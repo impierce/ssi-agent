@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = ["agent_core", "agent_api"]
+
+[workspace.dependencies]
+identity_credential = { version = "=1.0.0-rc.1", default-features = false, features = [
+    "credential",
+] }
+serde = { version = "1.0", default-features = false }
+serde_json = { version = "1.0", default-features = false }
+thiserror = { version = "1.0", default-features = false }
+
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.70.0"
