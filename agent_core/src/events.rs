@@ -5,12 +5,12 @@ use serde_json::Value;
 #[serde(tag = "type")]
 pub enum CredentialEvent {
     CredentialCreated {
-        user_id: String,
+        user_id: Option<String>,
         timestamp: String,
         payload: Value,
     },
     CredentialSigned {
-        user_id: String,
+        user_id: Option<String>,
         timestamp: String,
         key_id: String,
     },
