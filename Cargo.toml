@@ -1,16 +1,20 @@
 [workspace]
 resolver = "2"
-members = ["agent_api", "agent_core", "agent_storage"]
+members = ["agent_api", "agent_core", "agent_key_manager", "agent_storage"]
 
 [workspace.dependencies]
 identity_core = { version = "=1.0.0-rc.1" }
 identity_credential = { version = "=1.0.0-rc.1", default-features = false, features = [
     "credential",
 ] }
+identity_document = { version = "=1.0.0-rc.1" }
+identity_storage = { version = "=1.0.0-rc.1" }
+identity_stronghold = { version = "=1.0.0-rc.1" }
+identity_verification = { version = "=1.0.0-rc.1" }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0", default-features = false }
 thiserror = { version = "1.0", default-features = false }
-time = { version = "0.3" }
+time = { version = "0.3", features = ["formatting"] }
 
 [workspace.package]
 edition = "2021"

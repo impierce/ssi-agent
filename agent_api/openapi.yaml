@@ -1,0 +1,103 @@
+openapi: '3.1.0'
+info:
+  title: SSI Agent - REST API
+  description: foobar
+  version: 0.1.0
+
+servers:
+  - url: http://localhost:3033
+    description: local development
+
+paths:
+  /.well-known/openid-credential-issuer:
+    get:
+      summary: Credential Issuer metadata
+      tags:
+        - (proxied)
+      responses:
+        '200':
+          description: foobar
+  /v1/credentials:
+    post:
+      summary: Create a new Verifiable Credential for a given subject
+      #description: foobar
+      tags:
+        - Creation
+      requestBody:
+        description: Any json object will be used as the credential subject
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                given_name: Clark
+                family_name: Kent
+      responses:
+        '201':
+          description: Successfully created a new Verifiable Credential for the given subject
+          headers:
+            Location:
+              schema:
+                type: string
+                example: '/credentials/c0c97176-44c3-4f22-ab11-6bb782e29cb9'
+              #example: "/credentials/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
+              description: URL of the created resource
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  '@context': 'https://www.w3.org/2018/credentials/v1'
+                  'id': 'http://localhost:3033/credential/c0c97176-44c3-4f22-ab11-6bb782e29cb9'
+                  'type': 'VerifiableCredential'
+                  'credentialSubject':
+                    'given_name': 'Clark'
+                    'family_name': 'Kent'
+                  'issuer': 'https://example.com/'
+                  'issuanceDate': '2023-11-02T12:23:22Z'
+  /v1/offers:
+    post:
+      summary: Create a new credential offer (OpenID4VCI)
+      tags:
+        - Distribution
+      requestBody:
+        description: foobar
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                credential_ids:
+                  type: array
+                  items:
+                    type: string
+              example:
+                credential_ids:
+                  - 'cb94134c-6a65-4ce7-923c-f06167aee123'
+                  - '57b6948e-a44c-43b8-b1b8-5749e7881e00'
+      responses:
+        '200':
+          description: Offer created successfully, returned value should be displayed to the user as a QR code
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fcredential-issuer.example.com%2F%22%2C%22credentials%22%3A%5B%7B%22format%22%3A%22ldp_vc%22%2C%22credential_definition%22%3A%7B%22%40context%22%3A%5B%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fv1%22%2C%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fexamples%2Fv1%22%5D%2C%22type%22%3A%5B%22VerifiableCredential%22%2C%22UniversityDegreeCredential%22%5D%7D%7D%5D%7D
+  /v1/openid4vci/credential:
+    post:
+      summary: Fetch a previously created credential (OpenID4VCI)
+      tags:
+        - (proxied)
+      responses:
+        '200':
+          description: OK
+  /v1/openid4vci/batch_credential:
+    post:
+      summary: Fetch multiple credentials (OpenID4VCI)
+      tags:
+        - (proxied)
+      responses:
+        '200':
+          description: OK

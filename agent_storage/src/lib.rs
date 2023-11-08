@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use surrealdb::engine::local::{Db, Mem};
-use surrealdb::sql::Thing;
+use surrealdb::sql::{Thing, Uuid};
 use surrealdb::Surreal;
 use tokio::sync::OnceCell;
 
@@ -32,7 +32,7 @@ fn serialize_id<S>(id: &Thing, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
-    serializer.serialize_str(&id.id.to_string())
+    serializer.serialize_str(&id.id.to_raw())
 }
 
 #[derive(Debug, Deserialize)]
@@ -74,7 +74,7 @@ async fn initialize_in_mem_db() -> surrealdb::Result<Surreal<Db>> {
 }
 
 // TODO: add aggregate_id to fn signature
-pub async fn append_event(event: serde_json::Value) -> surrealdb::Result<Id> {
+pub async fn append_event(event: serde_json::Value, uuid: Option<Uuid>) -> surrealdb::Result<Id> {
     // Find the latest version in an (aggregate) stream
     let mut response = db()
         .await
@@ -83,16 +83,19 @@ pub async fn append_event(event: serde_json::Value) -> surrealdb::Result<Id> {
     let max_version: Option<u32> = response.take(0)?;
     dbg!(max_version);
 
-    let created: Vec<Record> = db()
+    // let created: Vec<Record> = db()
+    let created: Option<EventReadModel> = db()
         .await
-        .create("event") // rename to "credential_event"?
+        .create(("event", uuid.unwrap_or(Uuid::new()))) // rename to "credential_event"?
         .content(EventWriteModel {
             stream_id: 0, // TODO: pass in from outside? == aggregate id?
             version: (max_version.unwrap_or_default() + 1) as u8,
             data: event,
         })
         .await?;
-    Ok(created.first().unwrap().id.id.to_string()) // id of type "Thing": {tb: "event", id: 123}
+    dbg!(&created);
+    Ok(created.unwrap().id.id.to_raw())
+    // Ok(created.first().unwrap().id.id.to_string()) // id of type "Thing": {tb: "event", id: 123}
 }
 
 pub async fn get_all() -> surrealdb::Result<Vec<EventReadModel>> {

@@ -12,6 +12,6 @@ pub enum CredentialEvent {
     CredentialSigned {
         user_id: Option<String>,
         timestamp: String,
-        key_id: String,
+        payload: Value,
     },
 }

@@ -6,16 +6,16 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+agent_key_manager = { path = "../agent_key_manager" }
 agent_storage = { path = "../agent_storage" }
-anyhow = { version = "1.0" }                  # TODO: prefer thiserror for library code, anyhow for application code
-base64 = { version = "0.21" }
+anyhow = { version = "1.0" }                                                         # TODO: prefer thiserror for library code, anyhow for application code
 config = { version = "0.13" }
 dotenvy = { version = "0.15" }
 identity_core.workspace = true
 identity_credential.workspace = true
+oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "b743f3c" }
 serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
 uuid = { version = "1.5", features = ["v4"] }
-
-iota_stronghold = { version = "2.0" } # TODO: move all key-related code to extra crate
+url = { version = "2.4" }

@@ -1,0 +1,20 @@
+[package]
+name = "agent_key_manager"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow = { version = "1.0" }
+base64 = { version = "0.21" }
+identity_core.workspace = true
+identity_credential.workspace = true
+identity_document.workspace = true
+identity_storage.workspace = true
+identity_stronghold.workspace = true
+identity_verification.workspace = true
+iota-sdk = { version = "1.1.2", features = ["stronghold"] }
+iota_stronghold = { version = "2.0" }
+rand = { version = "0.8" }
+serde_json.workspace = true

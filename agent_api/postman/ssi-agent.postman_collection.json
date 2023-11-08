@@ -1,0 +1,126 @@
+{
+	"info": {
+		"_postman_id": "0779eb52-b570-45ac-b844-d3d52a357ec0",
+		"name": "ssi-agent",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "30650915"
+	},
+	"item": [
+		{
+			"name": "/credential",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							""
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"const credentialId = pm.response.headers.get('Location').split('/')[2];",
+							"pm.environment.set('CREDENTIAL_ID', credentialId);"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "basic",
+					"basic": [
+						{
+							"key": "password",
+							"value": "M5ujwkhhZ1FXpnH0",
+							"type": "string"
+						},
+						{
+							"key": "username",
+							"value": "configurator",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"given_name\": \"Clark\",\n    \"family_name\": \"Kent\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{HOST}}/credential",
+					"host": [
+						"{{HOST}}"
+					],
+					"path": [
+						"credential"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/credential/{id}",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{HOST}}/credential/{{CREDENTIAL_ID}}",
+					"host": [
+						"{{HOST}}"
+					],
+					"path": [
+						"credential",
+						"{{CREDENTIAL_ID}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/credential/{id}/sign",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{HOST}}/credential/{{CREDENTIAL_ID}}/sign",
+					"host": [
+						"{{HOST}}"
+					],
+					"path": [
+						"credential",
+						"{{CREDENTIAL_ID}}",
+						"sign"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/events",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{HOST}}/events",
+					"host": [
+						"{{HOST}}"
+					],
+					"path": [
+						"events"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
