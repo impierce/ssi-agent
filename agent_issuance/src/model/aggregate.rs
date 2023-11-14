@@ -60,6 +60,9 @@ impl Aggregate for Credential {
     fn apply(&mut self, event: Self::Event) {
         use IssuanceEvent::*;
         match event {
+            CredentialTemplateCreated {
+                credential_template,
+            } => self.credential_template = credential_template,
             CredentialDataCreated { .. } => todo!(),
             CredentialSigned { .. } => todo!(),
         }
@@ -78,14 +81,19 @@ mod tests {
     fn test_create_data_created() {
         let expected = IssuanceEvent::CredentialDataCreated {
             credential_template: CredentialTemplate {
-                metadata_schema: serde_json::json!({"type": "object"}),
+                metadata_schema: serde_json::json!({"foo": "bar"}),
                 subject_schema: None,
             },
             credential_data: serde_json::json!({}),
         };
 
         CredentialTestFramework::with(IssuanceServices)
-            .given_no_previous_events()
+            .given(vec![IssuanceEvent::CredentialTemplateCreated {
+                credential_template: CredentialTemplate {
+                    metadata_schema: serde_json::json!({"foo": "bar"}),
+                    subject_schema: None,
+                },
+            }])
             .when(IssuanceCommand::CreateCredentialData {
                 credential_subject: serde_json::json!({}),
                 metadata: Metadata {

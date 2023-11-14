@@ -7,6 +7,7 @@ pub struct Metadata {
 
 #[derive(Debug, Deserialize)]
 pub enum IssuanceCommand {
+    Credential,
     CreateCredentialData {
         // Credential data describing the subject.
         credential_subject: serde_json::Value,
