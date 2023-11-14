@@ -44,8 +44,8 @@ impl Aggregate for Credential {
                 metadata,
             } => {
                 let credential_template = CredentialTemplate {
-                    metadata_schema: serde_json::json!({"type": "object"}),
-                    subject_schema: credential_subject,
+                    metadata_schema: serde_json::json!(metadata),
+                    subject_schema: Some(credential_subject),
                 };
                 let credential_data = serde_json::json!({});
                 Ok(vec![IssuanceEvent::CredentialDataCreated {
