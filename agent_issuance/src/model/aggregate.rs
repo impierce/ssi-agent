@@ -6,12 +6,15 @@ use crate::{
     command::IssuanceCommand, error::IssuanceError, event::IssuanceEvent, service::IssuanceServices,
 };
 
-#[derive(Serialize, Default, Deserialize)]
-struct CredentialTemplate {
-    schema: serde_json::Value,
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct CredentialTemplate {
+    // json_schema
+    metadata_schema: serde_json::Value,
+    // json_schema
+    subject_schema: Option<serde_json::Value>,
 }
 
-#[derive(Serialize, Default, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Credential {
     credential_template: CredentialTemplate,
     credential_data: serde_json::Value,
@@ -33,9 +36,25 @@ impl Aggregate for Credential {
     async fn handle(
         &self,
         command: Self::Command,
-        services: &Self::Services,
+        _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
-        todo!()
+        match command {
+            IssuanceCommand::CreateCredentialData {
+                credential_subject,
+                metadata,
+            } => {
+                let credential_template = CredentialTemplate {
+                    metadata_schema: serde_json::json!({"type": "object"}),
+                    subject_schema: credential_subject,
+                };
+                let credential_data = serde_json::json!({});
+                Ok(vec![IssuanceEvent::CredentialDataCreated {
+                    credential_template,
+                    credential_data,
+                }])
+            }
+            _ => unimplemented!(),
+        }
     }
 
     fn apply(&mut self, event: Self::Event) {
@@ -44,5 +63,35 @@ impl Aggregate for Credential {
             CredentialDataCreated { .. } => todo!(),
             CredentialSigned { .. } => todo!(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::command::Metadata;
+    use cqrs_es::test::TestFramework;
+
+    type CredentialTestFramework = TestFramework<Credential>;
+
+    #[test]
+    fn test_create_data_created() {
+        let expected = IssuanceEvent::CredentialDataCreated {
+            credential_template: CredentialTemplate {
+                metadata_schema: serde_json::json!({"type": "object"}),
+                subject_schema: None,
+            },
+            credential_data: serde_json::json!({}),
+        };
+
+        CredentialTestFramework::with(IssuanceServices)
+            .given_no_previous_events()
+            .when(IssuanceCommand::CreateCredentialData {
+                credential_subject: serde_json::json!({}),
+                metadata: Metadata {
+                    credential_type: vec![],
+                },
+            })
+            .then_expect_events(vec![expected]);
     }
 }
