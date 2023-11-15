@@ -3,7 +3,8 @@ use cqrs_es::Aggregate;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    command::IssuanceCommand, error::IssuanceError, event::IssuanceEvent, service::IssuanceServices,
+    command::IssuanceCommand, error::IssuanceError, event::IssuanceEvent,
+    services::IssuanceServices,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]

@@ -1,0 +1,9 @@
+[package]
+name = "agent_store"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cqrs-es = "0.4.2"
+postgres-es = "0.4.10"
+sqlx = { version = "0.7", features = [ "postgres" , "runtime-tokio-rustls", "json"] }
