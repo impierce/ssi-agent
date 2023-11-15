@@ -64,7 +64,13 @@ impl Aggregate for Credential {
             CredentialTemplateCreated {
                 credential_template,
             } => self.credential_template = credential_template,
-            CredentialDataCreated { .. } => todo!(),
+            CredentialDataCreated {
+                credential_template,
+                credential_data,
+            } => {
+                self.credential_template = credential_template;
+                self.credential_data = credential_data;
+            }
             CredentialSigned { .. } => todo!(),
         }
     }
