@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 
+// TODO: Use thiserror crate.
 #[derive(Debug)]
 pub struct IssuanceError(String);
 

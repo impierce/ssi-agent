@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
+use jsonschema::JSONSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -40,6 +41,19 @@ impl Aggregate for Credential {
         _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         match command {
+            IssuanceCommand::LoadCredentialTemplate(credential_template) => {
+                JSONSchema::compile(&credential_template)
+                    .map_err(|e| IssuanceError::from(e.to_string().as_str()))?;
+
+                let credential_template = CredentialTemplate {
+                    metadata_schema: credential_template,
+                    subject_schema: None,
+                };
+
+                Ok(vec![IssuanceEvent::CredentialTemplateLoaded {
+                    credential_template,
+                }])
+            }
             IssuanceCommand::CreateCredentialData {
                 credential_subject,
                 metadata,
@@ -61,7 +75,7 @@ impl Aggregate for Credential {
     fn apply(&mut self, event: Self::Event) {
         use IssuanceEvent::*;
         match event {
-            CredentialTemplateCreated {
+            CredentialTemplateLoaded {
                 credential_template,
             } => self.credential_template = credential_template,
             CredentialDataCreated {
@@ -85,6 +99,23 @@ mod tests {
     type CredentialTestFramework = TestFramework<Credential>;
 
     #[test]
+    fn test_credential_template_loaded() {
+        let expected = IssuanceEvent::CredentialTemplateLoaded {
+            credential_template: CredentialTemplate {
+                metadata_schema: serde_json::json!({"foo": "bar"}),
+                subject_schema: None,
+            },
+        };
+
+        CredentialTestFramework::with(IssuanceServices)
+            .given_no_previous_events()
+            .when(IssuanceCommand::LoadCredentialTemplate(
+                serde_json::json!({"foo": "bar"}),
+            ))
+            .then_expect_events(vec![expected]);
+    }
+
+    #[test]
     fn test_create_data_created() {
         let expected = IssuanceEvent::CredentialDataCreated {
             credential_template: CredentialTemplate {
@@ -95,7 +126,7 @@ mod tests {
         };
 
         CredentialTestFramework::with(IssuanceServices)
-            .given(vec![IssuanceEvent::CredentialTemplateCreated {
+            .given(vec![IssuanceEvent::CredentialTemplateLoaded {
                 credential_template: CredentialTemplate {
                     metadata_schema: serde_json::json!({"foo": "bar"}),
                     subject_schema: None,

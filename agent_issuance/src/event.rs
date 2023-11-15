@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum IssuanceEvent {
-    CredentialTemplateCreated {
+    CredentialTemplateLoaded {
         credential_template: CredentialTemplate,
     },
     CredentialDataCreated {
@@ -20,7 +20,7 @@ impl DomainEvent for IssuanceEvent {
         use IssuanceEvent::*;
 
         let event_type: &str = match self {
-            CredentialTemplateCreated { .. } => "CredentialTemplateCreated",
+            CredentialTemplateLoaded { .. } => "CredentialTemplateCreated",
             CredentialDataCreated { .. } => "CredentialDataCreated",
             CredentialSigned { .. } => "CredentialSigned",
         };
