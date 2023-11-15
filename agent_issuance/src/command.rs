@@ -2,16 +2,12 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Metadata {
-    pub credential_type: Vec<String>,
+    pub metadata: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
 pub enum IssuanceCommand {
     LoadCredentialTemplate(serde_json::Value),
-    CreateCredentialData {
-        // Credential data describing the subject.
-        credential_subject: serde_json::Value,
-        metadata: Metadata,
-    },
+    CreateCredentialData { credential: serde_json::Value },
     SignCredential,
 }
