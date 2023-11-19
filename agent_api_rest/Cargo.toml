@@ -1,0 +1,9 @@
+[package]
+name = "agent_api_rest"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+agent_issuance = { path = "../agent_issuance" }
+agent_store = { path = "../agent_store" }
+axum = "0.6"

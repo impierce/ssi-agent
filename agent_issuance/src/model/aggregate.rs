@@ -8,14 +8,6 @@ use crate::{
     services::IssuanceServices,
 };
 
-// #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-// pub struct CredentialTemplate {
-//     // json_schema
-//     credential_template: serde_json::Value,
-//     // json_schema
-//     subject_schema: Option<serde_json::Value>,
-// }
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Credential {
     credential_template: serde_json::Value,
@@ -41,7 +33,9 @@ impl Aggregate for Credential {
         _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         match command {
-            IssuanceCommand::LoadCredentialTemplate(credential_template) => {
+            IssuanceCommand::LoadCredentialTemplate {
+                credential_template,
+            } => {
                 JSONSchema::compile(&credential_template)
                     .map_err(|e| IssuanceError::from(e.to_string().as_str()))?;
 
@@ -90,16 +84,14 @@ impl Aggregate for Credential {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::command::Metadata;
     use cqrs_es::test::TestFramework;
-    use identity_credential::credential;
     use serde_json::json;
 
     type CredentialTestFramework = TestFramework<Credential>;
 
-    fn credential_template() -> serde_json::Value {
+    pub fn credential_template() -> serde_json::Value {
         serde_json::from_str(include_str!(
-            "../../resources/json_schema/w3c_vc_data_model_v2.json"
+            "../../resources/json_schema/openbadges_v3.json"
         ))
         .unwrap()
     }
@@ -112,37 +104,42 @@ mod tests {
 
         CredentialTestFramework::with(IssuanceServices)
             .given_no_previous_events()
-            .when(IssuanceCommand::LoadCredentialTemplate(
-                credential_template(),
-            ))
+            .when(IssuanceCommand::LoadCredentialTemplate {
+                credential_template: credential_template(),
+            })
             .then_expect_events(vec![expected]);
     }
 
     #[test]
     fn test_create_data_created() {
         let credential = json!({
-        "@context": [
-            "https://www.w3.org/ns/credentials/v2",
-            "https://www.w3.org/ns/credentials/examples/v2"
-        ],
-        "type": ["VerifiableCredential", "UniversityDegreeCredential"],
-        "credentialSubject": {
-          "id": "did:example:123",
-          "degree": {
-            "type": "BachelorDegree",
-            "name": "Bachelor of Science",
-            "college": "Example University"
+          "@context": [
+            "https://www.w3.org/2018/credentials/v1",
+            "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
+          ],
+          "id": "http://example.com/credentials/3527",
+          "type": ["VerifiableCredential", "OpenBadgeCredential"],
+          "issuer": {
+            "id": "https://example.com/issuers/876543",
+            "type": "Profile",
+            "name": "Example Corp"
+          },
+          "issuanceDate": "2010-01-01T00:00:00Z",
+          "name": "Teamwork Badge",
+          "credentialSubject": {
+            "id": "did:example:ebfeb1f712ebc6f1c276e12ec21",
+            "type": "AchievementSubject",
+            "achievement": {
+                      "id": "https://example.com/achievements/21st-century-skills/teamwork",
+                      "type": "Achievement",
+                      "criteria": {
+                          "narrative": "Team members are nominated for this badge by their peers and recognized upon review by Example Corp management."
+                      },
+                      "description": "This badge recognizes the development of the capacity to collaborate within a group environment.",
+                      "name": "Teamwork"
+                  }
           }
-        },
-        "issuanceDate": "2023-01-01T00:00:00Z",
-        "issuer": "did:example:456",
-        "proof": {
-          "type": "Ed25519Signature2018",
-          "created": "2023-01-01T00:00:00Z",
-          "proofPurpose": "assertionMethod",
-          "verificationMethod": "did:example:456#key1",
-          "jws": "..."
-        }});
+        });
 
         let expected = IssuanceEvent::CredentialDataCreated {
             credential_template: credential_template(),
