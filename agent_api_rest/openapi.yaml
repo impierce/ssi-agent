@@ -1,0 +1,50 @@
+openapi: "3.1.0"
+info:
+  title: SSI Agent - REST API
+  description: foobar
+  version: 0.1.0
+
+servers:
+  - url: http://localhost:3033
+    description: local development
+
+paths:
+  /v1/credentials:
+    post:
+      summary: Create a new Verifiable Credential for a given subject
+      #description: foobar
+      tags:
+        - Creation
+      requestBody:
+        description: Any json object will be used as the credential subject
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                given_name: Clark
+                family_name: Kent
+      responses:
+        "201":
+          description: Successfully created a new Verifiable Credential for the given subject
+          headers:
+            Location:
+              schema:
+                type: string
+                example: "/credentials/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
+              #example: "/credentials/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
+              description: URL of the created resource
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  "@context": "https://www.w3.org/2018/credentials/v1"
+                  "id": "http://localhost:3033/credential/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
+                  "type": "VerifiableCredential"
+                  "credentialSubject":
+                    "given_name": "Clark"
+                    "family_name": "Kent"
+                  "issuer": "https://example.com/"
+                  "issuanceDate": "2023-11-02T12:23:22Z"

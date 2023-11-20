@@ -7,3 +7,5 @@ edition = "2021"
 agent_issuance = { path = "../agent_issuance" }
 agent_store = { path = "../agent_store" }
 axum = "0.6"
+axum-macros = "0.3"
+serde_json = "1.0"
