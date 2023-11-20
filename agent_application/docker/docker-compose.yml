@@ -1,4 +1,4 @@
-version: '3.1'
+version: "3.1"
 
 services:
   cqrs-postgres-db:
@@ -11,12 +11,12 @@ services:
       POSTGRES_USER: demo_user
       POSTGRES_PASSWORD: demo_pass
     volumes:
-      - './db:/docker-entrypoint-initdb.d'
+      - "./db:/docker-entrypoint-initdb.d"
   pg-admin:
     image: dpage/pgadmin4
     restart: always
     ports:
-      - 8080:80
+      - 5433:80
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@example.org
       PGADMIN_DEFAULT_PASSWORD: admin
