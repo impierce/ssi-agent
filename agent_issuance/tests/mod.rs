@@ -1,9 +1,4 @@
-use agent_issuance::{
-    command::{IssuanceCommand, Metadata},
-    state::new_application_state,
-};
-use cqrs_es::persist::ViewRepository;
-use serde_json::json;
+use agent_issuance::{command::IssuanceCommand, state::new_application_state};
 
 #[tokio::test]
 async fn test() {
@@ -17,34 +12,11 @@ async fn test() {
         credential_template: credential_template(),
     };
 
-    dbg!(application_state
-        .credential_query
-        .load("agg-id-0006")
-        .await
-        .unwrap()
-        .is_some());
-
     application_state
         .cqrs
-        .execute("agg-id-0006", command)
+        .execute("agg-id-0007", command)
         .await
         .unwrap();
-
-    dbg!(application_state
-        .credential_query
-        .load("agg-id-0006")
-        .await
-        .unwrap()
-        .is_some());
-
-    let application_state = new_application_state().await;
-
-    dbg!(application_state
-        .credential_query
-        .load("agg-id-0006")
-        .await
-        .unwrap()
-        .is_some());
 
     let command = IssuanceCommand::CreateCredentialData {
         credential: serde_json::json!({
@@ -78,7 +50,7 @@ async fn test() {
     };
     application_state
         .cqrs
-        .execute("agg-id-0002", command)
+        .execute("agg-id-0007", command)
         .await
         .unwrap();
 }

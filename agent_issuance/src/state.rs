@@ -1,5 +1,5 @@
 use crate::model::aggregate::Credential;
-use crate::queries::{CredentialView, SimpleLoggingQuery};
+use crate::queries::CredentialView;
 use crate::services::IssuanceServices;
 use agent_store::state::ApplicationState;
 

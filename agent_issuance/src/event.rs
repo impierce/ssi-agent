@@ -1,6 +1,5 @@
 // use crate::model::aggregate::CredentialTemplate;
 use cqrs_es::DomainEvent;
-use identity_credential::credential::Credential;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

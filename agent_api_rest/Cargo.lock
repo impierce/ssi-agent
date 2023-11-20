@@ -32,6 +32,7 @@ version = "0.1.0"
 dependencies = [
  "agent_store",
  "async-trait",
+ "axum",
  "cqrs-es",
  "identity_credential",
  "jsonschema",
