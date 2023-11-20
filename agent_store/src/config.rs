@@ -14,10 +14,7 @@ where
     V: View<A> + 'static,
 {
     // A query that stores the current state of an individual account.
-    let credential_view_repo = Arc::new(PostgresViewRepository::new(
-        "credential_query",
-        pool.clone(),
-    ));
+    let credential_view_repo = Arc::new(PostgresViewRepository::new("credential_query", pool.clone()));
     let mut credential_query = GenericQuery::new(credential_view_repo.clone());
     credential_query.use_error_handler(Box::new(|e| println!("{}", e)));
 

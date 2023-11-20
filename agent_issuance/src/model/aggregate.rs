@@ -3,10 +3,7 @@ use cqrs_es::Aggregate;
 use jsonschema::JSONSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    command::IssuanceCommand, error::IssuanceError, event::IssuanceEvent,
-    services::IssuanceServices,
-};
+use crate::{command::IssuanceCommand, error::IssuanceError, event::IssuanceEvent, services::IssuanceServices};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Credential {
@@ -33,15 +30,10 @@ impl Aggregate for Credential {
         _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         match command {
-            IssuanceCommand::LoadCredentialTemplate {
-                credential_template,
-            } => {
-                JSONSchema::compile(&credential_template)
-                    .map_err(|e| IssuanceError::from(e.to_string().as_str()))?;
+            IssuanceCommand::LoadCredentialTemplate { credential_template } => {
+                JSONSchema::compile(&credential_template).map_err(|e| IssuanceError::from(e.to_string().as_str()))?;
 
-                Ok(vec![IssuanceEvent::CredentialTemplateLoaded {
-                    credential_template,
-                }])
+                Ok(vec![IssuanceEvent::CredentialTemplateLoaded { credential_template }])
             }
             IssuanceCommand::CreateCredentialData { credential } => {
                 let credential_template = self.credential_template.clone();
@@ -66,9 +58,7 @@ impl Aggregate for Credential {
     fn apply(&mut self, event: Self::Event) {
         use IssuanceEvent::*;
         match event {
-            CredentialTemplateLoaded {
-                credential_template,
-            } => self.credential_template = credential_template,
+            CredentialTemplateLoaded { credential_template } => self.credential_template = credential_template,
             CredentialDataCreated {
                 credential_template,
                 credential_data,
@@ -90,10 +80,7 @@ mod tests {
     type CredentialTestFramework = TestFramework<Credential>;
 
     pub fn credential_template() -> serde_json::Value {
-        serde_json::from_str(include_str!(
-            "../../resources/json_schema/openbadges_v3.json"
-        ))
-        .unwrap()
+        serde_json::from_str(include_str!("../../resources/json_schema/openbadges_v3.json")).unwrap()
     }
 
     #[test]

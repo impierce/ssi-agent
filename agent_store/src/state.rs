@@ -13,10 +13,7 @@ pub struct ApplicationState<A: Aggregate, V: View<A>> {
     pub credential_query: Arc<PostgresViewRepository<V, A>>,
 }
 
-pub async fn application_state<A, V>(
-    queries: Vec<Box<dyn Query<A>>>,
-    services: A::Services,
-) -> ApplicationState<A, V>
+pub async fn application_state<A, V>(queries: Vec<Box<dyn Query<A>>>, services: A::Services) -> ApplicationState<A, V>
 where
     A: Aggregate + 'static,
     V: View<A> + 'static,
@@ -24,8 +21,5 @@ where
     let pool = default_postgress_pool("postgresql://demo_user:demo_pass@localhost:5432/demo").await;
     let (cqrs, credential_query) = cqrs_framework(pool, queries, services);
     // cqrs
-    ApplicationState {
-        cqrs,
-        credential_query,
-    }
+    ApplicationState { cqrs, credential_query }
 }

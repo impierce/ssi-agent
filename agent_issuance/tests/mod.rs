@@ -12,11 +12,7 @@ async fn test() {
         credential_template: credential_template(),
     };
 
-    application_state
-        .cqrs
-        .execute("agg-id-0007", command)
-        .await
-        .unwrap();
+    application_state.cqrs.execute("agg-id-0007", command).await.unwrap();
 
     let command = IssuanceCommand::CreateCredentialData {
         credential: serde_json::json!({
@@ -48,9 +44,5 @@ async fn test() {
           }
         }),
     };
-    application_state
-        .cqrs
-        .execute("agg-id-0007", command)
-        .await
-        .unwrap();
+    application_state.cqrs.execute("agg-id-0007", command).await.unwrap();
 }

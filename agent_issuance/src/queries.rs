@@ -31,9 +31,7 @@ impl View<Credential> for CredentialView {
         use crate::event::IssuanceEvent::*;
 
         match &event.payload {
-            CredentialTemplateLoaded {
-                credential_template,
-            } => {
+            CredentialTemplateLoaded { credential_template } => {
                 self.credential_template = credential_template.clone();
             }
             CredentialDataCreated {

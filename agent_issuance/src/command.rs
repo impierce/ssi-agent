@@ -7,11 +7,7 @@ pub struct Metadata {
 
 #[derive(Debug, Deserialize)]
 pub enum IssuanceCommand {
-    LoadCredentialTemplate {
-        credential_template: serde_json::Value,
-    },
-    CreateCredentialData {
-        credential: serde_json::Value,
-    },
+    LoadCredentialTemplate { credential_template: serde_json::Value },
+    CreateCredentialData { credential: serde_json::Value },
     SignCredential,
 }
