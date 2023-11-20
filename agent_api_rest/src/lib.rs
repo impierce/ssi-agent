@@ -18,7 +18,7 @@ pub fn router(state: ApplicationState<Credential, CredentialView>) -> Router {
         .with_state(state)
 }
 
-// #[axum_macros::debug_handler]
+#[axum_macros::debug_handler]
 async fn create_credential_data(
     State(state): State<ApplicationState<Credential, CredentialView>>,
     Json(payload): Json<Value>,

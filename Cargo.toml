@@ -6,3 +6,6 @@ members = [
     "agent_issuance",
     "agent_store",
 ]
+
+[workspace.dependencies]
+serde = { version = "1.0", default-features = false, features = ["derive"] }
