@@ -1,0 +1,8 @@
+[workspace]
+
+members = [
+    "agent_api_rest",
+    "agent_application",
+    "agent_issuance",
+    "agent_store",
+]
