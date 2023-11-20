@@ -1,5 +1,5 @@
 use agent_issuance::{
-    command::IssuanceCommand, handlers::command_handler, model::aggregate::Credential, queries::CredentialView,
+    command::IssuanceCommand, handlers::command_handler, model::aggregate::IssuanceData, queries::IssuanceDataView,
 };
 use agent_store::state::ApplicationState;
 use axum::{
@@ -11,7 +11,7 @@ use axum::{
 };
 use serde_json::Value;
 
-pub fn router(state: ApplicationState<Credential, CredentialView>) -> Router {
+pub fn router(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
     Router::new()
         .route("/v1/credentials", post(create_credential_data))
         .with_state(state)
@@ -19,7 +19,7 @@ pub fn router(state: ApplicationState<Credential, CredentialView>) -> Router {
 
 #[axum_macros::debug_handler]
 async fn create_credential_data(
-    State(state): State<ApplicationState<Credential, CredentialView>>,
+    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     let command = IssuanceCommand::CreateCredentialData { credential: payload };

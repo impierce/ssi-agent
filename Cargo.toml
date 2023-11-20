@@ -9,3 +9,4 @@ members = [
 
 [workspace.dependencies]
 serde = { version = "1.0", default-features = false, features = ["derive"] }
+lazy_static = "1.4"
