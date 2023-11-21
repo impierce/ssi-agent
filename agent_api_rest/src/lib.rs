@@ -42,6 +42,8 @@ async fn create_credential_data(
 
 #[cfg(test)]
 mod tests {
+    use std::{fs::File, path::Path};
+
     use super::*;
     use agent_issuance::state::new_application_state;
     use axum::{
@@ -82,6 +84,38 @@ mod tests {
         );
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        assert!(body.is_empty());
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            body,
+            // serde_json::from_reader::<_, Value>(
+            //     File::open(Path::new("../tests/response/create-open-badge.json")).unwrap()
+            // )
+            // .unwrap()
+            serde_json::from_str::<Value>(
+                r#"
+                {
+                    "@context": [
+                        "https://www.w3.org/2018/credentials/v1",
+                        "https://www.w3.org/2018/credentials/examples/v1",
+                        "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
+                    ],
+                    "id": "http://example.edu/credentials/3732",
+                    "type": ["VerifiableCredential", "OpenBadgeCredential"],
+                    "issuer": {
+                        "id": "https://example.edu/issuers/565049",
+                        "type": ["IssuerProfile"],
+                        "name": "Example University"
+                    },
+                    "issuanceDate": "2010-01-01T00:00:00Z",
+                    "name": "Teamwork Badge",
+                    "credentialSubject": {
+                        "first_name": "Ferris",
+                        "last_name": "Rustacean"
+                    }
+                }
+                "#
+            )
+            .unwrap()
+        );
     }
 }

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use jsonschema::JSONSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use crate::{command::IssuanceCommand, error::IssuanceError, event::IssuanceEvent, services::IssuanceServices};
 
@@ -38,14 +38,26 @@ impl Aggregate for Credential {
             }
             IssuanceCommand::CreateCredentialData { credential } => {
                 let credential_template = self.credential_template.clone();
-                let json_schema = JSONSchema::compile(&credential_template)
-                    .map_err(|e| IssuanceError::from(e.to_string().as_str()))?;
+                dbg!(&credential_template);
+                // let json_schema = JSONSchema::compile(&credential_template)
+                //     .map_err(|e| IssuanceError::from(e.to_string().as_str()))?;
 
-                json_schema.validate(&credential).map_err(|e| {
-                    // TODO: remove ugly solution.
-                    let e: Vec<_> = e.map(|e| e.to_string()).collect();
-                    IssuanceError::from(e.join(", ").as_str())
-                })?;
+                let mut openbadges_v3_format_template =
+                    serde_json::from_str::<Value>(include_str!("../../res/format_templates/openbadges_v3.json"))
+                        .map_err(|e| IssuanceError::from(e.to_string().as_str()))?;
+
+                openbadges_v3_format_template
+                    .as_object_mut()
+                    .unwrap()
+                    .insert("credentialSubject".to_string(), credential.clone());
+
+                dbg!(&openbadges_v3_format_template);
+
+                // json_schema.validate(&openbadges_v3_format_template).map_err(|e| {
+                //     // TODO: remove ugly solution.
+                //     let e: Vec<_> = e.map(|e| e.to_string()).collect();
+                //     IssuanceError::from(e.join(", ").as_str())
+                // })?;
 
                 Ok(vec![IssuanceEvent::CredentialDataCreated {
                     credential_template,
