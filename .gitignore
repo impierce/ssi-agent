@@ -1,2 +1,5 @@
 **/target/
 .cargo
+
+**/*.env
+!**/.env.example

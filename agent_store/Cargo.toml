@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+config = "0.13"
 cqrs-es = "0.4.2"
+dotenvy = "0.15"
 postgres-es = "0.4.10"
-sqlx = { version = "0.7", features = [ "postgres" , "runtime-tokio-rustls", "json"] }
+sqlx = { version = "0.7", features = [
+    "postgres",
+    "runtime-tokio-rustls",
+    "json",
+] }

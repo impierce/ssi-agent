@@ -1,7 +1,8 @@
-use cqrs_es::{mem_store::MemStore, persist::PersistedEventStore, Aggregate, CqrsFramework, EventStore, Query, View};
-use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresEventRepository, PostgresViewRepository};
+use cqrs_es::{Aggregate, Query, View};
+use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
 use std::sync::Arc;
 
+use crate::config::config;
 use crate::config::cqrs_framework;
 
 #[derive(Clone)]
@@ -15,7 +16,7 @@ where
     A: Aggregate + 'static,
     V: View<A> + 'static,
 {
-    let pool = default_postgress_pool("postgresql://demo_user:demo_pass@localhost:5432/demo").await;
+    let pool = default_postgress_pool(&config().get_string("db_connection_string").unwrap()).await;
     let (cqrs, credential_query) = cqrs_framework(pool, queries, services);
     ApplicationState { cqrs, credential_query }
 }
