@@ -25,7 +25,11 @@ dependencies = [
  "agent_store",
  "axum",
  "axum-macros",
+ "hyper",
+ "mime",
  "serde_json",
+ "tokio",
+ "tower",
 ]
 
 [[package]]

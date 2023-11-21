@@ -4,14 +4,14 @@ use agent_issuance::{
 use agent_store::state::ApplicationState;
 use axum::{
     extract::{Json, State},
-    http::StatusCode,
+    http::{header, StatusCode},
     response::IntoResponse,
     routing::post,
     Router,
 };
 use serde_json::Value;
 
-pub fn router(state: ApplicationState<Credential, CredentialView>) -> Router {
+pub fn app(state: ApplicationState<Credential, CredentialView>) -> Router {
     Router::new()
         .route("/v1/credentials", post(create_credential_data))
         .with_state(state)
@@ -25,10 +25,61 @@ async fn create_credential_data(
     let command = IssuanceCommand::CreateCredentialData { credential: payload };
 
     match command_handler("agg-id-F39A0C".to_string(), state, command).await {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Ok(_) => (
+            StatusCode::CREATED,
+            [(header::LOCATION, format!("/v1/credentials/{}", "agg-id-F39A0C"))],
+        )
+            .into_response(),
         Err(err) => {
             println!("Error: {:#?}\n", err);
             (StatusCode::BAD_REQUEST, err.to_string()).into_response()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_issuance::state::{self, in_mem_state, new_application_state};
+    use axum::{
+        body::Body,
+        http::{self, Request},
+    };
+    use serde_json::json;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn location_header_is_set_on_successful_creation() {
+        let state = in_mem_state().await;
+        let state = new_application_state().await;
+        let app = app(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/v1/credentials")
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "first_name": "Ferris",
+                           "last_name": "Rustacean",
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        assert_eq!(
+            response.headers().get(http::header::LOCATION).unwrap(),
+            "/v1/credentials/agg-id-F39A0C"
+        );
+
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        assert!(body.is_empty());
     }
 }

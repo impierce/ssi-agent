@@ -80,7 +80,7 @@ mod tests {
     type CredentialTestFramework = TestFramework<Credential>;
 
     pub fn credential_template() -> serde_json::Value {
-        serde_json::from_str(include_str!("../../resources/json_schema/openbadges_v3.json")).unwrap()
+        serde_json::from_str(include_str!("../../res/json_schema/openbadges_v3.json")).unwrap()
     }
 
     #[test]
