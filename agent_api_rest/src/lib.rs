@@ -9,7 +9,7 @@ use axum::{
     routing::post,
     Router,
 };
-use serde_json::Value;
+use serde_json::{json, Value};
 
 pub fn app(state: ApplicationState<Credential, CredentialView>) -> Router {
     Router::new()
@@ -27,8 +27,10 @@ async fn create_credential_data(
     match command_handler("agg-id-F39A0C".to_string(), state, command).await {
         Ok(_) => (
             StatusCode::CREATED,
-            // [(header::LOCATION, format!("/v1/credentials/{}", "agg-id-F39A0C"))],
-            "",
+            [(header::LOCATION, format!("/v1/credentials/{}", "agg-id-F39A0C"))],
+            Json(json!({
+                "foo": "bar"
+            })),
         )
             .into_response(),
         Err(err) => {
@@ -63,7 +65,7 @@ mod tests {
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "first_name": "Ferris",
-                           "last_name": "Rustacean",
+                            "last_name": "Rustacean",
                         }))
                         .unwrap(),
                     ))

@@ -11,43 +11,46 @@ servers:
 paths:
   /v1/credentials:
     post:
-      summary: Create a new credential
-      description: Optionally validates the given request body against the official JSON schema of the credential format (configured in ssi-agent, not via API)
+      summary: Create a new Credential for a given Subject
+      # description: n/a
       tags:
         - Creation
       requestBody:
-        description: A full JSON object of the credential (signature not required)
+        description: Any JSON object to be used as the Subject of the new Credential
         required: true
         content:
           application/json:
             schema:
               type: object
+              properties:
+                # $meta:
+                #   type: object
+                #   properties:
+                #     credentialTemplate:
+                #       type: string
+                #       description: The template to be used to create the credential
+                credentialSubject:
+                  type: object
+              required:
+                - credentialSubject
             examples:
               open-badges-3:
                 summary: Open Badges 3.0
-                externalValue: res/sample-open-badge.json
-              verifiable-credentials-1:
-                summary: Verifiable Credentials v1.1
-                externalValue: res/sample-vc-1.1.json
+                externalValue: res/open-badge-request.json
       responses:
-        "204":
-          description: The given credential was saved successfully
-          # headers:
-          #   Location:
-          #     schema:
-          #       type: string
-          #       example: "/credentials/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
-          #     description: URL of the created resource
-          # content:
-          #   application/json:
-          #     schema:
-          #       type: object
-          #       example:
-          #         "@context": "https://www.w3.org/2018/credentials/v1"
-          #         "id": "http://localhost:3033/credential/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
-          #         "type": "VerifiableCredential"
-          #         "credentialSubject":
-          #           "given_name": "Clark"
-          #           "family_name": "Kent"
-          #         "issuer": "https://example.com/"
-          #         "issuanceDate": "2023-11-02T12:23:22Z"
+        "201":
+          description: An Open Badge 3.0 has successfully been created for the provided credentialSubject
+          headers:
+            Location:
+              schema:
+                type: string
+                example: "/v1/credentials/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
+              description: URL of the created resource
+          content:
+            application/json:
+              schema:
+                type: object
+              examples:
+                open-badges-3:
+                  summary: Open Badges 3.0
+                  externalValue: res/open-badge-response.json

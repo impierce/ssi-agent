@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use jsonschema::JSONSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 
 use crate::{command::IssuanceCommand, error::IssuanceError, event::IssuanceEvent, services::IssuanceServices};
 
@@ -100,19 +101,6 @@ mod tests {
     #[test]
     fn test_create_data_created() {
         let credential = json!({
-          "@context": [
-            "https://www.w3.org/2018/credentials/v1",
-            "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
-          ],
-          "id": "http://example.com/credentials/3527",
-          "type": ["VerifiableCredential", "OpenBadgeCredential"],
-          "issuer": {
-            "id": "https://example.com/issuers/876543",
-            "type": "Profile",
-            "name": "Example Corp"
-          },
-          "issuanceDate": "2010-01-01T00:00:00Z",
-          "name": "Teamwork Badge",
           "credentialSubject": {
             "id": "did:example:ebfeb1f712ebc6f1c276e12ec21",
             "type": "AchievementSubject",
