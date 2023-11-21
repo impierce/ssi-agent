@@ -27,7 +27,8 @@ async fn create_credential_data(
     match command_handler("agg-id-F39A0C".to_string(), state, command).await {
         Ok(_) => (
             StatusCode::CREATED,
-            [(header::LOCATION, format!("/v1/credentials/{}", "agg-id-F39A0C"))],
+            // [(header::LOCATION, format!("/v1/credentials/{}", "agg-id-F39A0C"))],
+            "",
         )
             .into_response(),
         Err(err) => {
@@ -40,7 +41,7 @@ async fn create_credential_data(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_issuance::state::{self, in_mem_state, new_application_state};
+    use agent_issuance::state::new_application_state;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -50,7 +51,6 @@ mod tests {
 
     #[tokio::test]
     async fn location_header_is_set_on_successful_creation() {
-        let state = in_mem_state().await;
         let state = new_application_state().await;
         let app = app(state);
 

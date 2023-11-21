@@ -14,9 +14,9 @@ pub async fn new_application_state() -> ApplicationState<Credential, CredentialV
     .await
 }
 
-pub async fn in_mem_state() -> ApplicationState<Credential, CredentialView> {
-    let store = MemStore::<Credential>::default();
-    let service = IssuanceServices {};
-    let cqrs = CqrsFramework::new(store, vec![], service);
-    cqrs
-}
+// pub async fn in_mem_state() -> ApplicationState<Credential, CredentialView> {
+//     let store = MemStore::<Credential>::default();
+//     let service = IssuanceServices {};
+//     let cqrs = CqrsFramework::new(store, vec![], service);
+//     cqrs
+// }

@@ -1,50 +1,53 @@
-openapi: "3.1.0"
+openapi: 3.1.0
 info:
   title: SSI Agent - REST API
-  description: foobar
+  description: A lightweight REST API for the SSI Agent
   version: 0.1.0
 
 servers:
   - url: http://localhost:3033
-    description: local development
+    description: Development
 
 paths:
   /v1/credentials:
     post:
-      summary: Create a new Verifiable Credential for a given subject
-      #description: foobar
+      summary: Create a new credential
+      description: Optionally validates the given request body against the official JSON schema of the credential format (configured in ssi-agent, not via API)
       tags:
         - Creation
       requestBody:
-        description: Any json object will be used as the credential subject
+        description: A full JSON object of the credential (signature not required)
         required: true
         content:
           application/json:
             schema:
               type: object
-              example:
-                given_name: Clark
-                family_name: Kent
+            examples:
+              open-badges-3:
+                summary: Open Badges 3.0
+                externalValue: res/sample-open-badge.json
+              verifiable-credentials-1:
+                summary: Verifiable Credentials v1.1
+                externalValue: res/sample-vc-1.1.json
       responses:
-        "201":
-          description: Successfully created a new Verifiable Credential for the given subject
-          headers:
-            Location:
-              schema:
-                type: string
-                example: "/credentials/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
-              #example: "/credentials/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
-              description: URL of the created resource
-          content:
-            application/json:
-              schema:
-                type: object
-                example:
-                  "@context": "https://www.w3.org/2018/credentials/v1"
-                  "id": "http://localhost:3033/credential/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
-                  "type": "VerifiableCredential"
-                  "credentialSubject":
-                    "given_name": "Clark"
-                    "family_name": "Kent"
-                  "issuer": "https://example.com/"
-                  "issuanceDate": "2023-11-02T12:23:22Z"
+        "204":
+          description: The given credential was saved successfully
+          # headers:
+          #   Location:
+          #     schema:
+          #       type: string
+          #       example: "/credentials/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
+          #     description: URL of the created resource
+          # content:
+          #   application/json:
+          #     schema:
+          #       type: object
+          #       example:
+          #         "@context": "https://www.w3.org/2018/credentials/v1"
+          #         "id": "http://localhost:3033/credential/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
+          #         "type": "VerifiableCredential"
+          #         "credentialSubject":
+          #           "given_name": "Clark"
+          #           "family_name": "Kent"
+          #         "issuer": "https://example.com/"
+          #         "issuanceDate": "2023-11-02T12:23:22Z"
