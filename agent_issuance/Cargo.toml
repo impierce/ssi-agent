@@ -8,6 +8,7 @@ agent_store = { path = "../agent_store" }
 
 oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
 oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
+oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
 
 cqrs-es = "0.4.2"
 sqlx = { version = "0.7", features = [
@@ -19,7 +20,10 @@ async-trait = "0.1.52"
 serde.workspace = true
 serde_json = "1.0"
 jsonschema = "0.17"
-
+url = "2.4"
+uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
+did-key = "0.2"
+jsonwebtoken = "8.2"
 
 identity_credential = { git = "https://github.com/iotaledger/identity.rs.git", default-features = false, features = [
     "credential",
@@ -29,4 +33,3 @@ identity_credential = { git = "https://github.com/iotaledger/identity.rs.git", d
 tokio = { version = "1", features = ["full"] }
 serde.workspace = true
 lazy_static.workspace = true
-url = "2.4"

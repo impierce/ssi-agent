@@ -1,16 +1,23 @@
-// use crate::model::aggregate::CredentialTemplate;
+// use crate::model::aggregate::CredentialFormat;
 use cqrs_es::DomainEvent;
 use oid4vci::{
     credential_issuer::{
         authorization_server_metadata::AuthorizationServerMetadata,
         credential_issuer_metadata::CredentialIssuerMetadata, credentials_supported::CredentialsSupportedObject,
     },
-    credential_offer::CredentialOffer,
+    credential_response::CredentialResponse,
+    token_response::TokenResponse,
 };
 use serde::{Deserialize, Serialize};
 
+use crate::model::aggregate::{Credential, CredentialOffer, IssuanceSubject};
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
 pub enum IssuanceEvent {
+    CredentialFormatTemplateLoaded {
+        credential_format_template: serde_json::Value,
+    },
     AuthorizationServerMetadataLoaded {
         authorization_server_metadata: AuthorizationServerMetadata,
     },
@@ -20,17 +27,21 @@ pub enum IssuanceEvent {
     CredentialsSupportedCreated {
         credentials_supported: Vec<CredentialsSupportedObject>,
     },
-    CredentialTemplateLoaded {
-        credential_template: serde_json::Value,
+    SubjectCreated {
+        subject: IssuanceSubject,
     },
     CredentialOfferCreated {
         credential_offer: CredentialOffer,
     },
-    CredentialDataCreated {
-        credential_template: serde_json::Value,
-        credential_data: serde_json::Value,
+    UnsignedCredentialCreated {
+        credential: Credential,
     },
-    CredentialSigned,
+    TokenResponseCreated {
+        token_response: TokenResponse,
+    },
+    CredentialResponseCreated {
+        credential_response: CredentialResponse,
+    },
 }
 
 impl DomainEvent for IssuanceEvent {
@@ -38,13 +49,15 @@ impl DomainEvent for IssuanceEvent {
         use IssuanceEvent::*;
 
         let event_type: &str = match self {
+            CredentialFormatTemplateLoaded { .. } => "CredentialFormatLoaded",
             AuthorizationServerMetadataLoaded { .. } => "AuthorizationServerMetadataLoaded",
             CredentialIssuerMetadataLoaded { .. } => "CredentialIssuerMetadataLoaded",
-            CredentialsSupportedCreated { .. } => "CredentialsSupportedObjectsCreated",
+            CredentialsSupportedCreated { .. } => "CredentialsSupportedCreated",
+            SubjectCreated { .. } => "SubjectCreated",
             CredentialOfferCreated { .. } => "CredentialOfferCreated",
-            CredentialTemplateLoaded { .. } => "CredentialTemplateCreated",
-            CredentialDataCreated { .. } => "CredentialDataCreated",
-            CredentialSigned { .. } => "CredentialSigned",
+            UnsignedCredentialCreated { .. } => "UnsignedCredentialCreated",
+            TokenResponseCreated { .. } => "TokenResponseCreated",
+            CredentialResponseCreated { .. } => "CredentialResponseCreated",
         };
         event_type.to_string()
     }

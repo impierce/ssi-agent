@@ -6,6 +6,10 @@ edition = "2021"
 [dependencies]
 agent_issuance = { path = "../agent_issuance" }
 agent_store = { path = "../agent_store" }
+
+oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
+oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
+
 axum = "0.6"
 axum-macros = "0.3"
 serde_json = "1.0"

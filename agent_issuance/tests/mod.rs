@@ -2,20 +2,20 @@ use agent_issuance::{command::IssuanceCommand, state::new_application_state};
 
 #[tokio::test]
 async fn test() {
-    pub fn credential_template() -> serde_json::Value {
+    pub fn credential_format_template() -> serde_json::Value {
         serde_json::from_str(include_str!("../res/json_schema/openbadges_v3.json")).unwrap()
     }
 
     let application_state = new_application_state().await;
 
-    let command = IssuanceCommand::LoadCredentialTemplate {
-        credential_template: credential_template(),
+    let command = IssuanceCommand::LoadCredentialFormatTemplate {
+        credential_format_template: credential_format_template(),
     };
 
     application_state.cqrs.execute("agg-id-0007", command).await.unwrap();
 
-    let command = IssuanceCommand::CreateCredentialData {
-        credential: serde_json::json!({
+    let command = IssuanceCommand::CreateUnsignedCredential {
+        unsigned_credential: serde_json::json!({
           "@context": [
             "https://www.w3.org/2018/credentials/v1",
             "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
