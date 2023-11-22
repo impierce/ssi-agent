@@ -21,7 +21,7 @@ pub enum IssuanceCommand {
         credential_format_template: serde_json::Value,
     },
     LoadAuthorizationServerMetadata {
-        authorization_server_metadata: AuthorizationServerMetadata,
+        authorization_server_metadata: Box<AuthorizationServerMetadata>,
     },
     LoadCredentialIssuerMetadata {
         credential_issuer_metadata: CredentialIssuerMetadata,

@@ -200,7 +200,7 @@ impl Aggregate for IssuanceData {
                 }
 
                 let issuer = Arc::new(KeySubject::from_keypair(
-                    from_existing_key::<Ed25519KeyPair>(b"", Some(UNSAFE_ISSUER_KEY.as_bytes().try_into().unwrap())),
+                    from_existing_key::<Ed25519KeyPair>(b"", Some(UNSAFE_ISSUER_KEY.as_bytes())),
                     None,
                 ));
                 let issuer_did = issuer.identifier().unwrap();
@@ -268,7 +268,7 @@ impl Aggregate for IssuanceData {
             } => {
                 self.oid4vci_data
                     .authorization_server_metadata
-                    .replace(authorization_server_metadata);
+                    .replace(*authorization_server_metadata);
             }
             CredentialIssuerMetadataLoaded {
                 credential_issuer_metadata,
@@ -467,11 +467,12 @@ mod tests {
         static ref CREDENTIAL_FORMAT_TEMPLATE: serde_json::Value =
             serde_json::from_str(include_str!("../../res/credential_format_templates/openbadges_v3.json")).unwrap();
         static ref BASE_URL: url::Url = "https://example.com/".parse().unwrap();
-        static ref AUTHORIZATION_SERVER_METADATA: AuthorizationServerMetadata = AuthorizationServerMetadata {
-            issuer: BASE_URL.clone(),
-            token_endpoint: Some(BASE_URL.join("token").unwrap()),
-            ..Default::default()
-        };
+        static ref AUTHORIZATION_SERVER_METADATA: Box<AuthorizationServerMetadata> =
+            Box::new(AuthorizationServerMetadata {
+                issuer: BASE_URL.clone(),
+                token_endpoint: Some(BASE_URL.join("token").unwrap()),
+                ..Default::default()
+            });
         static ref CREDENTIAL_ISSUER_METADATA: CredentialIssuerMetadata = CredentialIssuerMetadata {
             credential_issuer: BASE_URL.clone(),
             authorization_server: None,
@@ -639,7 +640,7 @@ mod tests {
 
         pub fn authorization_server_metadata_loaded() -> IssuanceEvent {
             IssuanceEvent::AuthorizationServerMetadataLoaded {
-                authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone().clone(),
+                authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
             }
         }
 

@@ -16,7 +16,7 @@ use axum::{
 use axum_auth::AuthBearer;
 use hyper::header;
 use oid4vci::{credential_request::CredentialRequest, token_request::TokenRequest};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 // TODO: What to do with aggregate_id's?
 const AGGREGATE_ID: &str = "agg-id-F39A0C";

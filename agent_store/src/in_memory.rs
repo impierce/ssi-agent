@@ -7,6 +7,7 @@ use cqrs_es::{Aggregate, Query, View};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+#[derive(Default)]
 pub struct MemRepository<V: View<A>, A: Aggregate> {
     pub map: Mutex<HashMap<String, serde_json::Value>>,
     _phantom: std::marker::PhantomData<(V, A)>,
@@ -14,10 +15,7 @@ pub struct MemRepository<V: View<A>, A: Aggregate> {
 
 impl<V: View<A>, A: Aggregate> MemRepository<V, A> {
     pub fn new() -> Self {
-        Self {
-            map: Mutex::new(HashMap::new()),
-            _phantom: Default::default(),
-        }
+        Self::default()
     }
 }
 

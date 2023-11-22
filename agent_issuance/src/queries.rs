@@ -40,7 +40,9 @@ impl View<IssuanceData> for IssuanceDataView {
             AuthorizationServerMetadataLoaded {
                 authorization_server_metadata,
             } => {
-                self.oid4vci_data.authorization_server_metadata = Some(authorization_server_metadata.clone());
+                self.oid4vci_data
+                    .authorization_server_metadata
+                    .replace(*authorization_server_metadata.clone());
             }
             CredentialIssuerMetadataLoaded {
                 credential_issuer_metadata,
