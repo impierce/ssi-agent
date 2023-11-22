@@ -54,6 +54,7 @@ dependencies = [
  "agent_store",
  "async-trait",
  "cqrs-es",
+ "derivative",
  "did-key",
  "identity_credential 1.0.0 (git+https://github.com/iotaledger/identity.rs.git)",
  "jsonschema",

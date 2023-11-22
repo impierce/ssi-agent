@@ -37,7 +37,7 @@ pub enum IssuanceCommand {
     // TODO: add option for credential_offer_uri (by reference)
     CreateCredentialOffer,
     CreateUnsignedCredential {
-        unsigned_credential: serde_json::Value,
+        credential_subject: serde_json::Value,
     },
 
     // OpenID4VCI Pre-Authorized Code Flow

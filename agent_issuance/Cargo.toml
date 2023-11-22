@@ -24,6 +24,7 @@ url = "2.4"
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 did-key = "0.2"
 jsonwebtoken = "8.2"
+derivative = "2.2"
 
 identity_credential = { git = "https://github.com/iotaledger/identity.rs.git", default-features = false, features = [
     "credential",

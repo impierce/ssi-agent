@@ -1,6 +1,6 @@
 use agent_api_rest::app;
 use agent_issuance::{
-    command::IssuanceCommand, handlers::command_handler, model::aggregate::Credential, queries::CredentialView,
+    command::IssuanceCommand, handlers::command_handler, model::aggregate::IssuanceData, queries::IssuanceDataView,
     state::new_application_state,
 };
 use agent_store::state::ApplicationState;
@@ -17,12 +17,12 @@ async fn main() {
         .unwrap();
 }
 
-async fn startup_events(state: ApplicationState<Credential, CredentialView>) {
+async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>) {
     match command_handler(
         "agg-id-F39A0C".to_string(),
         &state,
-        IssuanceCommand::LoadCredentialTemplate {
-            credential_template: serde_json::from_str(r#"{"foo":"bar"}"#).unwrap(),
+        IssuanceCommand::LoadCredentialFormatTemplate {
+            credential_format_template: serde_json::from_str(r#"{"foo":"bar"}"#).unwrap(),
         },
     )
     .await

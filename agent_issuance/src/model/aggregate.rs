@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
+use derivative::Derivative;
 use did_key::{from_existing_key, Ed25519KeyPair};
 use jsonschema::JSONSchema;
 use jsonwebtoken::{Algorithm, Header};
@@ -35,8 +36,10 @@ pub struct OID4VCIData {
     pub credential_issuer_metadata: Option<CredentialIssuerMetadata>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
+#[derivative(PartialEq)]
 pub struct Credential {
+    #[derivative(PartialEq = "ignore")]
     id: uuid::Uuid,
     unsigned_credential: serde_json::Value,
     signed_credential: Option<serde_json::Value>,
@@ -48,8 +51,10 @@ pub struct CredentialOffer {
     form_urlencoded: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
+#[derivative(PartialEq)]
 pub struct IssuanceSubject {
+    #[derivative(PartialEq = "ignore")]
     pub id: uuid::Uuid,
     pub credential_offer: Option<CredentialOffer>,
     pub credentials: Vec<Credential>,
@@ -152,22 +157,14 @@ impl Aggregate for IssuanceData {
                     },
                 }])
             }
-            IssuanceCommand::CreateUnsignedCredential { unsigned_credential } => {
-                let json_schema = JSONSchema::compile(&self.credential_format_template)
-                    .map_err(|e| IssuanceError::from(e.to_string().as_str()))?;
 
-                {
-                    // In the provided unsigned credential, the id should be omitted. However, in order to validate the
-                    // content of the unsigned credential, we need to provide a temporary value for the id.
-                    let mut cloned_unsigned_credential = unsigned_credential.clone();
-                    cloned_unsigned_credential["credentialSubject"]["id"] = json!("did:temp:placeholder");
+            IssuanceCommand::CreateUnsignedCredential { credential_subject } => {
+                let mut unsigned_credential = self.credential_format_template.clone();
 
-                    json_schema.validate(&cloned_unsigned_credential).map_err(|e| {
-                        // TODO: remove ugly solution.
-                        let e: Vec<_> = e.map(|e| e.to_string()).collect();
-                        IssuanceError::from(e.join(", ").as_str())
-                    })?;
-                }
+                unsigned_credential.as_object_mut().unwrap().insert(
+                    "credentialSubject".to_string(),
+                    credential_subject["credentialSubject"].clone(),
+                );
 
                 Ok(vec![IssuanceEvent::UnsignedCredentialCreated {
                     credential: Credential {
@@ -268,39 +265,6 @@ impl Aggregate for IssuanceData {
                 Ok(vec![IssuanceEvent::CredentialResponseCreated { credential_response }])
             }
             _ => unimplemented!("Command not implemented"),
-            // IssuanceCommand::LoadCredentialTemplate { credential_template } => {
-            //     JSONSchema::compile(&credential_template).map_err(|e| IssuanceError::from(e.to_string().as_str()))?;
-
-            //     Ok(vec![IssuanceEvent::CredentialTemplateLoaded { credential_template }])
-            // }
-            // IssuanceCommand::CreateCredentialData { credential_subject } => {
-            //     let credential_template = self.credential_template.clone();
-            //     dbg!(&credential_template);
-            //     // let json_schema = JSONSchema::compile(&credential_template)
-            //     //     .map_err(|e| IssuanceError::from(e.to_string().as_str()))?;
-
-            //     let mut openbadges_v3_format_template =
-            //         serde_json::from_str::<Value>(include_str!("../../res/format_templates/openbadges_v3.json"))
-            //             .map_err(|e| IssuanceError::from(e.to_string().as_str()))?;
-
-            //     openbadges_v3_format_template
-            //         .as_object_mut()
-            //         .unwrap()
-            //         .insert("credentialSubject".to_string(), credential_subject.clone());
-
-            //     dbg!(&openbadges_v3_format_template);
-
-            //     // json_schema.validate(&openbadges_v3_format_template).map_err(|e| {
-            //     //     // TODO: remove ugly solution.
-            //     //     let e: Vec<_> = e.map(|e| e.to_string()).collect();
-            //     //     IssuanceError::from(e.join(", ").as_str())
-            //     // })?;
-
-            //     Ok(vec![IssuanceEvent::CredentialDataCreated {
-            //         credential_template,
-            //         credential_data: credential_subject,
-            //     }])
-            // }
         }
     }
 
@@ -376,17 +340,17 @@ mod tests {
     type CredentialTestFramework = TestFramework<IssuanceData>;
 
     #[test]
-    fn test_credential_format_template_loaded() {
+    fn test_load_credential_format_template() {
         CredentialTestFramework::with(IssuanceServices)
             .given_no_previous_events()
             .when(IssuanceCommand::LoadCredentialFormatTemplate {
-                credential_format_template: CREDENTIAL_FORMAT.clone(),
+                credential_format_template: CREDENTIAL_FORMAT_TEMPLATE.clone(),
             })
             .then_expect_events(vec![IssuanceEvent::credential_format_template_loaded()]);
     }
 
     #[test]
-    fn test_authorization_server_metadata_loaded() {
+    fn test_load_authorization_server_metadata() {
         CredentialTestFramework::with(IssuanceServices)
             .given(vec![IssuanceEvent::credential_format_template_loaded()])
             .when(IssuanceCommand::LoadAuthorizationServerMetadata {
@@ -396,7 +360,7 @@ mod tests {
     }
 
     #[test]
-    fn test_credential_issuer_metadata_loaded() {
+    fn test_load_credential_issuer_metadata() {
         CredentialTestFramework::with(IssuanceServices)
             .given(vec![
                 IssuanceEvent::credential_format_template_loaded(),
@@ -409,20 +373,22 @@ mod tests {
     }
 
     // How to fix Uuid? Should it come from outside, or should it be generated? Should it be metadata?
-    // #[test]
-    // fn test_subject_created() {
-    //     CredentialTestFramework::with(IssuanceServices)
-    //         .given(vec![
-    //             IssuanceEvent::credential_format_template_loaded(),
-    //             IssuanceEvent::authorization_server_metadata_loaded(),
-    //             IssuanceEvent::credential_issuer_metadata_loaded(),
-    //         ])
-    //         .when(IssuanceCommand::CreateSubject)
-    //         .then_expect_events(vec![IssuanceEvent::subject_created()]);
-    // }
+    #[test]
+    fn test_create_subject() {
+        CredentialTestFramework::with(IssuanceServices)
+            .given(vec![
+                IssuanceEvent::credential_format_template_loaded(),
+                IssuanceEvent::authorization_server_metadata_loaded(),
+                IssuanceEvent::credential_issuer_metadata_loaded(),
+            ])
+            .when(IssuanceCommand::CreateSubject {
+                pre_authorized_code: UNSAFE_PRE_AUTHORIZED_CODE.to_string(),
+            })
+            .then_expect_events(vec![IssuanceEvent::subject_created()]);
+    }
 
     #[test]
-    fn test_credentials_supported_created() {
+    fn test_create_credentials_supported() {
         CredentialTestFramework::with(IssuanceServices)
             .given(vec![
                 IssuanceEvent::credential_format_template_loaded(),
@@ -437,7 +403,7 @@ mod tests {
     }
 
     #[test]
-    fn test_credential_offer_created() {
+    fn test_create_credential_offer() {
         CredentialTestFramework::with(IssuanceServices)
             .given(vec![
                 IssuanceEvent::credential_format_template_loaded(),
@@ -451,7 +417,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unsigned_credential_created() {
+    fn test_create_unsigned_credential() {
         CredentialTestFramework::with(IssuanceServices)
             .given(vec![
                 IssuanceEvent::credential_format_template_loaded(),
@@ -462,13 +428,13 @@ mod tests {
                 IssuanceEvent::credential_offer_created(),
             ])
             .when(IssuanceCommand::CreateUnsignedCredential {
-                unsigned_credential: UNSIGNED_CREDENTIAL.clone(),
+                credential_subject: CREDENTIAL_SUBJECT.clone(),
             })
             .then_expect_events(vec![IssuanceEvent::unsigned_credential_created()]);
     }
 
     #[test]
-    fn test_token_response_created() {
+    fn test_create_token_response() {
         CredentialTestFramework::with(IssuanceServices)
             .given(vec![
                 IssuanceEvent::credential_format_template_loaded(),
@@ -486,7 +452,7 @@ mod tests {
     }
 
     #[test]
-    fn test_credential_response_created() {
+    fn test_create_credential_response() {
         CredentialTestFramework::with(IssuanceServices)
             .given(vec![
                 IssuanceEvent::credential_format_template_loaded(),
@@ -505,9 +471,14 @@ mod tests {
             .then_expect_events(vec![IssuanceEvent::credential_response_created()]);
     }
 
+    #[test]
+    fn temp() {
+        dbg!(IssuanceEvent::credential_response_created());
+    }
+
     lazy_static! {
-        static ref CREDENTIAL_FORMAT: serde_json::Value =
-            serde_json::from_str(include_str!("../../res/json_schema/openbadges_v3.json")).unwrap();
+        static ref CREDENTIAL_FORMAT_TEMPLATE: serde_json::Value =
+            serde_json::from_str(include_str!("../../res/credential_format_templates/openbadges_v3.json")).unwrap();
         static ref BASE_URL: url::Url = "https://example.com/".parse().unwrap();
         static ref AUTHORIZATION_SERVER_METADATA: AuthorizationServerMetadata = AuthorizationServerMetadata {
             issuer: BASE_URL.clone(),
@@ -570,6 +541,23 @@ mod tests {
                 form_urlencoded: credential_offer.to_string(),
             }
         };
+        static ref CREDENTIAL_SUBJECT: serde_json::Value = json!(
+            {
+                "credentialSubject": {
+                    "id": {},
+                    "type": "AchievementSubject",
+                    "achievement": {
+                              "id": "https://example.com/achievements/21st-century-skills/teamwork",
+                              "type": "Achievement",
+                              "criteria": {
+                                  "narrative": "Team members are nominated for this badge by their peers and recognized upon review by Example Corp management."
+                              },
+                              "description": "This badge recognizes the development of the capacity to collaborate within a group environment.",
+                              "name": "Teamwork"
+                          }
+                  }
+            }
+        );
         static ref UNSIGNED_CREDENTIAL: serde_json::Value = json!({
           "@context": [
             "https://www.w3.org/2018/credentials/v1",
@@ -584,19 +572,7 @@ mod tests {
           },
           "issuanceDate": "2010-01-01T00:00:00Z",
           "name": "Teamwork Badge",
-          "credentialSubject": {
-            "id": {},
-            "type": "AchievementSubject",
-            "achievement": {
-                      "id": "https://example.com/achievements/21st-century-skills/teamwork",
-                      "type": "Achievement",
-                      "criteria": {
-                          "narrative": "Team members are nominated for this badge by their peers and recognized upon review by Example Corp management."
-                      },
-                      "description": "This badge recognizes the development of the capacity to collaborate within a group environment.",
-                      "name": "Teamwork"
-                  }
-          }
+          "credentialSubject": CREDENTIAL_SUBJECT["credentialSubject"].clone(),
         });
         static ref CREDENTIAL: Credential = Credential {
             id: uuid::Uuid::new_v4(),
@@ -670,7 +646,7 @@ mod tests {
     impl IssuanceEvent {
         pub fn credential_format_template_loaded() -> IssuanceEvent {
             IssuanceEvent::CredentialFormatTemplateLoaded {
-                credential_format_template: CREDENTIAL_FORMAT.clone(),
+                credential_format_template: CREDENTIAL_FORMAT_TEMPLATE.clone(),
             }
         }
 

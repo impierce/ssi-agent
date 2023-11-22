@@ -43,7 +43,7 @@ async fn create_unsigned_credential(
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     let command = IssuanceCommand::CreateUnsignedCredential {
-        unsigned_credential: payload,
+        credential_subject: payload,
     };
 
     match create_credential(&state, command).await {
@@ -144,7 +144,6 @@ async fn credential(
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, path::Path};
 
     use super::*;
     use agent_issuance::state::new_application_state;
