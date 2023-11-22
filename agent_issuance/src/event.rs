@@ -1,4 +1,3 @@
-// use crate::model::aggregate::CredentialFormat;
 use cqrs_es::DomainEvent;
 use oid4vci::{
     credential_issuer::{
@@ -49,7 +48,7 @@ impl DomainEvent for IssuanceEvent {
         use IssuanceEvent::*;
 
         let event_type: &str = match self {
-            CredentialFormatTemplateLoaded { .. } => "CredentialFormatLoaded",
+            CredentialFormatTemplateLoaded { .. } => "CredentialFormatTemplateLoaded",
             AuthorizationServerMetadataLoaded { .. } => "AuthorizationServerMetadataLoaded",
             CredentialIssuerMetadataLoaded { .. } => "CredentialIssuerMetadataLoaded",
             CredentialsSupportedCreated { .. } => "CredentialsSupportedCreated",

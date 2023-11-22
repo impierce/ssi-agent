@@ -66,8 +66,6 @@ pub struct IssuanceData {
     credential_format_template: serde_json::Value,
     oid4vci_data: OID4VCIData,
     subjects: Vec<IssuanceSubject>,
-    // TODO: add proof?
-    // proof: Option<T>
 }
 
 #[async_trait]
@@ -364,7 +362,6 @@ mod tests {
             .then_expect_events(vec![IssuanceEvent::credential_issuer_metadata_loaded()]);
     }
 
-    // How to fix Uuid? Should it come from outside, or should it be generated? Should it be metadata?
     #[test]
     fn test_create_subject() {
         CredentialTestFramework::with(IssuanceServices)

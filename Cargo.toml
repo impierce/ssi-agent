@@ -8,6 +8,6 @@ members = [
 ]
 
 [workspace.dependencies]
-serde = { version = "1.0", default-features = false, features = ["derive"] }
 lazy_static = "1.4"
+serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0" }
