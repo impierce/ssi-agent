@@ -45,6 +45,7 @@ pub enum IssuanceCommand {
         token_request: TokenRequest,
     },
     CreateCredentialResponse {
+        access_token: String,
         credential_request: CredentialRequest,
     },
 }

@@ -3,7 +3,6 @@ use crate::model::aggregate::IssuanceData;
 use crate::queries::IssuanceDataView;
 use crate::services::IssuanceServices;
 use agent_store::state::ApplicationState;
-use cqrs_es::persist::ViewRepository;
 use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 

@@ -1,11 +1,9 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use did_key::{from_existing_key, generate, DIDCore, Ed25519KeyPair};
+use did_key::{from_existing_key, Ed25519KeyPair};
 use jsonschema::JSONSchema;
 use jsonwebtoken::{Algorithm, Header};
-use oid4vc_core::{jwt, Decoder, Subject, Subjects};
+use oid4vc_core::{jwt, Decoder, Subjects};
 use oid4vc_manager::methods::key_method::KeySubject;
 use oid4vci::{
     credential_format_profiles::{self, w3c_verifiable_credentials::jwt_vc_json::JwtVcJson, CredentialFormats},
@@ -18,10 +16,11 @@ use oid4vci::{
     },
     credential_response::{CredentialResponse, CredentialResponseType},
     token_response::TokenResponse,
-    Proof, VerifiableCredentialJwt,
+    VerifiableCredentialJwt,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::sync::Arc;
 
 use crate::{command::IssuanceCommand, error::IssuanceError, event::IssuanceEvent, services::IssuanceServices};
 
@@ -35,26 +34,6 @@ pub struct OID4VCIData {
     pub authorization_server_metadata: Option<AuthorizationServerMetadata>,
     pub credential_issuer_metadata: Option<CredentialIssuerMetadata>,
 }
-
-// #[test]
-// fn test() {
-//     let issuer = Arc::new(KeySubject::from_keypair(
-//         from_existing_key::<Ed25519KeyPair>(b"", Some(UNSAFE_ISSUER_KEY.as_bytes().try_into().unwrap())),
-//         None,
-//     ));
-//     let issuer_did = issuer.identifier().unwrap();
-
-//     let issuer = Arc::new(KeySubject::from_keypair(
-//         from_existing_key::<Ed25519KeyPair>(b"", Some(UNSAFE_ISSUER_KEY.as_bytes().try_into().unwrap())),
-//         None,
-//     ));
-//     let issuer_did = issuer.identifier().unwrap();
-//     let issuer = Arc::new(KeySubject::from_keypair(
-//         from_existing_key::<Ed25519KeyPair>(b"", Some(UNSAFE_ISSUER_KEY.as_bytes().try_into().unwrap())),
-//         None,
-//     ));
-//     let issuer_did = issuer.identifier().unwrap();
-// }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct Credential {
@@ -220,8 +199,15 @@ impl Aggregate for IssuanceData {
                 }
                 _ => Err(IssuanceError::from("Unsupported Token Request")),
             },
-            IssuanceCommand::CreateCredentialResponse { credential_request } => {
+            IssuanceCommand::CreateCredentialResponse {
+                access_token,
+                credential_request,
+            } => {
                 use oid4vc_core::Subject;
+
+                if access_token != UNSAFE_ACCESS_TOKEN {
+                    return Err(IssuanceError::from("Invalid Access Token"));
+                }
 
                 let issuer = Arc::new(KeySubject::from_keypair(
                     from_existing_key::<Ed25519KeyPair>(b"", Some(UNSAFE_ISSUER_KEY.as_bytes().try_into().unwrap())),
@@ -335,7 +321,7 @@ mod tests {
 
     use super::*;
     use cqrs_es::test::TestFramework;
-    use did_key::{generate, Ed25519KeyPair};
+    use did_key::Ed25519KeyPair;
     use lazy_static::lazy_static;
     use oid4vc_manager::methods::key_method::KeySubject;
     use oid4vci::{
@@ -480,6 +466,7 @@ mod tests {
                 IssuanceEvent::token_response_created(),
             ])
             .when(IssuanceCommand::CreateCredentialResponse {
+                access_token: UNSAFE_ACCESS_TOKEN.to_string(),
                 credential_request: CREDENTIAL_REQUEST.clone(),
             })
             .then_expect_events(vec![IssuanceEvent::credential_response_created()]);

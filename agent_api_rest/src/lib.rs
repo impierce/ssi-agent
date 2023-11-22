@@ -12,6 +12,7 @@ use axum::{
     routing::{get, post},
     Form, Router,
 };
+use axum_auth::AuthBearer;
 use oid4vci::{credential_request::CredentialRequest, token_request::TokenRequest};
 use serde_json::Value;
 
@@ -108,10 +109,13 @@ async fn token(
 #[axum_macros::debug_handler]
 async fn credential(
     State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
-    // TODO: add AuthBearer(access_token): AuthBearer,
+    AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> impl IntoResponse {
-    let command = IssuanceCommand::CreateCredentialResponse { credential_request };
+    let command = IssuanceCommand::CreateCredentialResponse {
+        access_token,
+        credential_request,
+    };
 
     match command_handler(AGGREGATE_ID.to_string(), &state, command).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),

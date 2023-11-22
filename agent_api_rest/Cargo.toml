@@ -12,4 +12,5 @@ oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", branch = 
 
 axum = "0.6"
 axum-macros = "0.3"
+axum-auth = "0.4"
 serde_json = "1.0"

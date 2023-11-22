@@ -24,6 +24,7 @@ dependencies = [
  "agent_issuance",
  "agent_store",
  "axum",
+ "axum-auth",
  "axum-macros",
  "oid4vc-core",
  "oid4vci",
