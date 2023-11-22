@@ -7,6 +7,8 @@ edition = "2021"
 agent_issuance = { path = "../agent_issuance" }
 agent_store = { path = "../agent_store" }
 
+cqrs-es = "0.4.2"
+
 oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
 oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
 

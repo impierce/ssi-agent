@@ -4,8 +4,8 @@ use agent_issuance::{
     model::aggregate::IssuanceData,
     model::create_credential,
     queries::IssuanceDataView,
+    state::DynApplicationState,
 };
-use agent_store::state::ApplicationState;
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -21,7 +21,7 @@ use serde_json::{json, Value};
 // TODO: What to do with aggregate_id's?
 const AGGREGATE_ID: &str = "agg-id-F39A0C";
 
-pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
+pub fn app(state: DynApplicationState<IssuanceData, IssuanceDataView>) -> Router {
     Router::new()
         .route("/v1/credentials", post(create_unsigned_credential))
         .route(
@@ -39,7 +39,7 @@ pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
 
 #[axum_macros::debug_handler]
 async fn create_unsigned_credential(
-    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
+    State(state): State<DynApplicationState<IssuanceData, IssuanceDataView>>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     let command = IssuanceCommand::CreateUnsignedCredential {
@@ -57,12 +57,26 @@ async fn create_unsigned_credential(
             println!("Error: {:#?}\n", err);
             (StatusCode::BAD_REQUEST, err.to_string()).into_response()
         }
+    };
+
+    match query_handler(AGGREGATE_ID.to_string(), &state).await {
+        Ok(Some(view)) => (
+            StatusCode::CREATED,
+            [(header::LOCATION, format!("/v1/credentials/{}", AGGREGATE_ID))],
+            Json(view.subjects[0].credentials[0].unsigned_credential.clone()),
+        )
+            .into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(err) => {
+            println!("Error: {:#?}\n", err);
+            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
+        }
     }
 }
 
 #[axum_macros::debug_handler]
 async fn oauth_authorization_server(
-    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
+    State(state): State<DynApplicationState<IssuanceData, IssuanceDataView>>,
 ) -> impl IntoResponse {
     match query_handler(AGGREGATE_ID.to_string(), &state).await {
         Ok(Some(view)) => (StatusCode::OK, Json(view.oid4vci_data.authorization_server_metadata)).into_response(),
@@ -76,7 +90,7 @@ async fn oauth_authorization_server(
 
 #[axum_macros::debug_handler]
 async fn openid_credential_issuer(
-    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
+    State(state): State<DynApplicationState<IssuanceData, IssuanceDataView>>,
 ) -> impl IntoResponse {
     match query_handler(AGGREGATE_ID.to_string(), &state).await {
         Ok(Some(view)) => (StatusCode::OK, Json(view.oid4vci_data.credential_issuer_metadata)).into_response(),
@@ -90,7 +104,7 @@ async fn openid_credential_issuer(
 
 #[axum_macros::debug_handler]
 async fn token(
-    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
+    State(state): State<DynApplicationState<IssuanceData, IssuanceDataView>>,
     Form(token_request): Form<TokenRequest>,
 ) -> impl IntoResponse {
     let command = IssuanceCommand::CreateTokenResponse { token_request };
@@ -115,7 +129,7 @@ async fn token(
 
 #[axum_macros::debug_handler]
 async fn credential(
-    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
+    State(state): State<DynApplicationState<IssuanceData, IssuanceDataView>>,
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> impl IntoResponse {
@@ -144,19 +158,47 @@ async fn credential(
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
-    use agent_issuance::state::new_application_state;
+    use agent_issuance::services::IssuanceServices;
+    use agent_store::in_memory::InMemoryApplicationState;
     use axum::{
         body::Body,
         http::{self, Request},
     };
     use serde_json::json;
+    use std::sync::Arc;
     use tower::ServiceExt;
 
     #[tokio::test]
     async fn location_header_is_set_on_successful_creation() {
-        let state = new_application_state().await;
+        let state = Arc::new(InMemoryApplicationState::new(vec![], IssuanceServices {}).await)
+            as DynApplicationState<IssuanceData, IssuanceDataView>;
+
+        state
+            .execute_with_metadata(
+                "agg-id-F39A0C",
+                IssuanceCommand::LoadCredentialFormatTemplate {
+                    credential_format_template: serde_json::from_str(include_str!(
+                        "../../agent_issuance/res/credential_format_templates/openbadges_v3.json"
+                    ))
+                    .unwrap(),
+                },
+                Default::default(),
+            )
+            .await
+            .unwrap();
+
+        state
+            .execute_with_metadata(
+                "agg-id-F39A0C",
+                IssuanceCommand::CreateSubject {
+                    pre_authorized_code: "test".to_string(),
+                },
+                Default::default(),
+            )
+            .await
+            .unwrap();
+
         let app = app(state);
 
         let response = app
@@ -167,8 +209,10 @@ mod tests {
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "first_name": "Ferris",
-                            "last_name": "Rustacean",
+                            "credentialSubject": {
+                                "first_name": "Ferris",
+                                "last_name": "Rustacean",
+                            },
                         }))
                         .unwrap(),
                     ))
@@ -188,24 +232,19 @@ mod tests {
         let body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(
             body,
-            // serde_json::from_reader::<_, Value>(
-            //     File::open(Path::new("../tests/response/create-open-badge.json")).unwrap()
-            // )
-            // .unwrap()
             serde_json::from_str::<Value>(
                 r#"
                 {
                     "@context": [
                         "https://www.w3.org/2018/credentials/v1",
-                        "https://www.w3.org/2018/credentials/examples/v1",
                         "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
                     ],
-                    "id": "http://example.edu/credentials/3732",
+                    "id": "http://example.com/credentials/3527",
                     "type": ["VerifiableCredential", "OpenBadgeCredential"],
                     "issuer": {
-                        "id": "https://example.edu/issuers/565049",
-                        "type": ["IssuerProfile"],
-                        "name": "Example University"
+                        "id": "https://example.com/issuers/876543",
+                        "type": "Profile",
+                        "name": "Example Corp"
                     },
                     "issuanceDate": "2010-01-01T00:00:00Z",
                     "name": "Teamwork Badge",

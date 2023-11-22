@@ -1,8 +1,8 @@
+use crate::{command::IssuanceCommand, error::IssuanceError, event::IssuanceEvent, services::IssuanceServices};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;
 use did_key::{from_existing_key, Ed25519KeyPair};
-use jsonschema::JSONSchema;
 use jsonwebtoken::{Algorithm, Header};
 use oid4vc_core::{jwt, Decoder, Subjects};
 use oid4vc_manager::methods::key_method::KeySubject;
@@ -23,8 +23,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
 
-use crate::{command::IssuanceCommand, error::IssuanceError, event::IssuanceEvent, services::IssuanceServices};
-
 const UNSAFE_PRE_AUTHORIZED_CODE: &str = "unsafe_pre_authorized_code";
 const UNSAFE_ACCESS_TOKEN: &str = "unsafe_access_token";
 const UNSAFE_C_NONCE: &str = "unsafe_c_nonce";
@@ -41,7 +39,7 @@ pub struct OID4VCIData {
 pub struct Credential {
     #[derivative(PartialEq = "ignore")]
     id: uuid::Uuid,
-    unsigned_credential: serde_json::Value,
+    pub unsigned_credential: serde_json::Value,
     signed_credential: Option<serde_json::Value>,
 }
 
@@ -91,14 +89,9 @@ impl Aggregate for IssuanceData {
         match command {
             IssuanceCommand::LoadCredentialFormatTemplate {
                 credential_format_template,
-            } => {
-                JSONSchema::compile(&credential_format_template)
-                    .map_err(|e| IssuanceError::from(e.to_string().as_str()))?;
-
-                Ok(vec![IssuanceEvent::CredentialFormatTemplateLoaded {
-                    credential_format_template,
-                }])
-            }
+            } => Ok(vec![IssuanceEvent::CredentialFormatTemplateLoaded {
+                credential_format_template,
+            }]),
             IssuanceCommand::LoadAuthorizationServerMetadata {
                 authorization_server_metadata,
             } => Ok(vec![IssuanceEvent::AuthorizationServerMetadataLoaded {
@@ -264,7 +257,6 @@ impl Aggregate for IssuanceData {
 
                 Ok(vec![IssuanceEvent::CredentialResponseCreated { credential_response }])
             }
-            _ => unimplemented!("Command not implemented"),
         }
     }
 
@@ -469,11 +461,6 @@ mod tests {
                 credential_request: CREDENTIAL_REQUEST.clone(),
             })
             .then_expect_events(vec![IssuanceEvent::credential_response_created()]);
-    }
-
-    #[test]
-    fn temp() {
-        dbg!(IssuanceEvent::credential_response_created());
     }
 
     lazy_static! {

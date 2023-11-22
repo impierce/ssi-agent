@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+agent_issuance = { path = "../agent_issuance" }
+
 cqrs-es = "0.4.2"
 postgres-es = "0.4.10"
 config = "0.13"
@@ -13,3 +15,5 @@ sqlx = { version = "0.7", features = [
     "runtime-tokio-rustls",
     "json",
 ] }
+async-trait = "0.1"
+serde_json = "1.0"

@@ -1,13 +1,15 @@
 use agent_api_rest::app;
 use agent_issuance::{
     command::IssuanceCommand, handlers::command_handler, model::aggregate::IssuanceData, queries::IssuanceDataView,
-    state::new_application_state,
+    services::IssuanceServices, state::DynApplicationState,
 };
-use agent_store::state::ApplicationState;
+use agent_store::postgres::PostgresApplicationState;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
-    let state = new_application_state().await;
+    let state = Arc::new(PostgresApplicationState::new(vec![], IssuanceServices {}).await)
+        as DynApplicationState<IssuanceData, IssuanceDataView>;
 
     tokio::spawn(startup_events(state.clone()));
 
@@ -17,7 +19,7 @@ async fn main() {
         .unwrap();
 }
 
-async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>) {
+async fn startup_events(state: DynApplicationState<IssuanceData, IssuanceDataView>) {
     match command_handler(
         "agg-id-F39A0C".to_string(),
         &state,

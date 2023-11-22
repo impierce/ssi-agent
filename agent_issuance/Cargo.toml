@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-agent_store = { path = "../agent_store" }
+# agent_store = { path = "../agent_store" }
 
 oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
 oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
@@ -16,7 +16,7 @@ sqlx = { version = "0.7", features = [
     "runtime-tokio-rustls",
     "json",
 ] }
-async-trait = "0.1.52"
+async-trait = "0.1"
 serde.workspace = true
 serde_json = "1.0"
 jsonschema = "0.17"

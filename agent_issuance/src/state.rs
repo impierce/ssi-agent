@@ -1,75 +1,20 @@
-use crate::command::IssuanceCommand;
-use crate::model::aggregate::IssuanceData;
-use crate::queries::IssuanceDataView;
-use crate::services::IssuanceServices;
-use agent_store::state::ApplicationState;
-use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
-use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
+use async_trait::async_trait;
+use cqrs_es::persist::PersistenceError;
+use cqrs_es::{Aggregate, View};
+use std::collections::HashMap;
+use std::sync::Arc;
 
-pub async fn new_application_state() -> ApplicationState<IssuanceData, IssuanceDataView> {
-    let state = agent_store::state::application_state(
-        // vec![Box::new(SimpleLoggingQuery {})],
-        vec![],
-        IssuanceServices {},
-    )
-    .await;
+#[async_trait]
+pub trait ApplicationState<A: Aggregate, V: View<A>> {
+    async fn execute_with_metadata(
+        &self,
+        aggregate_id: &str,
+        command: A::Command,
+        metadata: HashMap<String, String>,
+    ) -> Result<(), cqrs_es::AggregateError<A::Error>>
+    where
+        A::Command: Send + Sync;
 
-    let base_url: url::Url = "https://example.com/".parse().unwrap();
-
-    state
-        .cqrs
-        .execute(
-            "agg-id-F39A0C",
-            IssuanceCommand::LoadAuthorizationServerMetadata {
-                authorization_server_metadata: AuthorizationServerMetadata {
-                    issuer: base_url.clone(),
-                    token_endpoint: Some(base_url.join("token").unwrap()),
-                    ..Default::default()
-                },
-            },
-        )
-        .await
-        .unwrap();
-
-    state
-        .cqrs
-        .execute(
-            "agg-id-F39A0C",
-            IssuanceCommand::LoadCredentialIssuerMetadata {
-                credential_issuer_metadata: CredentialIssuerMetadata {
-                    credential_issuer: base_url.clone(),
-                    authorization_server: None,
-                    credential_endpoint: base_url.join("credential").unwrap(),
-                    deferred_credential_endpoint: None,
-                    batch_credential_endpoint: Some(base_url.join("batch_credential").unwrap()),
-                    credentials_supported: vec![],
-                    display: None,
-                },
-            },
-        )
-        .await
-        .unwrap();
-
-    // state
-    //     .cqrs
-    //     .execute(
-    //         "agg-id-F39A0C",
-    //         IssuanceCommand::CreateCredentialsSupported {
-    //             credentials_supported: vec![],
-    //         },
-    //     )
-    //     .await
-    //     .unwrap();
-
-    // state
-    //     .cqrs
-    //     .execute("agg-id-F39A0C", IssuanceCommand::CreateCredentialOffer)
-    //     .await
-    //     .unwrap();
-
-    // let view = state.issuance_data_query.load(&"agg-id-F39A0C").await.unwrap();
-
-    // println!("view: {:#?}", view);
-
-    state
+    async fn load(&self, view_id: &str) -> Result<Option<V>, PersistenceError>;
 }
+pub type DynApplicationState<A, V> = Arc<dyn ApplicationState<A, V> + Send + Sync>;

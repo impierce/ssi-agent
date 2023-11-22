@@ -61,13 +61,15 @@ impl View<IssuanceData> for IssuanceDataView {
                 self.subjects[0].credential_offer = Some(credential_offer.clone());
             }
             UnsignedCredentialCreated { credential } => {
-                todo!()
+                self.subjects[0].credentials.push(credential.clone());
             }
             TokenResponseCreated { token_response } => {
-                todo!()
+                self.subjects[0].token_response.replace(token_response.clone());
             }
             CredentialResponseCreated { credential_response } => {
-                todo!()
+                self.subjects[0]
+                    .credential_response
+                    .replace(credential_response.clone());
             }
         }
     }
