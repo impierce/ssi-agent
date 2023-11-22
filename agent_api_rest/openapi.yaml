@@ -1,0 +1,56 @@
+openapi: 3.1.0
+info:
+  title: SSI Agent - REST API
+  description: A lightweight REST API for the SSI Agent
+  version: 0.1.0
+
+servers:
+  - url: http://localhost:3033
+    description: Development
+
+paths:
+  /v1/credentials:
+    post:
+      summary: Create a new Credential for a given Subject
+      # description: n/a
+      tags:
+        - Creation
+      requestBody:
+        description: Any JSON object to be used as the Subject of the new Credential
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                # $meta:
+                #   type: object
+                #   properties:
+                #     credentialTemplate:
+                #       type: string
+                #       description: The template to be used to create the credential
+                credentialSubject:
+                  type: object
+              required:
+                - credentialSubject
+            examples:
+              open-badges-3:
+                summary: Open Badges 3.0
+                externalValue: res/open-badge-request.json
+      responses:
+        "201":
+          description: An Open Badge 3.0 has successfully been created for the provided credentialSubject
+          headers:
+            Location:
+              schema:
+                type: string
+                example: "/v1/credentials/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
+              description: URL of the created resource
+          content:
+            application/json:
+              schema:
+                type: object
+              examples:
+                open-badges-3:
+                  summary: Open Badges 3.0
+                  externalValue: res/open-badge-response.json
