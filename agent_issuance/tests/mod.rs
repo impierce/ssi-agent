@@ -15,7 +15,7 @@ async fn test() {
     application_state.cqrs.execute("agg-id-0007", command).await.unwrap();
 
     let command = IssuanceCommand::CreateCredentialData {
-        credential: serde_json::json!({
+        credential_subject: serde_json::json!({
           "@context": [
             "https://www.w3.org/2018/credentials/v1",
             "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"

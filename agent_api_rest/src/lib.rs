@@ -1,5 +1,7 @@
 use agent_issuance::{
-    command::IssuanceCommand, handlers::command_handler, model::aggregate::Credential, queries::CredentialView,
+    command::IssuanceCommand,
+    model::{aggregate::Credential, create_credential},
+    queries::CredentialView,
 };
 use agent_store::state::ApplicationState;
 use axum::{
@@ -22,15 +24,15 @@ async fn create_credential_data(
     State(state): State<ApplicationState<Credential, CredentialView>>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
-    let command = IssuanceCommand::CreateCredentialData { credential: payload };
+    let command = IssuanceCommand::CreateCredentialData {
+        credential_subject: payload,
+    };
 
-    match command_handler("agg-id-F39A0C".to_string(), state, command).await {
+    match create_credential(state, command).await {
         Ok(_) => (
             StatusCode::CREATED,
             [(header::LOCATION, format!("/v1/credentials/{}", "agg-id-F39A0C"))],
-            Json(json!({
-                "foo": "bar"
-            })),
+            Json(json!({})),
         )
             .into_response(),
         Err(err) => {

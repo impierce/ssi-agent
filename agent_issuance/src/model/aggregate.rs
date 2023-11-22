@@ -36,7 +36,7 @@ impl Aggregate for Credential {
 
                 Ok(vec![IssuanceEvent::CredentialTemplateLoaded { credential_template }])
             }
-            IssuanceCommand::CreateCredentialData { credential } => {
+            IssuanceCommand::CreateCredentialData { credential_subject } => {
                 let credential_template = self.credential_template.clone();
                 dbg!(&credential_template);
                 // let json_schema = JSONSchema::compile(&credential_template)
@@ -49,7 +49,7 @@ impl Aggregate for Credential {
                 openbadges_v3_format_template
                     .as_object_mut()
                     .unwrap()
-                    .insert("credentialSubject".to_string(), credential.clone());
+                    .insert("credentialSubject".to_string(), credential_subject.clone());
 
                 dbg!(&openbadges_v3_format_template);
 
@@ -61,7 +61,7 @@ impl Aggregate for Credential {
 
                 Ok(vec![IssuanceEvent::CredentialDataCreated {
                     credential_template,
-                    credential_data: credential,
+                    credential_data: credential_subject,
                 }])
             }
             _ => unimplemented!(),
@@ -137,7 +137,9 @@ mod tests {
             .given(vec![IssuanceEvent::CredentialTemplateLoaded {
                 credential_template: credential_template(),
             }])
-            .when(IssuanceCommand::CreateCredentialData { credential })
+            .when(IssuanceCommand::CreateCredentialData {
+                credential_subject: credential,
+            })
             .then_expect_events(vec![expected]);
     }
 }
