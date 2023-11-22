@@ -47,15 +47,10 @@ async fn create_unsigned_credential(
     };
 
     match create_credential(&state, command).await {
-        Ok(_) => (
-            StatusCode::CREATED,
-            [(header::LOCATION, format!("/v1/credentials/{}", AGGREGATE_ID))],
-            Json(json!({})),
-        )
-            .into_response(),
+        Ok(_) => {}
         Err(err) => {
             println!("Error: {:#?}\n", err);
-            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
+            return (StatusCode::BAD_REQUEST, err.to_string()).into_response();
         }
     };
 
