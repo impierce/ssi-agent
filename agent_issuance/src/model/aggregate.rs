@@ -268,6 +268,39 @@ impl Aggregate for IssuanceData {
                 Ok(vec![IssuanceEvent::CredentialResponseCreated { credential_response }])
             }
             _ => unimplemented!("Command not implemented"),
+            // IssuanceCommand::LoadCredentialTemplate { credential_template } => {
+            //     JSONSchema::compile(&credential_template).map_err(|e| IssuanceError::from(e.to_string().as_str()))?;
+
+            //     Ok(vec![IssuanceEvent::CredentialTemplateLoaded { credential_template }])
+            // }
+            // IssuanceCommand::CreateCredentialData { credential_subject } => {
+            //     let credential_template = self.credential_template.clone();
+            //     dbg!(&credential_template);
+            //     // let json_schema = JSONSchema::compile(&credential_template)
+            //     //     .map_err(|e| IssuanceError::from(e.to_string().as_str()))?;
+
+            //     let mut openbadges_v3_format_template =
+            //         serde_json::from_str::<Value>(include_str!("../../res/format_templates/openbadges_v3.json"))
+            //             .map_err(|e| IssuanceError::from(e.to_string().as_str()))?;
+
+            //     openbadges_v3_format_template
+            //         .as_object_mut()
+            //         .unwrap()
+            //         .insert("credentialSubject".to_string(), credential_subject.clone());
+
+            //     dbg!(&openbadges_v3_format_template);
+
+            //     // json_schema.validate(&openbadges_v3_format_template).map_err(|e| {
+            //     //     // TODO: remove ugly solution.
+            //     //     let e: Vec<_> = e.map(|e| e.to_string()).collect();
+            //     //     IssuanceError::from(e.join(", ").as_str())
+            //     // })?;
+
+            //     Ok(vec![IssuanceEvent::CredentialDataCreated {
+            //         credential_template,
+            //         credential_data: credential_subject,
+            //     }])
+            // }
         }
     }
 

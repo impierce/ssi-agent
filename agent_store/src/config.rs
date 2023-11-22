@@ -1,8 +1,7 @@
-use std::sync::Arc;
-
 use cqrs_es::{persist::GenericQuery, Aggregate, Query, View};
 use postgres_es::{PostgresCqrs, PostgresViewRepository};
 use sqlx::{Pool, Postgres};
+use std::sync::Arc;
 
 pub fn cqrs_framework<A, V>(
     pool: Pool<Postgres>,
@@ -25,4 +24,16 @@ where
         Arc::new(postgres_es::postgres_cqrs(pool, queries, services)),
         credential_view_repo,
     )
+}
+
+/// Read environment variables
+pub fn config() -> config::Config {
+    // Load .env file
+    dotenvy::dotenv().ok();
+
+    // Build configuration
+    config::Config::builder()
+        .add_source(config::Environment::with_prefix("AGENT_STORE"))
+        .build()
+        .unwrap()
 }

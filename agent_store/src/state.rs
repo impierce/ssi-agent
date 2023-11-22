@@ -1,10 +1,8 @@
-// use crate::config::cqrs_framework;
-// use crate::model::aggregate::Credential;
-// use crate::queries::SimpleLoggingQuery;
 use cqrs_es::{Aggregate, Query, View};
 use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
 use std::sync::Arc;
 
+use crate::config::config;
 use crate::config::cqrs_framework;
 
 #[derive(Clone)]
@@ -18,11 +16,10 @@ where
     A: Aggregate + 'static,
     V: View<A> + 'static,
 {
-    let pool = default_postgress_pool("postgresql://demo_user:demo_pass@localhost:5432/demo").await;
-    let (cqrs, credential_query) = cqrs_framework(pool, queries, services);
-    // cqrs
+    let pool = default_postgress_pool(&config().get_string("db_connection_string").unwrap()).await;
+    let (cqrs, issuance_data_query) = cqrs_framework(pool, queries, services);
     ApplicationState {
         cqrs,
-        issuance_data_query: credential_query,
+        issuance_data_query,
     }
 }

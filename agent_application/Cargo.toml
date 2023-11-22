@@ -6,6 +6,8 @@ edition = "2021"
 [dependencies]
 agent_issuance = { path = "../agent_issuance" }
 agent_api_rest = { path = "../agent_api_rest" }
+agent_store = { path = "../agent_store" }
 
 axum = "0.6"
+serde_json.workspace = true
 tokio = { version = "1.34", features = ["full"] }

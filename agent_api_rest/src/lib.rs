@@ -2,6 +2,7 @@ use agent_issuance::{
     command::IssuanceCommand,
     handlers::{command_handler, query_handler},
     model::aggregate::IssuanceData,
+    model::create_credential,
     queries::IssuanceDataView,
 };
 use agent_store::state::ApplicationState;
@@ -13,13 +14,14 @@ use axum::{
     Form, Router,
 };
 use axum_auth::AuthBearer;
+use hyper::header;
 use oid4vci::{credential_request::CredentialRequest, token_request::TokenRequest};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 // TODO: What to do with aggregate_id's?
 const AGGREGATE_ID: &str = "agg-id-F39A0C";
 
-pub fn router(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
+pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
     Router::new()
         .route("/v1/credentials", post(create_unsigned_credential))
         .route(
@@ -44,8 +46,13 @@ async fn create_unsigned_credential(
         unsigned_credential: payload,
     };
 
-    match command_handler(AGGREGATE_ID.to_string(), &state, command).await {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+    match create_credential(&state, command).await {
+        Ok(_) => (
+            StatusCode::CREATED,
+            [(header::LOCATION, format!("/v1/credentials/{}", AGGREGATE_ID))],
+            Json(json!({})),
+        )
+            .into_response(),
         Err(err) => {
             println!("Error: {:#?}\n", err);
             (StatusCode::BAD_REQUEST, err.to_string()).into_response()
@@ -132,5 +139,85 @@ async fn credential(
             println!("Error: {:#?}\n", err);
             (StatusCode::BAD_REQUEST, err.to_string()).into_response()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs::File, path::Path};
+
+    use super::*;
+    use agent_issuance::state::new_application_state;
+    use axum::{
+        body::Body,
+        http::{self, Request},
+    };
+    use serde_json::json;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn location_header_is_set_on_successful_creation() {
+        let state = new_application_state().await;
+        let app = app(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/v1/credentials")
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "first_name": "Ferris",
+                            "last_name": "Rustacean",
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        assert_eq!(
+            response.headers().get(http::header::LOCATION).unwrap(),
+            "/v1/credentials/agg-id-F39A0C"
+        );
+
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            body,
+            // serde_json::from_reader::<_, Value>(
+            //     File::open(Path::new("../tests/response/create-open-badge.json")).unwrap()
+            // )
+            // .unwrap()
+            serde_json::from_str::<Value>(
+                r#"
+                {
+                    "@context": [
+                        "https://www.w3.org/2018/credentials/v1",
+                        "https://www.w3.org/2018/credentials/examples/v1",
+                        "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
+                    ],
+                    "id": "http://example.edu/credentials/3732",
+                    "type": ["VerifiableCredential", "OpenBadgeCredential"],
+                    "issuer": {
+                        "id": "https://example.edu/issuers/565049",
+                        "type": ["IssuerProfile"],
+                        "name": "Example University"
+                    },
+                    "issuanceDate": "2010-01-01T00:00:00Z",
+                    "name": "Teamwork Badge",
+                    "credentialSubject": {
+                        "first_name": "Ferris",
+                        "last_name": "Rustacean"
+                    }
+                }
+                "#
+            )
+            .unwrap()
+        );
     }
 }
