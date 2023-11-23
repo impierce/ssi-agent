@@ -62,11 +62,11 @@ where
 {
     pub async fn new(queries: Vec<Box<dyn Query<A>>>, services: A::Services) -> InMemoryApplicationState<A, V> {
         let credential_view_repo = Arc::new(MemRepository::<V, A>::new());
-        let mut credential_query = GenericQuery::new(credential_view_repo.clone());
-        credential_query.use_error_handler(Box::new(|e| println!("{}", e)));
+        let mut issuance_data_query = GenericQuery::new(credential_view_repo.clone());
+        issuance_data_query.use_error_handler(Box::new(|e| println!("{}", e)));
 
         let mut queries = queries;
-        queries.push(Box::new(credential_query));
+        queries.push(Box::new(issuance_data_query));
 
         InMemoryApplicationState {
             cqrs: Arc::new(CqrsFramework::new(MemStore::default(), queries, services)),
