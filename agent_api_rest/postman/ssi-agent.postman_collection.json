@@ -1,0 +1,140 @@
+{
+	"info": {
+		"_postman_id": "0779eb52-b570-45ac-b844-d3d52a357ec0",
+		"name": "ssi-agent",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "30650915"
+	},
+	"item": [
+		{
+			"name": "/credentials",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							""
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"const credentialId = pm.response.headers.get('Location').split('/')[3];",
+							"pm.environment.set('CREDENTIAL_ID', credentialId);"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "basic",
+					"basic": [
+						{
+							"key": "password",
+							"value": "M5ujwkhhZ1FXpnH0",
+							"type": "string"
+						},
+						{
+							"key": "username",
+							"value": "configurator",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"credentialSubject\": {\n    \"id\": \"did:example:ebfeb1f712ebc6f1c276e12ec21\",\n    \"type\": [\"AchievementSubject\"],\n    \"achievement\": {\n      \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n      \"type\": [\"Achievement\"],\n      \"criteria\": {\n        \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n      },\n      \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n      \"name\": \"Teamwork\"\n    }\n}}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{HOST}}/v1/credentials",
+					"host": [
+						"{{HOST}}"
+					],
+					"path": [
+						"v1",
+						"credentials"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/offers",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"credential_ids\": [\n        \"{{CREDENTIAL_ID}}\"\n    ]\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{HOST}}/v1/offers",
+					"host": [
+						"{{HOST}}"
+					],
+					"path": [
+						"v1",
+						"offers"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/.well-known/oauth-authorization-server",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{HOST}}/v1/openid4vci/.well-known/oauth-authorization-server",
+					"host": [
+						"{{HOST}}"
+					],
+					"path": [
+						"v1",
+						"openid4vci",
+						".well-known",
+						"oauth-authorization-server"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/.well-known/openid-credential-issuer",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{HOST}}/v1/openid4vci/.well-known/openid-credential-issuer",
+					"host": [
+						"{{HOST}}"
+					],
+					"path": [
+						"v1",
+						"openid4vci",
+						".well-known",
+						"openid-credential-issuer"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

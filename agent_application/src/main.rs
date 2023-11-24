@@ -20,6 +20,23 @@ async fn main() {
 }
 
 async fn startup_events(state: DynApplicationState<IssuanceData, IssuanceDataView>) {
+    println!("Starting up ...");
+
+    // Create subject
+    match command_handler(
+        "agg-id-F39A0C".to_string(),
+        &state,
+        IssuanceCommand::CreateSubject {
+            pre_authorized_code: "pre-auth-code-1337".to_string(),
+        },
+    )
+    .await
+    {
+        Ok(_) => println!("Subject created"),
+        Err(err) => println!("Startup task failed: {:#?}", err),
+    };
+
+    // Load template
     match command_handler(
         "agg-id-F39A0C".to_string(),
         &state,
@@ -29,7 +46,7 @@ async fn startup_events(state: DynApplicationState<IssuanceData, IssuanceDataVie
     )
     .await
     {
-        Ok(_) => println!("Startup task completed."),
+        Ok(_) => println!("Template loaded"),
         Err(err) => println!("Startup task failed: {:#?}", err),
     };
 }
