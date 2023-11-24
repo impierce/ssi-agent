@@ -29,7 +29,7 @@ pub fn app(state: DynApplicationState<IssuanceData, IssuanceDataView>) -> Router
             get(oauth_authorization_server),
         )
         .route(
-            "/v1/openid4vci/.well-known/openid_credential_issuer",
+            "/v1/openid4vci/.well-known/openid-credential-issuer",
             get(openid_credential_issuer),
         )
         .route("/v1/openid4vci/token", post(token))
