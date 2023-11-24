@@ -46,7 +46,7 @@ pub struct Credential {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CredentialOffer {
     value: CredentialOfferQuery,
-    form_urlencoded: String,
+    pub form_urlencoded: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
@@ -117,7 +117,7 @@ impl Aggregate for IssuanceData {
                 };
                 Ok(vec![IssuanceEvent::SubjectCreated { subject }])
             }
-            IssuanceCommand::CreateCredentialOffer => {
+            IssuanceCommand::CreateCredentialOffer { subject_id } => {
                 let credential_issuer_metadata =
                     self.oid4vci_data
                         .credential_issuer_metadata
@@ -142,6 +142,7 @@ impl Aggregate for IssuanceData {
                 });
 
                 Ok(vec![IssuanceEvent::CredentialOfferCreated {
+                    subject_id,
                     credential_offer: CredentialOffer {
                         value: credential_offer.clone(),
                         form_urlencoded: credential_offer.to_string(),
@@ -149,13 +150,13 @@ impl Aggregate for IssuanceData {
                 }])
             }
 
-            IssuanceCommand::CreateUnsignedCredential { credential_subject } => {
+            IssuanceCommand::CreateUnsignedCredential { subject_id, credential } => {
                 let mut unsigned_credential = self.credential_format_template.clone();
 
-                unsigned_credential.as_object_mut().unwrap().insert(
-                    "credentialSubject".to_string(),
-                    credential_subject["credentialSubject"].clone(),
-                );
+                unsigned_credential
+                    .as_object_mut()
+                    .unwrap()
+                    .insert("credentialSubject".to_string(), credential["credentialSubject"].clone());
 
                 Ok(vec![IssuanceEvent::UnsignedCredentialCreated {
                     credential: Credential {
@@ -283,8 +284,16 @@ impl Aggregate for IssuanceData {
                     .credentials_supported = credentials_supported
             }
             SubjectCreated { subject } => self.subjects.push(subject),
-            CredentialOfferCreated { credential_offer } => {
-                self.subjects[0].credential_offer.replace(credential_offer);
+            CredentialOfferCreated {
+                subject_id,
+                credential_offer,
+            } => {
+                self.subjects
+                    .iter_mut()
+                    .find(|subject| subject.id == subject_id)
+                    .map(|subject| {
+                        subject.credential_offer.replace(credential_offer);
+                    });
             }
             CredentialFormatTemplateLoaded {
                 credential_format_template,
@@ -401,7 +410,9 @@ mod tests {
                 IssuanceEvent::subject_created(),
                 IssuanceEvent::credentials_supported_created(),
             ])
-            .when(IssuanceCommand::CreateCredentialOffer)
+            .when(IssuanceCommand::CreateCredentialOffer {
+                subject_id: ISSUANCE_SUBJECT.id,
+            })
             .then_expect_events(vec![IssuanceEvent::credential_offer_created()]);
     }
 
@@ -417,7 +428,8 @@ mod tests {
                 IssuanceEvent::credential_offer_created(),
             ])
             .when(IssuanceCommand::CreateUnsignedCredential {
-                credential_subject: CREDENTIAL_SUBJECT.clone(),
+                subject_id: ISSUANCE_SUBJECT.id,
+                credential: CREDENTIAL_SUBJECT.clone(),
             })
             .then_expect_events(vec![IssuanceEvent::unsigned_credential_created()]);
     }
@@ -661,6 +673,7 @@ mod tests {
 
         pub fn credential_offer_created() -> IssuanceEvent {
             IssuanceEvent::CredentialOfferCreated {
+                subject_id: ISSUANCE_SUBJECT.id,
                 credential_offer: CREDENTIAL_OFFER.clone(),
             }
         }

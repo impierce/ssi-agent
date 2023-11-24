@@ -27,12 +27,15 @@ dependencies = [
  "axum-auth",
  "axum-macros",
  "hyper",
+ "lazy_static",
  "mime",
  "oid4vc-core",
  "oid4vci",
+ "serde",
  "serde_json",
  "tokio",
  "tower",
+ "url",
 ]
 
 [[package]]

@@ -8,6 +8,7 @@ use oid4vci::{
     token_response::TokenResponse,
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::model::aggregate::{Credential, CredentialOffer, IssuanceSubject};
 
@@ -23,17 +24,18 @@ pub enum IssuanceEvent {
     CredentialIssuerMetadataLoaded {
         credential_issuer_metadata: CredentialIssuerMetadata,
     },
-    CredentialsSupportedCreated {
-        credentials_supported: Vec<CredentialsSupportedObject>,
-    },
     SubjectCreated {
         subject: IssuanceSubject,
     },
-    CredentialOfferCreated {
-        credential_offer: CredentialOffer,
+    CredentialsSupportedCreated {
+        credentials_supported: Vec<CredentialsSupportedObject>,
     },
     UnsignedCredentialCreated {
         credential: Credential,
+    },
+    CredentialOfferCreated {
+        subject_id: Uuid,
+        credential_offer: CredentialOffer,
     },
     TokenResponseCreated {
         token_response: TokenResponse,
