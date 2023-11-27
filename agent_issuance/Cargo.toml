@@ -22,6 +22,8 @@ sqlx = { version = "0.7", features = [
     "postgres",
     "runtime-tokio-rustls",
 ] }
+time = { version = "0.3" }
+tracing.workspace = true
 url = "2.4"
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 
