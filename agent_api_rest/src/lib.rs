@@ -34,6 +34,7 @@ pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
         .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
         .route("/v1/oauth/token", post(token))
         .route("/v1/openid4vci/credential", post(credential))
+        // .route("/v1/openid4vci/batch_credential", post(batch_credential))
         .with_state(state)
 }
 
@@ -52,7 +53,7 @@ mod tests {
         pub static ref BASE_URL: url::Url = url::Url::parse("https://example.com").unwrap();
     }
 
-    pub async fn load_credential_format_template(state: DynApplicationState<IssuanceData, IssuanceDataView>) {
+    pub async fn load_credential_format_template(state: ApplicationState<IssuanceData, IssuanceDataView>) {
         state
             .execute_with_metadata(
                 AGGREGATE_ID,
@@ -68,7 +69,7 @@ mod tests {
             .unwrap();
     }
 
-    pub async fn _load_authorization_server_metadata(state: DynApplicationState<IssuanceData, IssuanceDataView>) {
+    pub async fn _load_authorization_server_metadata(state: ApplicationState<IssuanceData, IssuanceDataView>) {
         state
             .execute_with_metadata(
                 AGGREGATE_ID,
@@ -85,7 +86,7 @@ mod tests {
             .unwrap();
     }
 
-    pub async fn load_credential_issuer_metadata(state: DynApplicationState<IssuanceData, IssuanceDataView>) {
+    pub async fn load_credential_issuer_metadata(state: ApplicationState<IssuanceData, IssuanceDataView>) {
         state
             .execute_with_metadata(
                 AGGREGATE_ID,
@@ -106,7 +107,7 @@ mod tests {
             .unwrap();
     }
 
-    pub async fn create_subject(state: DynApplicationState<IssuanceData, IssuanceDataView>) -> String {
+    pub async fn create_subject(state: ApplicationState<IssuanceData, IssuanceDataView>) -> String {
         state
             .execute_with_metadata(
                 AGGREGATE_ID,

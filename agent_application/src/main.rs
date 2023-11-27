@@ -7,6 +7,7 @@ use agent_store::postgres;
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
+use serde_json::json;
 use std::sync::Arc;
 
 #[tokio::main]
@@ -75,4 +76,83 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
         Ok(_) => println!("Startup task completed: `LoadCredentialIssuerMetadata`"),
         Err(err) => println!("Startup task failed: {:#?}", err),
     };
+
+    match command_handler(
+        "agg-id-F39A0C".to_string(),
+        &state,
+        IssuanceCommand::CreateSubject {
+            pre_authorized_code: "adhjhdjajkdkhjhdj".to_string(),
+        },
+    )
+    .await
+    {
+        Ok(_) => println!("Startup task completed."),
+        Err(err) => println!("Startup task failed: {:#?}", err),
+    };
+
+    match command_handler(
+        "agg-id-F39A0C".to_string(),
+        &state,
+        IssuanceCommand::CreateCredentialsSupported {
+            credentials_supported: vec![serde_json::from_value(json!({
+                "format": "jwt_vc_json",
+                "cryptographic_binding_methods_supported": [
+                    "did:key",
+                ],
+                "cryptographic_suites_supported": [
+                    "EdDSA"
+                ],
+                "credential_definition":{
+                    "type": [
+                        "VerifiableCredential",
+                        "OpenBadgeCredential"
+                    ]
+                },
+                "proof_types_supported": [
+                    "jwt"
+                ]
+            }
+            ))
+            .unwrap()],
+        },
+    )
+    .await
+    {
+        Ok(_) => println!("Startup task completed."),
+        Err(err) => println!("Startup task failed: {:#?}", err),
+    };
+
+    // match command_handler(
+    //     "agg-id-F39A0C".to_string(),
+    //     &state,
+    //     IssuanceCommand::CreateTokenResponse {
+    //         subject_id: uuid::Uuid::new_v4(),
+    //         token_request: TokenRequest::PreAuthorizedCode {
+    //             pre_authorized_code: "adhjhdjajkdkhjhdj".to_string(),
+    //             user_pin: None,
+    //         },
+    //     },
+    // )
+    // .await
+    // {
+    //     Ok(_) => println!("Startup task completed."),
+    //     Err(err) => println!("Startup task failed: {:#?}", err),
+    // };
+
+    // match command_handler(
+    //     "agg-id-F39A0C".to_string(),
+    //     &state,
+    //     IssuanceCommand::CreateTokenResponse {
+    //         subject_id: uuid::Uuid::new_v4(),
+    //         token_request: TokenRequest::PreAuthorizedCode {
+    //             pre_authorized_code: "adhjhdjajkdkhjhdj".to_string(),
+    //             user_pin: None,
+    //         },
+    //     },
+    // )
+    // .await
+    // {
+    //     Ok(_) => println!("Startup task completed."),
+    //     Err(err) => println!("Startup task failed: {:#?}", err),
+    // };
 }

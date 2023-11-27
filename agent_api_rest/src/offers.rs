@@ -56,7 +56,7 @@ mod tests {
 
     use super::*;
     use agent_issuance::services::IssuanceServices;
-    use agent_store::in_memory::ApplicationState;
+    use agent_store::in_memory;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -67,7 +67,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_offers_endpoint() {
-        let state = Arc::new(ApplicationState::new(vec![], IssuanceServices {}).await)
+        let state = Arc::new(in_memory::ApplicationState::new(vec![], IssuanceServices {}).await)
             as ApplicationState<IssuanceData, IssuanceDataView>;
 
         load_credential_issuer_metadata(state.clone()).await;

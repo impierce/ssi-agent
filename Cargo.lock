@@ -36,6 +36,7 @@ dependencies = [
  "tokio",
  "tower",
  "url",
+ "uuid",
 ]
 
 [[package]]
@@ -46,6 +47,7 @@ dependencies = [
  "agent_issuance",
  "agent_store",
  "axum",
+ "lazy_static",
  "oid4vci",
  "serde_json",
  "tokio",

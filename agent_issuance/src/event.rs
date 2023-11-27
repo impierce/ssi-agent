@@ -31,6 +31,7 @@ pub enum IssuanceEvent {
         credentials_supported: Vec<CredentialsSupportedObject>,
     },
     UnsignedCredentialCreated {
+        subject_id: Uuid,
         credential: Credential,
     },
     CredentialOfferCreated {
@@ -38,9 +39,11 @@ pub enum IssuanceEvent {
         credential_offer: CredentialOffer,
     },
     TokenResponseCreated {
+        subject_id: Uuid,
         token_response: TokenResponse,
     },
     CredentialResponseCreated {
+        subject_id: Uuid,
         credential_response: CredentialResponse,
     },
 }

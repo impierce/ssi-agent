@@ -3,7 +3,7 @@ use agent_issuance::{
     handlers::{command_handler, query_handler},
     model::aggregate::IssuanceData,
     queries::IssuanceDataView,
-    state::DynApplicationState,
+    state::ApplicationState,
 };
 use axum::{
     extract::{Json, State},
@@ -17,7 +17,7 @@ use crate::AGGREGATE_ID;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn token(
-    State(state): State<DynApplicationState<IssuanceData, IssuanceDataView>>,
+    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
     Form(token_request): Form<TokenRequest>,
 ) -> impl IntoResponse {
     let command = IssuanceCommand::CreateTokenResponse { token_request };
