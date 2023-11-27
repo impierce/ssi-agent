@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
-use crate::state::DynApplicationState;
+use crate::state::ApplicationState;
 use cqrs_es::{persist::PersistenceError, Aggregate, AggregateError, View};
 use time::format_description::well_known::Rfc3339;
 
 pub async fn query_handler<A: Aggregate, V: View<A>>(
     credential_id: String,
-    state: &DynApplicationState<A, V>,
+    state: &ApplicationState<A, V>,
 ) -> Result<Option<V>, PersistenceError> {
     match state.load(&credential_id).await {
         Ok(view) => {
@@ -22,7 +22,7 @@ pub async fn query_handler<A: Aggregate, V: View<A>>(
 
 pub async fn command_handler<A: Aggregate, V: View<A>>(
     aggregate_id: String,
-    state: &DynApplicationState<A, V>,
+    state: &ApplicationState<A, V>,
     command: A::Command,
 ) -> Result<(), AggregateError<<A as Aggregate>::Error>>
 where

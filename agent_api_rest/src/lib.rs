@@ -4,7 +4,7 @@ use agent_issuance::{
     model::aggregate::IssuanceData,
     model::create_credential,
     queries::IssuanceDataView,
-    state::DynApplicationState,
+    state::ApplicationState,
 };
 use axum::{
     extract::{Json, State},
@@ -21,7 +21,7 @@ use serde_json::Value;
 // TODO: What to do with aggregate_id's?
 const AGGREGATE_ID: &str = "agg-id-F39A0C";
 
-pub fn app(state: DynApplicationState<IssuanceData, IssuanceDataView>) -> Router {
+pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
     Router::new()
         .route("/v1/credentials", post(create_unsigned_credential))
         .route(
@@ -39,7 +39,7 @@ pub fn app(state: DynApplicationState<IssuanceData, IssuanceDataView>) -> Router
 
 #[axum_macros::debug_handler]
 async fn create_unsigned_credential(
-    State(state): State<DynApplicationState<IssuanceData, IssuanceDataView>>,
+    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     let command = IssuanceCommand::CreateUnsignedCredential {
@@ -71,11 +71,13 @@ async fn create_unsigned_credential(
 
 #[axum_macros::debug_handler]
 async fn oauth_authorization_server(
-    State(state): State<DynApplicationState<IssuanceData, IssuanceDataView>>,
+    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
 ) -> impl IntoResponse {
     match query_handler(AGGREGATE_ID.to_string(), &state).await {
-        Ok(Some(view)) => (StatusCode::OK, Json(view.oid4vci_data.authorization_server_metadata)).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Ok(Some(view)) if view.oid4vci_data.authorization_server_metadata.is_some() => {
+            (StatusCode::OK, Json(view.oid4vci_data.authorization_server_metadata)).into_response()
+        }
+        Ok(_) => StatusCode::NOT_FOUND.into_response(),
         Err(err) => {
             println!("Error: {:#?}\n", err);
             (StatusCode::BAD_REQUEST, err.to_string()).into_response()
@@ -85,11 +87,13 @@ async fn oauth_authorization_server(
 
 #[axum_macros::debug_handler]
 async fn openid_credential_issuer(
-    State(state): State<DynApplicationState<IssuanceData, IssuanceDataView>>,
+    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
 ) -> impl IntoResponse {
     match query_handler(AGGREGATE_ID.to_string(), &state).await {
-        Ok(Some(view)) => (StatusCode::OK, Json(view.oid4vci_data.credential_issuer_metadata)).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Ok(Some(view)) if view.oid4vci_data.credential_issuer_metadata.is_some() => {
+            (StatusCode::OK, Json(view.oid4vci_data.credential_issuer_metadata)).into_response()
+        }
+        Ok(_) => StatusCode::NOT_FOUND.into_response(),
         Err(err) => {
             println!("Error: {:#?}\n", err);
             (StatusCode::BAD_REQUEST, err.to_string()).into_response()
@@ -99,7 +103,7 @@ async fn openid_credential_issuer(
 
 #[axum_macros::debug_handler]
 async fn token(
-    State(state): State<DynApplicationState<IssuanceData, IssuanceDataView>>,
+    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
     Form(token_request): Form<TokenRequest>,
 ) -> impl IntoResponse {
     let command = IssuanceCommand::CreateTokenResponse { token_request };
@@ -124,7 +128,7 @@ async fn token(
 
 #[axum_macros::debug_handler]
 async fn credential(
-    State(state): State<DynApplicationState<IssuanceData, IssuanceDataView>>,
+    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> impl IntoResponse {
@@ -155,7 +159,7 @@ async fn credential(
 mod tests {
     use super::*;
     use agent_issuance::services::IssuanceServices;
-    use agent_store::in_memory::InMemoryApplicationState;
+    use agent_store::in_memory;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -166,8 +170,8 @@ mod tests {
 
     #[tokio::test]
     async fn location_header_is_set_on_successful_creation() {
-        let state = Arc::new(InMemoryApplicationState::new(vec![], IssuanceServices {}).await)
-            as DynApplicationState<IssuanceData, IssuanceDataView>;
+        let state = Arc::new(in_memory::ApplicationState::new(vec![], IssuanceServices {}).await)
+            as ApplicationState<IssuanceData, IssuanceDataView>;
 
         state
             .execute_with_metadata(

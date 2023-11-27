@@ -1,10 +1,10 @@
 use crate::{
     command::IssuanceCommand, handlers::command_handler, model::aggregate::IssuanceData, queries::IssuanceDataView,
-    state::DynApplicationState,
+    state::ApplicationState,
 };
 use tracing::info;
 
-pub async fn load_templates(state: &DynApplicationState<IssuanceData, IssuanceDataView>) {
+pub async fn load_templates(state: &ApplicationState<IssuanceData, IssuanceDataView>) {
     match command_handler(
         "agg-id-F39A0C".to_string(),
         state,

@@ -24,12 +24,8 @@ sqlx = { version = "0.7", features = [
 ] }
 time = { version = "0.3" }
 tracing.workspace = true
-url = "2.4"
+url.workspace = true
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
-
-identity_credential = { git = "https://github.com/iotaledger/identity.rs.git", default-features = false, features = [
-    "credential",
-] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
