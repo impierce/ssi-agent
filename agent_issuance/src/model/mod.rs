@@ -1,12 +1,12 @@
 pub mod aggregate;
 
-use crate::state::DynApplicationState;
+use crate::state::ApplicationState;
 use cqrs_es::{Aggregate, AggregateError, View};
 
 use crate::handlers::command_handler;
 
 pub async fn create_credential<A: Aggregate, V: View<A>>(
-    state: &DynApplicationState<A, V>,
+    state: &ApplicationState<A, V>,
     command: A::Command,
 ) -> Result<(), AggregateError<<A as Aggregate>::Error>>
 where

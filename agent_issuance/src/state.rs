@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 #[async_trait]
-pub trait ApplicationState<A: Aggregate, V: View<A>> {
+pub trait CQRS<A: Aggregate, V: View<A>> {
     async fn execute_with_metadata(
         &self,
         aggregate_id: &str,
@@ -17,4 +17,4 @@ pub trait ApplicationState<A: Aggregate, V: View<A>> {
 
     async fn load(&self, view_id: &str) -> Result<Option<V>, PersistenceError>;
 }
-pub type DynApplicationState<A, V> = Arc<dyn ApplicationState<A, V> + Send + Sync>;
+pub type ApplicationState<A, V> = Arc<dyn CQRS<A, V> + Send + Sync>;

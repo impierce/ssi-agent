@@ -1,4 +1,4 @@
-use agent_issuance::state::ApplicationState;
+use agent_issuance::state::CQRS;
 use async_trait::async_trait;
 use cqrs_es::mem_store::MemStore;
 use cqrs_es::persist::{GenericQuery, PersistenceError, ViewContext, ViewRepository};
@@ -50,17 +50,17 @@ where
 }
 
 #[derive(Clone)]
-pub struct InMemoryApplicationState<A: Aggregate, V: View<A>> {
+pub struct ApplicationState<A: Aggregate, V: View<A>> {
     pub cqrs: Arc<CqrsFramework<A, MemStore<A>>>,
     pub issuance_data_query: Arc<MemRepository<V, A>>,
 }
 
-impl<A, V> InMemoryApplicationState<A, V>
+impl<A, V> ApplicationState<A, V>
 where
     A: Aggregate + 'static,
     V: View<A> + 'static,
 {
-    pub async fn new(queries: Vec<Box<dyn Query<A>>>, services: A::Services) -> InMemoryApplicationState<A, V> {
+    pub async fn new(queries: Vec<Box<dyn Query<A>>>, services: A::Services) -> ApplicationState<A, V> {
         let credential_view_repo = Arc::new(MemRepository::<V, A>::new());
         let mut issuance_data_query = GenericQuery::new(credential_view_repo.clone());
         issuance_data_query.use_error_handler(Box::new(|e| println!("{}", e)));
@@ -68,7 +68,7 @@ where
         let mut queries = queries;
         queries.push(Box::new(issuance_data_query));
 
-        InMemoryApplicationState {
+        ApplicationState {
             cqrs: Arc::new(CqrsFramework::new(MemStore::default(), queries, services)),
             issuance_data_query: credential_view_repo,
         }
@@ -76,7 +76,7 @@ where
 }
 
 #[async_trait]
-impl<A: Aggregate, V: View<A>> ApplicationState<A, V> for InMemoryApplicationState<A, V> {
+impl<A: Aggregate, V: View<A>> CQRS<A, V> for ApplicationState<A, V> {
     async fn execute_with_metadata(
         &self,
         aggregate_id: &str,

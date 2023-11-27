@@ -1,4 +1,4 @@
-use agent_issuance::state::ApplicationState;
+use agent_issuance::state::CQRS;
 use async_trait::async_trait;
 use cqrs_es::persist::{GenericQuery, PersistenceError, ViewRepository};
 use cqrs_es::{Aggregate, Query, View};
@@ -8,24 +8,24 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct PostgresApplicationState<A: Aggregate, V: View<A>> {
+pub struct ApplicationState<A: Aggregate, V: View<A>> {
     pub cqrs: Arc<PostgresCqrs<A>>,
     pub issuance_data_query: Arc<PostgresViewRepository<V, A>>,
 }
 
-impl<A, V> PostgresApplicationState<A, V>
+impl<A, V> ApplicationState<A, V>
 where
     A: Aggregate,
     V: View<A>,
 {
-    pub async fn new(queries: Vec<Box<dyn Query<A>>>, services: A::Services) -> PostgresApplicationState<A, V>
+    pub async fn new(queries: Vec<Box<dyn Query<A>>>, services: A::Services) -> ApplicationState<A, V>
     where
         A: Aggregate + 'static,
         V: View<A> + 'static,
     {
         let pool = default_postgress_pool(&config().get_string("db_connection_string").unwrap()).await;
         let (cqrs, issuance_data_query) = cqrs_framework(pool, queries, services);
-        PostgresApplicationState {
+        ApplicationState {
             cqrs,
             issuance_data_query,
         }
@@ -33,7 +33,7 @@ where
 }
 
 #[async_trait]
-impl<A: Aggregate, V: View<A>> ApplicationState<A, V> for PostgresApplicationState<A, V> {
+impl<A: Aggregate, V: View<A>> CQRS<A, V> for ApplicationState<A, V> {
     async fn execute_with_metadata(
         &self,
         aggregate_id: &str,
