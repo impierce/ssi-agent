@@ -10,14 +10,10 @@ docker compose up -d
 
 Go to `http://localhost:5433` to access the event store database.
 
-## Deployment
+## Build
+
+From within the `/agent_application` directory run:
 
 ```bash
-docker build -t ssi-agent .
-```
-
-### Run
-
-```bash
-docker run --rm -p 3033:3033 ssi-agent
+docker build -f docker/Dockerfile -t ssi-agent ..
 ```
