@@ -1,3 +1,4 @@
+use crate::config::config;
 use agent_issuance::state::CQRS;
 use async_trait::async_trait;
 use cqrs_es::persist::{GenericQuery, PersistenceError, ViewRepository};
@@ -72,16 +73,4 @@ where
         Arc::new(postgres_es::postgres_cqrs(pool, queries, services)),
         issuance_data_repo,
     )
-}
-
-/// Read environment variables
-pub fn config() -> config::Config {
-    // Load .env file
-    dotenvy::dotenv().ok();
-
-    // Build configuration
-    config::Config::builder()
-        .add_source(config::Environment::with_prefix("AGENT_STORE"))
-        .build()
-        .unwrap()
 }
