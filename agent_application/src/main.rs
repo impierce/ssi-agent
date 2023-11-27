@@ -51,7 +51,7 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
     )
     .await
     {
-        Ok(_) => println!("Startup task completed: `AuthorizationServerMetadata`"),
+        Ok(_) => println!("Startup task completed: `LoadAuthorizationServerMetadata`"),
         Err(err) => println!("Startup task failed: {:#?}", err),
     };
 
@@ -72,7 +72,7 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
     )
     .await
     {
-        Ok(_) => println!("Startup task completed: `AuthorizationServerMetadata`"),
+        Ok(_) => println!("Startup task completed: `LoadCredentialIssuerMetadata`"),
         Err(err) => println!("Startup task failed: {:#?}", err),
     };
 }
