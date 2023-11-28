@@ -68,7 +68,6 @@ where
 
     // Create and return an event-sourced `CqrsFramework`.
     queries.push(Box::new(issuance_data_query));
-    // let services = IssuanceServices {};
     (
         Arc::new(postgres_es::postgres_cqrs(pool, queries, services)),
         issuance_data_repo,

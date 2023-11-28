@@ -68,6 +68,7 @@ mod tests {
             .unwrap();
     }
 
+    // TODO: actually use this for .well-known tests.
     pub async fn _load_authorization_server_metadata(state: ApplicationState<IssuanceData, IssuanceDataView>) {
         state
             .execute_with_metadata(
@@ -85,6 +86,7 @@ mod tests {
             .unwrap();
     }
 
+    // TODO: actually use this for .well-known tests.
     pub async fn load_credential_issuer_metadata(state: ApplicationState<IssuanceData, IssuanceDataView>) {
         state
             .execute_with_metadata(

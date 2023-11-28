@@ -17,6 +17,7 @@ pub(crate) async fn credentials(
     State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
+    // TODO: This should be removed once we know how to use aggregate ID's.
     let subject_id: uuid::Uuid = payload["subjectId"].as_str().unwrap().parse().unwrap();
     let command = IssuanceCommand::CreateUnsignedCredential {
         subject_id: subject_id.clone(),

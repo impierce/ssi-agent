@@ -3,7 +3,7 @@ use agent_issuance::{
     command::IssuanceCommand, handlers::command_handler, init::load_templates, model::aggregate::IssuanceData,
     queries::IssuanceDataView, services::IssuanceServices, state::ApplicationState,
 };
-use agent_store::postgres;
+use agent_store::in_memory;
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
@@ -13,7 +13,7 @@ use tracing::info;
 
 #[tokio::main]
 async fn main() {
-    let state = Arc::new(postgres::ApplicationState::new(vec![], IssuanceServices {}).await)
+    let state = Arc::new(in_memory::ApplicationState::new(vec![], IssuanceServices {}).await)
         as ApplicationState<IssuanceData, IssuanceDataView>;
 
     // Release
