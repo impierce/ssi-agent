@@ -12,6 +12,8 @@ pub enum IssuanceError {
     InvalidAccessTokenError,
     #[error("Credential must be an object")]
     InvalidCredentialError,
+    #[error("Credential is missing")]
+    MissingCredentialError,
     #[error("Missing `Proof` in Credential Request")]
     MissingProofError,
     #[error("Invalid `Proof` in Credential Request")]

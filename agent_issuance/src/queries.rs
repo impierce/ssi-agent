@@ -75,7 +75,7 @@ impl View<IssuanceData> for IssuanceDataView {
                     .iter_mut()
                     .find(|subject| subject.id == *subject_id)
                     .map(|subject| {
-                        subject.credentials.push(credential.clone());
+                        subject.credentials.replace(credential.clone());
                     });
             }
             TokenResponseCreated {

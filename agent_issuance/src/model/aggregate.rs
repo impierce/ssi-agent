@@ -55,7 +55,7 @@ pub struct IssuanceSubject {
     #[derivative(PartialEq = "ignore")]
     pub id: uuid::Uuid,
     pub credential_offer: Option<CredentialOffer>,
-    pub credentials: Vec<Credential>,
+    pub credentials: Option<Credential>,
     pub pre_authorized_code: String,
     pub token_response: Option<TokenResponse>,
     pub credential_response: Option<CredentialResponse>,
@@ -261,7 +261,9 @@ impl Aggregate for IssuanceData {
                     .iter()
                     .find(|subject| subject.id == subject_id)
                     .ok_or(MissingIssuanceSubjectError(subject_id))?
-                    .credentials[0]
+                    .credentials
+                    .as_ref()
+                    .ok_or(MissingCredentialError)?
                     .unsigned_credential
                     .clone();
 
@@ -342,7 +344,7 @@ impl Aggregate for IssuanceData {
                     .iter_mut()
                     .find(|subject| subject.id == subject_id)
                     .map(|subject| {
-                        subject.credentials.push(credential);
+                        subject.credentials.replace(credential);
                     });
             }
             TokenResponseCreated {

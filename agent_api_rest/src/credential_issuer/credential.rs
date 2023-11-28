@@ -22,7 +22,7 @@ pub(crate) async fn credential(
     Json(credential_request): Json<CredentialRequest>,
 ) -> impl IntoResponse {
     let command = IssuanceCommand::CreateCredentialResponse {
-        access_token,
+        access_token: access_token.clone(),
         credential_request,
     };
 
@@ -35,7 +35,18 @@ pub(crate) async fn credential(
     };
 
     match query_handler(AGGREGATE_ID.to_string(), &state).await {
-        Ok(Some(view)) => (StatusCode::OK, Json(view.subjects[0].credential_response.clone())).into_response(),
+        Ok(Some(view)) => {
+            // TODO: This is a non-idiomatic way of finding the subject by using the access token. We should use a aggregate/query instead.
+            let subject = view
+                .subjects
+                .iter()
+                .find(|subject| subject.token_response.as_ref().unwrap().access_token == access_token);
+            if let Some(subject) = subject {
+                (StatusCode::OK, Json(subject.credential_response.clone())).into_response()
+            } else {
+                StatusCode::NOT_FOUND.into_response()
+            }
+        }
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(err) => {
             println!("Error: {:#?}\n", err);

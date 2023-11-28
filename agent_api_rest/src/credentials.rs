@@ -17,8 +17,9 @@ pub(crate) async fn credentials(
     State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
+    let subject_id: uuid::Uuid = payload["subjectId"].as_str().unwrap().parse().unwrap();
     let command = IssuanceCommand::CreateUnsignedCredential {
-        subject_id: payload["subjectId"].as_str().unwrap().parse().unwrap(),
+        subject_id: subject_id.clone(),
         credential: payload["credential"].clone(),
     };
 
@@ -31,12 +32,26 @@ pub(crate) async fn credentials(
     };
 
     match query_handler(AGGREGATE_ID.to_string(), &state).await {
-        Ok(Some(view)) => (
-            StatusCode::CREATED,
-            [(header::LOCATION, format!("/v1/credentials/{}", AGGREGATE_ID))],
-            Json(view.subjects[0].credentials[0].unsigned_credential.clone()),
-        )
-            .into_response(),
+        Ok(Some(view)) => {
+            match view.subjects.iter().find_map(|subject| {
+                (subject.id == subject_id)
+                    .then(|| {
+                        subject
+                            .credentials
+                            .as_ref()
+                            .map(|credential| credential.unsigned_credential.clone())
+                    })
+                    .flatten()
+            }) {
+                Some(unsigned_credential) => (
+                    StatusCode::CREATED,
+                    [(header::LOCATION, format!("/v1/credentials/{}", AGGREGATE_ID))],
+                    Json(unsigned_credential),
+                )
+                    .into_response(),
+                None => StatusCode::NOT_FOUND.into_response(),
+            }
+        }
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(err) => {
             println!("Error: {:#?}\n", err);
@@ -49,7 +64,7 @@ pub(crate) async fn credentials(
 mod tests {
     use crate::{
         app,
-        tests::{create_subject, load_credential_format_template, SUBJECT_ID},
+        tests::{create_subject, load_credential_format_template},
     };
 
     use super::*;
@@ -69,7 +84,7 @@ mod tests {
             as ApplicationState<IssuanceData, IssuanceDataView>;
 
         load_credential_format_template(state.clone()).await;
-        create_subject(state.clone()).await;
+        let subject_id = create_subject(state.clone()).await;
 
         let app = app(state);
 
@@ -81,7 +96,7 @@ mod tests {
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "subjectId": SUBJECT_ID,
+                            "subjectId": subject_id,
                             "credential": {"credentialSubject": {
                                 "first_name": "Ferris",
                                 "last_name": "Rustacean",

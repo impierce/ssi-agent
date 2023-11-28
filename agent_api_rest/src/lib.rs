@@ -107,7 +107,7 @@ mod tests {
             .unwrap();
     }
 
-    pub async fn create_subject(state: ApplicationState<IssuanceData, IssuanceDataView>) -> String {
+    pub async fn create_subject(state: ApplicationState<IssuanceData, IssuanceDataView>) -> uuid::Uuid {
         state
             .execute_with_metadata(
                 AGGREGATE_ID,
@@ -126,6 +126,5 @@ mod tests {
             .unwrap()
             .clone()
             .id
-            .to_string()
     }
 }
