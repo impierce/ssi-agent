@@ -16,6 +16,7 @@ use oid4vci::{
         CredentialOffer as OID4VCICredentialOffer, CredentialOfferQuery, CredentialsObject, Grants, PreAuthorizedCode,
     },
     credential_response::{CredentialResponse, CredentialResponseType},
+    token_request::TokenRequest,
     token_response::TokenResponse,
     VerifiableCredentialJwt,
 };
@@ -41,13 +42,12 @@ pub struct Credential {
     #[derivative(PartialEq = "ignore")]
     id: uuid::Uuid,
     pub unsigned_credential: serde_json::Value,
-    signed_credential: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CredentialOffer {
     value: CredentialOfferQuery,
-    form_urlencoded: String,
+    pub form_urlencoded: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
@@ -56,7 +56,7 @@ pub struct IssuanceSubject {
     #[derivative(PartialEq = "ignore")]
     pub id: uuid::Uuid,
     pub credential_offer: Option<CredentialOffer>,
-    pub credentials: Vec<Credential>,
+    pub credentials: Option<Credential>,
     pub pre_authorized_code: String,
     pub token_response: Option<TokenResponse>,
     pub credential_response: Option<CredentialResponse>,
@@ -85,6 +85,8 @@ impl Aggregate for IssuanceData {
         command: Self::Command,
         _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
+        use IssuanceError::*;
+
         match command {
             IssuanceCommand::LoadCredentialFormatTemplate {
                 credential_format_template,
@@ -105,7 +107,7 @@ impl Aggregate for IssuanceData {
                 self.oid4vci_data
                     .credential_issuer_metadata
                     .as_ref()
-                    .ok_or(IssuanceError::from("Missing Credential Issuer Metadata"))?;
+                    .ok_or(MissingCredentialIssuerMetadataError)?;
                 Ok(vec![IssuanceEvent::CredentialsSupportedCreated {
                     credentials_supported,
                 }])
@@ -118,14 +120,12 @@ impl Aggregate for IssuanceData {
                 };
                 Ok(vec![IssuanceEvent::SubjectCreated { subject }])
             }
-            IssuanceCommand::CreateCredentialOffer => {
-                let credential_issuer_metadata =
-                    self.oid4vci_data
-                        .credential_issuer_metadata
-                        .as_ref()
-                        .ok_or(IssuanceError::from(
-                            "Missing Credential Issuer Metadata. Please load it before creating offer.",
-                        ))?;
+            IssuanceCommand::CreateCredentialOffer { subject_id } => {
+                let credential_issuer_metadata = self
+                    .oid4vci_data
+                    .credential_issuer_metadata
+                    .as_ref()
+                    .ok_or(MissingCredentialIssuerMetadataError)?;
                 let credentials_supported = credential_issuer_metadata.credentials_supported.clone();
                 let credential_offer = CredentialOfferQuery::CredentialOffer(OID4VCICredentialOffer {
                     credential_issuer: credential_issuer_metadata.credential_issuer.clone(),
@@ -143,6 +143,7 @@ impl Aggregate for IssuanceData {
                 });
 
                 Ok(vec![IssuanceEvent::CredentialOfferCreated {
+                    subject_id,
                     credential_offer: CredentialOffer {
                         value: credential_offer.clone(),
                         form_urlencoded: credential_offer.to_string(),
@@ -150,40 +151,39 @@ impl Aggregate for IssuanceData {
                 }])
             }
 
-            IssuanceCommand::CreateUnsignedCredential { credential_subject } => {
-                info!("Credential Subject: {:#?}", credential_subject);
-
+            IssuanceCommand::CreateUnsignedCredential { subject_id, credential } => {
                 let mut unsigned_credential = self.credential_format_template.clone();
 
-                info!("Unsigned Credential: {:#?}", unsigned_credential);
-
-                unsigned_credential.as_object_mut().unwrap().insert(
-                    "credentialSubject".to_string(),
-                    credential_subject
-                        .get("credential")
-                        .unwrap()
-                        .get("credentialSubject")
-                        .unwrap()
-                        .clone(),
-                );
+                unsigned_credential
+                    .as_object_mut()
+                    .ok_or(InvalidCredentialError)?
+                    .insert("credentialSubject".to_string(), credential["credentialSubject"].clone());
 
                 info!("Unsigned Credential: {:#?}", unsigned_credential);
 
                 Ok(vec![IssuanceEvent::UnsignedCredentialCreated {
+                    subject_id,
                     credential: Credential {
                         id: uuid::Uuid::new_v4(),
                         unsigned_credential,
-                        signed_credential: None,
                     },
                 }])
             }
             IssuanceCommand::CreateTokenResponse { token_request } => match token_request {
-                oid4vci::token_request::TokenRequest::PreAuthorizedCode {
+                TokenRequest::PreAuthorizedCode {
                     pre_authorized_code, ..
                 } => {
-                    if pre_authorized_code == self.subjects[0].pre_authorized_code {
+                    let subject_id = self
+                        .subjects
+                        .iter()
+                        .find(|subject| subject.pre_authorized_code == pre_authorized_code)
+                        .map(|subject| subject.id)
+                        .ok_or(InvalidPreAuthorizedCodeError)?;
+
+                    if self.subjects.iter().find(|subject| subject.id == subject_id).is_some() {
                         Ok(vec![IssuanceEvent::TokenResponseCreated {
-                            token_response: oid4vci::token_response::TokenResponse {
+                            subject_id: subject_id.clone(),
+                            token_response: TokenResponse {
                                 access_token: UNSAFE_ACCESS_TOKEN.to_string(),
                                 token_type: "bearer".to_string(),
                                 expires_in: None,
@@ -194,10 +194,10 @@ impl Aggregate for IssuanceData {
                             },
                         }])
                     } else {
-                        Err(IssuanceError::from("Invalid Pre-Authorized Code"))
+                        Err(InvalidPreAuthorizedCodeError)
                     }
                 }
-                _ => Err(IssuanceError::from("Unsupported Token Request")),
+                _ => Err(InvalidPreAuthorizedCodeError),
             },
             IssuanceCommand::CreateCredentialResponse {
                 access_token,
@@ -206,9 +206,10 @@ impl Aggregate for IssuanceData {
                 use oid4vc_core::Subject;
 
                 if access_token != UNSAFE_ACCESS_TOKEN {
-                    return Err(IssuanceError::from("Invalid Access Token"));
+                    return Err(InvalidAccessTokenError);
                 }
 
+                // TODO: utilize `agent_kms`.
                 let issuer = Arc::new(KeySubject::from_keypair(
                     from_existing_key::<Ed25519KeyPair>(b"", Some(UNSAFE_ISSUER_KEY.as_bytes())),
                     None,
@@ -217,55 +218,87 @@ impl Aggregate for IssuanceData {
 
                 let credential_issuer = CredentialIssuer {
                     subject: issuer.clone(),
-                    metadata: self.oid4vci_data.credential_issuer_metadata.as_ref().unwrap().clone(),
+                    metadata: self
+                        .oid4vci_data
+                        .credential_issuer_metadata
+                        .as_ref()
+                        .ok_or(MissingCredentialIssuerMetadataError)?
+                        .clone(),
                     authorization_server_metadata: self
                         .oid4vci_data
                         .authorization_server_metadata
                         .as_ref()
-                        .unwrap()
+                        .ok_or(MissingAuthorizationServerMetadataError)?
                         .clone(),
                 };
 
                 let proof = credential_issuer
                     .validate_proof(
-                        credential_request.proof.unwrap(),
+                        credential_request.proof.ok_or(MissingProofError)?,
                         Decoder::from(&Subjects::try_from([issuer.clone() as Arc<dyn Subject>]).unwrap()),
                     )
                     .await
-                    .unwrap();
+                    .map_err(|_| InvalidProofError)?;
 
-                let subject_did = proof.rfc7519_claims.iss().as_ref().unwrap().clone();
+                let subject_did = proof
+                    .rfc7519_claims
+                    .iss()
+                    .as_ref()
+                    .ok_or(MissingProofIssuerError)?
+                    .clone();
 
-                let mut credential = self.subjects[0].credentials[0].unsigned_credential.clone();
+                let subject_id = self
+                    .subjects
+                    .iter()
+                    .find(|subject| {
+                        subject
+                            .token_response
+                            .as_ref()
+                            .map_or(false, |res| res.access_token == access_token)
+                    })
+                    .map(|subject| subject.id)
+                    .ok_or(InvalidAccessTokenError)?;
+
+                let mut credential = self
+                    .subjects
+                    .iter()
+                    .find(|subject| subject.id == subject_id)
+                    .ok_or(MissingIssuanceSubjectError(subject_id))?
+                    .credentials
+                    .as_ref()
+                    .ok_or(MissingCredentialError)?
+                    .unsigned_credential
+                    .clone();
+
                 credential["issuer"] = json!(issuer_did);
                 credential["credentialSubject"]["id"] = json!(subject_did);
                 let credential_response = CredentialResponse {
                     credential: CredentialResponseType::Immediate(CredentialFormats::JwtVcJson(
                         credential_format_profiles::Credential {
                             format: JwtVcJson,
-                            credential: serde_json::to_value(
-                                jwt::encode(
-                                    issuer.clone(),
-                                    Header::new(Algorithm::EdDSA),
-                                    VerifiableCredentialJwt::builder()
-                                        .sub(subject_did)
-                                        .iss(issuer.identifier().unwrap())
-                                        .iat(0)
-                                        .exp(9999999999i64)
-                                        .verifiable_credential(credential)
-                                        .build()
-                                        .ok(),
-                                )
-                                .ok(),
+                            credential: json!(jwt::encode(
+                                issuer.clone(),
+                                Header::new(Algorithm::EdDSA),
+                                VerifiableCredentialJwt::builder()
+                                    .sub(subject_did)
+                                    .iss(issuer_did)
+                                    .iat(0)
+                                    .exp(9999999999i64)
+                                    .verifiable_credential(credential)
+                                    .build()
+                                    .ok(),
                             )
-                            .unwrap(),
+                            .ok()),
                         },
                     )),
                     c_nonce: None,
                     c_nonce_expires_in: None,
                 };
 
-                Ok(vec![IssuanceEvent::CredentialResponseCreated { credential_response }])
+                Ok(vec![IssuanceEvent::CredentialResponseCreated {
+                    subject_id,
+                    credential_response,
+                }])
             }
         }
     }
@@ -295,20 +328,49 @@ impl Aggregate for IssuanceData {
                     .credentials_supported = credentials_supported
             }
             SubjectCreated { subject } => self.subjects.push(subject),
-            CredentialOfferCreated { credential_offer } => {
-                self.subjects[0].credential_offer.replace(credential_offer);
+            CredentialOfferCreated {
+                subject_id,
+                credential_offer,
+            } => {
+                self.subjects
+                    .iter_mut()
+                    .find(|subject| subject.id == subject_id)
+                    .map(|subject| {
+                        subject.credential_offer.replace(credential_offer);
+                    });
             }
             CredentialFormatTemplateLoaded {
                 credential_format_template,
             } => self.credential_format_template = credential_format_template,
-            UnsignedCredentialCreated { credential } => {
-                self.subjects[0].credentials.push(credential);
+            UnsignedCredentialCreated { subject_id, credential } => {
+                self.subjects
+                    .iter_mut()
+                    .find(|subject| subject.id == subject_id)
+                    .map(|subject| {
+                        subject.credentials.replace(credential);
+                    });
             }
-            TokenResponseCreated { token_response } => {
-                self.subjects[0].token_response.replace(token_response);
+            TokenResponseCreated {
+                subject_id,
+                token_response,
+            } => {
+                self.subjects
+                    .iter_mut()
+                    .find(|subject| subject.id == subject_id)
+                    .map(|subject| {
+                        subject.token_response.replace(token_response);
+                    });
             }
-            CredentialResponseCreated { credential_response } => {
-                self.subjects[0].credential_response.replace(credential_response);
+            CredentialResponseCreated {
+                subject_id,
+                credential_response,
+            } => {
+                self.subjects
+                    .iter_mut()
+                    .find(|subject| subject.id == subject_id)
+                    .map(|subject| {
+                        subject.credential_response.replace(credential_response);
+                    });
             }
         }
     }
@@ -413,7 +475,9 @@ mod tests {
                 IssuanceEvent::subject_created(),
                 IssuanceEvent::credentials_supported_created(),
             ])
-            .when(IssuanceCommand::CreateCredentialOffer)
+            .when(IssuanceCommand::CreateCredentialOffer {
+                subject_id: ISSUANCE_SUBJECT.id,
+            })
             .then_expect_events(vec![IssuanceEvent::credential_offer_created()]);
     }
 
@@ -429,7 +493,8 @@ mod tests {
                 IssuanceEvent::credential_offer_created(),
             ])
             .when(IssuanceCommand::CreateUnsignedCredential {
-                credential_subject: CREDENTIAL_SUBJECT.clone(),
+                subject_id: ISSUANCE_SUBJECT.id,
+                credential: CREDENTIAL_SUBJECT.clone(),
             })
             .then_expect_events(vec![IssuanceEvent::unsigned_credential_created()]);
     }
@@ -511,8 +576,9 @@ mod tests {
         }
         ))
         .unwrap()];
+        static ref ISSUANCE_SUBJECT_ID: uuid::Uuid = uuid::Uuid::new_v4();
         static ref ISSUANCE_SUBJECT: IssuanceSubject = IssuanceSubject {
-            id: uuid::Uuid::new_v4(),
+            id: ISSUANCE_SUBJECT_ID.clone(),
             pre_authorized_code: UNSAFE_PRE_AUTHORIZED_CODE.to_string(),
             ..Default::default()
         };
@@ -574,7 +640,6 @@ mod tests {
         static ref CREDENTIAL: Credential = Credential {
             id: uuid::Uuid::new_v4(),
             unsigned_credential: UNSIGNED_CREDENTIAL.clone(),
-            signed_credential: None,
         };
         static ref TOKEN_REQUEST: TokenRequest = TokenRequest::PreAuthorizedCode {
             pre_authorized_code: UNSAFE_PRE_AUTHORIZED_CODE.to_string(),
@@ -673,24 +738,28 @@ mod tests {
 
         pub fn credential_offer_created() -> IssuanceEvent {
             IssuanceEvent::CredentialOfferCreated {
+                subject_id: ISSUANCE_SUBJECT.id,
                 credential_offer: CREDENTIAL_OFFER.clone(),
             }
         }
 
         pub fn unsigned_credential_created() -> IssuanceEvent {
             IssuanceEvent::UnsignedCredentialCreated {
+                subject_id: ISSUANCE_SUBJECT.id,
                 credential: CREDENTIAL.clone(),
             }
         }
 
         pub fn token_response_created() -> IssuanceEvent {
             IssuanceEvent::TokenResponseCreated {
+                subject_id: ISSUANCE_SUBJECT.id,
                 token_response: TOKEN_RESPONSE.clone(),
             }
         }
 
         pub fn credential_response_created() -> IssuanceEvent {
             IssuanceEvent::CredentialResponseCreated {
+                subject_id: ISSUANCE_SUBJECT.id,
                 credential_response: CREDENTIAL_RESPONSE.clone(),
             }
         }

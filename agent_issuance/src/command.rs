@@ -6,12 +6,8 @@ use oid4vci::{
     credential_request::CredentialRequest,
     token_request::TokenRequest,
 };
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Metadata {
-    pub metadata: serde_json::Value,
-}
+use serde::Deserialize;
+use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -34,10 +30,13 @@ pub enum IssuanceCommand {
     CreateCredentialsSupported {
         credentials_supported: Vec<CredentialsSupportedObject>,
     },
-    // TODO: add option for credential_offer_uri (by reference)
-    CreateCredentialOffer,
     CreateUnsignedCredential {
-        credential_subject: serde_json::Value,
+        subject_id: Uuid,
+        credential: serde_json::Value,
+    },
+    // TODO: add option for credential_offer_uri (by reference)
+    CreateCredentialOffer {
+        subject_id: Uuid,
     },
 
     // OpenID4VCI Pre-Authorized Code Flow

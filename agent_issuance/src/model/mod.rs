@@ -5,7 +5,7 @@ use cqrs_es::{Aggregate, AggregateError, View};
 
 use crate::handlers::command_handler;
 
-pub async fn create_credential<A: Aggregate, V: View<A>>(
+pub async fn command_handler_without_id<A: Aggregate, V: View<A>>(
     state: &ApplicationState<A, V>,
     command: A::Command,
 ) -> Result<(), AggregateError<<A as Aggregate>::Error>>

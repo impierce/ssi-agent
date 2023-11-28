@@ -28,13 +28,17 @@ dependencies = [
  "axum-macros",
  "http-api-problem",
  "hyper",
+ "lazy_static",
  "mime",
  "oid4vc-core",
  "oid4vci",
+ "serde",
  "serde_json",
  "tokio",
  "tower",
  "tracing",
+ "url",
+ "uuid",
 ]
 
 [[package]]
@@ -45,6 +49,7 @@ dependencies = [
  "agent_issuance",
  "agent_store",
  "axum",
+ "lazy_static",
  "oid4vci",
  "serde_json",
  "tokio",
@@ -70,6 +75,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "thiserror",
  "time",
  "tokio",
  "tracing",

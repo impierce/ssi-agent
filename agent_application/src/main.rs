@@ -7,6 +7,7 @@ use agent_store::postgres;
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
+use serde_json::json;
 use std::sync::Arc;
 use tracing::info;
 
@@ -32,7 +33,7 @@ async fn main() {
 async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>) {
     info!("Starting up ...");
 
-    let base_url: url::Url = "https://example.com/".parse().unwrap();
+    let base_url: url::Url = "http://0.0.0.0:3033/".parse().unwrap();
 
     // Create subject
     match command_handler(
@@ -54,7 +55,7 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
         IssuanceCommand::LoadAuthorizationServerMetadata {
             authorization_server_metadata: Box::new(AuthorizationServerMetadata {
                 issuer: base_url.clone(),
-                token_endpoint: Some(base_url.join("token").unwrap()),
+                token_endpoint: Some(base_url.join("v1/oauth/token").unwrap()),
                 ..Default::default()
             }),
         },
@@ -72,7 +73,7 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
             credential_issuer_metadata: CredentialIssuerMetadata {
                 credential_issuer: base_url.clone(),
                 authorization_server: None,
-                credential_endpoint: base_url.join("credential").unwrap(),
+                credential_endpoint: base_url.join("v1/openid4vci/credential").unwrap(),
                 deferred_credential_endpoint: None,
                 batch_credential_endpoint: None,
                 credentials_supported: vec![],
@@ -88,4 +89,36 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
 
     // Load templates
     load_templates(&state).await;
+
+    match command_handler(
+        "agg-id-F39A0C".to_string(),
+        &state,
+        IssuanceCommand::CreateCredentialsSupported {
+            credentials_supported: vec![serde_json::from_value(json!({
+                "format": "jwt_vc_json",
+                "cryptographic_binding_methods_supported": [
+                    "did:key",
+                ],
+                "cryptographic_suites_supported": [
+                    "EdDSA"
+                ],
+                "credential_definition":{
+                    "type": [
+                        "VerifiableCredential",
+                        "OpenBadgeCredential"
+                    ]
+                },
+                "proof_types_supported": [
+                    "jwt"
+                ]
+            }
+            ))
+            .unwrap()],
+        },
+    )
+    .await
+    {
+        Ok(_) => println!("Startup task completed: `CreateCredentialsSupported`"),
+        Err(err) => println!("Startup task failed: {:#?}", err),
+    };
 }
