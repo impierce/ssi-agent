@@ -34,7 +34,6 @@ pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
         .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
         .route("/v1/oauth/token", post(token))
         .route("/v1/openid4vci/credential", post(credential))
-        // .route("/v1/openid4vci/batch_credential", post(batch_credential))
         .with_state(state)
 }
 
