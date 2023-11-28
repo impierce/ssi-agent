@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
 
+// TODO: remove this.
 const UNSAFE_PRE_AUTHORIZED_CODE: &str = "unsafe_pre_authorized_code";
 const UNSAFE_ACCESS_TOKEN: &str = "unsafe_access_token";
 const UNSAFE_C_NONCE: &str = "unsafe_c_nonce";
@@ -202,9 +203,17 @@ impl Aggregate for IssuanceData {
             } => {
                 use oid4vc_core::Subject;
 
-                if access_token != UNSAFE_ACCESS_TOKEN {
-                    return Err(InvalidAccessTokenError);
-                }
+                let subject_id = self
+                    .subjects
+                    .iter()
+                    .find(|subject| {
+                        subject
+                            .token_response
+                            .as_ref()
+                            .map_or(false, |res| res.access_token == access_token)
+                    })
+                    .map(|subject| subject.id)
+                    .ok_or(InvalidAccessTokenError)?;
 
                 // TODO: utilize `agent_kms`.
                 let issuer = Arc::new(KeySubject::from_keypair(
@@ -243,18 +252,6 @@ impl Aggregate for IssuanceData {
                     .as_ref()
                     .ok_or(MissingProofIssuerError)?
                     .clone();
-
-                let subject_id = self
-                    .subjects
-                    .iter()
-                    .find(|subject| {
-                        subject
-                            .token_response
-                            .as_ref()
-                            .map_or(false, |res| res.access_token == access_token)
-                    })
-                    .map(|subject| subject.id)
-                    .ok_or(InvalidAccessTokenError)?;
 
                 let mut credential = self
                     .subjects

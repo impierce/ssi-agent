@@ -17,14 +17,14 @@ async fn main() {
 
     tokio::spawn(startup_events(state.clone()));
 
-    axum::Server::bind(&"192.168.1.127:3033".parse().unwrap())
+    axum::Server::bind(&"0.0.0.0:3033".parse().unwrap())
         .serve(app(state).into_make_service())
         .await
         .unwrap();
 }
 
 async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>) {
-    let base_url: url::Url = "http://192.168.1.127:3033/".parse().unwrap();
+    let base_url: url::Url = "http://0.0.0.0:3033/".parse().unwrap();
 
     match command_handler(
         "agg-id-F39A0C".to_string(),

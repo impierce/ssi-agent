@@ -16,12 +16,11 @@ did-key = "0.2"
 jsonschema = "0.17"
 jsonwebtoken = "8.2"
 serde.workspace = true
-serde_json.true = true
+serde_json.workspace = true
 thiserror.workspace = true
 url.workspace = true
-uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
+uuid.workspace = true
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
-serde.workspace = true
 lazy_static.workspace = true
