@@ -17,6 +17,7 @@ use axum_auth::AuthBearer;
 use hyper::header;
 use oid4vci::{credential_request::CredentialRequest, token_request::TokenRequest};
 use serde_json::Value;
+use tracing::info;
 
 // TODO: What to do with aggregate_id's?
 const AGGREGATE_ID: &str = "agg-id-F39A0C";
@@ -47,7 +48,9 @@ async fn create_unsigned_credential(
     };
 
     match create_credential(&state, command).await {
-        Ok(_) => {}
+        Ok(_) => {
+            info!("Credential created");
+        }
         Err(err) => {
             println!("Error: {:#?}\n", err);
             return (StatusCode::BAD_REQUEST, err.to_string()).into_response();

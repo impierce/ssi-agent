@@ -12,8 +12,10 @@ oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", branch = 
 axum = "0.6"
 axum-auth = "0.4"
 axum-macros = "0.3"
+http-api-problem = "0.57"
 hyper = { version = "0.14", features = ["full"] }
 serde_json = "1.0"
+tracing.workspace = true
 
 [dev-dependencies]
 agent_store = { path = "../agent_store" }

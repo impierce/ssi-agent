@@ -8,7 +8,7 @@ use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::info;
 
 #[tokio::main]
 async fn main() {
@@ -39,13 +39,12 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
         "agg-id-F39A0C".to_string(),
         &state,
         IssuanceCommand::CreateSubject {
-            pre_authorized_code: "pre-auth-code-1337".to_string(),
+            pre_authorized_code: "SplxlOBeZQQYbYS6WxSbIA".to_string(),
         },
     )
     .await
     {
         Ok(_) => info!("Subject created"),
-        // Ok(_) => println!("Startup task completed: `LoadCredentialFormatTemplate`"),
         Err(err) => println!("Startup task failed: {:#?}", err),
     };
 
@@ -83,7 +82,7 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
     )
     .await
     {
-        Ok(_) => println!("Startup task completed: `LoadCredentialIssuerMetadata`"),
+        Ok(_) => info!("Startup task completed: `LoadCredentialIssuerMetadata`"),
         Err(err) => println!("Startup task failed: {:#?}", err),
     };
 

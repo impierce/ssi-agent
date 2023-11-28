@@ -1,5 +1,5 @@
 [workspace]
-
+resolver = "2"
 members = [
     "agent_api_rest",
     "agent_application",

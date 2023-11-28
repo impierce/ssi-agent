@@ -22,6 +22,7 @@ use oid4vci::{
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
+use tracing::info;
 
 const UNSAFE_PRE_AUTHORIZED_CODE: &str = "unsafe_pre_authorized_code";
 const UNSAFE_ACCESS_TOKEN: &str = "unsafe_access_token";
@@ -150,12 +151,23 @@ impl Aggregate for IssuanceData {
             }
 
             IssuanceCommand::CreateUnsignedCredential { credential_subject } => {
+                info!("Credential Subject: {:#?}", credential_subject);
+
                 let mut unsigned_credential = self.credential_format_template.clone();
+
+                info!("Unsigned Credential: {:#?}", unsigned_credential);
 
                 unsigned_credential.as_object_mut().unwrap().insert(
                     "credentialSubject".to_string(),
-                    credential_subject["credentialSubject"].clone(),
+                    credential_subject
+                        .get("credential")
+                        .unwrap()
+                        .get("credentialSubject")
+                        .unwrap()
+                        .clone(),
                 );
+
+                info!("Unsigned Credential: {:#?}", unsigned_credential);
 
                 Ok(vec![IssuanceEvent::UnsignedCredentialCreated {
                     credential: Credential {

@@ -2,7 +2,7 @@ use crate::{
     command::IssuanceCommand, handlers::command_handler, model::aggregate::IssuanceData, queries::IssuanceDataView,
     state::ApplicationState,
 };
-use tracing::info;
+use tracing::{info, warn};
 
 pub async fn load_templates(state: &ApplicationState<IssuanceData, IssuanceDataView>) {
     match command_handler(
@@ -18,6 +18,6 @@ pub async fn load_templates(state: &ApplicationState<IssuanceData, IssuanceDataV
     .await
     {
         Ok(_) => info!("Template loaded: \"Open Badges 3.0\""),
-        Err(err) => println!("Template failed to load: {:#?}", err),
+        Err(err) => warn!("Template failed to load: {:#?}", err),
     };
 }
