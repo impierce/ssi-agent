@@ -1,0 +1,251 @@
+{
+	"info": {
+		"_postman_id": "53b46e18-de7f-4973-8304-8238844a71ce",
+		"name": "ssi-agent",
+		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
+		"_exporter_id": "24972330"
+	},
+	"item": [
+		{
+			"name": "Issuance",
+			"item": [
+				{
+					"name": "subjects",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"const subjectId = jsonData?.id;",
+									"",
+									"if(subjectId){",
+									"    pm.collectionVariables.set(\"subjectId\",subjectId)",
+									"}",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"value\": \"{{preAuthorizedCode}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{host}}/v1/subjects"
+					},
+					"response": []
+				},
+				{
+					"name": "credentials",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"subjectId\": \"{{subjectId}}\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": {},\n            \"type\": \"AchievementSubject\",\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    }\n}\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{host}}/v1/credentials"
+					},
+					"response": []
+				},
+				{
+					"name": "offers",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"subjectId\": \"{{subjectId}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{host}}/v1/offers"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "oid4vci",
+			"item": [
+				{
+					"name": "oauth-authorization-server",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"const issuer = jsonData?.issuer;",
+									"const tokenEndpoint = jsonData?.token_endpoint;",
+									"",
+									"if(issuer){",
+									"    pm.collectionVariables.set(\"issuer\",issuer)",
+									"}",
+									"",
+									"if(tokenEndpoint){",
+									"    pm.collectionVariables.set(\"tokenEndpoint\",tokenEndpoint)",
+									"}",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "http://{{host}}/.well-known/oauth-authorization-server"
+					},
+					"response": []
+				},
+				{
+					"name": "openid-credential-issuer",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "http://{{host}}/.well-known/openid-credential-issuer"
+					},
+					"response": []
+				},
+				{
+					"name": "token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"const accessToken = jsonData?.access_token;",
+									"",
+									"if(accessToken){",
+									"    pm.collectionVariables.set(\"accessToken\",accessToken)",
+									"}",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "grant_type",
+									"value": "urn:ietf:params:oauth:grant-type:pre-authorized_code",
+									"type": "text"
+								},
+								{
+									"key": "pre-authorized_code",
+									"value": "{{preAuthorizedCode}}",
+									"type": "text"
+								}
+							]
+						},
+						"url": "http://{{host}}/v1/oauth/token"
+					},
+					"response": []
+				},
+				{
+					"name": "credential",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\n            \"VerifiableCredential\",\n            \"OpenBadgeCredential\"\n        ]\n    },\n    \"proof\": {\n        \"proof_type\": \"jwt\",\n        \"jwt\": \"eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1rdWlSS3ExZktyekFYZVNOaUd3cnBKUFB1Z1k4QXhKWUE1Y3BDdlpDWUJEN0IjejZNa3VpUktxMWZLcnpBWGVTTmlHd3JwSlBQdWdZOEF4SllBNWNwQ3ZaQ1lCRDdCIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWt1aVJLcTFmS3J6QVhlU05pR3dycEpQUHVnWThBeEpZQTVjcEN2WkNZQkQ3QiIsImF1ZCI6Imh0dHA6Ly8xOTIuMTY4LjEuMTI3OjMwMzMvIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoidW5zYWZlX2Nfbm9uY2UifQ.wR2e4VUnVjG6IK9cntcqvc_8KEJQUd3SEjsPZwDYDlYqijZ4ZaQLxyHtzNmLkIS3FpChLrZrcvIUJrZxrWcKAg\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{host}}/v1/openid4vci/credential"
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "host",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "preAuthorizedCode",
+			"value": "unique_subject_string",
+			"type": "string"
+		},
+		{
+			"key": "subjectId",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "issuer",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "tokenEndpoint",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "accessToken",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		}
+	]
+}
