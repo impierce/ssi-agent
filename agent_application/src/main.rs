@@ -3,7 +3,7 @@ use agent_issuance::{
     command::IssuanceCommand, handlers::command_handler, model::aggregate::IssuanceData, queries::IssuanceDataView,
     services::IssuanceServices, state::ApplicationState,
 };
-use agent_store::postgres;
+use agent_store::in_memory;
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
@@ -12,19 +12,19 @@ use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
-    let state = Arc::new(postgres::ApplicationState::new(vec![], IssuanceServices {}).await)
+    let state = Arc::new(in_memory::ApplicationState::new(vec![], IssuanceServices {}).await)
         as ApplicationState<IssuanceData, IssuanceDataView>;
 
     tokio::spawn(startup_events(state.clone()));
 
-    axum::Server::bind(&"0.0.0.0:3033".parse().unwrap())
+    axum::Server::bind(&"192.168.1.127:3033".parse().unwrap())
         .serve(app(state).into_make_service())
         .await
         .unwrap();
 }
 
 async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>) {
-    let base_url: url::Url = "http://0.0.0.0:3033/".parse().unwrap();
+    let base_url: url::Url = "http://192.168.1.127:3033/".parse().unwrap();
 
     match command_handler(
         "agg-id-F39A0C".to_string(),
