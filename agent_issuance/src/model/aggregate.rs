@@ -165,8 +165,6 @@ impl Aggregate for IssuanceData {
                     .ok_or(InvalidCredentialError)?
                     .insert("credentialSubject".to_string(), credential["credentialSubject"].clone());
 
-                info!("Unsigned Credential: {:#?}", unsigned_credential);
-
                 Ok(vec![IssuanceEvent::UnsignedCredentialCreated {
                     subject_id,
                     credential: Credential {

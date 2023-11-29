@@ -1,7 +1,6 @@
-use std::collections::HashMap;
-
 use crate::state::ApplicationState;
 use cqrs_es::{persist::PersistenceError, Aggregate, AggregateError, View};
+use std::collections::HashMap;
 use time::format_description::well_known::Rfc3339;
 use tracing::{debug, error};
 
