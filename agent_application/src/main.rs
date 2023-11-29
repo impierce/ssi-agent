@@ -3,7 +3,7 @@ use agent_issuance::{
     command::IssuanceCommand, handlers::command_handler, init::load_templates, model::aggregate::IssuanceData,
     queries::IssuanceDataView, services::IssuanceServices, state::ApplicationState,
 };
-use agent_store::in_memory;
+use agent_store::{in_memory, postgres};
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
@@ -22,9 +22,11 @@ async fn main() {
     // Develop
     tracing_subscriber::fmt::init();
 
+    let host = config().get_string("host").unwrap();
+
     tokio::spawn(startup_events(state.clone()));
 
-    axum::Server::bind(&"0.0.0.0:3033".parse().unwrap())
+    axum::Server::bind(&format!("{}:3033", host).parse().unwrap())
         .serve(app(state).into_make_service())
         .await
         .unwrap();
@@ -33,7 +35,9 @@ async fn main() {
 async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>) {
     info!("Starting up ...");
 
-    let base_url: url::Url = "http://0.0.0.0:3033/".parse().unwrap();
+    let host = config().get_string("host").unwrap();
+
+    let base_url: url::Url = format!("http://{}:3033/", host).parse().unwrap();
 
     // Create subject
     match command_handler(
@@ -121,4 +125,16 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
         Ok(_) => println!("Startup task completed: `CreateCredentialsSupported`"),
         Err(err) => println!("Startup task failed: {:#?}", err),
     };
+}
+
+/// Read environment variables
+pub fn config() -> config::Config {
+    // Load global .env file
+    dotenvy::dotenv().ok();
+
+    // Build configuration
+    config::Config::builder()
+        .add_source(config::Environment::with_prefix("AGENT_APPLICATION"))
+        .build()
+        .unwrap()
 }

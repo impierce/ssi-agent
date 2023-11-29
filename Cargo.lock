@@ -49,6 +49,8 @@ dependencies = [
  "agent_issuance",
  "agent_store",
  "axum",
+ "config",
+ "dotenvy",
  "lazy_static",
  "oid4vci",
  "serde_json",
