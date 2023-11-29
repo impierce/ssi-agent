@@ -10,7 +10,7 @@ CREATE TABLE events
     PRIMARY KEY (aggregate_type, aggregate_id, sequence)
 );
 
-CREATE TABLE credential_query
+CREATE TABLE issuance_data_query
 (
     view_id text                        NOT NULL,
     version           bigint CHECK (version >= 0) NOT NULL,

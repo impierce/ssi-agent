@@ -1,17 +1,51 @@
-// use crate::model::aggregate::CredentialTemplate;
 use cqrs_es::DomainEvent;
+use oid4vci::{
+    credential_issuer::{
+        authorization_server_metadata::AuthorizationServerMetadata,
+        credential_issuer_metadata::CredentialIssuerMetadata, credentials_supported::CredentialsSupportedObject,
+    },
+    credential_response::CredentialResponse,
+    token_response::TokenResponse,
+};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::model::aggregate::{Credential, CredentialOffer, IssuanceSubject};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
 pub enum IssuanceEvent {
-    CredentialTemplateLoaded {
-        credential_template: serde_json::Value,
+    CredentialFormatTemplateLoaded {
+        credential_format_template: serde_json::Value,
     },
-    CredentialDataCreated {
-        credential_template: serde_json::Value,
-        credential_data: serde_json::Value,
+    AuthorizationServerMetadataLoaded {
+        authorization_server_metadata: Box<AuthorizationServerMetadata>,
     },
-    CredentialSigned,
+    CredentialIssuerMetadataLoaded {
+        credential_issuer_metadata: CredentialIssuerMetadata,
+    },
+    SubjectCreated {
+        subject: IssuanceSubject,
+    },
+    CredentialsSupportedCreated {
+        credentials_supported: Vec<CredentialsSupportedObject>,
+    },
+    UnsignedCredentialCreated {
+        subject_id: Uuid,
+        credential: Credential,
+    },
+    CredentialOfferCreated {
+        subject_id: Uuid,
+        credential_offer: CredentialOffer,
+    },
+    TokenResponseCreated {
+        subject_id: Uuid,
+        token_response: TokenResponse,
+    },
+    CredentialResponseCreated {
+        subject_id: Uuid,
+        credential_response: CredentialResponse,
+    },
 }
 
 impl DomainEvent for IssuanceEvent {
@@ -19,9 +53,15 @@ impl DomainEvent for IssuanceEvent {
         use IssuanceEvent::*;
 
         let event_type: &str = match self {
-            CredentialTemplateLoaded { .. } => "CredentialTemplateCreated",
-            CredentialDataCreated { .. } => "CredentialDataCreated",
-            CredentialSigned { .. } => "CredentialSigned",
+            CredentialFormatTemplateLoaded { .. } => "CredentialFormatTemplateLoaded",
+            AuthorizationServerMetadataLoaded { .. } => "AuthorizationServerMetadataLoaded",
+            CredentialIssuerMetadataLoaded { .. } => "CredentialIssuerMetadataLoaded",
+            CredentialsSupportedCreated { .. } => "CredentialsSupportedCreated",
+            SubjectCreated { .. } => "SubjectCreated",
+            CredentialOfferCreated { .. } => "CredentialOfferCreated",
+            UnsignedCredentialCreated { .. } => "UnsignedCredentialCreated",
+            TokenResponseCreated { .. } => "TokenResponseCreated",
+            CredentialResponseCreated { .. } => "CredentialResponseCreated",
         };
         event_type.to_string()
     }

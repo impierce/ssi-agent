@@ -1,17 +1,14 @@
-use agent_store::state::ApplicationState;
-use cqrs_es::{
-    persist::{PersistenceError, ViewRepository},
-    Aggregate, AggregateError, View,
-};
+use crate::state::ApplicationState;
+use cqrs_es::{persist::PersistenceError, Aggregate, AggregateError, View};
 
 pub async fn query_handler<A: Aggregate, V: View<A>>(
     credential_id: String,
-    state: ApplicationState<A, V>,
-) -> Result<(), PersistenceError> {
-    match state.credential_query.load(&credential_id).await {
+    state: &ApplicationState<A, V>,
+) -> Result<Option<V>, PersistenceError> {
+    match state.load(&credential_id).await {
         Ok(view) => {
             println!("View: {:#?}\n", view);
-            Ok(())
+            Ok(view)
         }
         Err(err) => {
             println!("Error: {:#?}\n", err);
@@ -22,11 +19,13 @@ pub async fn query_handler<A: Aggregate, V: View<A>>(
 
 pub async fn command_handler<A: Aggregate, V: View<A>>(
     aggregate_id: String,
-    state: ApplicationState<A, V>,
+    state: &ApplicationState<A, V>,
     command: A::Command,
-) -> Result<(), AggregateError<<A as Aggregate>::Error>> {
+) -> Result<(), AggregateError<<A as Aggregate>::Error>>
+where
+    A::Command: Send + Sync,
+{
     state
-        .cqrs
         .execute_with_metadata(&aggregate_id, command, Default::default())
         .await
 }

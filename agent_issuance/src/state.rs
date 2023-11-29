@@ -1,13 +1,20 @@
-use crate::model::aggregate::Credential;
-use crate::queries::CredentialView;
-use crate::services::IssuanceServices;
-use agent_store::state::ApplicationState;
+use async_trait::async_trait;
+use cqrs_es::persist::PersistenceError;
+use cqrs_es::{Aggregate, View};
+use std::collections::HashMap;
+use std::sync::Arc;
 
-pub async fn new_application_state() -> ApplicationState<Credential, CredentialView> {
-    agent_store::state::application_state(
-        // vec![Box::new(SimpleLoggingQuery {})],
-        vec![],
-        IssuanceServices {},
-    )
-    .await
+#[async_trait]
+pub trait CQRS<A: Aggregate, V: View<A>> {
+    async fn execute_with_metadata(
+        &self,
+        aggregate_id: &str,
+        command: A::Command,
+        metadata: HashMap<String, String>,
+    ) -> Result<(), cqrs_es::AggregateError<A::Error>>
+    where
+        A::Command: Send + Sync;
+
+    async fn load(&self, view_id: &str) -> Result<Option<V>, PersistenceError>;
 }
+pub type ApplicationState<A, V> = Arc<dyn CQRS<A, V> + Send + Sync>;
