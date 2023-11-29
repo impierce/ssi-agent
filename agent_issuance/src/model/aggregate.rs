@@ -25,7 +25,6 @@ use serde_json::json;
 use std::sync::Arc;
 
 // TODO: remove this.
-const UNSAFE_PRE_AUTHORIZED_CODE: &str = "unsafe_pre_authorized_code";
 const UNSAFE_ACCESS_TOKEN: &str = "unsafe_access_token";
 const UNSAFE_C_NONCE: &str = "unsafe_c_nonce";
 const UNSAFE_ISSUER_KEY: &str = "this-is-a-very-UNSAFE-issuer-key";
@@ -121,6 +120,12 @@ impl Aggregate for IssuanceData {
                 Ok(vec![IssuanceEvent::SubjectCreated { subject }])
             }
             IssuanceCommand::CreateCredentialOffer { subject_id } => {
+                let subject = self
+                    .subjects
+                    .iter()
+                    .find(|subject| subject.id == subject_id)
+                    .ok_or(MissingIssuanceSubjectError(subject_id))?;
+
                 let credential_issuer_metadata = self
                     .oid4vci_data
                     .credential_issuer_metadata
@@ -136,7 +141,7 @@ impl Aggregate for IssuanceData {
                     grants: Some(Grants {
                         authorization_code: None,
                         pre_authorized_code: Some(PreAuthorizedCode {
-                            pre_authorized_code: UNSAFE_PRE_AUTHORIZED_CODE.to_string(),
+                            pre_authorized_code: subject.pre_authorized_code.clone(),
                             ..Default::default()
                         }),
                     }),
@@ -530,6 +535,8 @@ mod tests {
             })
             .then_expect_events(vec![IssuanceEvent::credential_response_created()]);
     }
+
+    const UNSAFE_PRE_AUTHORIZED_CODE: &str = "unsafe_pre_authorized_code";
 
     lazy_static! {
         static ref CREDENTIAL_FORMAT_TEMPLATE: serde_json::Value =
