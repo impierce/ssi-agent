@@ -1,4 +1,4 @@
 # agent_store
 
-Persistence layer. Sets up the CQRS framework and creates the application state.
-Sets up a connection to some database to store the events.
+The persistence layer sets up the CQRS framework and manages the application state.
+It will bind to some event store database to persist domain events.

@@ -1,7 +1,12 @@
 use agent_api_rest::app;
 use agent_issuance::{
-    command::IssuanceCommand, handlers::command_handler, init::load_templates, model::aggregate::IssuanceData,
-    queries::IssuanceDataView, services::IssuanceServices, state::ApplicationState,
+    command::IssuanceCommand,
+    handlers::command_handler,
+    init::load_templates,
+    model::aggregate::IssuanceData,
+    queries::{IssuanceDataView, SimpleLoggingQuery},
+    services::IssuanceServices,
+    state::ApplicationState,
 };
 use agent_store::{in_memory, postgres};
 use oid4vci::credential_issuer::{
@@ -9,27 +14,28 @@ use oid4vci::credential_issuer::{
 };
 use serde_json::json;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::info;
 
 #[tokio::main]
 async fn main() {
-    let state = match config().get_string("event_store").unwrap().as_str() {
-        "postgres" => Arc::new(postgres::ApplicationState::new(vec![], IssuanceServices {}).await)
-            as ApplicationState<IssuanceData, IssuanceDataView>,
-        _ => Arc::new(in_memory::ApplicationState::new(vec![], IssuanceServices {}).await)
-            as ApplicationState<IssuanceData, IssuanceDataView>,
-    };
+    let state =
+        match config().get_string("event_store").unwrap().as_str() {
+            "postgres" => Arc::new(
+                postgres::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
+            ) as ApplicationState<IssuanceData, IssuanceDataView>,
+            _ => Arc::new(
+                in_memory::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
+            ) as ApplicationState<IssuanceData, IssuanceDataView>,
+        };
 
     match config().get_string("log_format").unwrap().as_str() {
         "json" => tracing_subscriber::fmt().json().init(),
         _ => tracing_subscriber::fmt::init(),
     }
 
-    let host = config().get_string("host").unwrap();
-
     tokio::spawn(startup_events(state.clone()));
 
-    axum::Server::bind(&format!("{}:3033", host).parse().unwrap())
+    axum::Server::bind(&"0.0.0.0:3033".parse().unwrap())
         .serve(app(state).into_make_service())
         .await
         .unwrap();
@@ -41,20 +47,6 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
     let host = config().get_string("host").unwrap();
 
     let base_url: url::Url = format!("http://{}:3033/", host).parse().unwrap();
-
-    // Create subject
-    // match command_handler(
-    //     "agg-id-F39A0C".to_string(),
-    //     &state,
-    //     IssuanceCommand::CreateSubject {
-    //         pre_authorized_code: "SplxlOBeZQQYbYS6WxSbIA".to_string(),
-    //     },
-    // )
-    // .await
-    // {
-    //     Ok(_) => info!("Subject created"),
-    //     Err(err) => println!("Startup task failed: {:#?}", err),
-    // };
 
     match command_handler(
         "agg-id-F39A0C".to_string(),

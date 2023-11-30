@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use cqrs_es::{persist::GenericQuery, EventEnvelope, Query, View};
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::model::aggregate::{IssuanceData, IssuanceSubject, OID4VCIData};
 
@@ -13,7 +14,7 @@ impl Query<IssuanceData> for SimpleLoggingQuery {
     async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<IssuanceData>]) {
         for event in events {
             let payload = serde_json::to_string_pretty(&event.payload).unwrap();
-            println!("{}-{}\n{}", aggregate_id, event.sequence, payload);
+            info!("{}-{} - {}", aggregate_id, event.sequence, payload);
         }
     }
 }
