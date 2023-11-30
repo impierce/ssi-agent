@@ -9,18 +9,21 @@ use oid4vci::credential_issuer::{
 };
 use serde_json::json;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{debug, info};
 
 #[tokio::main]
 async fn main() {
-    let state = Arc::new(in_memory::ApplicationState::new(vec![], IssuanceServices {}).await)
-        as ApplicationState<IssuanceData, IssuanceDataView>;
+    let state = match config().get_string("event_store").unwrap().as_str() {
+        "postgres" => Arc::new(postgres::ApplicationState::new(vec![], IssuanceServices {}).await)
+            as ApplicationState<IssuanceData, IssuanceDataView>,
+        _ => Arc::new(in_memory::ApplicationState::new(vec![], IssuanceServices {}).await)
+            as ApplicationState<IssuanceData, IssuanceDataView>,
+    };
 
-    // Release
-    // tracing_subscriber::fmt().json().init();
-
-    // Develop
-    tracing_subscriber::fmt::init();
+    match config().get_string("log_format").unwrap().as_str() {
+        "json" => tracing_subscriber::fmt().json().init(),
+        _ => tracing_subscriber::fmt::init(),
+    }
 
     let host = config().get_string("host").unwrap();
 
@@ -40,18 +43,18 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
     let base_url: url::Url = format!("http://{}:3033/", host).parse().unwrap();
 
     // Create subject
-    match command_handler(
-        "agg-id-F39A0C".to_string(),
-        &state,
-        IssuanceCommand::CreateSubject {
-            pre_authorized_code: "SplxlOBeZQQYbYS6WxSbIA".to_string(),
-        },
-    )
-    .await
-    {
-        Ok(_) => info!("Subject created"),
-        Err(err) => println!("Startup task failed: {:#?}", err),
-    };
+    // match command_handler(
+    //     "agg-id-F39A0C".to_string(),
+    //     &state,
+    //     IssuanceCommand::CreateSubject {
+    //         pre_authorized_code: "SplxlOBeZQQYbYS6WxSbIA".to_string(),
+    //     },
+    // )
+    // .await
+    // {
+    //     Ok(_) => info!("Subject created"),
+    //     Err(err) => println!("Startup task failed: {:#?}", err),
+    // };
 
     match command_handler(
         "agg-id-F39A0C".to_string(),
@@ -133,8 +136,13 @@ pub fn config() -> config::Config {
     dotenvy::dotenv().ok();
 
     // Build configuration
-    config::Config::builder()
+    let config = config::Config::builder()
         .add_source(config::Environment::with_prefix("AGENT_APPLICATION"))
+        .add_source(config::Environment::with_prefix("AGENT_CONFIG"))
         .build()
-        .unwrap()
+        .unwrap();
+
+    info!("{:?}", config);
+
+    config
 }
