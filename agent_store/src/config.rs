@@ -1,6 +1,6 @@
 /// Read environment variables
 pub fn config() -> config::Config {
-    // Load .env file
+    // Load global .env file
     dotenvy::dotenv().ok();
 
     // Build configuration

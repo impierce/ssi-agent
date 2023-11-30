@@ -1,5 +1,5 @@
 [workspace]
-
+resolver = "2"
 members = [
     "agent_api_rest",
     "agent_application",
@@ -8,9 +8,13 @@ members = [
 ]
 
 [workspace.dependencies]
+config = { version = "0.13" }
+dotenvy = { version = "0.15" }
 lazy_static = "1.4"
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0" }
 thiserror = "1.0"
+tracing = { version = "0.1" }
+tracing-subscriber = { version = "0.3", features = ["json"] }
 url = "2.5"

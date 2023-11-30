@@ -9,6 +9,26 @@ servers:
     description: Development
 
 paths:
+  /v1/subjects:
+    post:
+      summary: Create a new Subject for a given unique user-bound identifier
+      description: Works as a "get or create", will be used as the "pre-authorized code"
+      tags:
+        - Creation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value:
+                  type: string
+                  description: arbitrary value unique to a user
+              required:
+                - value
+            example:
+              value: "c86289fa-b105-4ec3-9326-a02436788f11"
   /v1/credentials:
     post:
       summary: Create a new Credential for a given Subject
@@ -16,7 +36,7 @@ paths:
       tags:
         - Creation
       requestBody:
-        description: Any JSON object to be used as the Subject of the new Credential
+        # description: n/a
         required: true
         content:
           application/json:
@@ -29,10 +49,16 @@ paths:
                 #     credentialTemplate:
                 #       type: string
                 #       description: The template to be used to create the credential
-                credentialSubject:
+                subjectId:
+                  type: string
+                credential:
                   type: object
+                  properties:
+                    credentialSubject:
+                      type: object
               required:
-                - credentialSubject
+                - subjectId
+                - credential
             examples:
               open-badges-3:
                 summary: Open Badges 3.0
@@ -54,3 +80,53 @@ paths:
                 open-badges-3:
                   summary: Open Badges 3.0
                   externalValue: res/open-badge-response.json
+  /v1/offers:
+    post:
+      summary: Create a new Offer for one or more Credentials
+      tags:
+        - Distribution
+      requestBody:
+        description: The id of the Subject
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                subjectId:
+                  type: string
+              required:
+                - subjectId
+            example:
+              subjectId: "c86289fa-b105-4ec3-9326-a02436788f11"
+      responses:
+        "200":
+          description: Offer created successfully. Response value should be displayed to the user in the form of a QR code.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fcredential-issuer.example.com%2F%22%2C%22credentials%22%3A%5B%7B%22format%22%3A%22ldp_vc%22%2C%22credential_definition%22%3A%7B%22%40context%22%3A%5B%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fv1%22%2C%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fexamples%2Fv1%22%5D%2C%22type%22%3A%5B%22VerifiableCredential%22%2C%22UniversityDegreeCredential%22%5D%7D%7D%5D%7D
+
+  # (proxied)
+  /.well-known/oauth-authorization-server:
+    get:
+      summary: Standard OpenID Connect discovery endpoint for authorization metadata
+      description: Standard OpenID Connect discovery endpoint for authorization metadata
+      tags:
+        - (proxied)
+  /.well-known/openid-credential-issuer:
+    get:
+      summary: Standard OpenID Connect discovery endpoint for issuer metadata
+      tags:
+        - (proxied)
+  /auth/token:
+    post:
+      summary: Standard OAuth 2.0 endpoint for fetching a token
+      tags:
+        - (proxied)
+  /openid4vci/credential:
+    post:
+      summary: Standard OpenID Connect endpoint for redeeming a token for a credential
+      tags:
+        - (proxied)

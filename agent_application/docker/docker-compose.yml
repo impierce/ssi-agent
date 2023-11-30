@@ -1,6 +1,6 @@
 version: "3.1"
 
-name: cqrs-postgres
+name: ssi-agent
 
 services:
   cqrs-postgres-db:
@@ -22,3 +22,17 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@example.org
       PGADMIN_DEFAULT_PASSWORD: admin
+    volumes:
+      - "./db/pgadmin4/servers.json:/pgadmin4/servers.json"
+    depends_on:
+      - cqrs-postgres-db
+  ssi-agent:
+    image: ssi-agent
+    restart: always
+    ports:
+      - 3033:3033
+    environment:
+      AGENT_CONFIG_LOG_FORMAT: json
+      AGENT_CONFIG_EVENT_STORE: postgres
+      AGENT_APPLICATION_HOST: <your-local-ip>
+      AGENT_STORE_DB_CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo

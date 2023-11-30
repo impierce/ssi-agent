@@ -1,19 +1,37 @@
 use agent_api_rest::app;
 use agent_issuance::{
-    command::IssuanceCommand, handlers::command_handler, model::aggregate::IssuanceData, queries::IssuanceDataView,
-    services::IssuanceServices, state::ApplicationState,
+    command::IssuanceCommand,
+    handlers::command_handler,
+    init::load_templates,
+    model::aggregate::IssuanceData,
+    queries::{IssuanceDataView, SimpleLoggingQuery},
+    services::IssuanceServices,
+    state::ApplicationState,
 };
-use agent_store::in_memory;
+use agent_store::{in_memory, postgres};
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
 use serde_json::json;
 use std::sync::Arc;
+use tracing::info;
 
 #[tokio::main]
 async fn main() {
-    let state = Arc::new(in_memory::ApplicationState::new(vec![], IssuanceServices {}).await)
-        as ApplicationState<IssuanceData, IssuanceDataView>;
+    let state =
+        match config().get_string("event_store").unwrap().as_str() {
+            "postgres" => Arc::new(
+                postgres::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
+            ) as ApplicationState<IssuanceData, IssuanceDataView>,
+            _ => Arc::new(
+                in_memory::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
+            ) as ApplicationState<IssuanceData, IssuanceDataView>,
+        };
+
+    match config().get_string("log_format").unwrap().as_str() {
+        "json" => tracing_subscriber::fmt().json().init(),
+        _ => tracing_subscriber::fmt::init(),
+    }
 
     tokio::spawn(startup_events(state.clone()));
 
@@ -24,23 +42,11 @@ async fn main() {
 }
 
 async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>) {
-    let base_url: url::Url = "http://0.0.0.0:3033/".parse().unwrap();
+    info!("Starting up ...");
 
-    match command_handler(
-        "agg-id-F39A0C".to_string(),
-        &state,
-        IssuanceCommand::LoadCredentialFormatTemplate {
-            credential_format_template: serde_json::from_str(include_str!(
-                "../../agent_issuance/res/credential_format_templates/openbadges_v3.json"
-            ))
-            .unwrap(),
-        },
-    )
-    .await
-    {
-        Ok(_) => println!("Startup task completed: `LoadCredentialFormatTemplate`"),
-        Err(err) => println!("Startup task failed: {:#?}", err),
-    };
+    let host = config().get_string("host").unwrap();
+
+    let base_url: url::Url = format!("http://{}:3033/", host).parse().unwrap();
 
     match command_handler(
         "agg-id-F39A0C".to_string(),
@@ -55,7 +61,7 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
     )
     .await
     {
-        Ok(_) => println!("Startup task completed: `LoadAuthorizationServerMetadata`"),
+        Ok(_) => info!("Startup task completed: `LoadAuthorizationServerMetadata`"),
         Err(err) => println!("Startup task failed: {:#?}", err),
     };
 
@@ -76,9 +82,12 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
     )
     .await
     {
-        Ok(_) => println!("Startup task completed: `LoadCredentialIssuerMetadata`"),
+        Ok(_) => info!("Startup task completed: `LoadCredentialIssuerMetadata`"),
         Err(err) => println!("Startup task failed: {:#?}", err),
     };
+
+    // Load templates
+    load_templates(&state).await;
 
     match command_handler(
         "agg-id-F39A0C".to_string(),
@@ -111,4 +120,21 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
         Ok(_) => println!("Startup task completed: `CreateCredentialsSupported`"),
         Err(err) => println!("Startup task failed: {:#?}", err),
     };
+}
+
+/// Read environment variables
+pub fn config() -> config::Config {
+    // Load global .env file
+    dotenvy::dotenv().ok();
+
+    // Build configuration
+    let config = config::Config::builder()
+        .add_source(config::Environment::with_prefix("AGENT_APPLICATION"))
+        .add_source(config::Environment::with_prefix("AGENT_CONFIG"))
+        .build()
+        .unwrap();
+
+    info!("{:?}", config);
+
+    config
 }

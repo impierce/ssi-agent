@@ -1,15 +1,18 @@
 {
-  "credentialSubject": {
-    "id": "did:example:ebfeb1f712ebc6f1c276e12ec21",
-    "type": ["AchievementSubject"],
-    "achievement": {
-      "id": "https://example.com/achievements/21st-century-skills/teamwork",
-      "type": ["Achievement"],
-      "criteria": {
-        "narrative": "Team members are nominated for this badge by their peers and recognized upon review by Example Corp management."
-      },
-      "description": "This badge recognizes the development of the capacity to collaborate within a group environment.",
-      "name": "Teamwork"
+  "subjectId": "c86289fa-b105-4ec3-9326-a02436788f11",
+  "credential": {
+    "credentialSubject": {
+      "id": "",
+      "type": ["AchievementSubject"],
+      "achievement": {
+        "id": "https://example.com/achievements/21st-century-skills/teamwork",
+        "type": ["Achievement"],
+        "criteria": {
+          "narrative": "Team members are nominated for this badge by their peers and recognized upon review by Example Corp management."
+        },
+        "description": "This badge recognizes the development of the capacity to collaborate within a group environment.",
+        "name": "Teamwork"
+      }
     }
   }
 }
