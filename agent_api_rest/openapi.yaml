@@ -28,7 +28,7 @@ paths:
               required:
                 - value
             example:
-              value: "c86289fa-b105-4ec3-9326-a02436788f11"
+              value: 'c86289fa-b105-4ec3-9326-a02436788f11'
   /v1/credentials:
     post:
       summary: Create a new Credential for a given Subject
@@ -64,13 +64,13 @@ paths:
                 summary: Open Badges 3.0
                 externalValue: res/open-badge-request.json
       responses:
-        "201":
+        '201':
           description: An Open Badge 3.0 has successfully been created for the provided credentialSubject
           headers:
             Location:
               schema:
                 type: string
-                example: "/v1/credentials/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
+                example: '/v1/credentials/c0c97176-44c3-4f22-ab11-6bb782e29cb9'
               description: URL of the created resource
           content:
             application/json:
@@ -98,9 +98,9 @@ paths:
               required:
                 - subjectId
             example:
-              subjectId: "c86289fa-b105-4ec3-9326-a02436788f11"
+              subjectId: 'c86289fa-b105-4ec3-9326-a02436788f11'
       responses:
-        "200":
+        '200':
           description: Offer created successfully. Response value should be displayed to the user in the form of a QR code.
           content:
             text/plain:
