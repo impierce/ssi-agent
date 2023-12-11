@@ -9,26 +9,6 @@ servers:
     description: Development
 
 paths:
-  /v1/subjects:
-    post:
-      summary: Create a new Subject for a given unique user-bound identifier
-      description: Works as a "get or create", will be used as the "pre-authorized code"
-      tags:
-        - Creation
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                value:
-                  type: string
-                  description: arbitrary value unique to a user
-              required:
-                - value
-            example:
-              value: "c86289fa-b105-4ec3-9326-a02436788f11"
   /v1/credentials:
     post:
       summary: Create a new Credential for a given Subject
@@ -95,6 +75,8 @@ paths:
               properties:
                 subjectId:
                   type: string
+                preAuthorizedCode:
+                  type: string
               required:
                 - subjectId
             example:
@@ -120,12 +102,12 @@ paths:
       summary: Standard OpenID Connect discovery endpoint for issuer metadata
       tags:
         - (proxied)
-  /auth/token:
+  /v1/auth/token:
     post:
       summary: Standard OAuth 2.0 endpoint for fetching a token
       tags:
         - (proxied)
-  /openid4vci/credential:
+  /v1/openid4vci/credential:
     post:
       summary: Standard OpenID Connect endpoint for redeeming a token for a credential
       tags:
