@@ -7,7 +7,6 @@ use oid4vci::{
     token_request::TokenRequest,
 };
 use serde::Deserialize;
-use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -24,19 +23,17 @@ pub enum IssuanceCommand {
     },
 
     // Subject Management
-    CreateSubject {
-        pre_authorized_code: String,
-    },
     CreateCredentialsSupported {
         credentials_supported: Vec<CredentialsSupportedObject>,
     },
     CreateUnsignedCredential {
-        subject_id: Uuid,
+        subject_id: String,
         credential: serde_json::Value,
     },
     // TODO: add option for credential_offer_uri (by reference)
     CreateCredentialOffer {
-        subject_id: Uuid,
+        subject_id: String,
+        pre_authorized_code: Option<String>,
     },
 
     // OpenID4VCI Pre-Authorized Code Flow

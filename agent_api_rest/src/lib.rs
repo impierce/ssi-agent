@@ -1,7 +1,6 @@
 mod credential_issuer;
 mod credentials;
 mod offers;
-mod subjects;
 
 use agent_issuance::{model::aggregate::IssuanceData, queries::IssuanceDataView, state::ApplicationState};
 use axum::{
@@ -17,14 +16,12 @@ use credential_issuer::{
 };
 use credentials::credentials;
 use offers::offers;
-use subjects::subjects;
 
 // TODO: What to do with aggregate_id's?
 pub const AGGREGATE_ID: &str = "agg-id-F39A0C";
 
 pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
     Router::new()
-        .route("/v1/subjects", post(subjects))
         .route("/v1/credentials", post(credentials))
         .route("/v1/offers", post(offers))
         .route(
@@ -45,6 +42,7 @@ mod tests {
         authorization_server_metadata::AuthorizationServerMetadata,
         credential_issuer_metadata::CredentialIssuerMetadata,
     };
+    use serde_json::json;
 
     pub const PRE_AUTHORIZED_CODE: &str = "pre-authorized_code";
     pub const SUBJECT_ID: &str = "00000000-0000-0000-0000-000000000000";
@@ -108,12 +106,17 @@ mod tests {
             .unwrap();
     }
 
-    pub async fn create_subject(state: ApplicationState<IssuanceData, IssuanceDataView>) -> uuid::Uuid {
+    pub async fn create_unsigned_credential(state: ApplicationState<IssuanceData, IssuanceDataView>) -> String {
         state
             .execute_with_metadata(
                 AGGREGATE_ID,
-                IssuanceCommand::CreateSubject {
-                    pre_authorized_code: PRE_AUTHORIZED_CODE.to_string(),
+                IssuanceCommand::CreateUnsignedCredential {
+                    subject_id: SUBJECT_ID.to_string(),
+                    credential: json!({
+                        "credentialSubject": {
+                            "first_name": "Ferris",
+                            "last_name": "Rustacean"
+                    }}),
                 },
                 Default::default(),
             )

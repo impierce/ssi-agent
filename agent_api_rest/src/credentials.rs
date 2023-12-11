@@ -18,9 +18,9 @@ pub(crate) async fn credentials(
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     // TODO: This should be removed once we know how to use aggregate ID's.
-    let subject_id: uuid::Uuid = payload["subjectId"].as_str().unwrap().parse().unwrap();
+    let subject_id = payload["subjectId"].as_str().unwrap();
     let command = IssuanceCommand::CreateUnsignedCredential {
-        subject_id: subject_id.clone(),
+        subject_id: subject_id.to_string(),
         credential: payload["credential"].clone(),
     };
 
@@ -65,7 +65,7 @@ pub(crate) async fn credentials(
 mod tests {
     use crate::{
         app,
-        tests::{create_subject, load_credential_format_template},
+        tests::{load_credential_format_template, SUBJECT_ID},
     };
 
     use super::*;
@@ -85,7 +85,6 @@ mod tests {
             as ApplicationState<IssuanceData, IssuanceDataView>;
 
         load_credential_format_template(state.clone()).await;
-        let subject_id = create_subject(state.clone()).await;
 
         let app = app(state);
 
@@ -97,10 +96,11 @@ mod tests {
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "subjectId": subject_id,
-                            "credential": {"credentialSubject": {
+                            "subjectId": SUBJECT_ID,
+                            "credential": {
+                                "credentialSubject": {
                                 "first_name": "Ferris",
-                                "last_name": "Rustacean",
+                                "last_name": "Rustacean"
                             }},
                         }))
                         .unwrap(),

@@ -79,27 +79,29 @@ impl View<IssuanceData> for IssuanceDataView {
                         subject.credentials.replace(credential.clone());
                     });
             }
+            PreAuthorizedCodeUpdated {
+                subject_id,
+                pre_authorized_code,
+            } => {
+                if let Some(subject) = self.subjects.iter_mut().find(|subject| subject.id == *subject_id) {
+                    subject.pre_authorized_code = pre_authorized_code.clone();
+                }
+            }
             TokenResponseCreated {
                 subject_id,
                 token_response,
             } => {
-                self.subjects
-                    .iter_mut()
-                    .find(|subject| subject.id == *subject_id)
-                    .map(|subject| {
-                        subject.token_response.replace(token_response.clone());
-                    });
+                if let Some(subject) = self.subjects.iter_mut().find(|subject| subject.id == *subject_id) {
+                    subject.token_response.replace(token_response.clone());
+                }
             }
             CredentialResponseCreated {
                 subject_id,
                 credential_response,
             } => {
-                self.subjects
-                    .iter_mut()
-                    .find(|subject| subject.id == *subject_id)
-                    .map(|subject| {
-                        subject.credential_response.replace(credential_response.clone());
-                    });
+                if let Some(subject) = self.subjects.iter_mut().find(|subject| subject.id == *subject_id) {
+                    subject.credential_response.replace(credential_response.clone());
+                }
             }
         }
     }

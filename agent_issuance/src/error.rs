@@ -21,5 +21,5 @@ pub enum IssuanceError {
     #[error("Missing `iss` claim in `Proof`")]
     MissingProofIssuerError,
     #[error("Cannot find Issuance Subject with `subject_id`: {0}")]
-    MissingIssuanceSubjectError(uuid::Uuid),
+    MissingIssuanceSubjectError(String),
 }
