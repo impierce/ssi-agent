@@ -166,7 +166,7 @@ impl Aggregate for IssuanceData {
             IssuanceCommand::CreateUnsignedCredential { subject_id, credential } => {
                 let mut events = vec![];
 
-                if self.subjects.iter().find(|subject| subject.id == subject_id).is_none() {
+                if !self.subjects.iter().any(|subject| subject.id == subject_id) {
                     events.push(IssuanceEvent::SubjectCreated {
                         subject: IssuanceSubject {
                             id: subject_id.clone(),
@@ -204,7 +204,7 @@ impl Aggregate for IssuanceData {
                         .map(|subject| subject.id.clone())
                         .ok_or(InvalidPreAuthorizedCodeError)?;
 
-                    if self.subjects.iter().find(|subject| subject.id == subject_id).is_some() {
+                    if self.subjects.iter().any(|subject| subject.id == subject_id) {
                         Ok(vec![IssuanceEvent::TokenResponseCreated {
                             subject_id: subject_id.clone(),
                             token_response: TokenResponse {
@@ -352,56 +352,41 @@ impl Aggregate for IssuanceData {
                 subject_id,
                 credential_offer,
             } => {
-                self.subjects
-                    .iter_mut()
-                    .find(|subject| subject.id == subject_id)
-                    .map(|subject| {
-                        subject.credential_offer.replace(credential_offer);
-                    });
+                if let Some(subject) = self.subjects.iter_mut().find(|subject| subject.id == subject_id) {
+                    subject.credential_offer.replace(credential_offer);
+                }
             }
             CredentialFormatTemplateLoaded {
                 credential_format_template,
             } => self.credential_format_template = credential_format_template,
             UnsignedCredentialCreated { subject_id, credential } => {
-                self.subjects
-                    .iter_mut()
-                    .find(|subject| subject.id == subject_id)
-                    .map(|subject| {
-                        subject.credentials.replace(credential);
-                    });
+                if let Some(subject) = self.subjects.iter_mut().find(|subject| subject.id == subject_id) {
+                    subject.credentials.replace(credential);
+                }
             }
             PreAuthorizedCodeUpdated {
                 subject_id,
                 pre_authorized_code,
             } => {
-                self.subjects
-                    .iter_mut()
-                    .find(|subject| subject.id == subject_id)
-                    .map(|subject| {
-                        subject.pre_authorized_code = pre_authorized_code;
-                    });
+                if let Some(subject) = self.subjects.iter_mut().find(|subject| subject.id == subject_id) {
+                    subject.pre_authorized_code = pre_authorized_code;
+                }
             }
             TokenResponseCreated {
                 subject_id,
                 token_response,
             } => {
-                self.subjects
-                    .iter_mut()
-                    .find(|subject| subject.id == subject_id)
-                    .map(|subject| {
-                        subject.token_response.replace(token_response);
-                    });
+                if let Some(subject) = self.subjects.iter_mut().find(|subject| subject.id == subject_id) {
+                    subject.token_response.replace(token_response);
+                }
             }
             CredentialResponseCreated {
                 subject_id,
                 credential_response,
             } => {
-                self.subjects
-                    .iter_mut()
-                    .find(|subject| subject.id == subject_id)
-                    .map(|subject| {
-                        subject.credential_response.replace(credential_response);
-                    });
+                if let Some(subject) = self.subjects.iter_mut().find(|subject| subject.id == subject_id) {
+                    subject.credential_response.replace(credential_response);
+                }
             }
         }
     }
@@ -679,10 +664,7 @@ mod tests {
             c_nonce_expires_in: None,
         };
         static ref SUBJECT_KEY_DID: Arc<KeySubject> = Arc::new(KeySubject::from_keypair(
-            from_existing_key::<Ed25519KeyPair>(
-                b"",
-                Some("this-is-a-very-UNSAFE-subjec-key".as_bytes().try_into().unwrap(),),
-            ),
+            from_existing_key::<Ed25519KeyPair>(b"", Some("this-is-a-very-UNSAFE-subjec-key".as_bytes())),
             None,
         ));
         static ref CREDENTIAL_REQUEST: CredentialRequest = {

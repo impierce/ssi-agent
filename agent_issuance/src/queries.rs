@@ -72,12 +72,9 @@ impl View<IssuanceData> for IssuanceDataView {
                     .replace(credential_offer.clone());
             }
             UnsignedCredentialCreated { subject_id, credential } => {
-                self.subjects
+                if let Some(subject) = self.subjects
                     .iter_mut()
-                    .find(|subject| subject.id == *subject_id)
-                    .map(|subject| {
-                        subject.credentials.replace(credential.clone());
-                    });
+                    .find(|subject| subject.id == *subject_id) { subject.credentials.replace(credential.clone()); }
             }
             PreAuthorizedCodeUpdated {
                 subject_id,

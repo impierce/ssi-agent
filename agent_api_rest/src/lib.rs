@@ -126,7 +126,7 @@ mod tests {
         let view = state.load(AGGREGATE_ID).await.unwrap().unwrap();
         view.subjects
             .iter()
-            .find(|subject| subject.pre_authorized_code == PRE_AUTHORIZED_CODE.to_string())
+            .find(|subject| subject.pre_authorized_code == *PRE_AUTHORIZED_CODE)
             .unwrap()
             .clone()
             .id
