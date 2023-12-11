@@ -16,7 +16,11 @@ pub(crate) async fn offers(
     State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
-    let subject_id = payload["subjectId"].as_str().unwrap();
+    let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
+        subject_id
+    } else {
+        return (StatusCode::BAD_REQUEST, "subjectId is required".to_string()).into_response();
+    };
     let pre_authorized_code = payload["preAuthorizedCode"].as_str().map(|s| s.to_string());
     let command = IssuanceCommand::CreateCredentialOffer {
         subject_id: subject_id.to_string(),

@@ -56,3 +56,72 @@ pub(crate) async fn token(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        app,
+        tests::{
+            create_credential_offer, create_credentials_supported, create_unsigned_credential,
+            load_authorization_server_metadata, load_credential_format_template, load_credential_issuer_metadata,
+            PRE_AUTHORIZED_CODE,
+        },
+    };
+
+    use super::*;
+    use agent_issuance::services::IssuanceServices;
+    use agent_store::in_memory;
+    use axum::{
+        body::Body,
+        http::{self, Request},
+    };
+    use serde_json::{json, Value};
+    use std::sync::Arc;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn test_token_endpoint() {
+        let state = Arc::new(in_memory::ApplicationState::new(vec![], IssuanceServices {}).await)
+            as ApplicationState<IssuanceData, IssuanceDataView>;
+
+        load_credential_format_template(state.clone()).await;
+        load_authorization_server_metadata(state.clone()).await;
+        load_credential_issuer_metadata(state.clone()).await;
+        create_credentials_supported(state.clone()).await;
+        create_unsigned_credential(state.clone()).await;
+        create_credential_offer(state.clone()).await;
+
+        let app = app(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri(format!("/v1/oauth/token"))
+                    .header(
+                        http::header::CONTENT_TYPE,
+                        mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
+                    )
+                    .body(Body::from(format!(
+                        "grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code&pre-authorized_code={}",
+                        PRE_AUTHORIZED_CODE
+                    )))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            body,
+            json!({
+                "access_token": "unsafe_access_token",
+                "token_type": "bearer",
+                "c_nonce": "unsafe_c_nonce"
+            })
+        );
+    }
+}

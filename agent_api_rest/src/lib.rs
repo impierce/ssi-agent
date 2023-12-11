@@ -66,8 +66,7 @@ mod tests {
             .unwrap();
     }
 
-    // TODO: actually use this for .well-known tests.
-    pub async fn _load_authorization_server_metadata(state: ApplicationState<IssuanceData, IssuanceDataView>) {
+    pub async fn load_authorization_server_metadata(state: ApplicationState<IssuanceData, IssuanceDataView>) {
         state
             .execute_with_metadata(
                 AGGREGATE_ID,
@@ -84,7 +83,6 @@ mod tests {
             .unwrap();
     }
 
-    // TODO: actually use this for .well-known tests.
     pub async fn load_credential_issuer_metadata(state: ApplicationState<IssuanceData, IssuanceDataView>) {
         state
             .execute_with_metadata(
@@ -99,6 +97,38 @@ mod tests {
                         credentials_supported: vec![],
                         display: None,
                     },
+                },
+                Default::default(),
+            )
+            .await
+            .unwrap();
+    }
+
+    pub async fn create_credentials_supported(state: ApplicationState<IssuanceData, IssuanceDataView>) {
+        state
+            .execute_with_metadata(
+                AGGREGATE_ID,
+                IssuanceCommand::CreateCredentialsSupported {
+                    credentials_supported: vec![serde_json::from_value(json!({
+                        "format": "jwt_vc_json",
+                        "cryptographic_binding_methods_supported": [
+                            "did:key",
+                        ],
+                        "cryptographic_suites_supported": [
+                            "EdDSA"
+                        ],
+                        "credential_definition":{
+                            "type": [
+                                "VerifiableCredential",
+                                "OpenBadgeCredential"
+                            ]
+                        },
+                        "proof_types_supported": [
+                            "jwt"
+                        ]
+                    }
+                    ))
+                    .unwrap()],
                 },
                 Default::default(),
             )
@@ -126,9 +156,51 @@ mod tests {
         let view = state.load(AGGREGATE_ID).await.unwrap().unwrap();
         view.subjects
             .iter()
-            .find(|subject| subject.pre_authorized_code == *PRE_AUTHORIZED_CODE)
+            .find(|subject| subject.id == SUBJECT_ID)
             .unwrap()
             .clone()
             .id
+    }
+
+    pub async fn create_credential_offer(state: ApplicationState<IssuanceData, IssuanceDataView>) {
+        state
+            .execute_with_metadata(
+                AGGREGATE_ID,
+                IssuanceCommand::CreateCredentialOffer {
+                    subject_id: SUBJECT_ID.to_string(),
+                    pre_authorized_code: Some(PRE_AUTHORIZED_CODE.to_string()),
+                },
+                Default::default(),
+            )
+            .await
+            .unwrap();
+    }
+
+    pub async fn create_token_response(state: ApplicationState<IssuanceData, IssuanceDataView>) -> String {
+        state
+            .execute_with_metadata(
+                AGGREGATE_ID,
+                IssuanceCommand::CreateTokenResponse {
+                    token_request: oid4vci::token_request::TokenRequest::PreAuthorizedCode {
+                        pre_authorized_code: PRE_AUTHORIZED_CODE.to_string(),
+                        user_pin: None,
+                    },
+                },
+                Default::default(),
+            )
+            .await
+            .unwrap();
+
+        let view = state.load(AGGREGATE_ID).await.unwrap().unwrap();
+
+        view.subjects
+            .iter()
+            .find(|subject| subject.id == SUBJECT_ID)
+            .unwrap()
+            .clone()
+            .token_response
+            .unwrap()
+            .access_token
+            .clone()
     }
 }
