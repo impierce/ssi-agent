@@ -372,17 +372,6 @@ impl Aggregate for IssuanceData {
                     subject.pre_authorized_code = pre_authorized_code;
                 }
             }
-            PreAuthorizedCodeUpdated {
-                subject_id,
-                pre_authorized_code,
-            } => {
-                self.subjects
-                    .iter_mut()
-                    .find(|subject| subject.id == subject_id)
-                    .map(|subject| {
-                        subject.pre_authorized_code = pre_authorized_code;
-                    });
-            }
             TokenResponseCreated {
                 subject_id,
                 token_response,
