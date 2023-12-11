@@ -26,6 +26,7 @@ dependencies = [
  "axum",
  "axum-auth",
  "axum-macros",
+ "http-api-problem",
  "hyper",
  "lazy_static",
  "mime",
@@ -1576,6 +1577,17 @@ dependencies = [
  "bytes",
  "fnv",
  "itoa",
+]
+
+[[package]]
+name = "http-api-problem"
+version = "0.57.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bce650a2c63171c9d92f95887c8d81154b77385301c8a581b9af96491f52d765"
+dependencies = [
+ "http",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
