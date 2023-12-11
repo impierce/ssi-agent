@@ -84,6 +84,14 @@ impl View<IssuanceData> for IssuanceDataView {
                     subject.pre_authorized_code = pre_authorized_code.clone();
                 }
             }
+            PreAuthorizedCodeUpdated {
+                subject_id,
+                pre_authorized_code,
+            } => {
+                if let Some(subject) = self.subjects.iter_mut().find(|subject| subject.id == *subject_id) {
+                    subject.pre_authorized_code = pre_authorized_code.clone();
+                }
+            }
             TokenResponseCreated {
                 subject_id,
                 token_response,
