@@ -102,12 +102,12 @@ paths:
       summary: Standard OpenID Connect discovery endpoint for issuer metadata
       tags:
         - (proxied)
-  /auth/token:
+  /v1/auth/token:
     post:
       summary: Standard OAuth 2.0 endpoint for fetching a token
       tags:
         - (proxied)
-  /openid4vci/credential:
+  /v1/openid4vci/credential:
     post:
       summary: Standard OpenID Connect endpoint for redeeming a token for a credential
       tags:
