@@ -69,7 +69,7 @@ mod tests {
             body,
             json!({
                 "issuer": "https://example.com/",
-                "token_endpoint": "https://example.com/v1/oauth/token"
+                "token_endpoint": "https://example.com/auth/token"
             })
         );
     }

@@ -95,7 +95,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri(format!("/v1/openid4vci/credential"))
+                    .uri(format!("/openid4vci/credential"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .header(http::header::AUTHORIZATION, format!("Bearer {}", access_token))
                     .body(Body::from(

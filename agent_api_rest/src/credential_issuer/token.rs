@@ -97,7 +97,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri(format!("/v1/oauth/token"))
+                    .uri(format!("/auth/token"))
                     .header(
                         http::header::CONTENT_TYPE,
                         mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),

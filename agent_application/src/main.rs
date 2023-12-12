@@ -54,7 +54,7 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
         IssuanceCommand::LoadAuthorizationServerMetadata {
             authorization_server_metadata: Box::new(AuthorizationServerMetadata {
                 issuer: base_url.clone(),
-                token_endpoint: Some(base_url.join("v1/oauth/token").unwrap()),
+                token_endpoint: Some(base_url.join("auth/token").unwrap()),
                 ..Default::default()
             }),
         },
@@ -72,7 +72,7 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
             credential_issuer_metadata: CredentialIssuerMetadata {
                 credential_issuer: base_url.clone(),
                 authorization_server: None,
-                credential_endpoint: base_url.join("v1/openid4vci/credential").unwrap(),
+                credential_endpoint: base_url.join("openid4vci/credential").unwrap(),
                 deferred_credential_endpoint: None,
                 batch_credential_endpoint: None,
                 credentials_supported: vec![],

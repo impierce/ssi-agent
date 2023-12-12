@@ -73,7 +73,7 @@ mod tests {
             body,
             json!({
                 "credential_issuer": "https://example.com/",
-                "credential_endpoint": "https://example.com/v1/openid4vci/credential",
+                "credential_endpoint": "https://example.com/openid4vci/credential",
                 "credentials_supported": [{
                     "format": "jwt_vc_json",
                     "cryptographic_binding_methods_supported": [

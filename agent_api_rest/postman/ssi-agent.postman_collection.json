@@ -129,7 +129,7 @@
 								}
 							]
 						},
-						"url": "http://{{HOST}}/v1/oauth/token"
+						"url": "http://{{HOST}}/auth/token"
 					},
 					"response": []
 				},
@@ -153,7 +153,7 @@
 								}
 							}
 						},
-						"url": "http://{{HOST}}/v1/openid4vci/credential"
+						"url": "http://{{HOST}}/openid4vci/credential"
 					},
 					"response": []
 				}

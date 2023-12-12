@@ -29,8 +29,8 @@ pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
             get(oauth_authorization_server),
         )
         .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
-        .route("/v1/oauth/token", post(token))
-        .route("/v1/openid4vci/credential", post(credential))
+        .route("/auth/token", post(token))
+        .route("/openid4vci/credential", post(credential))
         .with_state(state)
 }
 
@@ -73,7 +73,7 @@ mod tests {
                 IssuanceCommand::LoadAuthorizationServerMetadata {
                     authorization_server_metadata: Box::new(AuthorizationServerMetadata {
                         issuer: BASE_URL.clone(),
-                        token_endpoint: Some(BASE_URL.join("v1/oauth/token").unwrap()),
+                        token_endpoint: Some(BASE_URL.join("auth/token").unwrap()),
                         ..Default::default()
                     }),
                 },
@@ -91,7 +91,7 @@ mod tests {
                     credential_issuer_metadata: CredentialIssuerMetadata {
                         credential_issuer: BASE_URL.clone(),
                         authorization_server: None,
-                        credential_endpoint: BASE_URL.join("v1/openid4vci/credential").unwrap(),
+                        credential_endpoint: BASE_URL.join("openid4vci/credential").unwrap(),
                         deferred_credential_endpoint: None,
                         batch_credential_endpoint: None,
                         credentials_supported: vec![],
