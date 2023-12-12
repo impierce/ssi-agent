@@ -9,11 +9,13 @@ use oid4vci::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::model::aggregate::{Credential, CredentialOffer, IssuanceSubject};
+use crate::model::aggregate::{Credential, CredentialOffer, Image, IssuanceSubject};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(untagged)]
 pub enum IssuanceEvent {
+    ImageUploaded {
+        image: Image,
+    },
     CredentialFormatTemplateLoaded {
         credential_format_template: serde_json::Value,
     },
@@ -56,6 +58,7 @@ impl DomainEvent for IssuanceEvent {
         use IssuanceEvent::*;
 
         let event_type: &str = match self {
+            ImageUploaded { .. } => "ImageUploaded",
             CredentialFormatTemplateLoaded { .. } => "CredentialFormatTemplateLoaded",
             AuthorizationServerMetadataLoaded { .. } => "AuthorizationServerMetadataLoaded",
             CredentialIssuerMetadataLoaded { .. } => "CredentialIssuerMetadataLoaded",

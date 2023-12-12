@@ -11,6 +11,12 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum IssuanceCommand {
+    // Image Management
+    UploadImage {
+        id: String,
+        data: String,
+    },
+
     // Initialize Agent
     LoadCredentialFormatTemplate {
         credential_format_template: serde_json::Value,
