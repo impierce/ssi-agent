@@ -1,4 +1,4 @@
-use crate::{command::IssuanceCommand, error::IssuanceError, event::IssuanceEvent, services::IssuanceServices};
+use crate::{commands::IssuanceCommand, error::IssuanceError, events::IssuanceEvent, services::IssuanceServices};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;

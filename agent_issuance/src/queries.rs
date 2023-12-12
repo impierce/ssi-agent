@@ -33,7 +33,7 @@ pub struct IssuanceDataView {
 
 impl View<IssuanceData> for IssuanceDataView {
     fn update(&mut self, event: &EventEnvelope<IssuanceData>) {
-        use crate::event::IssuanceEvent::*;
+        use crate::events::IssuanceEvent::*;
 
         match &event.payload {
             ImageUploaded { image } => {

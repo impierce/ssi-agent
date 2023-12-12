@@ -1,6 +1,6 @@
-pub mod command;
+pub mod commands;
 pub mod error;
-pub mod event;
+pub mod events;
 pub mod handlers;
 pub mod init;
 pub mod model;

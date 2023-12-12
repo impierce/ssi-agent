@@ -51,7 +51,7 @@ pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_issuance::command::IssuanceCommand;
+    use agent_issuance::commands::IssuanceCommand;
     use oid4vci::credential_issuer::{
         authorization_server_metadata::AuthorizationServerMetadata,
         credential_issuer_metadata::CredentialIssuerMetadata,

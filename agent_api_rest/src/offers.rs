@@ -1,5 +1,5 @@
 use agent_issuance::{
-    command::IssuanceCommand, handlers::query_handler, model::aggregate::IssuanceData,
+    commands::IssuanceCommand, handlers::query_handler, model::aggregate::IssuanceData,
     model::command_handler_without_id, queries::IssuanceDataView, state::ApplicationState,
 };
 use axum::{

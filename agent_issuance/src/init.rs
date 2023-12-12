@@ -1,5 +1,5 @@
 use crate::{
-    command::IssuanceCommand, handlers::command_handler, model::aggregate::IssuanceData, queries::IssuanceDataView,
+    commands::IssuanceCommand, handlers::command_handler, model::aggregate::IssuanceData, queries::IssuanceDataView,
     state::ApplicationState,
 };
 use tracing::{info, warn};
