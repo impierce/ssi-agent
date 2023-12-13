@@ -65,10 +65,7 @@ mod tests {
     use super::*;
     use agent_issuance::{
         services::IssuanceServices,
-        startup_commands::{
-            create_credentials_supported, load_authorization_server_metadata, load_credential_format_template,
-            load_credential_issuer_metadata,
-        },
+        startup_commands::startup_commands,
         state::{initialize, CQRS},
     };
     use agent_store::in_memory;
@@ -83,16 +80,7 @@ mod tests {
     async fn test_credential_endpoint() {
         let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
 
-        initialize(
-            state.clone(),
-            vec![
-                load_credential_format_template(),
-                load_authorization_server_metadata(BASE_URL.clone()),
-                load_credential_issuer_metadata(BASE_URL.clone()),
-                create_credentials_supported(),
-            ],
-        )
-        .await;
+        initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
 
         create_unsigned_credential(state.clone()).await;
         create_credential_offer(state.clone()).await;
