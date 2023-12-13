@@ -68,13 +68,14 @@ pub(crate) async fn credentials(
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        app,
-        tests::{load_credential_format_template, SUBJECT_ID},
-    };
+    use crate::{app, tests::SUBJECT_ID};
 
     use super::*;
-    use agent_issuance::{services::IssuanceServices, state::CQRS};
+    use agent_issuance::{
+        services::IssuanceServices,
+        startup_commands::load_credential_format_template,
+        state::{initialize, CQRS},
+    };
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -87,7 +88,7 @@ mod tests {
     async fn test_credentials_endpoint() {
         let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
 
-        load_credential_format_template(state.clone()).await;
+        initialize(state.clone(), vec![load_credential_format_template()]).await;
 
         let app = app(state);
 

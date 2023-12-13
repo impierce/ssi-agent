@@ -38,102 +38,12 @@ pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
 mod tests {
     use super::*;
     use agent_issuance::command::IssuanceCommand;
-    use oid4vci::credential_issuer::{
-        authorization_server_metadata::AuthorizationServerMetadata,
-        credential_issuer_metadata::CredentialIssuerMetadata,
-    };
     use serde_json::json;
 
     pub const PRE_AUTHORIZED_CODE: &str = "pre-authorized_code";
     pub const SUBJECT_ID: &str = "00000000-0000-0000-0000-000000000000";
     lazy_static::lazy_static! {
         pub static ref BASE_URL: url::Url = url::Url::parse("https://example.com").unwrap();
-    }
-
-    pub async fn load_credential_format_template(state: ApplicationState<IssuanceData, IssuanceDataView>) {
-        state
-            .execute_with_metadata(
-                AGGREGATE_ID,
-                IssuanceCommand::LoadCredentialFormatTemplate {
-                    credential_format_template: serde_json::from_str(include_str!(
-                        "../../agent_issuance/res/credential_format_templates/openbadges_v3.json"
-                    ))
-                    .unwrap(),
-                },
-                Default::default(),
-            )
-            .await
-            .unwrap();
-    }
-
-    pub async fn load_authorization_server_metadata(state: ApplicationState<IssuanceData, IssuanceDataView>) {
-        state
-            .execute_with_metadata(
-                AGGREGATE_ID,
-                IssuanceCommand::LoadAuthorizationServerMetadata {
-                    authorization_server_metadata: Box::new(AuthorizationServerMetadata {
-                        issuer: BASE_URL.clone(),
-                        token_endpoint: Some(BASE_URL.join("auth/token").unwrap()),
-                        ..Default::default()
-                    }),
-                },
-                Default::default(),
-            )
-            .await
-            .unwrap();
-    }
-
-    pub async fn load_credential_issuer_metadata(state: ApplicationState<IssuanceData, IssuanceDataView>) {
-        state
-            .execute_with_metadata(
-                AGGREGATE_ID,
-                IssuanceCommand::LoadCredentialIssuerMetadata {
-                    credential_issuer_metadata: CredentialIssuerMetadata {
-                        credential_issuer: BASE_URL.clone(),
-                        authorization_server: None,
-                        credential_endpoint: BASE_URL.join("openid4vci/credential").unwrap(),
-                        deferred_credential_endpoint: None,
-                        batch_credential_endpoint: None,
-                        credentials_supported: vec![],
-                        display: None,
-                    },
-                },
-                Default::default(),
-            )
-            .await
-            .unwrap();
-    }
-
-    pub async fn create_credentials_supported(state: ApplicationState<IssuanceData, IssuanceDataView>) {
-        state
-            .execute_with_metadata(
-                AGGREGATE_ID,
-                IssuanceCommand::CreateCredentialsSupported {
-                    credentials_supported: vec![serde_json::from_value(json!({
-                        "format": "jwt_vc_json",
-                        "cryptographic_binding_methods_supported": [
-                            "did:key",
-                        ],
-                        "cryptographic_suites_supported": [
-                            "EdDSA"
-                        ],
-                        "credential_definition":{
-                            "type": [
-                                "VerifiableCredential",
-                                "OpenBadgeCredential"
-                            ]
-                        },
-                        "proof_types_supported": [
-                            "jwt"
-                        ]
-                    }
-                    ))
-                    .unwrap()],
-                },
-                Default::default(),
-            )
-            .await
-            .unwrap();
     }
 
     pub async fn create_unsigned_credential(state: ApplicationState<IssuanceData, IssuanceDataView>) -> String {

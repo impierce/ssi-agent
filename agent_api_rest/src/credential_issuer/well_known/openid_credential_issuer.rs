@@ -27,13 +27,14 @@ pub(crate) async fn openid_credential_issuer(
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        app,
-        tests::{create_credentials_supported, load_credential_issuer_metadata},
-    };
+    use crate::{app, tests::BASE_URL};
 
     use super::*;
-    use agent_issuance::{services::IssuanceServices, state::CQRS};
+    use agent_issuance::{
+        services::IssuanceServices,
+        startup_commands::{create_credentials_supported, load_credential_issuer_metadata},
+        state::{initialize, CQRS},
+    };
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -46,8 +47,14 @@ mod tests {
     async fn test_oauth_authorization_server_endpoint() {
         let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
 
-        load_credential_issuer_metadata(state.clone()).await;
-        create_credentials_supported(state.clone()).await;
+        initialize(
+            state.clone(),
+            vec![
+                load_credential_issuer_metadata(BASE_URL.clone()),
+                create_credentials_supported(),
+            ],
+        )
+        .await;
 
         let app = app(state);
 

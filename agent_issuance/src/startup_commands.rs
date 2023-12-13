@@ -15,15 +15,15 @@ use oid4vci::{
 use crate::command::IssuanceCommand;
 
 lazy_static! {
-    pub static ref BASE_URL: url::Url = format!("http://{}:3033/", config!("host").unwrap()).parse().unwrap();
+    static ref BASE_URL: url::Url = format!("http://{}:3033/", config!("host").unwrap()).parse().unwrap();
 }
 
 /// Returns the startup commands for the application.
 pub fn startup_commands() -> Vec<IssuanceCommand> {
     vec![
         load_credential_format_template(),
-        load_authorization_server_metadata(),
-        load_credential_issuer_metadata(),
+        load_authorization_server_metadata(BASE_URL.clone()),
+        load_credential_issuer_metadata(BASE_URL.clone()),
         create_credentials_supported(),
     ]
 }
@@ -37,22 +37,22 @@ pub fn load_credential_format_template() -> IssuanceCommand {
     }
 }
 
-pub fn load_authorization_server_metadata() -> IssuanceCommand {
+pub fn load_authorization_server_metadata(base_url: url::Url) -> IssuanceCommand {
     IssuanceCommand::LoadAuthorizationServerMetadata {
         authorization_server_metadata: Box::new(AuthorizationServerMetadata {
-            issuer: BASE_URL.clone(),
-            token_endpoint: Some(BASE_URL.join("auth/token").unwrap()),
+            issuer: base_url.clone(),
+            token_endpoint: Some(base_url.join("auth/token").unwrap()),
             ..Default::default()
         }),
     }
 }
 
-pub fn load_credential_issuer_metadata() -> IssuanceCommand {
+pub fn load_credential_issuer_metadata(base_url: url::Url) -> IssuanceCommand {
     IssuanceCommand::LoadCredentialIssuerMetadata {
         credential_issuer_metadata: CredentialIssuerMetadata {
-            credential_issuer: BASE_URL.clone(),
+            credential_issuer: base_url.clone(),
             authorization_server: None,
-            credential_endpoint: BASE_URL.join("openid4vci/credential").unwrap(),
+            credential_endpoint: base_url.join("openid4vci/credential").unwrap(),
             deferred_credential_endpoint: None,
             batch_credential_endpoint: None,
             credentials_supported: vec![],

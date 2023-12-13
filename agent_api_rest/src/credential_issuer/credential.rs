@@ -59,14 +59,18 @@ pub(crate) async fn credential(
 mod tests {
     use crate::{
         app,
-        tests::{
-            create_credential_offer, create_credentials_supported, create_token_response, create_unsigned_credential,
-            load_authorization_server_metadata, load_credential_format_template, load_credential_issuer_metadata,
-        },
+        tests::{create_credential_offer, create_token_response, create_unsigned_credential, BASE_URL},
     };
 
     use super::*;
-    use agent_issuance::{services::IssuanceServices, state::CQRS};
+    use agent_issuance::{
+        services::IssuanceServices,
+        startup_commands::{
+            create_credentials_supported, load_authorization_server_metadata, load_credential_format_template,
+            load_credential_issuer_metadata,
+        },
+        state::{initialize, CQRS},
+    };
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -79,10 +83,17 @@ mod tests {
     async fn test_credential_endpoint() {
         let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
 
-        load_credential_format_template(state.clone()).await;
-        load_authorization_server_metadata(state.clone()).await;
-        load_credential_issuer_metadata(state.clone()).await;
-        create_credentials_supported(state.clone()).await;
+        initialize(
+            state.clone(),
+            vec![
+                load_credential_format_template(),
+                load_authorization_server_metadata(BASE_URL.clone()),
+                load_credential_issuer_metadata(BASE_URL.clone()),
+                create_credentials_supported(),
+            ],
+        )
+        .await;
+
         create_unsigned_credential(state.clone()).await;
         create_credential_offer(state.clone()).await;
         let access_token = create_token_response(state.clone()).await;

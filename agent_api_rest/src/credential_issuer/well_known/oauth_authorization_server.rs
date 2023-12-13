@@ -27,10 +27,13 @@ pub(crate) async fn oauth_authorization_server(
 
 #[cfg(test)]
 mod tests {
-    use crate::{app, tests::load_authorization_server_metadata};
+    use crate::{app, tests::BASE_URL};
 
     use super::*;
-    use agent_issuance::{services::IssuanceServices, state::CQRS};
+    use agent_issuance::{
+        services::IssuanceServices,
+        state::{initialize, CQRS},
+    };
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -43,7 +46,13 @@ mod tests {
     async fn test_oauth_authorization_server_endpoint() {
         let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
 
-        load_authorization_server_metadata(state.clone()).await;
+        initialize(
+            state.clone(),
+            vec![agent_issuance::startup_commands::load_authorization_server_metadata(
+                BASE_URL.clone(),
+            )],
+        )
+        .await;
 
         let app = app(state);
 
