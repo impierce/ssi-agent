@@ -62,6 +62,7 @@ dependencies = [
 name = "agent_issuance"
 version = "0.1.0"
 dependencies = [
+ "agent_shared",
  "async-trait",
  "cqrs-es",
  "derivative",
