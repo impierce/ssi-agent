@@ -1,5 +1,6 @@
 **/target/
 .cargo
+**/Cargo.lcok
 
 **/*.env
 !**/.env.example
