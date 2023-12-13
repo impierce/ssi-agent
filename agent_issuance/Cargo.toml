@@ -17,6 +17,7 @@ derivative = "2.2"
 did-key = "0.2"
 jsonschema = "0.17"
 jsonwebtoken = "8.2"
+lazy_static.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -27,4 +28,3 @@ uuid.workspace = true
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
-lazy_static.workspace = true
