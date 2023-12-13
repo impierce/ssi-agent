@@ -18,9 +18,14 @@ pub(crate) async fn credentials(
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     // TODO: This should be removed once we know how to use aggregate ID's.
-    let subject_id: uuid::Uuid = payload["subjectId"].as_str().unwrap().parse().unwrap();
+    let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
+        subject_id
+    } else {
+        return (StatusCode::BAD_REQUEST, "subjectId is required".to_string()).into_response();
+    };
+
     let command = IssuanceCommand::CreateUnsignedCredential {
-        subject_id: subject_id.clone(),
+        subject_id: subject_id.to_string(),
         credential: payload["credential"].clone(),
     };
 
@@ -65,7 +70,7 @@ pub(crate) async fn credentials(
 mod tests {
     use crate::{
         app,
-        tests::{create_subject, load_credential_format_template},
+        tests::{load_credential_format_template, SUBJECT_ID},
     };
 
     use super::*;
@@ -85,7 +90,6 @@ mod tests {
             as ApplicationState<IssuanceData, IssuanceDataView>;
 
         load_credential_format_template(state.clone()).await;
-        let subject_id = create_subject(state.clone()).await;
 
         let app = app(state);
 
@@ -97,10 +101,11 @@ mod tests {
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "subjectId": subject_id,
-                            "credential": {"credentialSubject": {
+                            "subjectId": SUBJECT_ID,
+                            "credential": {
+                                "credentialSubject": {
                                 "first_name": "Ferris",
-                                "last_name": "Rustacean",
+                                "last_name": "Rustacean"
                             }},
                         }))
                         .unwrap(),
@@ -121,30 +126,25 @@ mod tests {
         let body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(
             body,
-            serde_json::from_str::<Value>(
-                r#"
-                {
-                    "@context": [
-                        "https://www.w3.org/2018/credentials/v1",
-                        "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
-                    ],
-                    "id": "http://example.com/credentials/3527",
-                    "type": ["VerifiableCredential", "OpenBadgeCredential"],
-                    "issuer": {
-                        "id": "https://example.com/issuers/876543",
-                        "type": "Profile",
-                        "name": "Example Corp"
-                    },
-                    "issuanceDate": "2010-01-01T00:00:00Z",
-                    "name": "Teamwork Badge",
-                    "credentialSubject": {
-                        "first_name": "Ferris",
-                        "last_name": "Rustacean"
-                    }
+            json!({
+                "@context": [
+                    "https://www.w3.org/2018/credentials/v1",
+                    "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
+                ],
+                "id": "http://example.com/credentials/3527",
+                "type": ["VerifiableCredential", "OpenBadgeCredential"],
+                "issuer": {
+                    "id": "https://example.com/issuers/876543",
+                    "type": "Profile",
+                    "name": "Example Corp"
+                },
+                "issuanceDate": "2010-01-01T00:00:00Z",
+                "name": "Teamwork Badge",
+                "credentialSubject": {
+                    "first_name": "Ferris",
+                    "last_name": "Rustacean"
                 }
-                "#
-            )
-            .unwrap()
+            })
         );
     }
 }

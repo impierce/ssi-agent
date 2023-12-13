@@ -8,7 +8,6 @@ use oid4vci::{
     token_response::TokenResponse,
 };
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::model::aggregate::{Credential, CredentialOffer, IssuanceSubject};
 
@@ -31,19 +30,23 @@ pub enum IssuanceEvent {
         credentials_supported: Vec<CredentialsSupportedObject>,
     },
     UnsignedCredentialCreated {
-        subject_id: Uuid,
+        subject_id: String,
         credential: Credential,
     },
+    PreAuthorizedCodeUpdated {
+        subject_id: String,
+        pre_authorized_code: String,
+    },
     CredentialOfferCreated {
-        subject_id: Uuid,
+        subject_id: String,
         credential_offer: CredentialOffer,
     },
     TokenResponseCreated {
-        subject_id: Uuid,
+        subject_id: String,
         token_response: TokenResponse,
     },
     CredentialResponseCreated {
-        subject_id: Uuid,
+        subject_id: String,
         credential_response: CredentialResponse,
     },
 }
@@ -60,6 +63,7 @@ impl DomainEvent for IssuanceEvent {
             SubjectCreated { .. } => "SubjectCreated",
             CredentialOfferCreated { .. } => "CredentialOfferCreated",
             UnsignedCredentialCreated { .. } => "UnsignedCredentialCreated",
+            PreAuthorizedCodeUpdated { .. } => "PreAuthorizedCodeUpdated",
             TokenResponseCreated { .. } => "TokenResponseCreated",
             CredentialResponseCreated { .. } => "CredentialResponseCreated",
         };

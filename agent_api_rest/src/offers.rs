@@ -16,9 +16,15 @@ pub(crate) async fn offers(
     State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
-    let subject_id: uuid::Uuid = payload["subjectId"].as_str().unwrap().parse().unwrap();
+    let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
+        subject_id
+    } else {
+        return (StatusCode::BAD_REQUEST, "subjectId is required".to_string()).into_response();
+    };
+    let pre_authorized_code = payload["preAuthorizedCode"].as_str().map(|s| s.to_string());
     let command = IssuanceCommand::CreateCredentialOffer {
-        subject_id: subject_id.clone(),
+        subject_id: subject_id.to_string(),
+        pre_authorized_code,
     };
 
     match command_handler_without_id(&state, command).await {
@@ -62,7 +68,10 @@ pub(crate) async fn offers(
 mod tests {
     use crate::{
         app,
-        tests::{create_subject, load_credential_issuer_metadata},
+        tests::{
+            create_unsigned_credential, load_credential_format_template, load_credential_issuer_metadata,
+            PRE_AUTHORIZED_CODE, SUBJECT_ID,
+        },
     };
 
     use super::*;
@@ -81,8 +90,9 @@ mod tests {
         let state = Arc::new(in_memory::ApplicationState::new(vec![], IssuanceServices {}).await)
             as ApplicationState<IssuanceData, IssuanceDataView>;
 
+        load_credential_format_template(state.clone()).await;
         load_credential_issuer_metadata(state.clone()).await;
-        let subject_id = create_subject(state.clone()).await;
+        create_unsigned_credential(state.clone()).await;
 
         let app = app(state);
 
@@ -94,7 +104,8 @@ mod tests {
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "subjectId": subject_id
+                            "subjectId": SUBJECT_ID,
+                            "preAuthorizedCode": PRE_AUTHORIZED_CODE
                         }))
                         .unwrap(),
                     ))

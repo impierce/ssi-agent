@@ -10,56 +10,20 @@
 			"name": "Issuance",
 			"item": [
 				{
-					"name": "subjects",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"const jsonData = JSON.parse(responseBody);",
-									"",
-									"const subjectId = jsonData?.id;",
-									"",
-									"if(subjectId){",
-									"    pm.collectionVariables.set(\"subjectId\",subjectId)",
-									"}",
-									""
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"value\": \"{{preAuthorizedCode}}\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": "http://{{host}}/v1/subjects"
-					},
-					"response": []
-				},
-				{
 					"name": "credentials",
 					"request": {
 						"method": "POST",
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"subjectId\": \"{{subjectId}}\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": {},\n            \"type\": \"AchievementSubject\",\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    }\n}\n",
+							"raw": "{\n    \"subjectId\": \"{{SUBJECT_ID}}\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": {},\n            \"type\": \"AchievementSubject\",\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    }\n}\n",
 							"options": {
 								"raw": {
 									"language": "json"
 								}
 							}
 						},
-						"url": "http://{{host}}/v1/credentials"
+						"url": "http://{{HOST}}/v1/credentials"
 					},
 					"response": []
 				},
@@ -70,14 +34,14 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"subjectId\": \"{{subjectId}}\"\n}",
+							"raw": "{\n    \"subjectId\": \"{{SUBJECT_ID}}\",\n    \"preAuthorizedCode\": \"{{PRE_AUTHORIZED_CODE}}\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
 								}
 							}
 						},
-						"url": "http://{{host}}/v1/offers"
+						"url": "http://{{HOST}}/v1/offers"
 					},
 					"response": []
 				}
@@ -99,11 +63,11 @@
 									"const tokenEndpoint = jsonData?.token_endpoint;",
 									"",
 									"if(issuer){",
-									"    pm.collectionVariables.set(\"issuer\",issuer)",
+									"    pm.collectionVariables.set(\"ISSUER\",issuer)",
 									"}",
 									"",
 									"if(tokenEndpoint){",
-									"    pm.collectionVariables.set(\"tokenEndpoint\",tokenEndpoint)",
+									"    pm.collectionVariables.set(\"TOKEN_ENDPOINT\",tokenEndpoint)",
 									"}",
 									""
 								],
@@ -114,7 +78,7 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": "http://{{host}}/.well-known/oauth-authorization-server"
+						"url": "http://{{HOST}}/.well-known/oauth-authorization-server"
 					},
 					"response": []
 				},
@@ -123,7 +87,7 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": "http://{{host}}/.well-known/openid-credential-issuer"
+						"url": "http://{{HOST}}/.well-known/openid-credential-issuer"
 					},
 					"response": []
 				},
@@ -139,7 +103,7 @@
 									"const accessToken = jsonData?.access_token;",
 									"",
 									"if(accessToken){",
-									"    pm.collectionVariables.set(\"accessToken\",accessToken)",
+									"    pm.collectionVariables.set(\"ACCESS_TOKEN\",accessToken)",
 									"}",
 									""
 								],
@@ -160,12 +124,12 @@
 								},
 								{
 									"key": "pre-authorized_code",
-									"value": "{{preAuthorizedCode}}",
+									"value": "{{PRE_AUTHORIZED_CODE}}",
 									"type": "text"
 								}
 							]
 						},
-						"url": "http://{{host}}/v1/oauth/token"
+						"url": "http://{{HOST}}/auth/token"
 					},
 					"response": []
 				},
@@ -176,7 +140,7 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "Bearer {{accessToken}}",
+								"value": "Bearer {{ACCESS_TOKEN}}",
 								"type": "text"
 							}
 						],
@@ -189,7 +153,7 @@
 								}
 							}
 						},
-						"url": "http://{{host}}/v1/openid4vci/credential"
+						"url": "http://{{HOST}}/openid4vci/credential"
 					},
 					"response": []
 				}
@@ -218,32 +182,32 @@
 	],
 	"variable": [
 		{
-			"key": "host",
+			"key": "HOST",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		},
 		{
-			"key": "preAuthorizedCode",
+			"key": "PRE_AUTHORIZED_CODE",
 			"value": "unique_subject_string",
 			"type": "string"
 		},
 		{
-			"key": "subjectId",
+			"key": "SUBJECT_ID",
+			"value": "00000000-0000-0000-0000-000000000000",
+			"type": "string"
+		},
+		{
+			"key": "ISSUER",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		},
 		{
-			"key": "issuer",
+			"key": "TOKEN_ENDPOINT",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		},
 		{
-			"key": "tokenEndpoint",
-			"value": "INITIAL_VALUE",
-			"type": "string"
-		},
-		{
-			"key": "accessToken",
+			"key": "ACCESS_TOKEN",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		}
