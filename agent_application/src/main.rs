@@ -7,6 +7,11 @@ use agent_issuance::{
 };
 use agent_shared::config;
 use agent_store::{in_memory, postgres};
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref HOST: url::Url = format!("http://{}:3033/", config!("host").unwrap()).parse().unwrap();
+}
 
 #[tokio::main]
 async fn main() {
@@ -20,7 +25,7 @@ async fn main() {
         _ => tracing_subscriber::fmt::init(),
     }
 
-    initialize(state.clone(), startup_commands()).await;
+    initialize(state.clone(), startup_commands(HOST.clone())).await;
 
     axum::Server::bind(&"0.0.0.0:3033".parse().unwrap())
         .serve(app(state).into_make_service())

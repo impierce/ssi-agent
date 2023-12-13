@@ -1,5 +1,3 @@
-use agent_shared::config;
-use lazy_static::lazy_static;
 use oid4vci::{
     credential_format_profiles::{
         w3c_verifiable_credentials::jwt_vc_json::{CredentialDefinition, JwtVcJson},
@@ -14,16 +12,12 @@ use oid4vci::{
 
 use crate::command::IssuanceCommand;
 
-lazy_static! {
-    static ref BASE_URL: url::Url = format!("http://{}:3033/", config!("host").unwrap()).parse().unwrap();
-}
-
 /// Returns the startup commands for the application.
-pub fn startup_commands() -> Vec<IssuanceCommand> {
+pub fn startup_commands(host: url::Url) -> Vec<IssuanceCommand> {
     vec![
         load_credential_format_template(),
-        load_authorization_server_metadata(BASE_URL.clone()),
-        load_credential_issuer_metadata(BASE_URL.clone()),
+        load_authorization_server_metadata(host.clone()),
+        load_credential_issuer_metadata(host.clone()),
         create_credentials_supported(),
     ]
 }
