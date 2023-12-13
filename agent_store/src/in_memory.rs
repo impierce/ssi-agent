@@ -60,7 +60,17 @@ where
     A: Aggregate + 'static,
     V: View<A> + 'static,
 {
-    pub async fn new(queries: Vec<Box<dyn Query<A>>>, services: A::Services) -> ApplicationState<A, V> {
+}
+
+#[async_trait]
+impl<A: Aggregate + 'static, V: View<A> + 'static> CQRS<A, V> for ApplicationState<A, V> {
+    async fn new(
+        queries: Vec<Box<dyn Query<A>>>,
+        services: A::Services,
+    ) -> agent_issuance::state::ApplicationState<A, V>
+    where
+        Self: Sized,
+    {
         let credential_view_repo = Arc::new(MemRepository::<V, A>::new());
         let mut issuance_data_query = GenericQuery::new(credential_view_repo.clone());
         issuance_data_query.use_error_handler(Box::new(|e| println!("{}", e)));
@@ -68,15 +78,11 @@ where
         let mut queries = queries;
         queries.push(Box::new(issuance_data_query));
 
-        ApplicationState {
+        Arc::new(ApplicationState {
             cqrs: Arc::new(CqrsFramework::new(MemStore::default(), queries, services)),
             issuance_data_query: credential_view_repo,
-        }
+        }) as agent_issuance::state::ApplicationState<A, V>
     }
-}
-
-#[async_trait]
-impl<A: Aggregate, V: View<A>> CQRS<A, V> for ApplicationState<A, V> {
     async fn execute_with_metadata(
         &self,
         aggregate_id: &str,

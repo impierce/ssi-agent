@@ -69,20 +69,18 @@ mod tests {
     };
 
     use super::*;
-    use agent_issuance::services::IssuanceServices;
+    use agent_issuance::{services::IssuanceServices, state::CQRS};
     use agent_store::in_memory;
     use axum::{
         body::Body,
         http::{self, Request},
     };
     use serde_json::{json, Value};
-    use std::sync::Arc;
     use tower::ServiceExt;
 
     #[tokio::test]
     async fn test_token_endpoint() {
-        let state = Arc::new(in_memory::ApplicationState::new(vec![], IssuanceServices {}).await)
-            as ApplicationState<IssuanceData, IssuanceDataView>;
+        let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
 
         load_credential_format_template(state.clone()).await;
         load_authorization_server_metadata(state.clone()).await;

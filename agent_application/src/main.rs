@@ -6,7 +6,7 @@ use agent_issuance::{
     model::aggregate::IssuanceData,
     queries::{IssuanceDataView, SimpleLoggingQuery},
     services::IssuanceServices,
-    state::ApplicationState,
+    state::{ApplicationState, CQRS},
 };
 use agent_shared::config;
 use agent_store::{in_memory, postgres};
@@ -14,20 +14,15 @@ use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
 use serde_json::json;
-use std::sync::Arc;
 use tracing::info;
 
 #[tokio::main]
 async fn main() {
-    let state =
-        match config!("event_store").unwrap().as_str() {
-            "postgres" => Arc::new(
-                postgres::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
-            ) as ApplicationState<IssuanceData, IssuanceDataView>,
-            _ => Arc::new(
-                in_memory::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
-            ) as ApplicationState<IssuanceData, IssuanceDataView>,
-        };
+    let state = match config!("event_store").unwrap().as_str() {
+        "postgres" => postgres::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
+
+        _ => in_memory::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
+    };
 
     match config!("log_format").unwrap().as_str() {
         "json" => tracing_subscriber::fmt().json().init(),
