@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 agent_issuance = { path = "../agent_issuance" }
 agent_api_rest = { path = "../agent_api_rest" }
+agent_shared = { path = "../agent_shared" }
 agent_store = { path = "../agent_store" }
 
 oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }

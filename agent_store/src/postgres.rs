@@ -1,5 +1,5 @@
-use crate::config::config;
 use agent_issuance::state::CQRS;
+use agent_shared::config;
 use async_trait::async_trait;
 use cqrs_es::persist::{GenericQuery, PersistenceError, ViewRepository};
 use cqrs_es::{Aggregate, Query, View};
@@ -24,7 +24,7 @@ where
         A: Aggregate + 'static,
         V: View<A> + 'static,
     {
-        let pool = default_postgress_pool(&config().get_string("db_connection_string").unwrap()).await;
+        let pool = default_postgress_pool(&config!("db_connection_string").unwrap()).await;
         let (cqrs, issuance_data_query) = cqrs_framework(pool, queries, services);
         ApplicationState {
             cqrs,

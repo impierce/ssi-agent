@@ -8,6 +8,7 @@ use agent_issuance::{
     services::IssuanceServices,
     state::ApplicationState,
 };
+use agent_shared::config;
 use agent_store::{in_memory, postgres};
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
@@ -19,7 +20,7 @@ use tracing::info;
 #[tokio::main]
 async fn main() {
     let state =
-        match config().get_string("event_store").unwrap().as_str() {
+        match config!("event_store").unwrap().as_str() {
             "postgres" => Arc::new(
                 postgres::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
             ) as ApplicationState<IssuanceData, IssuanceDataView>,
@@ -28,7 +29,7 @@ async fn main() {
             ) as ApplicationState<IssuanceData, IssuanceDataView>,
         };
 
-    match config().get_string("log_format").unwrap().as_str() {
+    match config!("log_format").unwrap().as_str() {
         "json" => tracing_subscriber::fmt().json().init(),
         _ => tracing_subscriber::fmt::init(),
     }
@@ -44,7 +45,7 @@ async fn main() {
 async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>) {
     info!("Starting up ...");
 
-    let host = config().get_string("host").unwrap();
+    let host = config!("host").unwrap();
 
     let base_url: url::Url = format!("http://{}:3033/", host).parse().unwrap();
 
@@ -120,21 +121,4 @@ async fn startup_events(state: ApplicationState<IssuanceData, IssuanceDataView>)
         Ok(_) => println!("Startup task completed: `CreateCredentialsSupported`"),
         Err(err) => println!("Startup task failed: {:#?}", err),
     };
-}
-
-/// Read environment variables
-pub fn config() -> config::Config {
-    // Load global .env file
-    dotenvy::dotenv().ok();
-
-    // Build configuration
-    let config = config::Config::builder()
-        .add_source(config::Environment::with_prefix("AGENT_APPLICATION"))
-        .add_source(config::Environment::with_prefix("AGENT_CONFIG"))
-        .build()
-        .unwrap();
-
-    info!("{:?}", config);
-
-    config
 }
