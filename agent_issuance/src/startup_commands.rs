@@ -12,6 +12,10 @@ use oid4vci::{
 
 use crate::command::IssuanceCommand;
 
+lazy_static! {
+    pub static ref BASE_URL: url::Url = format!("http://{}:3033/", config!("host").unwrap()).parse().unwrap();
+}
+
 /// Returns the startup commands for the application.
 pub fn startup_commands(host: url::Url) -> Vec<IssuanceCommand> {
     vec![
