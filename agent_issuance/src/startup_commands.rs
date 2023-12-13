@@ -16,7 +16,7 @@ use serde_json::json;
 use crate::command::IssuanceCommand;
 
 lazy_static! {
-    pub static ref BASE_URL: url::Url = format!("http://{}:3033/", config!("host").unwrap()).parse().unwrap();
+    static ref BASE_URL: url::Url = format!("http://{}:3033/", config!("host").unwrap()).parse().unwrap();
 }
 
 /// Returns the startup commands for the application.
