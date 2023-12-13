@@ -4,12 +4,11 @@ members = [
     "agent_api_rest",
     "agent_application",
     "agent_issuance",
+    "agent_shared",
     "agent_store",
 ]
 
 [workspace.dependencies]
-config = { version = "0.13" }
-dotenvy = { version = "0.15" }
 lazy_static = "1.4"
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }

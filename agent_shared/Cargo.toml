@@ -1,0 +1,9 @@
+[package]
+name = "agent_shared"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+config = { version = "0.13" }
+dotenvy = { version = "0.15" }
+tracing.workspace = true
