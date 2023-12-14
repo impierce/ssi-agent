@@ -1,3 +1,4 @@
+use agent_shared::config;
 use oid4vci::{
     credential_format_profiles::{
         w3c_verifiable_credentials::jwt_vc_json::{CredentialDefinition, JwtVcJson},
@@ -9,6 +10,7 @@ use oid4vci::{
     },
     ProofType,
 };
+use serde_json::json;
 
 use crate::command::IssuanceCommand;
 
@@ -74,7 +76,17 @@ pub fn create_credentials_supported() -> IssuanceCommand {
             cryptographic_binding_methods_supported: Some(vec!["did:key".to_string()]),
             cryptographic_suites_supported: Some(vec!["EdDSA".to_string()]),
             proof_types_supported: Some(vec![ProofType::Jwt]),
-            display: None,
+            display: Some(vec![json!({
+               "name": config!("credential_name").unwrap(),
+               "logo": {
+                    "url": config!("credential_logo_url").unwrap()
+               }
+            })]),
         }],
     }
+}
+
+#[test]
+fn test_startup_commands() {
+    dbg!(create_credentials_supported());
 }
