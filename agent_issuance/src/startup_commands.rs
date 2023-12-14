@@ -1,3 +1,4 @@
+use agent_shared::config;
 use oid4vci::{
     credential_format_profiles::{
         w3c_verifiable_credentials::jwt_vc_json::{CredentialDefinition, JwtVcJson},
@@ -86,4 +87,9 @@ pub fn create_credentials_supported() -> IssuanceCommand {
             },
         }],
     }
+}
+
+#[test]
+fn test_startup_commands() {
+    dbg!(create_credentials_supported());
 }
