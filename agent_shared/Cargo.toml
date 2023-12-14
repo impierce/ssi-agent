@@ -7,3 +7,6 @@ edition = "2021"
 config = { version = "0.13" }
 dotenvy = { version = "0.15" }
 tracing.workspace = true
+
+[features]
+test = []
