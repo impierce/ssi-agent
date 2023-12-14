@@ -85,8 +85,3 @@ pub fn create_credentials_supported() -> IssuanceCommand {
         }],
     }
 }
-
-#[test]
-fn test_startup_commands() {
-    dbg!(create_credentials_supported());
-}
