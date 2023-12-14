@@ -22,6 +22,7 @@ name = "agent_api_rest"
 version = "0.1.0"
 dependencies = [
  "agent_issuance",
+ "agent_shared",
  "agent_store",
  "axum",
  "axum-auth",
