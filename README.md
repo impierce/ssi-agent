@@ -9,34 +9,10 @@
 Build and run the **SSI Agent** in a local Docker environment following [these
 steps](./agent_application/docker/README.md).
 
+## Architecture
 
-```mermaid
-flowchart LR
+![alt text](UniCore.drawio.png "UniCore")
 
-    subgraph UniCore
-
-        client[Client]
-        wallet[Wallet]
-
-        client <-..-> unicore
-        wallet <-..-> oid4vci
-
-        subgraph agent_api_rest[UniCore API]
-            direction LR
-            unicore[UniCore API]
-            oid4vci[OpenID4VCI Protocol]
-        end
-        issuance[Core Issuance Agent]
-        store[Event Store]
-        app[Application]
-
-        agent_api_rest --> app
-        store --> issuance
-        issuance --> store
-        issuance --> app
-    end
-
-```
 
 ```mermaid
 sequenceDiagram
