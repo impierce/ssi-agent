@@ -14,27 +14,27 @@ pub struct ApplicationState<A: Aggregate, V: View<A>> {
     pub issuance_data_query: Arc<PostgresViewRepository<V, A>>,
 }
 
-impl<A, V> ApplicationState<A, V>
+#[async_trait]
+impl<A, V> CQRS<A, V> for ApplicationState<A, V>
 where
-    A: Aggregate,
-    V: View<A>,
+    V: View<A> + 'static,
+    A: Aggregate + 'static,
 {
-    pub async fn new(queries: Vec<Box<dyn Query<A>>>, services: A::Services) -> ApplicationState<A, V>
+    async fn new(
+        queries: Vec<Box<dyn Query<A>>>,
+        services: A::Services,
+    ) -> agent_issuance::state::ApplicationState<A, V>
     where
-        A: Aggregate + 'static,
-        V: View<A> + 'static,
+        Self: Sized,
     {
         let pool = default_postgress_pool(&config!("db_connection_string").unwrap()).await;
         let (cqrs, issuance_data_query) = cqrs_framework(pool, queries, services);
-        ApplicationState {
+        Arc::new(ApplicationState {
             cqrs,
             issuance_data_query,
-        }
+        }) as agent_issuance::state::ApplicationState<A, V>
     }
-}
 
-#[async_trait]
-impl<A: Aggregate, V: View<A>> CQRS<A, V> for ApplicationState<A, V> {
     async fn execute_with_metadata(
         &self,
         aggregate_id: &str,

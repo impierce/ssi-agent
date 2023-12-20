@@ -68,30 +68,36 @@ pub(crate) async fn offers(
 mod tests {
     use crate::{
         app,
-        tests::{
-            create_unsigned_credential, load_credential_format_template, load_credential_issuer_metadata,
-            PRE_AUTHORIZED_CODE, SUBJECT_ID,
-        },
+        tests::{create_unsigned_credential, BASE_URL, PRE_AUTHORIZED_CODE, SUBJECT_ID},
     };
 
     use super::*;
-    use agent_issuance::services::IssuanceServices;
+    use agent_issuance::{
+        services::IssuanceServices,
+        startup_commands::{load_credential_format_template, load_credential_issuer_metadata},
+        state::{initialize, CQRS},
+    };
     use agent_store::in_memory;
     use axum::{
         body::Body,
         http::{self, Request},
     };
     use serde_json::json;
-    use std::sync::Arc;
     use tower::ServiceExt;
 
     #[tokio::test]
     async fn test_offers_endpoint() {
-        let state = Arc::new(in_memory::ApplicationState::new(vec![], IssuanceServices {}).await)
-            as ApplicationState<IssuanceData, IssuanceDataView>;
+        let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
 
-        load_credential_format_template(state.clone()).await;
-        load_credential_issuer_metadata(state.clone()).await;
+        initialize(
+            state.clone(),
+            vec![
+                load_credential_format_template(),
+                load_credential_issuer_metadata(BASE_URL.clone()),
+            ],
+        )
+        .await;
+
         create_unsigned_credential(state.clone()).await;
 
         let app = app(state);

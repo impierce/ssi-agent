@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+agent_shared = { path = "../agent_shared" }
+
 oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
 oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
 oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
@@ -24,5 +26,5 @@ url.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-tokio = { version = "1", features = ["full"] }
 lazy_static.workspace = true
+tokio = { version = "1", features = ["full"] }

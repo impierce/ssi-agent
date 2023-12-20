@@ -59,32 +59,29 @@ pub(crate) async fn credential(
 mod tests {
     use crate::{
         app,
-        tests::{
-            create_credential_offer, create_credentials_supported, create_token_response, create_unsigned_credential,
-            load_authorization_server_metadata, load_credential_format_template, load_credential_issuer_metadata,
-        },
+        tests::{create_credential_offer, create_token_response, create_unsigned_credential, BASE_URL},
     };
 
     use super::*;
-    use agent_issuance::services::IssuanceServices;
+    use agent_issuance::{
+        services::IssuanceServices,
+        startup_commands::startup_commands,
+        state::{initialize, CQRS},
+    };
     use agent_store::in_memory;
     use axum::{
         body::Body,
         http::{self, Request},
     };
     use serde_json::{json, Value};
-    use std::sync::Arc;
     use tower::ServiceExt;
 
     #[tokio::test]
     async fn test_credential_endpoint() {
-        let state = Arc::new(in_memory::ApplicationState::new(vec![], IssuanceServices {}).await)
-            as ApplicationState<IssuanceData, IssuanceDataView>;
+        let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
 
-        load_credential_format_template(state.clone()).await;
-        load_authorization_server_metadata(state.clone()).await;
-        load_credential_issuer_metadata(state.clone()).await;
-        create_credentials_supported(state.clone()).await;
+        initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
+
         create_unsigned_credential(state.clone()).await;
         create_credential_offer(state.clone()).await;
         let access_token = create_token_response(state.clone()).await;
