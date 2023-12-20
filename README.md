@@ -117,31 +117,31 @@ sequenceDiagram
     store->>api_rest: View
     api_rest->>wallet: 200 OK application/json
 ```
-> Agent Preparations\
-> 1: The client sends a `POST` request to the `/v1/credentials` endpoint. The request body contains a (unique) subject ID
-and a credential object.\
-> 2-3: The API translates the request into a Command and sends it to the core. The core processes the Command and emits
-> one or more Events. The Events are stored in the Event Store.\
-> 4-5: The API sends a Query to the event store to retrieve the View(s) to be returned by the API.\
-> 6: The API returns a `201 CREATED` response with the Credentials View(s) in the response body.\
-> 7: The client sends a `POST` request to the `/v1/offers` endpoint. The request body contains the subject ID of the
-> subject for which the offer is being created.\
-> 8-9: See steps 2-3.\
-> 10-11: See steps 4-5\
-> 12: The API returns a `200 OK` response with the Offer View in the response body.\
->
-> OpenID4VCI Pre-Authorized Code Flow\
-> 13: The wallet sends a `GET` request to the `/.well-known/oauth-authorization-server` endpoint.\
-> 14-15: See steps 4-5.\
-> 16: The API returns a `200 OK` response with the OpenID4VCI Authorization Server Metadata in the response body.\
-> 17: The wallet sends a `GET` request to the `/.well-known/openid-credential-issuer` endpoint.\
-> 18-19: See steps 4-5.\
-> 20: The API returns a `200 OK` response with the OpenID4VCI Credential Issuer Metadata in the response body.\
-> 21: The wallet sends a `POST` request to the `/auth/token` endpoint.
-> 22-23: See steps 2-3.\
-> 24-25: See steps 4-5.\
-> 26: The API returns a `200 OK` response with the access token in the response body.\
-> 27: The wallet sends a `POST` request to the `/openid4vci/credential` endpoint.\
-> 28-29: See steps 2-3.\
-> 30-31: See steps 4-5.\
-> 32: The API returns a `200 OK` response with the credential(s) in the response body.
+
+```
+Agent Preparations
+    1: The client sends a `POST` request to the `/v1/credentials` endpoint. The request body contains a (unique) subject ID and a credential object.
+  2-3: The API translates the request into a Command and sends it to the core. The core processes the Command and emits one or more Events. The Events are stored in the Event Store.
+  4-5: The API sends a Query to the event store to retrieve the View(s) to be returned by the API.
+    6: The API returns a `201 CREATED` response with the Credentials View(s) in the response body.
+    7: The client sends a `POST` request to the `/v1/offers` endpoint. The request body contains the subject ID of the subject for which the offer is being created.
+  8-9: See steps 2-3.
+10-11: See steps 4-5
+   12: The API returns a `200 OK` response with the Offer View in the response body.
+
+OpenID4VCI Pre-Authorized Code Flow
+   13: The wallet sends a `GET` request to the `/.well-known/oauth-authorization-server` endpoint.
+14-15: See steps 4-5.
+   16: The API returns a `200 OK` response with the OpenID4VCI Authorization Server Metadata in the response body.
+   17: The wallet sends a `GET` request to the `/.well-known/openid-credential-issuer` endpoint.
+18-19: See steps 4-5.
+   20: The API returns a `200 OK` response with the OpenID4VCI Credential Issuer Metadata in the response body.
+   21: The wallet sends a `POST` request to the `/auth/token` endpoint.
+22-23: See steps 2-3.
+24-25: See steps 4-5.
+   26: The API returns a `200 OK` response with the access token in the response body.
+   27: The wallet sends a `POST` request to the `/openid4vci/credential` endpoint.
+28-29: See steps 2-3.
+30-31: See steps 4-5.
+   32: The API returns a `200 OK` response with the credential(s) in the response body.
+```
