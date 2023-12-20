@@ -54,17 +54,7 @@ The separation of commands and queries simplifies the design and maintenance of 
 optimization of each side independently.
 
 ### Event Sourcing
-Event Sourcing is a pattern where the state of an application is determined by a sequence of events. Each event
-represents a state change and is stored in an event store. **Events** represent immutable facts about the state changes
-in the application. The **Event Store** is a database that stores the events in the order they were applied. Therefore,
-it can be used to reconstruct the state of the application at any point in time. The added benefit of this is that this
-pattern provides a reliable audit log for tracking changes over time. It also supports querying the state of the system
-at different points in time.
-
-
-
-
-
+Event Sourcing is a pattern in which the application's state is determined by a sequence of events. Each event signifies a state change and is preserved in an event store. These **Events** serve as immutable facts about alterations in the application's state. The **Event Store**, functioning as a database, records events in the order of their occurrence. Consequently, it enables the reconstruction of the application's state at any given moment. This pattern not only ensures a dependable audit log for monitoring changes but also facilitates querying the system's state at various intervals.
 
 
 ```mermaid
