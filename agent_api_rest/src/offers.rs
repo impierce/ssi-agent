@@ -1,5 +1,5 @@
 use agent_issuance::{
-    command::IssuanceCommand, handlers::query_handler, model::aggregate::IssuanceData,
+    commands::IssuanceCommand, handlers::query_handler, model::aggregate::IssuanceData,
     model::command_handler_without_id, queries::IssuanceDataView, state::ApplicationState,
 };
 use axum::{
@@ -50,7 +50,7 @@ pub(crate) async fn offers(
                 })
                 .flatten();
             if let Some(credential_offer) = credential_offer {
-                (StatusCode::OK, Json(credential_offer)).into_response()
+                (StatusCode::OK, credential_offer).into_response()
             } else {
                 StatusCode::NOT_FOUND.into_response()
             }
@@ -116,10 +116,14 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
+        assert_eq!(
+            response.headers().get("Content-Type").unwrap().to_str().unwrap(),
+            "text/plain; charset=utf-8"
+        );
+
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
 
-        let value: Value = serde_json::from_slice(&body).unwrap();
-        let credential_offer = value.as_str().unwrap();
+        let credential_offer = String::from_utf8(body.to_vec()).unwrap();
         assert_eq!(credential_offer, "openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fexample.com%2F%22%2C%22credentials%22%3A%5B%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22pre-authorized_code%22%2C%22user_pin_required%22%3Afalse%7D%7D%7D");
     }
 }

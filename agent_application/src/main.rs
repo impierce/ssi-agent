@@ -1,6 +1,6 @@
 use agent_api_rest::app;
 use agent_issuance::{
-    command::IssuanceCommand,
+    commands::IssuanceCommand,
     handlers::command_handler,
     init::load_templates,
     model::aggregate::IssuanceData,

@@ -9,6 +9,62 @@ servers:
     description: Development
 
 paths:
+  /v1/images:
+    post:
+      summary: Upload an Image
+      tags:
+        - Upload
+      # description: n/a
+      requestBody:
+        # description: n/a
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                data:
+                  type: string
+              required:
+                - id
+                - data
+      responses:
+        "201":
+          description: An Image has succesfully been uploaded
+          headers:
+            Location:
+              schema:
+                type: string
+                example: "/v1/images/credential-logo"
+              description: URL of the created resource
+          content:
+            application/json:
+              schema:
+                type: object
+  /v1/images/{id}:
+    get:
+      summary: Retrieve an Image
+      # description: n/a
+      tags:
+        - Read
+      parameters:
+        - name: id
+          in: path
+          description: Image ID
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Image retrieved
+          content:
+            image/png:
+              schema:
+                type: string
+                format: base64
+                example: data:image/png;base64,iVBORw0KGgoAAAA
   /v1/credentials:
     post:
       summary: Create a new Credential for a given Subject
@@ -102,12 +158,12 @@ paths:
       summary: Standard OpenID Connect discovery endpoint for issuer metadata
       tags:
         - (proxied)
-  /auth/token:
+  /v1/auth/token:
     post:
       summary: Standard OAuth 2.0 endpoint for fetching a token
       tags:
         - (proxied)
-  /openid4vci/credential:
+  /v1/openid4vci/credential:
     post:
       summary: Standard OpenID Connect endpoint for redeeming a token for a credential
       tags:

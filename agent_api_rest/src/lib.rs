@@ -1,5 +1,6 @@
 mod credential_issuer;
 mod credentials;
+mod images;
 mod offers;
 
 use agent_issuance::{model::aggregate::IssuanceData, queries::IssuanceDataView, state::ApplicationState};
@@ -15,6 +16,7 @@ use credential_issuer::{
     },
 };
 use credentials::credentials;
+use images::{get_images, post_images};
 use offers::offers;
 
 // TODO: What to do with aggregate_id's?
@@ -22,8 +24,20 @@ pub const AGGREGATE_ID: &str = "agg-id-F39A0C";
 
 pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
     Router::new()
-        .route("/v1/credentials", post(credentials))
-        .route("/v1/offers", post(offers))
+        .nest(
+            "/v1",
+            Router::new()
+                .nest(
+                    "/images",
+                    Router::new()
+                        .route("/", post(post_images))
+                        .route("/:id", get(get_images)),
+                )
+                .route("/credentials", post(credentials))
+                .route("/offers", post(offers))
+                .route("/oauth/token", post(token))
+                .route("/openid4vci/credential", post(credential)),
+        )
         .route(
             "/.well-known/oauth-authorization-server",
             get(oauth_authorization_server),
@@ -37,7 +51,7 @@ pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_issuance::command::IssuanceCommand;
+    use agent_issuance::commands::IssuanceCommand;
     use oid4vci::credential_issuer::{
         authorization_server_metadata::AuthorizationServerMetadata,
         credential_issuer_metadata::CredentialIssuerMetadata,
@@ -48,6 +62,20 @@ mod tests {
     pub const SUBJECT_ID: &str = "00000000-0000-0000-0000-000000000000";
     lazy_static::lazy_static! {
         pub static ref BASE_URL: url::Url = url::Url::parse("https://example.com").unwrap();
+    }
+
+    pub async fn upload_image(state: ApplicationState<IssuanceData, IssuanceDataView>) {
+        state
+            .execute_with_metadata(
+                AGGREGATE_ID,
+                IssuanceCommand::UploadImage {
+                    id: "issuer-logo".to_string(),
+                    data: "data:image/png;base64,iVBORw0KGgoAAAA".to_string(),
+                },
+                Default::default(),
+            )
+            .await
+            .unwrap();
     }
 
     pub async fn load_credential_format_template(state: ApplicationState<IssuanceData, IssuanceDataView>) {

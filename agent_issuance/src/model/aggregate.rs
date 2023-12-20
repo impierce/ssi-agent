@@ -1,4 +1,4 @@
-use crate::{command::IssuanceCommand, error::IssuanceError, event::IssuanceEvent, services::IssuanceServices};
+use crate::{commands::IssuanceCommand, error::IssuanceError, events::IssuanceEvent, services::IssuanceServices};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;
@@ -22,7 +22,7 @@ use oid4vci::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 // TODO: remove this.
 const UNSAFE_ACCESS_TOKEN: &str = "unsafe_access_token";
@@ -62,11 +62,18 @@ pub struct IssuanceSubject {
     pub credential_response: Option<CredentialResponse>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct Image {
+    pub id: String,
+    pub data: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct IssuanceData {
     credential_format_template: serde_json::Value,
     oid4vci_data: OID4VCIData,
     subjects: Vec<IssuanceSubject>,
+    images: HashMap<String, Image>,
 }
 
 #[async_trait]
@@ -88,6 +95,9 @@ impl Aggregate for IssuanceData {
         use IssuanceError::*;
 
         match command {
+            IssuanceCommand::UploadImage { id, data } => Ok(vec![IssuanceEvent::ImageUploaded {
+                image: Image { id, data },
+            }]),
             IssuanceCommand::LoadCredentialFormatTemplate {
                 credential_format_template,
             } => Ok(vec![IssuanceEvent::CredentialFormatTemplateLoaded {
@@ -326,6 +336,9 @@ impl Aggregate for IssuanceData {
     fn apply(&mut self, event: Self::Event) {
         use IssuanceEvent::*;
         match event {
+            ImageUploaded { image } => {
+                self.images.insert(image.id.clone(), image);
+            }
             AuthorizationServerMetadataLoaded {
                 authorization_server_metadata,
             } => {
@@ -418,6 +431,17 @@ mod tests {
     use serde_json::json;
 
     type CredentialTestFramework = TestFramework<IssuanceData>;
+
+    #[test]
+    fn test_upload_image() {
+        CredentialTestFramework::with(IssuanceServices)
+            .given_no_previous_events()
+            .when(IssuanceCommand::UploadImage {
+                id: "id".to_string(),
+                data: "data".to_string(),
+            })
+            .then_expect_events(vec![IssuanceEvent::image_uploaded()]);
+    }
 
     #[test]
     fn test_load_credential_format_template() {
@@ -728,6 +752,15 @@ mod tests {
     }
 
     impl IssuanceEvent {
+        pub fn image_uploaded() -> IssuanceEvent {
+            IssuanceEvent::ImageUploaded {
+                image: Image {
+                    id: "id".to_string(),
+                    data: "data".to_string(),
+                },
+            }
+        }
+
         pub fn credential_format_template_loaded() -> IssuanceEvent {
             IssuanceEvent::CredentialFormatTemplateLoaded {
                 credential_format_template: CREDENTIAL_FORMAT_TEMPLATE.clone(),

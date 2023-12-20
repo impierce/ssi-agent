@@ -1,9 +1,11 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use cqrs_es::{persist::GenericQuery, EventEnvelope, Query, View};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::model::aggregate::{IssuanceData, IssuanceSubject, OID4VCIData};
+use crate::model::aggregate::{Image, IssuanceData, IssuanceSubject, OID4VCIData};
 
 pub struct SimpleLoggingQuery {}
 
@@ -26,13 +28,17 @@ pub struct IssuanceDataView {
     pub credential_format_template: serde_json::Value,
     pub oid4vci_data: OID4VCIData,
     pub subjects: Vec<IssuanceSubject>,
+    pub images: HashMap<String, Image>,
 }
 
 impl View<IssuanceData> for IssuanceDataView {
     fn update(&mut self, event: &EventEnvelope<IssuanceData>) {
-        use crate::event::IssuanceEvent::*;
+        use crate::events::IssuanceEvent::*;
 
         match &event.payload {
+            ImageUploaded { image } => {
+                self.images.insert(image.id.clone(), image.clone());
+            }
             CredentialFormatTemplateLoaded {
                 credential_format_template,
             } => {
@@ -72,9 +78,9 @@ impl View<IssuanceData> for IssuanceDataView {
                     .replace(credential_offer.clone());
             }
             UnsignedCredentialCreated { subject_id, credential } => {
-                if let Some(subject) = self.subjects
-                    .iter_mut()
-                    .find(|subject| subject.id == *subject_id) { subject.credentials.replace(credential.clone()); }
+                if let Some(subject) = self.subjects.iter_mut().find(|subject| subject.id == *subject_id) {
+                    subject.credentials.replace(credential.clone());
+                }
             }
             PreAuthorizedCodeUpdated {
                 subject_id,

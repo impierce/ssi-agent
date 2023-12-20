@@ -1,5 +1,5 @@
 use agent_issuance::{
-    command::IssuanceCommand,
+    commands::IssuanceCommand,
     handlers::{command_handler, query_handler},
     model::aggregate::IssuanceData,
     queries::IssuanceDataView,
