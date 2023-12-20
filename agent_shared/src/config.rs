@@ -1,7 +1,6 @@
 use tracing::info;
 
 /// Read environment variables
-#[cfg(feature = "test")] // Only allow unused code when testing
 #[allow(unused)]
 pub fn config(package_name: &str) -> config::Config {
     #[cfg(feature = "test")]
