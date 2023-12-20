@@ -57,15 +57,18 @@ optimization of each side independently.
 Event Sourcing is a pattern in which the application's state is determined by a sequence of events. Each event signifies a state change and is preserved in an event store. These **Events** serve as immutable facts about alterations in the application's state. The **Event Store**, functioning as a database, records events in the order of their occurrence. Consequently, it enables the reconstruction of the application's state at any given moment. This pattern not only ensures a dependable audit log for monitoring changes but also facilitates querying the system's state at various intervals.
 
 
+## Interaction Sequence
+This sequence diagram illustrates the dynamic interaction flow within UniCore, focusing on the preparation and issuance of credentials and offers. The diagram also illustrates the OpenID4VCI Pre-Authorized Code Flow, which is used by wallets to obtain access tokens and credentials.
+
 ```mermaid
 sequenceDiagram
     participant wallet as Wallet
     participant client as Client
 
     box rgb(33,66,99) UniCore
-        participant api_rest as Unicore API<br/>(agent_api_rest)
-        participant issuance as Core Issuance Agent<br/>(agent_issuance)
-        participant store as Event Store<br/>(agent_store)
+        participant api_rest as Unicore API
+        participant issuance as Core Issuance Agent
+        participant store as Event Store
     end
 
     autonumber
