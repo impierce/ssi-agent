@@ -84,9 +84,9 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let cfredential_issuer_metadata: CredentialIssuerMetadata = serde_json::from_slice(&body).unwrap();
+        let credential_issuer_metadata: CredentialIssuerMetadata = serde_json::from_slice(&body).unwrap();
         assert_eq!(
-            cfredential_issuer_metadata,
+            credential_issuer_metadata,
             CredentialIssuerMetadata {
                 credential_issuer: BASE_URL.clone(),
                 authorization_server: None,
