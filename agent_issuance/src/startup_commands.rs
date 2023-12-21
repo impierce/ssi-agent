@@ -76,12 +76,15 @@ pub fn create_credentials_supported() -> IssuanceCommand {
             cryptographic_binding_methods_supported: Some(vec!["did:key".to_string()]),
             cryptographic_suites_supported: Some(vec!["EdDSA".to_string()]),
             proof_types_supported: Some(vec![ProofType::Jwt]),
-            display: Some(vec![json!({
-               "name": config!("credential_name").unwrap(),
-               "logo": {
-                    "url": config!("credential_logo_url").unwrap()
-               }
-            })]),
+            display: match (config!("credential_name"), config!("credential_logo_url")) {
+                (Ok(name), Ok(logo_url)) => Some(vec![json!({
+                    "name": name,
+                    "logo": {
+                        "url": logo_url
+                    }
+                })]),
+                _ => None,
+            },
         }],
     }
 }
