@@ -19,6 +19,7 @@ serde_json.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+agent_shared = { path = "../agent_shared", features = ["test"] }
 agent_store = { path = "../agent_store" }
 
 lazy_static.workspace = true
