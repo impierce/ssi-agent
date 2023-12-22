@@ -6,8 +6,7 @@
 
 ## Build & Run
 
-Build and run the **SSI Agent** in a local Docker environment following [these
-steps](./agent_application/docker/README.md).
+Build and run the **SSI Agent** in a local Docker environment following [these steps](./agent_application/docker/README.md).
 
 ## Architecture
 
