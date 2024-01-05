@@ -5,7 +5,7 @@ info:
   version: 0.1.0
 
 servers:
-  - url: http://localhost:3033
+  - url: http://localhost:9090
     description: Development
 
 paths:
