@@ -29,5 +29,6 @@ spec:
               value: "https://dev.impierce.com/unicore/"
             - name: AGENT_STORE_DB_CONNECTION_STRING
               valueFrom:
-                name: unicore-db-secret
-                key: connection-string
+                secretKeyRef:
+                  name: unicore-db-secret
+                  key: connection-string
