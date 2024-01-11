@@ -74,6 +74,7 @@ dependencies = [
  "oid4vc-core",
  "oid4vc-manager",
  "oid4vci",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "thiserror",

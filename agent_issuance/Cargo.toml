@@ -17,6 +17,7 @@ derivative = "2.2"
 did-key = "0.2"
 jsonschema = "0.17"
 jsonwebtoken = "8.2"
+rand = "0.8"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

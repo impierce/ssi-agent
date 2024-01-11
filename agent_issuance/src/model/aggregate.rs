@@ -20,6 +20,7 @@ use oid4vci::{
     token_response::TokenResponse,
     VerifiableCredentialJwt,
 };
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
@@ -28,7 +29,26 @@ use std::sync::Arc;
 const UNSAFE_ACCESS_TOKEN: &str = "unsafe_access_token";
 const UNSAFE_C_NONCE: &str = "unsafe_c_nonce";
 const UNSAFE_ISSUER_KEY: &str = "this-is-a-very-UNSAFE-issuer-key";
-const UNSAFE_PRE_AUTHORIZED_CODE: &str = "unsafe_pre_authorized_code";
+
+fn pre_authorized_code() -> String {
+    let mut rng = rand::thread_rng();
+
+    // Generate a random pre-authorized_code with 16 bytes (128 bits)
+    let pre_authorized_code_bytes: [u8; 16] = rng.gen();
+
+    // Convert the pre-authorized_code bytes to a hexadecimal string
+    let pre_authorized_code: String = pre_authorized_code_bytes
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect();
+
+    pre_authorized_code
+}
+
+#[test]
+fn test_pre_authorized_code() {
+    println!("pre_authorized_code: {}", pre_authorized_code());
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OID4VCIData {
@@ -170,7 +190,7 @@ impl Aggregate for IssuanceData {
                     events.push(IssuanceEvent::SubjectCreated {
                         subject: IssuanceSubject {
                             id: subject_id.clone(),
-                            pre_authorized_code: UNSAFE_PRE_AUTHORIZED_CODE.to_string(),
+                            pre_authorized_code: pre_authorized_code(),
                             ..Default::default()
                         },
                     });
@@ -586,6 +606,7 @@ mod tests {
         ))
         .unwrap()];
         static ref ISSUANCE_SUBJECT_ID: uuid::Uuid = uuid::Uuid::new_v4();
+        static ref UNSAFE_PRE_AUTHORIZED_CODE: &'static str = "unsafe_pre_authorized_code";
         static ref ISSUANCE_SUBJECT: IssuanceSubject = IssuanceSubject {
             id: ISSUANCE_SUBJECT_ID.to_string(),
             pre_authorized_code: UNSAFE_PRE_AUTHORIZED_CODE.to_string(),
