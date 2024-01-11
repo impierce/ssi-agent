@@ -1,0 +1,71 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+# GitHub recommends pinning actions to a commit SHA.
+# To get a newer version, you will need to update the SHA.
+# You can also reference a tag or branch, but the action may change without warning.
+
+# TODO Project number from secrets
+
+name: Build and Deploy to GKE
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  ARTIFACTORY_HOST: europe-west4-docker.pkg.dev
+  ARTIFACTORY_REPO: impierce-repo
+  GKE_CLUSTER: impierce-cluster
+  GKE_ZONE: europe-west4-a
+  IMAGE: unicore
+  APISIX_PATH: react-app
+  NAMESPACE: ingress-apisix
+
+jobs:
+  setup-build-publish-deploy:
+    name: Setup, Build, Publish, and Deploy
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      PROJECT_ID: ${{ secrets.PROJECT_ID }}
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: "Auth"
+        uses: "google-github-actions/auth@v2"
+        with:
+          token_format: "access_token"
+          workload_identity_provider: projects/${{secrets.PROJECT_NR}}/locations/global/workloadIdentityPools/workload-ip/providers/workload-ip-provider
+          service_account: k8s-user@${{secrets.PROJECT_ID}}.iam.gserviceaccount.com
+
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
+
+      - name: "Use gcloud CLI"
+        run: "gcloud info"
+
+      - name: Build
+        working-directory: ".pipeline"
+        run: chmod u+x ./build.sh && ./build.sh
+
+      # Get the GKE credentials so we can deploy to the cluster
+      - uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          project_id: ${{ env.PROJECT_ID }}
+          location: ${{ env.GKE_ZONE }}
+
+      ## Deploy the Docker image to the GKE cluster
+      - name: Deploy
+        working-directory: ".pipeline"
+        run: chmod u+x ./deploy.sh && ./deploy.sh

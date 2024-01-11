@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "@IMAGE@-deployment"
+  labels:
+    app: "@IMAGE@"
+spec:
+  replicas: 1
+  progressDeadlineSeconds: 240
+  selector:
+    matchLabels:
+      app: "@IMAGE@"
+  template:
+    metadata:
+      labels:
+        app: "@IMAGE@"
+    spec:
+      containers:
+        - name: "@IMAGE@"
+          image: "@CONTAINER_REPO@"
+          ports:
+            - containerPort: 3033
