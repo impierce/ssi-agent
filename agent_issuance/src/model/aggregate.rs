@@ -37,10 +37,10 @@ fn pre_authorized_code() -> String {
     let pre_authorized_code_bytes: [u8; 16] = rng.gen();
 
     // Convert the pre-authorized_code bytes to a hexadecimal string
-    let pre_authorized_code: String = pre_authorized_code_bytes
-        .iter()
-        .map(|byte| format!("{:02x}", byte))
-        .collect();
+    let pre_authorized_code: String = pre_authorized_code_bytes.iter().fold(String::new(), |mut acc, byte| {
+        acc.push_str(&format!("{:02x}", byte));
+        acc
+    });
 
     pre_authorized_code
 }
