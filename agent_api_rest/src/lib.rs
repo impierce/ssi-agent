@@ -16,21 +16,38 @@ use credential_issuer::{
 };
 use credentials::credentials;
 use offers::offers;
+use std::env;
 
 // TODO: What to do with aggregate_id's?
 pub const AGGREGATE_ID: &str = "agg-id-F39A0C";
 
 pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
+    let prefix: Option<String> = env::var_os("AGENT_RELATIVE_PATH").map(|os| {
+        println!("AGENT_RELATIVE_PATH can't start or end with '/'");
+        os.into_string().expect("Can't parse AGENT_RELATIVE_PATH")
+    });
+
+    let path = |suffix: &str| -> String {
+        if let Some(prefix) = &prefix {
+            format!("/{}{}", prefix, suffix)
+        } else {
+            suffix.to_string()
+        }
+    };
+
     Router::new()
-        .route("/v1/credentials", post(credentials))
-        .route("/v1/offers", post(offers))
+        .route(&path("/v1/credentials"), post(credentials))
+        .route(&path("/v1/offers"), post(offers))
         .route(
-            "/.well-known/oauth-authorization-server",
+            &path("/.well-known/oauth-authorization-server"),
             get(oauth_authorization_server),
         )
-        .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
-        .route("/auth/token", post(token))
-        .route("/openid4vci/credential", post(credential))
+        .route(
+            &path("/.well-known/openid-credential-issuer"),
+            get(openid_credential_issuer),
+        )
+        .route(&path("/auth/token"), post(token))
+        .route(&path("/openid4vci/credential"), post(credential))
         .with_state(state)
 }
 

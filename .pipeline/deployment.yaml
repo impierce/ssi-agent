@@ -27,6 +27,8 @@ spec:
               value: "postgres"
             - name: AGENT_APPLICATION_HOST
               value: "dev.impierce.com/unicore"
+            - name: AGENT_RELATIVE_PATH 
+              value: "unicore"
             - name: AGENT_STORE_DB_CONNECTION_STRING
               valueFrom:
                 secretKeyRef:

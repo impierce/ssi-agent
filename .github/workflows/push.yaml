@@ -22,7 +22,6 @@ env:
   GKE_CLUSTER: impierce-cluster
   GKE_ZONE: europe-west4-a
   IMAGE: unicore
-  APISIX_PATH: react-app
 
 jobs:
   setup-build-publish-deploy:

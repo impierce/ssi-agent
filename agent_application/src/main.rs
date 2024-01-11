@@ -20,11 +20,10 @@ async fn main() {
         _ => in_memory::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
     };
 
-    tracing_subscriber::fmt().with_max_level(tracing::Level::DEBUG).init();
-    //match config!("log_format").unwrap().as_str() {
-    //"json" => tracing_subscriber::fmt().json().init(),
-    //_ => tracing_subscriber::fmt::init(),
-    //}
+    match config!("log_format").unwrap().as_str() {
+        "json" => tracing_subscriber::fmt().json().init(),
+        _ => tracing_subscriber::fmt::init(),
+    }
 
     initialize(state.clone(), startup_commands(HOST.clone())).await;
 
