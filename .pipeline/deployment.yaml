@@ -26,7 +26,7 @@ spec:
             - name: AGENT_CONFIG_EVENT_STORE
               value: "postgres"
             - name: AGENT_APPLICATION_HOST
-              value: "https://dev.impierce.com/unicore:3033"
+              value: "dev.impierce.com/unicore"
             - name: AGENT_STORE_DB_CONNECTION_STRING
               valueFrom:
                 secretKeyRef:
