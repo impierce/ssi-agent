@@ -1,5 +1,3 @@
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
-
 use agent_api_rest::app;
 use agent_issuance::{
     queries::SimpleLoggingQuery,
@@ -10,8 +8,6 @@ use agent_issuance::{
 use agent_shared::config;
 use agent_store::{in_memory, postgres};
 use lazy_static::lazy_static;
-use tracing::Level;
-use tracing_subscriber::filter;
 
 lazy_static! {
     static ref HOST: url::Url = format!("https://{}:3033/", config!("host").unwrap()).parse().unwrap();
@@ -32,16 +28,10 @@ async fn main() {
 
     initialize(state.clone(), startup_commands(HOST.clone())).await;
 
-    let servers = vec![
-        SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 3033),
-        SocketAddr::new(Ipv6Addr::LOCALHOST.into(), 3033),
-        "0.0.0.0:3033".parse().unwrap(),
-    ];
+    let server = "0.0.0.0:3033".parse().unwrap();
 
-    for server in servers.iter() {
-        axum::Server::bind(server)
-            .serve(app(state.clone()).into_make_service())
-            .await
-            .unwrap();
-    }
+    axum::Server::bind(&server)
+        .serve(app(state.clone()).into_make_service())
+        .await
+        .unwrap();
 }
