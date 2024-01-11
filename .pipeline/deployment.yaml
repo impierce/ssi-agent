@@ -28,4 +28,6 @@ spec:
             - name: AGENT_APPLICATION_HOST
               value: "https://dev.impierce.com/unicore/"
             - name: AGENT_STORE_DB_CONNECTION_STRING
-              value: "postgresql://${{ secrets.DB_USER }}:${{ secrets.DB_PASS }}@pg-release-postgresql.default:5432/unicore"
+              valueFrom:
+                name: unicore-db-secret
+                key: connection-string

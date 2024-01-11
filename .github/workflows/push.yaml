@@ -53,6 +53,12 @@ jobs:
       - name: "Use gcloud CLI"
         run: "gcloud info"
 
+      - name: Create secret
+        run: | 
+          kubectl -n ingress-apisix delete secret unicore-db-secret --ignore-not-found
+          kubectl -n ingress-apisix create secret generic unicore-db-secret \
+            --from-literal='connection-string=${{secrets.AGENT_STORE_DB_CONNECTION_STRING}}'
+
       - name: Build
         working-directory: ".pipeline"
         run: chmod u+x ./build.sh && ./build.sh
