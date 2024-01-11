@@ -10,6 +10,8 @@ use agent_issuance::{
 use agent_shared::config;
 use agent_store::{in_memory, postgres};
 use lazy_static::lazy_static;
+use tracing::Level;
+use tracing_subscriber::filter;
 
 lazy_static! {
     static ref HOST: url::Url = format!("https://{}:3033/", config!("host").unwrap()).parse().unwrap();
@@ -22,10 +24,11 @@ async fn main() {
         _ => in_memory::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
     };
 
-    match config!("log_format").unwrap().as_str() {
-        "json" => tracing_subscriber::fmt().json().init(),
-        _ => tracing_subscriber::fmt::init(),
-    }
+    tracing_subscriber::fmt().with_max_level(tracing::Level::DEBUG).init();
+    //match config!("log_format").unwrap().as_str() {
+    //"json" => tracing_subscriber::fmt().json().init(),
+    //_ => tracing_subscriber::fmt::init(),
+    //}
 
     initialize(state.clone(), startup_commands(HOST.clone())).await;
 
