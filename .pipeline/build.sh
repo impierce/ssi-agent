@@ -44,5 +44,5 @@ echo "-------------------------------------------------------------"
 echo "Build and push docker container"
 echo "-------------------------------------------------------------"
 
-docker build -t "$CONTAINER_REPO/$IMAGE:$GITHUB_SHA" -f docker/Dockerfile
+docker build -t "$CONTAINER_REPO/$IMAGE:$GITHUB_SHA" -f docker/Dockerfile ..
 docker push "$CONTAINER_REPO/$IMAGE:$GITHUB_SHA"

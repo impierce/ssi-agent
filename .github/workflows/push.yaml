@@ -23,7 +23,6 @@ env:
   GKE_ZONE: europe-west4-a
   IMAGE: unicore
   APISIX_PATH: react-app
-  NAMESPACE: ingress-apisix
 
 jobs:
   setup-build-publish-deploy:

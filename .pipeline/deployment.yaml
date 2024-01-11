@@ -20,3 +20,12 @@ spec:
           image: "@CONTAINER_REPO@"
           ports:
             - containerPort: 3033
+          env:
+            - name: AGENT_CONFIG_LOG_FORMAT
+              value: "json"
+            - name: AGENT_CONFIG_EVENT_STORE
+              value: "postgres"
+            - name: AGENT_APPLICATION_HOST
+              value: "https://dev.impierce.com/unicore/"
+            - name: AGENT_STORE_DB_CONNECTION_STRING
+              value: "postgresql://${{ secrets.db_user }}:${{ secrets.db_pass }}@pg-release-postgresql.default:5432/unicore"
