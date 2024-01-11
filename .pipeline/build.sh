@@ -7,7 +7,6 @@ set -e
 [ -z "$ARTIFACTORY_REPO" ] && echo "Need to set ARTIFACTORY_REPO" && exit 1;
 [ -z "$PROJECT_ID" ] && echo "Need to set PROJECT_ID" && exit 1;
 [ -z "$GITHUB_SHA" ] && echo "Need to set GITHUB_SHA" && exit 1;
-[ -z "$APISIX_PATH" ] && echo "Need to set APISIX_PATH" && exit 1;
 
 export CONTAINER_REPO="$ARTIFACTORY_HOST/$PROJECT_ID/$ARTIFACTORY_REPO"
 
