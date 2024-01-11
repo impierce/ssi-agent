@@ -10,7 +10,7 @@ use agent_store::{in_memory, postgres};
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref HOST: url::Url = format!("//{}:3033/", config!("host").unwrap()).parse().unwrap();
+    static ref HOST: url::Url = format!("https://{}:3033/", config!("host").unwrap()).parse().unwrap();
 }
 
 #[tokio::main]
