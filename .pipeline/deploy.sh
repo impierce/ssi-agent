@@ -19,6 +19,9 @@ echo "-------------------------------------------------------------"
 echo "Apply kustomize"
 echo "-------------------------------------------------------------"
 
+# Set namespace need to match kustomize
+kubectl config set-context --current --namespace=ingress-apisix
+
 ./kustomize build . | kubectl apply -f - 
 
 kubectl rollout status deployment/$IMAGE-deployment
