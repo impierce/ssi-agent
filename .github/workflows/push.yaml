@@ -14,7 +14,8 @@ name: Build and Deploy to GKE
 on:
   push:
     branches:
-      - feat/pipeline
+      - main
+      - dev
 
 env:
   ARTIFACTORY_HOST: europe-west4-docker.pkg.dev
