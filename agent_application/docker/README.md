@@ -22,4 +22,13 @@ Inside the folder `/agent_application/docker`:
 docker compose up -d
 ```
 
+
 3. The REST API will be served at `http://0.0.0.0:3033`
+
+~~~
+**NOTE**
+
+When you set the AGENT_RELATIVE_PATH to for example: "unicore"
+it will be available at: `http://0.0.0.0:3033/unicore`
+
+~~~
