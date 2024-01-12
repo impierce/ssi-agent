@@ -26,28 +26,21 @@ use serde_json::json;
 use std::sync::Arc;
 
 // TODO: remove this.
-const UNSAFE_ACCESS_TOKEN: &str = "unsafe_access_token";
-const UNSAFE_C_NONCE: &str = "unsafe_c_nonce";
 const UNSAFE_ISSUER_KEY: &str = "this-is-a-very-UNSAFE-issuer-key";
 
-fn pre_authorized_code() -> String {
+fn generate_random_string() -> String {
     let mut rng = rand::thread_rng();
 
-    // Generate a random pre-authorized_code with 16 bytes (128 bits)
-    let pre_authorized_code_bytes: [u8; 16] = rng.gen();
+    // Generate 16 random bytes (128 bits)
+    let random_bytes: [u8; 16] = rng.gen();
 
-    // Convert the pre-authorized_code bytes to a hexadecimal string
-    let pre_authorized_code: String = pre_authorized_code_bytes.iter().fold(String::new(), |mut acc, byte| {
+    // Convert the random bytes to a hexadecimal string
+    let random_string: String = random_bytes.iter().fold(String::new(), |mut acc, byte| {
         acc.push_str(&format!("{:02x}", byte));
         acc
     });
 
-    pre_authorized_code
-}
-
-#[test]
-fn test_pre_authorized_code() {
-    println!("pre_authorized_code: {}", pre_authorized_code());
+    random_string
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -190,7 +183,7 @@ impl Aggregate for IssuanceData {
                     events.push(IssuanceEvent::SubjectCreated {
                         subject: IssuanceSubject {
                             id: subject_id.clone(),
-                            pre_authorized_code: pre_authorized_code(),
+                            pre_authorized_code: generate_random_string(),
                             ..Default::default()
                         },
                     });
@@ -224,16 +217,25 @@ impl Aggregate for IssuanceData {
                         .map(|subject| subject.id.clone())
                         .ok_or(InvalidPreAuthorizedCodeError)?;
 
+                    #[cfg(test)]
+                    let (access_token, c_nonce) = {
+                        let access_token = tests::ACCESS_TOKENS.lock().unwrap().pop_front().unwrap();
+                        let c_nonce = tests::C_NONCES.lock().unwrap().pop_front().unwrap();
+                        (access_token, c_nonce)
+                    };
+                    #[cfg(not(test))]
+                    let (access_token, c_nonce) = { (generate_random_string(), generate_random_string()) };
+
                     if self.subjects.iter().any(|subject| subject.id == subject_id) {
                         Ok(vec![IssuanceEvent::TokenResponseCreated {
                             subject_id: subject_id.clone(),
                             token_response: TokenResponse {
-                                access_token: UNSAFE_ACCESS_TOKEN.to_string(),
+                                access_token,
                                 token_type: "bearer".to_string(),
                                 expires_in: None,
                                 refresh_token: None,
                                 scope: None,
-                                c_nonce: Some(UNSAFE_C_NONCE.to_string()),
+                                c_nonce: Some(c_nonce),
                                 c_nonce_expires_in: None,
                             },
                         }])
@@ -413,8 +415,11 @@ impl Aggregate for IssuanceData {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::sync::Arc;
+pub mod tests {
+    use std::{
+        collections::VecDeque,
+        sync::{Arc, Mutex},
+    };
 
     use super::*;
     use cqrs_es::test::TestFramework;
@@ -473,13 +478,18 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_create_credentials_supported() {
+        *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
+        *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
+
+        let subject_1 = subject_1();
         CredentialTestFramework::with(IssuanceServices)
             .given(vec![
                 IssuanceEvent::credential_format_template_loaded(),
                 IssuanceEvent::authorization_server_metadata_loaded(),
                 IssuanceEvent::credential_issuer_metadata_loaded(),
-                IssuanceEvent::subject_created(),
+                IssuanceEvent::subject_created(subject_1.clone()),
             ])
             .when(IssuanceCommand::CreateCredentialsSupported {
                 credentials_supported: CREDENTIALS_SUPPORTED.clone(),
@@ -488,85 +498,148 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_create_credential_offer() {
+        *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
+        *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
+
+        let subject_1 = subject_1();
         CredentialTestFramework::with(IssuanceServices)
             .given(vec![
                 IssuanceEvent::credential_format_template_loaded(),
                 IssuanceEvent::authorization_server_metadata_loaded(),
                 IssuanceEvent::credential_issuer_metadata_loaded(),
-                IssuanceEvent::subject_created(),
+                IssuanceEvent::subject_created(subject_1.clone()),
                 IssuanceEvent::credentials_supported_created(),
             ])
             .when(IssuanceCommand::CreateCredentialOffer {
-                subject_id: ISSUANCE_SUBJECT.id.clone(),
-                pre_authorized_code: Some(UNSAFE_PRE_AUTHORIZED_CODE.to_string()),
+                subject_id: ISSUANCE_SUBJECT_1.id.clone(),
+                pre_authorized_code: Some(PRE_AUTHORIZED_CODE_STRING_1.clone()),
             })
             .then_expect_events(vec![
-                IssuanceEvent::pre_authorized_code_updated(),
-                IssuanceEvent::credential_offer_created(),
+                IssuanceEvent::pre_authorized_code_updated(subject_1.clone()),
+                IssuanceEvent::credential_offer_created(subject_1.clone()),
             ]);
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_create_unsigned_credential() {
+        *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
+        *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
+
+        let subject_1 = subject_1();
         CredentialTestFramework::with(IssuanceServices)
             .given(vec![
                 IssuanceEvent::credential_format_template_loaded(),
                 IssuanceEvent::authorization_server_metadata_loaded(),
                 IssuanceEvent::credential_issuer_metadata_loaded(),
-                IssuanceEvent::subject_created(),
+                IssuanceEvent::subject_created(subject_1.clone()),
                 IssuanceEvent::credentials_supported_created(),
-                IssuanceEvent::pre_authorized_code_updated(),
-                IssuanceEvent::credential_offer_created(),
+                IssuanceEvent::pre_authorized_code_updated(subject_1.clone()),
+                IssuanceEvent::credential_offer_created(subject_1.clone()),
             ])
             .when(IssuanceCommand::CreateUnsignedCredential {
-                subject_id: ISSUANCE_SUBJECT.id.clone(),
+                subject_id: ISSUANCE_SUBJECT_1.id.clone(),
                 credential: CREDENTIAL_SUBJECT.clone(),
             })
-            .then_expect_events(vec![IssuanceEvent::unsigned_credential_created()]);
+            .then_expect_events(vec![IssuanceEvent::unsigned_credential_created(subject_1.clone())]);
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_create_token_response() {
+        *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
+        *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
+
+        let subject_1 = subject_1();
         CredentialTestFramework::with(IssuanceServices)
             .given(vec![
                 IssuanceEvent::credential_format_template_loaded(),
                 IssuanceEvent::authorization_server_metadata_loaded(),
                 IssuanceEvent::credential_issuer_metadata_loaded(),
-                IssuanceEvent::subject_created(),
+                IssuanceEvent::subject_created(subject_1.clone()),
                 IssuanceEvent::credentials_supported_created(),
-                IssuanceEvent::pre_authorized_code_updated(),
-                IssuanceEvent::credential_offer_created(),
-                IssuanceEvent::unsigned_credential_created(),
+                IssuanceEvent::pre_authorized_code_updated(subject_1.clone()),
+                IssuanceEvent::credential_offer_created(subject_1.clone()),
+                IssuanceEvent::unsigned_credential_created(subject_1.clone()),
             ])
             .when(IssuanceCommand::CreateTokenResponse {
-                token_request: TOKEN_REQUEST.clone(),
+                token_request: token_request(subject_1.clone()),
             })
-            .then_expect_events(vec![IssuanceEvent::token_response_created()]);
+            .then_expect_events(vec![IssuanceEvent::token_response_created(subject_1.clone())]);
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_create_credential_response() {
+        *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
+        *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
+
+        let subject_1 = subject_1();
         CredentialTestFramework::with(IssuanceServices)
             .given(vec![
                 IssuanceEvent::credential_format_template_loaded(),
                 IssuanceEvent::authorization_server_metadata_loaded(),
                 IssuanceEvent::credential_issuer_metadata_loaded(),
-                IssuanceEvent::subject_created(),
+                IssuanceEvent::subject_created(subject_1.clone()),
                 IssuanceEvent::credentials_supported_created(),
-                IssuanceEvent::pre_authorized_code_updated(),
-                IssuanceEvent::credential_offer_created(),
-                IssuanceEvent::unsigned_credential_created(),
-                IssuanceEvent::token_response_created(),
+                IssuanceEvent::pre_authorized_code_updated(subject_1.clone()),
+                IssuanceEvent::credential_offer_created(subject_1.clone()),
+                IssuanceEvent::unsigned_credential_created(subject_1.clone()),
+                IssuanceEvent::token_response_created(subject_1.clone()),
             ])
             .when(IssuanceCommand::CreateCredentialResponse {
-                access_token: UNSAFE_ACCESS_TOKEN.to_string(),
-                credential_request: CREDENTIAL_REQUEST.clone(),
+                access_token: subject_1.access_token.clone(),
+                credential_request: credential_request(subject_1.clone()),
             })
-            .then_expect_events(vec![IssuanceEvent::credential_response_created()]);
+            .then_expect_events(vec![IssuanceEvent::credential_response_created(subject_1.clone())]);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_create_credential_response_with_multiple_subjects() {
+        *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string(), generate_random_string()].into();
+        *C_NONCES.lock().unwrap() = vec![generate_random_string(), generate_random_string()].into();
+
+        let subject_1 = subject_1();
+        let subject_2 = subject_2();
+        CredentialTestFramework::with(IssuanceServices)
+            .given(vec![
+                IssuanceEvent::credential_format_template_loaded(),
+                IssuanceEvent::authorization_server_metadata_loaded(),
+                IssuanceEvent::credential_issuer_metadata_loaded(),
+                IssuanceEvent::subject_created(subject_1.clone()),
+                IssuanceEvent::subject_created(subject_2.clone()),
+                IssuanceEvent::credentials_supported_created(),
+                IssuanceEvent::pre_authorized_code_updated(subject_1.clone()),
+                IssuanceEvent::pre_authorized_code_updated(subject_2.clone()),
+                IssuanceEvent::credential_offer_created(subject_1.clone()),
+                IssuanceEvent::credential_offer_created(subject_2.clone()),
+                IssuanceEvent::unsigned_credential_created(subject_1.clone()),
+                IssuanceEvent::unsigned_credential_created(subject_2.clone()),
+                IssuanceEvent::token_response_created(subject_1.clone()),
+                IssuanceEvent::token_response_created(subject_2.clone()),
+            ])
+            .when(IssuanceCommand::CreateCredentialResponse {
+                access_token: subject_2.access_token.clone(),
+                credential_request: credential_request(subject_2.clone()),
+            })
+            .then_expect_events(vec![IssuanceEvent::credential_response_created(subject_2.clone())]);
+    }
+
+    #[derive(Clone)]
+    struct TestSubject {
+        issuance_subject: IssuanceSubject,
+        key_did: Arc<KeySubject>,
+        credential: String,
+        access_token: String,
+        c_nonce: String,
     }
 
     lazy_static! {
+        pub static ref ACCESS_TOKENS: Mutex<VecDeque<String>> = Mutex::new(vec![].into());
+        pub static ref C_NONCES: Mutex<VecDeque<String>> = Mutex::new(vec![].into());
         static ref CREDENTIAL_FORMAT_TEMPLATE: serde_json::Value =
             serde_json::from_str(include_str!("../../res/credential_format_templates/openbadges_v3.json")).unwrap();
         static ref BASE_URL: url::Url = "https://example.com/".parse().unwrap();
@@ -605,35 +678,24 @@ mod tests {
         }
         ))
         .unwrap()];
-        static ref ISSUANCE_SUBJECT_ID: uuid::Uuid = uuid::Uuid::new_v4();
-        static ref UNSAFE_PRE_AUTHORIZED_CODE: &'static str = "unsafe_pre_authorized_code";
-        static ref ISSUANCE_SUBJECT: IssuanceSubject = IssuanceSubject {
-            id: ISSUANCE_SUBJECT_ID.to_string(),
-            pre_authorized_code: UNSAFE_PRE_AUTHORIZED_CODE.to_string(),
+        static ref ISSUANCE_SUBJECT_ID_1: uuid::Uuid = uuid::Uuid::new_v4();
+        static ref ISSUANCE_SUBJECT_ID_2: uuid::Uuid = uuid::Uuid::new_v4();
+        static ref PRE_AUTHORIZED_CODE_STRING_1: String = generate_random_string();
+        static ref PRE_AUTHORIZED_CODE_STRING_2: String = generate_random_string();
+        static ref ISSUANCE_SUBJECT_1: IssuanceSubject = IssuanceSubject {
+            id: ISSUANCE_SUBJECT_ID_1.to_string(),
+            pre_authorized_code: PRE_AUTHORIZED_CODE_STRING_1.clone(),
+            ..Default::default()
+        };
+        static ref ISSUANCE_SUBJECT_2: IssuanceSubject = IssuanceSubject {
+            id: ISSUANCE_SUBJECT_ID_2.to_string(),
+            pre_authorized_code: PRE_AUTHORIZED_CODE_STRING_2.clone(),
             ..Default::default()
         };
         static ref CREDENTIALS_OBJECTS: Vec<CredentialsObject> = CREDENTIALS_SUPPORTED
             .iter()
             .map(|cso| CredentialsObject::ByValue(cso.credential_format.clone()))
             .collect();
-        static ref PRE_AUTHORIZED_CODE: PreAuthorizedCode = PreAuthorizedCode {
-            pre_authorized_code: UNSAFE_PRE_AUTHORIZED_CODE.to_string(),
-            ..Default::default()
-        };
-        static ref CREDENTIAL_OFFER: CredentialOffer = {
-            let credential_offer = CredentialOfferQuery::CredentialOffer(OID4VCICredentialOffer {
-                credential_issuer: CREDENTIAL_ISSUER_METADATA.credential_issuer.clone(),
-                credentials: CREDENTIALS_OBJECTS.clone(),
-                grants: Some(Grants {
-                    authorization_code: None,
-                    pre_authorized_code: Some(PRE_AUTHORIZED_CODE.clone()),
-                }),
-            });
-            CredentialOffer {
-                value: credential_offer.clone(),
-                form_urlencoded: credential_offer.to_string(),
-            }
-        };
         static ref CREDENTIAL_SUBJECT: serde_json::Value = json!(
             {
                 "credentialSubject": {
@@ -671,146 +733,215 @@ mod tests {
             id: uuid::Uuid::new_v4(),
             unsigned_credential: UNSIGNED_CREDENTIAL.clone(),
         };
-        static ref TOKEN_REQUEST: TokenRequest = TokenRequest::PreAuthorizedCode {
-            pre_authorized_code: UNSAFE_PRE_AUTHORIZED_CODE.to_string(),
-            user_pin: None,
-        };
-        static ref TOKEN_RESPONSE: TokenResponse = TokenResponse {
-            access_token: UNSAFE_ACCESS_TOKEN.to_string(),
-            token_type: "bearer".to_string(),
-            expires_in: None,
-            refresh_token: None,
-            scope: None,
-            c_nonce: Some(UNSAFE_C_NONCE.to_string()),
-            c_nonce_expires_in: None,
-        };
-        static ref SUBJECT_KEY_DID: Arc<KeySubject> = Arc::new(KeySubject::from_keypair(
-            from_existing_key::<Ed25519KeyPair>(b"", Some("this-is-a-very-UNSAFE-subjec-key".as_bytes())),
+        static ref SUBJECT_1_KEY_DID: Arc<KeySubject> = Arc::new(KeySubject::from_keypair(
+            from_existing_key::<Ed25519KeyPair>(b"", Some("this-is-a-very-UNSAFE-subj-key-1".as_bytes())),
             None,
         ));
-        static ref CREDENTIAL_REQUEST: CredentialRequest = {
-            use oid4vc_core::Subject;
-
-            CredentialRequest {
-                credential_format: CredentialFormats::JwtVcJson(Parameters {
-                    format: JwtVcJson,
-                    parameters: (
-                        CredentialDefinition {
-                            type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
-                            credential_subject: None,
-                        },
-                        None,
-                    )
-                        .into(),
-                }),
-                proof: Some(
-                    Proof::builder()
-                        .proof_type(ProofType::Jwt)
-                        .signer(SUBJECT_KEY_DID.clone())
-                        .iss(SUBJECT_KEY_DID.identifier().unwrap())
-                        .aud(CREDENTIAL_ISSUER_METADATA.credential_issuer.clone())
-                        .iat(1571324800)
-                        .exp(9999999999i64)
-                        .nonce(UNSAFE_C_NONCE.to_string())
-                        .build()
-                        .unwrap(),
-                ),
-            }
-        };
-        static ref VERIFIABLE_CREDENTIAL_JWT: String = {
+        static ref SUBJECT_2_KEY_DID: Arc<KeySubject> = Arc::new(KeySubject::from_keypair(
+            from_existing_key::<Ed25519KeyPair>(b"", Some("this-is-a-very-UNSAFE-subj-key-2".as_bytes())),
+            None,
+        ));
+        static ref VERIFIABLE_CREDENTIAL_JWT_1: String = {
             "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa3F5WmpEZmhzeVo1YzZOdUpoYm9zV2tTajg2Mmp5V2lDQ\
             0tIRHpOTkttOGtoI3o2TWtxeVpqRGZoc3laNWM2TnVKaGJvc1drU2o4NjJqeVdpQ0NLSER6Tk5LbThraCJ9.eyJpc3MiOiJkaWQ6a2V5On\
-            o2TWtxeVpqRGZoc3laNWM2TnVKaGJvc1drU2o4NjJqeVdpQ0NLSER6Tk5LbThraCIsInN1YiI6ImRpZDprZXk6ejZNa3RRcEJuTDY5MVdm\
-            dGhRV0xTNk0zQjZhczh2akx1Z29kZVFhWGtKVHdyclNxIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbIm\
+            o2TWtxeVpqRGZoc3laNWM2TnVKaGJvc1drU2o4NjJqeVdpQ0NLSER6Tk5LbThraCIsInN1YiI6ImRpZDprZXk6ejZNa2pNaDdieDNyd25t\
+            aWRONzdkYWkxZ2tKWWJSY3J6d1dGOFV1OWtpa2tzMzFmIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbIm\
             h0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3Aw\
             L2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHA6Ly9leGFtcGxlLmNvbS9jcmVkZW50aWFscy8zNTI3IiwidHlwZSI6WyJWZXJpZm\
             lhYmxlQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rcXlaakRmaHN5WjVjNk51Smhi\
             b3NXa1NqODYyanlXaUNDS0hEek5OS204a2giLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5hbWUiOiJUZWFtd2\
-            9yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rdFFwQm5MNjkxV2Z0aFFXTFM2TTNCNmFzOHZqTHVn\
-            b2RlUWFYa0pUd3JyU3EiLCJ0eXBlIjoiQWNoaWV2ZW1lbnRTdWJqZWN0IiwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbG\
+            9yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rak1oN2J4M3J3bm1pZE43N2RhaTFna0pZYlJjcnp3\
+            V0Y4VXU5a2lra3MzMWYiLCJ0eXBlIjoiQWNoaWV2ZW1lbnRTdWJqZWN0IiwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbG\
             UuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEi\
             OnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY2\
             9nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNv\
             Z25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbn\
-            QuIiwibmFtZSI6IlRlYW13b3JrIn19fX0.Klwqycvwq86HbwaRxO4kwNkgrComMTbQhAHrU5j9dNKC0IQg3-KB8SDVxbbOSCnta7yDGSkq\
-            45M931XmIPYuCg"
+            QuIiwibmFtZSI6IlRlYW13b3JrIn19fX0.7hsVlJTwTcZkxI7H0dVjjdtTsmaKE3uLAhLBkavu0eqjQGZWPZqq62tOPVJF_4csi1EvCgeG\
+            I5uhrYD2cxM8Bw"
                 .to_string()
         };
-        static ref CREDENTIAL_RESPONSE: CredentialResponse = CredentialResponse {
-            credential: CredentialResponseType::Immediate(CredentialFormats::JwtVcJson(
-                credential_format_profiles::Credential {
-                    format: JwtVcJson,
-                    credential: json!(VERIFIABLE_CREDENTIAL_JWT.clone()),
-                }
-            )),
-            c_nonce: None,
-            c_nonce_expires_in: None,
+        static ref VERIFIABLE_CREDENTIAL_JWT_2: String = {
+            "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa3F5WmpEZmhzeVo1YzZOdUpoYm9zV2tTajg2Mmp5V2lDQ\
+            0tIRHpOTkttOGtoI3o2TWtxeVpqRGZoc3laNWM2TnVKaGJvc1drU2o4NjJqeVdpQ0NLSER6Tk5LbThraCJ9.eyJpc3MiOiJkaWQ6a2V5On\
+            o2TWtxeVpqRGZoc3laNWM2TnVKaGJvc1drU2o4NjJqeVdpQ0NLSER6Tk5LbThraCIsInN1YiI6ImRpZDprZXk6ejZNa3ZrNVptb2dXa042\
+            RmtQRXJaVW1uVlNiQ0tmdEdCVjhqcGJ6UFZmeG8zdERBIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbIm\
+            h0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3Aw\
+            L2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHA6Ly9leGFtcGxlLmNvbS9jcmVkZW50aWFscy8zNTI3IiwidHlwZSI6WyJWZXJpZm\
+            lhYmxlQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rcXlaakRmaHN5WjVjNk51Smhi\
+            b3NXa1NqODYyanlXaUNDS0hEek5OS204a2giLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5hbWUiOiJUZWFtd2\
+            9yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rdms1Wm1vZ1drTjZGa1BFclpVbW5WU2JDS2Z0R0JW\
+            OGpwYnpQVmZ4bzN0REEiLCJ0eXBlIjoiQWNoaWV2ZW1lbnRTdWJqZWN0IiwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbG\
+            UuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEi\
+            OnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY2\
+            9nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNv\
+            Z25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbn\
+            QuIiwibmFtZSI6IlRlYW13b3JrIn19fX0.X4Hp_bZTfc54c_PcBI2-Qr3YjEZbUB72t4ppo-URRQKDjQXhZmzeox1pMBGQ-hjbNVmdvixw\
+            kdSvpwvZnx6zAg"
+                .to_string()
         };
     }
 
+    fn subject_1() -> TestSubject {
+        TestSubject {
+            issuance_subject: ISSUANCE_SUBJECT_1.clone(),
+            key_did: SUBJECT_1_KEY_DID.clone(),
+            credential: VERIFIABLE_CREDENTIAL_JWT_1.clone(),
+            access_token: ACCESS_TOKENS.lock().unwrap()[0].clone(),
+            c_nonce: C_NONCES.lock().unwrap()[0].clone(),
+        }
+    }
+
+    fn subject_2() -> TestSubject {
+        TestSubject {
+            issuance_subject: ISSUANCE_SUBJECT_2.clone(),
+            key_did: SUBJECT_2_KEY_DID.clone(),
+            credential: VERIFIABLE_CREDENTIAL_JWT_2.clone(),
+            access_token: ACCESS_TOKENS.lock().unwrap()[1].clone(),
+            c_nonce: C_NONCES.lock().unwrap()[1].clone(),
+        }
+    }
+
+    fn token_request(subject: TestSubject) -> TokenRequest {
+        TokenRequest::PreAuthorizedCode {
+            pre_authorized_code: subject.issuance_subject.pre_authorized_code,
+            user_pin: None,
+        }
+    }
+
+    fn token_response(subject: TestSubject) -> TokenResponse {
+        TokenResponse {
+            access_token: subject.access_token.clone(),
+            token_type: "bearer".to_string(),
+            expires_in: None,
+            refresh_token: None,
+            scope: None,
+            c_nonce: Some(subject.c_nonce.clone()),
+            c_nonce_expires_in: None,
+        }
+    }
+
+    fn credential_request(subject: TestSubject) -> CredentialRequest {
+        use oid4vc_core::Subject;
+
+        CredentialRequest {
+            credential_format: CredentialFormats::JwtVcJson(Parameters {
+                format: JwtVcJson,
+                parameters: (
+                    CredentialDefinition {
+                        type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
+                        credential_subject: None,
+                    },
+                    None,
+                )
+                    .into(),
+            }),
+            proof: Some(
+                Proof::builder()
+                    .proof_type(ProofType::Jwt)
+                    .signer(subject.key_did.clone())
+                    .iss(subject.key_did.identifier().unwrap())
+                    .aud(CREDENTIAL_ISSUER_METADATA.credential_issuer.clone())
+                    .iat(1571324800)
+                    .exp(9999999999i64)
+                    .nonce(subject.c_nonce.clone())
+                    .build()
+                    .unwrap(),
+            ),
+        }
+    }
+
+    fn credential_response(subject: TestSubject) -> CredentialResponse {
+        CredentialResponse {
+            credential: CredentialResponseType::Immediate(CredentialFormats::JwtVcJson(
+                credential_format_profiles::Credential {
+                    format: JwtVcJson,
+                    credential: json!(subject.credential.clone()),
+                },
+            )),
+            c_nonce: None,
+            c_nonce_expires_in: None,
+        }
+    }
+
     impl IssuanceEvent {
-        pub fn credential_format_template_loaded() -> IssuanceEvent {
+        fn credential_format_template_loaded() -> IssuanceEvent {
             IssuanceEvent::CredentialFormatTemplateLoaded {
                 credential_format_template: CREDENTIAL_FORMAT_TEMPLATE.clone(),
             }
         }
 
-        pub fn authorization_server_metadata_loaded() -> IssuanceEvent {
+        fn authorization_server_metadata_loaded() -> IssuanceEvent {
             IssuanceEvent::AuthorizationServerMetadataLoaded {
                 authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
             }
         }
 
-        pub fn credential_issuer_metadata_loaded() -> IssuanceEvent {
+        fn credential_issuer_metadata_loaded() -> IssuanceEvent {
             IssuanceEvent::CredentialIssuerMetadataLoaded {
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
             }
         }
 
-        pub fn subject_created() -> IssuanceEvent {
+        fn subject_created(subject: TestSubject) -> IssuanceEvent {
             IssuanceEvent::SubjectCreated {
-                subject: ISSUANCE_SUBJECT.clone(),
+                subject: subject.issuance_subject,
             }
         }
 
-        pub fn pre_authorized_code_updated() -> IssuanceEvent {
+        fn pre_authorized_code_updated(subject: TestSubject) -> IssuanceEvent {
             IssuanceEvent::PreAuthorizedCodeUpdated {
-                subject_id: ISSUANCE_SUBJECT.id.clone(),
-                pre_authorized_code: UNSAFE_PRE_AUTHORIZED_CODE.to_string(),
+                subject_id: subject.issuance_subject.id,
+                pre_authorized_code: subject.issuance_subject.pre_authorized_code,
             }
         }
 
-        pub fn credentials_supported_created() -> IssuanceEvent {
+        fn credentials_supported_created() -> IssuanceEvent {
             IssuanceEvent::CredentialsSupportedCreated {
                 credentials_supported: CREDENTIALS_SUPPORTED.clone(),
             }
         }
 
-        pub fn credential_offer_created() -> IssuanceEvent {
+        fn credential_offer_created(subject: TestSubject) -> IssuanceEvent {
+            let credential_offer_query = CredentialOfferQuery::CredentialOffer(OID4VCICredentialOffer {
+                credential_issuer: CREDENTIAL_ISSUER_METADATA.credential_issuer.clone(),
+                credentials: CREDENTIALS_OBJECTS.clone(),
+                grants: Some(Grants {
+                    authorization_code: None,
+                    pre_authorized_code: Some(PreAuthorizedCode {
+                        pre_authorized_code: subject.issuance_subject.pre_authorized_code,
+                        ..Default::default()
+                    }),
+                }),
+            });
+            let credential_offer = CredentialOffer {
+                value: credential_offer_query.clone(),
+                form_urlencoded: credential_offer_query.to_string(),
+            };
+
             IssuanceEvent::CredentialOfferCreated {
-                subject_id: ISSUANCE_SUBJECT.id.clone(),
-                credential_offer: CREDENTIAL_OFFER.clone(),
+                subject_id: subject.issuance_subject.id,
+                credential_offer,
             }
         }
 
-        pub fn unsigned_credential_created() -> IssuanceEvent {
+        fn unsigned_credential_created(subject: TestSubject) -> IssuanceEvent {
             IssuanceEvent::UnsignedCredentialCreated {
-                subject_id: ISSUANCE_SUBJECT.id.clone(),
+                subject_id: subject.issuance_subject.id,
                 credential: CREDENTIAL.clone(),
             }
         }
 
-        pub fn token_response_created() -> IssuanceEvent {
+        fn token_response_created(subject: TestSubject) -> IssuanceEvent {
             IssuanceEvent::TokenResponseCreated {
-                subject_id: ISSUANCE_SUBJECT.id.clone(),
-                token_response: TOKEN_RESPONSE.clone(),
+                subject_id: subject.issuance_subject.id.clone(),
+                token_response: token_response(subject),
             }
         }
 
-        pub fn credential_response_created() -> IssuanceEvent {
+        fn credential_response_created(subject: TestSubject) -> IssuanceEvent {
             IssuanceEvent::CredentialResponseCreated {
-                subject_id: ISSUANCE_SUBJECT.id.clone(),
-                credential_response: CREDENTIAL_RESPONSE.clone(),
+                subject_id: subject.issuance_subject.clone().id,
+                credential_response: credential_response(subject),
             }
         }
     }
