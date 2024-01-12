@@ -31,8 +31,8 @@ const UNSAFE_ISSUER_KEY: &str = "this-is-a-very-UNSAFE-issuer-key";
 fn generate_random_string() -> String {
     let mut rng = rand::thread_rng();
 
-    // Generate 16 random bytes (128 bits)
-    let random_bytes: [u8; 16] = rng.gen();
+    // Generate 32 random bytes (256 bits)
+    let random_bytes: [u8; 32] = rng.gen();
 
     // Convert the random bytes to a hexadecimal string
     let random_string: String = random_bytes.iter().fold(String::new(), |mut acc, byte| {
