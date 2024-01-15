@@ -22,14 +22,14 @@ use std::env;
 pub const AGGREGATE_ID: &str = "agg-id-F39A0C";
 
 pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
-    let prefix: Option<String> = env::var_os("AGENT_APPLICATION_BASE_PATH").map(|os| {
+    let base_path: Option<String> = env::var_os("AGENT_APPLICATION_BASE_PATH").map(|os| {
         println!("AGENT_APPLICATION_BASE_PATH can't start or end with '/'");
         os.into_string().expect("Can't parse AGENT_APPLICATION_BASE_PATH")
     });
 
     let path = |suffix: &str| -> String {
-        if let Some(prefix) = &prefix {
-            format!("/{}{}", prefix, suffix)
+        if let Some(base_path) = &base_path {
+            format!("/{}{}", base_path, suffix)
         } else {
             suffix.to_string()
         }

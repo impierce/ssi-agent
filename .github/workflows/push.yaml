@@ -16,6 +16,7 @@ on:
     branches:
       - main
       - dev
+      - feat/pipeline
 
 env:
   ARTIFACTORY_HOST: europe-west4-docker.pkg.dev
