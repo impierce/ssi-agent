@@ -22,9 +22,9 @@ use std::env;
 pub const AGGREGATE_ID: &str = "agg-id-F39A0C";
 
 pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
-    let prefix: Option<String> = env::var_os("AGENT_RELATIVE_PATH").map(|os| {
-        println!("AGENT_RELATIVE_PATH can't start or end with '/'");
-        os.into_string().expect("Can't parse AGENT_RELATIVE_PATH")
+    let prefix: Option<String> = env::var_os("AGENT_APPLICATION_BASE_PATH").map(|os| {
+        println!("AGENT_APPLICATION_BASE_PATH can't start or end with '/'");
+        os.into_string().expect("Can't parse AGENT_APPLICATION_BASE_PATH")
     });
 
     let path = |suffix: &str| -> String {
@@ -59,6 +59,7 @@ mod tests {
 
     pub const PRE_AUTHORIZED_CODE: &str = "pre-authorized_code";
     pub const SUBJECT_ID: &str = "00000000-0000-0000-0000-000000000000";
+
     lazy_static::lazy_static! {
         pub static ref BASE_URL: url::Url = url::Url::parse("https://example.com").unwrap();
     }

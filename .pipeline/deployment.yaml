@@ -25,9 +25,9 @@ spec:
               value: "json"
             - name: AGENT_CONFIG_EVENT_STORE
               value: "postgres"
-            - name: AGENT_APPLICATION_HOST
-              value: "dev.impierce.com/unicore"
-            - name: AGENT_RELATIVE_PATH 
+            - name: AGENT_APPLICATION_URL
+              value: "https://dev.impierce.com/unicore"
+            - name: AGENT_APPLICATION_BASE_PATH 
               value: "unicore"
             - name: AGENT_STORE_DB_CONNECTION_STRING
               valueFrom:

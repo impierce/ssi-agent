@@ -1,3 +1,5 @@
+use std::env;
+
 use agent_api_rest::app;
 use agent_issuance::{
     queries::SimpleLoggingQuery,
@@ -7,11 +9,6 @@ use agent_issuance::{
 };
 use agent_shared::config;
 use agent_store::{in_memory, postgres};
-use lazy_static::lazy_static;
-
-lazy_static! {
-    static ref HOST: url::Url = format!("https://{}:3033/", config!("host").unwrap()).parse().unwrap();
-}
 
 #[tokio::main]
 async fn main() {
@@ -21,11 +18,20 @@ async fn main() {
     };
 
     match config!("log_format").unwrap().as_str() {
-        "json" => tracing_subscriber::fmt().json().init(),
+        "json" => tracing_subscriber::fmt().init(),
         _ => tracing_subscriber::fmt::init(),
     }
 
-    initialize(state.clone(), startup_commands(HOST.clone())).await;
+    let url: url::Url = env::var_os("AGENT_APPLICATION_URL")
+        .expect("AGENT_APPLICATION_URL is not set")
+        .into_string()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    tracing::info!("Application url: {:?}", url);
+
+    initialize(state.clone(), startup_commands(url)).await;
 
     let server = "0.0.0.0:3033".parse().unwrap();
 
