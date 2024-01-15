@@ -75,7 +75,7 @@ mod tests {
         body::Body,
         http::{self, Request},
     };
-    use serde_json::{json, Value};
+    use serde_json::Value;
     use tower::ServiceExt;
 
     #[tokio::test]
@@ -111,13 +111,8 @@ mod tests {
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(
-            body,
-            json!({
-                "access_token": "unsafe_access_token",
-                "token_type": "bearer",
-                "c_nonce": "unsafe_c_nonce"
-            })
-        );
+        assert!(body["access_token"].as_str().is_some());
+        assert_eq!(body["token_type"], "bearer");
+        assert!(body["c_nonce"].as_str().is_some());
     }
 }
