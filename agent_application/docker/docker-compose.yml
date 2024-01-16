@@ -27,7 +27,10 @@ services:
     depends_on:
       - cqrs-postgres-db
   ssi-agent:
-    image: ssi-agent
+    #image: ssi-agent
+    build:
+      context: ../..
+      dockerfile: ./agent_application/docker/Dockerfile
     restart: always
     ports:
       - 3033:3033

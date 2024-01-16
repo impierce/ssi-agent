@@ -19,7 +19,7 @@ Inside the folder `/agent_application/docker`:
 3. To start the **SSI Agent**, a **Postgres** database along with **pgadmin** (Postgres Admin Interface) simply run:
 
 ```bash
-docker compose up -d
+docker compose up
 ```
 
 
