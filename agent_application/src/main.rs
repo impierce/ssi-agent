@@ -17,19 +17,24 @@ async fn main() {
         _ => in_memory::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
     };
 
-    match config!("log_format").unwrap().as_str() {
-        "json" => tracing_subscriber::fmt().init(),
-        _ => tracing_subscriber::fmt::init(),
+    if let Ok(val) = config!("log_format") {
+        if &val == "json" {
+            tracing_subscriber::fmt().json().init()
+        } else {
+            tracing_subscriber::fmt::init()
+        }
+    } else {
+        tracing_subscriber::fmt::init()
     }
 
-    let url: url::Url = env::var_os("AGENT_APPLICATION_URL")
+    let url = env::var_os("AGENT_APPLICATION_URL")
         .expect("AGENT_APPLICATION_URL is not set")
         .into_string()
-        .unwrap()
-        .parse()
         .unwrap();
 
     tracing::info!("Application url: {:?}", url);
+
+    let url = url::Url::parse(&url).unwrap();
 
     initialize(state.clone(), startup_commands(url)).await;
 

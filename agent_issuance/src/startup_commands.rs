@@ -1,4 +1,4 @@
-use agent_shared::config;
+use agent_shared::{config, url_utils::AddFunctions};
 use oid4vci::{
     credential_format_profiles::{
         w3c_verifiable_credentials::jwt_vc_json::{CredentialDefinition, JwtVcJson},
@@ -37,7 +37,7 @@ pub fn load_authorization_server_metadata(base_url: url::Url) -> IssuanceCommand
     IssuanceCommand::LoadAuthorizationServerMetadata {
         authorization_server_metadata: Box::new(AuthorizationServerMetadata {
             issuer: base_url.clone(),
-            token_endpoint: Some(base_url.join("auth/token").unwrap()),
+            token_endpoint: Some(base_url.add_file("auth/token")),
             ..Default::default()
         }),
     }
@@ -48,7 +48,7 @@ pub fn load_credential_issuer_metadata(base_url: url::Url) -> IssuanceCommand {
         credential_issuer_metadata: CredentialIssuerMetadata {
             credential_issuer: base_url.clone(),
             authorization_server: None,
-            credential_endpoint: base_url.join("openid4vci/credential").unwrap(),
+            credential_endpoint: base_url.add_file("openid4vci/credential"),
             deferred_credential_endpoint: None,
             batch_credential_endpoint: None,
             credentials_supported: vec![],

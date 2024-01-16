@@ -394,6 +394,7 @@ impl Aggregate for IssuanceData {
 
 #[cfg(test)]
 mod tests {
+    use agent_shared::AddFunctions;
     use std::sync::Arc;
 
     use super::*;
@@ -553,15 +554,15 @@ mod tests {
         static ref AUTHORIZATION_SERVER_METADATA: Box<AuthorizationServerMetadata> =
             Box::new(AuthorizationServerMetadata {
                 issuer: BASE_URL.clone(),
-                token_endpoint: Some(BASE_URL.join("token").unwrap()),
+                token_endpoint: Some(BASE_URL.add_file("token")),
                 ..Default::default()
             });
         static ref CREDENTIAL_ISSUER_METADATA: CredentialIssuerMetadata = CredentialIssuerMetadata {
             credential_issuer: BASE_URL.clone(),
             authorization_server: None,
-            credential_endpoint: BASE_URL.join("credential").unwrap(),
+            credential_endpoint: BASE_URL.add_file("credential"),
             deferred_credential_endpoint: None,
-            batch_credential_endpoint: Some(BASE_URL.join("batch_credential").unwrap()),
+            batch_credential_endpoint: Some(BASE_URL.add_file("batch_credential")),
             credentials_supported: vec![],
             display: None,
         };

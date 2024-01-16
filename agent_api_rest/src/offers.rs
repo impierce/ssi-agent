@@ -68,7 +68,7 @@ pub(crate) async fn offers(
 mod tests {
     use crate::{
         app,
-        tests::{create_unsigned_credential, BASE_URL, PRE_AUTHORIZED_CODE, SUBJECT_ID},
+        tests::{create_unsigned_credential, init_env_vars, BASE_URL, PRE_AUTHORIZED_CODE, SUBJECT_ID},
     };
 
     use super::*;
@@ -87,6 +87,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_offers_endpoint() {
+        init_env_vars();
+
         let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
 
         initialize(

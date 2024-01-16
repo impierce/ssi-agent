@@ -23,8 +23,14 @@ pub const AGGREGATE_ID: &str = "agg-id-F39A0C";
 
 pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
     let base_path: Option<String> = env::var_os("AGENT_APPLICATION_BASE_PATH").map(|os| {
-        println!("AGENT_APPLICATION_BASE_PATH can't start or end with '/'");
-        os.into_string().expect("Can't parse AGENT_APPLICATION_BASE_PATH")
+        let err_msg = "can't parse AGENT_APPLICATION_BASE_PATH";
+        let base_path = os.into_string().expect(err_msg);
+
+        if base_path.starts_with("/") || base_path.ends_with("/") {
+            println!("AGENT_APPLICATION_BASE_PATH can't start or end with '/'");
+        }
+
+        base_path
     });
 
     let path = |suffix: &str| -> String {
@@ -62,6 +68,17 @@ mod tests {
 
     lazy_static::lazy_static! {
         pub static ref BASE_URL: url::Url = url::Url::parse("https://example.com").unwrap();
+    }
+
+    pub fn init_env_vars() {
+        env::remove_var("AGENT_APPLICATION_BASE_PATH");
+        env::remove_var("AGENT_APPLICATION_URL");
+        env::set_var("AGENT_CONFIG_LOG_FORMAT", "json");
+        env::set_var("AGENT_CONFIG_EVENT_STORE", "postgres");
+        env::set_var(
+            "AGENT_STORE_DB_CONNECTION_STRING",
+            "postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo",
+        );
     }
 
     pub async fn create_unsigned_credential(state: ApplicationState<IssuanceData, IssuanceDataView>) -> String {

@@ -27,7 +27,10 @@ pub(crate) async fn openid_credential_issuer(
 
 #[cfg(test)]
 mod tests {
-    use crate::{app, tests::BASE_URL};
+    use crate::{
+        app,
+        tests::{init_env_vars, BASE_URL},
+    };
 
     use super::*;
     use agent_issuance::{
@@ -35,7 +38,7 @@ mod tests {
         startup_commands::{create_credentials_supported, load_credential_issuer_metadata},
         state::{initialize, CQRS},
     };
-    use agent_shared::config;
+    use agent_shared::{config, AddFunctions};
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -56,6 +59,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
+        init_env_vars();
+
         let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
 
         initialize(
@@ -85,12 +90,13 @@ mod tests {
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let credential_issuer_metadata: CredentialIssuerMetadata = serde_json::from_slice(&body).unwrap();
+
         assert_eq!(
             credential_issuer_metadata,
             CredentialIssuerMetadata {
                 credential_issuer: BASE_URL.clone(),
                 authorization_server: None,
-                credential_endpoint: BASE_URL.join("openid4vci/credential").unwrap(),
+                credential_endpoint: BASE_URL.add_file("openid4vci/credential"),
                 batch_credential_endpoint: None,
                 deferred_credential_endpoint: None,
                 credentials_supported: vec![CredentialsSupportedObject {
