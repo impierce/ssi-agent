@@ -1,8 +1,13 @@
 mod credential_issuer;
 mod credentials;
-mod offers;
+// mod offers;
 
-use agent_issuance::{model::aggregate::IssuanceData, queries::IssuanceDataView, state::ApplicationState};
+use agent_issuance::{
+    // model::aggregate::IssuanceData,
+    // queries::IssuanceDataView,
+    server_config::command::ServerConfigCommand,
+    state::{ApplicationState, CQRS},
+};
 use axum::{
     routing::{get, post},
     Router,
@@ -15,22 +20,24 @@ use credential_issuer::{
     },
 };
 use credentials::credentials;
-use offers::offers;
+// use offers::offers;
+use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
+use serde_json::json;
 
 // TODO: What to do with aggregate_id's?
-pub const AGGREGATE_ID: &str = "agg-id-F39A0C";
+// pub const AGGREGATE_ID: &str = "agg-id-F39A0C";
 
-pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
+pub fn app(state: ApplicationState) -> Router {
     Router::new()
         .route("/v1/credentials", post(credentials))
-        .route("/v1/offers", post(offers))
-        .route(
-            "/.well-known/oauth-authorization-server",
-            get(oauth_authorization_server),
-        )
-        .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
-        .route("/auth/token", post(token))
-        .route("/openid4vci/credential", post(credential))
+        // .route("/v1/offers", post(offers))
+        // .route(
+        //     "/.well-known/oauth-authorization-server",
+        //     get(oauth_authorization_server),
+        // )
+        // .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
+        // .route("/auth/token", post(token))
+        // .route("/openid4vci/credential", post(credential))
         .with_state(state)
 }
 

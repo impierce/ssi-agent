@@ -1,17 +1,11 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum IssuanceError {
-    #[error("Missing Credential Issuer Metadata")]
-    MissingCredentialIssuerMetadataError,
-    #[error("Missing OAuth Authorization Server Metadata")]
-    MissingAuthorizationServerMetadataError,
+pub enum OfferError {
     #[error("Invalid Pre-Authorized Code")]
     InvalidPreAuthorizedCodeError,
     #[error("Invalid Access Token")]
     InvalidAccessTokenError,
-    #[error("Credential must be an object")]
-    InvalidCredentialError,
     #[error("Credential is missing")]
     MissingCredentialError,
     #[error("Missing `Proof` in Credential Request")]

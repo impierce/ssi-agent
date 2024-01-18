@@ -1,12 +1,13 @@
 use agent_api_rest::app;
 use agent_issuance::{
-    queries::SimpleLoggingQuery,
-    services::IssuanceServices,
-    startup_commands::startup_commands,
+    // queries::SimpleLoggingQuery,
+    server_config::services::ServerConfigServices,
+    // services::IssuanceServices,
+    startup_commands::startup_commands_server_config,
     state::{initialize, CQRS},
 };
 use agent_shared::config;
-use agent_store::{in_memory, postgres};
+use agent_store::in_memory;
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -16,8 +17,25 @@ lazy_static! {
 #[tokio::main]
 async fn main() {
     let state = match config!("event_store").unwrap().as_str() {
-        "postgres" => postgres::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
-        _ => in_memory::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
+        // "postgres" => postgres::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
+        _ => in_memory::ApplicationState::new(vec![], ServerConfigServices {}).await
+        // _ => in_memory::AppState {
+        //     server_config: Arc::new(cqrs_es::CqrsFramework::new(
+        //         cqrs_es::mem_store::MemStore::default(),
+        //         vec![],
+        //         ServerConfigServices,
+        //     )),
+        //     credential: Arc::new(cqrs_es::CqrsFramework::new(
+        //         cqrs_es::mem_store::MemStore::default(),
+        //         vec![],
+        //         ServerConfigServices,
+        //     )),
+        //     offer: Arc::new(cqrs_es::CqrsFramework::new(
+        //         cqrs_es::mem_store::MemStore::default(),
+        //         vec![],
+        //         ServerConfigServices,
+        //     )),
+        // },
     };
 
     match config!("log_format").unwrap().as_str() {
@@ -25,7 +43,7 @@ async fn main() {
         _ => tracing_subscriber::fmt::init(),
     }
 
-    initialize(state.clone(), startup_commands(HOST.clone())).await;
+    initialize(state.clone(), startup_commands_server_config(HOST.clone())).await;
 
     axum::Server::bind(&"0.0.0.0:3033".parse().unwrap())
         .serve(app(state).into_make_service())

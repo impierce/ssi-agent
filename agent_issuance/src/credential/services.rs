@@ -1,6 +1,6 @@
-pub struct IssuanceServices;
+pub struct CredentialServices;
 
-impl IssuanceServices {
+impl CredentialServices {
     async fn _sign_credential(&self) -> Result<(), String> {
         todo!()
     }

@@ -12,20 +12,23 @@ use oid4vci::{
 };
 use serde_json::json;
 
-use crate::command::IssuanceCommand;
+// use crate::command::IssuanceCommand;
+use crate::credential::command::CredentialCommand;
+use crate::offer::command::OfferCommand;
+use crate::server_config::command::ServerConfigCommand;
 
 /// Returns the startup commands for the application.
-pub fn startup_commands(host: url::Url) -> Vec<IssuanceCommand> {
+pub fn startup_commands_server_config(host: url::Url) -> Vec<ServerConfigCommand> {
     vec![
-        load_credential_format_template(),
+        // load_credential_format_template(),
         load_authorization_server_metadata(host.clone()),
         load_credential_issuer_metadata(host.clone()),
         create_credentials_supported(),
     ]
 }
 
-pub fn load_credential_format_template() -> IssuanceCommand {
-    IssuanceCommand::LoadCredentialFormatTemplate {
+pub fn load_credential_format_template() -> CredentialCommand {
+    CredentialCommand::LoadCredentialFormatTemplate {
         credential_format_template: serde_json::from_str(include_str!(
             "../res/credential_format_templates/openbadges_v3.json"
         ))
@@ -33,8 +36,8 @@ pub fn load_credential_format_template() -> IssuanceCommand {
     }
 }
 
-pub fn load_authorization_server_metadata(base_url: url::Url) -> IssuanceCommand {
-    IssuanceCommand::LoadAuthorizationServerMetadata {
+pub fn load_authorization_server_metadata(base_url: url::Url) -> ServerConfigCommand {
+    ServerConfigCommand::LoadAuthorizationServerMetadata {
         authorization_server_metadata: Box::new(AuthorizationServerMetadata {
             issuer: base_url.clone(),
             token_endpoint: Some(base_url.join("auth/token").unwrap()),
@@ -43,8 +46,8 @@ pub fn load_authorization_server_metadata(base_url: url::Url) -> IssuanceCommand
     }
 }
 
-pub fn load_credential_issuer_metadata(base_url: url::Url) -> IssuanceCommand {
-    IssuanceCommand::LoadCredentialIssuerMetadata {
+pub fn load_credential_issuer_metadata(base_url: url::Url) -> ServerConfigCommand {
+    ServerConfigCommand::LoadCredentialIssuerMetadata {
         credential_issuer_metadata: CredentialIssuerMetadata {
             credential_issuer: base_url.clone(),
             authorization_server: None,
@@ -57,8 +60,8 @@ pub fn load_credential_issuer_metadata(base_url: url::Url) -> IssuanceCommand {
     }
 }
 
-pub fn create_credentials_supported() -> IssuanceCommand {
-    IssuanceCommand::CreateCredentialsSupported {
+pub fn create_credentials_supported() -> ServerConfigCommand {
+    ServerConfigCommand::CreateCredentialsSupported {
         credentials_supported: vec![CredentialsSupportedObject {
             id: None,
             credential_format: CredentialFormats::JwtVcJson(Parameters {

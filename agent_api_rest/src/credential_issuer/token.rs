@@ -1,8 +1,6 @@
 use agent_issuance::{
-    command::IssuanceCommand,
-    handlers::{command_handler, query_handler},
-    model::aggregate::IssuanceData,
-    queries::IssuanceDataView,
+    handlers::{command_handler_offer, query_handler},
+    offer::command::OfferCommand,
     state::ApplicationState,
 };
 use axum::{
@@ -13,11 +11,11 @@ use axum::{
 };
 use oid4vci::token_request::TokenRequest;
 
-use crate::AGGREGATE_ID;
+// use crate::AGGREGATE_ID;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn token(
-    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
+    State(state): State<ApplicationState>,
     Form(token_request): Form<TokenRequest>,
 ) -> impl IntoResponse {
     let pre_authorized_code = match token_request.clone() {
@@ -26,9 +24,9 @@ pub(crate) async fn token(
         } => pre_authorized_code,
         _ => return StatusCode::BAD_REQUEST.into_response(),
     };
-    let command = IssuanceCommand::CreateTokenResponse { token_request };
+    let command = OfferCommand::CreateTokenResponse { token_request };
 
-    match command_handler(AGGREGATE_ID.to_string(), &state, command).await {
+    match command_handler_offer("OFF-0123".to_string(), &state, command).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => {
             println!("Error: {:#?}\n", err);
@@ -36,18 +34,19 @@ pub(crate) async fn token(
         }
     };
 
-    match query_handler(AGGREGATE_ID.to_string(), &state).await {
+    match query_handler("OFF_98123".to_string(), &state).await {
         Ok(Some(view)) => {
             // TODO: This is a non-idiomatic way of finding the subject by using the pre-authorized_code in the token_request. We should use a aggregate/query instead.
-            let subject = view
-                .subjects
-                .iter()
-                .find(|subject| subject.pre_authorized_code == pre_authorized_code);
-            if let Some(subject) = subject {
-                (StatusCode::OK, Json(subject.token_response.clone())).into_response()
-            } else {
-                StatusCode::NOT_FOUND.into_response()
-            }
+            // let subject = view
+            //     .subjects
+            //     .iter()
+            //     .find(|subject| subject.pre_authorized_code == pre_authorized_code);
+            // if let Some(subject) = subject {
+            //     (StatusCode::OK, Json(subject.token_response.clone())).into_response()
+            // } else {
+            //     StatusCode::NOT_FOUND.into_response()
+            // }
+            StatusCode::NOT_IMPLEMENTED.into_response()
         }
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(err) => {
@@ -67,7 +66,7 @@ mod tests {
     use super::*;
     use agent_issuance::{
         services::IssuanceServices,
-        startup_commands::startup_commands,
+        startup_commands::startup_commands_server_config,
         state::{initialize, CQRS},
     };
     use agent_store::in_memory;
@@ -82,7 +81,7 @@ mod tests {
     async fn test_token_endpoint() {
         let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
 
-        initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
+        initialize(state.clone(), startup_commands_server_config(BASE_URL.clone())).await;
 
         create_unsigned_credential(state.clone()).await;
         create_credential_offer(state.clone()).await;

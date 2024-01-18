@@ -1,6 +1,10 @@
 use agent_issuance::{
-    command::IssuanceCommand, handlers::query_handler, model::aggregate::IssuanceData,
-    model::command_handler_without_id, queries::IssuanceDataView, state::ApplicationState,
+    credential::{command::CredentialCommand, value_object::Subject},
+    // command::IssuanceCommand,
+    handlers::{command_handler_credential, query_handler},
+    // model::aggregate::IssuanceData,
+    // queries::IssuanceDataView,
+    state::ApplicationState,
 };
 use axum::{
     extract::{Json, State},
@@ -10,11 +14,11 @@ use axum::{
 use hyper::header;
 use serde_json::Value;
 
-use crate::AGGREGATE_ID;
+// use crate::AGGREGATE_ID;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
-    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
+    State(state): State<ApplicationState>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     // TODO: This should be removed once we know how to use aggregate ID's.
@@ -24,41 +28,48 @@ pub(crate) async fn credentials(
         return (StatusCode::BAD_REQUEST, "subjectId is required".to_string()).into_response();
     };
 
-    let command = IssuanceCommand::CreateUnsignedCredential {
-        subject_id: subject_id.to_string(),
+    let command = CredentialCommand::CreateUnsignedCredential {
+        // subject_id: subject_id.to_string(),
+        subject: Subject {
+            pre_authorized_code: "MY_CODE_001".to_string(),
+        },
         credential: payload["credential"].clone(),
     };
 
-    match command_handler_without_id(&state, command).await {
+    match command_handler_credential("CRED_001".to_string(), &state, command).await {
         Ok(_) => {}
         Err(err) => {
-            println!("Error: {:#?}\n", err);
-            return (StatusCode::BAD_REQUEST, err.to_string()).into_response();
+            println!("{:?}", err)
         }
-    };
+    }
 
-    match query_handler(AGGREGATE_ID.to_string(), &state).await {
+    match query_handler("CRED_002".to_string(), &state).await {
         Ok(Some(view)) => {
-            match view.subjects.iter().find_map(|subject| {
-                (subject.id == subject_id)
-                    .then(|| {
-                        subject
-                            .credentials
-                            .as_ref()
-                            .map(|credential| credential.unsigned_credential.clone())
-                    })
-                    .flatten()
-            }) {
-                Some(unsigned_credential) => (
-                    StatusCode::CREATED,
-                    [(header::LOCATION, format!("/v1/credentials/{}", AGGREGATE_ID))],
-                    Json(unsigned_credential),
-                )
-                    .into_response(),
-                None => StatusCode::NOT_FOUND.into_response(),
-            }
+            println!("view: {:?}", view);
+            StatusCode::NOT_IMPLEMENTED.into_response()
+            // match view.subjects.iter().find_map(|subject| {
+            //     (subject.id == subject_id)
+            //         .then(|| {
+            //             subject
+            //                 .credentials
+            //                 .as_ref()
+            //                 .map(|credential| credential.unsigned_credential.clone())
+            //         })
+            //         .flatten()
+            // }) {
+            //     Some(unsigned_credential) => (
+            //         StatusCode::CREATED,
+            //         [(header::LOCATION, format!("/v1/credentials/{}", "CRED-03"))],
+            //         Json(unsigned_credential),
+            //     )
+            //         .into_response(),
+            //     None => StatusCode::NOT_FOUND.into_response(),
+            // }
         }
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Ok(None) => {
+            println!("404");
+            StatusCode::NOT_FOUND.into_response()
+        }
         Err(err) => {
             println!("Error: {:#?}\n", err);
             (StatusCode::BAD_REQUEST, err.to_string()).into_response()

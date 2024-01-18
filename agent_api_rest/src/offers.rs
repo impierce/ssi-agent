@@ -1,6 +1,7 @@
 use agent_issuance::{
-    command::IssuanceCommand, handlers::query_handler, model::aggregate::IssuanceData,
-    model::command_handler_without_id, queries::IssuanceDataView, state::ApplicationState,
+    handlers::{command_handler_offer, query_handler},
+    queries::IssuanceDataView,
+    state::ApplicationState,
 };
 use axum::{
     extract::{Json, State},
@@ -9,13 +10,10 @@ use axum::{
 };
 use serde_json::Value;
 
-use crate::AGGREGATE_ID;
+// use crate::AGGREGATE_ID;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn offers(
-    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
-    Json(payload): Json<Value>,
-) -> impl IntoResponse {
+pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> impl IntoResponse {
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id
     } else {
@@ -27,7 +25,7 @@ pub(crate) async fn offers(
         pre_authorized_code,
     };
 
-    match command_handler_without_id(&state, command).await {
+    match command_handler_offer("OFFER-0123".to_string(), &state, command).await {
         Ok(_) => {}
         Err(err) => {
             println!("Error: {:#?}\n", err);
