@@ -18,24 +18,7 @@ lazy_static! {
 async fn main() {
     let state = match config!("event_store").unwrap().as_str() {
         // "postgres" => postgres::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
-        _ => in_memory::ApplicationState::new(vec![], ServerConfigServices {}).await
-        // _ => in_memory::AppState {
-        //     server_config: Arc::new(cqrs_es::CqrsFramework::new(
-        //         cqrs_es::mem_store::MemStore::default(),
-        //         vec![],
-        //         ServerConfigServices,
-        //     )),
-        //     credential: Arc::new(cqrs_es::CqrsFramework::new(
-        //         cqrs_es::mem_store::MemStore::default(),
-        //         vec![],
-        //         ServerConfigServices,
-        //     )),
-        //     offer: Arc::new(cqrs_es::CqrsFramework::new(
-        //         cqrs_es::mem_store::MemStore::default(),
-        //         vec![],
-        //         ServerConfigServices,
-        //     )),
-        // },
+        _ => in_memory::ApplicationState::new(vec![], ServerConfigServices {}).await,
     };
 
     match config!("log_format").unwrap().as_str() {

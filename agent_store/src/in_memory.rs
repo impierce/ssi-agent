@@ -16,7 +16,7 @@ use cqrs_es::mem_store::MemStore;
 use cqrs_es::persist::{GenericQuery, PersistenceError, ViewContext, ViewRepository};
 use cqrs_es::CqrsFramework;
 use cqrs_es::{Aggregate, Query, View};
-use serde_json::json;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -31,35 +31,35 @@ pub struct MemRepositoryNoView {
     pub map: Mutex<HashMap<String, serde_json::Value>>,
 }
 
-// #[async_trait]
-// impl<V, A> ViewRepository<V, A> for MemRepositoryNoView
-// where
-//     V: View<A>,
-//     A: Aggregate,
-// {
-//     async fn load(&self, view_id: &str) -> Result<Option<V>, PersistenceError> {
-//         Ok(self
-//             .map
-//             .lock()
-//             .unwrap()
-//             .get(view_id)
-//             .map(|view| serde_json::from_value(view.clone()).unwrap()))
-//     }
+#[async_trait]
+impl<V, A> ViewRepository<V, A> for MemRepositoryNoView
+where
+    V: View<A>,
+    A: Aggregate,
+{
+    async fn load(&self, view_id: &str) -> Result<Option<V>, PersistenceError> {
+        Ok(self
+            .map
+            .lock()
+            .unwrap()
+            .get(view_id)
+            .map(|view| serde_json::from_value(view.clone()).unwrap()))
+    }
 
-//     async fn load_with_context(&self, view_id: &str) -> Result<Option<(V, ViewContext)>, PersistenceError> {
-//         Ok(self.map.lock().unwrap().get(view_id).map(|view| {
-//             let view = serde_json::from_value(view.clone()).unwrap();
-//             let view_context = ViewContext::new(view_id.to_string(), 0);
-//             (view, view_context)
-//         }))
-//     }
+    async fn load_with_context(&self, view_id: &str) -> Result<Option<(V, ViewContext)>, PersistenceError> {
+        Ok(self.map.lock().unwrap().get(view_id).map(|view| {
+            let view = serde_json::from_value(view.clone()).unwrap();
+            let view_context = ViewContext::new(view_id.to_string(), 0);
+            (view, view_context)
+        }))
+    }
 
-//     async fn update_view(&self, view: V, context: ViewContext) -> Result<(), PersistenceError> {
-//         let payload = serde_json::to_value(&view).unwrap();
-//         self.map.lock().unwrap().insert(context.view_instance_id, payload);
-//         Ok(())
-//     }
-// }
+    async fn update_view(&self, view: V, context: ViewContext) -> Result<(), PersistenceError> {
+        let payload = serde_json::to_value(&view).unwrap();
+        self.map.lock().unwrap().insert(context.view_instance_id, payload);
+        Ok(())
+    }
+}
 
 impl<V: View<A>, A: Aggregate> MemRepository<V, A> {
     pub fn new() -> Self {
@@ -102,7 +102,6 @@ pub struct ApplicationState {
     pub server_config: Arc<CqrsFramework<ServerConfig, MemStore<ServerConfig>>>,
     // pub server_config_query: Arc<MemRepository<dyn View<ServerConfig>, ServerConfig>>,
     pub server_config_query: Arc<MemRepositoryNoView>,
-
     pub credential: Arc<CqrsFramework<Credential, MemStore<Credential>>>,
     // pub credential_query: Arc<MemRepository<dyn View<Credential>, Credential>>,
     pub credential_query: Arc<MemRepositoryNoView>,
@@ -137,14 +136,22 @@ impl CQRS for ApplicationState {
 
         Arc::new(ApplicationState {
             server_config: Arc::new(CqrsFramework::new(
-                MemStore::default(),
+                MemStore::<ServerConfig>::default(),
                 server_config_queries,
                 server_config_services,
             )),
             server_config_query: credential_view_repo,
-            credential: Arc::new(CqrsFramework::new(MemStore::default(), vec![], CredentialServices {})),
+            credential: Arc::new(CqrsFramework::new(
+                MemStore::<Credential>::default(),
+                vec![],
+                CredentialServices {},
+            )),
             credential_query: Arc::new(MemRepositoryNoView::default()),
-            offer: Arc::new(CqrsFramework::new(MemStore::default(), vec![], OfferServices {})),
+            offer: Arc::new(CqrsFramework::new(
+                MemStore::<Offer>::default(),
+                vec![],
+                OfferServices {},
+            )),
             offer_query: Arc::new(MemRepositoryNoView::default()),
             // cqrs: Arc::new(CqrsFramework::new(MemStore::default(), queries, services)),
             // issuance_data_query: credential_view_repo,
@@ -184,11 +191,6 @@ impl CQRS for ApplicationState {
     ) -> Result<(), cqrs_es::AggregateError<OfferError>> {
         self.offer.execute_with_metadata(aggregate_id, command, metadata).await
     }
-
-    // async fn load(&self, view_id: &str) -> Result<Option<serde_json::Value>, PersistenceError> {
-    //     self.server_config_query.load(view_id).await
-    //     // Ok(None)
-    // }
 
     async fn load(&self, view_id: &str) -> Result<Option<serde_json::Value>, PersistenceError> {
         self.server_config_query.load(view_id).await
