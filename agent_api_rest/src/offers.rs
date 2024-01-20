@@ -1,6 +1,6 @@
 use agent_issuance::{
-    handlers::{command_handler_offer, query_handler},
-    queries::IssuanceDataView,
+    handlers::{command_handler, query_handler},
+    offer::{aggregate::Offer, command::OfferCommand, queries::OfferView},
     state::ApplicationState,
 };
 use axum::{
@@ -12,20 +12,23 @@ use serde_json::Value;
 
 // use crate::AGGREGATE_ID;
 
-#[axum_macros::debug_handler]
-pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> impl IntoResponse {
+// #[axum_macros::debug_handler]
+pub(crate) async fn offers(
+    State(state): State<ApplicationState<Offer, OfferView>>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id
     } else {
         return (StatusCode::BAD_REQUEST, "subjectId is required".to_string()).into_response();
     };
     let pre_authorized_code = payload["preAuthorizedCode"].as_str().map(|s| s.to_string());
-    let command = IssuanceCommand::CreateCredentialOffer {
+    let command = OfferCommand::CreateCredentialOffer {
         subject_id: subject_id.to_string(),
         pre_authorized_code,
     };
 
-    match command_handler_offer("OFFER-0123".to_string(), &state, command).await {
+    match command_handler("OFFER-0123".to_string(), &state, command).await {
         Ok(_) => {}
         Err(err) => {
             println!("Error: {:#?}\n", err);
@@ -33,32 +36,33 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
         }
     };
 
-    match query_handler(AGGREGATE_ID.to_string(), &state).await {
-        Ok(Some(view)) => {
-            let credential_offer = view
-                .subjects
-                .iter()
-                .find_map(|subject| {
-                    (subject.id == subject_id).then(|| {
-                        subject
-                            .credential_offer
-                            .as_ref()
-                            .map(|credential_offer| credential_offer.form_urlencoded.clone())
-                    })
-                })
-                .flatten();
-            if let Some(credential_offer) = credential_offer {
-                (StatusCode::OK, Json(credential_offer)).into_response()
-            } else {
-                StatusCode::NOT_FOUND.into_response()
-            }
-            .into_response()
-        }
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            println!("Error: {:#?}\n", err);
-            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
-        }
+    match query_handler("OFF-99988".to_string(), &state).await {
+        // Ok(Some(view)) => {
+        //     let credential_offer = view
+        //         .subjects
+        //         .iter()
+        //         .find_map(|subject| {
+        //             (subject.id == subject_id).then(|| {
+        //                 subject
+        //                     .credential_offer
+        //                     .as_ref()
+        //                     .map(|credential_offer| credential_offer.form_urlencoded.clone())
+        //             })
+        //         })
+        //         .flatten();
+        //     if let Some(credential_offer) = credential_offer {
+        //         (StatusCode::OK, Json(credential_offer)).into_response()
+        //     } else {
+        //         StatusCode::NOT_FOUND.into_response()
+        //     }
+        //     .into_response()
+        // }
+        // Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        // Err(err) => {
+        //     println!("Error: {:#?}\n", err);
+        //     (StatusCode::BAD_REQUEST, err.to_string()).into_response()
+        // }
+        _ => StatusCode::NOT_IMPLEMENTED.into_response(),
     }
 }
 

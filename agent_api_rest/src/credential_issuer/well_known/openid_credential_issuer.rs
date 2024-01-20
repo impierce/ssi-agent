@@ -1,4 +1,8 @@
-use agent_issuance::{handlers::query_handler, server_config::aggregate::ServerConfig, state::ApplicationState};
+use agent_issuance::{
+    handlers::query_handler,
+    server_config::{aggregate::ServerConfig, queries::ServerConfigView},
+    state::ApplicationState,
+};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -8,7 +12,9 @@ use axum::{
 // use crate::AGGREGATE_ID;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn openid_credential_issuer(State(state): State<ApplicationState>) -> impl IntoResponse {
+pub(crate) async fn openid_credential_issuer(
+    State(state): State<ApplicationState<ServerConfig, ServerConfigView>>,
+) -> impl IntoResponse {
     // match query_handler(AGGREGATE_ID.to_string(), &state).await {
     //     Ok(Some(view)) if view.oid4vci_data.credential_issuer_metadata.is_some() => {
     //         (StatusCode::OK, Json(view.oid4vci_data.credential_issuer_metadata)).into_response()

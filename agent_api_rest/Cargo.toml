@@ -9,6 +9,8 @@ agent_issuance = { path = "../agent_issuance" }
 oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
 oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
 
+cqrs-es = "0.4.2"
+
 axum = "0.6"
 axum-auth = "0.4"
 axum-macros = "0.3"

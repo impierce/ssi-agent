@@ -1,7 +1,7 @@
 use agent_issuance::{
-    credential::{command::CredentialCommand, value_object::Subject},
+    credential::{aggregate::Credential, command::CredentialCommand, queries::CredentialView, value_object::Subject},
     // command::IssuanceCommand,
-    handlers::{command_handler_credential, query_handler},
+    handlers::{command_handler, query_handler},
     // model::aggregate::IssuanceData,
     // queries::IssuanceDataView,
     state::ApplicationState,
@@ -11,16 +11,21 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use cqrs_es::{Aggregate, View};
 use hyper::header;
 use serde_json::Value;
 
 // use crate::AGGREGATE_ID;
 
-#[axum_macros::debug_handler]
+// #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
-    State(state): State<ApplicationState>,
+    State(state): State<ApplicationState<Credential, CredentialView>>,
     Json(payload): Json<Value>,
-) -> impl IntoResponse {
+) -> impl IntoResponse
+// where
+//     A: Aggregate,
+//     V: View<A>,
+{
     // TODO: This should be removed once we know how to use aggregate ID's.
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id
@@ -36,7 +41,7 @@ pub(crate) async fn credentials(
         credential: payload["credential"].clone(),
     };
 
-    match command_handler_credential("CRED_001".to_string(), &state, command).await {
+    match command_handler("CRED_001".to_string(), &state, command).await {
         Ok(_) => {}
         Err(err) => {
             println!("{:?}", err)

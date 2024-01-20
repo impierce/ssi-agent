@@ -1,6 +1,6 @@
 use agent_issuance::{
-    handlers::{command_handler_offer, query_handler},
-    offer::command::OfferCommand,
+    handlers::{command_handler, query_handler},
+    offer::{aggregate::Offer, command::OfferCommand, queries::OfferView},
     state::ApplicationState,
 };
 use axum::{
@@ -15,7 +15,7 @@ use oid4vci::token_request::TokenRequest;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn token(
-    State(state): State<ApplicationState>,
+    State(state): State<ApplicationState<Offer, OfferView>>,
     Form(token_request): Form<TokenRequest>,
 ) -> impl IntoResponse {
     let pre_authorized_code = match token_request.clone() {
@@ -26,7 +26,7 @@ pub(crate) async fn token(
     };
     let command = OfferCommand::CreateTokenResponse { token_request };
 
-    match command_handler_offer("OFF-0123".to_string(), &state, command).await {
+    match command_handler("OFF-0123".to_string(), &state, command).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => {
             println!("Error: {:#?}\n", err);

@@ -27,6 +27,7 @@ dependencies = [
  "axum",
  "axum-auth",
  "axum-macros",
+ "cqrs-es",
  "http-api-problem",
  "hyper",
  "lazy_static",

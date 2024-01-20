@@ -1,13 +1,13 @@
 use agent_api_rest::app;
 use agent_issuance::{
     // queries::SimpleLoggingQuery,
-    server_config::services::ServerConfigServices,
+    server_config::{queries::SimpleLoggingQuery, services::ServerConfigServices},
     // services::IssuanceServices,
     startup_commands::startup_commands_server_config,
     state::{initialize, CQRS},
 };
 use agent_shared::config;
-use agent_store::in_memory;
+use agent_store::{in_mem, in_memory};
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -18,7 +18,8 @@ lazy_static! {
 async fn main() {
     let state = match config!("event_store").unwrap().as_str() {
         // "postgres" => postgres::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], IssuanceServices {}).await,
-        _ => in_memory::ApplicationState::new(vec![], ServerConfigServices {}).await,
+        // _ => in_mem::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], ServerConfigServices {}).await,
+        _ => in_memory::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], ServerConfigServices {}).await,
     };
 
     match config!("log_format").unwrap().as_str() {
