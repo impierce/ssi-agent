@@ -22,6 +22,7 @@ use crate::startup_commands::load_credential_format_template;
 #[allow(clippy::new_ret_no_self)]
 #[async_trait]
 pub trait CQRS<A: Aggregate, V: View<A>> {
+    // type MyContainer: MyContainer<>
     async fn new(queries: Vec<Box<dyn Query<A>>>, services: A::Services) -> ApplicationState<A, V>
     where
         Self: Sized;

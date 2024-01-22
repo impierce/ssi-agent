@@ -10,6 +10,7 @@ use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::IntoResponse,
+    Extension,
 };
 use cqrs_es::{Aggregate, View};
 use hyper::header;

@@ -7,6 +7,7 @@ use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::IntoResponse,
+    Extension,
 };
 use serde_json::Value;
 
@@ -14,7 +15,7 @@ use serde_json::Value;
 
 // #[axum_macros::debug_handler]
 pub(crate) async fn offers(
-    State(state): State<ApplicationState<Offer, OfferView>>,
+    Extension(state): Extension<ApplicationState<Offer, OfferView>>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
