@@ -1,0 +1,23 @@
+[package]
+name = "agent_key_manager"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# identity.rs example
+identity_iota = { version = "1.0.0", features = ["memstore"] }
+iota-sdk = { version = "1.0.2", default-features = true, features = [
+    "tls",
+    "client",
+    "stronghold",
+] }
+tokio = { version = "1", features = ["full"] }
+
+# possibly importing only specific crates instead of all of "identity_iota" could be sufficient
+identity_storage = { version = "1.0" }    # high-level abstractions over key management systems for secure storage of cryptographic keys
+identity_stronghold = { version = "1.0" } # implementation of `JwkStorage` and `KeyIdStorage` traits on top of `Stronghold`
+
+anyhow = { version = "1.0" }
+serde.workspace = true
+serde_json.workspace = true
+rand = { version = "0.8" }

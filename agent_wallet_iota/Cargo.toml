@@ -1,0 +1,17 @@
+[package]
+name = "agent_wallet"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = { version = "0.1" }
+cqrs-es.workspace = true
+iota-sdk = { git = "https://github.com/iotaledger/iota-sdk", branch = "develop", features = [
+    # "rocksdb",
+    "stronghold",
+] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true

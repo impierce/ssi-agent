@@ -7,7 +7,7 @@ edition = "2021"
 agent_issuance = { path = "../agent_issuance" }
 agent_shared = { path = "../agent_shared" }
 
-cqrs-es = "0.4.2"
+cqrs-es.workspace = true
 postgres-es = "0.4.10"
 
 async-trait = "0.1"

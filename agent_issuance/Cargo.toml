@@ -10,7 +10,7 @@ oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", branch = "fea
 oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
 oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
 
-cqrs-es = "0.4.2"
+cqrs-es.workspace = true
 
 async-trait = "0.1"
 derivative = "2.2"
