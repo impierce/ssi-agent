@@ -4,7 +4,7 @@ use agent_issuance::{
     handlers::{command_handler, query_handler},
     // model::aggregate::IssuanceData,
     // queries::IssuanceDataView,
-    state::{AppState, ApplicationState},
+    state::{AggregateHandler, ApplicationState},
 };
 use axum::{
     extract::{Json, State},
@@ -19,7 +19,10 @@ use serde_json::Value;
 // use crate::AGGREGATE_ID;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn credentials(State(state): State<AppState>, Json(payload): Json<Value>) -> impl IntoResponse
+pub(crate) async fn credentials(
+    State(state): State<ApplicationState>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse
 // where
 //     A: Aggregate,
 //     V: View<A>,

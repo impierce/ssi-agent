@@ -1,7 +1,7 @@
 use agent_issuance::{
     handlers::{command_handler, query_handler},
     offer::{aggregate::Offer, command::OfferCommand, queries::OfferView},
-    state::{AppState, ApplicationState},
+    state::{AggregateHandler, ApplicationState},
 };
 use axum::{
     extract::{Json, State},
@@ -14,7 +14,10 @@ use oid4vci::token_request::TokenRequest;
 // use crate::AGGREGATE_ID;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn token(State(state): State<AppState>, Form(token_request): Form<TokenRequest>) -> impl IntoResponse {
+pub(crate) async fn token(
+    State(state): State<ApplicationState>,
+    Form(token_request): Form<TokenRequest>,
+) -> impl IntoResponse {
     let pre_authorized_code = match token_request.clone() {
         TokenRequest::PreAuthorizedCode {
             pre_authorized_code, ..

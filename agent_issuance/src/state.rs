@@ -30,7 +30,7 @@ use crate::startup_commands::load_credential_format_template;
 #[async_trait]
 pub trait CQRS<A: Aggregate, V: View<A>> {
     // type MyContainer: MyContainer<>
-    async fn new(queries: Vec<Box<dyn Query<A>>>, services: A::Services) -> ApplicationState<A, V>
+    async fn new(queries: Vec<Box<dyn Query<A>>>, services: A::Services) -> AggregateHandler<A, V>
     where
         Self: Sized;
 
@@ -61,17 +61,17 @@ pub trait CQRS<A: Aggregate, V: View<A>> {
 }
 
 #[derive(Clone)]
-pub struct AppState {
-    pub server_config: ApplicationState<ServerConfig, ServerConfigView>,
-    pub credential: ApplicationState<Credential, CredentialView>,
-    pub offer: ApplicationState<Offer, OfferView>,
+pub struct ApplicationState {
+    pub server_config: AggregateHandler<ServerConfig, ServerConfigView>,
+    pub credential: AggregateHandler<Credential, CredentialView>,
+    pub offer: AggregateHandler<Offer, OfferView>,
 }
 
-pub type ApplicationState<A, V> = Arc<dyn CQRS<A, V> + Send + Sync>;
+pub type AggregateHandler<A, V> = Arc<dyn CQRS<A, V> + Send + Sync>;
 // pub type ApplicationState = Arc<dyn Send + Sync>;
 
 /// Initialize the application state by executing the startup commands.
-pub async fn initialize<A: Aggregate, V: View<A>>(state: ApplicationState<A, V>, startup_commands: Vec<A::Command>)
+pub async fn initialize<A: Aggregate, V: View<A>>(state: AggregateHandler<A, V>, startup_commands: Vec<A::Command>)
 where
     <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
 {

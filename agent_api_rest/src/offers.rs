@@ -1,7 +1,7 @@
 use agent_issuance::{
     handlers::{command_handler, query_handler},
     offer::{aggregate::Offer, command::OfferCommand, queries::OfferView},
-    state::{AppState, ApplicationState},
+    state::{AggregateHandler, ApplicationState},
 };
 use axum::{
     extract::{Json, State},
@@ -13,7 +13,7 @@ use serde_json::Value;
 // use crate::AGGREGATE_ID;
 
 // #[axum_macros::debug_handler]
-pub(crate) async fn offers(State(state): State<AppState>, Json(payload): Json<Value>) -> impl IntoResponse {
+pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> impl IntoResponse {
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id
     } else {

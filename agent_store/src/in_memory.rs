@@ -60,7 +60,7 @@ impl<A: Aggregate + 'static, V: View<A> + 'static> CQRS<A, V> for ApplicationSta
     async fn new(
         queries: Vec<Box<dyn Query<A>>>,
         services: A::Services,
-    ) -> agent_issuance::state::ApplicationState<A, V>
+    ) -> agent_issuance::state::AggregateHandler<A, V>
     where
         Self: Sized,
     {
@@ -74,7 +74,7 @@ impl<A: Aggregate + 'static, V: View<A> + 'static> CQRS<A, V> for ApplicationSta
         Arc::new(ApplicationState {
             cqrs: Arc::new(CqrsFramework::new(MemStore::default(), queries, services)),
             issuance_data_query: credential_view_repo,
-        }) as agent_issuance::state::ApplicationState<A, V>
+        }) as agent_issuance::state::AggregateHandler<A, V>
     }
 
     async fn execute_with_metadata(

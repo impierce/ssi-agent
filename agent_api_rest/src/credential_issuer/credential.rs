@@ -5,7 +5,7 @@ use agent_issuance::{
     offer::{aggregate::Offer, command::OfferCommand, queries::OfferView},
     // model::aggregate::IssuanceData,
     // queries::IssuanceDataView,
-    state::{AppState, ApplicationState},
+    state::{AggregateHandler, ApplicationState},
 };
 use axum::{
     extract::{Json, State},
@@ -19,7 +19,7 @@ use oid4vci::credential_request::CredentialRequest;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
-    State(state): State<AppState>,
+    State(state): State<ApplicationState>,
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> impl IntoResponse {

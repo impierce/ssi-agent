@@ -2,7 +2,7 @@ use crate::{
     credential::{command::CredentialCommand, error::CredentialError},
     offer::{command::OfferCommand, error::OfferError},
     server_config::{command::ServerConfigCommand, error::ServerConfigError},
-    state::ApplicationState,
+    state::AggregateHandler,
 };
 use cqrs_es::{persist::PersistenceError, Aggregate, AggregateError, View};
 use serde_json::Value;
@@ -12,7 +12,7 @@ use tracing::{debug, error};
 
 pub async fn query_handler<A: Aggregate, V: View<A>>(
     credential_id: String,
-    state: &ApplicationState<A, V>,
+    state: &AggregateHandler<A, V>,
 ) -> Result<Option<V>, PersistenceError> {
     match state.load(&credential_id).await {
         Ok(view) => {
@@ -28,7 +28,7 @@ pub async fn query_handler<A: Aggregate, V: View<A>>(
 
 pub async fn command_handler<A: Aggregate, V: View<A>>(
     aggregate_id: String,
-    state: &ApplicationState<A, V>,
+    state: &AggregateHandler<A, V>,
     command: A::Command,
 ) -> Result<(), AggregateError<<A as Aggregate>::Error>>
 where

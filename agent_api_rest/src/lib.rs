@@ -10,7 +10,7 @@ use agent_issuance::{
     // model::aggregate::IssuanceData,
     // queries::IssuanceDataView,
     server_config::command::ServerConfigCommand,
-    state::{AppState, ApplicationState, CQRS},
+    state::{AggregateHandler, ApplicationState, CQRS},
 };
 use axum::{
     routing::{get, post},
@@ -33,7 +33,7 @@ use serde_json::json;
 // pub const AGGREGATE_ID: &str = "agg-id-F39A0C";
 
 // #[axum_macros::debug_handler]
-pub fn app(app_state: AppState) -> Router {
+pub fn app(app_state: ApplicationState) -> Router {
     Router::new()
         .route("/v1/credentials", post(credentials))
         .route("/v1/offers", post(offers))

@@ -6,7 +6,7 @@ use agent_issuance::{
     server_config::{queries::SimpleLoggingQuery, services::ServerConfigServices},
     // services::IssuanceServices,
     startup_commands::startup_commands_server_config,
-    state::{initialize, AppState, CQRS},
+    state::{initialize, ApplicationState, CQRS},
 };
 use agent_shared::config;
 use agent_store::in_memory;
@@ -28,7 +28,7 @@ async fn main() {
     let offer_state = { in_memory::ApplicationState::new(vec![], OfferServices).await };
     let server_config_state = { in_memory::ApplicationState::new(vec![], ServerConfigServices).await };
 
-    let app_state = AppState {
+    let app_state = ApplicationState {
         server_config: server_config_state,
         credential: credential_state,
         offer: offer_state,
