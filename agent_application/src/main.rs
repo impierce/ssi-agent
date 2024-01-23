@@ -6,7 +6,7 @@ use agent_issuance::{
     server_config::{queries::SimpleLoggingQuery, services::ServerConfigServices},
     // services::IssuanceServices,
     startup_commands::startup_commands_server_config,
-    state::{initialize, CQRS},
+    state::{initialize, AppState, CQRS},
 };
 use agent_shared::config;
 use agent_store::in_memory;
@@ -26,6 +26,13 @@ async fn main() {
 
     let credential_state = { in_memory::ApplicationState::new(vec![], CredentialServices).await };
     let offer_state = { in_memory::ApplicationState::new(vec![], OfferServices).await };
+    let server_config_state = { in_memory::ApplicationState::new(vec![], ServerConfigServices).await };
+
+    let app_state = AppState {
+        server_config: server_config_state,
+        credential: credential_state,
+        offer: offer_state,
+    };
 
     match config!("log_format").unwrap().as_str() {
         "json" => tracing_subscriber::fmt().json().init(),
@@ -35,7 +42,7 @@ async fn main() {
     // initialize(state.clone(), startup_commands_server_config(HOST.clone())).await;
 
     axum::Server::bind(&"0.0.0.0:3033".parse().unwrap())
-        .serve(app(credential_state, offer_state).into_make_service())
+        .serve(app(app_state).into_make_service())
         .await
         .unwrap();
 }

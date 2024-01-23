@@ -55,13 +55,6 @@ pub struct ApplicationState<A: Aggregate, V: View<A>> {
     pub issuance_data_query: Arc<MemRepository<V, A>>,
 }
 
-impl<A, V> ApplicationState<A, V>
-where
-    A: Aggregate + 'static,
-    V: View<A> + 'static,
-{
-}
-
 #[async_trait]
 impl<A: Aggregate + 'static, V: View<A> + 'static> CQRS<A, V> for ApplicationState<A, V> {
     async fn new(

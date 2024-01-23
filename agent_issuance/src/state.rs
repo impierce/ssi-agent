@@ -6,16 +6,23 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{info, warn};
 
+use crate::credential::aggregate::Credential;
 use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError;
+use crate::credential::queries::CredentialView;
+use crate::credential::services::CredentialServices;
 use crate::handlers::command_handler;
+use crate::offer::aggregate::Offer;
 // use crate::handlers::{command_handler_credential, command_handler_server_config};
 use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError;
+use crate::offer::queries::OfferView;
+use crate::offer::services::OfferServices;
 // use crate::handlers::command_handler;
 use crate::server_config::aggregate::ServerConfig;
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::error::ServerConfigError;
+use crate::server_config::queries::ServerConfigView;
 use crate::server_config::services::ServerConfigServices;
 use crate::startup_commands::load_credential_format_template;
 
@@ -51,6 +58,13 @@ pub trait CQRS<A: Aggregate, V: View<A>> {
     //     ) -> Result<(), AggregateError<OfferError>>;
 
     async fn load(&self, view_id: &str) -> Result<Option<V>, PersistenceError>;
+}
+
+#[derive(Clone)]
+pub struct AppState {
+    pub server_config: ApplicationState<ServerConfig, ServerConfigView>,
+    pub credential: ApplicationState<Credential, CredentialView>,
+    pub offer: ApplicationState<Offer, OfferView>,
 }
 
 pub type ApplicationState<A, V> = Arc<dyn CQRS<A, V> + Send + Sync>;
