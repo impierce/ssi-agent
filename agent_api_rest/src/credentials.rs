@@ -4,7 +4,7 @@ use agent_issuance::{
     handlers::{command_handler, query_handler},
     // model::aggregate::IssuanceData,
     // queries::IssuanceDataView,
-    state::{AggregateHandler, ApplicationState},
+    state::ApplicationState,
 };
 use axum::{
     extract::{Json, State},
@@ -16,17 +16,15 @@ use cqrs_es::{Aggregate, View};
 use hyper::header;
 use serde_json::Value;
 
+use crate::AggregateHandler;
+
 // use crate::AGGREGATE_ID;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
-    State(state): State<ApplicationState>,
+    State(state): State<AggregateHandler<Credential>>,
     Json(payload): Json<Value>,
-) -> impl IntoResponse
-// where
-//     A: Aggregate,
-//     V: View<A>,
-{
+) -> impl IntoResponse {
     // TODO: This should be removed once we know how to use aggregate ID's.
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id
@@ -42,14 +40,14 @@ pub(crate) async fn credentials(
         credential: payload["credential"].clone(),
     };
 
-    match command_handler("CRED_001".to_string(), &state.credential, command).await {
+    match command_handler("CRED_001".to_string(), &state, command).await {
         Ok(_) => {}
         Err(err) => {
             println!("{:?}", err)
         }
     }
 
-    match query_handler("CRED_002".to_string(), &state.credential).await {
+    match query_handler("CRED_002".to_string(), &state).await {
         Ok(Some(view)) => {
             println!("view: {:?}", view);
             StatusCode::NOT_IMPLEMENTED.into_response()

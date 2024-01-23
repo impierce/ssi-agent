@@ -10,6 +10,9 @@ use crate::credential::error::CredentialError::{self, InvalidCredentialError};
 use crate::credential::event::CredentialEvent;
 use crate::credential::services::CredentialServices;
 use crate::credential::value_object::Subject;
+use crate::state::Domain;
+
+use super::queries::CredentialView;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
 #[derivative(PartialEq)]
@@ -19,6 +22,11 @@ pub struct Credential {
     // Value Objects
     pub credential_format_template: serde_json::Value,
     pub subject: Subject,
+}
+
+impl Domain for Credential {
+    type Aggregate = Self;
+    type View = CredentialView;
 }
 
 // #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]

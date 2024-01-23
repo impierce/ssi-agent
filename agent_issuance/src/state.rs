@@ -28,20 +28,22 @@ use crate::startup_commands::load_credential_format_template;
 
 #[allow(clippy::new_ret_no_self)]
 #[async_trait]
-pub trait CQRS<A: Aggregate, V: View<A>> {
-    // type MyContainer: MyContainer<>
-    async fn new(queries: Vec<Box<dyn Query<A>>>, services: A::Services) -> AggregateHandler<A, V>
+pub trait CQRS<D: Domain> {
+    async fn new(
+        queries: Vec<Box<dyn Query<D::Aggregate>>>,
+        services: <<D as Domain>::Aggregate as Aggregate>::Services,
+    ) -> AggregateHandler<D>
     where
         Self: Sized;
 
     async fn execute_with_metadata(
         &self,
         aggregate_id: &str,
-        command: A::Command,
+        command: <D::Aggregate as Aggregate>::Command,
         metadata: HashMap<String, String>,
-    ) -> Result<(), cqrs_es::AggregateError<A::Error>>
+    ) -> Result<(), cqrs_es::AggregateError<<D::Aggregate as Aggregate>::Error>>
     where
-        A::Command: Send + Sync;
+        <D::Aggregate as Aggregate>::Command: Send + Sync;
 
     //     async fn execute_with_metadata_credential(
     //         &self,
@@ -57,23 +59,30 @@ pub trait CQRS<A: Aggregate, V: View<A>> {
     //         metadata: HashMap<String, String>,
     //     ) -> Result<(), AggregateError<OfferError>>;
 
-    async fn load(&self, view_id: &str) -> Result<Option<V>, PersistenceError>;
+    async fn load(&self, view_id: &str) -> Result<Option<D::View>, PersistenceError>;
+}
+
+pub trait Domain {
+    type Aggregate: Aggregate;
+    type View: View<Self::Aggregate>;
 }
 
 #[derive(Clone)]
 pub struct ApplicationState {
-    pub server_config: AggregateHandler<ServerConfig, ServerConfigView>,
-    pub credential: AggregateHandler<Credential, CredentialView>,
-    pub offer: AggregateHandler<Offer, OfferView>,
+    pub server_config: AggregateHandler<ServerConfig>,
+    pub credential: AggregateHandler<Credential>,
+    pub offer: AggregateHandler<Offer>,
 }
 
-pub type AggregateHandler<A, V> = Arc<dyn CQRS<A, V> + Send + Sync>;
+pub type AggregateHandler<D> = Arc<dyn CQRS<D> + Send + Sync>;
 // pub type ApplicationState = Arc<dyn Send + Sync>;
 
 /// Initialize the application state by executing the startup commands.
-pub async fn initialize<A: Aggregate, V: View<A>>(state: AggregateHandler<A, V>, startup_commands: Vec<A::Command>)
-where
-    <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
+pub async fn initialize<D: Domain>(
+    state: AggregateHandler<D>,
+    startup_commands: Vec<<D::Aggregate as Aggregate>::Command>,
+) where
+    <D::Aggregate as Aggregate>::Command: Send + Sync + std::fmt::Debug,
 {
     info!("Initializing ...");
 

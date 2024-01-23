@@ -24,15 +24,7 @@ async fn main() {
     //     _ => in_memory::ApplicationState::new(vec![Box::new(SimpleLoggingQuery {})], ServerConfigServices {}).await,
     // };
 
-    let credential_state = { in_memory::ApplicationState::new(vec![], CredentialServices).await };
-    let offer_state = { in_memory::ApplicationState::new(vec![], OfferServices).await };
-    let server_config_state = { in_memory::ApplicationState::new(vec![], ServerConfigServices).await };
-
-    let app_state = ApplicationState {
-        server_config: server_config_state,
-        credential: credential_state,
-        offer: offer_state,
-    };
+    let app_state = in_memory::application_state().await;
 
     match config!("log_format").unwrap().as_str() {
         "json" => tracing_subscriber::fmt().json().init(),

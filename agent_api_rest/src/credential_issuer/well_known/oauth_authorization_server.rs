@@ -1,7 +1,7 @@
 use agent_issuance::{
     handlers::query_handler,
     server_config::{aggregate::ServerConfig, queries::ServerConfigView},
-    state::{AggregateHandler, ApplicationState},
+    state::ApplicationState,
 };
 use axum::{
     extract::{Json, State},
@@ -9,10 +9,14 @@ use axum::{
     response::IntoResponse,
 };
 
+use crate::AggregateHandler;
+
 // use crate::AGGREGATE_ID;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn oauth_authorization_server(State(state): State<ApplicationState>) -> impl IntoResponse {
+pub(crate) async fn oauth_authorization_server(
+    State(state): State<AggregateHandler<ServerConfig>>,
+) -> impl IntoResponse {
     // match query_handler(AGGREGATE_ID.to_string(), &state).await {
     //     Ok(Some(view)) if view.oid4vci_data.authorization_server_metadata.is_some() => {
     //         (StatusCode::OK, Json(view.oid4vci_data.authorization_server_metadata)).into_response()

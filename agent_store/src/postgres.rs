@@ -1,4 +1,7 @@
-use agent_issuance::state::CQRS;
+use agent_issuance::credential::services::CredentialServices;
+use agent_issuance::offer::services::OfferServices;
+use agent_issuance::server_config::services::ServerConfigServices;
+use agent_issuance::state::{ApplicationState, Domain, CQRS};
 use agent_shared::config;
 use async_trait::async_trait;
 use cqrs_es::persist::{GenericQuery, PersistenceError, ViewRepository};
@@ -8,46 +11,53 @@ use sqlx::{Pool, Postgres};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+pub async fn application_state() -> ApplicationState {
+    ApplicationState {
+        server_config: AggregateHandler::new(vec![], ServerConfigServices).await,
+        credential: AggregateHandler::new(vec![], CredentialServices).await,
+        offer: AggregateHandler::new(vec![], OfferServices).await,
+    }
+}
+
 #[derive(Clone)]
-pub struct ApplicationState<A: Aggregate, V: View<A>> {
-    pub cqrs: Arc<PostgresCqrs<A>>,
-    pub issuance_data_query: Arc<PostgresViewRepository<V, A>>,
+pub struct AggregateHandler<D: Domain> {
+    pub cqrs: Arc<PostgresCqrs<D::Aggregate>>,
+    pub issuance_data_query: Arc<PostgresViewRepository<D::View, D::Aggregate>>,
 }
 
 #[async_trait]
-impl<A, V> CQRS<A, V> for ApplicationState<A, V>
+impl<D> CQRS<D> for AggregateHandler<D>
 where
-    V: View<A> + 'static,
-    A: Aggregate + 'static,
+    D: Domain + 'static,
 {
     async fn new(
-        queries: Vec<Box<dyn Query<A>>>,
-        services: A::Services,
-    ) -> agent_issuance::state::ApplicationState<A, V>
+        queries: Vec<Box<dyn Query<D::Aggregate>>>,
+        services: <D::Aggregate as Aggregate>::Services,
+    ) -> agent_issuance::state::AggregateHandler<D>
     where
         Self: Sized,
     {
         let pool = default_postgress_pool(&config!("db_connection_string").unwrap()).await;
         let (cqrs, issuance_data_query) = cqrs_framework(pool, queries, services);
-        Arc::new(ApplicationState {
+        Arc::new(AggregateHandler {
             cqrs,
             issuance_data_query,
-        }) as agent_issuance::state::ApplicationState<A, V>
+        }) as agent_issuance::state::AggregateHandler<D>
     }
 
     async fn execute_with_metadata(
         &self,
         aggregate_id: &str,
-        command: A::Command,
+        command: <D::Aggregate as Aggregate>::Command,
         metadata: HashMap<String, String>,
-    ) -> Result<(), cqrs_es::AggregateError<A::Error>>
+    ) -> Result<(), cqrs_es::AggregateError<<D::Aggregate as Aggregate>::Error>>
     where
-        A::Command: Send + Sync,
+        <D::Aggregate as Aggregate>::Command: Send + Sync,
     {
         self.cqrs.execute_with_metadata(aggregate_id, command, metadata).await
     }
 
-    async fn load(&self, view_id: &str) -> Result<Option<V>, PersistenceError> {
+    async fn load(&self, view_id: &str) -> Result<Option<D::View>, PersistenceError> {
         self.issuance_data_query.load(view_id).await
     }
 }

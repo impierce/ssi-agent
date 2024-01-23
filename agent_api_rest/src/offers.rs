@@ -1,7 +1,7 @@
 use agent_issuance::{
     handlers::{command_handler, query_handler},
     offer::{aggregate::Offer, command::OfferCommand, queries::OfferView},
-    state::{AggregateHandler, ApplicationState},
+    state::ApplicationState,
 };
 use axum::{
     extract::{Json, State},
@@ -10,10 +10,15 @@ use axum::{
 };
 use serde_json::Value;
 
+use crate::AggregateHandler;
+
 // use crate::AGGREGATE_ID;
 
 // #[axum_macros::debug_handler]
-pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> impl IntoResponse {
+pub(crate) async fn offers(
+    State(state): State<AggregateHandler<Offer>>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id
     } else {
@@ -25,7 +30,7 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
         pre_authorized_code,
     };
 
-    match command_handler("OFFER-0123".to_string(), &state.offer, command).await {
+    match command_handler("OFFER-0123".to_string(), &state, command).await {
         Ok(_) => {}
         Err(err) => {
             println!("Error: {:#?}\n", err);
@@ -33,7 +38,7 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
         }
     };
 
-    match query_handler("OFF-99988".to_string(), &state.offer).await {
+    match query_handler("OFF-99988".to_string(), &state).await {
         // Ok(Some(view)) => {
         //     let credential_offer = view
         //         .subjects

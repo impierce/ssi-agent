@@ -26,6 +26,9 @@ use crate::server_config::aggregate::ServerConfig;
 use crate::server_config::error::ServerConfigError::{
     MissingAuthorizationServerMetadataError, MissingCredentialIssuerMetadataError,
 };
+use crate::state::Domain;
+
+use super::queries::OfferView;
 
 // TODO: remove this.
 const UNSAFE_ISSUER_KEY: &str = "this-is-a-very-UNSAFE-issuer-key";
@@ -54,6 +57,11 @@ pub struct Offer {
     pub server_config: ServerConfig,
     pub token_response: Option<TokenResponse>,
     pub credential_response: Option<CredentialResponse>,
+}
+
+impl Domain for Offer {
+    type Aggregate = Self;
+    type View = OfferView;
 }
 
 #[async_trait]

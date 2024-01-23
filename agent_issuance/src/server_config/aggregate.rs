@@ -10,6 +10,9 @@ use crate::server_config::entity::{Image, Root};
 use crate::server_config::error::ServerConfigError;
 use crate::server_config::event::ServerConfigEvent;
 use crate::server_config::services::ServerConfigServices;
+use crate::state::Domain;
+
+use super::queries::ServerConfigView;
 
 /// An aggregate that holds the configuration of the server.
 #[derive(Clone, Default, Deserialize, Serialize, Debug)]
@@ -21,6 +24,11 @@ pub struct ServerConfig {
     credential_issuer_metadata: Option<CredentialIssuerMetadata>,
     // Entities
     // issuer_logo: Image,
+}
+
+impl Domain for ServerConfig {
+    type Aggregate = Self;
+    type View = ServerConfigView;
 }
 
 #[async_trait]

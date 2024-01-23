@@ -1,11 +1,10 @@
 use agent_issuance::{
-    credential::command::CredentialCommand,
+    // model::aggregate::IssuanceData,
+    // queries::IssuanceDataView,,
+    credential::{aggregate::Credential, command::CredentialCommand},
     // command::IssuanceCommand,
     handlers::{command_handler, query_handler},
     offer::{aggregate::Offer, command::OfferCommand, queries::OfferView},
-    // model::aggregate::IssuanceData,
-    // queries::IssuanceDataView,
-    state::{AggregateHandler, ApplicationState},
 };
 use axum::{
     extract::{Json, State},
@@ -15,11 +14,13 @@ use axum::{
 use axum_auth::AuthBearer;
 use oid4vci::credential_request::CredentialRequest;
 
+use crate::AggregateHandler;
+
 // use crate::AGGREGATE_ID;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
-    State(state): State<ApplicationState>,
+    State(state): State<AggregateHandler<Offer>>,
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> impl IntoResponse {
@@ -28,7 +29,7 @@ pub(crate) async fn credential(
         credential_request,
     };
 
-    match command_handler("CRED-01".to_string(), &state.offer, command).await {
+    match command_handler("CRED-01".to_string(), &state, command).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => {
             println!("Error: {:#?}\n", err);

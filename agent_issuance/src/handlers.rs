@@ -2,7 +2,7 @@ use crate::{
     credential::{command::CredentialCommand, error::CredentialError},
     offer::{command::OfferCommand, error::OfferError},
     server_config::{command::ServerConfigCommand, error::ServerConfigError},
-    state::AggregateHandler,
+    state::{AggregateHandler, Domain},
 };
 use cqrs_es::{persist::PersistenceError, Aggregate, AggregateError, View};
 use serde_json::Value;
@@ -10,10 +10,10 @@ use std::collections::HashMap;
 use time::format_description::well_known::Rfc3339;
 use tracing::{debug, error};
 
-pub async fn query_handler<A: Aggregate, V: View<A>>(
+pub async fn query_handler<D: Domain>(
     credential_id: String,
-    state: &AggregateHandler<A, V>,
-) -> Result<Option<V>, PersistenceError> {
+    state: &AggregateHandler<D>,
+) -> Result<Option<D::View>, PersistenceError> {
     match state.load(&credential_id).await {
         Ok(view) => {
             debug!("View: {:#?}\n", view);
@@ -26,13 +26,13 @@ pub async fn query_handler<A: Aggregate, V: View<A>>(
     }
 }
 
-pub async fn command_handler<A: Aggregate, V: View<A>>(
+pub async fn command_handler<D: Domain>(
     aggregate_id: String,
-    state: &AggregateHandler<A, V>,
-    command: A::Command,
-) -> Result<(), AggregateError<<A as Aggregate>::Error>>
+    state: &AggregateHandler<D>,
+    command: <D::Aggregate as Aggregate>::Command,
+) -> Result<(), AggregateError<<D::Aggregate as Aggregate>::Error>>
 where
-    A::Command: Send + Sync,
+    <D::Aggregate as Aggregate>::Command: Send + Sync,
 {
     let mut metadata = HashMap::new();
     metadata.insert(

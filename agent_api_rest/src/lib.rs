@@ -9,10 +9,11 @@ use agent_issuance::{
     offer::{aggregate::Offer, queries::OfferView},
     // model::aggregate::IssuanceData,
     // queries::IssuanceDataView,
-    server_config::command::ServerConfigCommand,
-    state::{AggregateHandler, ApplicationState, CQRS},
+    server_config::{aggregate::ServerConfig, command::ServerConfigCommand, queries::ServerConfigView},
+    state::{self, ApplicationState, Domain, CQRS},
 };
 use axum::{
+    extract::FromRef,
     routing::{get, post},
     Router,
 };
@@ -28,6 +29,35 @@ use credentials::credentials;
 use offers::offers;
 use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
 use serde_json::json;
+
+#[derive(Clone)]
+pub(crate) struct AggregateHandler<D: Domain>(pub(crate) state::AggregateHandler<D>);
+
+impl<D: Domain> std::ops::Deref for AggregateHandler<D> {
+    type Target = state::AggregateHandler<D>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl FromRef<ApplicationState> for AggregateHandler<Offer> {
+    fn from_ref(application_state: &ApplicationState) -> AggregateHandler<Offer> {
+        AggregateHandler(application_state.offer.clone())
+    }
+}
+
+impl FromRef<ApplicationState> for AggregateHandler<Credential> {
+    fn from_ref(application_state: &ApplicationState) -> AggregateHandler<Credential> {
+        AggregateHandler(application_state.credential.clone())
+    }
+}
+
+impl FromRef<ApplicationState> for AggregateHandler<ServerConfig> {
+    fn from_ref(application_state: &ApplicationState) -> AggregateHandler<ServerConfig> {
+        AggregateHandler(application_state.server_config.clone())
+    }
+}
 
 // TODO: What to do with aggregate_id's?
 // pub const AGGREGATE_ID: &str = "agg-id-F39A0C";

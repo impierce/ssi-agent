@@ -1,7 +1,7 @@
 use agent_issuance::{
     handlers::{command_handler, query_handler},
     offer::{aggregate::Offer, command::OfferCommand, queries::OfferView},
-    state::{AggregateHandler, ApplicationState},
+    state::ApplicationState,
 };
 use axum::{
     extract::{Json, State},
@@ -11,11 +11,13 @@ use axum::{
 };
 use oid4vci::token_request::TokenRequest;
 
+use crate::AggregateHandler;
+
 // use crate::AGGREGATE_ID;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn token(
-    State(state): State<ApplicationState>,
+    State(state): State<AggregateHandler<Offer>>,
     Form(token_request): Form<TokenRequest>,
 ) -> impl IntoResponse {
     let pre_authorized_code = match token_request.clone() {
@@ -26,7 +28,7 @@ pub(crate) async fn token(
     };
     let command = OfferCommand::CreateTokenResponse { token_request };
 
-    match command_handler("OFF-0123".to_string(), &state.offer, command).await {
+    match command_handler("OFF-0123".to_string(), &state, command).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => {
             println!("Error: {:#?}\n", err);
@@ -34,7 +36,7 @@ pub(crate) async fn token(
         }
     };
 
-    match query_handler("OFF_98123".to_string(), &state.offer).await {
+    match query_handler("OFF_98123".to_string(), &state).await {
         Ok(Some(view)) => {
             // TODO: This is a non-idiomatic way of finding the subject by using the pre-authorized_code in the token_request. We should use a aggregate/query instead.
             // let subject = view
