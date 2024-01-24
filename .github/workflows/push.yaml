@@ -11,12 +11,7 @@
 
 name: Build and Deploy to GKE
 
-on:
-  push:
-    branches:
-      - non-existent-branch-to-disable-github-worklow
-      #- main
-      #- dev
+on: workflow_dispatch
 
 env:
   ARTIFACTORY_HOST: europe-west4-docker.pkg.dev
