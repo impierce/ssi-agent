@@ -8,6 +8,10 @@
 
 Build and run the **SSI Agent** in a local Docker environment following [these steps](./agent_application/docker/README.md).
 
+## Changelog
+
+From time to time breaking changes can occur. Please make sure you read Changelog.md before updating.
+
 ## Architecture
 
 ![alt text](UniCore.drawio.png "UniCore")
