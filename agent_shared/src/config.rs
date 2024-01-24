@@ -25,7 +25,11 @@ pub fn config(package_name: &str) -> config::Config {
 /// Read environment variables for tests that can be used across packages
 #[cfg(feature = "test")]
 fn test_config() -> config::Config {
+    use std::env;
+
     dotenvy::from_filename("agent_shared/tests/.env.test").ok();
+
+    env::remove_var("AGENT_APPLICATION_BASE_PATH");
 
     config::Config::builder()
         .add_source(config::Environment::with_prefix("TEST"))

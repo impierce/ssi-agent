@@ -70,17 +70,6 @@ mod tests {
         pub static ref BASE_URL: url::Url = url::Url::parse("https://example.com").unwrap();
     }
 
-    pub fn init_env_vars() {
-        env::remove_var("AGENT_APPLICATION_BASE_PATH");
-        env::remove_var("AGENT_APPLICATION_URL");
-        env::set_var("AGENT_CONFIG_LOG_FORMAT", "json");
-        env::set_var("AGENT_CONFIG_EVENT_STORE", "postgres");
-        env::set_var(
-            "AGENT_STORE_DB_CONNECTION_STRING",
-            "postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo",
-        );
-    }
-
     pub async fn create_unsigned_credential(state: ApplicationState<IssuanceData, IssuanceDataView>) -> String {
         state
             .execute_with_metadata(
