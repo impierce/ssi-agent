@@ -31,7 +31,7 @@ services:
     build:
       context: ../..
       dockerfile: ./agent_application/docker/Dockerfile
-    restart: always
+    #restart: always
     ports:
       - 3033:3033
     environment:
