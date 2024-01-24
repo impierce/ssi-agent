@@ -59,7 +59,7 @@ pub(crate) async fn credential(
 mod tests {
     use crate::{
         app,
-        tests::{create_credential_offer, create_token_response, create_unsigned_credential, init_env_vars, BASE_URL},
+        tests::{create_credential_offer, create_token_response, create_unsigned_credential, BASE_URL},
     };
 
     use super::*;
@@ -78,8 +78,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_credential_endpoint() {
-        init_env_vars();
-
         let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
 
         initialize(state.clone(), startup_commands(BASE_URL.clone())).await;

@@ -27,10 +27,7 @@ pub(crate) async fn openid_credential_issuer(
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        app,
-        tests::{init_env_vars, BASE_URL},
-    };
+    use crate::{app, tests::BASE_URL};
 
     use super::*;
     use agent_issuance::{
@@ -59,8 +56,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
-        init_env_vars();
-
         let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
 
         initialize(
