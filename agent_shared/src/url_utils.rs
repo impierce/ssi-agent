@@ -46,3 +46,38 @@ impl AddFunctions for url::Url {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use url::Url;
+    use crate::url_utils::AddFunctions;
+
+    #[test]
+    fn test_add_path() {
+
+        let url = Url::parse("https://test.example.com/unicore/").unwrap();
+        let res: String = url.add_path("/some-path/").into();
+
+        assert_eq!("https://test.example.com/unicore/some-path/", &res);
+
+        let res: String = url.add_path("some-path/").into();
+
+        assert_eq!("https://test.example.com/unicore/some-path/", &res);
+
+        let res: String = url.add_path("some-path").into();
+
+        assert_eq!("https://test.example.com/unicore/some-path/", &res);
+    }
+
+    #[test]
+    fn test_add_file() {
+        let url = Url::parse("https://test.example.com/unicore/").unwrap();
+        let res: String = url.add_file("/some-file.txt").into();
+
+        assert_eq!("https://test.example.com/unicore/some-file.txt", &res);
+
+        let res: String = url.add_file("some-file.txt").into();
+
+        assert_eq!("https://test.example.com/unicore/some-file.txt", &res);
+    }
+}
