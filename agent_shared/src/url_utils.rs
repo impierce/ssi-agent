@@ -54,7 +54,6 @@ mod tests {
 
     #[test]
     fn test_add_path() {
-
         let url = Url::parse("https://test.example.com/unicore/").unwrap();
         let res: String = url.add_path("/some-path/").into();
 
