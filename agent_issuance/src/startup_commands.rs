@@ -1,4 +1,4 @@
-use agent_shared::{config, url_utils::AddFunctions};
+use agent_shared::{config, url_utils::UrlAddFunctions};
 use oid4vci::{
     credential_format_profiles::{
         w3c_verifiable_credentials::jwt_vc_json::{CredentialDefinition, JwtVcJson},

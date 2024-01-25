@@ -422,7 +422,7 @@ pub mod tests {
     };
 
     use super::*;
-    use agent_shared::AddFunctions;
+    use agent_shared::UrlAddFunctions;
     use cqrs_es::test::TestFramework;
     use did_key::Ed25519KeyPair;
     use lazy_static::lazy_static;

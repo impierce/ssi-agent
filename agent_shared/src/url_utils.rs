@@ -1,17 +1,17 @@
-pub trait AddFunctions {
+pub trait UrlAddFunctions {
     fn add_path(&self, path: &str) -> url::Url;
     fn add_file(&self, file: &str) -> url::Url;
 }
 
-impl AddFunctions for url::Url {
+impl UrlAddFunctions for url::Url {
     fn add_path(&self, path: &str) -> url::Url {
         let mut path = path.to_string();
 
-        if path.starts_with("/") {
+        if path.starts_with('/') {
             path.remove(0);
         }
 
-        if !path.ends_with("/") {
+        if !path.ends_with('/') {
             path.push('/')
         }
 
@@ -30,7 +30,7 @@ impl AddFunctions for url::Url {
     fn add_file(&self, file: &str) -> url::Url {
         let mut path = file.to_string();
 
-        if path.starts_with("/") {
+        if path.starts_with('/') {
             path.remove(0);
         }
 
@@ -50,7 +50,7 @@ impl AddFunctions for url::Url {
 #[cfg(test)]
 mod tests {
     use url::Url;
-    use crate::url_utils::AddFunctions;
+    use crate::url_utils::UrlAddFunctions;
 
     #[test]
     fn test_add_path() {

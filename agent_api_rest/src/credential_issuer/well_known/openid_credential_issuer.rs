@@ -35,7 +35,7 @@ mod tests {
         startup_commands::{create_credentials_supported, load_credential_issuer_metadata},
         state::{initialize, CQRS},
     };
-    use agent_shared::{config, AddFunctions};
+    use agent_shared::{config, UrlAddFunctions};
     use agent_store::in_memory;
     use axum::{
         body::Body,

@@ -3,6 +3,7 @@ mod credentials;
 mod offers;
 
 use agent_issuance::{model::aggregate::IssuanceData, queries::IssuanceDataView, state::ApplicationState};
+use agent_shared::config;
 use axum::{
     routing::{get, post},
     Router,
@@ -16,25 +17,31 @@ use credential_issuer::{
 };
 use credentials::credentials;
 use offers::offers;
-use std::env;
 
 // TODO: What to do with aggregate_id's?
 pub const AGGREGATE_ID: &str = "agg-id-F39A0C";
 
 pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
-    let base_path: Option<String> = env::var_os("AGENT_APPLICATION_BASE_PATH").map(|os| {
-        let err_msg = "can't parse AGENT_APPLICATION_BASE_PATH";
-        let base_path = os.into_string().expect(err_msg);
-
-        if base_path.starts_with("/") || base_path.ends_with("/") {
-            println!("AGENT_APPLICATION_BASE_PATH can't start or end with '/'");
+    let base_path = config!("base_path").map(|mut base_path| {
+        if base_path.starts_with('/') {
+            base_path.remove(0);
         }
+
+        if base_path.ends_with('/') {
+            base_path.pop();
+        }
+
+        if base_path.is_empty() {
+            panic!("AGENT_APPLICATION_BASE_PATH can't be empty, remove or set path");
+        }
+
+        tracing::info!("Base path: {:?}", base_path);
 
         base_path
     });
 
     let path = |suffix: &str| -> String {
-        if let Some(base_path) = &base_path {
+        if let Ok(base_path) = &base_path {
             format!("/{}{}", base_path, suffix)
         } else {
             suffix.to_string()
@@ -60,14 +67,29 @@ pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_issuance::command::IssuanceCommand;
+    use agent_issuance::{command::IssuanceCommand, services::IssuanceServices};
+    use agent_store::in_memory;
     use serde_json::json;
+    use agent_issuance::state::CQRS;
 
     pub const PRE_AUTHORIZED_CODE: &str = "pre-authorized_code";
     pub const SUBJECT_ID: &str = "00000000-0000-0000-0000-000000000000";
 
     lazy_static::lazy_static! {
         pub static ref BASE_URL: url::Url = url::Url::parse("https://example.com").unwrap();
+    }
+
+    async fn handler() {}
+
+    #[tokio::test]
+    #[should_panic]
+    async fn test_base_path_routes() {
+        let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
+        
+        std::env::set_var("AGENT_APPLICATION_BASE_PATH", "unicore");
+        let router = app(state);
+
+        let _ = router.route("/auth/token", post(handler));
     }
 
     pub async fn create_unsigned_credential(state: ApplicationState<IssuanceData, IssuanceDataView>) -> String {
