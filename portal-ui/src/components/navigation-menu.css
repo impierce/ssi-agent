@@ -1,0 +1,15 @@
+.navbar {
+    margin: 1em 0 0 1em;
+}
+
+ul {
+    background: black;   
+    list-style-type: none;
+    display: flex;
+    margin: 0;
+
+    li {
+        margin: 1em 1em 1em 0;
+    }
+
+}
