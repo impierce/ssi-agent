@@ -5,7 +5,7 @@ pub trait UrlAddFunctions {
 
 fn create_trailing_slash_url(url: &url::Url) -> url::Url {
          if !url.path().ends_with('/') {
-             let res = url::Url::parse(&format!("{}/", url.to_string())).unwrap();
+             let res = url::Url::parse(&format!("{}/", url)).unwrap();
              tracing::info!("res: {:?}", res);
              res
         } else {
