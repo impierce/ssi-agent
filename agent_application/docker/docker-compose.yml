@@ -37,6 +37,6 @@ services:
     environment:
       #AGENT_CONFIG_LOG_FORMAT: json
       AGENT_CONFIG_EVENT_STORE: postgres
+      #AGENT_CONFIG_BASE_PATH: "unicore"
       AGENT_APPLICATION_URL: ${AGENT_APPLICATION_URL}
-      AGENT_APPLICATION_BASE_PATH: "unicore"
       AGENT_STORE_DB_CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo

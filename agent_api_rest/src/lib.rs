@@ -32,7 +32,7 @@ pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
         }
 
         if base_path.is_empty() {
-            panic!("AGENT_APPLICATION_BASE_PATH can't be empty, remove or set path");
+            panic!("AGENT_CONFIG_BASE_PATH can't be empty, remove or set path");
         }
 
         tracing::info!("Base path: {:?}", base_path);

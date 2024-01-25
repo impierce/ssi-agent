@@ -3,6 +3,16 @@ pub trait UrlAddFunctions {
     fn add_file(&self, file: &str) -> url::Url;
 }
 
+fn create_trailing_slash_url(url: &url::Url) -> url::Url {
+         if !url.path().ends_with('/') {
+             let res = url::Url::parse(&format!("{}/", url.to_string())).unwrap();
+             tracing::info!("res: {:?}", res);
+             res
+        } else {
+            url.clone()
+        }
+}
+
 impl UrlAddFunctions for url::Url {
     fn add_path(&self, path: &str) -> url::Url {
         let mut path = path.to_string();
@@ -15,7 +25,9 @@ impl UrlAddFunctions for url::Url {
             path.push('/')
         }
 
-        let url = self.join(&path);
+        let url = create_trailing_slash_url(self).join(&path);
+
+        println!("{:?}", url);
 
         match url {
             Ok(url) => url,
@@ -30,11 +42,11 @@ impl UrlAddFunctions for url::Url {
     fn add_file(&self, file: &str) -> url::Url {
         let mut path = file.to_string();
 
-        if path.starts_with('/') {
+        if path.starts_with('/')  {
             path.remove(0);
         }
 
-        let url = self.join(&path);
+        let url = create_trailing_slash_url(self).join(&path);
 
         match url {
             Ok(url) => url,
@@ -66,6 +78,17 @@ mod tests {
         let res: String = url.add_path("some-path").into();
 
         assert_eq!("https://test.example.com/unicore/some-path/", &res);
+
+        // With base path (no trailing slash)
+        let url = Url::parse("https://test.example.com/unicore").unwrap();
+        let res: String = url.add_path("/some-path/").into();
+
+        assert_eq!("https://test.example.com/unicore/some-path/", &res);
+
+        let url = Url::parse("https://test.example.com").unwrap();
+        let res: String = url.add_path("/some-path/").into();
+
+        assert_eq!("https://test.example.com/some-path/", &res);
     }
 
     #[test]
@@ -78,5 +101,20 @@ mod tests {
         let res: String = url.add_file("some-file.txt").into();
 
         assert_eq!("https://test.example.com/unicore/some-file.txt", &res);
+
+        let url = Url::parse("https://test.example.com/unicore").unwrap();
+        let res: String = url.add_file("/some-file.txt").into();
+
+        assert_eq!("https://test.example.com/unicore/some-file.txt", &res);
+
+        let url = Url::parse("https://test.example.com").unwrap();
+        let res: String = url.add_file("/some-file.txt").into();
+
+        assert_eq!("https://test.example.com/some-file.txt", &res);
+
+        let url = Url::parse("https://test.example.com/").unwrap();
+        let res: String = url.add_file("/some-file.txt").into();
+
+        assert_eq!("https://test.example.com/some-file.txt", &res);
     }
 }
