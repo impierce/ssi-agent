@@ -59,7 +59,7 @@ fn get_base_path() -> Result<String, ConfigError> {
         }
 
         if base_path.is_empty() {
-            panic!("AGENT_CONFIG_BASE_PATH can't be empty, remove or set path");
+            panic!("AGENT_APPLICATION_BASE_PATH can't be empty, remove or set path");
         }
 
         tracing::info!("Base path: {:?}", base_path);
