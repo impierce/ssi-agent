@@ -3,18 +3,18 @@
 set -e
 
 [ -z "$IMAGE" ] && echo "Need to set IMAGE" && exit 1;
-[ -z "$ARTIFACTORY_HOST" ] && echo "Need to set ARTIFACTORY_HOST" && exit 1;
-[ -z "$ARTIFACTORY_REPO" ] && echo "Need to set ARTIFACTORY_REPO" && exit 1;
+[ -z "$ARTIFACT_REGISTRY_HOST" ] && echo "Need to set ARTIFACT_REGISTRY_HOST" && exit 1;
+[ -z "$ARTIFACT_REGISTRY_REPOSITORY" ] && echo "Need to set ARTIFACT_REGISTRY_REPOSITORY" && exit 1;
 [ -z "$PROJECT_ID" ] && echo "Need to set PROJECT_ID" && exit 1;
 [ -z "$GITHUB_SHA" ] && echo "Need to set GITHUB_SHA" && exit 1;
 
-export CONTAINER_REPO="$ARTIFACTORY_HOST/$PROJECT_ID/$ARTIFACTORY_REPO"
+export CONTAINER_REPO="$ARTIFACT_REGISTRY_HOST/$PROJECT_ID/$ARTIFACT_REGISTRY_REPOSITORY"
 
 echo $CONTAINER_REPO
 
 # Configure Docker to use the gcloud command-line tool as a credential
 # helper for authentication
-gcloud auth configure-docker $ARTIFACTORY_HOST
+gcloud auth configure-docker $ARTIFACT_REGISTRY_HOST
 
 [ -e build/ ] && rm -rf build 
 

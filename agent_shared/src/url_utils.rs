@@ -3,20 +3,20 @@ pub trait UrlAppendHelpers {
 }
 
 fn create_trailing_slash_url(url: &url::Url) -> url::Url {
-         if !url.path().ends_with('/') {
-             let res = url::Url::parse(&format!("{}/", url)).unwrap();
-             tracing::info!("res: {:?}", res);
-             res
-        } else {
-            url.clone()
-        }
+    if !url.path().ends_with('/') {
+        let res = url::Url::parse(&format!("{}/", url)).unwrap();
+        tracing::info!("res: {:?}", res);
+        res
+    } else {
+        url.clone()
+    }
 }
 
 impl UrlAppendHelpers for url::Url {
     fn append_path_segment(&self, file: &str) -> url::Url {
         let mut path = file.to_string();
 
-        if path.starts_with('/')  {
+        if path.starts_with('/') {
             path.remove(0);
         }
 
@@ -35,8 +35,8 @@ impl UrlAppendHelpers for url::Url {
 
 #[cfg(test)]
 mod tests {
-    use url::Url;
     use crate::url_utils::UrlAppendHelpers;
+    use url::Url;
 
     #[test]
     fn test_append_path() {

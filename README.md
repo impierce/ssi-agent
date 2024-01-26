@@ -8,9 +8,9 @@
 
 Build and run the **SSI Agent** in a local Docker environment following [these steps](./agent_application/docker/README.md).
 
-## Changelog
+## Breaking changes
 
-From time to time breaking changes can occur. Please make sure you read [Changelog.md](./CHANGELOG.md) before updating.
+From time to time breaking changes can occur. Please make sure you read the [CHANGELOG](./CHANGELOG.md) before updating.
 
 ## Architecture
 
@@ -20,22 +20,27 @@ UniCore makes use of several practical architectural principles—specifically, 
 Sourcing. Together, these principles contribute to a robust and scalable software solution.
 
 ### Hexagonal Architecture
+
 Hexagonal Architecture promotes modularity by separating the core business logic from external dependencies. UniCore's
 core functionality remains untangled from external frameworks, making it adaptable to changes without affecting the
 overall system.
 
 #### Core
+
 The core business logic of UniCore currently consists of the [**Core Issuance Agent**](./agent_issuance/README.md). This
 component is responsible for handling the issuance of credentials and offers. It defines the rules by which incoming
 **Commands** can change the state by emitting **Events**. The Core Issuance Agent has two major functions:
+
 - **Preparations**: Preparing the data that will be used in the issuance of credentials and credential offers.
 - **Credential Issuance**: Issuing credentials according to the OpenID for Verifiable Credential Issuance specification.
 
 #### Adapters
+
 UniCore's adapters are responsible for handling the communication between the core and external systems. Adapters can
 either be **Inbound** or **Outbound**. Inbound adapters are responsible for receiving incoming requests and translating
 them into commands that can be understood by the core. Outbound adapters are responsible for translating the core's
 **Events** into outgoing requests. In our current implementation, we have the following adapters:
+
 - [**REST API**](./agent_api_rest/) (Inbound): The REST API is responsible for receiving incoming HTTP requests from clients and translating them
   into commands that can be understood by the core.
 - [**Event Store**](./agent_store/) (Outbound): The Event Store is responsible for storing the events emitted by the
@@ -43,12 +48,15 @@ them into commands that can be understood by the core. Outbound adapters are res
   in-memory database for testing purposes.
 
 #### Application
+
 The [**Application**](./agent_application/) is responsible for orchestrating the core and adapters. It is responsible for initializing the core and
 adapters and connecting them together.
 
 ### CQRS
+
 CQRS is a design pattern that separates the responsibility for handling commands (changing state) from handling queries
 (retrieving state).
+
 - **Commands**: Commands are actions that are responsible for executing business logic
   and updating the application state.
 - **Queries**: Queries are responsible for reading data without modifying the state.
@@ -57,10 +65,11 @@ The separation of commands and queries simplifies the design and maintenance of 
 optimization of each side independently.
 
 ### Event Sourcing
+
 Event Sourcing is a pattern in which the application's state is determined by a sequence of events. Each event signifies a state change and is preserved in an event store. These **Events** serve as immutable facts about alterations in the application's state. The **Event Store**, functioning as a database, records events in the order of their occurrence. Consequently, it enables the reconstruction of the application's state at any given moment. This pattern not only ensures a dependable audit log for monitoring changes but also facilitates querying the system's state at various intervals.
 
-
 ## Interaction Sequence
+
 This sequence diagram illustrates the dynamic interaction flow within UniCore, focusing on the preparation and issuance of credentials and offers. The diagram also illustrates the OpenID4VCI Pre-Authorized Code Flow, which is used by wallets to obtain access tokens and credentials.
 
 ```mermaid
@@ -76,7 +85,7 @@ sequenceDiagram
 
     autonumber
 
-    Note over api_rest, store: Command and Query<br/>Responsibility Segregation (CQRS) 
+    Note over api_rest, store: Command and Query<br/>Responsibility Segregation (CQRS)
 
     Note over client, store: Agent Preparations
 
@@ -99,7 +108,7 @@ sequenceDiagram
     wallet->>api_rest: GET /.well-known/oauth-authorization-server
     api_rest->>store: Query
     store->>api_rest: View
-    api_rest->>wallet: 200 OK application/json    
+    api_rest->>wallet: 200 OK application/json
 
     wallet->>api_rest: GET /.well-known/openid-credential-issuer
     api_rest->>store: Query

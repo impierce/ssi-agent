@@ -7,17 +7,12 @@
 # To get a newer version, you will need to update the SHA.
 # You can also reference a tag or branch, but the action may change without warning.
 
-# TODO Project number from secrets
-
 name: Build and Deploy to GKE
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
 
 env:
-  ARTIFACTORY_HOST: europe-west4-docker.pkg.dev
-  ARTIFACTORY_REPO: impierce-repo
-  GKE_CLUSTER: impierce-cluster
-  GKE_ZONE: europe-west4-a
   IMAGE: unicore
 
 jobs:
@@ -40,8 +35,8 @@ jobs:
         uses: "google-github-actions/auth@v2"
         with:
           token_format: "access_token"
-          workload_identity_provider: projects/${{secrets.PROJECT_NR}}/locations/global/workloadIdentityPools/workload-ip/providers/workload-ip-provider
-          service_account: k8s-user@${{secrets.PROJECT_ID}}.iam.gserviceaccount.com
+          workload_identity_provider: projects/${{ secrets.PROJECT_NR }}/locations/global/workloadIdentityPools/workload-ip/providers/workload-ip-provider
+          service_account: k8s-user@${{ secrets.PROJECT_ID }}.iam.gserviceaccount.com
 
       - name: "Set up Cloud SDK"
         uses: "google-github-actions/setup-gcloud@v2"
@@ -56,15 +51,15 @@ jobs:
       # Get the GKE credentials so we can deploy to the cluster
       - uses: google-github-actions/get-gke-credentials@v2
         with:
-          cluster_name: ${{ env.GKE_CLUSTER }}
-          project_id: ${{ env.PROJECT_ID }}
-          location: ${{ env.GKE_ZONE }}
+          cluster_name: ${{ vars.GKE_CLUSTER_NAME }}
+          project_id: ${{ secrets.PROJECT_ID }}
+          location: ${{ vars.GKE_COMPUTE_ZONE }}
 
       - name: Create secret
-        run: | 
+        run: |
           kubectl -n ingress-apisix delete secret unicore-db-secret --ignore-not-found
           kubectl -n ingress-apisix create secret generic unicore-db-secret \
-            --from-literal='connection-string=${{secrets.AGENT_STORE_DB_CONNECTION_STRING}}'
+            --from-literal='connection-string=${{ secrets.AGENT_STORE_DB_CONNECTION_STRING }}'
 
       ## Deploy the Docker image to the GKE cluster
       - name: Deploy

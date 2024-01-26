@@ -71,10 +71,10 @@ fn get_base_path() -> Result<String, ConfigError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_issuance::state::CQRS;
     use agent_issuance::{command::IssuanceCommand, services::IssuanceServices};
     use agent_store::in_memory;
     use serde_json::json;
-    use agent_issuance::state::CQRS;
 
     pub const PRE_AUTHORIZED_CODE: &str = "pre-authorized_code";
     pub const SUBJECT_ID: &str = "00000000-0000-0000-0000-000000000000";
@@ -89,7 +89,7 @@ mod tests {
     #[should_panic]
     async fn test_base_path_routes() {
         let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
-        
+
         std::env::set_var("AGENT_APPLICATION_BASE_PATH", "unicore");
         let router = app(state);
 
