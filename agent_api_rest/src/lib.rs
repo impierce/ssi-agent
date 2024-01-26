@@ -3,7 +3,7 @@ mod credentials;
 mod offers;
 
 use agent_issuance::{model::aggregate::IssuanceData, queries::IssuanceDataView, state::ApplicationState};
-use agent_shared::config;
+use agent_shared::{config, ConfigError};
 use axum::{
     routing::{get, post},
     Router,
@@ -22,23 +22,7 @@ use offers::offers;
 pub const AGGREGATE_ID: &str = "agg-id-F39A0C";
 
 pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
-    let base_path = config!("base_path").map(|mut base_path| {
-        if base_path.starts_with('/') {
-            base_path.remove(0);
-        }
-
-        if base_path.ends_with('/') {
-            base_path.pop();
-        }
-
-        if base_path.is_empty() {
-            panic!("AGENT_CONFIG_BASE_PATH can't be empty, remove or set path");
-        }
-
-        tracing::info!("Base path: {:?}", base_path);
-
-        base_path
-    });
+    let base_path = get_base_path();
 
     let path = |suffix: &str| -> String {
         if let Ok(base_path) = &base_path {
@@ -62,6 +46,26 @@ pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
         .route(&path("/auth/token"), post(token))
         .route(&path("/openid4vci/credential"), post(credential))
         .with_state(state)
+}
+
+fn get_base_path() -> Result<String, ConfigError> {
+    config!("base_path").map(|mut base_path| {
+        if base_path.starts_with('/') {
+            base_path.remove(0);
+        }
+
+        if base_path.ends_with('/') {
+            base_path.pop();
+        }
+
+        if base_path.is_empty() {
+            panic!("AGENT_CONFIG_BASE_PATH can't be empty, remove or set path");
+        }
+
+        tracing::info!("Base path: {:?}", base_path);
+
+        base_path
+    })
 }
 
 #[cfg(test)]

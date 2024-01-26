@@ -1,7 +1,8 @@
 pub mod config;
 pub mod url_utils;
 
-pub use url_utils::UrlAddFunctions;
+pub use url_utils::UrlAppendHelpers;
+pub use ::config::ConfigError;
 
 /// Macro to read configuration using the package name as prefix.
 #[macro_export]

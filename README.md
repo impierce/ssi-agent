@@ -10,7 +10,7 @@ Build and run the **SSI Agent** in a local Docker environment following [these s
 
 ## Changelog
 
-From time to time breaking changes can occur. Please make sure you read [Changelog.md](./Changelog.md) before updating.
+From time to time breaking changes can occur. Please make sure you read [Changelog.md](./CHANGELOG.md) before updating.
 
 ## Architecture
 

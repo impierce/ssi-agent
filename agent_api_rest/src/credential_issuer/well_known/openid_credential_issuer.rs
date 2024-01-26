@@ -35,7 +35,7 @@ mod tests {
         startup_commands::{create_credentials_supported, load_credential_issuer_metadata},
         state::{initialize, CQRS},
     };
-    use agent_shared::{config, UrlAddFunctions};
+    use agent_shared::{config, UrlAppendHelpers};
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -91,7 +91,7 @@ mod tests {
             CredentialIssuerMetadata {
                 credential_issuer: BASE_URL.clone(),
                 authorization_server: None,
-                credential_endpoint: BASE_URL.add_file("openid4vci/credential"),
+                credential_endpoint: BASE_URL.append_path_segment("openid4vci/credential"),
                 batch_credential_endpoint: None,
                 deferred_credential_endpoint: None,
                 credentials_supported: vec![CredentialsSupportedObject {

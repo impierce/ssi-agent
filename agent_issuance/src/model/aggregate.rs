@@ -422,7 +422,7 @@ pub mod tests {
     };
 
     use super::*;
-    use agent_shared::UrlAddFunctions;
+    use agent_shared::UrlAppendHelpers;
     use cqrs_es::test::TestFramework;
     use did_key::Ed25519KeyPair;
     use lazy_static::lazy_static;
@@ -647,15 +647,15 @@ pub mod tests {
         static ref AUTHORIZATION_SERVER_METADATA: Box<AuthorizationServerMetadata> =
             Box::new(AuthorizationServerMetadata {
                 issuer: BASE_URL.clone(),
-                token_endpoint: Some(BASE_URL.add_file("token")),
+                token_endpoint: Some(BASE_URL.append_path_segment("token")),
                 ..Default::default()
             });
         static ref CREDENTIAL_ISSUER_METADATA: CredentialIssuerMetadata = CredentialIssuerMetadata {
             credential_issuer: BASE_URL.clone(),
             authorization_server: None,
-            credential_endpoint: BASE_URL.add_file("credential"),
+            credential_endpoint: BASE_URL.append_path_segment("credential"),
             deferred_credential_endpoint: None,
-            batch_credential_endpoint: Some(BASE_URL.add_file("batch_credential")),
+            batch_credential_endpoint: Some(BASE_URL.append_path_segment("batch_credential")),
             credentials_supported: vec![],
             display: None,
         };
