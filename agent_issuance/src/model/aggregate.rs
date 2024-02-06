@@ -292,7 +292,7 @@ impl Aggregate for IssuanceData {
                         Decoder::from(&Subjects::try_from([issuer.clone() as Arc<dyn Subject>]).unwrap()),
                     )
                     .await
-                    .map_err(|_| InvalidProofError)?;
+                    .map_err(|e| InvalidProofError(e.to_string()))?;
 
                 let subject_did = proof
                     .rfc7519_claims
