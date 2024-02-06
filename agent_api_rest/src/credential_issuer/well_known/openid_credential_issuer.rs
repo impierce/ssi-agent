@@ -35,7 +35,7 @@ mod tests {
         startup_commands::{create_credentials_supported, load_credential_issuer_metadata},
         state::{initialize, CQRS},
     };
-    use agent_shared::config;
+    use agent_shared::{config, UrlAppendHelpers};
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -85,12 +85,13 @@ mod tests {
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let credential_issuer_metadata: CredentialIssuerMetadata = serde_json::from_slice(&body).unwrap();
+
         assert_eq!(
             credential_issuer_metadata,
             CredentialIssuerMetadata {
                 credential_issuer: BASE_URL.clone(),
                 authorization_server: None,
-                credential_endpoint: BASE_URL.join("openid4vci/credential").unwrap(),
+                credential_endpoint: BASE_URL.append_path_segment("openid4vci/credential"),
                 batch_credential_endpoint: None,
                 deferred_credential_endpoint: None,
                 credentials_supported: vec![CredentialsSupportedObject {

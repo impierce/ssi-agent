@@ -3,6 +3,7 @@ mod credentials;
 mod offers;
 
 use agent_issuance::{model::aggregate::IssuanceData, queries::IssuanceDataView, state::ApplicationState};
+use agent_shared::{config, ConfigError};
 use axum::{
     routing::{get, post},
     Router,
@@ -21,29 +22,78 @@ use offers::offers;
 pub const AGGREGATE_ID: &str = "agg-id-F39A0C";
 
 pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
+    let base_path = get_base_path();
+
+    let path = |suffix: &str| -> String {
+        if let Ok(base_path) = &base_path {
+            format!("/{}{}", base_path, suffix)
+        } else {
+            suffix.to_string()
+        }
+    };
+
     Router::new()
-        .route("/v1/credentials", post(credentials))
-        .route("/v1/offers", post(offers))
+        .route(&path("/v1/credentials"), post(credentials))
+        .route(&path("/v1/offers"), post(offers))
         .route(
-            "/.well-known/oauth-authorization-server",
+            &path("/.well-known/oauth-authorization-server"),
             get(oauth_authorization_server),
         )
-        .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
-        .route("/auth/token", post(token))
-        .route("/openid4vci/credential", post(credential))
+        .route(
+            &path("/.well-known/openid-credential-issuer"),
+            get(openid_credential_issuer),
+        )
+        .route(&path("/auth/token"), post(token))
+        .route(&path("/openid4vci/credential"), post(credential))
         .with_state(state)
+}
+
+fn get_base_path() -> Result<String, ConfigError> {
+    config!("base_path").map(|mut base_path| {
+        if base_path.starts_with('/') {
+            base_path.remove(0);
+        }
+
+        if base_path.ends_with('/') {
+            base_path.pop();
+        }
+
+        if base_path.is_empty() {
+            panic!("AGENT_APPLICATION_BASE_PATH can't be empty, remove or set path");
+        }
+
+        tracing::info!("Base path: {:?}", base_path);
+
+        base_path
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_issuance::command::IssuanceCommand;
+    use agent_issuance::state::CQRS;
+    use agent_issuance::{command::IssuanceCommand, services::IssuanceServices};
+    use agent_store::in_memory;
     use serde_json::json;
 
     pub const PRE_AUTHORIZED_CODE: &str = "pre-authorized_code";
     pub const SUBJECT_ID: &str = "00000000-0000-0000-0000-000000000000";
+
     lazy_static::lazy_static! {
         pub static ref BASE_URL: url::Url = url::Url::parse("https://example.com").unwrap();
+    }
+
+    async fn handler() {}
+
+    #[tokio::test]
+    #[should_panic]
+    async fn test_base_path_routes() {
+        let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
+
+        std::env::set_var("AGENT_APPLICATION_BASE_PATH", "unicore");
+        let router = app(state);
+
+        let _ = router.route("/auth/token", post(handler));
     }
 
     pub async fn create_unsigned_credential(state: ApplicationState<IssuanceData, IssuanceDataView>) -> String {

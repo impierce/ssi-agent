@@ -93,6 +93,7 @@ dependencies = [
  "config",
  "dotenvy",
  "tracing",
+ "url",
 ]
 
 [[package]]
