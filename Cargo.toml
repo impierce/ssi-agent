@@ -6,6 +6,7 @@ members = [
     "agent_issuance",
     "agent_shared",
     "agent_store",
+    "portal-ui/src-tauri"
 ]
 
 [workspace.dependencies]
