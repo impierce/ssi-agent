@@ -12,7 +12,7 @@ docker build -f docker/Dockerfile -t ssi-agent ..
 
 Inside the folder `/agent_application/docker`:
 
-1. _Inside `docker-compose.yml` replace the environment value: `AGENT_APPLICATION_URL` with your actual local ip address (such as http://192.168.1.234:3033)
+1. Inside `docker-compose.yml` replace the environment value: `AGENT_APPLICATION_URL` with your actual local ip address or url (such as http://192.168.1.234:3033)
 2. Optionally, add the following environment variables:
     - `AGENT_ISSUANCE_CREDENTIAL_NAME`: To set the name of the credentials that will be issued.
     - `AGENT_ISSUANCE_CREDENTIAL_LOGO_URL`: To set the URL of the logo that will be used in the credentials.
@@ -22,13 +22,12 @@ Inside the folder `/agent_application/docker`:
 docker compose up
 ```
 
-
-3. The REST API will be served at `http://0.0.0.0:3033`
+4. The REST API will be served at `http://0.0.0.0:3033`
 
 ---
 **NOTE**
 
-When you set the AGENT_APPLICATION_BASE_PATH to for example: "unicore"
-it will be available at: `http://0.0.0.0:3033/unicore`
+You can set the AGENT_CONFIG_BASE_PATH to for example: "unicore"
+if you don't have rewrite to root rules enabled on your reverse proxy.
 
 ---

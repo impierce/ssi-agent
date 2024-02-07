@@ -31,13 +31,12 @@ services:
     build:
       context: ../..
       dockerfile: ./agent_application/docker/Dockerfile
-    restart: always
+    #restart: "${DOCKER_RESTART_POLICY:always}"
     ports:
       - 3033:3033
     environment:
-      AGENT_CONFIG_LOG_FORMAT: json
+      #AGENT_CONFIG_LOG_FORMAT: json
       AGENT_CONFIG_EVENT_STORE: postgres
-      # Relative paths can't start or end with '/'
+      #AGENT_CONFIG_BASE_PATH: "unicore"
       AGENT_APPLICATION_URL: ${AGENT_APPLICATION_URL}
-      #AGENT_APPLICATION_BASE_PATH: "unicore"
       AGENT_STORE_DB_CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo

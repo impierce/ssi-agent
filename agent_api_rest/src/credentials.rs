@@ -68,10 +68,7 @@ pub(crate) async fn credentials(
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        app,
-        tests::{init_env_vars, SUBJECT_ID},
-    };
+    use crate::{app, tests::SUBJECT_ID};
 
     use super::*;
     use agent_issuance::{
@@ -89,8 +86,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_credentials_endpoint() {
-        init_env_vars();
-
         let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
 
         initialize(state.clone(), vec![load_credential_format_template()]).await;

@@ -1,48 +1,90 @@
-pub trait AddFunctions {
-    fn add_path(&self, path: &str) -> url::Url;
-    fn add_file(&self, file: &str) -> url::Url;
+pub trait UrlAppendHelpers {
+    fn append_path_segment(&self, file: &str) -> url::Url;
 }
 
-impl AddFunctions for url::Url {
-    fn add_path(&self, path: &str) -> url::Url {
-        let mut path = path.to_string();
+fn create_trailing_slash_url(url: &url::Url) -> url::Url {
+         if !url.path().ends_with('/') {
+             let res = url::Url::parse(&format!("{}/", url)).unwrap();
+             tracing::info!("res: {:?}", res);
+             res
+        } else {
+            url.clone()
+        }
+}
 
-        if path.starts_with("/") {
+impl UrlAppendHelpers for url::Url {
+    fn append_path_segment(&self, file: &str) -> url::Url {
+        let mut path = file.to_string();
+
+        if path.starts_with('/')  {
             path.remove(0);
         }
 
-        if !path.ends_with("/") {
-            path.push('/')
-        }
-
-        let url = self.join(&path);
+        let url = create_trailing_slash_url(self).join(&path);
 
         match url {
             Ok(url) => url,
             Err(err) => {
-                let err_str = format!("Path can't be added: {:?}\n{:?}", path, err);
+                let err_str = format!("Segment can't be added: {:?}\n{:?}", path, err);
                 tracing::error!("{:?}", &err_str);
                 panic!("{:?}", &err_str);
             }
         }
     }
+}
 
-    fn add_file(&self, file: &str) -> url::Url {
-        let mut path = file.to_string();
+#[cfg(test)]
+mod tests {
+    use url::Url;
+    use crate::url_utils::UrlAppendHelpers;
 
-        if path.starts_with("/") {
-            path.remove(0);
-        }
+    #[test]
+    fn test_append_path() {
+        let url = Url::parse("https://test.example.com/unicore/").unwrap();
+        let res: String = url.append_path_segment("/some-path/").into();
 
-        let url = self.join(&path);
+        assert_eq!("https://test.example.com/unicore/some-path/", &res);
 
-        match url {
-            Ok(url) => url,
-            Err(err) => {
-                let err_str = format!("File can't be added: {:?}\n{:?}", path, err);
-                tracing::error!("{:?}", &err_str);
-                panic!("{:?}", &err_str);
-            }
-        }
+        let res: String = url.append_path_segment("some-path/").into();
+
+        assert_eq!("https://test.example.com/unicore/some-path/", &res);
+
+        // With base path (no trailing slash)
+        let url = Url::parse("https://test.example.com/unicore").unwrap();
+        let res: String = url.append_path_segment("/some-path/").into();
+
+        assert_eq!("https://test.example.com/unicore/some-path/", &res);
+
+        let url = Url::parse("https://test.example.com").unwrap();
+        let res: String = url.append_path_segment("/some-path/").into();
+
+        assert_eq!("https://test.example.com/some-path/", &res);
+    }
+
+    #[test]
+    fn test_append_filename() {
+        let url = Url::parse("https://test.example.com/unicore/").unwrap();
+        let res: String = url.append_path_segment("/some-file.txt").into();
+
+        assert_eq!("https://test.example.com/unicore/some-file.txt", &res);
+
+        let res: String = url.append_path_segment("some-file.txt").into();
+
+        assert_eq!("https://test.example.com/unicore/some-file.txt", &res);
+
+        let url = Url::parse("https://test.example.com/unicore").unwrap();
+        let res: String = url.append_path_segment("/some-file.txt").into();
+
+        assert_eq!("https://test.example.com/unicore/some-file.txt", &res);
+
+        let url = Url::parse("https://test.example.com").unwrap();
+        let res: String = url.append_path_segment("/some-file.txt").into();
+
+        assert_eq!("https://test.example.com/some-file.txt", &res);
+
+        let url = Url::parse("https://test.example.com/").unwrap();
+        let res: String = url.append_path_segment("/some-file.txt").into();
+
+        assert_eq!("https://test.example.com/some-file.txt", &res);
     }
 }

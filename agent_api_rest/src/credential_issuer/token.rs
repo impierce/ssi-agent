@@ -61,7 +61,7 @@ pub(crate) async fn token(
 mod tests {
     use crate::{
         app,
-        tests::{create_credential_offer, create_unsigned_credential, init_env_vars, BASE_URL, PRE_AUTHORIZED_CODE},
+        tests::{create_credential_offer, create_unsigned_credential, BASE_URL, PRE_AUTHORIZED_CODE},
     };
 
     use super::*;
@@ -80,8 +80,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_token_endpoint() {
-        init_env_vars();
-
         let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
 
         initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
@@ -95,7 +93,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri(format!("/auth/token"))
+                    .uri("/auth/token")
                     .header(
                         http::header::CONTENT_TYPE,
                         mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
