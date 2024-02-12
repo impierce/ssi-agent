@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::credential::command::CredentialCommand;
 use crate::credential::entity::Data;
@@ -10,36 +9,17 @@ use crate::credential::error::CredentialError::{self, InvalidCredentialError};
 use crate::credential::event::CredentialEvent;
 use crate::credential::services::CredentialServices;
 use crate::credential::value_object::Subject;
-use crate::state::Domain;
-
-use super::queries::CredentialView;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
 #[derivative(PartialEq)]
 pub struct Credential {
     // Entity
-    pub data: Data,
+    // pub data: Data,
+    pub credential: serde_json::Value,
     // Value Objects
     pub credential_format_template: serde_json::Value,
-    pub subject: Subject,
+    // pub subject: Subject,
 }
-
-impl Domain for Credential {
-    type Aggregate = Self;
-    type View = CredentialView;
-}
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
-// #[derivative(PartialEq)]
-// pub struct IssuanceSubject {
-//     #[derivative(PartialEq = "ignore")]
-//     pub id: String,
-//     pub credential_offer: Option<CredentialOffer>,
-//     pub credentials: Option<Credential>,
-//     pub pre_authorized_code: String,
-//     pub token_response: Option<TokenResponse>,
-//     pub credential_response: Option<CredentialResponse>,
-// }
 
 #[async_trait]
 impl Aggregate for Credential {
@@ -60,18 +40,11 @@ impl Aggregate for Credential {
         match command {
             CredentialCommand::LoadCredentialFormatTemplate {
                 credential_format_template,
-            } => {
-                // self.credential_format_template = credential_format_template;
-                Ok(vec![CredentialEvent::CredentialFormatTemplateLoaded {
-                    credential_format_template,
-                }])
-            }
-            CredentialCommand::CreateUnsignedCredential { subject, credential } => {
+            } => Ok(vec![CredentialEvent::CredentialFormatTemplateLoaded {
+                credential_format_template,
+            }]),
+            CredentialCommand::CreateUnsignedCredential { credential } => {
                 let mut events = vec![];
-
-                events.push(CredentialEvent::SubjectCreated {
-                    subject: subject.clone(),
-                });
 
                 // if !self.subjects.iter().any(|subject| subject.id == subject_id) {
                 //     events.push(CredentialEvent::SubjectCreated {
@@ -88,23 +61,18 @@ impl Aggregate for Credential {
 
                 let mut unsigned_credential = self.credential_format_template.clone();
 
+                println!("unsigned_credential: {:?}", unsigned_credential);
+
                 unsigned_credential
                     .as_object_mut()
                     .ok_or(InvalidCredentialError)?
                     .insert("credentialSubject".to_string(), credential["credentialSubject"].clone());
 
+                println!("unsigned_credential2: {:?}", unsigned_credential);
+
                 events.push(CredentialEvent::UnsignedCredentialCreated {
                     // subject_id,
-                    credential: Credential {
-                        data: Data {
-                            id: uuid::Uuid::new_v4(),
-                            raw: credential,
-                        },
-                        subject,
-                        credential_format_template: unsigned_credential,
-                        // id: uuid::Uuid::new_v4(),
-                        // unsigned_credential,
-                    },
+                    credential: unsigned_credential.clone(),
                 });
 
                 Ok(events)
@@ -119,16 +87,95 @@ impl Aggregate for Credential {
             CredentialFormatTemplateLoaded {
                 credential_format_template,
             } => self.credential_format_template = credential_format_template,
-            SubjectCreated { subject } => self.subject = subject,
             UnsignedCredentialCreated { credential } => {
+                self.credential = credential;
                 // if let Some(subject) = self.subjects.iter_mut().find(|subject| subject.id == subject_id) {
                 //     subject.credentials.replace(credential);
                 // }
                 // self.data = Data { id: credential.data.id}
-                self.data = credential.data;
-                self.subject = credential.subject;
-                self.credential_format_template = credential.credential_format_template;
+                // self.data = credential.data;
+                // self.credential_format_template = credential.credential_format_template;
             }
         }
+    }
+}
+
+#[cfg(test)]
+pub mod credential_tests {
+    use super::*;
+
+    use lazy_static::lazy_static;
+    use oid4vci::credential_issuer::credentials_supported::CredentialsSupportedObject;
+    use serde_json::json;
+
+    use cqrs_es::test::TestFramework;
+
+    use crate::credential::aggregate::Credential;
+    use crate::credential::event::CredentialEvent;
+
+    type CredentialTestFramework = TestFramework<Credential>;
+
+    #[test]
+    fn test_load_credential_format_template() {
+        CredentialTestFramework::with(CredentialServices)
+            .given_no_previous_events()
+            .when(CredentialCommand::LoadCredentialFormatTemplate {
+                credential_format_template: CREDENTIAL_FORMAT_TEMPLATE.clone(),
+            })
+            .then_expect_events(vec![CredentialEvent::CredentialFormatTemplateLoaded {
+                credential_format_template: CREDENTIAL_FORMAT_TEMPLATE.clone(),
+            }]);
+    }
+
+    #[test]
+    fn test_create_unsigned_credential() {
+        CredentialTestFramework::with(CredentialServices)
+            .given(vec![CredentialEvent::CredentialFormatTemplateLoaded {
+                credential_format_template: CREDENTIAL_FORMAT_TEMPLATE.clone(),
+            }])
+            .when(CredentialCommand::CreateUnsignedCredential {
+                credential: CREDENTIAL_SUBJECT.clone(),
+            })
+            .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
+                credential: UNSIGNED_CREDENTIAL.clone(),
+            }])
+    }
+
+    lazy_static! {
+        static ref CREDENTIAL_FORMAT_TEMPLATE: serde_json::Value =
+            serde_json::from_str(include_str!("../../res/credential_format_templates/openbadges_v3.json")).unwrap();
+        static ref CREDENTIAL_SUBJECT: serde_json::Value = json!(
+            {
+                "credentialSubject": {
+                    "id": {},
+                    "type": "AchievementSubject",
+                    "achievement": {
+                              "id": "https://example.com/achievements/21st-century-skills/teamwork",
+                              "type": "Achievement",
+                              "criteria": {
+                                  "narrative": "Team members are nominated for this badge by their peers and recognized upon review by Example Corp management."
+                              },
+                              "description": "This badge recognizes the development of the capacity to collaborate within a group environment.",
+                              "name": "Teamwork"
+                          }
+                  }
+            }
+        );
+        static ref UNSIGNED_CREDENTIAL: serde_json::Value = json!({
+          "@context": [
+            "https://www.w3.org/2018/credentials/v1",
+            "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
+          ],
+          "id": "http://example.com/credentials/3527",
+          "type": ["VerifiableCredential", "OpenBadgeCredential"],
+          "issuer": {
+            "id": "https://example.com/issuers/876543",
+            "type": "Profile",
+            "name": "Example Corp"
+          },
+          "issuanceDate": "2010-01-01T00:00:00Z",
+          "name": "Teamwork Badge",
+          "credentialSubject": CREDENTIAL_SUBJECT["credentialSubject"].clone(),
+        });
     }
 }

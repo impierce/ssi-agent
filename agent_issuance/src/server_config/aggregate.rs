@@ -10,25 +10,18 @@ use crate::server_config::entity::{Image, Root};
 use crate::server_config::error::ServerConfigError;
 use crate::server_config::event::ServerConfigEvent;
 use crate::server_config::services::ServerConfigServices;
-use crate::state::Domain;
-
-use super::queries::ServerConfigView;
 
 /// An aggregate that holds the configuration of the server.
 #[derive(Clone, Default, Deserialize, Serialize, Debug)]
 pub struct ServerConfig {
     // root: Root,
+    // TODO: Remove? already covered by aggregate_id
     id: uuid::Uuid,
     // Value Objects
     authorization_server_metadata: Option<AuthorizationServerMetadata>,
     credential_issuer_metadata: Option<CredentialIssuerMetadata>,
     // Entities
     // issuer_logo: Image,
-}
-
-impl Domain for ServerConfig {
-    type Aggregate = Self;
-    type View = ServerConfigView;
 }
 
 #[async_trait]
@@ -47,26 +40,26 @@ impl Aggregate for ServerConfig {
         command: Self::Command,
         _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
+        use ServerConfigCommand::*;
         use ServerConfigError::*;
+        use ServerConfigEvent::*;
 
         match command {
-            ServerConfigCommand::LoadAuthorizationServerMetadata {
+            LoadAuthorizationServerMetadata {
                 authorization_server_metadata,
-            } => Ok(vec![ServerConfigEvent::AuthorizationServerMetadataLoaded {
+            } => Ok(vec![AuthorizationServerMetadataLoaded {
                 authorization_server_metadata,
             }]),
-            ServerConfigCommand::LoadCredentialIssuerMetadata {
+            LoadCredentialIssuerMetadata {
                 credential_issuer_metadata,
-            } => Ok(vec![ServerConfigEvent::CredentialIssuerMetadataLoaded {
+            } => Ok(vec![CredentialIssuerMetadataLoaded {
                 credential_issuer_metadata,
             }]),
-            ServerConfigCommand::CreateCredentialsSupported { credentials_supported } => {
+            CreateCredentialsSupported { credentials_supported } => {
                 self.credential_issuer_metadata
                     .as_ref()
                     .ok_or(MissingCredentialIssuerMetadataError)?;
-                Ok(vec![ServerConfigEvent::CredentialsSupportedCreated {
-                    credentials_supported,
-                }])
+                Ok(vec![CredentialsSupportedCreated { credentials_supported }])
             }
         }
     }
@@ -94,11 +87,12 @@ impl Aggregate for ServerConfig {
 }
 
 #[cfg(test)]
-mod server_config_tests {
+pub mod server_config_tests {
     use super::*;
 
-    use async_trait::async_trait;
-    use std::sync::Mutex;
+    use lazy_static::lazy_static;
+    use oid4vci::credential_issuer::credentials_supported::CredentialsSupportedObject;
+    use serde_json::json;
 
     use cqrs_es::test::TestFramework;
 
@@ -108,24 +102,78 @@ mod server_config_tests {
     type ServerConfigTestFramework = TestFramework<ServerConfig>;
 
     #[test]
-    fn test_load_server_config() {
-        let expected = ServerConfigEvent::AuthorizationServerMetadataLoaded {
-            authorization_server_metadata: Box::new(AuthorizationServerMetadata {
-                issuer: "https://www.example.org".parse().unwrap(),
-                token_endpoint: Some(
-                    "https://www.example.org"
-                        .parse::<url::Url>()
-                        .unwrap()
-                        .join("token")
-                        .unwrap(),
-                ),
-                ..Default::default()
-            }),
+    fn test_load_authorization_server_metadata() {
+        ServerConfigTestFramework::with(ServerConfigServices)
+            .given_no_previous_events()
+            .when(ServerConfigCommand::LoadAuthorizationServerMetadata {
+                authorization_server_metadata: Box::new(AUTHORIZATION_SERVER_METADATA.clone()),
+            })
+            .then_expect_events(vec![ServerConfigEvent::AuthorizationServerMetadataLoaded {
+                authorization_server_metadata: Box::new(AUTHORIZATION_SERVER_METADATA.clone()),
+            }]);
+    }
+
+    #[test]
+    fn test_load_credential_issuer_metadata() {
+        ServerConfigTestFramework::with(ServerConfigServices)
+            .given_no_previous_events()
+            .when(ServerConfigCommand::LoadCredentialIssuerMetadata {
+                credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
+            })
+            .then_expect_events(vec![ServerConfigEvent::CredentialIssuerMetadataLoaded {
+                credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
+            }]);
+    }
+
+    #[test]
+    fn test_create_credentials_supported() {
+        ServerConfigTestFramework::with(ServerConfigServices)
+            .given(vec![ServerConfigEvent::CredentialIssuerMetadataLoaded {
+                credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
+            }])
+            .when(ServerConfigCommand::CreateCredentialsSupported {
+                credentials_supported: CREDENTIALS_SUPPORTED.clone(),
+            })
+            .then_expect_events(vec![ServerConfigEvent::CredentialsSupportedCreated {
+                credentials_supported: CREDENTIALS_SUPPORTED.clone(),
+            }]);
+    }
+
+    lazy_static! {
+        static ref BASE_URL: url::Url = "https://example.com/".parse().unwrap();
+        static ref CREDENTIALS_SUPPORTED: Vec<CredentialsSupportedObject> = vec![serde_json::from_value(json!({
+            "format": "jwt_vc_json",
+            "cryptographic_binding_methods_supported": [
+                "did:key",
+            ],
+            "cryptographic_suites_supported": [
+                "EdDSA"
+            ],
+            "credential_definition":{
+                "type": [
+                    "VerifiableCredential",
+                    "OpenBadgeCredential"
+                ]
+            },
+            "proof_types_supported": [
+                "jwt"
+            ]
+        }
+        ))
+        .unwrap()];
+        pub static ref AUTHORIZATION_SERVER_METADATA: AuthorizationServerMetadata = AuthorizationServerMetadata {
+            issuer: BASE_URL.clone(),
+            token_endpoint: Some(BASE_URL.join("token").unwrap()),
+            ..Default::default()
         };
-        // let command = ServerConfigCommand::LoadAuthorizationServerMetadata { authorization_server_metadata: () }
-        // let services = ServerConfigServices::new();
-        // ServerConfigTestFramework::with().given_no_previous_events()
-        //     .when(command)
-        //     .then_expect_events(vec![expected]);
+        pub static ref CREDENTIAL_ISSUER_METADATA: CredentialIssuerMetadata = CredentialIssuerMetadata {
+            credential_issuer: BASE_URL.clone(),
+            authorization_server: None,
+            credential_endpoint: BASE_URL.join("credential").unwrap(),
+            deferred_credential_endpoint: None,
+            batch_credential_endpoint: Some(BASE_URL.join("batch_credential").unwrap()),
+            credentials_supported: CREDENTIALS_SUPPORTED.clone(),
+            display: None,
+        };
     }
 }

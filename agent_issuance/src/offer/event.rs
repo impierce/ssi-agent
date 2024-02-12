@@ -6,22 +6,34 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum OfferEvent {
-    PreAuthorizedCodeUpdated {
-        // subject_id: String,
+    OfferCreated {
         pre_authorized_code: String,
+        access_token: String,
+    },
+    CredentialAdded {
+        credential_id: String,
     },
     CredentialOfferCreated {
-        // subject_id: String,
-        credential_offer: CredentialOffer,
+        form_url_encoded_credential_offer: String,
     },
     TokenResponseCreated {
-        // subject_id: String,
         token_response: TokenResponse,
     },
     CredentialResponseCreated {
-        // subject_id: String,
         credential_response: CredentialResponse,
     },
+    // PreAuthorizedCodeUpdated {
+    //     // subject_id: String,
+    //     pre_authorized_code: String,
+    // },
+    // TokenResponseCreated {
+    //     // subject_id: String,
+    //     token_response: TokenResponse,
+    // },
+    // CredentialResponseCreated {
+    //     // subject_id: String,
+    //     credential_response: CredentialResponse,
+    // },
 }
 
 impl DomainEvent for OfferEvent {
@@ -29,10 +41,12 @@ impl DomainEvent for OfferEvent {
         use OfferEvent::*;
 
         let event_type: &str = match self {
-            PreAuthorizedCodeUpdated { .. } => "PreAuthorizedCodeUpdated",
+            OfferCreated { .. } => "OfferCreated",
+            CredentialAdded { .. } => "CredentialAdded",
             CredentialOfferCreated { .. } => "CredentialOfferCreated",
             TokenResponseCreated { .. } => "TokenResponseCreated",
             CredentialResponseCreated { .. } => "CredentialResponseCreated",
+            // PreAuthorizedCodeUpdated { .. } => "PreAuthorizedCodeUpdated",
         };
         event_type.to_string()
     }

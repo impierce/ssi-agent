@@ -19,6 +19,7 @@ hyper = { version = "0.14", features = ["full"] }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
+uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 
 [dev-dependencies]
 agent_shared = { path = "../agent_shared", features = ["test"] }

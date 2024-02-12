@@ -15,7 +15,7 @@ use crate::AggregateHandler;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn oauth_authorization_server(
-    State(state): State<AggregateHandler<ServerConfig>>,
+    State(state): State<AggregateHandler<ServerConfig, ServerConfigView>>,
 ) -> impl IntoResponse {
     // match query_handler(AGGREGATE_ID.to_string(), &state).await {
     //     Ok(Some(view)) if view.oid4vci_data.authorization_server_metadata.is_some() => {

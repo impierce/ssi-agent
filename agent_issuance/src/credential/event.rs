@@ -9,12 +9,13 @@ pub enum CredentialEvent {
     CredentialFormatTemplateLoaded {
         credential_format_template: serde_json::Value,
     },
-    SubjectCreated {
-        subject: Subject,
-    },
+    // SubjectCreated {
+    //     subject: Subject,
+    // },
     UnsignedCredentialCreated {
         // subject_id: String,
-        credential: Credential,
+        // credential: Credential,
+        credential: serde_json::Value,
     },
 }
 
@@ -24,7 +25,7 @@ impl DomainEvent for CredentialEvent {
 
         let event_type: &str = match self {
             CredentialFormatTemplateLoaded { .. } => "CredentialFormatTemplateLoaded",
-            SubjectCreated { .. } => "SubjectCreated",
+            // SubjectCreated { .. } => "SubjectCreated",
             UnsignedCredentialCreated { .. } => "UnsignedCredentialCreated",
         };
         event_type.to_string()

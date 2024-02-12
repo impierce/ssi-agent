@@ -1,9 +1,7 @@
 use agent_issuance::{
     credential::{aggregate::Credential, command::CredentialCommand, queries::CredentialView, value_object::Subject},
-    // command::IssuanceCommand,
     handlers::{command_handler, query_handler},
-    // model::aggregate::IssuanceData,
-    // queries::IssuanceDataView,
+    offer::command::OfferCommand,
     state::ApplicationState,
 };
 use axum::{
@@ -12,7 +10,7 @@ use axum::{
     response::IntoResponse,
     Extension,
 };
-use cqrs_es::{Aggregate, View};
+use cqrs_es::{persist::ViewRepository, Aggregate, View};
 use hyper::header;
 use serde_json::Value;
 
@@ -22,7 +20,7 @@ use crate::AggregateHandler;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
-    State(state): State<AggregateHandler<Credential>>,
+    State(state): State<ApplicationState>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     // TODO: This should be removed once we know how to use aggregate ID's.
@@ -32,25 +30,86 @@ pub(crate) async fn credentials(
         return (StatusCode::BAD_REQUEST, "subjectId is required".to_string()).into_response();
     };
 
-    let command = CredentialCommand::CreateUnsignedCredential {
-        // subject_id: subject_id.to_string(),
-        subject: Subject {
-            pre_authorized_code: "MY_CODE_001".to_string(),
-        },
-        credential: payload["credential"].clone(),
-    };
-
-    match command_handler("CRED_001".to_string(), &state, command).await {
+    match command_handler(subject_id.to_string(), &state.offer, OfferCommand::CreateOffer).await {
         Ok(_) => {}
         Err(err) => {
             println!("{:?}", err)
         }
     }
 
-    match query_handler("CRED_002".to_string(), &state).await {
+    let credential_id = uuid::Uuid::new_v4().to_string();
+
+    match command_handler(
+        credential_id.clone(),
+        &state.credential,
+        CredentialCommand::LoadCredentialFormatTemplate {
+            credential_format_template: serde_json::from_str(include_str!(
+                "../../agent_issuance/res/credential_format_templates/openbadges_v3.json"
+            ))
+            .unwrap(),
+        },
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(err) => {
+            println!("{:?}", err)
+        }
+    }
+
+    let command = CredentialCommand::CreateUnsignedCredential {
+        // subject_id: subject_id.to_string(),
+        // subject: Subject {
+        //     pre_authorized_code: "MY_CODE_001".to_string(),
+        // },
+        credential: payload["credential"].clone(),
+    };
+
+    println!("command: {:#?}", command);
+
+    match command_handler(credential_id.clone(), &state.credential, command).await {
+        Ok(_) => {}
+        Err(err) => {
+            println!("{:?}", err)
+        }
+    }
+
+    match command_handler(
+        subject_id.to_string(),
+        &state.offer,
+        OfferCommand::AddCredential {
+            credential_id: credential_id.clone(),
+        },
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(err) => {
+            println!("{:?}", err)
+        }
+    }
+
+    let pre_code = query_handler(subject_id.to_string(), &state.offer)
+        .await
+        .unwrap()
+        .unwrap()
+        .pre_authorized_code;
+
+    dbg!(&pre_code);
+
+    let test = state.offer.load_pre_authorized_code(&pre_code).await.unwrap();
+
+    dbg!(test);
+
+    match query_handler(credential_id.clone(), &state.credential).await {
         Ok(Some(view)) => {
             println!("view: {:?}", view);
-            StatusCode::NOT_IMPLEMENTED.into_response()
+            (
+                StatusCode::CREATED,
+                [(header::LOCATION, format!("/v1/credentials/{credential_id}"))],
+                Json(view.credential.clone()),
+            )
+                .into_response()
             // match view.subjects.iter().find_map(|subject| {
             //     (subject.id == subject_id)
             //         .then(|| {
@@ -81,84 +140,80 @@ pub(crate) async fn credentials(
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use crate::{app, tests::SUBJECT_ID};
+#[cfg(test)]
+mod tests {
+    use crate::{app, tests::SUBJECT_ID};
 
-//     use super::*;
-//     use agent_issuance::{
-//         services::IssuanceServices,
-//         startup_commands::load_credential_format_template,
-//         state::{initialize, CQRS},
-//     };
-//     use agent_store::in_memory;
-//     use axum::{
-//         body::Body,
-//         http::{self, Request},
-//     };
-//     use serde_json::json;
-//     use tower::ServiceExt;
+    use super::*;
+    use agent_issuance::startup_commands::load_credential_format_template;
+    use agent_store::in_memory;
+    use axum::{
+        body::Body,
+        http::{self, Request},
+    };
+    use serde_json::json;
+    use tower::ServiceExt;
 
-//     #[tokio::test]
-//     async fn test_credentials_endpoint() {
-//         let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
+    #[tokio::test]
+    async fn test_credentials_endpoint() {
+        let state = in_memory::application_state().await;
 
-//         initialize(state.clone(), vec![load_credential_format_template()]).await;
+        // initialize(state.clone(), vec![load_credential_format_template()]).await;
 
-//         let app = app(state);
+        let app = app(state);
 
-//         let response = app
-//             .oneshot(
-//                 Request::builder()
-//                     .method(http::Method::POST)
-//                     .uri("/v1/credentials")
-//                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-//                     .body(Body::from(
-//                         serde_json::to_vec(&json!({
-//                             "subjectId": SUBJECT_ID,
-//                             "credential": {
-//                                 "credentialSubject": {
-//                                 "first_name": "Ferris",
-//                                 "last_name": "Rustacean"
-//                             }},
-//                         }))
-//                         .unwrap(),
-//                     ))
-//                     .unwrap(),
-//             )
-//             .await
-//             .unwrap();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/v1/credentials")
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "subjectId": SUBJECT_ID,
+                            "credential": {
+                                "credentialSubject": {
+                                "first_name": "Ferris",
+                                "last_name": "Rustacean"
+                            }},
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
 
-//         assert_eq!(response.status(), StatusCode::CREATED);
+        assert_eq!(response.status(), StatusCode::CREATED);
 
-//         assert_eq!(
-//             response.headers().get(http::header::LOCATION).unwrap(),
-//             "/v1/credentials/agg-id-F39A0C"
-//         );
+        // assert_eq!(
+        //     response.headers().get(http::header::LOCATION).unwrap(),
+        //     "/v1/credentials/agg-id-F39A0C"
+        // );
 
-//         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-//         let body: Value = serde_json::from_slice(&body).unwrap();
-//         assert_eq!(
-//             body,
-//             json!({
-//                 "@context": [
-//                     "https://www.w3.org/2018/credentials/v1",
-//                     "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
-//                 ],
-//                 "id": "http://example.com/credentials/3527",
-//                 "type": ["VerifiableCredential", "OpenBadgeCredential"],
-//                 "issuer": {
-//                     "id": "https://example.com/issuers/876543",
-//                     "type": "Profile",
-//                     "name": "Example Corp"
-//                 },
-//                 "issuanceDate": "2010-01-01T00:00:00Z",
-//                 "name": "Teamwork Badge",
-//                 "credentialSubject": {
-//                     "first_name": "Ferris",
-//                     "last_name": "Rustacean"
-//                 }
-//             })
-//         );
-//     }
-// }
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            body,
+            json!({
+                "@context": [
+                    "https://www.w3.org/2018/credentials/v1",
+                    "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
+                ],
+                "id": "http://example.com/credentials/3527",
+                "type": ["VerifiableCredential", "OpenBadgeCredential"],
+                "issuer": {
+                    "id": "https://example.com/issuers/876543",
+                    "type": "Profile",
+                    "name": "Example Corp"
+                },
+                "issuanceDate": "2010-01-01T00:00:00Z",
+                "name": "Teamwork Badge",
+                "credentialSubject": {
+                    "first_name": "Ferris",
+                    "last_name": "Rustacean"
+                }
+            })
+        );
+    }
+}

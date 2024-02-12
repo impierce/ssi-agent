@@ -9,8 +9,7 @@ pub enum CredentialCommand {
         credential_format_template: serde_json::Value,
     },
     CreateUnsignedCredential {
-        // subject_id: String,
-        subject: Subject,
+        // subject: Subject,
         credential: serde_json::Value,
     },
 }

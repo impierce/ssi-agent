@@ -17,7 +17,7 @@ use crate::AggregateHandler;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn token(
-    State(state): State<AggregateHandler<Offer>>,
+    State(state): State<AggregateHandler<Offer, OfferView>>,
     Form(token_request): Form<TokenRequest>,
 ) -> impl IntoResponse {
     let pre_authorized_code = match token_request.clone() {

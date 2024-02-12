@@ -20,7 +20,7 @@ use crate::AggregateHandler;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
-    State(state): State<AggregateHandler<Offer>>,
+    State(state): State<AggregateHandler<Offer, OfferView>>,
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> impl IntoResponse {

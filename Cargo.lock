@@ -40,6 +40,7 @@ dependencies = [
  "tower",
  "tracing",
  "url",
+ "uuid",
 ]
 
 [[package]]
@@ -51,8 +52,11 @@ dependencies = [
  "agent_shared",
  "agent_store",
  "axum",
+ "cqrs-es",
  "lazy_static",
  "oid4vci",
+ "postgres-es",
+ "serde",
  "serde_json",
  "tokio",
  "tracing",

@@ -1,6 +1,7 @@
 use async_trait::async_trait;
-use cqrs_es::persist::PersistenceError;
+use cqrs_es::persist::{PersistenceError, ViewRepository};
 use cqrs_es::{Aggregate, AggregateError, Query, View};
+use oid4vci::credential_offer::PreAuthorizedCode;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,7 +17,7 @@ use crate::offer::aggregate::Offer;
 // use crate::handlers::{command_handler_credential, command_handler_server_config};
 use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError;
-use crate::offer::queries::OfferView;
+use crate::offer::queries::{AccessTokenView, OfferView, PreAuthorizedCodeView};
 use crate::offer::services::OfferServices;
 // use crate::handlers::command_handler;
 use crate::server_config::aggregate::ServerConfig;
@@ -28,71 +29,64 @@ use crate::startup_commands::load_credential_format_template;
 
 #[allow(clippy::new_ret_no_self)]
 #[async_trait]
-pub trait CQRS<D: Domain> {
-    async fn new(
-        queries: Vec<Box<dyn Query<D::Aggregate>>>,
-        services: <<D as Domain>::Aggregate as Aggregate>::Services,
-    ) -> AggregateHandler<D>
+pub trait CQRS<A, V>
+where
+    A: Aggregate,
+    V: View<A>,
+{
+    async fn new() -> AggregateHandler<A, V>
     where
         Self: Sized;
-
     async fn execute_with_metadata(
         &self,
         aggregate_id: &str,
-        command: <D::Aggregate as Aggregate>::Command,
+        command: A::Command,
         metadata: HashMap<String, String>,
-    ) -> Result<(), cqrs_es::AggregateError<<D::Aggregate as Aggregate>::Error>>
+    ) -> Result<(), cqrs_es::AggregateError<A::Error>>
     where
-        <D::Aggregate as Aggregate>::Command: Send + Sync;
+        A::Command: Send + Sync;
 
-    //     async fn execute_with_metadata_credential(
-    //         &self,
-    //         aggregate_id: &str,
-    //         command: CredentialCommand,
-    //         metadata: HashMap<String, String>,
-    //     ) -> Result<(), AggregateError<CredentialError>>;
+    async fn load(&self, view_id: &str) -> Result<Option<V>, PersistenceError>;
 
-    //     async fn execute_with_metadata_offer(
-    //         &self,
-    //         aggregate_id: &str,
-    //         command: OfferCommand,
-    //         metadata: HashMap<String, String>,
-    //     ) -> Result<(), AggregateError<OfferError>>;
+    async fn load_pre_authorized_code(
+        &self,
+        _view_id: &str,
+    ) -> Result<Option<PreAuthorizedCodeView>, PersistenceError> {
+        Ok(None)
+    }
 
-    async fn load(&self, view_id: &str) -> Result<Option<D::View>, PersistenceError>;
-}
-
-pub trait Domain {
-    type Aggregate: Aggregate;
-    type View: View<Self::Aggregate>;
+    async fn load_access_token(&self, _view_id: &str) -> Result<Option<AccessTokenView>, PersistenceError> {
+        Ok(None)
+    }
 }
 
 #[derive(Clone)]
 pub struct ApplicationState {
-    pub server_config: AggregateHandler<ServerConfig>,
-    pub credential: AggregateHandler<Credential>,
-    pub offer: AggregateHandler<Offer>,
+    pub offer: AggregateHandler<Offer, OfferView>,
+    pub credential: AggregateHandler<Credential, CredentialView>,
+    pub server_config: AggregateHandler<ServerConfig, ServerConfigView>,
 }
 
-pub type AggregateHandler<D> = Arc<dyn CQRS<D> + Send + Sync>;
+pub type AggregateHandler<A, V> = Arc<dyn CQRS<A, V> + Send + Sync>;
 // pub type ApplicationState = Arc<dyn Send + Sync>;
 
-/// Initialize the application state by executing the startup commands.
-pub async fn initialize<D: Domain>(
-    state: AggregateHandler<D>,
-    startup_commands: Vec<<D::Aggregate as Aggregate>::Command>,
-) where
-    <D::Aggregate as Aggregate>::Command: Send + Sync + std::fmt::Debug,
-{
-    info!("Initializing ...");
+// /// Initialize the application state by executing the startup commands.
+// pub async fn initialize<R, A, V>(state: AggregateHandler<R, A, V>, startup_commands: Vec<<A as Aggregate>::Command>)
+// where
+//     R: ViewRepository<V, A>,
+//     A: Aggregate,
+//     V: View<A>,
+//     <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
+// {
+//     info!("Initializing ...");
 
-    // let _ = command_handler_credential("CRED_001".to_string(), &state, load_credential_format_template()).await;
+//     // let _ = command_handler_credential("CRED_001".to_string(), &state, load_credential_format_template()).await;
 
-    for command in startup_commands {
-        let command_string = format!("{:?}", command).split(' ').next().unwrap().to_string();
-        match command_handler("CONFIG_001".to_string(), &state, command).await {
-            Ok(_) => info!("Startup task completed: `{}`", command_string),
-            Err(err) => warn!("Startup task failed: {:#?}", err),
-        }
-    }
-}
+//     for command in startup_commands {
+//         let command_string = format!("{:?}", command).split(' ').next().unwrap().to_string();
+//         match command_handler("CONFIG_001".to_string(), &state, command).await {
+//             Ok(_) => info!("Startup task completed: `{}`", command_string),
+//             Err(err) => warn!("Startup task failed: {:#?}", err),
+//         }
+//     }
+// }

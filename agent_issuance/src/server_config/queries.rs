@@ -1,23 +1,39 @@
 use async_trait::async_trait;
-use cqrs_es::{EventEnvelope, Query, View};
+use cqrs_es::{Aggregate, EventEnvelope, Query, View};
+use oid4vci::credential_issuer::{
+    authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
+};
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
-use crate::server_config::aggregate::ServerConfig;
+use crate::server_config::{aggregate::ServerConfig, event::ServerConfigEvent};
 
-pub struct SimpleLoggingQuery {}
-
-#[async_trait]
-impl Query<ServerConfig> for SimpleLoggingQuery {
-    async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<ServerConfig>]) {}
-}
-
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct ServerConfigView {
-    aggregate_id: Option<String>,
+    pub authorization_server_metadata: Option<AuthorizationServerMetadata>,
+    pub credential_issuer_metadata: Option<CredentialIssuerMetadata>,
 }
 
 impl View<ServerConfig> for ServerConfigView {
     fn update(&mut self, event: &EventEnvelope<ServerConfig>) {
-        println!("TODO: should be updating the view ...");
+        use ServerConfigEvent::*;
+
+        match &event.payload {
+            AuthorizationServerMetadataLoaded {
+                authorization_server_metadata,
+            } => {
+                self.authorization_server_metadata
+                    .replace(*authorization_server_metadata.clone());
+            }
+            CredentialIssuerMetadataLoaded {
+                credential_issuer_metadata,
+            } => {
+                self.credential_issuer_metadata
+                    .replace(credential_issuer_metadata.clone());
+            }
+            CredentialsSupportedCreated { credentials_supported } => {
+                self.credential_issuer_metadata.as_mut().unwrap().credentials_supported = credentials_supported.clone()
+            }
+        }
     }
 }
