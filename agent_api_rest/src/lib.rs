@@ -18,6 +18,8 @@ use credential_issuer::{
 use credentials::credentials;
 use offers::offers;
 
+pub const SERVER_CONFIG_ID: &str = "SERVER-CONFIG-001";
+
 pub fn app(app_state: ApplicationState) -> Router {
     let base_path = get_base_path();
 

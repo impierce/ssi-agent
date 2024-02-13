@@ -12,26 +12,16 @@ use axum::{
 use hyper::header;
 use serde_json::Value;
 
-// use crate::AGGREGATE_ID;
-
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
     State(state): State<ApplicationState>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
-    // TODO: This should be removed once we know how to use aggregate ID's.
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id
     } else {
         return (StatusCode::BAD_REQUEST, "subjectId is required".to_string()).into_response();
     };
-
-    // match command_handler(subject_id.to_string(), &state.offer, OfferCommand::CreateOffer).await {
-    //     Ok(_) => {}
-    //     Err(err) => {
-    //         println!("{:?}", err)
-    //     }
-    // }
 
     let credential_id = uuid::Uuid::new_v4().to_string();
 
@@ -74,7 +64,7 @@ pub(crate) async fn credentials(
         subject_id.to_string(),
         &state.offer,
         OfferCommand::AddCredential {
-            credential_id: credential_id.clone(),
+            credential_ids: vec![credential_id.clone()],
         },
     )
     .await
@@ -85,18 +75,6 @@ pub(crate) async fn credentials(
         }
     }
 
-    let pre_code = query_handler(subject_id.to_string(), &state.offer)
-        .await
-        .unwrap()
-        .unwrap()
-        .pre_authorized_code;
-
-    dbg!(&pre_code);
-
-    let test = state.offer.load_pre_authorized_code(&pre_code).await.unwrap();
-
-    dbg!(test);
-
     match query_handler(credential_id.clone(), &state.credential).await {
         Ok(Some(view)) => {
             println!("view: {:?}", view);
@@ -106,33 +84,9 @@ pub(crate) async fn credentials(
                 Json(view.credential.clone()),
             )
                 .into_response()
-            // match view.subjects.iter().find_map(|subject| {
-            //     (subject.id == subject_id)
-            //         .then(|| {
-            //             subject
-            //                 .credentials
-            //                 .as_ref()
-            //                 .map(|credential| credential.unsigned_credential.clone())
-            //         })
-            //         .flatten()
-            // }) {
-            //     Some(unsigned_credential) => (
-            //         StatusCode::CREATED,
-            //         [(header::LOCATION, format!("/v1/credentials/{}", "CRED-03"))],
-            //         Json(unsigned_credential),
-            //     )
-            //         .into_response(),
-            //     None => StatusCode::NOT_FOUND.into_response(),
-            // }
         }
-        Ok(None) => {
-            println!("404");
-            StatusCode::NOT_FOUND.into_response()
-        }
-        Err(err) => {
-            println!("Error: {:#?}\n", err);
-            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
-        }
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(err) => (StatusCode::BAD_REQUEST, err.to_string()).into_response(),
     }
 }
 

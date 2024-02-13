@@ -5,9 +5,11 @@ use axum::{
     response::IntoResponse,
 };
 
+use crate::SERVER_CONFIG_ID;
+
 #[axum_macros::debug_handler]
 pub(crate) async fn oauth_authorization_server(State(state): State<ApplicationState>) -> impl IntoResponse {
-    match query_handler("SERVCONFIG-0001".to_string(), &state.server_config).await {
+    match query_handler(SERVER_CONFIG_ID.to_string(), &state.server_config).await {
         Ok(Some(view)) if view.authorization_server_metadata.is_some() => {
             (StatusCode::OK, Json(view.authorization_server_metadata)).into_response()
         }

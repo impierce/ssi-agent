@@ -1,6 +1,9 @@
 use agent_issuance::{
     handlers::{command_handler, query_handler},
-    offer::command::OfferCommand,
+    offer::{
+        command::OfferCommand,
+        queries::{OfferView, PreAuthorizedCodeView},
+    },
     state::ApplicationState,
 };
 use axum::{
@@ -16,38 +19,39 @@ pub(crate) async fn token(
     State(state): State<ApplicationState>,
     Form(token_request): Form<TokenRequest>,
 ) -> impl IntoResponse {
-    let pre_authorized_code = match token_request.clone() {
+    // Get the `pre_authorized_code` from the `TokenRequest`.
+    let pre_authorized_code = match &token_request {
         TokenRequest::PreAuthorizedCode {
             pre_authorized_code, ..
         } => pre_authorized_code,
-        _ => return StatusCode::BAD_REQUEST.into_response(),
+        _ => panic!(),
     };
 
-    let offer_id = state
-        .offer
-        .load_pre_authorized_code(&pre_authorized_code)
-        .await
-        .unwrap()
-        .unwrap()
-        .offer_id;
+    // Use the `pre_authorized_code` to get the `offer_id` from the `PreAuthorizedCodeView`.
+    let offer_id = match state.offer.load_pre_authorized_code(pre_authorized_code).await {
+        Ok(Some(PreAuthorizedCodeView { offer_id })) => offer_id,
+        _ => panic!(),
+    };
 
-    let command = OfferCommand::CreateTokenResponse { token_request };
-
-    match command_handler(offer_id.clone(), &state.offer, command).await {
+    // Create a `TokenResponse` using the `offer_id` and `token_request`.
+    match command_handler(
+        offer_id.clone(),
+        &state.offer,
+        OfferCommand::CreateTokenResponse { token_request },
+    )
+    .await
+    {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => {
-            println!("Error: {:#?}\n", err);
-            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
-        }
+        _ => panic!(),
     };
 
+    // Use the `offer_id` to get the `token_response` from the `OfferView`.
     match query_handler(offer_id, &state.offer).await {
-        Ok(Some(view)) => (StatusCode::OK, Json(view.token_response.unwrap())).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            println!("Error: {:#?}\n", err);
-            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
-        }
+        Ok(Some(OfferView {
+            token_response: Some(token_response),
+            ..
+        })) => (StatusCode::OK, Json(token_response)).into_response(),
+        _ => panic!(),
     }
 }
 

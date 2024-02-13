@@ -94,7 +94,7 @@ where
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct OfferView {
-    pub credential_id: String,
+    pub credential_ids: Vec<String>,
     pub pre_authorized_code: String,
     pub access_token: String,
     pub form_urlencoded_credential_offer: String,
@@ -114,8 +114,10 @@ impl View<Offer> for OfferView {
                 self.pre_authorized_code = pre_authorized_code.clone();
                 self.access_token = access_token.clone();
             }
-            CredentialAdded { credential_id } => {
-                self.credential_id = credential_id.clone();
+            CredentialsAdded {
+                credential_ids: credential_id,
+            } => {
+                self.credential_ids = credential_id.clone();
             }
             CredentialOfferCreated {
                 form_url_encoded_credential_offer,

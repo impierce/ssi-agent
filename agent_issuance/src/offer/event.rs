@@ -8,8 +8,8 @@ pub enum OfferEvent {
         pre_authorized_code: String,
         access_token: String,
     },
-    CredentialAdded {
-        credential_id: String,
+    CredentialsAdded {
+        credential_ids: Vec<String>,
     },
     CredentialOfferCreated {
         form_url_encoded_credential_offer: String,
@@ -40,7 +40,7 @@ impl DomainEvent for OfferEvent {
 
         let event_type: &str = match self {
             OfferCreated { .. } => "OfferCreated",
-            CredentialAdded { .. } => "CredentialAdded",
+            CredentialsAdded { .. } => "CredentialAdded",
             CredentialOfferCreated { .. } => "CredentialOfferCreated",
             TokenResponseCreated { .. } => "TokenResponseCreated",
             CredentialResponseCreated { .. } => "CredentialResponseCreated",

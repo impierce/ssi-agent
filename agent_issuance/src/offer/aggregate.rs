@@ -43,16 +43,24 @@ fn generate_random_string() -> String {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Offer {
-    pub credential_id: String,
-    pub pre_authorized_code: String,
-    pub access_token: String,
+    pub credential_ids: Vec<String>,
     pub form_urlencoded_credential_offer: String,
+    pub pre_authorized_code: String,
     pub token_response: Option<TokenResponse>,
+    pub access_token: String,
     pub credential_response: Option<CredentialResponse>,
-    // pub id: uuid::Uuid,
-    // // value: CredentialOfferQuery,
-    // pub credentials: Vec<Credential>,
 }
+
+// #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+// pub struct OfferLegacy {
+//     pub id: uuid::Uuid,
+//     // value: CredentialOfferQuery,
+//     // pub form_urlencoded: String,
+//     pub credentials: Vec<Credential>,
+//     pub server_config: ServerConfig,
+//     pub token_response: Option<TokenResponse>,
+//     pub credential_response: Option<CredentialResponse>,
+// }
 
 #[async_trait]
 impl Aggregate for Offer {
@@ -89,7 +97,7 @@ impl Aggregate for Offer {
                     access_token,
                 }])
             }
-            AddCredential { credential_id } => Ok(vec![CredentialAdded { credential_id }]),
+            AddCredential { credential_ids } => Ok(vec![CredentialsAdded { credential_ids }]),
             CreateCredentialOffer {
                 credential_issuer_metadata,
             } => {
@@ -136,10 +144,13 @@ impl Aggregate for Offer {
             CreateCredentialResponse {
                 credential_issuer_metadata,
                 authorization_server_metadata,
-                mut credential,
+                credentials,
                 credential_request,
             } => {
                 use oid4vc_core::Subject;
+
+                // TODO: support batch credentials.
+                let mut credential = credentials.first().unwrap().clone();
 
                 // TODO: utilize `agent_kms`.
                 let issuer = Arc::new(KeySubject::from_keypair(
@@ -211,8 +222,8 @@ impl Aggregate for Offer {
                 self.pre_authorized_code = pre_authorized_code;
                 self.access_token = access_token;
             }
-            CredentialAdded { credential_id } => {
-                self.credential_id = credential_id;
+            CredentialsAdded { credential_ids } => {
+                self.credential_ids = credential_ids;
             }
             CredentialOfferCreated {
                 form_url_encoded_credential_offer,
@@ -256,13 +267,13 @@ pub mod tests {
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
-        let subject_1 = subject_1();
+        let subject = subject();
         OfferTestFramework::with(OfferServices)
             .given_no_previous_events()
             .when(OfferCommand::CreateOffer)
             .then_expect_events(vec![OfferEvent::OfferCreated {
-                pre_authorized_code: subject_1.pre_authorized_code,
-                access_token: subject_1.access_token,
+                pre_authorized_code: subject.pre_authorized_code,
+                access_token: subject.access_token,
             }]);
     }
 
@@ -273,17 +284,17 @@ pub mod tests {
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
-        let subject_1 = subject_1();
+        let subject = subject();
         OfferTestFramework::with(OfferServices)
             .given(vec![OfferEvent::OfferCreated {
-                pre_authorized_code: subject_1.pre_authorized_code.clone(),
-                access_token: subject_1.access_token.clone(),
+                pre_authorized_code: subject.pre_authorized_code.clone(),
+                access_token: subject.access_token.clone(),
             }])
             .when(OfferCommand::AddCredential {
-                credential_id: "credential-id".to_string(),
+                credential_ids: vec!["credential-id".to_string()],
             })
-            .then_expect_events(vec![OfferEvent::CredentialAdded {
-                credential_id: "credential-id".to_string(),
+            .then_expect_events(vec![OfferEvent::CredentialsAdded {
+                credential_ids: vec!["credential-id".to_string()],
             }]);
     }
 
@@ -294,22 +305,22 @@ pub mod tests {
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
-        let subject_1 = subject_1();
+        let subject = subject();
         OfferTestFramework::with(OfferServices)
             .given(vec![
                 OfferEvent::OfferCreated {
-                    pre_authorized_code: subject_1.pre_authorized_code,
-                    access_token: subject_1.access_token,
+                    pre_authorized_code: subject.pre_authorized_code,
+                    access_token: subject.access_token,
                 },
-                OfferEvent::CredentialAdded {
-                    credential_id: "credential-id".to_string(),
+                OfferEvent::CredentialsAdded {
+                    credential_ids: vec!["credential-id".to_string()],
                 },
             ])
             .when(OfferCommand::CreateCredentialOffer {
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
             })
             .then_expect_events(vec![OfferEvent::CredentialOfferCreated {
-                form_url_encoded_credential_offer: subject_1.form_url_encoded_credential_offer,
+                form_url_encoded_credential_offer: subject.form_url_encoded_credential_offer,
             }]);
     }
 
@@ -320,27 +331,25 @@ pub mod tests {
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
-        *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
-
-        let subject_1 = subject_1();
+        let subject = subject();
         OfferTestFramework::with(OfferServices)
             .given(vec![
                 OfferEvent::OfferCreated {
-                    pre_authorized_code: subject_1.pre_authorized_code.clone(),
-                    access_token: subject_1.access_token.clone(),
+                    pre_authorized_code: subject.pre_authorized_code.clone(),
+                    access_token: subject.access_token.clone(),
                 },
-                OfferEvent::CredentialAdded {
-                    credential_id: "credential-id".to_string(),
+                OfferEvent::CredentialsAdded {
+                    credential_ids: vec!["credential-id".to_string()],
                 },
                 OfferEvent::CredentialOfferCreated {
-                    form_url_encoded_credential_offer: subject_1.form_url_encoded_credential_offer.clone(),
+                    form_url_encoded_credential_offer: subject.form_url_encoded_credential_offer.clone(),
                 },
             ])
             .when(OfferCommand::CreateTokenResponse {
-                token_request: token_request(subject_1.clone()),
+                token_request: token_request(subject.clone()),
             })
             .then_expect_events(vec![OfferEvent::TokenResponseCreated {
-                token_response: token_response(subject_1),
+                token_response: token_response(subject),
             }]);
     }
 
@@ -351,33 +360,31 @@ pub mod tests {
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
-        *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
-
-        let subject_1 = subject_1();
+        let subject = subject();
         OfferTestFramework::with(OfferServices)
             .given(vec![
                 OfferEvent::OfferCreated {
-                    pre_authorized_code: subject_1.pre_authorized_code.clone(),
-                    access_token: subject_1.access_token.clone(),
+                    pre_authorized_code: subject.pre_authorized_code.clone(),
+                    access_token: subject.access_token.clone(),
                 },
-                OfferEvent::CredentialAdded {
-                    credential_id: "credential-id".to_string(),
+                OfferEvent::CredentialsAdded {
+                    credential_ids: vec!["credential-id".to_string()],
                 },
                 OfferEvent::CredentialOfferCreated {
-                    form_url_encoded_credential_offer: subject_1.form_url_encoded_credential_offer.clone(),
+                    form_url_encoded_credential_offer: subject.form_url_encoded_credential_offer.clone(),
                 },
                 OfferEvent::TokenResponseCreated {
-                    token_response: token_response(subject_1.clone()),
+                    token_response: token_response(subject.clone()),
                 },
             ])
             .when(OfferCommand::CreateCredentialResponse {
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
                 authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
-                credential: UNSIGNED_CREDENTIAL.clone(),
-                credential_request: credential_request(subject_1.clone()),
+                credentials: vec![UNSIGNED_CREDENTIAL.clone()],
+                credential_request: credential_request(subject.clone()),
             })
             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
-                credential_response: credential_response(subject_1),
+                credential_response: credential_response(subject),
             }]);
     }
 
@@ -388,33 +395,31 @@ pub mod tests {
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
-        *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
-
-        let subject_1 = subject_1();
+        let subject = subject();
         OfferTestFramework::with(OfferServices)
             .given(vec![
                 OfferEvent::OfferCreated {
-                    pre_authorized_code: subject_1.pre_authorized_code.clone(),
-                    access_token: subject_1.access_token.clone(),
+                    pre_authorized_code: subject.pre_authorized_code.clone(),
+                    access_token: subject.access_token.clone(),
                 },
-                OfferEvent::CredentialAdded {
-                    credential_id: "credential-id".to_string(),
+                OfferEvent::CredentialsAdded {
+                    credential_ids: vec!["credential-id".to_string()],
                 },
                 OfferEvent::CredentialOfferCreated {
-                    form_url_encoded_credential_offer: subject_1.form_url_encoded_credential_offer.clone(),
+                    form_url_encoded_credential_offer: subject.form_url_encoded_credential_offer.clone(),
                 },
                 OfferEvent::TokenResponseCreated {
-                    token_response: token_response(subject_1.clone()),
+                    token_response: token_response(subject.clone()),
                 },
             ])
             .when(OfferCommand::CreateCredentialResponse {
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
                 authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
-                credential: UNSIGNED_CREDENTIAL.clone(),
-                credential_request: credential_request(subject_1.clone()),
+                credentials: vec![UNSIGNED_CREDENTIAL.clone()],
+                credential_request: credential_request(subject.clone()),
             })
             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
-                credential_response: credential_response(subject_1),
+                credential_response: credential_response(subject),
             }]);
     }
 
@@ -514,7 +519,7 @@ pub mod tests {
         };
     }
 
-    fn subject_1() -> TestSubject {
+    fn subject() -> TestSubject {
         let pre_authorized_code = PRE_AUTHORIZED_CODES.lock().unwrap()[0].clone();
 
         TestSubject {

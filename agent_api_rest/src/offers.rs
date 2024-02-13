@@ -1,6 +1,7 @@
 use agent_issuance::{
     handlers::{command_handler, query_handler},
     offer::command::OfferCommand,
+    server_config::queries::ServerConfigView,
     state::ApplicationState,
 };
 use axum::{
@@ -10,6 +11,8 @@ use axum::{
 };
 use serde_json::Value;
 
+use crate::SERVER_CONFIG_ID;
+
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> impl IntoResponse {
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
@@ -18,18 +21,16 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
         return (StatusCode::BAD_REQUEST, "subjectId is required".to_string()).into_response();
     };
 
-    dbg!("HERE");
-
-    let credential_issuer_metadata = query_handler("SERVCONFIG-0001".to_string(), &state.server_config)
-        .await
-        .unwrap()
-        .unwrap()
-        .credential_issuer_metadata
-        .unwrap();
-    dbg!("HERE");
+    let credential_issuer_metadata = match query_handler(SERVER_CONFIG_ID.to_string(), &state.server_config).await {
+        Ok(Some(ServerConfigView {
+            credential_issuer_metadata: Some(credential_issuer_metadata),
+            ..
+        })) => credential_issuer_metadata,
+        // TODO: fix this!
+        _ => panic!(),
+    };
 
     let command = OfferCommand::CreateOffer;
-    dbg!("HERE");
 
     match command_handler(subject_id.to_string(), &state.offer, command).await {
         Ok(_) => {}
@@ -38,13 +39,10 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
             return (StatusCode::BAD_REQUEST, err.to_string()).into_response();
         }
     };
-
-    dbg!("HERE");
 
     let command = OfferCommand::CreateCredentialOffer {
         credential_issuer_metadata,
     };
-    dbg!("HERE");
 
     match command_handler(subject_id.to_string(), &state.offer, command).await {
         Ok(_) => {}
@@ -54,14 +52,9 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
         }
     };
 
-    dbg!("HERE");
-
     match query_handler(subject_id.to_string(), &state.offer).await {
-        Ok(Some(offer_view)) => {
-            dbg!(&offer_view);
-            dbg!((StatusCode::OK, Json(offer_view.form_urlencoded_credential_offer)).into_response())
-        }
-        Ok(None) => dbg!(StatusCode::NOT_FOUND.into_response()),
+        Ok(Some(offer_view)) => (StatusCode::OK, Json(offer_view.form_urlencoded_credential_offer)).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(err) => {
             println!("Error: {:#?}\n", err);
             (StatusCode::BAD_REQUEST, err.to_string()).into_response()

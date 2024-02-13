@@ -11,13 +11,19 @@ use crate::credential::services::CredentialServices;
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
 #[derivative(PartialEq)]
 pub struct Credential {
-    // Entity
-    // pub data: Data,
     pub credential: serde_json::Value,
-    // Value Objects
     pub credential_format_template: serde_json::Value,
-    // pub subject: Subject,
 }
+
+// #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
+// #[derivative(PartialEq)]
+// pub struct CredentialLegacy {
+//     // Entity
+//     pub data: Data,
+//     // Value Objects
+//     pub credential_format_template: serde_json::Value,
+//     pub subject: Subject,
+// }
 
 #[async_trait]
 impl Aggregate for Credential {

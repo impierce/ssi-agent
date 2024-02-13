@@ -13,8 +13,13 @@ use crate::server_config::services::ServerConfigServices;
 /// An aggregate that holds the configuration of the server.
 #[derive(Clone, Default, Deserialize, Serialize, Debug)]
 pub struct ServerConfig {
+    authorization_server_metadata: Option<AuthorizationServerMetadata>,
+    credential_issuer_metadata: Option<CredentialIssuerMetadata>,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize, Debug)]
+pub struct ServerConfigLegacy {
     // root: Root,
-    // TODO: Remove? already covered by aggregate_id
     id: uuid::Uuid,
     // Value Objects
     authorization_server_metadata: Option<AuthorizationServerMetadata>,

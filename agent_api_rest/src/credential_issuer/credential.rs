@@ -1,6 +1,11 @@
 use agent_issuance::{
+    credential::queries::CredentialView,
     handlers::{command_handler, query_handler},
-    offer::command::OfferCommand,
+    offer::{
+        command::OfferCommand,
+        queries::{AccessTokenView, OfferView},
+    },
+    server_config::queries::ServerConfigView,
     state::ApplicationState,
 };
 use axum::{
@@ -9,7 +14,10 @@ use axum::{
     response::IntoResponse,
 };
 use axum_auth::AuthBearer;
+use core::panic;
 use oid4vci::credential_request::CredentialRequest;
+
+use crate::SERVER_CONFIG_ID;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
@@ -17,59 +25,64 @@ pub(crate) async fn credential(
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> impl IntoResponse {
-    println!("access_token: {:#?}", access_token);
-    let offer_id = state
-        .offer
-        .load_access_token(&access_token)
-        .await
-        .unwrap()
-        .unwrap()
-        .offer_id;
-    println!("offer_id: {:#?}", offer_id);
+    // Use the `access_token` to get the `offer_id` from the `AccessTokenView`.
+    let offer_id = match state.offer.load_access_token(&access_token).await {
+        Ok(Some(AccessTokenView { offer_id })) => offer_id,
+        // TODO: fix this!
+        _ => return StatusCode::UNAUTHORIZED.into_response(),
+    };
 
-    let credential_id = state.offer.load(&offer_id).await.unwrap().unwrap().credential_id;
-    println!("credential_id: {:#?}", credential_id);
+    // Use the `offer_id` to get the `credential_ids` from the `OfferView`.
+    let credential_ids = match state.offer.load(&offer_id).await {
+        Ok(Some(OfferView { credential_ids, .. })) => credential_ids,
+        // TODO: fix this!
+        _ => panic!(),
+    };
 
-    let credential = state.credential.load(&credential_id).await.unwrap().unwrap().credential;
+    // Use the `credential_ids` to get the `credentials` from the `CredentialView`.
+    let mut credentials = vec![];
+    for credential_id in credential_ids {
+        let credential = match state.credential.load(&credential_id).await {
+            Ok(Some(CredentialView { credential, .. })) => credential,
+            // TODO: fix this!
+            _ => panic!(),
+        };
 
-    println!("HERE");
+        credentials.push(credential);
+    }
 
-    let view = state.server_config.load("SERVCONFIG-0001").await.unwrap().unwrap();
-    let (credential_issuer_metadata, authorization_server_metadata) = (
-        view.credential_issuer_metadata.unwrap(),
-        view.authorization_server_metadata.unwrap(),
-    );
-
-    println!("HERE");
+    // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
+    let (credential_issuer_metadata, authorization_server_metadata) =
+        match state.server_config.load(SERVER_CONFIG_ID).await {
+            Ok(Some(ServerConfigView {
+                credential_issuer_metadata: Some(credential_issuer_metadata),
+                authorization_server_metadata: Some(authorization_server_metadata),
+            })) => (credential_issuer_metadata, authorization_server_metadata),
+            // TODO: fix this!
+            _ => panic!(),
+        };
 
     let command = OfferCommand::CreateCredentialResponse {
         credential_issuer_metadata,
         authorization_server_metadata,
         credential_request,
-        credential,
+        credentials,
     };
-    println!("HERE");
 
+    // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
     match command_handler(offer_id.clone(), &state.offer, command).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => {
-            println!("Error: {:#?}\n", err);
-            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
-        }
+        Err(err) => (StatusCode::BAD_REQUEST, err.to_string()).into_response(),
     };
 
-    println!("HERE");
-
+    // Use the `offer_id` to get the `credential_response` from the `OfferView`.
     match query_handler(offer_id, &state.offer).await {
-        Ok(Some(view)) => {
-            dbg!(&view);
-            (StatusCode::OK, Json(view.credential_response.unwrap())).into_response()
-        }
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            println!("Error: {:#?}\n", err);
-            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
-        }
+        Ok(Some(OfferView {
+            credential_response: Some(credential_response),
+            ..
+        })) => (StatusCode::OK, Json(credential_response)).into_response(),
+        // TODO: fix this!
+        _ => panic!(),
     }
 }
 

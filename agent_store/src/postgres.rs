@@ -1,8 +1,3 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
-
 use agent_issuance::{
     credential::{
         aggregate::Credential, command::CredentialCommand, error::CredentialError, queries::CredentialView,
@@ -23,13 +18,9 @@ use agent_issuance::{
 };
 use agent_shared::config;
 use async_trait::async_trait;
-use cqrs_es::{
-    mem_store::MemStore,
-    persist::{GenericQuery, PersistenceError, ViewContext, ViewRepository},
-    Aggregate, CqrsFramework, Query, View,
-};
+use cqrs_es::persist::{GenericQuery, PersistenceError, ViewRepository};
 use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
-use sqlx::{Pool, Postgres};
+use std::{collections::HashMap, sync::Arc};
 
 pub struct OfferAggregateHandler {
     pub main_view: Arc<PostgresViewRepository<OfferView, Offer>>,
