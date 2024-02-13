@@ -17,6 +17,7 @@ pub(crate) async fn credential(
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> impl IntoResponse {
+    println!("access_token: {:#?}", access_token);
     let offer_id = state
         .offer
         .load_access_token(&access_token)
@@ -24,10 +25,14 @@ pub(crate) async fn credential(
         .unwrap()
         .unwrap()
         .offer_id;
+    println!("offer_id: {:#?}", offer_id);
 
     let credential_id = state.offer.load(&offer_id).await.unwrap().unwrap().credential_id;
+    println!("credential_id: {:#?}", credential_id);
 
     let credential = state.credential.load(&credential_id).await.unwrap().unwrap().credential;
+
+    println!("HERE");
 
     let view = state.server_config.load("SERVCONFIG-0001").await.unwrap().unwrap();
     let (credential_issuer_metadata, authorization_server_metadata) = (
@@ -35,12 +40,15 @@ pub(crate) async fn credential(
         view.authorization_server_metadata.unwrap(),
     );
 
+    println!("HERE");
+
     let command = OfferCommand::CreateCredentialResponse {
         credential_issuer_metadata,
         authorization_server_metadata,
         credential_request,
         credential,
     };
+    println!("HERE");
 
     match command_handler(offer_id.clone(), &state.offer, command).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
@@ -50,8 +58,13 @@ pub(crate) async fn credential(
         }
     };
 
+    println!("HERE");
+
     match query_handler(offer_id, &state.offer).await {
-        Ok(Some(view)) => (StatusCode::OK, Json(view.credential_response.unwrap())).into_response(),
+        Ok(Some(view)) => {
+            dbg!(&view);
+            (StatusCode::OK, Json(view.credential_response.unwrap())).into_response()
+        }
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(err) => {
             println!("Error: {:#?}\n", err);

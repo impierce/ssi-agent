@@ -3,12 +3,12 @@ use std::{marker::PhantomData, sync::Arc};
 use async_trait::async_trait;
 use cqrs_es::{
     persist::{PersistenceError, ViewContext, ViewRepository},
-    Aggregate, EventEnvelope, Query, View,
+    EventEnvelope, Query, View,
 };
 use oid4vci::{credential_response::CredentialResponse, token_response::TokenResponse};
 use serde::{Deserialize, Serialize};
 
-use crate::{credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig};
+use crate::offer::aggregate::Offer;
 
 pub struct OfferSubQuery<R, V>
 where
@@ -58,9 +58,12 @@ where
                     pre_authorized_code,
                     access_token,
                 } => {
+                    println!("own type: {:?}", self.r#type);
                     if self.r#type == "pre-authorized_code" {
+                        println!("pre_authorized_code: {:?}", pre_authorized_code);
                         view_context.view_instance_id = pre_authorized_code.clone();
                     } else if self.r#type == "access_token" {
+                        println!("access_token: {:?}", access_token);
                         view_context.view_instance_id = access_token.clone();
                     }
                 }

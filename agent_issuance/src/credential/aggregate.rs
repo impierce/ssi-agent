@@ -4,11 +4,9 @@ use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 
 use crate::credential::command::CredentialCommand;
-use crate::credential::entity::Data;
 use crate::credential::error::CredentialError::{self, InvalidCredentialError};
 use crate::credential::event::CredentialEvent;
 use crate::credential::services::CredentialServices;
-use crate::credential::value_object::Subject;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
 #[derivative(PartialEq)]
@@ -105,7 +103,6 @@ pub mod credential_tests {
     use super::*;
 
     use lazy_static::lazy_static;
-    use oid4vci::credential_issuer::credentials_supported::CredentialsSupportedObject;
     use serde_json::json;
 
     use cqrs_es::test::TestFramework;

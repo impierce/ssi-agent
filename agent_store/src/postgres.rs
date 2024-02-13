@@ -32,7 +32,6 @@ use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
 use sqlx::{Pool, Postgres};
 
 pub struct OfferAggregateHandler {
-    pub pool: Pool<Postgres>,
     pub main_view: Arc<PostgresViewRepository<OfferView, Offer>>,
     pub pre_authorized_code_repo: Arc<PostgresViewRepository<PreAuthorizedCodeView, Offer>>,
     pub access_token_repo: Arc<PostgresViewRepository<AccessTokenView, Offer>>,
@@ -44,12 +43,12 @@ impl CQRS<Offer, OfferView> for OfferAggregateHandler {
     async fn new() -> AggregateHandler<Offer, OfferView> {
         let pool = default_postgress_pool(&config!("db_connection_string").unwrap()).await;
 
-        let main_view = Arc::new(PostgresViewRepository::new("offer_query", pool.clone()));
+        let main_view = Arc::new(PostgresViewRepository::new("offer", pool.clone()));
         let mut offer_query = GenericQuery::new(main_view.clone());
         offer_query.use_error_handler(Box::new(|e| println!("{}", e)));
 
-        let pre_authorized_code_repo = Arc::new(PostgresViewRepository::new("pre_authorized_code_query", pool.clone()));
-        let access_token_repo = Arc::new(PostgresViewRepository::new("access_token_query", pool.clone()));
+        let pre_authorized_code_repo = Arc::new(PostgresViewRepository::new("pre_authorized_code", pool.clone()));
+        let access_token_repo = Arc::new(PostgresViewRepository::new("access_token", pool.clone()));
 
         let mut generic_query = GenericQuery::new(main_view.clone());
         generic_query.use_error_handler(Box::new(|e| println!("{}", e)));
@@ -112,7 +111,7 @@ impl CQRS<Credential, CredentialView> for CredentialAggregateHandler {
     async fn new() -> AggregateHandler<Credential, CredentialView> {
         let pool = default_postgress_pool(&config!("db_connection_string").unwrap()).await;
 
-        let main_view = Arc::new(PostgresViewRepository::new("credential_query", pool.clone()));
+        let main_view = Arc::new(PostgresViewRepository::new("credential", pool.clone()));
         let mut credential_query = GenericQuery::new(main_view.clone());
         credential_query.use_error_handler(Box::new(|e| println!("{}", e)));
 
@@ -149,7 +148,7 @@ impl CQRS<ServerConfig, ServerConfigView> for ServerConfigAggregateHandler {
     async fn new() -> AggregateHandler<ServerConfig, ServerConfigView> {
         let pool = default_postgress_pool(&config!("db_connection_string").unwrap()).await;
 
-        let main_view = Arc::new(PostgresViewRepository::new("server_config_query", pool.clone()));
+        let main_view = Arc::new(PostgresViewRepository::new("server_config", pool.clone()));
         let mut server_config_query = GenericQuery::new(main_view.clone());
         server_config_query.use_error_handler(Box::new(|e| println!("{}", e)));
 

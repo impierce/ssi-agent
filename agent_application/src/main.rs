@@ -1,26 +1,7 @@
-use std::sync::Arc;
-
 use agent_api_rest::app;
-use agent_issuance::{
-    credential::{aggregate::Credential, queries::CredentialView, services::CredentialServices},
-    handlers::{command_handler, query_handler},
-    offer::{
-        aggregate::Offer,
-        command::OfferCommand,
-        queries::{AccessTokenView, OfferSubQuery, OfferView, PreAuthorizedCodeView},
-        services::OfferServices,
-    },
-    server_config::{self, aggregate::ServerConfig, queries::ServerConfigView, services::ServerConfigServices},
-    startup_commands::startup_commands_server_config,
-    state::{initialize, ApplicationState, CQRS},
-};
+use agent_issuance::{startup_commands::startup_commands_server_config, state::initialize};
 use agent_shared::config;
 use agent_store::{in_memory, postgres};
-use cqrs_es::{
-    mem_store::MemStore,
-    persist::{GenericQuery, ViewRepository},
-    Aggregate, CqrsFramework, View,
-};
 use lazy_static::lazy_static;
 
 lazy_static! {

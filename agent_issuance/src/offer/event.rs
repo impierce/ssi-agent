@@ -1,7 +1,5 @@
 use cqrs_es::DomainEvent;
-use oid4vci::{
-    credential_offer::CredentialOffer, credential_response::CredentialResponse, token_response::TokenResponse,
-};
+use oid4vci::{credential_response::CredentialResponse, token_response::TokenResponse};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

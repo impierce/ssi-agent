@@ -26,12 +26,12 @@ pub(crate) async fn credentials(
         return (StatusCode::BAD_REQUEST, "subjectId is required".to_string()).into_response();
     };
 
-    match command_handler(subject_id.to_string(), &state.offer, OfferCommand::CreateOffer).await {
-        Ok(_) => {}
-        Err(err) => {
-            println!("{:?}", err)
-        }
-    }
+    // match command_handler(subject_id.to_string(), &state.offer, OfferCommand::CreateOffer).await {
+    //     Ok(_) => {}
+    //     Err(err) => {
+    //         println!("{:?}", err)
+    //     }
+    // }
 
     let credential_id = uuid::Uuid::new_v4().to_string();
 

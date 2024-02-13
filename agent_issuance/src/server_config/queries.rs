@@ -1,10 +1,8 @@
-use async_trait::async_trait;
-use cqrs_es::{Aggregate, EventEnvelope, Query, View};
+use cqrs_es::{EventEnvelope, View};
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
 use serde::{Deserialize, Serialize};
-use tracing::info;
 
 use crate::server_config::{aggregate::ServerConfig, event::ServerConfigEvent};
 

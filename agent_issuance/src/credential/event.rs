@@ -1,9 +1,6 @@
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 
-use crate::credential::aggregate::Credential;
-use crate::credential::value_object::Subject;
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum CredentialEvent {
     CredentialFormatTemplateLoaded {

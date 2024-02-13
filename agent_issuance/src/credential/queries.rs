@@ -1,11 +1,7 @@
-use async_trait::async_trait;
-use cqrs_es::{Aggregate, EventEnvelope, Query, View};
-use oid4vci::credential;
-use serde::{Deserialize, Serialize};
-
+use super::event::CredentialEvent;
 use crate::credential::aggregate::Credential;
-
-use super::{entity::Data, event::CredentialEvent, value_object::Subject};
+use cqrs_es::{EventEnvelope, View};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct CredentialView {

@@ -1,7 +1,5 @@
 use serde::Deserialize;
 
-use super::value_object::Subject;
-
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum CredentialCommand {

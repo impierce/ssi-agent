@@ -1,31 +1,18 @@
 use async_trait::async_trait;
-use cqrs_es::persist::{PersistenceError, ViewRepository};
-use cqrs_es::{Aggregate, AggregateError, Query, View};
-use oid4vci::credential_offer::PreAuthorizedCode;
-use serde_json::json;
+use cqrs_es::persist::PersistenceError;
+use cqrs_es::{Aggregate, View};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{info, warn};
 
 use crate::credential::aggregate::Credential;
-use crate::credential::command::CredentialCommand;
-use crate::credential::error::CredentialError;
 use crate::credential::queries::CredentialView;
-use crate::credential::services::CredentialServices;
 use crate::handlers::command_handler;
 use crate::offer::aggregate::Offer;
-// use crate::handlers::{command_handler_credential, command_handler_server_config};
-use crate::offer::command::OfferCommand;
-use crate::offer::error::OfferError;
 use crate::offer::queries::{AccessTokenView, OfferView, PreAuthorizedCodeView};
-use crate::offer::services::OfferServices;
-// use crate::handlers::command_handler;
 use crate::server_config::aggregate::ServerConfig;
 use crate::server_config::command::ServerConfigCommand;
-use crate::server_config::error::ServerConfigError;
 use crate::server_config::queries::ServerConfigView;
-use crate::server_config::services::ServerConfigServices;
-use crate::startup_commands::load_credential_format_template;
 
 #[allow(clippy::new_ret_no_self)]
 #[async_trait]
@@ -68,7 +55,6 @@ pub struct ApplicationState {
 }
 
 pub type AggregateHandler<A, V> = Arc<dyn CQRS<A, V> + Send + Sync>;
-// pub type ApplicationState = Arc<dyn Send + Sync>;
 
 /// Initialize the application state by executing the startup commands.
 pub async fn initialize(state: ApplicationState, startup_commands: Vec<ServerConfigCommand>) {

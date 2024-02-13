@@ -1,3 +1,4 @@
+use crate::server_config::command::ServerConfigCommand;
 use agent_shared::config;
 use oid4vci::{
     credential_format_profiles::{
@@ -12,11 +13,6 @@ use oid4vci::{
 };
 use serde_json::json;
 
-// use crate::command::IssuanceCommand;
-use crate::credential::command::CredentialCommand;
-use crate::offer::command::OfferCommand;
-use crate::server_config::command::ServerConfigCommand;
-
 /// Returns the startup commands for the application.
 pub fn startup_commands_server_config(host: url::Url) -> Vec<ServerConfigCommand> {
     vec![
@@ -25,15 +21,6 @@ pub fn startup_commands_server_config(host: url::Url) -> Vec<ServerConfigCommand
         load_credential_issuer_metadata(host.clone()),
         create_credentials_supported(),
     ]
-}
-
-pub fn load_credential_format_template() -> CredentialCommand {
-    CredentialCommand::LoadCredentialFormatTemplate {
-        credential_format_template: serde_json::from_str(include_str!(
-            "../res/credential_format_templates/openbadges_v3.json"
-        ))
-        .unwrap(),
-    }
 }
 
 pub fn load_authorization_server_metadata(base_url: url::Url) -> ServerConfigCommand {

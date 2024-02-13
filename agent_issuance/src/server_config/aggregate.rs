@@ -6,7 +6,6 @@ use oid4vci::credential_issuer::{
 use serde::{Deserialize, Serialize};
 
 use crate::server_config::command::ServerConfigCommand;
-use crate::server_config::entity::{Image, Root};
 use crate::server_config::error::ServerConfigError;
 use crate::server_config::event::ServerConfigEvent;
 use crate::server_config::services::ServerConfigServices;

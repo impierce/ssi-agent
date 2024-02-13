@@ -10,7 +10,7 @@ CREATE TABLE events
     PRIMARY KEY (aggregate_type, aggregate_id, sequence)
 );
 
-CREATE TABLE offer_query
+CREATE TABLE offer
 (
     view_id           text                        NOT NULL,
     version           bigint CHECK (version >= 0) NOT NULL,
@@ -18,7 +18,7 @@ CREATE TABLE offer_query
     PRIMARY KEY (view_id)
 );
 
-CREATE TABLE pre_authorized_code_query
+CREATE TABLE pre_authorized_code
 (
     view_id           text                        NOT NULL,
     version           bigint CHECK (version >= 0) NOT NULL,
@@ -26,7 +26,7 @@ CREATE TABLE pre_authorized_code_query
     PRIMARY KEY (view_id)
 );
 
-CREATE TABLE access_token_query
+CREATE TABLE access_token
 (
     view_id           text                        NOT NULL,
     version           bigint CHECK (version >= 0) NOT NULL,
@@ -34,7 +34,7 @@ CREATE TABLE access_token_query
     PRIMARY KEY (view_id)
 );
 
-CREATE TABLE credential_query
+CREATE TABLE credential
 (
     view_id           text                        NOT NULL,
     version           bigint CHECK (version >= 0) NOT NULL,
@@ -42,7 +42,7 @@ CREATE TABLE credential_query
     PRIMARY KEY (view_id)
 );
 
-CREATE TABLE server_config_query
+CREATE TABLE server_config
 (
     view_id           text                        NOT NULL,
     version           bigint CHECK (version >= 0) NOT NULL,

@@ -243,10 +243,6 @@ pub mod tests {
     use lazy_static::lazy_static;
     use oid4vci::{
         credential_format_profiles::{w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, Parameters},
-        credential_issuer::{
-            authorization_server_metadata::AuthorizationServerMetadata,
-            credential_issuer_metadata::CredentialIssuerMetadata, credentials_supported::CredentialsSupportedObject,
-        },
         credential_request::CredentialRequest,
         Proof, ProofType,
     };
@@ -341,6 +337,40 @@ pub mod tests {
 
     #[test]
     fn test_create_credential_response() {
+        *PRE_AUTHORIZED_CODES.lock().unwrap() = vec![generate_random_string()].into();
+        *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
+        *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
+
+        let subject_1 = subject_1();
+        OfferTestFramework::with(OfferServices)
+            .given(vec![
+                OfferEvent::OfferCreated {
+                    pre_authorized_code: subject_1.pre_authorized_code.clone(),
+                    access_token: subject_1.access_token.clone(),
+                },
+                OfferEvent::CredentialAdded {
+                    credential_id: "credential-id".to_string(),
+                },
+                OfferEvent::CredentialOfferCreated {
+                    form_url_encoded_credential_offer: subject_1.form_url_encoded_credential_offer.clone(),
+                },
+                OfferEvent::TokenResponseCreated {
+                    token_response: token_response(subject_1.clone()),
+                },
+            ])
+            .when(OfferCommand::CreateCredentialResponse {
+                credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
+                authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
+                credential: UNSIGNED_CREDENTIAL.clone(),
+                credential_request: credential_request(subject_1.clone()),
+            })
+            .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
+                credential_response: credential_response(subject_1),
+            }]);
+    }
+
+    #[test]
+    fn test_create_credential_response_multiple_subjects() {
         *PRE_AUTHORIZED_CODES.lock().unwrap() = vec![generate_random_string()].into();
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
@@ -479,19 +509,6 @@ pub mod tests {
             access_token: ACCESS_TOKENS.lock().unwrap()[0].clone(),
             form_url_encoded_credential_offer: format!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fexample.com%2F%22%2C%22credentials%22%3A%5B%7B%22format%22%3A%22jwt_vc_json%22%2C%22credential_definition%22%3A%7B%22type%22%3A%5B%22VerifiableCredential%22%2C%22OpenBadgeCredential%22%5D%7D%7D%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%2C%22user_pin_required%22%3Afalse%7D%7D%7D"),
             c_nonce: C_NONCES.lock().unwrap()[0].clone(),
-        }
-    }
-
-    fn subject_2() -> TestSubject {
-        let pre_authorized_code = PRE_AUTHORIZED_CODES.lock().unwrap()[1].clone();
-
-        TestSubject {
-            key_did: SUBJECT_2_KEY_DID.clone(),
-            credential: VERIFIABLE_CREDENTIAL_JWT_2.clone(),
-            pre_authorized_code: pre_authorized_code.clone(),
-            access_token: ACCESS_TOKENS.lock().unwrap()[1].clone(),
-            form_url_encoded_credential_offer: format!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fexample.com%2F%22%2C%22credentials%22%3A%5B%7B%22format%22%3A%22jwt_vc_json%22%2C%22credential_definition%22%3A%7B%22type%22%3A%5B%22VerifiableCredential%22%2C%22OpenBadgeCredential%22%5D%7D%7D%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%2C%22user_pin_required%22%3Afalse%7D%7D%7D"),
-            c_nonce: C_NONCES.lock().unwrap()[1].clone(),
         }
     }
 

@@ -111,6 +111,7 @@ dependencies = [
  "postgres-es",
  "serde_json",
  "sqlx",
+ "tokio",
 ]
 
 [[package]]
