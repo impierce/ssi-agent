@@ -24,7 +24,7 @@ mod tests {
     use crate::{app, tests::BASE_URL};
 
     use super::*;
-    use agent_issuance::{startup_commands::startup_commands_server_config, state::initialize};
+    use agent_issuance::{startup_commands::startup_commands, state::initialize};
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -68,7 +68,7 @@ mod tests {
     async fn test_oauth_authorization_server_endpoint() {
         let state = in_memory::application_state().await;
 
-        initialize(state.clone(), startup_commands_server_config(BASE_URL.clone())).await;
+        initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
 
         let mut app = app(state);
 

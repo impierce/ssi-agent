@@ -56,7 +56,7 @@ pub mod tests {
     use crate::{app, credentials::tests::credentials, offers::tests::offers, tests::BASE_URL};
 
     use super::*;
-    use agent_issuance::{startup_commands::startup_commands_server_config, state::initialize};
+    use agent_issuance::{startup_commands::startup_commands, state::initialize};
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -71,7 +71,7 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri(format!("/auth/token"))
+                    .uri("/auth/token")
                     .header(
                         http::header::CONTENT_TYPE,
                         mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
@@ -99,7 +99,7 @@ pub mod tests {
     async fn test_token_endpoint() {
         let state = in_memory::application_state().await;
 
-        initialize(state.clone(), startup_commands_server_config(BASE_URL.clone())).await;
+        initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
 
         let mut app = app(state);
 

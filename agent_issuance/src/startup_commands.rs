@@ -1,5 +1,5 @@
 use crate::server_config::command::ServerConfigCommand;
-use agent_shared::config;
+use agent_shared::{config, url_utils::UrlAppendHelpers};
 use oid4vci::{
     credential_format_profiles::{
         w3c_verifiable_credentials::jwt_vc_json::{CredentialDefinition, JwtVcJson},
@@ -14,7 +14,7 @@ use oid4vci::{
 use serde_json::json;
 
 /// Returns the startup commands for the application.
-pub fn startup_commands_server_config(host: url::Url) -> Vec<ServerConfigCommand> {
+pub fn startup_commands(host: url::Url) -> Vec<ServerConfigCommand> {
     vec![
         // load_credential_format_template(),
         load_authorization_server_metadata(host.clone()),
@@ -27,7 +27,7 @@ pub fn load_authorization_server_metadata(base_url: url::Url) -> ServerConfigCom
     ServerConfigCommand::LoadAuthorizationServerMetadata {
         authorization_server_metadata: Box::new(AuthorizationServerMetadata {
             issuer: base_url.clone(),
-            token_endpoint: Some(base_url.join("auth/token").unwrap()),
+            token_endpoint: Some(base_url.append_path_segment("auth/token")),
             ..Default::default()
         }),
     }
@@ -38,7 +38,7 @@ pub fn load_credential_issuer_metadata(base_url: url::Url) -> ServerConfigComman
         credential_issuer_metadata: CredentialIssuerMetadata {
             credential_issuer: base_url.clone(),
             authorization_server: None,
-            credential_endpoint: base_url.join("openid4vci/credential").unwrap(),
+            credential_endpoint: base_url.append_path_segment("openid4vci/credential"),
             deferred_credential_endpoint: None,
             batch_credential_endpoint: None,
             credentials_supported: vec![],

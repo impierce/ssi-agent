@@ -250,9 +250,11 @@ pub mod tests {
     type OfferTestFramework = TestFramework<Offer>;
 
     #[test]
+    #[serial_test::serial]
     fn test_create_offer() {
         *PRE_AUTHORIZED_CODES.lock().unwrap() = vec![generate_random_string()].into();
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
+        *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
         let subject_1 = subject_1();
         OfferTestFramework::with(OfferServices)
@@ -265,9 +267,11 @@ pub mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_add_credential() {
         *PRE_AUTHORIZED_CODES.lock().unwrap() = vec![generate_random_string()].into();
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
+        *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
         let subject_1 = subject_1();
         OfferTestFramework::with(OfferServices)
@@ -284,9 +288,11 @@ pub mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_create_credential_offer() {
         *PRE_AUTHORIZED_CODES.lock().unwrap() = vec![generate_random_string()].into();
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
+        *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
         let subject_1 = subject_1();
         OfferTestFramework::with(OfferServices)
@@ -308,9 +314,12 @@ pub mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_create_token_response() {
         *PRE_AUTHORIZED_CODES.lock().unwrap() = vec![generate_random_string()].into();
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
+        *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
+
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
         let subject_1 = subject_1();
@@ -336,9 +345,12 @@ pub mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_create_credential_response() {
         *PRE_AUTHORIZED_CODES.lock().unwrap() = vec![generate_random_string()].into();
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
+        *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
+
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
         let subject_1 = subject_1();
@@ -370,9 +382,12 @@ pub mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_create_credential_response_multiple_subjects() {
         *PRE_AUTHORIZED_CODES.lock().unwrap() = vec![generate_random_string()].into();
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
+        *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
+
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
         let subject_1 = subject_1();

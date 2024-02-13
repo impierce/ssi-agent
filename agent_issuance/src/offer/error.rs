@@ -11,7 +11,7 @@ pub enum OfferError {
     #[error("Missing `Proof` in Credential Request")]
     MissingProofError,
     #[error("Invalid `Proof` in Credential Request")]
-    InvalidProofError,
+    InvalidProofError(String),
     #[error("Missing `iss` claim in `Proof`")]
     MissingProofIssuerError,
     #[error("Cannot find Issuance Subject with `subject_id`: {0}")]

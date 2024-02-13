@@ -24,8 +24,8 @@ mod tests {
     use crate::{app, tests::BASE_URL};
 
     use super::*;
-    use agent_issuance::{startup_commands::startup_commands_server_config, state::initialize};
-    use agent_shared::config;
+    use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use agent_shared::{config, UrlAppendHelpers};
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -68,7 +68,7 @@ mod tests {
             CredentialIssuerMetadata {
                 credential_issuer: BASE_URL.clone(),
                 authorization_server: None,
-                credential_endpoint: BASE_URL.join("openid4vci/credential").unwrap(),
+                credential_endpoint: BASE_URL.append_path_segment("openid4vci/credential"),
                 batch_credential_endpoint: None,
                 deferred_credential_endpoint: None,
                 credentials_supported: vec![CredentialsSupportedObject {
@@ -106,7 +106,7 @@ mod tests {
     async fn test_oauth_authorization_server_endpoint() {
         let state = in_memory::application_state().await;
 
-        initialize(state.clone(), startup_commands_server_config(BASE_URL.clone())).await;
+        initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
 
         let mut app = app(state);
 

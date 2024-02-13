@@ -81,7 +81,7 @@ mod tests {
     };
 
     use super::*;
-    use agent_issuance::{startup_commands::startup_commands_server_config, state::initialize};
+    use agent_issuance::{startup_commands::startup_commands, state::initialize};
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -94,7 +94,7 @@ mod tests {
     async fn test_credential_endpoint() {
         let state = in_memory::application_state().await;
 
-        initialize(state.clone(), startup_commands_server_config(BASE_URL.clone())).await;
+        initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
 
         let mut app = app(state);
 
@@ -107,7 +107,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri(format!("/openid4vci/credential"))
+                    .uri("/openid4vci/credential")
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .header(http::header::AUTHORIZATION, format!("Bearer {}", access_token))
                     .body(Body::from(

@@ -1,12 +1,7 @@
 use agent_api_rest::app;
-use agent_issuance::{startup_commands::startup_commands_server_config, state::initialize};
+use agent_issuance::{startup_commands::startup_commands, state::initialize};
 use agent_shared::config;
 use agent_store::{in_memory, postgres};
-use lazy_static::lazy_static;
-
-lazy_static! {
-    static ref HOST: url::Url = format!("http://{}:3033/", config!("host").unwrap()).parse().unwrap();
-}
 
 #[tokio::main]
 async fn main() {
@@ -15,14 +10,27 @@ async fn main() {
         _ => in_memory::application_state().await,
     };
 
-    match config!("log_format").unwrap().as_str() {
-        "json" => tracing_subscriber::fmt().json().init(),
-        _ => tracing_subscriber::fmt::init(),
+    if let Ok(log_format) = config!("log_format") {
+        if &log_format == "json" {
+            tracing_subscriber::fmt().json().init()
+        } else {
+            tracing_subscriber::fmt::init()
+        }
+    } else {
+        tracing_subscriber::fmt::init()
     }
 
-    initialize(state.clone(), startup_commands_server_config(HOST.clone())).await;
+    let url = config!("url").expect("AGENT_APPLICATION_URL is not set");
 
-    axum::Server::bind(&"0.0.0.0:3033".parse().unwrap())
+    tracing::info!("Application url: {:?}", url);
+
+    let url = url::Url::parse(&url).unwrap();
+
+    initialize(state.clone(), startup_commands(url)).await;
+
+    let server = "0.0.0.0:3033".parse().unwrap();
+
+    axum::Server::bind(&server)
         .serve(app(state).into_make_service())
         .await
         .unwrap();

@@ -2,12 +2,12 @@ use async_trait::async_trait;
 use cqrs_es::{Aggregate, EventEnvelope, Query};
 use tracing::info;
 
+// Aggregates
 pub mod credential;
-pub mod handlers;
-pub mod model;
 pub mod offer;
-// pub mod queries;
 pub mod server_config;
+
+pub mod handlers;
 pub mod startup_commands;
 pub mod state;
 

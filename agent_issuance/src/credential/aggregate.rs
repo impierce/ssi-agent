@@ -44,19 +44,6 @@ impl Aggregate for Credential {
             CredentialCommand::CreateUnsignedCredential { credential } => {
                 let mut events = vec![];
 
-                // if !self.subjects.iter().any(|subject| subject.id == subject_id) {
-                //     events.push(CredentialEvent::SubjectCreated {
-                //         // subject: IssuanceSubject {
-                //         //     id: subject_id.clone(),
-                //         //     pre_authorized_code: generate_random_string(),
-                //         //     ..Default::default()
-                //         // },
-                //         subject: Subject {
-                //             pre_authorized_code: "rand_str_123".to_string(),
-                //         },
-                //     });
-                // }
-
                 let mut unsigned_credential = self.credential_format_template.clone();
 
                 println!("unsigned_credential: {:?}", unsigned_credential);
