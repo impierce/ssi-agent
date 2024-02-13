@@ -1,6 +1,6 @@
 use agent_issuance::{
     handlers::{command_handler, query_handler},
-    offer::{aggregate::Offer, command::OfferCommand, queries::OfferView},
+    offer::command::OfferCommand,
     state::ApplicationState,
 };
 use axum::{
@@ -11,13 +11,9 @@ use axum::{
 };
 use oid4vci::token_request::TokenRequest;
 
-use crate::AggregateHandler;
-
-// use crate::AGGREGATE_ID;
-
 #[axum_macros::debug_handler]
 pub(crate) async fn token(
-    State(state): State<AggregateHandler<Offer, OfferView>>,
+    State(state): State<ApplicationState>,
     Form(token_request): Form<TokenRequest>,
 ) -> impl IntoResponse {
     let pre_authorized_code = match token_request.clone() {
@@ -26,9 +22,18 @@ pub(crate) async fn token(
         } => pre_authorized_code,
         _ => return StatusCode::BAD_REQUEST.into_response(),
     };
+
+    let offer_id = state
+        .offer
+        .load_pre_authorized_code(&pre_authorized_code)
+        .await
+        .unwrap()
+        .unwrap()
+        .offer_id;
+
     let command = OfferCommand::CreateTokenResponse { token_request };
 
-    match command_handler("OFF-0123".to_string(), &state, command).await {
+    match command_handler(offer_id.clone(), &state.offer, command).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => {
             println!("Error: {:#?}\n", err);
@@ -36,20 +41,8 @@ pub(crate) async fn token(
         }
     };
 
-    match query_handler("OFF_98123".to_string(), &state).await {
-        Ok(Some(view)) => {
-            // TODO: This is a non-idiomatic way of finding the subject by using the pre-authorized_code in the token_request. We should use a aggregate/query instead.
-            // let subject = view
-            //     .subjects
-            //     .iter()
-            //     .find(|subject| subject.pre_authorized_code == pre_authorized_code);
-            // if let Some(subject) = subject {
-            //     (StatusCode::OK, Json(subject.token_response.clone())).into_response()
-            // } else {
-            //     StatusCode::NOT_FOUND.into_response()
-            // }
-            StatusCode::NOT_IMPLEMENTED.into_response()
-        }
+    match query_handler(offer_id, &state.offer).await {
+        Ok(Some(view)) => (StatusCode::OK, Json(view.token_response.unwrap())).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(err) => {
             println!("Error: {:#?}\n", err);
@@ -58,62 +51,63 @@ pub(crate) async fn token(
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use crate::{
-//         app,
-//         tests::{create_credential_offer, create_unsigned_credential, BASE_URL, PRE_AUTHORIZED_CODE},
-//     };
+#[cfg(test)]
+pub mod tests {
+    use crate::{app, credentials::tests::credentials, offers::tests::offers, tests::BASE_URL};
 
-//     use super::*;
-//     use agent_issuance::{
-//         services::IssuanceServices,
-//         startup_commands::startup_commands_server_config,
-//         state::{initialize, CQRS},
-//     };
-//     use agent_store::in_memory;
-//     use axum::{
-//         body::Body,
-//         http::{self, Request},
-//     };
-//     use serde_json::Value;
-//     use tower::ServiceExt;
+    use super::*;
+    use agent_issuance::{startup_commands::startup_commands_server_config, state::initialize};
+    use agent_store::in_memory;
+    use axum::{
+        body::Body,
+        http::{self, Request},
+        Router,
+    };
+    use oid4vci::token_response::TokenResponse;
+    use tower::Service;
 
-//     #[tokio::test]
-//     async fn test_token_endpoint() {
-//         let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
+    pub async fn token(app: &mut Router, pre_authorized_code: String) -> String {
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri(format!("/auth/token"))
+                    .header(
+                        http::header::CONTENT_TYPE,
+                        mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
+                    )
+                    .body(Body::from(format!(
+                        "grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code&pre-authorized_code={}",
+                        pre_authorized_code
+                    )))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
 
-//         initialize(state.clone(), startup_commands_server_config(BASE_URL.clone())).await;
+        assert_eq!(response.status(), StatusCode::OK);
 
-//         create_unsigned_credential(state.clone()).await;
-//         create_credential_offer(state.clone()).await;
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let token_response: TokenResponse = serde_json::from_slice(&body).unwrap();
+        assert_eq!(token_response.token_type, "bearer");
+        assert!(token_response.c_nonce.is_some());
 
-//         let app = app(state);
+        token_response.access_token
+    }
 
-//         let response = app
-//             .oneshot(
-//                 Request::builder()
-//                     .method(http::Method::POST)
-//                     .uri(format!("/auth/token"))
-//                     .header(
-//                         http::header::CONTENT_TYPE,
-//                         mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
-//                     )
-//                     .body(Body::from(format!(
-//                         "grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code&pre-authorized_code={}",
-//                         PRE_AUTHORIZED_CODE
-//                     )))
-//                     .unwrap(),
-//             )
-//             .await
-//             .unwrap();
+    #[tokio::test]
+    async fn test_token_endpoint() {
+        let state = in_memory::application_state().await;
 
-//         assert_eq!(response.status(), StatusCode::OK);
+        initialize(state.clone(), startup_commands_server_config(BASE_URL.clone())).await;
 
-//         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-//         let body: Value = serde_json::from_slice(&body).unwrap();
-//         assert!(body["access_token"].as_str().is_some());
-//         assert_eq!(body["token_type"], "bearer");
-//         assert!(body["c_nonce"].as_str().is_some());
-//     }
-// }
+        let mut app = app(state);
+
+        let _response = credentials(&mut app).await.unwrap();
+        let pre_authorized_code = offers(&mut app).await;
+
+        let _access_token = token(&mut app, pre_authorized_code).await;
+
+        dbg!(_access_token);
+    }
+}

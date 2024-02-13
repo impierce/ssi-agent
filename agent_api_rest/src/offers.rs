@@ -1,6 +1,6 @@
 use agent_issuance::{
     handlers::{command_handler, query_handler},
-    offer::{aggregate::Offer, command::OfferCommand, queries::OfferView},
+    offer::command::OfferCommand,
     state::ApplicationState,
 };
 use axum::{
@@ -10,8 +10,6 @@ use axum::{
 };
 use serde_json::Value;
 
-use crate::AggregateHandler;
-
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> impl IntoResponse {
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
@@ -20,16 +18,18 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
         return (StatusCode::BAD_REQUEST, "subjectId is required".to_string()).into_response();
     };
 
+    dbg!("HERE");
+
     let credential_issuer_metadata = query_handler("SERVCONFIG-0001".to_string(), &state.server_config)
         .await
         .unwrap()
         .unwrap()
         .credential_issuer_metadata
         .unwrap();
+    dbg!("HERE");
 
-    let command = OfferCommand::CreateCredentialOffer {
-        credential_issuer_metadata,
-    };
+    let command = OfferCommand::CreateOffer;
+    dbg!("HERE");
 
     match command_handler(subject_id.to_string(), &state.offer, command).await {
         Ok(_) => {}
@@ -39,61 +39,63 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
         }
     };
 
+    dbg!("HERE");
+
+    let command = OfferCommand::CreateCredentialOffer {
+        credential_issuer_metadata,
+    };
+    dbg!("HERE");
+
+    match command_handler(subject_id.to_string(), &state.offer, command).await {
+        Ok(_) => {}
+        Err(err) => {
+            println!("Error: {:#?}\n", err);
+            return (StatusCode::BAD_REQUEST, err.to_string()).into_response();
+        }
+    };
+
+    dbg!("HERE");
+
     match query_handler(subject_id.to_string(), &state.offer).await {
-        Ok(Some(offer_view)) => (StatusCode::OK, offer_view.form_urlencoded_credential_offer).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Ok(Some(offer_view)) => {
+            dbg!(&offer_view);
+            dbg!((StatusCode::OK, Json(offer_view.form_urlencoded_credential_offer)).into_response())
+        }
+        Ok(None) => dbg!(StatusCode::NOT_FOUND.into_response()),
         Err(err) => {
             println!("Error: {:#?}\n", err);
             (StatusCode::BAD_REQUEST, err.to_string()).into_response()
         }
-        _ => StatusCode::NOT_IMPLEMENTED.into_response(),
     }
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
+    use std::str::FromStr;
+
     use crate::{
         app,
         tests::{BASE_URL, PRE_AUTHORIZED_CODE, SUBJECT_ID},
     };
 
     use super::*;
-    use agent_issuance::{
-        startup_commands::{load_credential_format_template, load_credential_issuer_metadata},
-        state::CQRS,
-    };
+    use agent_issuance::{startup_commands::startup_commands_server_config, state::initialize};
     use agent_store::in_memory;
     use axum::{
         body::Body,
         http::{self, Request},
+        Router,
+    };
+    use oid4vci::{
+        credential_format_profiles::CredentialFormats,
+        credential_offer::{CredentialOffer, CredentialOfferQuery, Grants, PreAuthorizedCode},
     };
     use serde_json::json;
-    use tower::ServiceExt;
+    use tower::Service;
 
-    #[tokio::test]
-    async fn test_offers_endpoint() {
-        let state = in_memory::application_state().await;
-
-        state
-            .credential
-            .execute_with_metadata("credential-001", load_credential_format_template(), Default::default())
-            .await;
-
-        state
-            .server_config
-            .execute_with_metadata(
-                "SERVCONFIG-0001",
-                load_credential_issuer_metadata(BASE_URL.clone()),
-                Default::default(),
-            )
-            .await;
-
-        create_unsigned_credential(state.clone()).await;
-
-        let app = app(state);
-
+    pub async fn offers(app: &mut Router) -> String {
         let response = app
-            .oneshot(
+            .call(
                 Request::builder()
                     .method(http::Method::POST)
                     .uri("/v1/offers")
@@ -115,7 +117,32 @@ mod tests {
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
 
         let value: Value = serde_json::from_slice(&body).unwrap();
-        let credential_offer = value.as_str().unwrap();
-        assert_eq!(credential_offer, "openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fexample.com%2F%22%2C%22credentials%22%3A%5B%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22pre-authorized_code%22%2C%22user_pin_required%22%3Afalse%7D%7D%7D");
+        let CredentialOfferQuery::CredentialOffer(CredentialOffer {
+            grants:
+                Some(Grants {
+                    pre_authorized_code:
+                        Some(PreAuthorizedCode {
+                            pre_authorized_code, ..
+                        }),
+                    ..
+                }),
+            ..
+        }) = CredentialOfferQuery::<CredentialFormats>::from_str(value.as_str().unwrap()).unwrap()
+        else {
+            unreachable!()
+        };
+
+        pre_authorized_code
+    }
+
+    #[tokio::test]
+    async fn test_offers_endpoint() {
+        let state = in_memory::application_state().await;
+
+        initialize(state.clone(), startup_commands_server_config(BASE_URL.clone())).await;
+
+        let mut app = app(state);
+
+        let _pre_authorized_code = offers(&mut app).await;
     }
 }

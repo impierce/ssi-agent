@@ -1,5 +1,5 @@
 use agent_issuance::{
-    credential::{aggregate::Credential, command::CredentialCommand, queries::CredentialView, value_object::Subject},
+    credential::command::CredentialCommand,
     handlers::{command_handler, query_handler},
     offer::command::OfferCommand,
     state::ApplicationState,
@@ -8,13 +8,9 @@ use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::IntoResponse,
-    Extension,
 };
-use cqrs_es::{persist::ViewRepository, Aggregate, View};
 use hyper::header;
 use serde_json::Value;
-
-use crate::AggregateHandler;
 
 // use crate::AGGREGATE_ID;
 
@@ -141,18 +137,43 @@ pub(crate) async fn credentials(
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
+    use std::convert::Infallible;
+
     use crate::{app, tests::SUBJECT_ID};
 
     use super::*;
-    use agent_issuance::startup_commands::load_credential_format_template;
     use agent_store::in_memory;
     use axum::{
         body::Body,
         http::{self, Request},
+        response::Response,
+        Router,
     };
     use serde_json::json;
-    use tower::ServiceExt;
+    use tower::Service;
+
+    pub async fn credentials(app: &mut Router) -> Result<Response, Infallible> {
+        app.call(
+            Request::builder()
+                .method(http::Method::POST)
+                .uri("/v1/credentials")
+                .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "subjectId": SUBJECT_ID,
+                        "credential": {
+                            "credentialSubject": {
+                            "first_name": "Ferris",
+                            "last_name": "Rustacean"
+                        }},
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+    }
 
     #[tokio::test]
     async fn test_credentials_endpoint() {
@@ -160,29 +181,9 @@ mod tests {
 
         // initialize(state.clone(), vec![load_credential_format_template()]).await;
 
-        let app = app(state);
+        let mut app = app(state);
 
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .method(http::Method::POST)
-                    .uri("/v1/credentials")
-                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-                    .body(Body::from(
-                        serde_json::to_vec(&json!({
-                            "subjectId": SUBJECT_ID,
-                            "credential": {
-                                "credentialSubject": {
-                                "first_name": "Ferris",
-                                "last_name": "Rustacean"
-                            }},
-                        }))
-                        .unwrap(),
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let response = credentials(&mut app).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::CREATED);
 

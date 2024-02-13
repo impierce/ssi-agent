@@ -70,23 +70,17 @@ pub struct ApplicationState {
 pub type AggregateHandler<A, V> = Arc<dyn CQRS<A, V> + Send + Sync>;
 // pub type ApplicationState = Arc<dyn Send + Sync>;
 
-// /// Initialize the application state by executing the startup commands.
-// pub async fn initialize<R, A, V>(state: AggregateHandler<R, A, V>, startup_commands: Vec<<A as Aggregate>::Command>)
-// where
-//     R: ViewRepository<V, A>,
-//     A: Aggregate,
-//     V: View<A>,
-//     <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
-// {
-//     info!("Initializing ...");
+/// Initialize the application state by executing the startup commands.
+pub async fn initialize(state: ApplicationState, startup_commands: Vec<ServerConfigCommand>) {
+    info!("Initializing ...");
 
-//     // let _ = command_handler_credential("CRED_001".to_string(), &state, load_credential_format_template()).await;
+    // let _ = command_handler_credential("CRED_001".to_string(), &state, load_credential_format_template()).await;
 
-//     for command in startup_commands {
-//         let command_string = format!("{:?}", command).split(' ').next().unwrap().to_string();
-//         match command_handler("CONFIG_001".to_string(), &state, command).await {
-//             Ok(_) => info!("Startup task completed: `{}`", command_string),
-//             Err(err) => warn!("Startup task failed: {:#?}", err),
-//         }
-//     }
-// }
+    for command in startup_commands {
+        let command_string = format!("{:?}", command).split(' ').next().unwrap().to_string();
+        match command_handler("SERVCONFIG-0001".to_string(), &state.server_config, command).await {
+            Ok(_) => info!("Startup task completed: `{}`", command_string),
+            Err(err) => warn!("Startup task failed: {:#?}", err),
+        }
+    }
+}

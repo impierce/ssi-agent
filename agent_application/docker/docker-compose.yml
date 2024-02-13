@@ -26,13 +26,13 @@ services:
       - "./db/pgadmin4/servers.json:/pgadmin4/servers.json"
     depends_on:
       - cqrs-postgres-db
-  # ssi-agent:
-  #   image: ssi-agent
-  #   restart: always
-  #   ports:
-  #     - 3033:3033
-  #   environment:
-  #     AGENT_CONFIG_LOG_FORMAT: json
-  #     AGENT_CONFIG_EVENT_STORE: postgres
-  #     AGENT_APPLICATION_HOST: ${AGENT_APPLICATION_HOST:?set it please}
-  #     AGENT_STORE_DB_CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo
+  ssi-agent:
+    image: ssi-agent
+    restart: always
+    ports:
+      - 3033:3033
+    environment:
+      AGENT_CONFIG_LOG_FORMAT: json
+      AGENT_CONFIG_EVENT_STORE: postgres
+      AGENT_APPLICATION_HOST: 192.168.1.127
+      AGENT_STORE_DB_CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo
