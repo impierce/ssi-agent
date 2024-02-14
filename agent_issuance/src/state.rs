@@ -31,9 +31,7 @@ where
 
 #[derive(Clone)]
 pub struct ApplicationState {
-    pub server_config_handler: AggregateHandler<ServerConfig>,
-    pub credential_handler: AggregateHandler<Credential>,
-    pub offer_handler: AggregateHandler<Offer>,
+    pub command: CommandHandlers,
     pub query: Queries<
         dyn ViewRepository<ServerConfigView, ServerConfig>,
         dyn ViewRepository<CredentialView, Credential>,
@@ -43,7 +41,14 @@ pub struct ApplicationState {
     >,
 }
 
-pub type AggregateHandler<A> = Arc<dyn CQRS<A> + Send + Sync>;
+#[derive(Clone)]
+pub struct CommandHandlers {
+    pub server_config: CommandHandler<ServerConfig>,
+    pub credential: CommandHandler<Credential>,
+    pub offer: CommandHandler<Offer>,
+}
+
+pub type CommandHandler<A> = Arc<dyn CQRS<A> + Send + Sync>;
 
 pub struct Queries<SC, C, O, O1, O2>
 where
@@ -98,7 +103,7 @@ pub async fn initialize(state: ApplicationState, startup_commands: Vec<ServerCon
 
     for command in startup_commands {
         let command_string = format!("{:?}", command).split(' ').next().unwrap().to_string();
-        match command_handler("SERVCONFIG-0001", &state.server_config_handler, command).await {
+        match command_handler("SERVCONFIG-0001", &state.command.server_config, command).await {
             Ok(_) => info!("Startup task completed: `{}`", command_string),
             Err(err) => warn!("Startup task failed: {:#?}", err),
         }

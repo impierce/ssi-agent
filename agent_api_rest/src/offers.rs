@@ -32,7 +32,7 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
 
     let command = OfferCommand::CreateOffer;
 
-    match command_handler(subject_id, &state.offer_handler, command).await {
+    match command_handler(subject_id, &state.command.offer, command).await {
         Ok(_) => {}
         Err(err) => {
             println!("Error: {:#?}\n", err);
@@ -44,7 +44,7 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
         credential_issuer_metadata,
     };
 
-    match command_handler(subject_id, &state.offer_handler, command).await {
+    match command_handler(subject_id, &state.command.offer, command).await {
         Ok(_) => {}
         Err(err) => {
             println!("Error: {:#?}\n", err);

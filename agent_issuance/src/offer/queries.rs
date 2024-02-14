@@ -49,8 +49,6 @@ where
         events: &[EventEnvelope<Offer>],
     ) -> Result<(), PersistenceError> {
         let (mut view, mut view_context) = self.load_mut(view_id.to_string()).await?;
-        println!("Applying events to view: {:?}", view);
-        println!("view_context: {:?}", view_context.view_instance_id);
 
         for event in events {
             match &event.payload {
@@ -58,21 +56,16 @@ where
                     pre_authorized_code,
                     access_token,
                 } => {
-                    println!("own type: {:?}", self.r#type);
                     if self.r#type == "pre-authorized_code" {
-                        println!("pre_authorized_code: {:?}", pre_authorized_code);
                         view_context.view_instance_id = pre_authorized_code.clone();
                     } else if self.r#type == "access_token" {
-                        println!("access_token: {:?}", access_token);
                         view_context.view_instance_id = access_token.clone();
                     }
                 }
                 _ => {}
             }
-            println!("event: {:?}", event.payload);
             view.update(event);
         }
-        println!("view_context: {:?}", view_context.view_instance_id);
         self.view_repository.update_view(view, view_context).await?;
         Ok(())
     }

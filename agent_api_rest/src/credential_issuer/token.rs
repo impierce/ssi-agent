@@ -36,7 +36,7 @@ pub(crate) async fn token(
     // Create a `TokenResponse` using the `offer_id` and `token_request`.
     match command_handler(
         &offer_id,
-        &state.offer_handler,
+        &state.command.offer,
         OfferCommand::CreateTokenResponse { token_request },
     )
     .await

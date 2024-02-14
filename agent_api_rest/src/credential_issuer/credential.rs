@@ -70,7 +70,7 @@ pub(crate) async fn credential(
     };
 
     // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
-    match command_handler(&offer_id, &state.offer_handler, command).await {
+    match command_handler(&offer_id, &state.command.offer, command).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => (StatusCode::BAD_REQUEST, err.to_string()).into_response(),
     };

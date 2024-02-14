@@ -1,4 +1,4 @@
-use crate::state::AggregateHandler;
+use crate::state::CommandHandler;
 use cqrs_es::{
     persist::{PersistenceError, ViewRepository},
     Aggregate, AggregateError, View,
@@ -29,7 +29,7 @@ where
 
 pub async fn command_handler<A>(
     aggregate_id: &str,
-    state: &AggregateHandler<A>,
+    state: &CommandHandler<A>,
     command: <A as Aggregate>::Command,
 ) -> Result<(), AggregateError<<A as Aggregate>::Error>>
 where

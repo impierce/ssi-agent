@@ -6,7 +6,7 @@ use agent_issuance::{
         services::OfferServices,
     },
     server_config::services::ServerConfigServices,
-    state::{generic_query, ApplicationState, Queries, CQRS},
+    state::{generic_query, ApplicationState, CommandHandlers, Queries, CQRS},
 };
 use async_trait::async_trait;
 use cqrs_es::{
@@ -71,8 +71,8 @@ where
 #[async_trait]
 impl<A> CQRS<A> for AggregateHandler<A>
 where
-    A: Aggregate + 'static,
-    <A as Aggregate>::Command: Send + Sync,
+    A: Aggregate,
+    <A as Aggregate>::Command: Send,
 {
     async fn execute_with_metadata(
         &self,
@@ -86,8 +86,8 @@ where
 
 impl<A> AggregateHandler<A>
 where
-    A: Aggregate + 'static,
-    <A as Aggregate>::Command: Send + Sync,
+    A: Aggregate,
+    <A as Aggregate>::Command: Send,
 {
     fn new(services: A::Services) -> Self {
         Self {
@@ -106,34 +106,34 @@ where
 }
 
 pub async fn application_state() -> agent_issuance::state::ApplicationState {
+    // Initialize the in-memory repositories.
     let server_config = Arc::new(MemRepository::default());
     let credential = Arc::new(MemRepository::default());
-
     let offer = Arc::new(MemRepository::default());
     let pre_authorized_code = Arc::new(MemRepository::<PreAuthorizedCodeView, Offer>::new());
     let access_token = Arc::new(MemRepository::<AccessTokenView, Offer>::new());
 
+    // Create sub-queries for the offer aggregate.
     let pre_authorized_code_query: OfferSubQuery<MemRepository<PreAuthorizedCodeView, Offer>, PreAuthorizedCodeView> =
         OfferSubQuery::new(pre_authorized_code.clone(), "pre-authorized_code".to_string());
-
     let access_token_query: OfferSubQuery<MemRepository<AccessTokenView, Offer>, AccessTokenView> =
         OfferSubQuery::new(access_token.clone(), "access_token".to_string());
 
-    let server_config_handler =
-        Arc::new(AggregateHandler::new(ServerConfigServices).append_query(generic_query(server_config.clone())));
-    let credential_handler =
-        Arc::new(AggregateHandler::new(CredentialServices).append_query(generic_query(credential.clone())));
-    let offer_handler = Arc::new(
-        AggregateHandler::new(OfferServices)
-            .append_query(generic_query(offer.clone()))
-            .append_query(pre_authorized_code_query)
-            .append_query(access_token_query),
-    );
-
     ApplicationState {
-        offer_handler,
-        credential_handler,
-        server_config_handler,
+        command: CommandHandlers {
+            server_config: Arc::new(
+                AggregateHandler::new(ServerConfigServices).append_query(generic_query(server_config.clone())),
+            ),
+            credential: Arc::new(
+                AggregateHandler::new(CredentialServices).append_query(generic_query(credential.clone())),
+            ),
+            offer: Arc::new(
+                AggregateHandler::new(OfferServices)
+                    .append_query(generic_query(offer.clone()))
+                    .append_query(pre_authorized_code_query)
+                    .append_query(access_token_query),
+            ),
+        },
         query: Queries {
             server_config,
             credential,
