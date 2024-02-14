@@ -13,7 +13,6 @@ pub enum ServerConfigCommand {
     LoadCredentialIssuerMetadata {
         credential_issuer_metadata: CredentialIssuerMetadata,
     },
-    // Subject Management
     CreateCredentialsSupported {
         credentials_supported: Vec<CredentialsSupportedObject>,
     },

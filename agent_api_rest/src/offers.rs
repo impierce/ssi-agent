@@ -21,7 +21,7 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
         return (StatusCode::BAD_REQUEST, "subjectId is required".to_string()).into_response();
     };
 
-    let credential_issuer_metadata = match query_handler(SERVER_CONFIG_ID.to_string(), &state.server_config).await {
+    let credential_issuer_metadata = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
         Ok(Some(ServerConfigView {
             credential_issuer_metadata: Some(credential_issuer_metadata),
             ..
@@ -32,7 +32,7 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
 
     let command = OfferCommand::CreateOffer;
 
-    match command_handler(subject_id.to_string(), &state.offer, command).await {
+    match command_handler(subject_id, &state.offer_handler, command).await {
         Ok(_) => {}
         Err(err) => {
             println!("Error: {:#?}\n", err);
@@ -44,7 +44,7 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
         credential_issuer_metadata,
     };
 
-    match command_handler(subject_id.to_string(), &state.offer, command).await {
+    match command_handler(subject_id, &state.offer_handler, command).await {
         Ok(_) => {}
         Err(err) => {
             println!("Error: {:#?}\n", err);
@@ -52,7 +52,7 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
         }
     };
 
-    match query_handler(subject_id.to_string(), &state.offer).await {
+    match query_handler(subject_id, &state.query.offer).await {
         Ok(Some(offer_view)) => (StatusCode::OK, Json(offer_view.form_urlencoded_credential_offer)).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(err) => {

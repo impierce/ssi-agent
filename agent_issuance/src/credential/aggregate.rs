@@ -17,7 +17,7 @@ pub struct Credential {
 
 // #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
 // #[derivative(PartialEq)]
-// pub struct CredentialLegacy {
+// pub struct CredentialAlt {
 //     // Entity
 //     pub data: Data,
 //     // Value Objects

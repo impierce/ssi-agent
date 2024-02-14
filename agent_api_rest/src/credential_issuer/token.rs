@@ -28,15 +28,15 @@ pub(crate) async fn token(
     };
 
     // Use the `pre_authorized_code` to get the `offer_id` from the `PreAuthorizedCodeView`.
-    let offer_id = match state.offer.load_pre_authorized_code(pre_authorized_code).await {
+    let offer_id = match query_handler(pre_authorized_code, &state.query.pre_authorized_code).await {
         Ok(Some(PreAuthorizedCodeView { offer_id })) => offer_id,
         _ => panic!(),
     };
 
     // Create a `TokenResponse` using the `offer_id` and `token_request`.
     match command_handler(
-        offer_id.clone(),
-        &state.offer,
+        &offer_id,
+        &state.offer_handler,
         OfferCommand::CreateTokenResponse { token_request },
     )
     .await
@@ -46,7 +46,7 @@ pub(crate) async fn token(
     };
 
     // Use the `offer_id` to get the `token_response` from the `OfferView`.
-    match query_handler(offer_id, &state.offer).await {
+    match query_handler(&offer_id, &state.query.offer).await {
         Ok(Some(OfferView {
             token_response: Some(token_response),
             ..

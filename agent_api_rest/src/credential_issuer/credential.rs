@@ -26,14 +26,14 @@ pub(crate) async fn credential(
     Json(credential_request): Json<CredentialRequest>,
 ) -> impl IntoResponse {
     // Use the `access_token` to get the `offer_id` from the `AccessTokenView`.
-    let offer_id = match state.offer.load_access_token(&access_token).await {
+    let offer_id = match query_handler(&access_token, &state.query.access_token).await {
         Ok(Some(AccessTokenView { offer_id })) => offer_id,
         // TODO: fix this!
         _ => return StatusCode::UNAUTHORIZED.into_response(),
     };
 
     // Use the `offer_id` to get the `credential_ids` from the `OfferView`.
-    let credential_ids = match state.offer.load(&offer_id).await {
+    let credential_ids = match query_handler(&offer_id, &state.query.offer).await {
         Ok(Some(OfferView { credential_ids, .. })) => credential_ids,
         // TODO: fix this!
         _ => panic!(),
@@ -42,7 +42,7 @@ pub(crate) async fn credential(
     // Use the `credential_ids` to get the `credentials` from the `CredentialView`.
     let mut credentials = vec![];
     for credential_id in credential_ids {
-        let credential = match state.credential.load(&credential_id).await {
+        let credential = match query_handler(&credential_id, &state.query.credential).await {
             Ok(Some(CredentialView { credential, .. })) => credential,
             // TODO: fix this!
             _ => panic!(),
@@ -53,7 +53,7 @@ pub(crate) async fn credential(
 
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
     let (credential_issuer_metadata, authorization_server_metadata) =
-        match state.server_config.load(SERVER_CONFIG_ID).await {
+        match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
             Ok(Some(ServerConfigView {
                 credential_issuer_metadata: Some(credential_issuer_metadata),
                 authorization_server_metadata: Some(authorization_server_metadata),
@@ -70,13 +70,13 @@ pub(crate) async fn credential(
     };
 
     // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
-    match command_handler(offer_id.clone(), &state.offer, command).await {
+    match command_handler(&offer_id, &state.offer_handler, command).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(err) => (StatusCode::BAD_REQUEST, err.to_string()).into_response(),
     };
 
     // Use the `offer_id` to get the `credential_response` from the `OfferView`.
-    match query_handler(offer_id, &state.offer).await {
+    match query_handler(&offer_id, &state.query.offer).await {
         Ok(Some(OfferView {
             credential_response: Some(credential_response),
             ..

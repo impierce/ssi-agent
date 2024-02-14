@@ -13,12 +13,14 @@ use crate::server_config::services::ServerConfigServices;
 /// An aggregate that holds the configuration of the server.
 #[derive(Clone, Default, Deserialize, Serialize, Debug)]
 pub struct ServerConfig {
+    // TODO: These fields should not be optional. ServerConfig should be created with all of its fields that can be
+    // updated through commands.
     authorization_server_metadata: Option<AuthorizationServerMetadata>,
     credential_issuer_metadata: Option<CredentialIssuerMetadata>,
 }
 
 #[derive(Clone, Default, Deserialize, Serialize, Debug)]
-pub struct ServerConfigLegacy {
+pub struct ServerConfigAlt {
     // root: Root,
     id: uuid::Uuid,
     // Value Objects

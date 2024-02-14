@@ -26,8 +26,8 @@ pub(crate) async fn credentials(
     let credential_id = uuid::Uuid::new_v4().to_string();
 
     match command_handler(
-        credential_id.clone(),
-        &state.credential,
+        &credential_id,
+        &state.credential_handler,
         CredentialCommand::LoadCredentialFormatTemplate {
             credential_format_template: serde_json::from_str(include_str!(
                 "../../agent_issuance/res/credential_format_templates/openbadges_v3.json"
@@ -53,7 +53,7 @@ pub(crate) async fn credentials(
 
     println!("command: {:#?}", command);
 
-    match command_handler(credential_id.clone(), &state.credential, command).await {
+    match command_handler(&credential_id, &state.credential_handler, command).await {
         Ok(_) => {}
         Err(err) => {
             println!("{:?}", err)
@@ -61,8 +61,8 @@ pub(crate) async fn credentials(
     }
 
     match command_handler(
-        subject_id.to_string(),
-        &state.offer,
+        subject_id,
+        &state.offer_handler,
         OfferCommand::AddCredential {
             credential_ids: vec![credential_id.clone()],
         },
@@ -75,7 +75,7 @@ pub(crate) async fn credentials(
         }
     }
 
-    match query_handler(credential_id.clone(), &state.credential).await {
+    match query_handler(&credential_id, &state.query.credential).await {
         Ok(Some(view)) => {
             println!("view: {:?}", view);
             (

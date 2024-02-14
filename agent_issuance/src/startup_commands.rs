@@ -47,6 +47,7 @@ pub fn load_credential_issuer_metadata(base_url: url::Url) -> ServerConfigComman
     }
 }
 
+// TODO: Should not be a static startup command. Should be dynamic based on the configuration and/or updatable.
 pub fn create_credentials_supported() -> ServerConfigCommand {
     ServerConfigCommand::CreateCredentialsSupported {
         credentials_supported: vec![CredentialsSupportedObject {

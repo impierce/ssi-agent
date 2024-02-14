@@ -52,7 +52,7 @@ pub struct Offer {
 }
 
 // #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-// pub struct OfferLegacy {
+// pub struct OfferAlt {
 //     pub id: uuid::Uuid,
 //     // value: CredentialOfferQuery,
 //     // pub form_urlencoded: String,
@@ -144,13 +144,13 @@ impl Aggregate for Offer {
             CreateCredentialResponse {
                 credential_issuer_metadata,
                 authorization_server_metadata,
-                credentials,
+                mut credentials,
                 credential_request,
             } => {
                 use oid4vc_core::Subject;
 
                 // TODO: support batch credentials.
-                let mut credential = credentials.first().unwrap().clone();
+                let mut credential = credentials.pop().ok_or(MissingCredentialError)?;
 
                 // TODO: utilize `agent_kms`.
                 let issuer = Arc::new(KeySubject::from_keypair(
@@ -171,8 +171,7 @@ impl Aggregate for Offer {
                         Decoder::from(&Subjects::try_from([issuer.clone() as Arc<dyn Subject>]).unwrap()),
                     )
                     .await
-                    // TODO: FIx this
-                    .unwrap();
+                    .map_err(|e| InvalidProofError(e.to_string()))?;
 
                 let subject_did = proof
                     .rfc7519_claims

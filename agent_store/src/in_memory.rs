@@ -1,35 +1,26 @@
+use agent_issuance::{
+    credential::services::CredentialServices,
+    offer::{
+        aggregate::Offer,
+        queries::{AccessTokenView, OfferSubQuery, PreAuthorizedCodeView},
+        services::OfferServices,
+    },
+    server_config::services::ServerConfigServices,
+    state::{generic_query, ApplicationState, Queries, CQRS},
+};
+use async_trait::async_trait;
+use cqrs_es::{
+    mem_store::MemStore,
+    persist::{PersistenceError, ViewContext, ViewRepository},
+    Aggregate, CqrsFramework, Query, View,
+};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
 
-use agent_issuance::{
-    credential::{
-        aggregate::Credential, command::CredentialCommand, error::CredentialError, queries::CredentialView,
-        services::CredentialServices,
-    },
-    offer::{
-        aggregate::Offer,
-        command::OfferCommand,
-        error::OfferError,
-        queries::{AccessTokenView, OfferSubQuery, OfferView, PreAuthorizedCodeView},
-        services::OfferServices,
-    },
-    server_config::{
-        aggregate::ServerConfig, command::ServerConfigCommand, error::ServerConfigError, queries::ServerConfigView,
-        services::ServerConfigServices,
-    },
-    state::{AggregateHandler, ApplicationState, CQRS},
-};
-use async_trait::async_trait;
-use cqrs_es::{
-    mem_store::MemStore,
-    persist::{GenericQuery, PersistenceError, ViewContext, ViewRepository},
-    Aggregate, CqrsFramework, View,
-};
-
 #[derive(Default)]
-pub struct MemRepository<V: View<A>, A: Aggregate> {
+struct MemRepository<V: View<A>, A: Aggregate> {
     pub map: Mutex<HashMap<String, serde_json::Value>>,
     _phantom: std::marker::PhantomData<(V, A)>,
 }
@@ -70,148 +61,85 @@ where
     }
 }
 
-pub struct OfferAggregateHandler {
-    pub main_view: Arc<MemRepository<OfferView, Offer>>,
-    pub pre_authorized_code_repo: Arc<MemRepository<PreAuthorizedCodeView, Offer>>,
-    pub access_token_repo: Arc<MemRepository<AccessTokenView, Offer>>,
-    pub cqrs: Arc<CqrsFramework<Offer, MemStore<Offer>>>,
+struct AggregateHandler<A>
+where
+    A: Aggregate,
+{
+    pub cqrs: CqrsFramework<A, MemStore<A>>,
 }
 
 #[async_trait]
-impl CQRS<Offer, OfferView> for OfferAggregateHandler {
-    async fn new() -> AggregateHandler<Offer, OfferView> {
-        let main_view = Arc::new(MemRepository::default());
-
-        let pre_authorized_code_repo = Arc::new(MemRepository::<PreAuthorizedCodeView, Offer>::new());
-        let access_token_repo = Arc::new(MemRepository::<AccessTokenView, Offer>::new());
-
-        let mut generic_query = GenericQuery::new(main_view.clone());
-        generic_query.use_error_handler(Box::new(|e| println!("{}", e)));
-
-        let pre_authorized_code_query: OfferSubQuery<
-            MemRepository<PreAuthorizedCodeView, Offer>,
-            PreAuthorizedCodeView,
-        > = OfferSubQuery::new(pre_authorized_code_repo.clone(), "pre-authorized_code".to_string());
-
-        let access_token_query: OfferSubQuery<MemRepository<AccessTokenView, Offer>, AccessTokenView> =
-            OfferSubQuery::new(access_token_repo.clone(), "access_token".to_string());
-
-        let cqrs: Arc<CqrsFramework<Offer, MemStore<Offer>>> = Arc::new(CqrsFramework::new(
-            MemStore::default(),
-            vec![
-                Box::new(generic_query),
-                Box::new(pre_authorized_code_query),
-                Box::new(access_token_query),
-            ],
-            OfferServices,
-        ));
-
-        Arc::new(OfferAggregateHandler {
-            main_view,
-            pre_authorized_code_repo,
-            access_token_repo,
-            cqrs,
-        })
-    }
-
+impl<A> CQRS<A> for AggregateHandler<A>
+where
+    A: Aggregate + 'static,
+    <A as Aggregate>::Command: Send + Sync,
+{
     async fn execute_with_metadata(
         &self,
         aggregate_id: &str,
-        command: OfferCommand,
+        command: A::Command,
         metadata: HashMap<String, String>,
-    ) -> Result<(), cqrs_es::AggregateError<OfferError>> {
+    ) -> Result<(), cqrs_es::AggregateError<A::Error>> {
         self.cqrs.execute_with_metadata(aggregate_id, command, metadata).await
     }
-
-    async fn load(&self, view_id: &str) -> Result<Option<OfferView>, PersistenceError> {
-        self.main_view.load(view_id).await
-    }
-
-    async fn load_pre_authorized_code(&self, view_id: &str) -> Result<Option<PreAuthorizedCodeView>, PersistenceError> {
-        self.pre_authorized_code_repo.load(view_id).await
-    }
-
-    async fn load_access_token(&self, view_id: &str) -> Result<Option<AccessTokenView>, PersistenceError> {
-        self.access_token_repo.load(view_id).await
-    }
 }
 
-pub struct CredentialAggregateHandler {
-    pub main_view: Arc<MemRepository<CredentialView, Credential>>,
-    pub cqrs: Arc<CqrsFramework<Credential, MemStore<Credential>>>,
-}
-
-#[async_trait]
-impl CQRS<Credential, CredentialView> for CredentialAggregateHandler {
-    async fn new() -> AggregateHandler<Credential, CredentialView> {
-        let main_view = Arc::new(MemRepository::default());
-
-        let mut generic_query = GenericQuery::new(main_view.clone());
-        generic_query.use_error_handler(Box::new(|e| println!("{}", e)));
-
-        let cqrs: Arc<CqrsFramework<Credential, MemStore<Credential>>> = Arc::new(CqrsFramework::new(
-            MemStore::default(),
-            vec![Box::new(generic_query)],
-            CredentialServices,
-        ));
-
-        Arc::new(CredentialAggregateHandler { main_view, cqrs })
+impl<A> AggregateHandler<A>
+where
+    A: Aggregate + 'static,
+    <A as Aggregate>::Command: Send + Sync,
+{
+    fn new(services: A::Services) -> Self {
+        Self {
+            cqrs: CqrsFramework::new(MemStore::default(), vec![], services),
+        }
     }
 
-    async fn execute_with_metadata(
-        &self,
-        aggregate_id: &str,
-        command: CredentialCommand,
-        metadata: HashMap<String, String>,
-    ) -> Result<(), cqrs_es::AggregateError<CredentialError>> {
-        self.cqrs.execute_with_metadata(aggregate_id, command, metadata).await
-    }
-
-    async fn load(&self, view_id: &str) -> Result<Option<CredentialView>, PersistenceError> {
-        self.main_view.load(view_id).await
-    }
-}
-
-pub struct ServerConfigAggregateHandler {
-    pub main_view: Arc<MemRepository<ServerConfigView, ServerConfig>>,
-    pub cqrs: Arc<CqrsFramework<ServerConfig, MemStore<ServerConfig>>>,
-}
-
-#[async_trait]
-impl CQRS<ServerConfig, ServerConfigView> for ServerConfigAggregateHandler {
-    async fn new() -> AggregateHandler<ServerConfig, ServerConfigView> {
-        let main_view = Arc::new(MemRepository::default());
-
-        let mut generic_query = GenericQuery::new(main_view.clone());
-        generic_query.use_error_handler(Box::new(|e| println!("{}", e)));
-
-        let cqrs: Arc<CqrsFramework<ServerConfig, MemStore<ServerConfig>>> = Arc::new(CqrsFramework::new(
-            MemStore::default(),
-            vec![Box::new(generic_query)],
-            ServerConfigServices,
-        ));
-
-        Arc::new(ServerConfigAggregateHandler { main_view, cqrs })
-    }
-
-    async fn execute_with_metadata(
-        &self,
-        aggregate_id: &str,
-        command: ServerConfigCommand,
-        metadata: HashMap<String, String>,
-    ) -> Result<(), cqrs_es::AggregateError<ServerConfigError>> {
-        self.cqrs.execute_with_metadata(aggregate_id, command, metadata).await
-    }
-
-    async fn load(&self, view_id: &str) -> Result<Option<ServerConfigView>, PersistenceError> {
-        self.main_view.load(view_id).await
+    fn append_query<Q>(self, query: Q) -> Self
+    where
+        Q: Query<A> + 'static,
+    {
+        Self {
+            cqrs: self.cqrs.append_query(Box::new(query)),
+        }
     }
 }
 
 pub async fn application_state() -> agent_issuance::state::ApplicationState {
+    let server_config = Arc::new(MemRepository::default());
+    let credential = Arc::new(MemRepository::default());
+
+    let offer = Arc::new(MemRepository::default());
+    let pre_authorized_code = Arc::new(MemRepository::<PreAuthorizedCodeView, Offer>::new());
+    let access_token = Arc::new(MemRepository::<AccessTokenView, Offer>::new());
+
+    let pre_authorized_code_query: OfferSubQuery<MemRepository<PreAuthorizedCodeView, Offer>, PreAuthorizedCodeView> =
+        OfferSubQuery::new(pre_authorized_code.clone(), "pre-authorized_code".to_string());
+
+    let access_token_query: OfferSubQuery<MemRepository<AccessTokenView, Offer>, AccessTokenView> =
+        OfferSubQuery::new(access_token.clone(), "access_token".to_string());
+
+    let server_config_handler =
+        Arc::new(AggregateHandler::new(ServerConfigServices).append_query(generic_query(server_config.clone())));
+    let credential_handler =
+        Arc::new(AggregateHandler::new(CredentialServices).append_query(generic_query(credential.clone())));
+    let offer_handler = Arc::new(
+        AggregateHandler::new(OfferServices)
+            .append_query(generic_query(offer.clone()))
+            .append_query(pre_authorized_code_query)
+            .append_query(access_token_query),
+    );
+
     ApplicationState {
-        offer: OfferAggregateHandler::new().await,
-        credential: CredentialAggregateHandler::new().await,
-        server_config: ServerConfigAggregateHandler::new().await,
+        offer_handler,
+        credential_handler,
+        server_config_handler,
+        query: Queries {
+            server_config,
+            credential,
+            offer,
+            pre_authorized_code,
+            access_token,
+        },
     }
 }
