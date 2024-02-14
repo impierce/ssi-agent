@@ -51,17 +51,6 @@ pub struct Offer {
     pub credential_response: Option<CredentialResponse>,
 }
 
-// #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-// pub struct OfferLegacy {
-//     pub id: uuid::Uuid,
-//     // value: CredentialOfferQuery,
-//     // pub form_urlencoded: String,
-//     pub credentials: Vec<Credential>,
-//     pub server_config: ServerConfig,
-//     pub token_response: Option<TokenResponse>,
-//     pub credential_response: Option<CredentialResponse>,
-// }
-
 #[async_trait]
 impl Aggregate for Offer {
     type Command = OfferCommand;
@@ -82,7 +71,7 @@ impl Aggregate for Offer {
         use OfferEvent::*;
 
         match command {
-            CreateOffer => {
+            CreateCredentialOffer => {
                 #[cfg(test)]
                 let (pre_authorized_code, access_token) = {
                     let pre_authorized_code = tests::PRE_AUTHORIZED_CODES.lock().unwrap().pop_front().unwrap();
@@ -92,13 +81,13 @@ impl Aggregate for Offer {
                 #[cfg(not(test))]
                 let (pre_authorized_code, access_token) = { (generate_random_string(), generate_random_string()) };
 
-                Ok(vec![OfferCreated {
+                Ok(vec![CredentialOfferCreated {
                     pre_authorized_code,
                     access_token,
                 }])
             }
-            AddCredential { credential_ids } => Ok(vec![CredentialsAdded { credential_ids }]),
-            CreateCredentialOffer {
+            AddCredentials { credential_ids } => Ok(vec![CredentialsAdded { credential_ids }]),
+            CreateFormUrlEncodedCredentialOffer {
                 credential_issuer_metadata,
             } => {
                 let credentials_supported = credential_issuer_metadata.credentials_supported.clone();
@@ -116,7 +105,7 @@ impl Aggregate for Offer {
                         }),
                     }),
                 });
-                Ok(vec![CredentialOfferCreated {
+                Ok(vec![FormUrlEncodedCredentialOfferCreated {
                     form_url_encoded_credential_offer: credential_offer.to_string(),
                 }])
             }
@@ -180,8 +169,8 @@ impl Aggregate for Offer {
                     .ok_or(MissingProofIssuerError)?
                     .clone();
 
-                credential["issuer"] = json!(issuer_did);
-                credential["credentialSubject"]["id"] = json!(subject_did);
+                credential.raw["issuer"] = json!(issuer_did);
+                credential.raw["credentialSubject"]["id"] = json!(subject_did);
                 let credential_response = CredentialResponse {
                     credential: CredentialResponseType::Immediate(CredentialFormats::JwtVcJson(
                         credential_format_profiles::Credential {
@@ -194,7 +183,7 @@ impl Aggregate for Offer {
                                     .iss(issuer_did)
                                     .iat(0)
                                     .exp(9999999999i64)
-                                    .verifiable_credential(credential)
+                                    .verifiable_credential(credential.raw)
                                     .build()
                                     .ok(),
                             )
@@ -214,7 +203,7 @@ impl Aggregate for Offer {
         use OfferEvent::*;
 
         match event {
-            OfferCreated {
+            CredentialOfferCreated {
                 pre_authorized_code,
                 access_token,
             } => {
@@ -224,7 +213,7 @@ impl Aggregate for Offer {
             CredentialsAdded { credential_ids } => {
                 self.credential_ids = credential_ids;
             }
-            CredentialOfferCreated {
+            FormUrlEncodedCredentialOfferCreated {
                 form_url_encoded_credential_offer,
             } => {
                 self.form_urlencoded_credential_offer = form_url_encoded_credential_offer;
@@ -244,8 +233,9 @@ pub mod tests {
 
     use std::{collections::VecDeque, sync::Mutex};
 
-    use crate::server_config::aggregate::server_config_tests::{
-        AUTHORIZATION_SERVER_METADATA, CREDENTIAL_ISSUER_METADATA,
+    use crate::{
+        credential::entity::Data,
+        server_config::aggregate::server_config_tests::{AUTHORIZATION_SERVER_METADATA, CREDENTIAL_ISSUER_METADATA},
     };
 
     use super::*;
@@ -269,8 +259,8 @@ pub mod tests {
         let subject = subject();
         OfferTestFramework::with(OfferServices)
             .given_no_previous_events()
-            .when(OfferCommand::CreateOffer)
-            .then_expect_events(vec![OfferEvent::OfferCreated {
+            .when(OfferCommand::CreateCredentialOffer)
+            .then_expect_events(vec![OfferEvent::CredentialOfferCreated {
                 pre_authorized_code: subject.pre_authorized_code,
                 access_token: subject.access_token,
             }]);
@@ -285,11 +275,11 @@ pub mod tests {
 
         let subject = subject();
         OfferTestFramework::with(OfferServices)
-            .given(vec![OfferEvent::OfferCreated {
+            .given(vec![OfferEvent::CredentialOfferCreated {
                 pre_authorized_code: subject.pre_authorized_code.clone(),
                 access_token: subject.access_token.clone(),
             }])
-            .when(OfferCommand::AddCredential {
+            .when(OfferCommand::AddCredentials {
                 credential_ids: vec!["credential-id".to_string()],
             })
             .then_expect_events(vec![OfferEvent::CredentialsAdded {
@@ -307,7 +297,7 @@ pub mod tests {
         let subject = subject();
         OfferTestFramework::with(OfferServices)
             .given(vec![
-                OfferEvent::OfferCreated {
+                OfferEvent::CredentialOfferCreated {
                     pre_authorized_code: subject.pre_authorized_code,
                     access_token: subject.access_token,
                 },
@@ -315,10 +305,10 @@ pub mod tests {
                     credential_ids: vec!["credential-id".to_string()],
                 },
             ])
-            .when(OfferCommand::CreateCredentialOffer {
+            .when(OfferCommand::CreateFormUrlEncodedCredentialOffer {
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
             })
-            .then_expect_events(vec![OfferEvent::CredentialOfferCreated {
+            .then_expect_events(vec![OfferEvent::FormUrlEncodedCredentialOfferCreated {
                 form_url_encoded_credential_offer: subject.form_url_encoded_credential_offer,
             }]);
     }
@@ -333,14 +323,14 @@ pub mod tests {
         let subject = subject();
         OfferTestFramework::with(OfferServices)
             .given(vec![
-                OfferEvent::OfferCreated {
+                OfferEvent::CredentialOfferCreated {
                     pre_authorized_code: subject.pre_authorized_code.clone(),
                     access_token: subject.access_token.clone(),
                 },
                 OfferEvent::CredentialsAdded {
                     credential_ids: vec!["credential-id".to_string()],
                 },
-                OfferEvent::CredentialOfferCreated {
+                OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     form_url_encoded_credential_offer: subject.form_url_encoded_credential_offer.clone(),
                 },
             ])
@@ -362,14 +352,14 @@ pub mod tests {
         let subject = subject();
         OfferTestFramework::with(OfferServices)
             .given(vec![
-                OfferEvent::OfferCreated {
+                OfferEvent::CredentialOfferCreated {
                     pre_authorized_code: subject.pre_authorized_code.clone(),
                     access_token: subject.access_token.clone(),
                 },
                 OfferEvent::CredentialsAdded {
                     credential_ids: vec!["credential-id".to_string()],
                 },
-                OfferEvent::CredentialOfferCreated {
+                OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     form_url_encoded_credential_offer: subject.form_url_encoded_credential_offer.clone(),
                 },
                 OfferEvent::TokenResponseCreated {
@@ -397,14 +387,14 @@ pub mod tests {
         let subject = subject();
         OfferTestFramework::with(OfferServices)
             .given(vec![
-                OfferEvent::OfferCreated {
+                OfferEvent::CredentialOfferCreated {
                     pre_authorized_code: subject.pre_authorized_code.clone(),
                     access_token: subject.access_token.clone(),
                 },
                 OfferEvent::CredentialsAdded {
                     credential_ids: vec!["credential-id".to_string()],
                 },
-                OfferEvent::CredentialOfferCreated {
+                OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     form_url_encoded_credential_offer: subject.form_url_encoded_credential_offer.clone(),
                 },
                 OfferEvent::TokenResponseCreated {
@@ -454,22 +444,24 @@ pub mod tests {
                   }
             }
         );
-        static ref UNSIGNED_CREDENTIAL: serde_json::Value = json!({
-          "@context": [
-            "https://www.w3.org/2018/credentials/v1",
-            "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
-          ],
-          "id": "http://example.com/credentials/3527",
-          "type": ["VerifiableCredential", "OpenBadgeCredential"],
-          "issuer": {
-            "id": "https://example.com/issuers/876543",
-            "type": "Profile",
-            "name": "Example Corp"
-          },
-          "issuanceDate": "2010-01-01T00:00:00Z",
-          "name": "Teamwork Badge",
-          "credentialSubject": CREDENTIAL_SUBJECT["credentialSubject"].clone(),
-        });
+        static ref UNSIGNED_CREDENTIAL: Data = Data {
+            raw: json!({
+              "@context": [
+                "https://www.w3.org/2018/credentials/v1",
+                "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
+              ],
+              "id": "http://example.com/credentials/3527",
+              "type": ["VerifiableCredential", "OpenBadgeCredential"],
+              "issuer": {
+                "id": "https://example.com/issuers/876543",
+                "type": "Profile",
+                "name": "Example Corp"
+              },
+              "issuanceDate": "2010-01-01T00:00:00Z",
+              "name": "Teamwork Badge",
+              "credentialSubject": CREDENTIAL_SUBJECT["credentialSubject"].clone(),
+            })
+        };
         static ref SUBJECT_1_KEY_DID: Arc<KeySubject> = Arc::new(KeySubject::from_keypair(
             from_existing_key::<Ed25519KeyPair>(b"", Some("this-is-a-very-UNSAFE-subj-key-1".as_bytes())),
             None,

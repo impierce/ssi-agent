@@ -7,10 +7,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum ServerConfigEvent {
-    AuthorizationServerMetadataLoaded {
+    ServerMetadataLoaded {
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
-    },
-    CredentialIssuerMetadataLoaded {
         credential_issuer_metadata: CredentialIssuerMetadata,
     },
     CredentialsSupportedCreated {
@@ -23,8 +21,7 @@ impl DomainEvent for ServerConfigEvent {
         use ServerConfigEvent::*;
 
         let event_type: &str = match self {
-            AuthorizationServerMetadataLoaded { .. } => "AuthorizationServerMetadataLoaded",
-            CredentialIssuerMetadataLoaded { .. } => "CredentialIssuerMetadataLoaded",
+            ServerMetadataLoaded { .. } => "ServerMetadataLoaded",
             CredentialsSupportedCreated { .. } => "CredentialsSupportedCreated",
         };
         event_type.to_string()

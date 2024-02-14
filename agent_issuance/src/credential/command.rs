@@ -1,13 +1,12 @@
 use serde::Deserialize;
 
+use super::entity::Data;
+
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum CredentialCommand {
-    LoadCredentialFormatTemplate {
-        credential_format_template: serde_json::Value,
-    },
     CreateUnsignedCredential {
-        // subject: Subject,
-        credential: serde_json::Value,
+        data: Data,
+        credential_format_template: serde_json::Value,
     },
 }

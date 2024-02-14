@@ -1,18 +1,13 @@
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 
+use super::entity::Data;
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum CredentialEvent {
-    CredentialFormatTemplateLoaded {
-        credential_format_template: serde_json::Value,
-    },
-    // SubjectCreated {
-    //     subject: Subject,
-    // },
     UnsignedCredentialCreated {
-        // subject_id: String,
-        // credential: Credential,
-        credential: serde_json::Value,
+        data: Data,
+        credential_format_template: serde_json::Value,
     },
 }
 
@@ -21,8 +16,6 @@ impl DomainEvent for CredentialEvent {
         use CredentialEvent::*;
 
         let event_type: &str = match self {
-            CredentialFormatTemplateLoaded { .. } => "CredentialFormatTemplateLoaded",
-            // SubjectCreated { .. } => "SubjectCreated",
             UnsignedCredentialCreated { .. } => "UnsignedCredentialCreated",
         };
         event_type.to_string()

@@ -44,7 +44,7 @@ pub(crate) async fn credential(
     let mut credentials = vec![];
     for credential_id in credential_ids {
         let credential = match query_handler(&credential_id, &state.query.credential).await {
-            Ok(Some(CredentialView { credential, .. })) => credential,
+            Ok(Some(CredentialView { data, .. })) => data,
             _ => {
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
@@ -58,7 +58,7 @@ pub(crate) async fn credential(
         match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
             Ok(Some(ServerConfigView {
                 credential_issuer_metadata: Some(credential_issuer_metadata),
-                authorization_server_metadata: Some(authorization_server_metadata),
+                authorization_server_metadata,
             })) => (credential_issuer_metadata, Box::new(authorization_server_metadata)),
             _ => {
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();

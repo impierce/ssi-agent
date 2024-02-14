@@ -8,7 +8,7 @@ use crate::server_config::{aggregate::ServerConfig, event::ServerConfigEvent};
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct ServerConfigView {
-    pub authorization_server_metadata: Option<AuthorizationServerMetadata>,
+    pub authorization_server_metadata: AuthorizationServerMetadata,
     pub credential_issuer_metadata: Option<CredentialIssuerMetadata>,
 }
 
@@ -17,15 +17,11 @@ impl View<ServerConfig> for ServerConfigView {
         use ServerConfigEvent::*;
 
         match &event.payload {
-            AuthorizationServerMetadataLoaded {
+            ServerMetadataLoaded {
                 authorization_server_metadata,
-            } => {
-                self.authorization_server_metadata
-                    .replace(*authorization_server_metadata.clone());
-            }
-            CredentialIssuerMetadataLoaded {
                 credential_issuer_metadata,
             } => {
+                self.authorization_server_metadata = *authorization_server_metadata.clone();
                 self.credential_issuer_metadata
                     .replace(credential_issuer_metadata.clone());
             }

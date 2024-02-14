@@ -1,5 +1,5 @@
 use agent_issuance::{
-    credential::command::CredentialCommand,
+    credential::{command::CredentialCommand, entity::Data, queries::CredentialView},
     handlers::{command_handler, query_handler},
     offer::command::OfferCommand,
     state::ApplicationState,
@@ -25,11 +25,14 @@ pub(crate) async fn credentials(
 
     let credential_id = uuid::Uuid::new_v4().to_string();
 
-    // Load the credential format template.
+    // Create an unsigned credential.
     match command_handler(
         &credential_id,
         &state.command.credential,
-        CredentialCommand::LoadCredentialFormatTemplate {
+        CredentialCommand::CreateUnsignedCredential {
+            data: Data {
+                raw: payload["credential"].clone(),
+            },
             credential_format_template: serde_json::from_str(include_str!(
                 "../../agent_issuance/res/credential_format_templates/openbadges_v3.json"
             ))
@@ -44,26 +47,10 @@ pub(crate) async fn credentials(
         }
     }
 
-    // Create an unsigned credential.
-    match command_handler(
-        &credential_id,
-        &state.command.credential,
-        CredentialCommand::CreateUnsignedCredential {
-            credential: payload["credential"].clone(),
-        },
-    )
-    .await
-    {
-        Ok(_) => {}
-        _ => {
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    }
-
     // Create an offer if it does not exist yet.
     match query_handler(subject_id, &state.query.offer).await {
         Ok(Some(_)) => {}
-        _ => match command_handler(subject_id, &state.command.offer, OfferCommand::CreateOffer).await {
+        _ => match command_handler(subject_id, &state.command.offer, OfferCommand::CreateCredentialOffer).await {
             Ok(_) => {}
             _ => {
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
@@ -75,7 +62,7 @@ pub(crate) async fn credentials(
     match command_handler(
         subject_id,
         &state.command.offer,
-        OfferCommand::AddCredential {
+        OfferCommand::AddCredentials {
             credential_ids: vec![credential_id.clone()],
         },
     )
@@ -89,10 +76,10 @@ pub(crate) async fn credentials(
 
     // Return the credential.
     match query_handler(&credential_id, &state.query.credential).await {
-        Ok(Some(view)) => (
+        Ok(Some(CredentialView { data: Data { raw }, .. })) => (
             StatusCode::CREATED,
             [(header::LOCATION, format!("/v1/credentials/{credential_id}"))],
-            Json(view.credential),
+            Json(raw),
         )
             .into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),

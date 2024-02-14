@@ -13,21 +13,9 @@ use crate::server_config::services::ServerConfigServices;
 /// An aggregate that holds the configuration of the server.
 #[derive(Clone, Default, Deserialize, Serialize, Debug)]
 pub struct ServerConfig {
-    // TODO: These fields should not be optional. ServerConfig should be created with all of its fields that can be
-    // updated through commands.
-    authorization_server_metadata: Option<AuthorizationServerMetadata>,
+    authorization_server_metadata: AuthorizationServerMetadata,
+    // TODO: Remove `Option` once CredentialIssuerMetadata is `Default`
     credential_issuer_metadata: Option<CredentialIssuerMetadata>,
-}
-
-#[derive(Clone, Default, Deserialize, Serialize, Debug)]
-pub struct ServerConfigAlt {
-    // root: Root,
-    id: uuid::Uuid,
-    // Value Objects
-    authorization_server_metadata: Option<AuthorizationServerMetadata>,
-    credential_issuer_metadata: Option<CredentialIssuerMetadata>,
-    // Entities
-    // issuer_logo: Image,
 }
 
 #[async_trait]
@@ -51,16 +39,14 @@ impl Aggregate for ServerConfig {
         use ServerConfigEvent::*;
 
         match command {
-            LoadAuthorizationServerMetadata {
+            LoadServerMetadata {
                 authorization_server_metadata,
-            } => Ok(vec![AuthorizationServerMetadataLoaded {
-                authorization_server_metadata,
-            }]),
-            LoadCredentialIssuerMetadata {
                 credential_issuer_metadata,
-            } => Ok(vec![CredentialIssuerMetadataLoaded {
+            } => Ok(vec![ServerMetadataLoaded {
+                authorization_server_metadata,
                 credential_issuer_metadata,
             }]),
+
             CreateCredentialsSupported { credentials_supported } => {
                 self.credential_issuer_metadata
                     .as_ref()
@@ -74,15 +60,11 @@ impl Aggregate for ServerConfig {
         use ServerConfigEvent::*;
 
         match event {
-            AuthorizationServerMetadataLoaded {
+            ServerMetadataLoaded {
                 authorization_server_metadata,
-            } => {
-                self.authorization_server_metadata
-                    .replace(*authorization_server_metadata);
-            }
-            CredentialIssuerMetadataLoaded {
                 credential_issuer_metadata,
             } => {
+                self.authorization_server_metadata = *authorization_server_metadata;
                 self.credential_issuer_metadata.replace(credential_issuer_metadata);
             }
             CredentialsSupportedCreated { credentials_supported } => {
@@ -108,33 +90,23 @@ pub mod server_config_tests {
     type ServerConfigTestFramework = TestFramework<ServerConfig>;
 
     #[test]
-    fn test_load_authorization_server_metadata() {
+    fn test_load_server_metadata() {
         ServerConfigTestFramework::with(ServerConfigServices)
             .given_no_previous_events()
-            .when(ServerConfigCommand::LoadAuthorizationServerMetadata {
+            .when(ServerConfigCommand::LoadServerMetadata {
                 authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
-            })
-            .then_expect_events(vec![ServerConfigEvent::AuthorizationServerMetadataLoaded {
-                authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
-            }]);
-    }
-
-    #[test]
-    fn test_load_credential_issuer_metadata() {
-        ServerConfigTestFramework::with(ServerConfigServices)
-            .given_no_previous_events()
-            .when(ServerConfigCommand::LoadCredentialIssuerMetadata {
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
             })
-            .then_expect_events(vec![ServerConfigEvent::CredentialIssuerMetadataLoaded {
+            .then_expect_events(vec![ServerConfigEvent::ServerMetadataLoaded {
+                authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
             }]);
     }
-
     #[test]
     fn test_create_credentials_supported() {
         ServerConfigTestFramework::with(ServerConfigServices)
-            .given(vec![ServerConfigEvent::CredentialIssuerMetadataLoaded {
+            .given(vec![ServerConfigEvent::ServerMetadataLoaded {
+                authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
             }])
             .when(ServerConfigCommand::CreateCredentialsSupported {

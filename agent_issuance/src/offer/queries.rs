@@ -51,7 +51,7 @@ where
         let (mut view, mut view_context) = self.load_mut(view_id.to_string()).await?;
 
         for event in events {
-            if let crate::offer::event::OfferEvent::OfferCreated {
+            if let crate::offer::event::OfferEvent::CredentialOfferCreated {
                 pre_authorized_code,
                 access_token,
             } = &event.payload
@@ -95,7 +95,7 @@ impl View<Offer> for OfferView {
         use crate::offer::event::OfferEvent::*;
 
         match &event.payload {
-            OfferCreated {
+            CredentialOfferCreated {
                 pre_authorized_code,
                 access_token,
             } => {
@@ -107,7 +107,7 @@ impl View<Offer> for OfferView {
             } => {
                 self.credential_ids = credential_id.clone();
             }
-            CredentialOfferCreated {
+            FormUrlEncodedCredentialOfferCreated {
                 form_url_encoded_credential_offer,
             } => {
                 self.form_urlencoded_credential_offer = form_url_encoded_credential_offer.clone();
@@ -131,7 +131,7 @@ impl View<Offer> for PreAuthorizedCodeView {
     fn update(&mut self, event: &EventEnvelope<Offer>) {
         use crate::offer::event::OfferEvent::*;
 
-        if let OfferCreated { .. } = event.payload {
+        if let CredentialOfferCreated { .. } = event.payload {
             self.offer_id = event.aggregate_id.clone();
         }
     }
@@ -146,7 +146,7 @@ impl View<Offer> for AccessTokenView {
     fn update(&mut self, event: &EventEnvelope<Offer>) {
         use crate::offer::event::OfferEvent::*;
 
-        if let OfferCreated { .. } = event.payload {
+        if let CredentialOfferCreated { .. } = event.payload {
             self.offer_id = event.aggregate_id.clone();
         }
     }

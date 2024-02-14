@@ -8,22 +8,14 @@ use crate::credential::error::CredentialError::{self, InvalidCredentialError};
 use crate::credential::event::CredentialEvent;
 use crate::credential::services::CredentialServices;
 
+use super::entity::Data;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
 #[derivative(PartialEq)]
 pub struct Credential {
-    pub credential: serde_json::Value,
+    pub data: Data,
     pub credential_format_template: serde_json::Value,
 }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
-// #[derivative(PartialEq)]
-// pub struct CredentialAlt {
-//     // Entity
-//     pub data: Data,
-//     // Value Objects
-//     pub credential_format_template: serde_json::Value,
-//     pub subject: Subject,
-// }
 
 #[async_trait]
 impl Aggregate for Credential {
@@ -42,24 +34,24 @@ impl Aggregate for Credential {
         _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         match command {
-            CredentialCommand::LoadCredentialFormatTemplate {
+            CredentialCommand::CreateUnsignedCredential {
+                data,
                 credential_format_template,
-            } => Ok(vec![CredentialEvent::CredentialFormatTemplateLoaded {
-                credential_format_template,
-            }]),
-            CredentialCommand::CreateUnsignedCredential { credential } => {
+            } => {
                 let mut events = vec![];
 
-                let mut unsigned_credential = self.credential_format_template.clone();
+                let mut unsigned_credential = credential_format_template.clone();
 
                 unsigned_credential
                     .as_object_mut()
                     .ok_or(InvalidCredentialError)?
-                    .insert("credentialSubject".to_string(), credential["credentialSubject"].clone());
+                    .insert("credentialSubject".to_string(), data.raw["credentialSubject"].clone());
 
                 events.push(CredentialEvent::UnsignedCredentialCreated {
-                    // subject_id,
-                    credential: unsigned_credential.clone(),
+                    data: Data {
+                        raw: unsigned_credential.clone(),
+                    },
+                    credential_format_template,
                 });
 
                 Ok(events)
@@ -71,17 +63,12 @@ impl Aggregate for Credential {
         use CredentialEvent::*;
 
         match event {
-            CredentialFormatTemplateLoaded {
+            UnsignedCredentialCreated {
+                data,
                 credential_format_template,
-            } => self.credential_format_template = credential_format_template,
-            UnsignedCredentialCreated { credential } => {
-                self.credential = credential;
-                // if let Some(subject) = self.subjects.iter_mut().find(|subject| subject.id == subject_id) {
-                //     subject.credentials.replace(credential);
-                // }
-                // self.data = Data { id: credential.data.id}
-                // self.data = credential.data;
-                // self.credential_format_template = credential.credential_format_template;
+            } => {
+                self.data = data;
+                self.credential_format_template = credential_format_template;
             }
         }
     }
@@ -102,28 +89,20 @@ pub mod credential_tests {
     type CredentialTestFramework = TestFramework<Credential>;
 
     #[test]
-    fn test_load_credential_format_template() {
-        CredentialTestFramework::with(CredentialServices)
-            .given_no_previous_events()
-            .when(CredentialCommand::LoadCredentialFormatTemplate {
-                credential_format_template: CREDENTIAL_FORMAT_TEMPLATE.clone(),
-            })
-            .then_expect_events(vec![CredentialEvent::CredentialFormatTemplateLoaded {
-                credential_format_template: CREDENTIAL_FORMAT_TEMPLATE.clone(),
-            }]);
-    }
-
-    #[test]
     fn test_create_unsigned_credential() {
         CredentialTestFramework::with(CredentialServices)
-            .given(vec![CredentialEvent::CredentialFormatTemplateLoaded {
-                credential_format_template: CREDENTIAL_FORMAT_TEMPLATE.clone(),
-            }])
+            .given_no_previous_events()
             .when(CredentialCommand::CreateUnsignedCredential {
-                credential: CREDENTIAL_SUBJECT.clone(),
+                data: Data {
+                    raw: CREDENTIAL_SUBJECT.clone(),
+                },
+                credential_format_template: CREDENTIAL_FORMAT_TEMPLATE.clone(),
             })
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
-                credential: UNSIGNED_CREDENTIAL.clone(),
+                data: Data {
+                    raw: UNSIGNED_CREDENTIAL.clone(),
+                },
+                credential_format_template: CREDENTIAL_FORMAT_TEMPLATE.clone(),
             }])
     }
 

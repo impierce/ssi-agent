@@ -15,26 +15,16 @@ use serde_json::json;
 
 /// Returns the startup commands for the application.
 pub fn startup_commands(host: url::Url) -> Vec<ServerConfigCommand> {
-    vec![
-        // load_credential_format_template(),
-        load_authorization_server_metadata(host.clone()),
-        load_credential_issuer_metadata(host.clone()),
-        create_credentials_supported(),
-    ]
+    vec![load_server_metadata(host.clone()), create_credentials_supported()]
 }
 
-pub fn load_authorization_server_metadata(base_url: url::Url) -> ServerConfigCommand {
-    ServerConfigCommand::LoadAuthorizationServerMetadata {
+pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
+    ServerConfigCommand::LoadServerMetadata {
         authorization_server_metadata: Box::new(AuthorizationServerMetadata {
             issuer: base_url.clone(),
             token_endpoint: Some(base_url.append_path_segment("auth/token")),
             ..Default::default()
         }),
-    }
-}
-
-pub fn load_credential_issuer_metadata(base_url: url::Url) -> ServerConfigCommand {
-    ServerConfigCommand::LoadCredentialIssuerMetadata {
         credential_issuer_metadata: CredentialIssuerMetadata {
             credential_issuer: base_url.clone(),
             authorization_server: None,

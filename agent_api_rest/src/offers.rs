@@ -32,7 +32,7 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
         }
     };
 
-    let command = OfferCommand::CreateOffer;
+    let command = OfferCommand::CreateCredentialOffer;
 
     match command_handler(subject_id, &state.command.offer, command).await {
         Ok(_) => {}
@@ -42,7 +42,7 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
         }
     };
 
-    let command = OfferCommand::CreateCredentialOffer {
+    let command = OfferCommand::CreateFormUrlEncodedCredentialOffer {
         credential_issuer_metadata,
     };
 

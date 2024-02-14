@@ -1,4 +1,4 @@
-use agent_issuance::{handlers::query_handler, state::ApplicationState};
+use agent_issuance::{handlers::query_handler, server_config::queries::ServerConfigView, state::ApplicationState};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -10,9 +10,10 @@ use crate::SERVER_CONFIG_ID;
 #[axum_macros::debug_handler]
 pub(crate) async fn oauth_authorization_server(State(state): State<ApplicationState>) -> impl IntoResponse {
     match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
-        Ok(Some(view)) if view.authorization_server_metadata.is_some() => {
-            (StatusCode::OK, Json(view.authorization_server_metadata)).into_response()
-        }
+        Ok(Some(ServerConfigView {
+            authorization_server_metadata,
+            ..
+        })) => (StatusCode::OK, Json(authorization_server_metadata)).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

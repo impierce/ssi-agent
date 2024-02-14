@@ -7,10 +7,8 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum ServerConfigCommand {
-    LoadAuthorizationServerMetadata {
+    LoadServerMetadata {
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
-    },
-    LoadCredentialIssuerMetadata {
         credential_issuer_metadata: CredentialIssuerMetadata,
     },
     CreateCredentialsSupported {
