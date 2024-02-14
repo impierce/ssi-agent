@@ -27,7 +27,6 @@ impl View<Credential> for CredentialView {
                 // self.credential_format_template = credential.credential_format_template.clone();
                 self.credential = credential.clone();
             }
-            _ => {}
         }
     }
 }

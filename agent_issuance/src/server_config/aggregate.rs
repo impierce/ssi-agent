@@ -112,10 +112,10 @@ pub mod server_config_tests {
         ServerConfigTestFramework::with(ServerConfigServices)
             .given_no_previous_events()
             .when(ServerConfigCommand::LoadAuthorizationServerMetadata {
-                authorization_server_metadata: Box::new(AUTHORIZATION_SERVER_METADATA.clone()),
+                authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
             })
             .then_expect_events(vec![ServerConfigEvent::AuthorizationServerMetadataLoaded {
-                authorization_server_metadata: Box::new(AUTHORIZATION_SERVER_METADATA.clone()),
+                authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
             }]);
     }
 
@@ -167,11 +167,12 @@ pub mod server_config_tests {
         }
         ))
         .unwrap()];
-        pub static ref AUTHORIZATION_SERVER_METADATA: AuthorizationServerMetadata = AuthorizationServerMetadata {
-            issuer: BASE_URL.clone(),
-            token_endpoint: Some(BASE_URL.join("token").unwrap()),
-            ..Default::default()
-        };
+        pub static ref AUTHORIZATION_SERVER_METADATA: Box<AuthorizationServerMetadata> =
+            Box::new(AuthorizationServerMetadata {
+                issuer: BASE_URL.clone(),
+                token_endpoint: Some(BASE_URL.join("token").unwrap()),
+                ..Default::default()
+            });
         pub static ref CREDENTIAL_ISSUER_METADATA: CredentialIssuerMetadata = CredentialIssuerMetadata {
             credential_issuer: BASE_URL.clone(),
             authorization_server: None,

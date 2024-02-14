@@ -32,13 +32,7 @@ where
 #[derive(Clone)]
 pub struct ApplicationState {
     pub command: CommandHandlers,
-    pub query: Queries<
-        dyn ViewRepository<ServerConfigView, ServerConfig>,
-        dyn ViewRepository<CredentialView, Credential>,
-        dyn ViewRepository<OfferView, Offer>,
-        dyn ViewRepository<PreAuthorizedCodeView, Offer>,
-        dyn ViewRepository<AccessTokenView, Offer>,
-    >,
+    pub query: Queries,
 }
 
 #[derive(Clone)]
@@ -50,7 +44,15 @@ pub struct CommandHandlers {
 
 pub type CommandHandler<A> = Arc<dyn CQRS<A> + Send + Sync>;
 
-pub struct Queries<SC, C, O, O1, O2>
+type Queries = ViewRepositories<
+    dyn ViewRepository<ServerConfigView, ServerConfig>,
+    dyn ViewRepository<CredentialView, Credential>,
+    dyn ViewRepository<OfferView, Offer>,
+    dyn ViewRepository<PreAuthorizedCodeView, Offer>,
+    dyn ViewRepository<AccessTokenView, Offer>,
+>;
+
+pub struct ViewRepositories<SC, C, O, O1, O2>
 where
     SC: ViewRepository<ServerConfigView, ServerConfig> + ?Sized,
     C: ViewRepository<CredentialView, Credential> + ?Sized,
@@ -65,17 +67,9 @@ where
     pub access_token: Arc<O2>,
 }
 
-impl Clone
-    for Queries<
-        dyn ViewRepository<ServerConfigView, ServerConfig>,
-        dyn ViewRepository<CredentialView, Credential>,
-        dyn ViewRepository<OfferView, Offer>,
-        dyn ViewRepository<PreAuthorizedCodeView, Offer>,
-        dyn ViewRepository<AccessTokenView, Offer>,
-    >
-{
+impl Clone for Queries {
     fn clone(&self) -> Self {
-        Queries {
+        ViewRepositories {
             server_config: self.server_config.clone(),
             credential: self.credential.clone(),
             offer: self.offer.clone(),
@@ -103,7 +97,7 @@ pub async fn initialize(state: ApplicationState, startup_commands: Vec<ServerCon
 
     for command in startup_commands {
         let command_string = format!("{:?}", command).split(' ').next().unwrap().to_string();
-        match command_handler("SERVCONFIG-0001", &state.command.server_config, command).await {
+        match command_handler("SERVER-CONFIG-001", &state.command.server_config, command).await {
             Ok(_) => info!("Startup task completed: `{}`", command_string),
             Err(err) => warn!("Startup task failed: {:#?}", err),
         }

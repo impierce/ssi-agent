@@ -25,6 +25,7 @@ pub(crate) async fn credentials(
 
     let credential_id = uuid::Uuid::new_v4().to_string();
 
+    // Load the credential format template.
     match command_handler(
         &credential_id,
         &state.command.credential,
@@ -38,28 +39,39 @@ pub(crate) async fn credentials(
     .await
     {
         Ok(_) => {}
-        Err(err) => {
-            println!("{:?}", err)
+        _ => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     }
 
-    let command = CredentialCommand::CreateUnsignedCredential {
-        // subject_id: subject_id.to_string(),
-        // subject: Subject {
-        //     pre_authorized_code: "MY_CODE_001".to_string(),
-        // },
-        credential: payload["credential"].clone(),
+    // Create an unsigned credential.
+    match command_handler(
+        &credential_id,
+        &state.command.credential,
+        CredentialCommand::CreateUnsignedCredential {
+            credential: payload["credential"].clone(),
+        },
+    )
+    .await
+    {
+        Ok(_) => {}
+        _ => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    }
+
+    // Create an offer if it does not exist yet.
+    match query_handler(subject_id, &state.query.offer).await {
+        Ok(Some(_)) => {}
+        _ => match command_handler(subject_id, &state.command.offer, OfferCommand::CreateOffer).await {
+            Ok(_) => {}
+            _ => {
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        },
     };
 
-    println!("command: {:#?}", command);
-
-    match command_handler(&credential_id, &state.command.credential, command).await {
-        Ok(_) => {}
-        Err(err) => {
-            println!("{:?}", err)
-        }
-    }
-
+    // Add the credential to the offer.
     match command_handler(
         subject_id,
         &state.command.offer,
@@ -70,81 +82,72 @@ pub(crate) async fn credentials(
     .await
     {
         Ok(_) => {}
-        Err(err) => {
-            println!("{:?}", err)
+        _ => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     }
 
+    // Return the credential.
     match query_handler(&credential_id, &state.query.credential).await {
-        Ok(Some(view)) => {
-            println!("view: {:?}", view);
-            (
-                StatusCode::CREATED,
-                [(header::LOCATION, format!("/v1/credentials/{credential_id}"))],
-                Json(view.credential.clone()),
-            )
-                .into_response()
-        }
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => (StatusCode::BAD_REQUEST, err.to_string()).into_response(),
+        Ok(Some(view)) => (
+            StatusCode::CREATED,
+            [(header::LOCATION, format!("/v1/credentials/{credential_id}"))],
+            Json(view.credential),
+        )
+            .into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
 #[cfg(test)]
 pub mod tests {
-    use std::convert::Infallible;
-
-    use crate::{app, tests::SUBJECT_ID};
-
     use super::*;
+    use crate::{
+        app,
+        tests::{BASE_URL, SUBJECT_ID},
+    };
+    use agent_issuance::{startup_commands::startup_commands, state::initialize};
     use agent_store::in_memory;
     use axum::{
         body::Body,
         http::{self, Request},
-        response::Response,
         Router,
     };
     use serde_json::json;
     use tower::Service;
 
-    pub async fn credentials(app: &mut Router) -> Result<Response, Infallible> {
-        app.call(
-            Request::builder()
-                .method(http::Method::POST)
-                .uri("/v1/credentials")
-                .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-                .body(Body::from(
-                    serde_json::to_vec(&json!({
-                        "subjectId": SUBJECT_ID,
-                        "credential": {
-                            "credentialSubject": {
-                            "first_name": "Ferris",
-                            "last_name": "Rustacean"
-                        }},
-                    }))
+    pub async fn credentials(app: &mut Router) {
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/v1/credentials")
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "subjectId": SUBJECT_ID,
+                            "credential": {
+                                "credentialSubject": {
+                                "first_name": "Ferris",
+                                "last_name": "Rustacean"
+                            }},
+                        }))
+                        .unwrap(),
+                    ))
                     .unwrap(),
-                ))
-                .unwrap(),
-        )
-        .await
-    }
-
-    #[tokio::test]
-    async fn test_credentials_endpoint() {
-        let state = in_memory::application_state().await;
-
-        // initialize(state.clone(), vec![load_credential_format_template()]).await;
-
-        let mut app = app(state);
-
-        let response = credentials(&mut app).await.unwrap();
+            )
+            .await
+            .unwrap();
 
         assert_eq!(response.status(), StatusCode::CREATED);
 
-        // assert_eq!(
-        //     response.headers().get(http::header::LOCATION).unwrap(),
-        //     "/v1/credentials/agg-id-F39A0C"
-        // );
+        assert!(response
+            .headers()
+            .get(http::header::LOCATION)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .starts_with("/v1/credentials/"));
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
@@ -170,5 +173,16 @@ pub mod tests {
                 }
             })
         );
+    }
+
+    #[tokio::test]
+    async fn test_credentials_endpoint() {
+        let state = in_memory::application_state().await;
+
+        initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
+
+        let mut app = app(state);
+
+        credentials(&mut app).await;
     }
 }

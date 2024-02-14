@@ -51,18 +51,16 @@ where
         let (mut view, mut view_context) = self.load_mut(view_id.to_string()).await?;
 
         for event in events {
-            match &event.payload {
-                crate::offer::event::OfferEvent::OfferCreated {
-                    pre_authorized_code,
-                    access_token,
-                } => {
-                    if self.r#type == "pre-authorized_code" {
-                        view_context.view_instance_id = pre_authorized_code.clone();
-                    } else if self.r#type == "access_token" {
-                        view_context.view_instance_id = access_token.clone();
-                    }
+            if let crate::offer::event::OfferEvent::OfferCreated {
+                pre_authorized_code,
+                access_token,
+            } = &event.payload
+            {
+                if self.r#type == "pre-authorized_code" {
+                    view_context.view_instance_id = pre_authorized_code.clone();
+                } else if self.r#type == "access_token" {
+                    view_context.view_instance_id = access_token.clone();
                 }
-                _ => {}
             }
             view.update(event);
         }
@@ -78,10 +76,7 @@ where
     V: View<Offer>,
 {
     async fn dispatch(&self, view_id: &str, events: &[EventEnvelope<Offer>]) {
-        match self.apply_events(view_id, events).await {
-            Ok(_) => {}
-            Err(err) => {}
-        };
+        self.apply_events(view_id, events).await.ok();
     }
 }
 
@@ -136,11 +131,8 @@ impl View<Offer> for PreAuthorizedCodeView {
     fn update(&mut self, event: &EventEnvelope<Offer>) {
         use crate::offer::event::OfferEvent::*;
 
-        match &event.payload {
-            OfferCreated { .. } => {
-                self.offer_id = event.aggregate_id.clone();
-            }
-            _ => {}
+        if let OfferCreated { .. } = event.payload {
+            self.offer_id = event.aggregate_id.clone();
         }
     }
 }
@@ -154,11 +146,8 @@ impl View<Offer> for AccessTokenView {
     fn update(&mut self, event: &EventEnvelope<Offer>) {
         use crate::offer::event::OfferEvent::*;
 
-        match &event.payload {
-            OfferCreated { .. } => {
-                self.offer_id = event.aggregate_id.clone();
-            }
-            _ => {}
+        if let OfferCreated { .. } = event.payload {
+            self.offer_id = event.aggregate_id.clone();
         }
     }
 }

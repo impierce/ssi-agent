@@ -35,8 +35,9 @@ pub(crate) async fn credential(
     // Use the `offer_id` to get the `credential_ids` from the `OfferView`.
     let credential_ids = match query_handler(&offer_id, &state.query.offer).await {
         Ok(Some(OfferView { credential_ids, .. })) => credential_ids,
-        // TODO: fix this!
-        _ => panic!(),
+        _ => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
     };
 
     // Use the `credential_ids` to get the `credentials` from the `CredentialView`.
@@ -44,8 +45,9 @@ pub(crate) async fn credential(
     for credential_id in credential_ids {
         let credential = match query_handler(&credential_id, &state.query.credential).await {
             Ok(Some(CredentialView { credential, .. })) => credential,
-            // TODO: fix this!
-            _ => panic!(),
+            _ => {
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
         };
 
         credentials.push(credential);
@@ -57,9 +59,10 @@ pub(crate) async fn credential(
             Ok(Some(ServerConfigView {
                 credential_issuer_metadata: Some(credential_issuer_metadata),
                 authorization_server_metadata: Some(authorization_server_metadata),
-            })) => (credential_issuer_metadata, authorization_server_metadata),
-            // TODO: fix this!
-            _ => panic!(),
+            })) => (credential_issuer_metadata, Box::new(authorization_server_metadata)),
+            _ => {
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
         };
 
     let command = OfferCommand::CreateCredentialResponse {
@@ -81,8 +84,7 @@ pub(crate) async fn credential(
             credential_response: Some(credential_response),
             ..
         })) => (StatusCode::OK, Json(credential_response)).into_response(),
-        // TODO: fix this!
-        _ => panic!(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
@@ -111,7 +113,7 @@ mod tests {
 
         let mut app = app(state);
 
-        let _response = credentials(&mut app).await.unwrap();
+        credentials(&mut app).await;
         let pre_authorized_code = offers(&mut app).await;
 
         let access_token = token(&mut app, pre_authorized_code).await;

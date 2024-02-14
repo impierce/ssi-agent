@@ -27,16 +27,18 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
             ..
         })) => credential_issuer_metadata,
         // TODO: fix this!
-        _ => panic!(),
+        _ => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
     };
 
     let command = OfferCommand::CreateOffer;
 
     match command_handler(subject_id, &state.command.offer, command).await {
         Ok(_) => {}
-        Err(err) => {
-            println!("Error: {:#?}\n", err);
-            return (StatusCode::BAD_REQUEST, err.to_string()).into_response();
+        // TODO: fix this!
+        _ => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
 
@@ -46,19 +48,15 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
 
     match command_handler(subject_id, &state.command.offer, command).await {
         Ok(_) => {}
-        Err(err) => {
-            println!("Error: {:#?}\n", err);
-            return (StatusCode::BAD_REQUEST, err.to_string()).into_response();
+        // TODO: fix this!
+        _ => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
 
     match query_handler(subject_id, &state.query.offer).await {
         Ok(Some(offer_view)) => (StatusCode::OK, Json(offer_view.form_urlencoded_credential_offer)).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            println!("Error: {:#?}\n", err);
-            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
-        }
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 

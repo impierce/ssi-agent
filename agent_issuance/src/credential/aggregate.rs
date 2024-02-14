@@ -52,14 +52,10 @@ impl Aggregate for Credential {
 
                 let mut unsigned_credential = self.credential_format_template.clone();
 
-                println!("unsigned_credential: {:?}", unsigned_credential);
-
                 unsigned_credential
                     .as_object_mut()
                     .ok_or(InvalidCredentialError)?
                     .insert("credentialSubject".to_string(), credential["credentialSubject"].clone());
-
-                println!("unsigned_credential2: {:?}", unsigned_credential);
 
                 events.push(CredentialEvent::UnsignedCredentialCreated {
                     // subject_id,

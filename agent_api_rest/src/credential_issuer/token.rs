@@ -24,13 +24,17 @@ pub(crate) async fn token(
         TokenRequest::PreAuthorizedCode {
             pre_authorized_code, ..
         } => pre_authorized_code,
-        _ => panic!(),
+        _ => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
     };
 
     // Use the `pre_authorized_code` to get the `offer_id` from the `PreAuthorizedCodeView`.
     let offer_id = match query_handler(pre_authorized_code, &state.query.pre_authorized_code).await {
         Ok(Some(PreAuthorizedCodeView { offer_id })) => offer_id,
-        _ => panic!(),
+        _ => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
     };
 
     // Create a `TokenResponse` using the `offer_id` and `token_request`.
@@ -42,7 +46,9 @@ pub(crate) async fn token(
     .await
     {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        _ => panic!(),
+        _ => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
     };
 
     // Use the `offer_id` to get the `token_response` from the `OfferView`.
@@ -51,7 +57,7 @@ pub(crate) async fn token(
             token_response: Some(token_response),
             ..
         })) => (StatusCode::OK, Json(token_response)).into_response(),
-        _ => panic!(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
@@ -107,7 +113,7 @@ pub mod tests {
 
         let mut app = app(state);
 
-        let _response = credentials(&mut app).await.unwrap();
+        credentials(&mut app).await;
         let pre_authorized_code = offers(&mut app).await;
 
         let _access_token = token(&mut app, pre_authorized_code).await;

@@ -14,10 +14,7 @@ pub(crate) async fn openid_credential_issuer(State(state): State<ApplicationStat
             (StatusCode::OK, Json(view.credential_issuer_metadata)).into_response()
         }
         Ok(_) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            println!("Error: {:#?}\n", err);
-            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
-        }
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 

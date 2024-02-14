@@ -52,7 +52,7 @@ pub struct Offer {
 }
 
 // #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-// pub struct OfferAlt {
+// pub struct OfferLegacy {
 //     pub id: uuid::Uuid,
 //     // value: CredentialOfferQuery,
 //     // pub form_urlencoded: String,
@@ -162,7 +162,7 @@ impl Aggregate for Offer {
                 let credential_issuer = CredentialIssuer {
                     subject: issuer.clone(),
                     metadata: credential_issuer_metadata,
-                    authorization_server_metadata,
+                    authorization_server_metadata: *authorization_server_metadata,
                 };
 
                 let proof = credential_issuer

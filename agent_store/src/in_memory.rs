@@ -6,7 +6,7 @@ use agent_issuance::{
         services::OfferServices,
     },
     server_config::services::ServerConfigServices,
-    state::{generic_query, ApplicationState, CommandHandlers, Queries, CQRS},
+    state::{generic_query, ApplicationState, CommandHandlers, ViewRepositories, CQRS},
 };
 use async_trait::async_trait;
 use cqrs_es::{
@@ -134,7 +134,7 @@ pub async fn application_state() -> agent_issuance::state::ApplicationState {
                     .append_query(access_token_query),
             ),
         },
-        query: Queries {
+        query: ViewRepositories {
             server_config,
             credential,
             offer,

@@ -13,11 +13,7 @@ pub(crate) async fn oauth_authorization_server(State(state): State<ApplicationSt
         Ok(Some(view)) if view.authorization_server_metadata.is_some() => {
             (StatusCode::OK, Json(view.authorization_server_metadata)).into_response()
         }
-        Ok(_) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            println!("Error: {:#?}\n", err);
-            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
-        }
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 

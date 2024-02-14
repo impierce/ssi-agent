@@ -26,7 +26,7 @@ pub enum OfferCommand {
     },
     CreateCredentialResponse {
         credential_issuer_metadata: CredentialIssuerMetadata,
-        authorization_server_metadata: AuthorizationServerMetadata,
+        authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credentials: Vec<serde_json::Value>,
         credential_request: CredentialRequest,
     },
