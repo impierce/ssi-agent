@@ -17,10 +17,17 @@ pub(crate) async fn credentials(
     State(state): State<ApplicationState>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
+    // TODO: should we rename this to `offer_id`?
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id
     } else {
         return (StatusCode::BAD_REQUEST, "subjectId is required".to_string()).into_response();
+    };
+
+    let data = if payload["credential"].is_object() {
+        payload["credential"].clone()
+    } else {
+        return (StatusCode::BAD_REQUEST, "credential is required".to_string()).into_response();
     };
 
     let credential_id = uuid::Uuid::new_v4().to_string();
@@ -30,9 +37,7 @@ pub(crate) async fn credentials(
         &credential_id,
         &state.command.credential,
         CredentialCommand::CreateUnsignedCredential {
-            data: Data {
-                raw: payload["credential"].clone(),
-            },
+            data: Data { raw: data },
             credential_format_template: serde_json::from_str(include_str!(
                 "../../agent_issuance/res/credential_format_templates/openbadges_v3.json"
             ))
@@ -69,7 +74,7 @@ pub(crate) async fn credentials(
     .await
     {
         Ok(_) => {}
-        _ => {
+        Err(err) => {
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     }

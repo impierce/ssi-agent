@@ -27,9 +27,9 @@ impl DomainEvent for OfferEvent {
         use OfferEvent::*;
 
         let event_type: &str = match self {
-            CredentialOfferCreated { .. } => "OfferCreated",
+            CredentialOfferCreated { .. } => "CredentialOfferCreated",
             CredentialsAdded { .. } => "CredentialAdded",
-            FormUrlEncodedCredentialOfferCreated { .. } => "CredentialOfferCreated",
+            FormUrlEncodedCredentialOfferCreated { .. } => "FormUrlEncodedCredentialOfferCreated",
             TokenResponseCreated { .. } => "TokenResponseCreated",
             CredentialResponseCreated { .. } => "CredentialResponseCreated",
         };

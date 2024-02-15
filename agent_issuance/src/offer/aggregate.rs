@@ -44,7 +44,7 @@ fn generate_random_string() -> String {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Offer {
     pub credential_ids: Vec<String>,
-    pub form_urlencoded_credential_offer: String,
+    pub form_url_encoded_credential_offer: String,
     pub pre_authorized_code: String,
     pub token_response: Option<TokenResponse>,
     pub access_token: String,
@@ -207,8 +207,12 @@ impl Aggregate for Offer {
                 pre_authorized_code,
                 access_token,
             } => {
-                self.pre_authorized_code = pre_authorized_code;
-                self.access_token = access_token;
+                *self = Self {
+                    pre_authorized_code,
+                    access_token,
+                    // In case of re-creating an `Offer`, this ensures that all the other fields are reset.
+                    ..Default::default()
+                };
             }
             CredentialsAdded { credential_ids } => {
                 self.credential_ids = credential_ids;
@@ -216,7 +220,7 @@ impl Aggregate for Offer {
             FormUrlEncodedCredentialOfferCreated {
                 form_url_encoded_credential_offer,
             } => {
-                self.form_urlencoded_credential_offer = form_url_encoded_credential_offer;
+                self.form_url_encoded_credential_offer = form_url_encoded_credential_offer;
             }
             TokenResponseCreated { token_response } => {
                 self.token_response.replace(token_response);

@@ -75,7 +75,6 @@ mod tests {
 
     use crate::app;
 
-    pub const PRE_AUTHORIZED_CODE: &str = "pre-authorized_code";
     pub const SUBJECT_ID: &str = "00000000-0000-0000-0000-000000000000";
 
     lazy_static::lazy_static! {

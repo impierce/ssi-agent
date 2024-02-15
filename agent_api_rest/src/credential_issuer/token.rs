@@ -117,7 +117,5 @@ pub mod tests {
         let pre_authorized_code = offers(&mut app).await;
 
         let _access_token = token(&mut app, pre_authorized_code).await;
-
-        dbg!(_access_token);
     }
 }

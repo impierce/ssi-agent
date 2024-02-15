@@ -85,7 +85,7 @@ pub struct OfferView {
     pub credential_ids: Vec<String>,
     pub pre_authorized_code: String,
     pub access_token: String,
-    pub form_urlencoded_credential_offer: String,
+    pub form_url_encoded_credential_offer: String,
     pub token_response: Option<TokenResponse>,
     pub credential_response: Option<CredentialResponse>,
 }
@@ -108,9 +108,9 @@ impl View<Offer> for OfferView {
                 self.credential_ids = credential_id.clone();
             }
             FormUrlEncodedCredentialOfferCreated {
-                form_url_encoded_credential_offer,
+                form_url_encoded_credential_offer: form_url_encoded_credential_offer,
             } => {
-                self.form_urlencoded_credential_offer = form_url_encoded_credential_offer.clone();
+                self.form_url_encoded_credential_offer = form_url_encoded_credential_offer.clone();
             }
             TokenResponseCreated { token_response } => {
                 self.token_response.replace(token_response.clone());
