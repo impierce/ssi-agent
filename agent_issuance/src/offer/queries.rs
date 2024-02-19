@@ -48,9 +48,8 @@ where
         view_id: &str,
         events: &[EventEnvelope<Offer>],
     ) -> Result<(), PersistenceError> {
-        let (mut view, mut view_context) = self.load_mut(view_id.to_string()).await?;
-
         for event in events {
+            let (mut view, mut view_context) = self.load_mut(view_id.to_string()).await?;
             if let crate::offer::event::OfferEvent::CredentialOfferCreated {
                 pre_authorized_code,
                 access_token,
@@ -61,10 +60,10 @@ where
                 } else if self.r#type == "access_token" {
                     view_context.view_instance_id = access_token.clone();
                 }
+                view.update(event);
+                self.view_repository.update_view(view, view_context).await?;
             }
-            view.update(event);
         }
-        self.view_repository.update_view(view, view_context).await?;
         Ok(())
     }
 }
@@ -108,7 +107,7 @@ impl View<Offer> for OfferView {
                 self.credential_ids = credential_id.clone();
             }
             FormUrlEncodedCredentialOfferCreated {
-                form_url_encoded_credential_offer: form_url_encoded_credential_offer,
+                form_url_encoded_credential_offer,
             } => {
                 self.form_url_encoded_credential_offer = form_url_encoded_credential_offer.clone();
             }
