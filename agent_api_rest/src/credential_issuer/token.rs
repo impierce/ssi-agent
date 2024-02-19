@@ -19,15 +19,19 @@ use tracing::info;
 pub(crate) async fn token(
     State(state): State<ApplicationState>,
     Form(token_request): Form<TokenRequest>,
+    // TODO: implement official oid4vci error response. This TODO is also in the `credential` endpoint.
 ) -> impl IntoResponse {
     info!("token endpoint");
+    info!("Received request: {:?}", token_request);
+
     // Get the `pre_authorized_code` from the `TokenRequest`.
     let pre_authorized_code = match &token_request {
         TokenRequest::PreAuthorizedCode {
             pre_authorized_code, ..
         } => pre_authorized_code,
         _ => {
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            info!("Returning 400");
+            return StatusCode::BAD_REQUEST.into_response();
         }
     };
 
@@ -35,6 +39,7 @@ pub(crate) async fn token(
     let offer_id = match query_handler(pre_authorized_code, &state.query.pre_authorized_code).await {
         Ok(Some(PreAuthorizedCodeView { offer_id })) => offer_id,
         _ => {
+            info!("Returning 500");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
@@ -47,7 +52,7 @@ pub(crate) async fn token(
     )
     .await
     {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Ok(_) => {}
         _ => {
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }

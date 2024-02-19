@@ -18,8 +18,10 @@ pub(crate) async fn openid_credential_issuer(State(state): State<ApplicationStat
             credential_issuer_metadata: Some(credential_issuer_metadata),
             ..
         })) => (StatusCode::OK, Json(credential_issuer_metadata)).into_response(),
-        Ok(_) => StatusCode::NOT_FOUND.into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        _ => {
+            info!("Returning 500");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
     }
 }
 

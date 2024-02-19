@@ -32,8 +32,10 @@ pub fn app(app_state: ApplicationState) -> Router {
     };
 
     Router::new()
+        // Agent Preparations
         .route(&path("/v1/credentials"), post(credentials))
         .route(&path("/v1/offers"), post(offers))
+        // OpenID4VCI Pre-Authorized Code Flow
         .route(
             &path("/.well-known/oauth-authorization-server"),
             get(oauth_authorization_server),

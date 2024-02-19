@@ -25,12 +25,14 @@ pub(crate) async fn credentials(
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id
     } else {
+        info!("Returning 400");
         return (StatusCode::BAD_REQUEST, "subjectId is required".to_string()).into_response();
     };
 
     let data = if payload["credential"].is_object() {
         payload["credential"].clone()
     } else {
+        info!("Returning 400");
         return (StatusCode::BAD_REQUEST, "credential is required".to_string()).into_response();
     };
 
@@ -52,6 +54,7 @@ pub(crate) async fn credentials(
     {
         Ok(_) => {}
         _ => {
+            info!("Returning 500");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     }
@@ -62,6 +65,7 @@ pub(crate) async fn credentials(
         _ => match command_handler(subject_id, &state.command.offer, OfferCommand::CreateCredentialOffer).await {
             Ok(_) => {}
             _ => {
+                info!("Returning 500");
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         },
@@ -79,6 +83,7 @@ pub(crate) async fn credentials(
     {
         Ok(_) => {}
         _ => {
+            info!("Returning 500");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     }
@@ -91,7 +96,10 @@ pub(crate) async fn credentials(
             Json(raw),
         )
             .into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        _ => {
+            info!("Returning 500");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
     }
 }
 

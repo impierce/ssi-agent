@@ -22,6 +22,7 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id
     } else {
+        info!("Returning 400");
         return (StatusCode::BAD_REQUEST, "subjectId is required".to_string()).into_response();
     };
 
@@ -32,6 +33,7 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
             ..
         })) => credential_issuer_metadata,
         _ => {
+            info!("Returning 500");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
@@ -47,13 +49,17 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
     {
         Ok(_) => {}
         _ => {
+            info!("Returning 500");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
 
     match query_handler(subject_id, &state.query.offer).await {
         Ok(Some(offer_view)) => (StatusCode::OK, Json(offer_view.form_url_encoded_credential_offer)).into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        _ => {
+            info!("Returning 500");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
     }
 }
 

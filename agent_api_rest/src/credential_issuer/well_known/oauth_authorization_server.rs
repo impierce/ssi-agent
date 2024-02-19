@@ -17,8 +17,14 @@ pub(crate) async fn oauth_authorization_server(State(state): State<ApplicationSt
         Ok(Some(ServerConfigView {
             authorization_server_metadata,
             ..
-        })) => (StatusCode::OK, Json(authorization_server_metadata)).into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        })) => {
+            info!("Returning authorization_server_metadata");
+            (StatusCode::OK, Json(authorization_server_metadata)).into_response()
+        }
+        _ => {
+            info!("Returning 500");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
     }
 }
 

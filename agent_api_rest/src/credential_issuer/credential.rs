@@ -25,6 +25,7 @@ pub(crate) async fn credential(
     State(state): State<ApplicationState>,
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
+    // TODO: implement official oid4vci error response. This TODO is also in the `token` endpoint.
 ) -> impl IntoResponse {
     info!("credential endpoint");
     info!("Access Token: {:?}", access_token);
@@ -33,14 +34,17 @@ pub(crate) async fn credential(
     // Use the `access_token` to get the `offer_id` from the `AccessTokenView`.
     let offer_id = match query_handler(&access_token, &state.query.access_token).await {
         Ok(Some(AccessTokenView { offer_id })) => offer_id,
-        // TODO: fix this!
-        _ => return StatusCode::UNAUTHORIZED.into_response(),
+        _ => {
+            info!("Returning 401");
+            return StatusCode::UNAUTHORIZED.into_response();
+        }
     };
 
     // Use the `offer_id` to get the `credential_ids` from the `OfferView`.
     let credential_ids = match query_handler(&offer_id, &state.query.offer).await {
         Ok(Some(OfferView { credential_ids, .. })) => credential_ids,
         _ => {
+            info!("Returning 500");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
@@ -51,6 +55,7 @@ pub(crate) async fn credential(
         let credential = match query_handler(&credential_id, &state.query.credential).await {
             Ok(Some(CredentialView { data, .. })) => data,
             _ => {
+                info!("Returning 500");
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         };
@@ -66,6 +71,7 @@ pub(crate) async fn credential(
                 authorization_server_metadata,
             })) => (credential_issuer_metadata, Box::new(authorization_server_metadata)),
             _ => {
+                info!("Returning 500");
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         };
@@ -80,7 +86,10 @@ pub(crate) async fn credential(
     // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
     match command_handler(&offer_id, &state.command.offer, command).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => (StatusCode::BAD_REQUEST, err.to_string()).into_response(),
+        _ => {
+            info!("Returning 500");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
     };
 
     // Use the `offer_id` to get the `credential_response` from the `OfferView`.
@@ -89,7 +98,10 @@ pub(crate) async fn credential(
             credential_response: Some(credential_response),
             ..
         })) => (StatusCode::OK, Json(credential_response)).into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        _ => {
+            info!("Returning 500");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
     }
 }
 
