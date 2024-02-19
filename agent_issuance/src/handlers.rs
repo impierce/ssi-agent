@@ -5,7 +5,7 @@ use cqrs_es::{
 };
 use std::{collections::HashMap, sync::Arc};
 use time::format_description::well_known::Rfc3339;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 pub async fn query_handler<A, V>(
     view_id: &str,
@@ -34,7 +34,7 @@ pub async fn command_handler<A>(
 ) -> Result<(), AggregateError<<A as Aggregate>::Error>>
 where
     A: Aggregate,
-    <A as Aggregate>::Command: Send + Sync,
+    <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
 {
     let mut metadata = HashMap::new();
     metadata.insert(
@@ -42,5 +42,9 @@ where
         time::OffsetDateTime::now_utc().format(&Rfc3339).unwrap(),
     );
 
-    state.execute_with_metadata(aggregate_id, command, metadata).await
+    info!("Executing command: {:?}", command);
+    state
+        .execute_with_metadata(aggregate_id, command, metadata)
+        .await
+        .inspect_err(|err| error!("Error: {:?}", err))
 }

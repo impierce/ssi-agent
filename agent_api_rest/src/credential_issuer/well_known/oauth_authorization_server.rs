@@ -4,11 +4,15 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use tracing::info;
 
 use crate::SERVER_CONFIG_ID;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn oauth_authorization_server(State(state): State<ApplicationState>) -> impl IntoResponse {
+    info!("oauth_authorization_server endpoint");
+    info!("Received request");
+
     match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
         Ok(Some(ServerConfigView {
             authorization_server_metadata,

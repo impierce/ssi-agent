@@ -16,6 +16,7 @@ use axum::{
 use axum_auth::AuthBearer;
 use core::panic;
 use oid4vci::credential_request::CredentialRequest;
+use tracing::info;
 
 use crate::SERVER_CONFIG_ID;
 
@@ -25,6 +26,10 @@ pub(crate) async fn credential(
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> impl IntoResponse {
+    info!("credential endpoint");
+    info!("Access Token: {:?}", access_token);
+    info!("Received request: {:?}", credential_request);
+
     // Use the `access_token` to get the `offer_id` from the `AccessTokenView`.
     let offer_id = match query_handler(&access_token, &state.query.access_token).await {
         Ok(Some(AccessTokenView { offer_id })) => offer_id,

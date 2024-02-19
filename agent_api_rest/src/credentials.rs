@@ -11,12 +11,16 @@ use axum::{
 };
 use hyper::header;
 use serde_json::Value;
+use tracing::info;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
     State(state): State<ApplicationState>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
+    info!("credentials endpoint");
+    info!("Received request: {:?}", payload);
+
     // TODO: should we rename this to `offer_id`?
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id
@@ -74,7 +78,7 @@ pub(crate) async fn credentials(
     .await
     {
         Ok(_) => {}
-        Err(err) => {
+        _ => {
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     }

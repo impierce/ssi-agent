@@ -1,6 +1,6 @@
 use agent_issuance::{
     handlers::{command_handler, query_handler},
-    offer::{command::OfferCommand, queries::OfferView},
+    offer::command::OfferCommand,
     server_config::queries::ServerConfigView,
     state::ApplicationState,
 };
@@ -10,11 +10,15 @@ use axum::{
     response::IntoResponse,
 };
 use serde_json::Value;
+use tracing::info;
 
 use crate::SERVER_CONFIG_ID;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> impl IntoResponse {
+    info!("offers endpoint");
+    info!("Received request: {:?}", payload);
+
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id
     } else {

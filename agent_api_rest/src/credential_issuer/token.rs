@@ -13,12 +13,14 @@ use axum::{
     Form,
 };
 use oid4vci::token_request::TokenRequest;
+use tracing::info;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn token(
     State(state): State<ApplicationState>,
     Form(token_request): Form<TokenRequest>,
 ) -> impl IntoResponse {
+    info!("token endpoint");
     // Get the `pre_authorized_code` from the `TokenRequest`.
     let pre_authorized_code = match &token_request {
         TokenRequest::PreAuthorizedCode {

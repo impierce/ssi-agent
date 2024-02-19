@@ -17,6 +17,7 @@ use oid4vci::VerifiableCredentialJwt;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tracing::info;
 
 use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError::{self, *};
@@ -69,6 +70,8 @@ impl Aggregate for Offer {
     ) -> Result<Vec<Self::Event>, Self::Error> {
         use OfferCommand::*;
         use OfferEvent::*;
+
+        info!("Handling command: {:?}", command);
 
         match command {
             CreateCredentialOffer => {
@@ -201,6 +204,8 @@ impl Aggregate for Offer {
 
     fn apply(&mut self, event: Self::Event) {
         use OfferEvent::*;
+
+        info!("Applying event: {:?}", event);
 
         match event {
             CredentialOfferCreated {

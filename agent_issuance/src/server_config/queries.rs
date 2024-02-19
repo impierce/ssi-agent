@@ -17,7 +17,7 @@ impl View<ServerConfig> for ServerConfigView {
         use ServerConfigEvent::*;
 
         match &event.payload {
-            ServerMetadataLoaded {
+            ServerMetadataInitialized {
                 authorization_server_metadata,
                 credential_issuer_metadata,
             } => {

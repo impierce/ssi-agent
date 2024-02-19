@@ -19,7 +19,7 @@ pub fn startup_commands(host: url::Url) -> Vec<ServerConfigCommand> {
 }
 
 pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
-    ServerConfigCommand::LoadServerMetadata {
+    ServerConfigCommand::InitializeServerMetadata {
         authorization_server_metadata: Box::new(AuthorizationServerMetadata {
             issuer: base_url.clone(),
             token_endpoint: Some(base_url.append_path_segment("auth/token")),

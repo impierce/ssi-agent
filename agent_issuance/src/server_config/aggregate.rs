@@ -39,10 +39,10 @@ impl Aggregate for ServerConfig {
         use ServerConfigEvent::*;
 
         match command {
-            LoadServerMetadata {
+            InitializeServerMetadata {
                 authorization_server_metadata,
                 credential_issuer_metadata,
-            } => Ok(vec![ServerMetadataLoaded {
+            } => Ok(vec![ServerMetadataInitialized {
                 authorization_server_metadata,
                 credential_issuer_metadata,
             }]),
@@ -60,7 +60,7 @@ impl Aggregate for ServerConfig {
         use ServerConfigEvent::*;
 
         match event {
-            ServerMetadataLoaded {
+            ServerMetadataInitialized {
                 authorization_server_metadata,
                 credential_issuer_metadata,
             } => {
@@ -93,11 +93,11 @@ pub mod server_config_tests {
     fn test_load_server_metadata() {
         ServerConfigTestFramework::with(ServerConfigServices)
             .given_no_previous_events()
-            .when(ServerConfigCommand::LoadServerMetadata {
+            .when(ServerConfigCommand::InitializeServerMetadata {
                 authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
             })
-            .then_expect_events(vec![ServerConfigEvent::ServerMetadataLoaded {
+            .then_expect_events(vec![ServerConfigEvent::ServerMetadataInitialized {
                 authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
             }]);
@@ -105,7 +105,7 @@ pub mod server_config_tests {
     #[test]
     fn test_create_credentials_supported() {
         ServerConfigTestFramework::with(ServerConfigServices)
-            .given(vec![ServerConfigEvent::ServerMetadataLoaded {
+            .given(vec![ServerConfigEvent::ServerMetadataInitialized {
                 authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
             }])
