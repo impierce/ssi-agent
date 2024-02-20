@@ -10,6 +10,7 @@ use agent_issuance::{
     },
     server_config::services::ServerConfigServices,
     state::{generic_query, ApplicationState, Command, CommandHandlers, ViewRepositories},
+    SimpleLoggingQuery,
 };
 use async_trait::async_trait;
 use cqrs_es::{
@@ -123,13 +124,18 @@ pub async fn application_state() -> agent_issuance::state::ApplicationState {
     ApplicationState {
         command: CommandHandlers {
             server_config: Arc::new(
-                AggregateHandler::new(ServerConfigServices).append_query(generic_query(server_config.clone())),
+                AggregateHandler::new(ServerConfigServices)
+                    .append_query(SimpleLoggingQuery {})
+                    .append_query(generic_query(server_config.clone())),
             ),
             credential: Arc::new(
-                AggregateHandler::new(CredentialServices).append_query(generic_query(credential.clone())),
+                AggregateHandler::new(CredentialServices)
+                    .append_query(SimpleLoggingQuery {})
+                    .append_query(generic_query(credential.clone())),
             ),
             offer: Arc::new(
                 AggregateHandler::new(OfferServices)
+                    .append_query(SimpleLoggingQuery {})
                     .append_query(generic_query(offer.clone()))
                     .append_query(pre_authorized_code_query)
                     .append_query(access_token_query),

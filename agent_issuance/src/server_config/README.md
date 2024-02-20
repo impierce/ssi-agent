@@ -2,7 +2,5 @@
 
 This aggregate holds all things related to server configuration:
 
-- issuer image
-- metadata
-
-Its aggregate root is a unique identifier (UUID).
+- authorization_server_metadata
+- credential_issuer_metadata

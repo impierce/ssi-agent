@@ -51,11 +51,8 @@ dependencies = [
  "agent_shared",
  "agent_store",
  "axum",
- "cqrs-es",
  "lazy_static",
  "oid4vci",
- "postgres-es",
- "serde",
  "serde_json",
  "tokio",
  "tracing",
@@ -111,7 +108,6 @@ dependencies = [
  "postgres-es",
  "serde_json",
  "sqlx",
- "tokio",
 ]
 
 [[package]]
@@ -648,9 +644,9 @@ dependencies = [
 
 [[package]]
 name = "cqrs-es"
-version = "0.4.10"
+version = "0.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "724b314f779ae55e485c03b4cb85ab1d84a4edea1ee14b3b2acfa89015e91688"
+checksum = "4b907f0f950fdce9f3e6b1e38bb11dc70fc9d5b127cdf071750341e7f7f67ee4"
 dependencies = [
  "async-trait",
  "serde",
@@ -2734,9 +2730,9 @@ checksum = "14e6ab3f592e6fb464fc9712d8d6e6912de6473954635fd76a589d832cffcbb0"
 
 [[package]]
 name = "postgres-es"
-version = "0.4.10"
+version = "0.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f86bd7dfa50e437849bd1ac3b79bfee7f3314d4e7cddcf5cff5262c8118edb7"
+checksum = "05fcd2f85b76ea7edb35f7d421c42b85f2a4964ce7a2f139851eb9a751929cc4"
 dependencies = [
  "async-trait",
  "cqrs-es",

@@ -14,7 +14,6 @@ use axum::{
     response::IntoResponse,
 };
 use axum_auth::AuthBearer;
-use core::panic;
 use oid4vci::credential_request::CredentialRequest;
 use tracing::info;
 

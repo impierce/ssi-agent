@@ -18,7 +18,7 @@ use credential_issuer::{
 use credentials::credentials;
 use offers::offers;
 
-pub fn app(app_state: ApplicationState) -> Router {
+pub fn app(state: ApplicationState) -> Router {
     let base_path = get_base_path();
 
     let path = |suffix: &str| -> String {
@@ -41,7 +41,7 @@ pub fn app(app_state: ApplicationState) -> Router {
         .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
         .route("/auth/token", post(token))
         .route("/openid4vci/credential", post(credential))
-        .with_state(app_state)
+        .with_state(state)
 }
 
 fn get_base_path() -> Result<String, ConfigError> {
