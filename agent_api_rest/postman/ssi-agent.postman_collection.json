@@ -29,12 +29,40 @@
 				},
 				{
 					"name": "offers",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const credential_offer = responseBody;",
+									"",
+									"const decodedString = decodeURIComponent(credential_offer);",
+									"",
+									"// Split the string on the first '=' character and take the second item",
+									"const [, secondItem] = decodedString.split('=', 2);",
+									"",
+									"// Remove the last character from secondItem",
+									"const secondItemWithoutLastChar = secondItem.slice(0, -1);",
+									"",
+									"const { grants } = JSON.parse(secondItemWithoutLastChar);",
+									"",
+									"const pre_authorized_code = grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']['pre-authorized_code'];",
+									"",
+									"if(pre_authorized_code){",
+									"    pm.collectionVariables.set(\"PRE_AUTHORIZED_CODE\",pre_authorized_code)",
+									"}",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"subjectId\": \"{{SUBJECT_ID}}\",\n    \"preAuthorizedCode\": \"{{PRE_AUTHORIZED_CODE}}\"\n}",
+							"raw": "{\n    \"subjectId\": \"{{SUBJECT_ID}}\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -188,7 +216,7 @@
 		},
 		{
 			"key": "PRE_AUTHORIZED_CODE",
-			"value": "unique_subject_string",
+			"value": "INITIAL_VALUE",
 			"type": "string"
 		},
 		{
