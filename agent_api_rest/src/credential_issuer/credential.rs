@@ -3,10 +3,10 @@ use agent_issuance::{
     handlers::{command_handler, query_handler},
     offer::{
         command::OfferCommand,
-        queries::{AccessTokenView, OfferView},
+        queries::{access_token::AccessTokenView, OfferView},
     },
     server_config::queries::ServerConfigView,
-    state::ApplicationState,
+    state::{ApplicationState, SERVER_CONFIG_ID},
 };
 use axum::{
     extract::{Json, State},
@@ -17,8 +17,6 @@ use axum_auth::AuthBearer;
 use core::panic;
 use oid4vci::credential_request::CredentialRequest;
 use tracing::info;
-
-use crate::SERVER_CONFIG_ID;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(

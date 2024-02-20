@@ -2,11 +2,14 @@ use agent_issuance::{
     credential::services::CredentialServices,
     offer::{
         aggregate::Offer,
-        queries::{AccessTokenView, OfferSubQuery, PreAuthorizedCodeView},
+        queries::{
+            access_token::{AccessTokenQuery, AccessTokenView},
+            pre_authorized_code::{PreAuthorizedCodeQuery, PreAuthorizedCodeView},
+        },
         services::OfferServices,
     },
     server_config::services::ServerConfigServices,
-    state::{generic_query, ApplicationState, CommandHandlers, ViewRepositories, CQRS},
+    state::{generic_query, ApplicationState, Command, CommandHandlers, ViewRepositories},
 };
 use async_trait::async_trait;
 use cqrs_es::{
@@ -69,7 +72,7 @@ where
 }
 
 #[async_trait]
-impl<A> CQRS<A> for AggregateHandler<A>
+impl<A> Command<A> for AggregateHandler<A>
 where
     A: Aggregate,
     <A as Aggregate>::Command: Send,
@@ -113,11 +116,9 @@ pub async fn application_state() -> agent_issuance::state::ApplicationState {
     let pre_authorized_code = Arc::new(MemRepository::<PreAuthorizedCodeView, Offer>::new());
     let access_token = Arc::new(MemRepository::<AccessTokenView, Offer>::new());
 
-    // Create sub-queries for the offer aggregate.
-    let pre_authorized_code_query: OfferSubQuery<MemRepository<PreAuthorizedCodeView, Offer>, PreAuthorizedCodeView> =
-        OfferSubQuery::new(pre_authorized_code.clone(), "pre-authorized_code".to_string());
-    let access_token_query: OfferSubQuery<MemRepository<AccessTokenView, Offer>, AccessTokenView> =
-        OfferSubQuery::new(access_token.clone(), "access_token".to_string());
+    // Create custom-queries for the offer aggregate.
+    let pre_authorized_code_query = PreAuthorizedCodeQuery::new(pre_authorized_code.clone());
+    let access_token_query = AccessTokenQuery::new(access_token.clone());
 
     ApplicationState {
         command: CommandHandlers {

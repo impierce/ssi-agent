@@ -98,7 +98,9 @@ impl Aggregate for Offer {
                     credential_issuer: credential_issuer_metadata.credential_issuer.clone(),
                     credentials: credentials_supported
                         .iter()
-                        .map(|cso| CredentialsObject::ByValue(cso.credential_format.clone()))
+                        .map(|credentials_supported_object| {
+                            CredentialsObject::ByValue(credentials_supported_object.credential_format.clone())
+                        })
                         .collect(),
                     grants: Some(Grants {
                         authorization_code: None,
@@ -216,6 +218,7 @@ impl Aggregate for Offer {
                     pre_authorized_code,
                     access_token,
                     // In case of re-creating an `Offer`, this ensures that all the other fields are reset.
+                    // TODO: what to do with the `access_token` and `pre-authorize_code` views? They should be reset as well.
                     ..Default::default()
                 };
             }

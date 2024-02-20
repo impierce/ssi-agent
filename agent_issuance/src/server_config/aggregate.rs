@@ -4,6 +4,7 @@ use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::error::ServerConfigError;
@@ -38,6 +39,8 @@ impl Aggregate for ServerConfig {
         use ServerConfigError::*;
         use ServerConfigEvent::*;
 
+        info!("Handling command: {:?}", command);
+
         match command {
             InitializeServerMetadata {
                 authorization_server_metadata,
@@ -58,6 +61,8 @@ impl Aggregate for ServerConfig {
 
     fn apply(&mut self, event: Self::Event) {
         use ServerConfigEvent::*;
+
+        info!("Applying event: {:?}", event);
 
         match event {
             ServerMetadataInitialized {

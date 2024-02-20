@@ -2,7 +2,7 @@ use agent_issuance::{
     handlers::{command_handler, query_handler},
     offer::{
         command::OfferCommand,
-        queries::{OfferView, PreAuthorizedCodeView},
+        queries::{pre_authorized_code::PreAuthorizedCodeView, OfferView},
     },
     state::ApplicationState,
 };

@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError::{self, InvalidCredentialError};
@@ -33,6 +34,8 @@ impl Aggregate for Credential {
         command: Self::Command,
         _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
+        info!("Handling command: {:?}", command);
+
         match command {
             CredentialCommand::CreateUnsignedCredential {
                 data,
@@ -61,6 +64,8 @@ impl Aggregate for Credential {
 
     fn apply(&mut self, event: Self::Event) {
         use CredentialEvent::*;
+
+        info!("Applying event: {:?}", event);
 
         match event {
             UnsignedCredentialCreated {

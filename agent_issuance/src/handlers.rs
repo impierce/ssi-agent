@@ -7,6 +7,7 @@ use std::{collections::HashMap, sync::Arc};
 use time::format_description::well_known::Rfc3339;
 use tracing::{debug, error, info};
 
+/// The `query_handler` function is used to query the view repository for a specific view.
 pub async fn query_handler<A, V>(
     view_id: &str,
     state: &Arc<dyn ViewRepository<V, A>>,
@@ -27,6 +28,7 @@ where
     }
 }
 
+/// The `command_handler` function is used to execute a command on an aggregate.
 pub async fn command_handler<A>(
     aggregate_id: &str,
     state: &CommandHandler<A>,

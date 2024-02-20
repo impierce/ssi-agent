@@ -2,7 +2,7 @@ use agent_issuance::{
     handlers::{command_handler, query_handler},
     offer::command::OfferCommand,
     server_config::queries::ServerConfigView,
-    state::ApplicationState,
+    state::{ApplicationState, SERVER_CONFIG_ID},
 };
 use axum::{
     extract::{Json, State},
@@ -11,8 +11,6 @@ use axum::{
 };
 use serde_json::Value;
 use tracing::info;
-
-use crate::SERVER_CONFIG_ID;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> impl IntoResponse {
