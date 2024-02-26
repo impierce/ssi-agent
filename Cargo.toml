@@ -10,6 +10,9 @@ members = [
 
 [workspace.dependencies]
 lazy_static = "1.4"
+oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "ebd7a83f8494d55b57f569e43e3001d32cda583a" }
+oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "ebd7a83f8494d55b57f569e43e3001d32cda583a" }
+oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "ebd7a83f8494d55b57f569e43e3001d32cda583a" }
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0" }

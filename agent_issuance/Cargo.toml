@@ -6,9 +6,9 @@ edition = "2021"
 [dependencies]
 agent_shared = { path = "../agent_shared" }
 
-oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
-oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
-oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", branch = "feat/refactor-request" }
+oid4vci.workspace = true
+oid4vc-core.workspace = true
+oid4vc-manager.workspace = true
 
 cqrs-es = "0.4.2"
 
