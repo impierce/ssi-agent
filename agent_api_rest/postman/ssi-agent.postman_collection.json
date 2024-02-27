@@ -11,12 +11,28 @@
 			"item": [
 				{
 					"name": "credentials",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const location = pm.response.headers.get(\"LOCATION\");",
+									"",
+									"if(location){",
+									"    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
+									"}",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"subjectId\": \"{{SUBJECT_ID}}\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": {},\n            \"type\": \"AchievementSubject\",\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    }\n}\n",
+							"raw": "{\n    \"subjectId\":\"{{SUBJECT_ID}}\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\":\"\",\n            \"type\":[\n                \"AchievementSubject\"\n            ],\n            \"achievement\":{\n                \"id\":\"http://localhost:4000/public/assertions/m9fh0Fc4Q0qlefqjTx8FvQ\",\n                \"type\":[\n                    \"Achievement\"\n                ],\n                \"criteria\":{\n                    \"narrative\":\"A lot\"\n                },\n                \"description\":\"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\",\n                \"name\":\"CCCCCC\",\n                \"image\":{\n                    \"id\":\"http://localhost:8000/media/uploads/badges/eduid.png\"\n                }\n            }\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -24,6 +40,15 @@
 							}
 						},
 						"url": "http://{{HOST}}/v1/credentials"
+					},
+					"response": []
+				},
+				{
+					"name": "credentials",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "http://{{HOST}}{{CREDENTIAL_LOCATION}}"
 					},
 					"response": []
 				},
@@ -236,6 +261,11 @@
 		},
 		{
 			"key": "ACCESS_TOKEN",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "CREDENTIAL_LOCATION",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		}
