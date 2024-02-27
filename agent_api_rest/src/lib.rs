@@ -15,7 +15,7 @@ use credential_issuer::{
         oauth_authorization_server::oauth_authorization_server, openid_credential_issuer::openid_credential_issuer,
     },
 };
-use credentials::credentials;
+use credentials::{credentials, get_credentials};
 use offers::offers;
 
 pub fn app(state: ApplicationState) -> Router {
@@ -32,6 +32,7 @@ pub fn app(state: ApplicationState) -> Router {
     Router::new()
         // Agent Preparations
         .route(&path("/v1/credentials"), post(credentials))
+        .route(&path("/v1/credentials/:credential_id"), get(get_credentials))
         .route(&path("/v1/offers"), post(offers))
         // OpenID4VCI Pre-Authorized Code Flow
         .route(

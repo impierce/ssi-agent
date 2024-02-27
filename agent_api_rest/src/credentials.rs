@@ -5,13 +5,32 @@ use agent_issuance::{
     state::ApplicationState,
 };
 use axum::{
-    extract::{Json, State},
+    extract::{Json, Path, State},
     http::StatusCode,
     response::IntoResponse,
 };
 use hyper::header;
 use serde_json::Value;
 use tracing::info;
+
+#[axum_macros::debug_handler]
+pub(crate) async fn get_credentials(
+    State(state): State<ApplicationState>,
+    Path(credential_id): Path<String>,
+) -> impl IntoResponse {
+    info!("credentials endpoint");
+    info!("Received request");
+    info!("credential_id: {:?}", credential_id);
+
+    // Get the credential if it exists.
+    match query_handler(&credential_id, &state.query.credential).await {
+        Ok(Some(CredentialView { data: Data { raw }, .. })) => (StatusCode::OK, Json(raw)).into_response(),
+        _ => {
+            info!("Returning 404");
+            StatusCode::NOT_FOUND.into_response()
+        }
+    }
+}
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
@@ -92,7 +111,7 @@ pub(crate) async fn credentials(
     match query_handler(&credential_id, &state.query.credential).await {
         Ok(Some(CredentialView { data: Data { raw }, .. })) => (
             StatusCode::CREATED,
-            [(header::LOCATION, format!("/v1/credentials/{credential_id}"))],
+            [(header::LOCATION, &format!("/v1/credentials/{credential_id}"))],
             Json(raw),
         )
             .into_response(),
@@ -117,8 +136,31 @@ pub mod tests {
         http::{self, Request},
         Router,
     };
+    use lazy_static::lazy_static;
     use serde_json::json;
     use tower::Service;
+
+    lazy_static! {
+        pub static ref CREDENTIAL: serde_json::Value = json!({
+            "@context": [
+                "https://www.w3.org/2018/credentials/v1",
+                "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
+                ],
+                "id": "http://example.com/credentials/3527",
+                "type": ["VerifiableCredential", "OpenBadgeCredential"],
+                "issuer": {
+                    "id": "https://example.com/issuers/876543",
+                    "type": "Profile",
+                    "name": "Example Corp"
+                },
+            "issuanceDate": "2010-01-01T00:00:00Z",
+            "name": "Teamwork Badge",
+            "credentialSubject": {
+                "first_name": "Ferris",
+                "last_name": "Rustacean"
+            }
+        });
+    }
 
     pub async fn credentials(app: &mut Router) {
         let response = app
@@ -145,38 +187,45 @@ pub mod tests {
 
         assert_eq!(response.status(), StatusCode::CREATED);
 
-        assert!(response
+        let get_credentials_endpoint = response
             .headers()
             .get(http::header::LOCATION)
             .unwrap()
             .to_str()
             .unwrap()
-            .starts_with("/v1/credentials/"));
+            .to_string();
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(
-            body,
-            json!({
-                "@context": [
-                    "https://www.w3.org/2018/credentials/v1",
-                    "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
-                ],
-                "id": "http://example.com/credentials/3527",
-                "type": ["VerifiableCredential", "OpenBadgeCredential"],
-                "issuer": {
-                    "id": "https://example.com/issuers/876543",
-                    "type": "Profile",
-                    "name": "Example Corp"
-                },
-                "issuanceDate": "2010-01-01T00:00:00Z",
-                "name": "Teamwork Badge",
-                "credentialSubject": {
-                    "first_name": "Ferris",
-                    "last_name": "Rustacean"
-                }
-            })
-        );
+        assert_eq!(body, CREDENTIAL.clone());
+
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri(get_credentials_endpoint)
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "subjectId": SUBJECT_ID,
+                            "credential": {
+                                "credentialSubject": {
+                                "first_name": "Ferris",
+                                "last_name": "Rustacean"
+                            }},
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body, CREDENTIAL.clone());
     }
 
     #[tokio::test]
