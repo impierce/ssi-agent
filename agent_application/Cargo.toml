@@ -10,7 +10,7 @@ agent_api_rest = { path = "../agent_api_rest" }
 agent_shared = { path = "../agent_shared" }
 agent_store = { path = "../agent_store" }
 
-axum = "0.6"
+axum.workspace = true
 lazy_static.workspace = true
 serde_json.workspace = true
 tokio = { version = "1.34", features = ["full"] }
