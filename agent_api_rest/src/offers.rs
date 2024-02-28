@@ -7,21 +7,22 @@ use agent_issuance::{
 use axum::{
     extract::{Json, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
 };
 use serde_json::Value;
 use tracing::info;
 
+use crate::log_error_response;
+
 #[axum_macros::debug_handler]
-pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> impl IntoResponse {
+pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> Response {
     info!("offers endpoint");
     info!("Received request: {:?}", payload);
 
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id
     } else {
-        info!("Returning 400");
-        return (StatusCode::BAD_REQUEST, "subjectId is required".to_string()).into_response();
+        return log_error_response!((StatusCode::BAD_REQUEST, "subjectId is required"));
     };
 
     // Get the `CredentialIssuerMetadata` from the `ServerConfigView`.
@@ -30,10 +31,7 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
             credential_issuer_metadata: Some(credential_issuer_metadata),
             ..
         })) => credential_issuer_metadata,
-        _ => {
-            info!("Returning 500");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        _ => return log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
     };
 
     match command_handler(
@@ -46,18 +44,12 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
     .await
     {
         Ok(_) => {}
-        _ => {
-            info!("Returning 500");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        _ => return log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
     };
 
     match query_handler(subject_id, &state.query.offer).await {
         Ok(Some(offer_view)) => (StatusCode::OK, Json(offer_view.form_url_encoded_credential_offer)).into_response(),
-        _ => {
-            info!("Returning 500");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        _ => log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
 

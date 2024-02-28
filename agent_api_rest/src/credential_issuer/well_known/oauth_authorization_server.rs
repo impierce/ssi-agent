@@ -6,12 +6,14 @@ use agent_issuance::{
 use axum::{
     extract::{Json, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
 };
 use tracing::info;
 
+use crate::log_error_response;
+
 #[axum_macros::debug_handler]
-pub(crate) async fn oauth_authorization_server(State(state): State<ApplicationState>) -> impl IntoResponse {
+pub(crate) async fn oauth_authorization_server(State(state): State<ApplicationState>) -> Response {
     info!("oauth_authorization_server endpoint");
     info!("Received request");
 
@@ -23,10 +25,7 @@ pub(crate) async fn oauth_authorization_server(State(state): State<ApplicationSt
             info!("Returning authorization_server_metadata");
             (StatusCode::OK, Json(authorization_server_metadata)).into_response()
         }
-        _ => {
-            info!("Returning 500");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        _ => log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
 

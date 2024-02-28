@@ -18,6 +18,18 @@ use credential_issuer::{
 use credentials::{credentials, get_credentials};
 use offers::offers;
 
+#[macro_export]
+macro_rules! log_error_response {
+    (($status_code:expr, $message:literal)) => {{
+        tracing::error!("Returning {}: {}", $status_code, $message);
+        $status_code.into_response()
+    }};
+    ($status_code:expr) => {{
+        tracing::error!("Returning {}", $status_code);
+        $status_code.into_response()
+    }};
+}
+
 pub fn app(state: ApplicationState) -> Router {
     let base_path = get_base_path();
 

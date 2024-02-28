@@ -7,17 +7,19 @@ use agent_issuance::{
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
 };
 use hyper::header;
 use serde_json::Value;
 use tracing::info;
 
+use crate::log_error_response;
+
 #[axum_macros::debug_handler]
 pub(crate) async fn get_credentials(
     State(state): State<ApplicationState>,
     Path(credential_id): Path<String>,
-) -> impl IntoResponse {
+) -> Response {
     info!("credentials endpoint");
     info!("Received request");
     info!("credential_id: {:?}", credential_id);
@@ -25,18 +27,12 @@ pub(crate) async fn get_credentials(
     // Get the credential if it exists.
     match query_handler(&credential_id, &state.query.credential).await {
         Ok(Some(CredentialView { data: Data { raw }, .. })) => (StatusCode::OK, Json(raw)).into_response(),
-        _ => {
-            info!("Returning 404");
-            StatusCode::NOT_FOUND.into_response()
-        }
+        _ => log_error_response!(StatusCode::NOT_FOUND),
     }
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn credentials(
-    State(state): State<ApplicationState>,
-    Json(payload): Json<Value>,
-) -> impl IntoResponse {
+pub(crate) async fn credentials(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> Response {
     info!("credentials endpoint");
     info!("Received request: {:?}", payload);
 
@@ -44,15 +40,13 @@ pub(crate) async fn credentials(
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id
     } else {
-        info!("Returning 400");
-        return (StatusCode::BAD_REQUEST, "subjectId is required".to_string()).into_response();
+        return log_error_response!((StatusCode::BAD_REQUEST, "subjectId is required"));
     };
 
     let data = if payload["credential"].is_object() {
         payload["credential"].clone()
     } else {
-        info!("Returning 400");
-        return (StatusCode::BAD_REQUEST, "credential is required".to_string()).into_response();
+        return log_error_response!((StatusCode::BAD_REQUEST, "credential is required"));
     };
 
     let credential_id = uuid::Uuid::new_v4().to_string();
@@ -72,10 +66,7 @@ pub(crate) async fn credentials(
     .await
     {
         Ok(_) => {}
-        _ => {
-            info!("Returning 500");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        _ => return log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
     }
 
     // Create an offer if it does not exist yet.
@@ -83,10 +74,7 @@ pub(crate) async fn credentials(
         Ok(Some(_)) => {}
         _ => match command_handler(subject_id, &state.command.offer, OfferCommand::CreateCredentialOffer).await {
             Ok(_) => {}
-            _ => {
-                info!("Returning 500");
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
+            _ => return log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
         },
     };
 
@@ -102,8 +90,7 @@ pub(crate) async fn credentials(
     {
         Ok(_) => {}
         _ => {
-            info!("Returning 500");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return log_error_response!(StatusCode::INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -115,10 +102,7 @@ pub(crate) async fn credentials(
             Json(raw),
         )
             .into_response(),
-        _ => {
-            info!("Returning 500");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        _ => log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
 
