@@ -28,10 +28,6 @@ async fn main() {
 
     initialize(state.clone(), startup_commands(url)).await;
 
-    let server = "0.0.0.0:3033".parse().unwrap();
-
-    axum::Server::bind(&server)
-        .serve(app(state).into_make_service())
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await.unwrap();
+    axum::serve(listener, app(state)).await.unwrap();
 }

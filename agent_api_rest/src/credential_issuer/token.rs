@@ -104,7 +104,7 @@ pub mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let token_response: TokenResponse = serde_json::from_slice(&body).unwrap();
         assert_eq!(token_response.token_type, "bearer");
         assert!(token_response.c_nonce.is_some());

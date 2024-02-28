@@ -60,7 +60,7 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let authorization_server_metadata: AuthorizationServerMetadata = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(
