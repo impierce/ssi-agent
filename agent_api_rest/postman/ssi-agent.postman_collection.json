@@ -32,7 +32,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"subjectId\":\"{{SUBJECT_ID}}\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\":\"\",\n            \"type\":[\n                \"AchievementSubject\"\n            ],\n            \"achievement\":{\n                \"id\":\"http://localhost:4000/public/assertions/m9fh0Fc4Q0qlefqjTx8FvQ\",\n                \"type\":[\n                    \"Achievement\"\n                ],\n                \"criteria\":{\n                    \"narrative\":\"A lot\"\n                },\n                \"description\":\"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\",\n                \"name\":\"CCCCCC\",\n                \"image\":{\n                    \"id\":\"http://localhost:8000/media/uploads/badges/eduid.png\"\n                }\n            }\n        }\n    }\n}",
+							"raw": "{\n    \"subjectId\":\"{{SUBJECT_ID}}\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"type\":[\n                \"AchievementSubject\"\n            ],\n            \"achievement\":{\n                \"id\":\"https://demo.edubadges.nl/public/assertions/6pEB--n-SwiZPtWXMCB2jQ\",\n                \"name\":\"Edubadge account complete\",\n                \"type\":[\n                    \"Achievement\"\n                ],\n                \"image\":{\n                    \"id\":\"https://api-demo.edubadges.nl/media/uploads/badges/issuer_badgeclass_548517aa-cbab-4a7b-a971-55cdcce0e2a5.png\"\n                },\n                \"criteria\":{\n                    \"narrative\":\"To qualify for this edubadge:\\r\\n\\r\\n*  you successfully created an eduID,\\r\\n* you successfully linked your institution to your eduID,\\r\\n*  you can store and manage them safely in your backpack.\"\n                },\n                \"description\":\"### Welcome to edubadges. Let your life long learning begin! ###\\r\\n\\r\\nYou are now ready to collect all your edubadges in your backpack. In your backpack you can store and manage them safely.\\r\\n\\r\\nShare them anytime you like and with whom you like.\\r\\n\\r\\nEdubadges are visual representations of your knowledge, skills and competences.\"\n            }\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -236,7 +236,7 @@
 	"variable": [
 		{
 			"key": "HOST",
-			"value": "INITIAL_VALUE",
+			"value": "192.168.1.127:3033",
 			"type": "string"
 		},
 		{
@@ -246,7 +246,7 @@
 		},
 		{
 			"key": "SUBJECT_ID",
-			"value": "00000000-0000-0000-0000-000000000000",
+			"value": "001",
 			"type": "string"
 		},
 		{
