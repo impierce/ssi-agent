@@ -38,16 +38,11 @@ pub(crate) async fn token(
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
+    let command = OfferCommand::CreateTokenResponse { token_request };
+
     // Create a `TokenResponse` using the `offer_id` and `token_request`.
-    match command_handler(
-        &offer_id,
-        &state.command.offer,
-        OfferCommand::CreateTokenResponse { token_request },
-    )
-    .await
-    {
-        Ok(_) => {}
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
     // Use the `offer_id` to get the `token_response` from the `OfferView`.

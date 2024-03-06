@@ -44,47 +44,45 @@ pub(crate) async fn credentials(State(state): State<ApplicationState>, Json(payl
 
     let credential_id = uuid::Uuid::new_v4().to_string();
 
+    let command = CredentialCommand::CreateUnsignedCredential {
+        data: Data { raw: data },
+        credential_format_template: serde_json::from_str(include_str!(
+            "../../agent_issuance/res/credential_format_templates/openbadges_v3.json"
+        ))
+        .unwrap(),
+    };
+
     // Create an unsigned credential.
-    match command_handler(
-        &credential_id,
-        &state.command.credential,
-        CredentialCommand::CreateUnsignedCredential {
-            data: Data { raw: data },
-            credential_format_template: serde_json::from_str(include_str!(
-                "../../agent_issuance/res/credential_format_templates/openbadges_v3.json"
-            ))
-            .unwrap(),
-        },
-    )
-    .await
+    if command_handler(&credential_id, &state.command.credential, command)
+        .await
+        .is_err()
     {
-        Ok(_) => {}
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
     // Create an offer if it does not exist yet.
     match query_handler(subject_id, &state.query.offer).await {
         Ok(Some(_)) => {}
-        _ => match command_handler(subject_id, &state.command.offer, OfferCommand::CreateCredentialOffer).await {
-            Ok(_) => {}
-            _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-        },
+        _ => {
+            if command_handler(subject_id, &state.command.offer, OfferCommand::CreateCredentialOffer)
+                .await
+                .is_err()
+            {
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        }
+    };
+
+    let command = OfferCommand::AddCredentials {
+        credential_ids: vec![credential_id.clone()],
     };
 
     // Add the credential to the offer.
-    match command_handler(
-        subject_id,
-        &state.command.offer,
-        OfferCommand::AddCredentials {
-            credential_ids: vec![credential_id.clone()],
-        },
-    )
-    .await
+    if command_handler(subject_id, &state.command.offer, command)
+        .await
+        .is_err()
     {
-        Ok(_) => {}
-        _ => {
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
     // Return the credential.

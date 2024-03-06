@@ -68,9 +68,8 @@ pub(crate) async fn credential(
     };
 
     // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
-    match command_handler(&offer_id, &state.command.offer, command).await {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
+        StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
     // Use the `offer_id` to get the `credential_response` from the `OfferView`.

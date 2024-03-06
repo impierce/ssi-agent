@@ -31,18 +31,16 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
-    match command_handler(
-        subject_id,
-        &state.command.offer,
-        OfferCommand::CreateFormUrlEncodedCredentialOffer {
-            credential_issuer_metadata,
-        },
-    )
-    .await
-    {
-        Ok(_) => {}
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    let command = OfferCommand::CreateFormUrlEncodedCredentialOffer {
+        credential_issuer_metadata,
     };
+
+    if command_handler(subject_id, &state.command.offer, command)
+        .await
+        .is_err()
+    {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
 
     match query_handler(subject_id, &state.query.offer).await {
         Ok(Some(offer_view)) => (StatusCode::OK, Json(offer_view.form_url_encoded_credential_offer)).into_response(),
