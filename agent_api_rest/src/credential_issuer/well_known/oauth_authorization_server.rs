@@ -16,6 +16,7 @@ pub(crate) async fn oauth_authorization_server(State(state): State<ApplicationSt
             authorization_server_metadata,
             ..
         })) => (StatusCode::OK, Json(authorization_server_metadata)).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

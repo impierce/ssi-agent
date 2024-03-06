@@ -21,7 +21,8 @@ pub(crate) async fn get_credentials(
     // Get the credential if it exists.
     match query_handler(&credential_id, &state.query.credential).await {
         Ok(Some(CredentialView { data: Data { raw }, .. })) => (StatusCode::OK, Json(raw)).into_response(),
-        _ => StatusCode::NOT_FOUND.into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
