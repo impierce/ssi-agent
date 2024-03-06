@@ -20,10 +20,6 @@ pub(crate) async fn get_credentials(
     State(state): State<ApplicationState>,
     Path(credential_id): Path<String>,
 ) -> Response {
-    info!("credentials endpoint");
-    info!("Received request");
-    info!("credential_id: {:?}", credential_id);
-
     // Get the credential if it exists.
     match query_handler(&credential_id, &state.query.credential).await {
         Ok(Some(CredentialView { data: Data { raw }, .. })) => (StatusCode::OK, Json(raw)).into_response(),
@@ -33,8 +29,7 @@ pub(crate) async fn get_credentials(
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> Response {
-    info!("credentials endpoint");
-    info!("Received request: {:?}", payload);
+    info!("Request Body: {}", payload);
 
     // TODO: should we rename this to `offer_id`?
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {

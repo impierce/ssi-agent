@@ -8,15 +8,11 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use tracing::info;
 
 use crate::log_error_response;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn openid_credential_issuer(State(state): State<ApplicationState>) -> Response {
-    info!("openid_credential_issuer endpoint");
-    info!("Received request");
-
     match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
         Ok(Some(ServerConfigView {
             credential_issuer_metadata: Some(credential_issuer_metadata),

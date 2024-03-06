@@ -30,4 +30,4 @@ uuid.workspace = true
 [dev-dependencies]
 lazy_static.workspace = true
 serial_test = "3.0"
-tokio = { version = "1", features = ["full"] }
+tokio.workspace = true

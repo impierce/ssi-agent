@@ -5,6 +5,10 @@ mod offers;
 use agent_issuance::state::ApplicationState;
 use agent_shared::{config, ConfigError};
 use axum::{
+    body::Bytes,
+    extract::MatchedPath,
+    http::Request,
+    response::Response,
     routing::{get, post},
     Router,
 };
@@ -17,6 +21,8 @@ use credential_issuer::{
 };
 use credentials::{credentials, get_credentials};
 use offers::offers;
+use tower_http::trace::TraceLayer;
+use tracing::{info_span, Span};
 
 #[macro_export]
 macro_rules! log_error_response {
@@ -54,6 +60,28 @@ pub fn app(state: ApplicationState) -> Router {
         .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
         .route("/auth/token", post(token))
         .route("/openid4vci/credential", post(credential))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(|request: &Request<_>| {
+                    let path = request.extensions().get::<MatchedPath>().map(MatchedPath::as_str);
+                    info_span!(
+                        "HTTP Request ",
+                        method = ?request.method(),
+                        path,
+                    )
+                })
+                .on_request(|request: &Request<_>, _span: &Span| {
+                    tracing::info!("Received request");
+                    tracing::info!("Request Headers: {:?}", request.headers());
+                })
+                .on_response(|response: &Response, _latency: std::time::Duration, _span: &Span| {
+                    tracing::info!("Returning {}", response.status());
+                    tracing::info!("Response Headers: {:?}", response.headers());
+                })
+                .on_body_chunk(|chunk: &Bytes, _latency: std::time::Duration, _span: &Span| {
+                    tracing::info!("Response Body: {}", std::str::from_utf8(chunk).unwrap());
+                }),
+        )
         .with_state(state)
 }
 

@@ -16,8 +16,7 @@ use crate::log_error_response;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> Response {
-    info!("offers endpoint");
-    info!("Received request: {:?}", payload);
+    info!("Request Body: {}", payload);
 
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id

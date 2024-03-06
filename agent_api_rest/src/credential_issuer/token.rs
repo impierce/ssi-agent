@@ -13,6 +13,7 @@ use axum::{
     Form,
 };
 use oid4vci::token_request::TokenRequest;
+use serde_json::json;
 use tracing::info;
 
 use crate::log_error_response;
@@ -23,8 +24,7 @@ pub(crate) async fn token(
     Form(token_request): Form<TokenRequest>,
     // TODO: implement official oid4vci error response. This TODO is also in the `credential` endpoint.
 ) -> Response {
-    info!("token endpoint");
-    info!("Received request: {:?}", token_request);
+    info!("Request Body: {}", json!(token_request));
 
     // Get the `pre_authorized_code` from the `TokenRequest`.
     let pre_authorized_code = match &token_request {

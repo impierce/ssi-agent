@@ -15,6 +15,7 @@ use axum::{
 };
 use axum_auth::AuthBearer;
 use oid4vci::credential_request::CredentialRequest;
+use serde_json::json;
 use tracing::info;
 
 use crate::log_error_response;
@@ -26,9 +27,7 @@ pub(crate) async fn credential(
     Json(credential_request): Json<CredentialRequest>,
     // TODO: implement official oid4vci error response. This TODO is also in the `token` endpoint.
 ) -> Response {
-    info!("credential endpoint");
-    info!("Access Token: {:?}", access_token);
-    info!("Received request: {:?}", credential_request);
+    info!("Request Body: {}", json!(credential_request));
 
     // Use the `access_token` to get the `offer_id` from the `AccessTokenView`.
     let offer_id = match query_handler(&access_token, &state.query.access_token).await {
