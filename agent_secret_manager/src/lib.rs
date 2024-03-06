@@ -1,44 +1,31 @@
 use agent_shared::config;
-use identity_stronghold::StrongholdStorage;
-use iota_sdk::client::{secret::stronghold::StrongholdSecretManager, Password};
-use iota_stronghold::SnapshotPath;
-use log::info;
+use producer::did_document::Method;
+use producer::SecretManager;
 
-pub struct SecretManager {
-    pub stronghold_storage: StrongholdStorage,
+pub async fn init() -> Result<(), std::io::Error> {
+    let snapshot_path = config!("stronghold_path").unwrap();
+    let password = config!("stronghold_password").unwrap();
+
+    let secret_manager = SecretManager::load(snapshot_path, password).unwrap();
+
+    let signature = secret_manager.sign("foobar".as_bytes()).await.unwrap();
+    println!("{:x?}", signature);
+
+    let document = secret_manager.produce_document_json(Method::Web).await.unwrap();
+    println!("{}", serde_json::to_string_pretty(&document).unwrap());
+
+    Ok(())
 }
 
-impl SecretManager {
-    /// Generates a new Stronghold
-    pub fn generate() -> Self {
-        // TODO: require specifying the path and password?
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
 
-        info!("Creating new Stronghold ...");
-        let stronghold_secret_manager = StrongholdSecretManager::builder()
-            .password(Password::from("test123".to_string()))
-            .build("test123")
-            .unwrap();
-        SecretManager {
-            stronghold_storage: StrongholdStorage::new(stronghold_secret_manager),
-        }
-    }
-
-    /// Loads an existing Stronghold as specified in the environment variables
-    pub fn load() -> Self {
-        let snapshot_path_str = config!("stronghold_path").unwrap();
-        let snapshot_path = SnapshotPath::from_path(snapshot_path_str);
-
-        info!("Loading existing Stronghold from {:?} ...", snapshot_path.as_path());
-
-        let password = config!("stronghold_password").unwrap();
-
-        let stronghold_secret_manager = StrongholdSecretManager::builder()
-            .password(Password::from(password))
-            .build(snapshot_path.as_path())
-            .unwrap();
-
-        SecretManager {
-            stronghold_storage: StrongholdStorage::new(stronghold_secret_manager),
-        }
+    #[tokio::test]
+    async fn test_load() {
+        env::set_var("AGENT_SECRET_MANAGER_STRONGHOLD_PATH", "tests/res/test.stronghold");
+        env::set_var("AGENT_SECRET_MANAGER_STRONGHOLD_PASSWORD", "secure_password");
+        assert!(init().await.is_ok());
     }
 }
