@@ -1,0 +1,25 @@
+[package]
+name = "agent_secret_manager"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+agent_shared = { path = "../agent_shared" }
+
+cqrs-es = "0.4.2"
+
+# TODO: temporarily pin until https://github.com/iotaledger/identity.rs/pull/1303 is merged
+# identity_iota = { git = "https://github.com/iotaledger/identity.rs.git", rev = "b424d3d" }
+# identity_stronghold = { git = "https://github.com/iotaledger/identity.rs.git", rev = "b424d3d" }
+identity_iota = { version = "1.1.1" }
+identity_stronghold = { version = "1.1.1" }
+iota-sdk = { version = "1.0.2", default-features = false, features = [
+    "client",
+    "stronghold",
+] }
+iota_stronghold = { version = "2.0.0" }
+log = "0.4"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
