@@ -24,18 +24,6 @@ use offers::offers;
 use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
 
-#[macro_export]
-macro_rules! log_error_response {
-    (($status_code:expr, $message:literal)) => {{
-        tracing::error!("Returning {}: {}", $status_code, $message);
-        $status_code.into_response()
-    }};
-    ($status_code:expr) => {{
-        tracing::error!("Returning {}", $status_code);
-        $status_code.into_response()
-    }};
-}
-
 pub fn app(state: ApplicationState) -> Router {
     let base_path = get_base_path();
 

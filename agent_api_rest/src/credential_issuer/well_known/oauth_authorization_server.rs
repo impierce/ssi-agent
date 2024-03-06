@@ -9,8 +9,6 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use crate::log_error_response;
-
 #[axum_macros::debug_handler]
 pub(crate) async fn oauth_authorization_server(State(state): State<ApplicationState>) -> Response {
     match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
@@ -18,7 +16,7 @@ pub(crate) async fn oauth_authorization_server(State(state): State<ApplicationSt
             authorization_server_metadata,
             ..
         })) => (StatusCode::OK, Json(authorization_server_metadata)).into_response(),
-        _ => log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 

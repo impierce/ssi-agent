@@ -16,8 +16,6 @@ use oid4vci::token_request::TokenRequest;
 use serde_json::json;
 use tracing::info;
 
-use crate::log_error_response;
-
 #[axum_macros::debug_handler]
 pub(crate) async fn token(
     State(state): State<ApplicationState>,
@@ -31,13 +29,13 @@ pub(crate) async fn token(
         TokenRequest::PreAuthorizedCode {
             pre_authorized_code, ..
         } => pre_authorized_code,
-        _ => return log_error_response!(StatusCode::BAD_REQUEST),
+        _ => return StatusCode::BAD_REQUEST.into_response(),
     };
 
     // Use the `pre_authorized_code` to get the `offer_id` from the `PreAuthorizedCodeView`.
     let offer_id = match query_handler(pre_authorized_code, &state.query.pre_authorized_code).await {
         Ok(Some(PreAuthorizedCodeView { offer_id })) => offer_id,
-        _ => return log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
+        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
     // Create a `TokenResponse` using the `offer_id` and `token_request`.
@@ -49,7 +47,7 @@ pub(crate) async fn token(
     .await
     {
         Ok(_) => {}
-        _ => return log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
+        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
     // Use the `offer_id` to get the `token_response` from the `OfferView`.
@@ -58,7 +56,7 @@ pub(crate) async fn token(
             token_response: Some(token_response),
             ..
         })) => (StatusCode::OK, Json(token_response)).into_response(),
-        _ => log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 

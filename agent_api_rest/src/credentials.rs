@@ -13,8 +13,6 @@ use hyper::header;
 use serde_json::Value;
 use tracing::info;
 
-use crate::log_error_response;
-
 #[axum_macros::debug_handler]
 pub(crate) async fn get_credentials(
     State(state): State<ApplicationState>,
@@ -23,7 +21,7 @@ pub(crate) async fn get_credentials(
     // Get the credential if it exists.
     match query_handler(&credential_id, &state.query.credential).await {
         Ok(Some(CredentialView { data: Data { raw }, .. })) => (StatusCode::OK, Json(raw)).into_response(),
-        _ => log_error_response!(StatusCode::NOT_FOUND),
+        _ => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
@@ -35,13 +33,13 @@ pub(crate) async fn credentials(State(state): State<ApplicationState>, Json(payl
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id
     } else {
-        return log_error_response!((StatusCode::BAD_REQUEST, "subjectId is required"));
+        return (StatusCode::BAD_REQUEST, "subjectId is required").into_response();
     };
 
     let data = if payload["credential"].is_object() {
         payload["credential"].clone()
     } else {
-        return log_error_response!((StatusCode::BAD_REQUEST, "credential is required"));
+        return (StatusCode::BAD_REQUEST, "credential is required").into_response();
     };
 
     let credential_id = uuid::Uuid::new_v4().to_string();
@@ -61,7 +59,7 @@ pub(crate) async fn credentials(State(state): State<ApplicationState>, Json(payl
     .await
     {
         Ok(_) => {}
-        _ => return log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
+        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 
     // Create an offer if it does not exist yet.
@@ -69,7 +67,7 @@ pub(crate) async fn credentials(State(state): State<ApplicationState>, Json(payl
         Ok(Some(_)) => {}
         _ => match command_handler(subject_id, &state.command.offer, OfferCommand::CreateCredentialOffer).await {
             Ok(_) => {}
-            _ => return log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
+            _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         },
     };
 
@@ -85,7 +83,7 @@ pub(crate) async fn credentials(State(state): State<ApplicationState>, Json(payl
     {
         Ok(_) => {}
         _ => {
-            return log_error_response!(StatusCode::INTERNAL_SERVER_ERROR);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     }
 
@@ -97,7 +95,7 @@ pub(crate) async fn credentials(State(state): State<ApplicationState>, Json(payl
             Json(raw),
         )
             .into_response(),
-        _ => log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
