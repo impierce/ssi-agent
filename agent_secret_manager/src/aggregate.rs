@@ -1,4 +1,5 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
@@ -19,7 +20,7 @@ impl Aggregate for AgentSecretManager {
     type Command = SecretManagerCommand;
     type Event = SecretManagerEvent;
     type Error = std::io::Error;
-    type Services = SecretManagerServices;
+    type Services = Arc<Mutex<SecretManagerServices>>;
 
     fn aggregate_type() -> String {
         "secret_manager".to_string()
@@ -28,36 +29,22 @@ impl Aggregate for AgentSecretManager {
     async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
         match command {
             SecretManagerCommand::LoadStronghold => {
-                // let mut s = SecretManagerWrapper { secret_manager: None };
-                // assert!(s.secret_manager.is_none());
-                // s.init().unwrap();
-                // assert!(s.secret_manager.is_some());
+                let mut guard = services.lock().await;
+                assert!(guard.secret_manager.is_none());
+                guard.init().unwrap();
+                assert!(guard.secret_manager.is_some());
 
-                let secret_manager = services.secret_manager.clone();
-                assert!(secret_manager.is_none());
-
-                services.init().unwrap();
-                assert!(secret_manager.is_some());
-
-                // SecretManagerWrapper::init(&mut self)
-                // SecretManagerWrapper::init().unwrap();
-                // SecretManagerWrapper::init().await.unwrap();
-                // let _ = async { SecretManagerWrapper::init().await.unwrap() };
-                // let _ = Arc::new(Mutex::new(SecretManagerWrapper::init().await.unwrap()));
                 Ok(vec![SecretManagerEvent::StrongholdLoaded {}])
             }
             SecretManagerCommand::EnableDidMethod { method } => {
-                // let mut s = SecretManagerWrapper { secret_manager: None };
-                // s.init().unwrap();
-                // assert!(s.secret_manager.is_some());
-
-                // let result = s.secret_manager.unwrap().produce_document_json(method.clone()).await;
-
-                // TODO: do not init() again
-
-                let secret_manager = services.secret_manager.clone();
-                assert!(secret_manager.is_some());
-                let result = secret_manager.unwrap().produce_document_json(method.clone()).await;
+                let guard = services.lock().await;
+                assert!(guard.secret_manager.is_some());
+                let result = guard
+                    .secret_manager
+                    .as_ref()
+                    .unwrap()
+                    .produce_document_json(method.clone())
+                    .await;
 
                 if result.is_ok() {
                     Ok(vec![SecretManagerEvent::DidMethodEnabled { method }])
@@ -82,6 +69,8 @@ impl Default for AgentSecretManager {
 
 #[cfg(test)]
 mod aggregate_tests {
+    use super::*;
+
     use cqrs_es::test::TestFramework;
     use producer::did_document::Method;
     use producer::SecretManager;
@@ -100,7 +89,7 @@ mod aggregate_tests {
 
         let expected = SecretManagerEvent::StrongholdLoaded {};
         let command = SecretManagerCommand::LoadStronghold;
-        let services = SecretManagerServices::new(None);
+        let services = Arc::new(Mutex::new(SecretManagerServices::new(None)));
 
         SecretManagerTestFramework::with(services)
             .given_no_previous_events()
@@ -112,9 +101,9 @@ mod aggregate_tests {
     fn enables_did_method() {
         let expected = SecretManagerEvent::DidMethodEnabled { method: Method::Key };
         let command = SecretManagerCommand::EnableDidMethod { method: Method::Key };
-        let services = SecretManagerServices::new(Some(
+        let services = Arc::new(Mutex::new(SecretManagerServices::new(Some(
             SecretManager::load("tests/res/test.stronghold".to_string(), "secure_password".to_string()).unwrap(),
-        ));
+        ))));
 
         SecretManagerTestFramework::with(services)
             .given_no_previous_events()

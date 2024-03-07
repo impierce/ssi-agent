@@ -6,7 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 agent_issuance = { path = "../agent_issuance" }
-agent_shared = {path = "../agent_shared"}
+agent_shared = { path = "../agent_shared" }
 
 axum.workspace = true
 axum-auth = "0.7"
@@ -26,6 +26,6 @@ agent_store = { path = "../agent_store" }
 lazy_static.workspace = true
 mime = { version = "0.3" }
 oid4vc-core.workspace = true
-tokio = { version = "1.34", features = ["full"] }
+tokio.workspace = true
 tower = { version = "0.4" }
 url.workspace = true

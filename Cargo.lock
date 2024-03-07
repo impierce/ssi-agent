@@ -66,7 +66,7 @@ dependencies = [
  "hyper 1.2.0",
  "lazy_static",
  "mime",
- "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
+ "oid4vc-core",
  "oid4vci",
  "serde",
  "serde_json",
@@ -107,7 +107,7 @@ dependencies = [
  "jsonschema",
  "jsonwebtoken",
  "lazy_static",
- "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
+ "oid4vc-core",
  "oid4vc-manager",
  "oid4vci",
  "producer",
@@ -132,7 +132,7 @@ dependencies = [
  "async-trait",
  "cqrs-es",
  "log",
- "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
+ "oid4vc-core",
  "producer",
  "serde",
  "serde_json",
@@ -160,6 +160,7 @@ dependencies = [
  "postgres-es",
  "serde_json",
  "sqlx",
+ "tokio",
 ]
 
 [[package]]
@@ -913,9 +914,9 @@ checksum = "a2bd12c1caf447e69cd4528f47f94d203fd2582878ecb9e9465484c4148a8223"
 
 [[package]]
 name = "cc"
-version = "1.0.89"
+version = "1.0.90"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0ba8f7aaa012f30d5b2861462f6708eccd49c3c39863fe083a308035f63d723"
+checksum = "8cd6604a82acf3039f1144f54b8eb34e91ffba622051189e71b781822d5ee1f5"
 
 [[package]]
 name = "cfg-if"
@@ -981,9 +982,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.1"
+version = "4.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c918d541ef2913577a0f9566e9ce27cb35b6df072075769e0b26cb5a554520da"
+checksum = "b230ab84b0ffdf890d5a10abdbc8b83ae1c4918275daea1ab8801f71536b2651"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -991,9 +992,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.1"
+version = "4.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f3e7391dad68afb0c2ede1bf619f579a3dc9c2ec67f089baa397123a2f3d1eb"
+checksum = "ae129e2e766ae0ec03484e609954119f123cc1fe650337e155d03b022f24f7b4"
 dependencies = [
  "anstream",
  "anstyle",
@@ -4149,29 +4150,6 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc.git?rev=ebd7a83#ebd7a83f8494d55b57f569e43e3001d32cda583a"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64-url",
- "derive_more",
- "did_url 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures",
- "getset",
- "is_empty",
- "jsonwebtoken",
- "rand 0.8.5",
- "reqwest-middleware",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "serde_with 2.3.3",
- "url",
-]
-
-[[package]]
-name = "oid4vc-core"
-version = "0.1.0"
 source = "git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a#ebd7a83f8494d55b57f569e43e3001d32cda583a"
 dependencies = [
  "anyhow",
@@ -4209,7 +4187,7 @@ dependencies = [
  "identity_core 1.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "identity_credential 1.1.1 (git+https://github.com/iotaledger/identity.rs.git)",
  "jsonwebtoken",
- "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
+ "oid4vc-core",
  "oid4vci",
  "oid4vp",
  "paste",
@@ -4235,7 +4213,7 @@ dependencies = [
  "getset",
  "jsonwebtoken",
  "lazy_static",
- "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
+ "oid4vc-core",
  "paste",
  "reqwest",
  "reqwest-middleware",
@@ -4261,7 +4239,7 @@ dependencies = [
  "identity_credential 1.1.1 (git+https://github.com/iotaledger/identity.rs.git)",
  "is_empty",
  "jsonwebtoken",
- "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
+ "oid4vc-core",
  "oid4vci",
  "serde",
  "serde_json",
@@ -4920,7 +4898,6 @@ dependencies = [
  "iota-sdk",
  "iota_stronghold",
  "log",
- "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc.git?rev=ebd7a83)",
  "rand 0.8.5",
  "serde",
  "serde_json",
@@ -5889,7 +5866,7 @@ dependencies = [
  "identity_credential 1.1.1 (git+https://github.com/iotaledger/identity.rs.git)",
  "is_empty",
  "jsonwebtoken",
- "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
+ "oid4vc-core",
  "oid4vci",
  "oid4vp",
  "reqwest",

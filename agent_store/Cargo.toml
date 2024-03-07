@@ -18,3 +18,4 @@ sqlx = { version = "0.7", features = [
     "runtime-tokio-rustls",
     "json",
 ] }
+tokio.workspace = true
