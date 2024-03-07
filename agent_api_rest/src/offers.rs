@@ -12,17 +12,14 @@ use axum::{
 use serde_json::Value;
 use tracing::info;
 
-use crate::log_error_response;
-
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> Response {
-    info!("offers endpoint");
-    info!("Received request: {:?}", payload);
+    info!("Request Body: {}", payload);
 
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
         subject_id
     } else {
-        return log_error_response!((StatusCode::BAD_REQUEST, "subjectId is required"));
+        return (StatusCode::BAD_REQUEST, "subjectId is required").into_response();
     };
 
     // Get the `CredentialIssuerMetadata` from the `ServerConfigView`.
@@ -31,25 +28,23 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
             credential_issuer_metadata: Some(credential_issuer_metadata),
             ..
         })) => credential_issuer_metadata,
-        _ => return log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
+        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
-    match command_handler(
-        subject_id,
-        &state.command.offer,
-        OfferCommand::CreateFormUrlEncodedCredentialOffer {
-            credential_issuer_metadata,
-        },
-    )
-    .await
-    {
-        Ok(_) => {}
-        _ => return log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
+    let command = OfferCommand::CreateFormUrlEncodedCredentialOffer {
+        credential_issuer_metadata,
     };
+
+    if command_handler(subject_id, &state.command.offer, command)
+        .await
+        .is_err()
+    {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
 
     match query_handler(subject_id, &state.query.offer).await {
         Ok(Some(offer_view)) => (StatusCode::OK, Json(offer_view.form_url_encoded_credential_offer)).into_response(),
-        _ => log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 

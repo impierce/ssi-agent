@@ -8,24 +8,16 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use tracing::info;
-
-use crate::log_error_response;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn oauth_authorization_server(State(state): State<ApplicationState>) -> Response {
-    info!("oauth_authorization_server endpoint");
-    info!("Received request");
-
     match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
         Ok(Some(ServerConfigView {
             authorization_server_metadata,
             ..
-        })) => {
-            info!("Returning authorization_server_metadata");
-            (StatusCode::OK, Json(authorization_server_metadata)).into_response()
-        }
-        _ => log_error_response!(StatusCode::INTERNAL_SERVER_ERROR),
+        })) => (StatusCode::OK, Json(authorization_server_metadata)).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
