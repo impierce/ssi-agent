@@ -251,6 +251,7 @@ pub mod tests {
     };
 
     use super::*;
+    use agent_secret_manager::SecretManagerWrapper;
     use cqrs_es::test::TestFramework;
     use lazy_static::lazy_static;
     use oid4vci::{
@@ -258,6 +259,7 @@ pub mod tests {
         credential_request::CredentialRequest,
         Proof, ProofType,
     };
+    use producer::SecretManager;
 
     type OfferTestFramework = TestFramework<Offer>;
 
@@ -476,11 +478,21 @@ pub mod tests {
         };
         static ref SUBJECT_1_KEY_DID: Arc<KeySubject> = Arc::new(KeySubject::from_keypair(
             from_existing_key::<Ed25519KeyPair>(b"", Some("this-is-a-very-UNSAFE-subj-key-1".as_bytes())),
-            None,
+            Some(Arc::new(SecretManagerWrapper {
+                secret_manager: Some(
+                    SecretManager::load("tests/res/test.stronghold".to_string(), "secure_password".to_string())
+                        .unwrap()
+                ),
+            }))
         ));
         static ref SUBJECT_2_KEY_DID: Arc<KeySubject> = Arc::new(KeySubject::from_keypair(
             from_existing_key::<Ed25519KeyPair>(b"", Some("this-is-a-very-UNSAFE-subj-key-2".as_bytes())),
-            None,
+            Some(Arc::new(SecretManagerWrapper {
+                secret_manager: Some(
+                    SecretManager::load("tests/res/test.stronghold".to_string(), "secure_password".to_string())
+                        .unwrap()
+                ),
+            }))
         ));
         static ref VERIFIABLE_CREDENTIAL_JWT_1: String = {
             "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa3F5WmpEZmhzeVo1YzZOdUpoYm9zV2tTajg2Mmp5V2lDQ\

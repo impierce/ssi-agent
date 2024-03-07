@@ -66,7 +66,7 @@ dependencies = [
  "hyper 1.2.0",
  "lazy_static",
  "mime",
- "oid4vc-core",
+ "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
  "oid4vci",
  "serde",
  "serde_json",
@@ -98,6 +98,7 @@ dependencies = [
 name = "agent_issuance"
 version = "0.1.0"
 dependencies = [
+ "agent_secret_manager",
  "agent_shared",
  "async-trait",
  "cqrs-es",
@@ -106,9 +107,10 @@ dependencies = [
  "jsonschema",
  "jsonwebtoken",
  "lazy_static",
- "oid4vc-core",
+ "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
  "oid4vc-manager",
  "oid4vci",
+ "producer",
  "rand 0.8.5",
  "serde",
  "serde_json",
@@ -126,9 +128,13 @@ name = "agent_secret_manager"
 version = "0.1.0"
 dependencies = [
  "agent_shared",
+ "anyhow",
+ "async-trait",
  "cqrs-es",
  "log",
+ "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
  "producer",
+ "serde",
  "serde_json",
  "tokio",
 ]
@@ -4143,6 +4149,29 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
+source = "git+https://github.com/impierce/openid4vc.git?rev=ebd7a83#ebd7a83f8494d55b57f569e43e3001d32cda583a"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64-url",
+ "derive_more",
+ "did_url 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures",
+ "getset",
+ "is_empty",
+ "jsonwebtoken",
+ "rand 0.8.5",
+ "reqwest-middleware",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "serde_with 2.3.3",
+ "url",
+]
+
+[[package]]
+name = "oid4vc-core"
+version = "0.1.0"
 source = "git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a#ebd7a83f8494d55b57f569e43e3001d32cda583a"
 dependencies = [
  "anyhow",
@@ -4180,7 +4209,7 @@ dependencies = [
  "identity_core 1.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "identity_credential 1.1.1 (git+https://github.com/iotaledger/identity.rs.git)",
  "jsonwebtoken",
- "oid4vc-core",
+ "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
  "oid4vci",
  "oid4vp",
  "paste",
@@ -4206,7 +4235,7 @@ dependencies = [
  "getset",
  "jsonwebtoken",
  "lazy_static",
- "oid4vc-core",
+ "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
  "paste",
  "reqwest",
  "reqwest-middleware",
@@ -4232,7 +4261,7 @@ dependencies = [
  "identity_credential 1.1.1 (git+https://github.com/iotaledger/identity.rs.git)",
  "is_empty",
  "jsonwebtoken",
- "oid4vc-core",
+ "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
  "oid4vci",
  "serde",
  "serde_json",
@@ -4881,6 +4910,7 @@ dependencies = [
 name = "producer"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "did_jwk",
  "did_key",
  "did_web",
@@ -4890,9 +4920,12 @@ dependencies = [
  "iota-sdk",
  "iota_stronghold",
  "log",
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc.git?rev=ebd7a83)",
  "rand 0.8.5",
+ "serde",
  "serde_json",
  "shared",
+ "tokio",
  "url",
 ]
 
@@ -5856,7 +5889,7 @@ dependencies = [
  "identity_credential 1.1.1 (git+https://github.com/iotaledger/identity.rs.git)",
  "is_empty",
  "jsonwebtoken",
- "oid4vc-core",
+ "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
  "oid4vci",
  "oid4vp",
  "reqwest",
