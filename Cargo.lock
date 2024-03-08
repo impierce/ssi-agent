@@ -881,9 +881,9 @@ dependencies = [
 
 [[package]]
 name = "bumpalo"
-version = "3.15.3"
+version = "3.15.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ea184aa71bb362a1157c896979544cc23974e08fd265f29ea96b59f0b4a555b"
+checksum = "7ff69b9dd49fd426c69a0db9fc04dd934cdb6645ff000864d98f7e2af8830eaa"
 
 [[package]]
 name = "byte-slice-cast"
@@ -1090,7 +1090,7 @@ checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager.git?rev=39ee413#39ee41374c994b93fd5ca20cdd455c1e9c7038d3"
+source = "git+https://github.com/impierce/did-manager.git?rev=38f2ad9#38f2ad9c8d91df46ec4263b13b1acc4121160f0f"
 dependencies = [
  "did_jwk",
  "did_key",
@@ -1595,7 +1595,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager.git?rev=39ee413#39ee41374c994b93fd5ca20cdd455c1e9c7038d3"
+source = "git+https://github.com/impierce/did-manager.git?rev=38f2ad9#38f2ad9c8d91df46ec4263b13b1acc4121160f0f"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -1611,7 +1611,7 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager.git?rev=39ee413#39ee41374c994b93fd5ca20cdd455c1e9c7038d3"
+source = "git+https://github.com/impierce/did-manager.git?rev=38f2ad9#38f2ad9c8d91df46ec4263b13b1acc4121160f0f"
 dependencies = [
  "did-key",
  "did-method-key",
@@ -1629,7 +1629,7 @@ dependencies = [
 [[package]]
 name = "did_manager"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager.git?rev=39ee413#39ee41374c994b93fd5ca20cdd455c1e9c7038d3"
+source = "git+https://github.com/impierce/did-manager.git?rev=38f2ad9#38f2ad9c8d91df46ec4263b13b1acc4121160f0f"
 dependencies = [
  "consumer",
  "producer",
@@ -1657,7 +1657,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager.git?rev=39ee413#39ee41374c994b93fd5ca20cdd455c1e9c7038d3"
+source = "git+https://github.com/impierce/did-manager.git?rev=38f2ad9#38f2ad9c8d91df46ec4263b13b1acc4121160f0f"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -4924,7 +4924,7 @@ dependencies = [
 [[package]]
 name = "producer"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager.git?rev=39ee413#39ee41374c994b93fd5ca20cdd455c1e9c7038d3"
+source = "git+https://github.com/impierce/did-manager.git?rev=38f2ad9#38f2ad9c8d91df46ec4263b13b1acc4121160f0f"
 dependencies = [
  "anyhow",
  "did_jwk",
@@ -5845,7 +5845,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager.git?rev=39ee413#39ee41374c994b93fd5ca20cdd455c1e9c7038d3"
+source = "git+https://github.com/impierce/did-manager.git?rev=38f2ad9#38f2ad9c8d91df46ec4263b13b1acc4121160f0f"
 dependencies = [
  "identity_iota",
  "identity_stronghold",

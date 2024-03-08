@@ -31,7 +31,7 @@ impl Aggregate for AgentSecretManager {
             SecretManagerCommand::LoadStronghold => {
                 let mut guard = services.lock().await;
                 assert!(guard.secret_manager.is_none());
-                // guard.init().await.unwrap();
+                guard.init().await.unwrap();
                 assert!(guard.secret_manager.is_some());
 
                 Ok(vec![SecretManagerEvent::StrongholdLoaded {}])
