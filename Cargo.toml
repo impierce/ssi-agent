@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "agent_api_rest",
     "agent_application",
+    "agent_event_publisher_http",
     "agent_issuance",
     "agent_shared",
     "agent_store",

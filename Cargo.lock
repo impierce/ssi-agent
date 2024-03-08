@@ -63,6 +63,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent_event_publisher_http"
+version = "0.1.0"
+
+[[package]]
 name = "agent_issuance"
 version = "0.1.0"
 dependencies = [
