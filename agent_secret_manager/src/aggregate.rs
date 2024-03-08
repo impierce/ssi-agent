@@ -31,7 +31,7 @@ impl Aggregate for AgentSecretManager {
             SecretManagerCommand::LoadStronghold => {
                 let mut guard = services.lock().await;
                 assert!(guard.secret_manager.is_none());
-                guard.init().unwrap();
+                // guard.init().await.unwrap();
                 assert!(guard.secret_manager.is_some());
 
                 Ok(vec![SecretManagerEvent::StrongholdLoaded {}])
@@ -72,8 +72,8 @@ mod aggregate_tests {
     use super::*;
 
     use cqrs_es::test::TestFramework;
-    use producer::did_document::Method;
-    use producer::SecretManager;
+    use did_manager::Method;
+    use did_manager::SecretManager;
 
     use crate::aggregate::AgentSecretManager;
     use crate::commands::SecretManagerCommand;
@@ -83,7 +83,7 @@ mod aggregate_tests {
     type SecretManagerTestFramework = TestFramework<AgentSecretManager>;
 
     #[test]
-    fn loads_stronghold() {
+    fn successfully_loads_stronghold_from_environment_variables() {
         std::env::set_var("AGENT_SECRET_MANAGER_STRONGHOLD_PATH", "tests/res/test.stronghold");
         std::env::set_var("AGENT_SECRET_MANAGER_STRONGHOLD_PASSWORD", "secure_password");
 
@@ -97,12 +97,18 @@ mod aggregate_tests {
             .then_expect_events(vec![expected])
     }
 
-    #[test]
-    fn enables_did_method() {
+    #[tokio::test]
+    async fn successfully_enables_did_method() {
         let expected = SecretManagerEvent::DidMethodEnabled { method: Method::Key };
         let command = SecretManagerCommand::EnableDidMethod { method: Method::Key };
         let services = Arc::new(Mutex::new(SecretManagerServices::new(Some(
-            SecretManager::load("tests/res/test.stronghold".to_string(), "secure_password".to_string()).unwrap(),
+            SecretManager::load(
+                "tests/res/test.stronghold".to_string(),
+                "secure_password".to_string(),
+                "9O66nzWqYYy1LmmiOudOlh2SMIaUWoTS".to_string(),
+            )
+            .await
+            .unwrap(),
         ))));
 
         SecretManagerTestFramework::with(services)

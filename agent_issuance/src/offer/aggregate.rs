@@ -253,13 +253,13 @@ pub mod tests {
     use super::*;
     use agent_secret_manager::services::SecretManagerServices;
     use cqrs_es::test::TestFramework;
+    use did_manager::SecretManager;
     use lazy_static::lazy_static;
     use oid4vci::{
         credential_format_profiles::{w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, Parameters},
         credential_request::CredentialRequest,
         Proof, ProofType,
     };
-    use producer::SecretManager;
 
     type OfferTestFramework = TestFramework<Offer>;
 

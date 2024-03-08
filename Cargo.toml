@@ -17,6 +17,7 @@ rust-version = "1.76.0"
 [workspace.dependencies]
 axum = { version = "0.7", features = ["tracing"] }
 lazy_static = "1.4"
+did_manager = { git = "https://github.com/impierce/did-manager.git", rev = "39ee413" }
 oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "ebd7a83f8494d55b57f569e43e3001d32cda583a" }
 oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "ebd7a83f8494d55b57f569e43e3001d32cda583a" }
 oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "ebd7a83f8494d55b57f569e43e3001d32cda583a" }

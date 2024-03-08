@@ -12,7 +12,7 @@ oid4vci.workspace = true
 oid4vc-core.workspace = true
 oid4vc-manager.workspace = true
 
-producer = { path = "../../did-manager/producer" }
+did_manager.workspace = true
 
 cqrs-es = "0.4.2"
 

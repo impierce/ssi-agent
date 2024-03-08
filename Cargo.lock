@@ -107,13 +107,13 @@ dependencies = [
  "cqrs-es",
  "derivative",
  "did-key",
+ "did_manager",
  "jsonschema",
  "jsonwebtoken",
  "lazy_static",
  "oid4vc-core",
  "oid4vc-manager",
  "oid4vci",
- "producer",
  "rand 0.8.5",
  "serde",
  "serde_json",
@@ -134,9 +134,9 @@ dependencies = [
  "anyhow",
  "async-trait",
  "cqrs-es",
+ "did_manager",
  "log",
  "oid4vc-core",
- "producer",
  "serde",
  "serde_json",
  "tokio",
@@ -1088,6 +1088,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
 
 [[package]]
+name = "consumer"
+version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager.git?rev=39ee413#39ee41374c994b93fd5ca20cdd455c1e9c7038d3"
+dependencies = [
+ "did_jwk",
+ "did_key",
+ "did_web",
+ "identity_iota",
+ "iota-sdk",
+ "tokio",
+]
+
+[[package]]
 name = "contextual"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1582,6 +1595,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager.git?rev=39ee413#39ee41374c994b93fd5ca20cdd455c1e9c7038d3"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -1597,6 +1611,7 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager.git?rev=39ee413#39ee41374c994b93fd5ca20cdd455c1e9c7038d3"
 dependencies = [
  "did-key",
  "did-method-key",
@@ -1609,6 +1624,15 @@ dependencies = [
  "ssi-dids",
  "ssi-jwk",
  "tokio",
+]
+
+[[package]]
+name = "did_manager"
+version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager.git?rev=39ee413#39ee41374c994b93fd5ca20cdd455c1e9c7038d3"
+dependencies = [
+ "consumer",
+ "producer",
 ]
 
 [[package]]
@@ -1633,6 +1657,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager.git?rev=39ee413#39ee41374c994b93fd5ca20cdd455c1e9c7038d3"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -4899,6 +4924,7 @@ dependencies = [
 [[package]]
 name = "producer"
 version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager.git?rev=39ee413#39ee41374c994b93fd5ca20cdd455c1e9c7038d3"
 dependencies = [
  "anyhow",
  "did_jwk",
@@ -5819,6 +5845,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager.git?rev=39ee413#39ee41374c994b93fd5ca20cdd455c1e9c7038d3"
 dependencies = [
  "identity_iota",
  "identity_stronghold",

@@ -9,8 +9,7 @@ agent_shared = { path = "../agent_shared" }
 
 cqrs-es = "0.4.2"
 
-# producer = { git = "https://github.com/impierce/did-manager.git", rev = "0660b44" }
-producer = { path = "../../did-manager/producer" }
+did_manager.workspace = true
 
 anyhow = "1.0"
 async-trait = "0.1"

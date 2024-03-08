@@ -1,5 +1,5 @@
 use cqrs_es::DomainEvent;
-use producer::did_document::Method;
+use did_manager::Method;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
