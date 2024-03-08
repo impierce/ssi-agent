@@ -251,9 +251,7 @@ pub mod tests {
     };
 
     use super::*;
-    use agent_secret_manager::services::SecretManagerServices;
     use cqrs_es::test::TestFramework;
-    use did_manager::SecretManager;
     use lazy_static::lazy_static;
     use oid4vci::{
         credential_format_profiles::{w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, Parameters},
@@ -477,24 +475,12 @@ pub mod tests {
             })
         };
         static ref SUBJECT_1_KEY_DID: Arc<KeySubject> = Arc::new(KeySubject::from_keypair(
-            from_existing_key::<Ed25519KeyPair>(b"", None),
-            // Some(Arc::new(SecretManagerServices {
-            //     secret_manager: Some(
-            //         SecretManager::load("tests/res/test.stronghold".to_string(), "secure_password".to_string())
-            //             .unwrap()
-            //     ),
-            // }))
-            None
+            from_existing_key::<Ed25519KeyPair>(b"", Some("this-is-a-very-UNSAFE-subj-key-1".as_bytes())),
+            None,
         ));
         static ref SUBJECT_2_KEY_DID: Arc<KeySubject> = Arc::new(KeySubject::from_keypair(
-            from_existing_key::<Ed25519KeyPair>(b"", None),
-            // Some(Arc::new(SecretManagerServices {
-            //     secret_manager: Some(
-            //         SecretManager::load("tests/res/test.stronghold".to_string(), "secure_password".to_string())
-            //             .unwrap()
-            //     ),
-            // }))
-            None
+            from_existing_key::<Ed25519KeyPair>(b"", Some("this-is-a-very-UNSAFE-subj-key-2".as_bytes())),
+            None,
         ));
         static ref VERIFIABLE_CREDENTIAL_JWT_1: String = {
             "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa3F5WmpEZmhzeVo1YzZOdUpoYm9zV2tTajg2Mmp5V2lDQ\
