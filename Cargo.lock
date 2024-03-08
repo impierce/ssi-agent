@@ -135,6 +135,7 @@ dependencies = [
  "async-trait",
  "cqrs-es",
  "did_manager",
+ "futures",
  "log",
  "oid4vc-core",
  "serde",

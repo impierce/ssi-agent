@@ -13,6 +13,7 @@ did_manager.workspace = true
 
 anyhow = "1.0"
 async-trait = "0.1"
+futures = "0.3"
 log = "0.4"
 oid4vc-core.workspace = true
 serde.workspace = true
