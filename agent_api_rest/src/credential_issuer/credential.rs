@@ -1,73 +1,96 @@
 use agent_issuance::{
-    command::IssuanceCommand,
+    credential::queries::CredentialView,
     handlers::{command_handler, query_handler},
-    model::aggregate::IssuanceData,
-    queries::IssuanceDataView,
-    state::ApplicationState,
+    offer::{
+        command::OfferCommand,
+        queries::{access_token::AccessTokenView, OfferView},
+    },
+    server_config::queries::ServerConfigView,
+    state::{ApplicationState, SERVER_CONFIG_ID},
 };
 use axum::{
     extract::{Json, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
 use oid4vci::credential_request::CredentialRequest;
-
-use crate::AGGREGATE_ID;
+use serde_json::json;
+use tracing::info;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
-    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
+    State(state): State<ApplicationState>,
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
-) -> impl IntoResponse {
-    let command = IssuanceCommand::CreateCredentialResponse {
-        access_token: access_token.clone(),
+    // TODO: implement official oid4vci error response. This TODO is also in the `token` endpoint.
+) -> Response {
+    info!("Request Body: {}", json!(credential_request));
+
+    // Use the `access_token` to get the `offer_id` from the `AccessTokenView`.
+    let offer_id = match query_handler(&access_token, &state.query.access_token).await {
+        Ok(Some(AccessTokenView { offer_id })) => offer_id,
+        _ => return StatusCode::UNAUTHORIZED.into_response(),
+    };
+
+    // Use the `offer_id` to get the `credential_ids` from the `OfferView`.
+    let credential_ids = match query_handler(&offer_id, &state.query.offer).await {
+        Ok(Some(OfferView { credential_ids, .. })) => credential_ids,
+        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    // Use the `credential_ids` to get the `credentials` from the `CredentialView`.
+    let mut credentials = vec![];
+    for credential_id in credential_ids {
+        let credential = match query_handler(&credential_id, &state.query.credential).await {
+            Ok(Some(CredentialView { data, .. })) => data,
+            _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        };
+
+        credentials.push(credential);
+    }
+
+    // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
+    let (credential_issuer_metadata, authorization_server_metadata) =
+        match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
+            Ok(Some(ServerConfigView {
+                credential_issuer_metadata: Some(credential_issuer_metadata),
+                authorization_server_metadata,
+            })) => (credential_issuer_metadata, Box::new(authorization_server_metadata)),
+            _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        };
+
+    let command = OfferCommand::CreateCredentialResponse {
+        credential_issuer_metadata,
+        authorization_server_metadata,
         credential_request,
+        credentials,
     };
 
-    match command_handler(AGGREGATE_ID.to_string(), &state, command).await {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(err) => {
-            println!("Error: {:#?}\n", err);
-            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
-        }
+    // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
+    if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
+        StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
-    match query_handler(AGGREGATE_ID.to_string(), &state).await {
-        Ok(Some(view)) => {
-            // TODO: This is a non-idiomatic way of finding the subject by using the access token. We should use a aggregate/query instead.
-            let subject = view
-                .subjects
-                .iter()
-                .find(|subject| subject.token_response.as_ref().unwrap().access_token == access_token);
-            if let Some(subject) = subject {
-                (StatusCode::OK, Json(subject.credential_response.clone())).into_response()
-            } else {
-                StatusCode::NOT_FOUND.into_response()
-            }
-        }
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            println!("Error: {:#?}\n", err);
-            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
-        }
+    // Use the `offer_id` to get the `credential_response` from the `OfferView`.
+    match query_handler(&offer_id, &state.query.offer).await {
+        Ok(Some(OfferView {
+            credential_response: Some(credential_response),
+            ..
+        })) => (StatusCode::OK, Json(credential_response)).into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        app,
-        tests::{create_credential_offer, create_token_response, create_unsigned_credential, BASE_URL},
+        app, credential_issuer::token::tests::token, credentials::tests::credentials, offers::tests::offers,
+        tests::BASE_URL,
     };
 
     use super::*;
-    use agent_issuance::{
-        services::IssuanceServices,
-        startup_commands::startup_commands,
-        state::{initialize, CQRS},
-    };
+    use agent_issuance::{startup_commands::startup_commands, state::initialize};
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -78,15 +101,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_credential_endpoint() {
-        let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
+        let state = in_memory::application_state().await;
 
         initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
 
-        create_unsigned_credential(state.clone()).await;
-        create_credential_offer(state.clone()).await;
-        let access_token = create_token_response(state.clone()).await;
+        let mut app = app(state);
 
-        let app = app(state);
+        credentials(&mut app).await;
+        let pre_authorized_code = offers(&mut app).await;
+
+        let access_token = token(&mut app, pre_authorized_code).await;
 
         let response = app
             .oneshot(
@@ -124,7 +148,7 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(
             body,

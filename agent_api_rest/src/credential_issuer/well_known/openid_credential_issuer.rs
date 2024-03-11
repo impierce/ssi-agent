@@ -1,27 +1,23 @@
 use agent_issuance::{
-    handlers::query_handler, model::aggregate::IssuanceData, queries::IssuanceDataView, state::ApplicationState,
+    handlers::query_handler,
+    server_config::queries::ServerConfigView,
+    state::{ApplicationState, SERVER_CONFIG_ID},
 };
 use axum::{
     extract::{Json, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
 };
 
-use crate::AGGREGATE_ID;
-
 #[axum_macros::debug_handler]
-pub(crate) async fn openid_credential_issuer(
-    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
-) -> impl IntoResponse {
-    match query_handler(AGGREGATE_ID.to_string(), &state).await {
-        Ok(Some(view)) if view.oid4vci_data.credential_issuer_metadata.is_some() => {
-            (StatusCode::OK, Json(view.oid4vci_data.credential_issuer_metadata)).into_response()
-        }
-        Ok(_) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            println!("Error: {:#?}\n", err);
-            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
-        }
+pub(crate) async fn openid_credential_issuer(State(state): State<ApplicationState>) -> Response {
+    match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
+        Ok(Some(ServerConfigView {
+            credential_issuer_metadata: Some(credential_issuer_metadata),
+            ..
+        })) => (StatusCode::OK, Json(credential_issuer_metadata)).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
@@ -30,16 +26,13 @@ mod tests {
     use crate::{app, tests::BASE_URL};
 
     use super::*;
-    use agent_issuance::{
-        services::IssuanceServices,
-        startup_commands::{create_credentials_supported, load_credential_issuer_metadata},
-        state::{initialize, CQRS},
-    };
+    use agent_issuance::{startup_commands::startup_commands, state::initialize};
     use agent_shared::{config, UrlAppendHelpers};
     use agent_store::in_memory;
     use axum::{
         body::Body,
         http::{self, Request},
+        Router,
     };
     use oid4vci::{
         credential_format_profiles::{
@@ -52,25 +45,11 @@ mod tests {
         ProofType,
     };
     use serde_json::json;
-    use tower::ServiceExt;
+    use tower::Service;
 
-    #[tokio::test]
-    async fn test_oauth_authorization_server_endpoint() {
-        let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
-
-        initialize(
-            state.clone(),
-            vec![
-                load_credential_issuer_metadata(BASE_URL.clone()),
-                create_credentials_supported(),
-            ],
-        )
-        .await;
-
-        let app = app(state);
-
+    pub async fn openid_credential_issuer(app: &mut Router) -> CredentialIssuerMetadata {
         let response = app
-            .oneshot(
+            .call(
                 Request::builder()
                     .method(http::Method::GET)
                     .uri("/.well-known/openid-credential-issuer")
@@ -83,7 +62,7 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let credential_issuer_metadata: CredentialIssuerMetadata = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(
@@ -121,5 +100,18 @@ mod tests {
                 display: None,
             }
         );
+
+        credential_issuer_metadata
+    }
+
+    #[tokio::test]
+    async fn test_oauth_authorization_server_endpoint() {
+        let state = in_memory::application_state().await;
+
+        initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
+
+        let mut app = app(state);
+
+        let _credential_issuer_metadata = openid_credential_issuer(&mut app).await;
     }
 }

@@ -1,3 +1,4 @@
+use crate::server_config::command::ServerConfigCommand;
 use agent_shared::{config, url_utils::UrlAppendHelpers};
 use oid4vci::{
     credential_format_profiles::{
@@ -12,39 +13,18 @@ use oid4vci::{
 };
 use serde_json::json;
 
-use crate::command::IssuanceCommand;
-
 /// Returns the startup commands for the application.
-pub fn startup_commands(host: url::Url) -> Vec<IssuanceCommand> {
-    vec![
-        load_credential_format_template(),
-        load_authorization_server_metadata(host.clone()),
-        load_credential_issuer_metadata(host.clone()),
-        create_credentials_supported(),
-    ]
+pub fn startup_commands(host: url::Url) -> Vec<ServerConfigCommand> {
+    vec![load_server_metadata(host.clone()), create_credentials_supported()]
 }
 
-pub fn load_credential_format_template() -> IssuanceCommand {
-    IssuanceCommand::LoadCredentialFormatTemplate {
-        credential_format_template: serde_json::from_str(include_str!(
-            "../res/credential_format_templates/openbadges_v3.json"
-        ))
-        .unwrap(),
-    }
-}
-
-pub fn load_authorization_server_metadata(base_url: url::Url) -> IssuanceCommand {
-    IssuanceCommand::LoadAuthorizationServerMetadata {
+pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
+    ServerConfigCommand::InitializeServerMetadata {
         authorization_server_metadata: Box::new(AuthorizationServerMetadata {
             issuer: base_url.clone(),
             token_endpoint: Some(base_url.append_path_segment("auth/token")),
             ..Default::default()
         }),
-    }
-}
-
-pub fn load_credential_issuer_metadata(base_url: url::Url) -> IssuanceCommand {
-    IssuanceCommand::LoadCredentialIssuerMetadata {
         credential_issuer_metadata: CredentialIssuerMetadata {
             credential_issuer: base_url.clone(),
             authorization_server: None,
@@ -57,8 +37,9 @@ pub fn load_credential_issuer_metadata(base_url: url::Url) -> IssuanceCommand {
     }
 }
 
-pub fn create_credentials_supported() -> IssuanceCommand {
-    IssuanceCommand::CreateCredentialsSupported {
+// TODO: Should not be a static startup command. Should be dynamic based on the configuration and/or updatable.
+pub fn create_credentials_supported() -> ServerConfigCommand {
+    ServerConfigCommand::CreateCredentialsSupported {
         credentials_supported: vec![CredentialsSupportedObject {
             id: None,
             credential_format: CredentialFormats::JwtVcJson(Parameters {

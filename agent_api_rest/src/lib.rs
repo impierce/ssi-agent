@@ -2,9 +2,13 @@ mod credential_issuer;
 mod credentials;
 mod offers;
 
-use agent_issuance::{model::aggregate::IssuanceData, queries::IssuanceDataView, state::ApplicationState};
+use agent_issuance::state::ApplicationState;
 use agent_shared::{config, ConfigError};
 use axum::{
+    body::Bytes,
+    extract::MatchedPath,
+    http::Request,
+    response::Response,
     routing::{get, post},
     Router,
 };
@@ -15,13 +19,12 @@ use credential_issuer::{
         oauth_authorization_server::oauth_authorization_server, openid_credential_issuer::openid_credential_issuer,
     },
 };
-use credentials::credentials;
+use credentials::{credentials, get_credentials};
 use offers::offers;
+use tower_http::trace::TraceLayer;
+use tracing::{info_span, Span};
 
-// TODO: What to do with aggregate_id's?
-pub const AGGREGATE_ID: &str = "agg-id-F39A0C";
-
-pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
+pub fn app(state: ApplicationState) -> Router {
     let base_path = get_base_path();
 
     let path = |suffix: &str| -> String {
@@ -33,18 +36,40 @@ pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
     };
 
     Router::new()
+        // Agent Preparations
         .route(&path("/v1/credentials"), post(credentials))
+        .route(&path("/v1/credentials/:credential_id"), get(get_credentials))
         .route(&path("/v1/offers"), post(offers))
+        // OpenID4VCI Pre-Authorized Code Flow
         .route(
             &path("/.well-known/oauth-authorization-server"),
             get(oauth_authorization_server),
         )
-        .route(
-            &path("/.well-known/openid-credential-issuer"),
-            get(openid_credential_issuer),
+        .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
+        .route("/auth/token", post(token))
+        .route("/openid4vci/credential", post(credential))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(|request: &Request<_>| {
+                    let path = request.extensions().get::<MatchedPath>().map(MatchedPath::as_str);
+                    info_span!(
+                        "HTTP Request ",
+                        method = ?request.method(),
+                        path,
+                    )
+                })
+                .on_request(|request: &Request<_>, _span: &Span| {
+                    tracing::info!("Received request");
+                    tracing::info!("Request Headers: {:?}", request.headers());
+                })
+                .on_response(|response: &Response, _latency: std::time::Duration, _span: &Span| {
+                    tracing::info!("Returning {}", response.status());
+                    tracing::info!("Response Headers: {:?}", response.headers());
+                })
+                .on_body_chunk(|chunk: &Bytes, _latency: std::time::Duration, _span: &Span| {
+                    tracing::info!("Response Body: {}", std::str::from_utf8(chunk).unwrap());
+                }),
         )
-        .route(&path("/auth/token"), post(token))
-        .route(&path("/openid4vci/credential"), post(credential))
         .with_state(state)
 }
 
@@ -70,17 +95,48 @@ fn get_base_path() -> Result<String, ConfigError> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use agent_issuance::state::CQRS;
-    use agent_issuance::{command::IssuanceCommand, services::IssuanceServices};
     use agent_store::in_memory;
+    use axum::routing::post;
+    use oid4vci::credential_issuer::{
+        credential_issuer_metadata::CredentialIssuerMetadata, credentials_supported::CredentialsSupportedObject,
+    };
     use serde_json::json;
 
-    pub const PRE_AUTHORIZED_CODE: &str = "pre-authorized_code";
+    use crate::app;
+
     pub const SUBJECT_ID: &str = "00000000-0000-0000-0000-000000000000";
 
     lazy_static::lazy_static! {
         pub static ref BASE_URL: url::Url = url::Url::parse("https://example.com").unwrap();
+        static ref CREDENTIALS_SUPPORTED: Vec<CredentialsSupportedObject> = vec![serde_json::from_value(json!({
+            "format": "jwt_vc_json",
+            "cryptographic_binding_methods_supported": [
+                "did:key",
+            ],
+            "cryptographic_suites_supported": [
+                "EdDSA"
+            ],
+            "credential_definition":{
+                "type": [
+                    "VerifiableCredential",
+                    "OpenBadgeCredential"
+                ]
+            },
+            "proof_types_supported": [
+                "jwt"
+            ]
+        }
+        ))
+        .unwrap()];
+        pub static ref CREDENTIAL_ISSUER_METADATA: CredentialIssuerMetadata = CredentialIssuerMetadata {
+            credential_issuer: BASE_URL.clone(),
+            authorization_server: None,
+            credential_endpoint: BASE_URL.join("credential").unwrap(),
+            deferred_credential_endpoint: None,
+            batch_credential_endpoint: Some(BASE_URL.join("batch_credential").unwrap()),
+            credentials_supported: CREDENTIALS_SUPPORTED.clone(),
+            display: None,
+        };
     }
 
     async fn handler() {}
@@ -88,79 +144,11 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn test_base_path_routes() {
-        let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
+        let state = in_memory::application_state().await;
 
         std::env::set_var("AGENT_APPLICATION_BASE_PATH", "unicore");
         let router = app(state);
 
         let _ = router.route("/auth/token", post(handler));
-    }
-
-    pub async fn create_unsigned_credential(state: ApplicationState<IssuanceData, IssuanceDataView>) -> String {
-        state
-            .execute_with_metadata(
-                AGGREGATE_ID,
-                IssuanceCommand::CreateUnsignedCredential {
-                    subject_id: SUBJECT_ID.to_string(),
-                    credential: json!({
-                        "credentialSubject": {
-                            "first_name": "Ferris",
-                            "last_name": "Rustacean"
-                    }}),
-                },
-                Default::default(),
-            )
-            .await
-            .unwrap();
-
-        let view = state.load(AGGREGATE_ID).await.unwrap().unwrap();
-        view.subjects
-            .iter()
-            .find(|subject| subject.id == SUBJECT_ID)
-            .unwrap()
-            .clone()
-            .id
-    }
-
-    pub async fn create_credential_offer(state: ApplicationState<IssuanceData, IssuanceDataView>) {
-        state
-            .execute_with_metadata(
-                AGGREGATE_ID,
-                IssuanceCommand::CreateCredentialOffer {
-                    subject_id: SUBJECT_ID.to_string(),
-                    pre_authorized_code: Some(PRE_AUTHORIZED_CODE.to_string()),
-                },
-                Default::default(),
-            )
-            .await
-            .unwrap();
-    }
-
-    pub async fn create_token_response(state: ApplicationState<IssuanceData, IssuanceDataView>) -> String {
-        state
-            .execute_with_metadata(
-                AGGREGATE_ID,
-                IssuanceCommand::CreateTokenResponse {
-                    token_request: oid4vci::token_request::TokenRequest::PreAuthorizedCode {
-                        pre_authorized_code: PRE_AUTHORIZED_CODE.to_string(),
-                        user_pin: None,
-                    },
-                },
-                Default::default(),
-            )
-            .await
-            .unwrap();
-
-        let view = state.load(AGGREGATE_ID).await.unwrap().unwrap();
-
-        view.subjects
-            .iter()
-            .find(|subject| subject.id == SUBJECT_ID)
-            .unwrap()
-            .clone()
-            .token_response
-            .unwrap()
-            .access_token
-            .clone()
     }
 }

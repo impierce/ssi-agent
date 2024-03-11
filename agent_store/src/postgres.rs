@@ -1,75 +1,103 @@
-use agent_issuance::state::CQRS;
+use agent_issuance::{
+    credential::services::CredentialServices,
+    offer::{
+        queries::{access_token::AccessTokenQuery, pre_authorized_code::PreAuthorizedCodeQuery},
+        services::OfferServices,
+    },
+    server_config::services::ServerConfigServices,
+    state::{generic_query, ApplicationState, Command, CommandHandlers, ViewRepositories},
+    SimpleLoggingQuery,
+};
 use agent_shared::config;
 use async_trait::async_trait;
-use cqrs_es::persist::{GenericQuery, PersistenceError, ViewRepository};
-use cqrs_es::{Aggregate, Query, View};
+use cqrs_es::{Aggregate, Query};
 use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
 use sqlx::{Pool, Postgres};
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
-#[derive(Clone)]
-pub struct ApplicationState<A: Aggregate, V: View<A>> {
-    pub cqrs: Arc<PostgresCqrs<A>>,
-    pub issuance_data_query: Arc<PostgresViewRepository<V, A>>,
+struct AggregateHandler<A>
+where
+    A: Aggregate,
+{
+    pub cqrs: PostgresCqrs<A>,
 }
 
 #[async_trait]
-impl<A, V> CQRS<A, V> for ApplicationState<A, V>
+impl<A> Command<A> for AggregateHandler<A>
 where
-    V: View<A> + 'static,
     A: Aggregate + 'static,
+    <A as Aggregate>::Command: Send + Sync,
 {
-    async fn new(
-        queries: Vec<Box<dyn Query<A>>>,
-        services: A::Services,
-    ) -> agent_issuance::state::ApplicationState<A, V>
-    where
-        Self: Sized,
-    {
-        let pool = default_postgress_pool(&config!("db_connection_string").unwrap()).await;
-        let (cqrs, issuance_data_query) = cqrs_framework(pool, queries, services);
-        Arc::new(ApplicationState {
-            cqrs,
-            issuance_data_query,
-        }) as agent_issuance::state::ApplicationState<A, V>
-    }
-
     async fn execute_with_metadata(
         &self,
         aggregate_id: &str,
         command: A::Command,
         metadata: HashMap<String, String>,
-    ) -> Result<(), cqrs_es::AggregateError<A::Error>>
-    where
-        A::Command: Send + Sync,
-    {
+    ) -> Result<(), cqrs_es::AggregateError<A::Error>> {
         self.cqrs.execute_with_metadata(aggregate_id, command, metadata).await
-    }
-
-    async fn load(&self, view_id: &str) -> Result<Option<V>, PersistenceError> {
-        self.issuance_data_query.load(view_id).await
     }
 }
 
-pub fn cqrs_framework<A, V>(
-    pool: Pool<Postgres>,
-    mut queries: Vec<Box<dyn Query<A>>>,
-    services: A::Services,
-) -> (Arc<PostgresCqrs<A>>, Arc<PostgresViewRepository<V, A>>)
+impl<A> AggregateHandler<A>
 where
-    A: Aggregate + 'static,
-    V: View<A> + 'static,
+    A: Aggregate,
 {
-    // A query that stores the current state of an individual account.
-    let issuance_data_repo = Arc::new(PostgresViewRepository::new("issuance_data_query", pool.clone()));
-    let mut issuance_data_query = GenericQuery::new(issuance_data_repo.clone());
-    issuance_data_query.use_error_handler(Box::new(|e| println!("{}", e)));
+    fn new(pool: Pool<Postgres>, services: A::Services) -> Self {
+        Self {
+            cqrs: postgres_es::postgres_cqrs(pool, vec![], services),
+        }
+    }
 
-    // Create and return an event-sourced `CqrsFramework`.
-    queries.push(Box::new(issuance_data_query));
-    (
-        Arc::new(postgres_es::postgres_cqrs(pool, queries, services)),
-        issuance_data_repo,
-    )
+    fn append_query<Q>(self, query: Q) -> Self
+    where
+        Q: Query<A> + 'static,
+    {
+        Self {
+            cqrs: self.cqrs.append_query(Box::new(query)),
+        }
+    }
+}
+
+pub async fn application_state() -> agent_issuance::state::ApplicationState {
+    let pool = default_postgress_pool(&config!("db_connection_string").unwrap()).await;
+
+    // Initialize the postgres repositories.
+    let server_config = Arc::new(PostgresViewRepository::new("server_config", pool.clone()));
+    let credential = Arc::new(PostgresViewRepository::new("credential", pool.clone()));
+    let offer = Arc::new(PostgresViewRepository::new("offer", pool.clone()));
+    let pre_authorized_code = Arc::new(PostgresViewRepository::new("pre_authorized_code", pool.clone()));
+    let access_token = Arc::new(PostgresViewRepository::new("access_token", pool.clone()));
+
+    // Create custom-queries for the offer aggregate.
+    let pre_authorized_code_query = PreAuthorizedCodeQuery::new(pre_authorized_code.clone());
+    let access_token_query = AccessTokenQuery::new(access_token.clone());
+
+    ApplicationState {
+        command: CommandHandlers {
+            server_config: Arc::new(
+                AggregateHandler::new(pool.clone(), ServerConfigServices)
+                    .append_query(SimpleLoggingQuery {})
+                    .append_query(generic_query(server_config.clone())),
+            ),
+            credential: Arc::new(
+                AggregateHandler::new(pool.clone(), CredentialServices)
+                    .append_query(SimpleLoggingQuery {})
+                    .append_query(generic_query(credential.clone())),
+            ),
+            offer: Arc::new(
+                AggregateHandler::new(pool, OfferServices)
+                    .append_query(SimpleLoggingQuery {})
+                    .append_query(generic_query(offer.clone()))
+                    .append_query(pre_authorized_code_query)
+                    .append_query(access_token_query),
+            ),
+        },
+        query: ViewRepositories {
+            server_config,
+            credential,
+            offer,
+            pre_authorized_code,
+            access_token,
+        },
+    }
 }

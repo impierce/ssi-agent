@@ -11,12 +11,28 @@
 			"item": [
 				{
 					"name": "credentials",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const location = pm.response.headers.get(\"LOCATION\");",
+									"",
+									"if(location){",
+									"    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
+									"}",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"subjectId\": \"{{SUBJECT_ID}}\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": {},\n            \"type\": \"AchievementSubject\",\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    }\n}\n",
+							"raw": "{\n    \"subjectId\":\"{{SUBJECT_ID}}\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"type\":[\n                \"AchievementSubject\"\n            ],\n            \"achievement\":{\n                \"id\":\"https://demo.edubadges.nl/public/assertions/6pEB--n-SwiZPtWXMCB2jQ\",\n                \"name\":\"Edubadge account complete\",\n                \"type\":[\n                    \"Achievement\"\n                ],\n                \"image\":{\n                    \"id\":\"https://api-demo.edubadges.nl/media/uploads/badges/issuer_badgeclass_548517aa-cbab-4a7b-a971-55cdcce0e2a5.png\"\n                },\n                \"criteria\":{\n                    \"narrative\":\"To qualify for this edubadge:\\r\\n\\r\\n*  you successfully created an eduID,\\r\\n* you successfully linked your institution to your eduID,\\r\\n*  you can store and manage them safely in your backpack.\"\n                },\n                \"description\":\"### Welcome to edubadges. Let your life long learning begin! ###\\r\\n\\r\\nYou are now ready to collect all your edubadges in your backpack. In your backpack you can store and manage them safely.\\r\\n\\r\\nShare them anytime you like and with whom you like.\\r\\n\\r\\nEdubadges are visual representations of your knowledge, skills and competences.\"\n            }\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -28,13 +44,50 @@
 					"response": []
 				},
 				{
+					"name": "credentials",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "http://{{HOST}}{{CREDENTIAL_LOCATION}}"
+					},
+					"response": []
+				},
+				{
 					"name": "offers",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const credential_offer = responseBody;",
+									"",
+									"const decodedString = decodeURIComponent(credential_offer);",
+									"",
+									"// Split the string on the first '=' character and take the second item",
+									"const [, secondItem] = decodedString.split('=', 2);",
+									"",
+									"// Remove the last character from secondItem",
+									"const secondItemWithoutLastChar = secondItem.slice(0, -1);",
+									"",
+									"const { grants } = JSON.parse(secondItemWithoutLastChar);",
+									"",
+									"const pre_authorized_code = grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']['pre-authorized_code'];",
+									"",
+									"if(pre_authorized_code){",
+									"    pm.collectionVariables.set(\"PRE_AUTHORIZED_CODE\",pre_authorized_code)",
+									"}",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"subjectId\": \"{{SUBJECT_ID}}\",\n    \"preAuthorizedCode\": \"{{PRE_AUTHORIZED_CODE}}\"\n}",
+							"raw": "{\n    \"subjectId\": \"{{SUBJECT_ID}}\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -183,17 +236,17 @@
 	"variable": [
 		{
 			"key": "HOST",
-			"value": "INITIAL_VALUE",
+			"value": "192.168.1.127:3033",
 			"type": "string"
 		},
 		{
 			"key": "PRE_AUTHORIZED_CODE",
-			"value": "unique_subject_string",
+			"value": "INITIAL_VALUE",
 			"type": "string"
 		},
 		{
 			"key": "SUBJECT_ID",
-			"value": "00000000-0000-0000-0000-000000000000",
+			"value": "001",
 			"type": "string"
 		},
 		{
@@ -208,6 +261,11 @@
 		},
 		{
 			"key": "ACCESS_TOKEN",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "CREDENTIAL_LOCATION",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		}

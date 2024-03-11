@@ -1,14 +1,30 @@
-use agent_issuance::state::CQRS;
+use agent_issuance::{
+    credential::services::CredentialServices,
+    offer::{
+        aggregate::Offer,
+        queries::{
+            access_token::{AccessTokenQuery, AccessTokenView},
+            pre_authorized_code::{PreAuthorizedCodeQuery, PreAuthorizedCodeView},
+        },
+        services::OfferServices,
+    },
+    server_config::services::ServerConfigServices,
+    state::{generic_query, ApplicationState, Command, CommandHandlers, ViewRepositories},
+    SimpleLoggingQuery,
+};
 use async_trait::async_trait;
-use cqrs_es::mem_store::MemStore;
-use cqrs_es::persist::{GenericQuery, PersistenceError, ViewContext, ViewRepository};
-use cqrs_es::CqrsFramework;
-use cqrs_es::{Aggregate, Query, View};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use cqrs_es::{
+    mem_store::MemStore,
+    persist::{PersistenceError, ViewContext, ViewRepository},
+    Aggregate, CqrsFramework, Query, View,
+};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 #[derive(Default)]
-pub struct MemRepository<V: View<A>, A: Aggregate> {
+struct MemRepository<V: View<A>, A: Aggregate> {
     pub map: Mutex<HashMap<String, serde_json::Value>>,
     _phantom: std::marker::PhantomData<(V, A)>,
 }
@@ -49,53 +65,88 @@ where
     }
 }
 
-#[derive(Clone)]
-pub struct ApplicationState<A: Aggregate, V: View<A>> {
-    pub cqrs: Arc<CqrsFramework<A, MemStore<A>>>,
-    pub issuance_data_query: Arc<MemRepository<V, A>>,
-}
-
-impl<A, V> ApplicationState<A, V>
+struct AggregateHandler<A>
 where
-    A: Aggregate + 'static,
-    V: View<A> + 'static,
+    A: Aggregate,
 {
+    pub cqrs: CqrsFramework<A, MemStore<A>>,
 }
 
 #[async_trait]
-impl<A: Aggregate + 'static, V: View<A> + 'static> CQRS<A, V> for ApplicationState<A, V> {
-    async fn new(
-        queries: Vec<Box<dyn Query<A>>>,
-        services: A::Services,
-    ) -> agent_issuance::state::ApplicationState<A, V>
-    where
-        Self: Sized,
-    {
-        let credential_view_repo = Arc::new(MemRepository::<V, A>::new());
-        let mut issuance_data_query = GenericQuery::new(credential_view_repo.clone());
-        issuance_data_query.use_error_handler(Box::new(|e| println!("{}", e)));
-
-        let mut queries = queries;
-        queries.push(Box::new(issuance_data_query));
-
-        Arc::new(ApplicationState {
-            cqrs: Arc::new(CqrsFramework::new(MemStore::default(), queries, services)),
-            issuance_data_query: credential_view_repo,
-        }) as agent_issuance::state::ApplicationState<A, V>
-    }
+impl<A> Command<A> for AggregateHandler<A>
+where
+    A: Aggregate,
+    <A as Aggregate>::Command: Send,
+{
     async fn execute_with_metadata(
         &self,
         aggregate_id: &str,
         command: A::Command,
         metadata: HashMap<String, String>,
-    ) -> Result<(), cqrs_es::AggregateError<A::Error>>
-    where
-        A::Command: Send + Sync,
-    {
+    ) -> Result<(), cqrs_es::AggregateError<A::Error>> {
         self.cqrs.execute_with_metadata(aggregate_id, command, metadata).await
     }
+}
 
-    async fn load(&self, view_id: &str) -> Result<Option<V>, PersistenceError> {
-        self.issuance_data_query.load(view_id).await
+impl<A> AggregateHandler<A>
+where
+    A: Aggregate,
+    <A as Aggregate>::Command: Send,
+{
+    fn new(services: A::Services) -> Self {
+        Self {
+            cqrs: CqrsFramework::new(MemStore::default(), vec![], services),
+        }
+    }
+
+    fn append_query<Q>(self, query: Q) -> Self
+    where
+        Q: Query<A> + 'static,
+    {
+        Self {
+            cqrs: self.cqrs.append_query(Box::new(query)),
+        }
+    }
+}
+
+pub async fn application_state() -> agent_issuance::state::ApplicationState {
+    // Initialize the in-memory repositories.
+    let server_config = Arc::new(MemRepository::default());
+    let credential = Arc::new(MemRepository::default());
+    let offer = Arc::new(MemRepository::default());
+    let pre_authorized_code = Arc::new(MemRepository::<PreAuthorizedCodeView, Offer>::new());
+    let access_token = Arc::new(MemRepository::<AccessTokenView, Offer>::new());
+
+    // Create custom-queries for the offer aggregate.
+    let pre_authorized_code_query = PreAuthorizedCodeQuery::new(pre_authorized_code.clone());
+    let access_token_query = AccessTokenQuery::new(access_token.clone());
+
+    ApplicationState {
+        command: CommandHandlers {
+            server_config: Arc::new(
+                AggregateHandler::new(ServerConfigServices)
+                    .append_query(SimpleLoggingQuery {})
+                    .append_query(generic_query(server_config.clone())),
+            ),
+            credential: Arc::new(
+                AggregateHandler::new(CredentialServices)
+                    .append_query(SimpleLoggingQuery {})
+                    .append_query(generic_query(credential.clone())),
+            ),
+            offer: Arc::new(
+                AggregateHandler::new(OfferServices)
+                    .append_query(SimpleLoggingQuery {})
+                    .append_query(generic_query(offer.clone()))
+                    .append_query(pre_authorized_code_query)
+                    .append_query(access_token_query),
+            ),
+        },
+        query: ViewRepositories {
+            server_config,
+            credential,
+            offer,
+            pre_authorized_code,
+            access_token,
+        },
     }
 }

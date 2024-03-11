@@ -60,6 +60,32 @@ paths:
                 open-badges-3:
                   summary: Open Badges 3.0
                   externalValue: res/open-badge-response.json
+  /v1/credentials/{credential_id}:
+    get:
+      summary: Get the Credential with the given Credential ID
+      tags:
+        - Retrieval
+      # description: n/a
+      parameters:
+        - in: path
+          name: credential_id
+          required: true
+          schema:
+            type: string
+            minimum: 1
+          description: The Credential ID
+      responses:
+        "200":
+          description: A Credential with the given Credential ID has been successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+              examples:
+                open-badges-3:
+                  summary: Open Badges 3.0
+                  externalValue: res/open-badge-response.json
+
   /v1/offers:
     post:
       summary: Create a new Offer for one or more Credentials

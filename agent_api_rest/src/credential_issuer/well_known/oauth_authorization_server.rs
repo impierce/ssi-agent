@@ -1,27 +1,23 @@
 use agent_issuance::{
-    handlers::query_handler, model::aggregate::IssuanceData, queries::IssuanceDataView, state::ApplicationState,
+    handlers::query_handler,
+    server_config::queries::ServerConfigView,
+    state::{ApplicationState, SERVER_CONFIG_ID},
 };
 use axum::{
     extract::{Json, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
 };
 
-use crate::AGGREGATE_ID;
-
 #[axum_macros::debug_handler]
-pub(crate) async fn oauth_authorization_server(
-    State(state): State<ApplicationState<IssuanceData, IssuanceDataView>>,
-) -> impl IntoResponse {
-    match query_handler(AGGREGATE_ID.to_string(), &state).await {
-        Ok(Some(view)) if view.oid4vci_data.authorization_server_metadata.is_some() => {
-            (StatusCode::OK, Json(view.oid4vci_data.authorization_server_metadata)).into_response()
-        }
-        Ok(_) => StatusCode::NOT_FOUND.into_response(),
-        Err(err) => {
-            println!("Error: {:#?}\n", err);
-            (StatusCode::BAD_REQUEST, err.to_string()).into_response()
-        }
+pub(crate) async fn oauth_authorization_server(State(state): State<ApplicationState>) -> Response {
+    match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
+        Ok(Some(ServerConfigView {
+            authorization_server_metadata,
+            ..
+        })) => (StatusCode::OK, Json(authorization_server_metadata)).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
@@ -30,34 +26,19 @@ mod tests {
     use crate::{app, tests::BASE_URL};
 
     use super::*;
-    use agent_issuance::{
-        services::IssuanceServices,
-        state::{initialize, CQRS},
-    };
+    use agent_issuance::{startup_commands::startup_commands, state::initialize};
     use agent_store::in_memory;
     use axum::{
         body::Body,
         http::{self, Request},
+        Router,
     };
-    use serde_json::{json, Value};
-    use tower::ServiceExt;
+    use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
+    use tower::Service;
 
-    #[tokio::test]
-    async fn test_oauth_authorization_server_endpoint() {
-        let state = in_memory::ApplicationState::new(vec![], IssuanceServices {}).await;
-
-        initialize(
-            state.clone(),
-            vec![agent_issuance::startup_commands::load_authorization_server_metadata(
-                BASE_URL.clone(),
-            )],
-        )
-        .await;
-
-        let app = app(state);
-
+    pub async fn oauth_authorization_server(app: &mut Router) -> AuthorizationServerMetadata {
         let response = app
-            .oneshot(
+            .call(
                 Request::builder()
                     .method(http::Method::GET)
                     .uri("/.well-known/oauth-authorization-server")
@@ -70,14 +51,29 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let body: Value = serde_json::from_slice(&body).unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let authorization_server_metadata: AuthorizationServerMetadata = serde_json::from_slice(&body).unwrap();
+
         assert_eq!(
-            body,
-            json!({
-                "issuer": "https://example.com/",
-                "token_endpoint": "https://example.com/auth/token"
-            })
+            authorization_server_metadata,
+            AuthorizationServerMetadata {
+                issuer: "https://example.com/".parse().unwrap(),
+                token_endpoint: Some("https://example.com/auth/token".parse().unwrap()),
+                ..Default::default()
+            }
         );
+
+        authorization_server_metadata
+    }
+
+    #[tokio::test]
+    async fn test_oauth_authorization_server_endpoint() {
+        let state = in_memory::application_state().await;
+
+        initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
+
+        let mut app = app(state);
+
+        let _authorization_server_metadata = oauth_authorization_server(&mut app).await;
     }
 }
