@@ -9,10 +9,9 @@ pub struct SecretManagerServices {
 
 // impl ExternalSign for SecretManagerServices {
 //     fn sign(&self, message: &str) -> Result<Vec<u8>> {
-//         let signature = tokio::runtime::Runtime::new()
-//             .unwrap()
-//             .block_on(self.secret_manager.as_ref().unwrap().sign(message.as_bytes()))
-//             .unwrap();
+//         let signature =
+//             futures::executor::block_on(self.secret_manager.as_ref().unwrap().sign(message.as_bytes())).unwrap();
+
 //         Ok(signature)
 //     }
 // }

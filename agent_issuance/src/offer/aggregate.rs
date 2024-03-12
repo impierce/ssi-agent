@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use did_key::{from_existing_key, Ed25519KeyPair};
+use did_manager::SecretManager;
 use jsonwebtoken::{Algorithm, Header};
+use oid4vc_core::authentication::subject::Subject;
 use oid4vc_core::{jwt, Decoder, Subjects};
-use oid4vc_manager::methods::key_method::KeySubject;
 use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
 use oid4vci::credential_format_profiles::{self, CredentialFormats};
 use oid4vci::credential_issuer::CredentialIssuer;
@@ -141,17 +141,19 @@ impl Aggregate for Offer {
                 mut credentials,
                 credential_request,
             } => {
-                use oid4vc_core::Subject;
-
                 // TODO: support batch credentials.
                 let mut credential = credentials.pop().ok_or(MissingCredentialError)?;
 
-                // TODO: utilize `agent_kms`.
-                let issuer = Arc::new(KeySubject::from_keypair(
-                    from_existing_key::<Ed25519KeyPair>(b"", Some(UNSAFE_ISSUER_KEY.as_bytes())),
-                    None,
-                ));
-                let issuer_did = issuer.identifier().unwrap();
+                let issuer: Arc<SecretManager> = Arc::new(futures::executor::block_on(async {
+                    SecretManager::load(
+                        "../agent_secret_manager/tests/res/test.stronghold".to_string(),
+                        "secure_password".to_string(),
+                        "9O66nzWqYYy1LmmiOudOlh2SMIaUWoTS".to_string(),
+                    )
+                    .await
+                    .unwrap()
+                }));
+                let issuer_did = issuer.identifier().await.unwrap();
 
                 let credential_issuer = CredentialIssuer {
                     subject: issuer.clone(),
@@ -426,7 +428,7 @@ pub mod tests {
 
     #[derive(Clone)]
     struct TestSubject {
-        key_did: Arc<KeySubject>,
+        secret_manager: Arc<SecretManager>,
         credential: String,
         access_token: String,
         pre_authorized_code: String,
@@ -474,14 +476,24 @@ pub mod tests {
               "credentialSubject": CREDENTIAL_SUBJECT["credentialSubject"].clone(),
             })
         };
-        static ref SUBJECT_1_KEY_DID: Arc<KeySubject> = Arc::new(KeySubject::from_keypair(
-            from_existing_key::<Ed25519KeyPair>(b"", Some("this-is-a-very-UNSAFE-subj-key-1".as_bytes())),
-            None,
-        ));
-        static ref SUBJECT_2_KEY_DID: Arc<KeySubject> = Arc::new(KeySubject::from_keypair(
-            from_existing_key::<Ed25519KeyPair>(b"", Some("this-is-a-very-UNSAFE-subj-key-2".as_bytes())),
-            None,
-        ));
+        static ref SUBJECT_1_KEY_DID: Arc<SecretManager> = Arc::new(futures::executor::block_on(async {
+            SecretManager::load(
+                "../agent_secret_manager/tests/res/test.stronghold".to_string(),
+                "secure_password".to_string(),
+                "9O66nzWqYYy1LmmiOudOlh2SMIaUWoTS".to_string(),
+            )
+            .await
+            .unwrap()
+        }));
+        static ref SUBJECT_2_KEY_DID: Arc<SecretManager> = Arc::new(futures::executor::block_on(async {
+            SecretManager::load(
+                "../agent_secret_manager/tests/res/test.stronghold".to_string(),
+                "secure_password".to_string(),
+                "9O66nzWqYYy1LmmiOudOlh2SMIaUWoTS".to_string(),
+            )
+            .await
+            .unwrap()
+        }));
         static ref VERIFIABLE_CREDENTIAL_JWT_1: String = {
             "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa3F5WmpEZmhzeVo1YzZOdUpoYm9zV2tTajg2Mmp5V2lDQ\
             0tIRHpOTkttOGtoI3o2TWtxeVpqRGZoc3laNWM2TnVKaGJvc1drU2o4NjJqeVdpQ0NLSER6Tk5LbThraCJ9.eyJpc3MiOiJkaWQ6a2V5On\
@@ -526,7 +538,7 @@ pub mod tests {
         let pre_authorized_code = PRE_AUTHORIZED_CODES.lock().unwrap()[0].clone();
 
         TestSubject {
-            key_did: SUBJECT_1_KEY_DID.clone(),
+            secret_manager: SUBJECT_1_KEY_DID.clone(),
             credential: VERIFIABLE_CREDENTIAL_JWT_1.clone(),
             pre_authorized_code: pre_authorized_code.clone(),
             access_token: ACCESS_TOKENS.lock().unwrap()[0].clone(),
@@ -555,8 +567,6 @@ pub mod tests {
     }
 
     fn credential_request(subject: TestSubject) -> CredentialRequest {
-        use oid4vc_core::Subject;
-
         CredentialRequest {
             credential_format: CredentialFormats::JwtVcJson(Parameters {
                 format: JwtVcJson,
@@ -572,8 +582,8 @@ pub mod tests {
             proof: Some(
                 Proof::builder()
                     .proof_type(ProofType::Jwt)
-                    .signer(subject.key_did.clone())
-                    .iss(subject.key_did.identifier().unwrap())
+                    .signer(subject.secret_manager.clone())
+                    .iss(subject.secret_manager.identifier().unwrap())
                     .aud(CREDENTIAL_ISSUER_METADATA.credential_issuer.clone())
                     .iat(1571324800)
                     .exp(9999999999i64)
