@@ -11,7 +11,6 @@ agent_secret_manager = { path = "../agent_secret_manager" }
 async-trait = "0.1"
 cqrs-es = "0.4.2"
 derivative = "2.2"
-did-key = "0.2"
 did_manager.workspace = true
 futures = "0.3"
 jsonschema = "0.17"

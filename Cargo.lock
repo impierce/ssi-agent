@@ -107,7 +107,6 @@ dependencies = [
  "async-trait",
  "cqrs-es",
  "derivative",
- "did-key",
  "did_manager",
  "futures",
  "jsonschema",
