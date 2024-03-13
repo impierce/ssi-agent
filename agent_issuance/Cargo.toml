@@ -8,20 +8,17 @@ rust-version.workspace = true
 agent_shared = { path = "../agent_shared" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 
-oid4vci.workspace = true
-oid4vc-core.workspace = true
-oid4vc-manager.workspace = true
-
-did_manager.workspace = true
-
-cqrs-es = "0.4.2"
-
 async-trait = "0.1"
+cqrs-es = "0.4.2"
 derivative = "2.2"
 did-key = "0.2"
+did_manager.workspace = true
 futures = "0.3"
 jsonschema = "0.17"
 jsonwebtoken = "8.2"
+oid4vci.workspace = true
+oid4vc-core.workspace = true
+oid4vc-manager.workspace = true
 rand = "0.8"
 serde.workspace = true
 serde_json.workspace = true
@@ -35,3 +32,4 @@ uuid.workspace = true
 lazy_static.workspace = true
 serial_test = "3.0"
 tokio.workspace = true
+tracing-test.workspace = true

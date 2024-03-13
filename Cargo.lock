@@ -66,7 +66,7 @@ dependencies = [
  "hyper 1.2.0",
  "lazy_static",
  "mime",
- "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
+ "oid4vc-core",
  "oid4vci",
  "serde",
  "serde_json",
@@ -75,6 +75,7 @@ dependencies = [
  "tower-http 0.5.2",
  "tracing",
  "tracing-subscriber",
+ "tracing-test",
  "url",
  "uuid",
 ]
@@ -112,7 +113,7 @@ dependencies = [
  "jsonschema",
  "jsonwebtoken",
  "lazy_static",
- "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
+ "oid4vc-core",
  "oid4vc-manager",
  "oid4vci",
  "rand 0.8.5",
@@ -123,6 +124,7 @@ dependencies = [
  "time",
  "tokio",
  "tracing",
+ "tracing-test",
  "url",
  "uuid",
 ]
@@ -138,7 +140,7 @@ dependencies = [
  "did_manager",
  "futures",
  "log",
- "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
+ "oid4vc-core",
  "serde",
  "serde_json",
  "tokio",
@@ -1076,7 +1078,7 @@ checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager.git?rev=2476e23#2476e23415e13f4b53b9c323ae43d023fc01b1fe"
+source = "git+https://github.com/impierce/did-manager.git?rev=9bd737a#9bd737a8115d7636f9892964b5d0416f81fcf3c2"
 dependencies = [
  "did_jwk",
  "did_key",
@@ -1582,7 +1584,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager.git?rev=2476e23#2476e23415e13f4b53b9c323ae43d023fc01b1fe"
+source = "git+https://github.com/impierce/did-manager.git?rev=9bd737a#9bd737a8115d7636f9892964b5d0416f81fcf3c2"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -1598,7 +1600,7 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager.git?rev=2476e23#2476e23415e13f4b53b9c323ae43d023fc01b1fe"
+source = "git+https://github.com/impierce/did-manager.git?rev=9bd737a#9bd737a8115d7636f9892964b5d0416f81fcf3c2"
 dependencies = [
  "did-key",
  "did-method-key",
@@ -1616,7 +1618,7 @@ dependencies = [
 [[package]]
 name = "did_manager"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager.git?rev=2476e23#2476e23415e13f4b53b9c323ae43d023fc01b1fe"
+source = "git+https://github.com/impierce/did-manager.git?rev=9bd737a#9bd737a8115d7636f9892964b5d0416f81fcf3c2"
 dependencies = [
  "consumer",
  "producer",
@@ -1644,7 +1646,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager.git?rev=2476e23#2476e23415e13f4b53b9c323ae43d023fc01b1fe"
+source = "git+https://github.com/impierce/did-manager.git?rev=9bd737a#9bd737a8115d7636f9892964b5d0416f81fcf3c2"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -4162,29 +4164,6 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc.git?rev=ebd7a83#ebd7a83f8494d55b57f569e43e3001d32cda583a"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64-url",
- "derive_more",
- "did_url 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures",
- "getset",
- "is_empty",
- "jsonwebtoken",
- "rand 0.8.5",
- "reqwest-middleware",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "serde_with 2.3.3",
- "url",
-]
-
-[[package]]
-name = "oid4vc-core"
-version = "0.1.0"
 source = "git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a#ebd7a83f8494d55b57f569e43e3001d32cda583a"
 dependencies = [
  "anyhow",
@@ -4222,7 +4201,7 @@ dependencies = [
  "identity_core 1.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "identity_credential 1.1.1 (git+https://github.com/iotaledger/identity.rs.git)",
  "jsonwebtoken",
- "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
+ "oid4vc-core",
  "oid4vci",
  "oid4vp",
  "paste",
@@ -4248,7 +4227,7 @@ dependencies = [
  "getset",
  "jsonwebtoken",
  "lazy_static",
- "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
+ "oid4vc-core",
  "paste",
  "reqwest",
  "reqwest-middleware",
@@ -4274,7 +4253,7 @@ dependencies = [
  "identity_credential 1.1.1 (git+https://github.com/iotaledger/identity.rs.git)",
  "is_empty",
  "jsonwebtoken",
- "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
+ "oid4vc-core",
  "oid4vci",
  "serde",
  "serde_json",
@@ -4922,7 +4901,7 @@ dependencies = [
 [[package]]
 name = "producer"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager.git?rev=2476e23#2476e23415e13f4b53b9c323ae43d023fc01b1fe"
+source = "git+https://github.com/impierce/did-manager.git?rev=9bd737a#9bd737a8115d7636f9892964b5d0416f81fcf3c2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4937,7 +4916,7 @@ dependencies = [
  "iota-sdk",
  "iota_stronghold",
  "log",
- "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc.git?rev=ebd7a83)",
+ "oid4vc-core",
  "rand 0.8.5",
  "serde",
  "serde_json",
@@ -5848,7 +5827,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager.git?rev=2476e23#2476e23415e13f4b53b9c323ae43d023fc01b1fe"
+source = "git+https://github.com/impierce/did-manager.git?rev=9bd737a#9bd737a8115d7636f9892964b5d0416f81fcf3c2"
 dependencies = [
  "identity_iota",
  "identity_stronghold",
@@ -5923,7 +5902,7 @@ dependencies = [
  "identity_credential 1.1.1 (git+https://github.com/iotaledger/identity.rs.git)",
  "is_empty",
  "jsonwebtoken",
- "oid4vc-core 0.1.0 (git+https://git@github.com/impierce/openid4vc.git?rev=ebd7a83f8494d55b57f569e43e3001d32cda583a)",
+ "oid4vc-core",
  "oid4vci",
  "oid4vp",
  "reqwest",
@@ -6896,6 +6875,29 @@ dependencies = [
  "tracing-core",
  "tracing-log",
  "tracing-serde",
+]
+
+[[package]]
+name = "tracing-test"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a2c0ff408fe918a94c428a3f2ad04e4afd5c95bbc08fcf868eff750c15728a4"
+dependencies = [
+ "lazy_static",
+ "tracing-core",
+ "tracing-subscriber",
+ "tracing-test-macro",
+]
+
+[[package]]
+name = "tracing-test-macro"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "258bc1c4f8e2e73a977812ab339d503e6feeb92700f6d07a6de4d321522d5c08"
+dependencies = [
+ "lazy_static",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
