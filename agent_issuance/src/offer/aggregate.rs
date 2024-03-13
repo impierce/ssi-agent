@@ -586,7 +586,6 @@ pub mod tests {
                     .exp(9999999999i64)
                     .nonce(subject.c_nonce.clone())
                     .build()
-                    .inspect(|x| println!("{:?}", x))
                     .unwrap(),
             ),
         }
