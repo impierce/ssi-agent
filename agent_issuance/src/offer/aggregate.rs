@@ -24,9 +24,6 @@ use crate::offer::error::OfferError::{self, *};
 use crate::offer::event::OfferEvent;
 use crate::offer::services::OfferServices;
 
-// TODO: remove this.
-const UNSAFE_ISSUER_KEY: &str = "this-is-a-very-UNSAFE-issuer-key";
-
 fn generate_random_string() -> String {
     let mut rng = rand::thread_rng();
 
@@ -153,7 +150,7 @@ impl Aggregate for Offer {
                     .await
                     .unwrap()
                 }));
-                let issuer_did = issuer.identifier().await.unwrap();
+                let issuer_did = issuer.identifier().unwrap();
 
                 let credential_issuer = CredentialIssuer {
                     subject: issuer.clone(),
@@ -495,22 +492,22 @@ pub mod tests {
             .unwrap()
         }));
         static ref VERIFIABLE_CREDENTIAL_JWT_1: String = {
-            "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa3F5WmpEZmhzeVo1YzZOdUpoYm9zV2tTajg2Mmp5V2lDQ\
-            0tIRHpOTkttOGtoI3o2TWtxeVpqRGZoc3laNWM2TnVKaGJvc1drU2o4NjJqeVdpQ0NLSER6Tk5LbThraCJ9.eyJpc3MiOiJkaWQ6a2V5On\
-            o2TWtxeVpqRGZoc3laNWM2TnVKaGJvc1drU2o4NjJqeVdpQ0NLSER6Tk5LbThraCIsInN1YiI6ImRpZDprZXk6ejZNa2pNaDdieDNyd25t\
-            aWRONzdkYWkxZ2tKWWJSY3J6d1dGOFV1OWtpa2tzMzFmIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbIm\
+            "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGO\
+            GtiY3JqWnBYM3FkI3o2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCJ9.eyJpc3MiOiJkaWQ6a2V5On\
+            o2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNK\
+            QVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbIm\
             h0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3Aw\
             L2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHA6Ly9leGFtcGxlLmNvbS9jcmVkZW50aWFscy8zNTI3IiwidHlwZSI6WyJWZXJpZm\
-            lhYmxlQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rcXlaakRmaHN5WjVjNk51Smhi\
-            b3NXa1NqODYyanlXaUNDS0hEek5OS204a2giLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5hbWUiOiJUZWFtd2\
-            9yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rak1oN2J4M3J3bm1pZE43N2RhaTFna0pZYlJjcnp3\
-            V0Y4VXU5a2lra3MzMWYiLCJ0eXBlIjoiQWNoaWV2ZW1lbnRTdWJqZWN0IiwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbG\
+            lhYmxlQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3Smpl\
+            NXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5hbWUiOiJUZWFtd2\
+            9yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdr\
+            eUY4a2JjcmpacFgzcWQiLCJ0eXBlIjoiQWNoaWV2ZW1lbnRTdWJqZWN0IiwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbG\
             UuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEi\
             OnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY2\
             9nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNv\
             Z25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbn\
-            QuIiwibmFtZSI6IlRlYW13b3JrIn19fX0.7hsVlJTwTcZkxI7H0dVjjdtTsmaKE3uLAhLBkavu0eqjQGZWPZqq62tOPVJF_4csi1EvCgeG\
-            I5uhrYD2cxM8Bw"
+            QuIiwibmFtZSI6IlRlYW13b3JrIn19fX0.ynkpX-rZlw0S4Vgnffn8y8fZhVOIqVid8yEUCMUNT20EC143uOMtuvpmktu5NvhXlLZTaNPe\
+            _cLt0BYnPMcKDg"
                 .to_string()
         };
         static ref VERIFIABLE_CREDENTIAL_JWT_2: String = {
@@ -589,6 +586,7 @@ pub mod tests {
                     .exp(9999999999i64)
                     .nonce(subject.c_nonce.clone())
                     .build()
+                    .inspect(|x| println!("{:?}", x))
                     .unwrap(),
             ),
         }
