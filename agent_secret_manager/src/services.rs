@@ -1,20 +1,10 @@
 use agent_shared::config;
 use anyhow::Result;
 use did_manager::SecretManager;
-use oid4vc_core::authentication::sign::ExternalSign;
 
 pub struct SecretManagerServices {
     pub secret_manager: Option<SecretManager>,
 }
-
-// impl ExternalSign for SecretManagerServices {
-//     fn sign(&self, message: &str) -> Result<Vec<u8>> {
-//         let signature =
-//             futures::executor::block_on(self.secret_manager.as_ref().unwrap().sign(message.as_bytes())).unwrap();
-
-//         Ok(signature)
-//     }
-// }
 
 impl SecretManagerServices {
     pub fn new(secret_manager: Option<SecretManager>) -> Self {

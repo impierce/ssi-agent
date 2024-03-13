@@ -9,11 +9,9 @@ use crate::commands::SecretManagerCommand;
 use crate::events::SecretManagerEvent;
 use crate::services::SecretManagerServices;
 
-#[derive(Serialize, Deserialize)]
-pub struct AgentSecretManager {
-    // TODO: problem: SecretManager is not serializable --> use service?
-    // secret_manager: SecretManager,
-}
+/// An aggregate that uses services to interact with `did_manager::SecretManager`.
+#[derive(Serialize, Deserialize, Default)]
+pub struct AgentSecretManager {}
 
 #[async_trait]
 impl Aggregate for AgentSecretManager {
@@ -58,13 +56,7 @@ impl Aggregate for AgentSecretManager {
         }
     }
 
-    fn apply(&mut self, event: Self::Event) {}
-}
-
-impl Default for AgentSecretManager {
-    fn default() -> Self {
-        AgentSecretManager {}
-    }
+    fn apply(&mut self, _event: Self::Event) {}
 }
 
 #[cfg(test)]
