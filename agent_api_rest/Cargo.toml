@@ -30,4 +30,5 @@ mime = { version = "0.3" }
 oid4vc-core.workspace = true
 tokio.workspace = true
 tower = { version = "0.4" }
+tracing-test.workspace = true
 url.workspace = true

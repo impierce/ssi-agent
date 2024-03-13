@@ -2,6 +2,7 @@ use agent_api_rest::app;
 use agent_issuance::{startup_commands::startup_commands, state::initialize};
 use agent_shared::config;
 use agent_store::{in_memory, postgres};
+use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -24,13 +25,13 @@ async fn main() {
 
     let url = config!("url").expect("AGENT_APPLICATION_URL is not set");
 
-    tracing::info!("Application url: {:?}", url);
+    info!("Application url: {:?}", url);
 
     let url = url::Url::parse(&url).unwrap();
 
     initialize(state.clone(), startup_commands(url)).await;
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await.unwrap();
-    tracing::info!("listening on {}", listener.local_addr().unwrap());
+    info!("listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, app(state)).await.unwrap();
 }
