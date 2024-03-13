@@ -43,7 +43,7 @@ impl Aggregate for AgentSecretManager {
                     .secret_manager
                     .as_ref()
                     .unwrap()
-                    .produce_document_json(method.clone())
+                    .produce_document(method.clone())
                     .await;
 
                 if result.is_ok() {
