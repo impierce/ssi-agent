@@ -26,13 +26,13 @@ impl Aggregate for AgentSecretManager {
 
     async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
         match command {
-            SecretManagerCommand::LoadStronghold => {
+            SecretManagerCommand::Initialize => {
                 let mut guard = services.lock().await;
                 assert!(guard.secret_manager.is_none());
                 guard.init().await.unwrap();
                 assert!(guard.secret_manager.is_some());
 
-                Ok(vec![SecretManagerEvent::StrongholdLoaded {}])
+                Ok(vec![SecretManagerEvent::Initialized {}])
             }
             SecretManagerCommand::EnableDidMethod { method } => {
                 let guard = services.lock().await;
@@ -74,9 +74,9 @@ mod aggregate_tests {
     type SecretManagerTestFramework = TestFramework<AgentSecretManager>;
 
     #[test]
-    fn successfully_loads_stronghold() {
-        let expected = SecretManagerEvent::StrongholdLoaded {};
-        let command = SecretManagerCommand::LoadStronghold;
+    fn successfully_initializes_secret_manager() {
+        let expected = SecretManagerEvent::Initialized {};
+        let command = SecretManagerCommand::Initialize;
         let services = Arc::new(Mutex::new(SecretManagerServices::new(None)));
 
         SecretManagerTestFramework::with(services)

@@ -4,14 +4,14 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SecretManagerEvent {
-    StrongholdLoaded,
+    Initialized,
     DidMethodEnabled { method: Method },
 }
 
 impl DomainEvent for SecretManagerEvent {
     fn event_type(&self) -> String {
         match self {
-            SecretManagerEvent::StrongholdLoaded => "StrongholdLoaded".to_string(),
+            SecretManagerEvent::Initialized => "Initialized".to_string(),
             SecretManagerEvent::DidMethodEnabled { .. } => "DidMethodEnabled".to_string(),
         }
     }
