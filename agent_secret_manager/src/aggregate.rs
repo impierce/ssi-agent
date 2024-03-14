@@ -65,7 +65,6 @@ mod aggregate_tests {
 
     use cqrs_es::test::TestFramework;
     use did_manager::Method;
-    use did_manager::SecretManager;
 
     use crate::aggregate::AgentSecretManager;
     use crate::commands::SecretManagerCommand;
@@ -75,11 +74,7 @@ mod aggregate_tests {
     type SecretManagerTestFramework = TestFramework<AgentSecretManager>;
 
     #[test]
-    fn successfully_loads_stronghold_from_environment_variables() {
-        std::env::set_var("TEST_STRONGHOLD_PATH", "tests/res/test.stronghold");
-        std::env::set_var("TEST_STRONGHOLD_PASSWORD", "secure_password");
-        std::env::set_var("TEST_ISSUER_KEY_ID", "9O66nzWqYYy1LmmiOudOlh2SMIaUWoTS");
-
+    fn successfully_loads_stronghold() {
         let expected = SecretManagerEvent::StrongholdLoaded {};
         let command = SecretManagerCommand::LoadStronghold;
         let services = Arc::new(Mutex::new(SecretManagerServices::new(None)));
@@ -95,15 +90,9 @@ mod aggregate_tests {
         let expected = SecretManagerEvent::DidMethodEnabled { method: Method::Key };
         let command = SecretManagerCommand::EnableDidMethod { method: Method::Key };
         let services = futures::executor::block_on(async {
-            Arc::new(Mutex::new(SecretManagerServices::new(Some(
-                SecretManager::load(
-                    "tests/res/test.stronghold".to_string(),
-                    "secure_password".to_string(),
-                    "9O66nzWqYYy1LmmiOudOlh2SMIaUWoTS".to_string(),
-                )
-                .await
-                .unwrap(),
-            ))))
+            let mut services = SecretManagerServices::new(None);
+            services.init().await.unwrap();
+            Arc::new(Mutex::new(services))
         });
 
         SecretManagerTestFramework::with(services)
