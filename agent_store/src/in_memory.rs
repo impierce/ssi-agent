@@ -18,10 +18,8 @@ use cqrs_es::{
     persist::{PersistenceError, ViewContext, ViewRepository},
     Aggregate, CqrsFramework, Query, View,
 };
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::Mutex;
 
 #[derive(Default)]
 struct MemRepository<V: View<A>, A: Aggregate> {
@@ -45,13 +43,13 @@ where
         Ok(self
             .map
             .lock()
-            .unwrap()
+            .await
             .get(view_id)
             .map(|view| serde_json::from_value(view.clone()).unwrap()))
     }
 
     async fn load_with_context(&self, view_id: &str) -> Result<Option<(V, ViewContext)>, PersistenceError> {
-        Ok(self.map.lock().unwrap().get(view_id).map(|view| {
+        Ok(self.map.lock().await.get(view_id).map(|view| {
             let view = serde_json::from_value(view.clone()).unwrap();
             let view_context = ViewContext::new(view_id.to_string(), 0);
             (view, view_context)
@@ -60,7 +58,7 @@ where
 
     async fn update_view(&self, view: V, context: ViewContext) -> Result<(), PersistenceError> {
         let payload = serde_json::to_value(&view).unwrap();
-        self.map.lock().unwrap().insert(context.view_instance_id, payload);
+        self.map.lock().await.insert(context.view_instance_id, payload);
         Ok(())
     }
 }

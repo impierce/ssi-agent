@@ -4,6 +4,7 @@ members = [
     "agent_api_rest",
     "agent_application",
     "agent_issuance",
+    "agent_secret_manager",
     "agent_shared",
     "agent_store",
 ]
@@ -14,12 +15,13 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
+did_manager = { git = "https://git@github.com/impierce/did-manager.git", rev = "60ba7c0" }
+oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "10a6bd7" }
+oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "10a6bd7" }
+oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "10a6bd7" }
+
 axum = { version = "0.7", features = ["tracing"] }
 lazy_static = "1.4"
-oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "ebd7a83f8494d55b57f569e43e3001d32cda583a" }
-oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "ebd7a83f8494d55b57f569e43e3001d32cda583a" }
-oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "ebd7a83f8494d55b57f569e43e3001d32cda583a" }
-uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0" }
 thiserror = "1.0"
@@ -27,4 +29,6 @@ tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.5", features = ["trace"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+tracing-test = { version = "0.2" }
 url = "2.5"
+uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }

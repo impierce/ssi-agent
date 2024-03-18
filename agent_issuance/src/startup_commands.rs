@@ -2,8 +2,7 @@ use crate::server_config::command::ServerConfigCommand;
 use agent_shared::{config, url_utils::UrlAppendHelpers};
 use oid4vci::{
     credential_format_profiles::{
-        w3c_verifiable_credentials::jwt_vc_json::{CredentialDefinition, JwtVcJson},
-        CredentialFormats, Parameters,
+        w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, CredentialFormats, Parameters,
     },
     credential_issuer::{
         authorization_server_metadata::AuthorizationServerMetadata,
@@ -43,7 +42,6 @@ pub fn create_credentials_supported() -> ServerConfigCommand {
         credentials_supported: vec![CredentialsSupportedObject {
             id: None,
             credential_format: CredentialFormats::JwtVcJson(Parameters {
-                format: JwtVcJson,
                 parameters: (
                     CredentialDefinition {
                         type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],

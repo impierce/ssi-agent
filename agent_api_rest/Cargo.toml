@@ -6,7 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 agent_issuance = { path = "../agent_issuance" }
-agent_shared = {path = "../agent_shared"}
+agent_shared = { path = "../agent_shared" }
 
 axum.workspace = true
 axum-auth = "0.7"
@@ -30,4 +30,5 @@ mime = { version = "0.3" }
 oid4vc-core.workspace = true
 tokio.workspace = true
 tower = { version = "0.4" }
+tracing-test.workspace = true
 url.workspace = true
