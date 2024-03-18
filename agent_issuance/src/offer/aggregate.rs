@@ -6,7 +6,6 @@ use cqrs_es::Aggregate;
 use jsonwebtoken::{Algorithm, Header};
 use oid4vc_core::authentication::subject::Subject;
 use oid4vc_core::{jwt, Decoder, Subjects};
-use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
 use oid4vci::credential_format_profiles::{self, CredentialFormats};
 use oid4vci::credential_issuer::CredentialIssuer;
 use oid4vci::credential_offer::{CredentialOffer, CredentialOfferQuery, CredentialsObject, Grants, PreAuthorizedCode};
@@ -174,7 +173,6 @@ impl Aggregate for Offer {
                 let credential_response = CredentialResponse {
                     credential: CredentialResponseType::Immediate(CredentialFormats::JwtVcJson(
                         credential_format_profiles::Credential {
-                            format: JwtVcJson,
                             credential: json!(jwt::encode(
                                 issuer.clone(),
                                 Header::new(Algorithm::EdDSA),
@@ -546,7 +544,6 @@ pub mod tests {
     fn credential_request(subject: TestSubject) -> CredentialRequest {
         CredentialRequest {
             credential_format: CredentialFormats::JwtVcJson(Parameters {
-                format: JwtVcJson,
                 parameters: (
                     CredentialDefinition {
                         type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
@@ -575,7 +572,6 @@ pub mod tests {
         CredentialResponse {
             credential: CredentialResponseType::Immediate(CredentialFormats::JwtVcJson(
                 credential_format_profiles::Credential {
-                    format: JwtVcJson,
                     credential: json!(subject.credential.clone()),
                 },
             )),
