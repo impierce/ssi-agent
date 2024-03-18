@@ -8,6 +8,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use tower_http::cors::CorsLayer;
 use credential_issuer::{
     credential::credential,
     token::token,
@@ -45,6 +46,7 @@ pub fn app(state: ApplicationState<IssuanceData, IssuanceDataView>) -> Router {
         )
         .route(&path("/auth/token"), post(token))
         .route(&path("/openid4vci/credential"), post(credential))
+        .layer(CorsLayer::permissive())
         .with_state(state)
 }
 
