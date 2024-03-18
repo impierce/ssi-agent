@@ -66,10 +66,7 @@ pub mod tests {
         http::{self, Request},
         Router,
     };
-    use oid4vci::{
-        credential_format_profiles::CredentialFormats,
-        credential_offer::{CredentialOffer, CredentialOfferQuery, Grants, PreAuthorizedCode},
-    };
+    use oid4vci::credential_offer::{CredentialOffer, CredentialOfferQuery, Grants, PreAuthorizedCode};
     use serde_json::json;
     use tower::Service;
 
@@ -106,7 +103,7 @@ pub mod tests {
                     ..
                 }),
             ..
-        }) = CredentialOfferQuery::<CredentialFormats>::from_str(value.as_str().unwrap()).unwrap()
+        }) = CredentialOfferQuery::from_str(value.as_str().unwrap()).unwrap()
         else {
             unreachable!()
         };
