@@ -1,13 +1,11 @@
-use async_trait::async_trait;
-use cqrs_es::persist::{GenericQuery, ViewRepository};
-use cqrs_es::{Aggregate, View};
-use std::collections::HashMap;
+use agent_shared::application_state::CommandHandler;
+use agent_shared::handlers::command_handler;
+use cqrs_es::persist::ViewRepository;
 use std::sync::Arc;
 use tracing::{info, warn};
 
 use crate::credential::aggregate::Credential;
 use crate::credential::queries::CredentialView;
-use crate::handlers::command_handler;
 use crate::offer::aggregate::Offer;
 use crate::offer::queries::access_token::AccessTokenView;
 use crate::offer::queries::pre_authorized_code::PreAuthorizedCodeView;
@@ -15,28 +13,19 @@ use crate::offer::queries::OfferView;
 use crate::server_config::aggregate::ServerConfig;
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::queries::ServerConfigView;
+use agent_shared::application_state::ApplicationState;
+use axum::extract::FromRef;
 
-/// The `Command` trait is used to define the command handlers for the aggregates.
-#[async_trait]
-pub trait Command<A>
-where
-    A: Aggregate,
-{
-    async fn execute_with_metadata(
-        &self,
-        aggregate_id: &str,
-        command: A::Command,
-        metadata: HashMap<String, String>,
-    ) -> Result<(), cqrs_es::AggregateError<A::Error>>
-    where
-        A::Command: Send + Sync;
-}
-
-/// The application state is used to store the command handlers and queries.
 #[derive(Clone)]
-pub struct ApplicationState {
+pub struct IssuanceState {
     pub command: CommandHandlers,
     pub query: Queries,
+}
+
+impl FromRef<ApplicationState<IssuanceState>> for IssuanceState {
+    fn from_ref(application_state: &ApplicationState<IssuanceState>) -> IssuanceState {
+        application_state.issuance.clone()
+    }
 }
 
 /// The command handlers are used to execute commands on the aggregates.
@@ -46,8 +35,6 @@ pub struct CommandHandlers {
     pub credential: CommandHandler<Credential>,
     pub offer: CommandHandler<Offer>,
 }
-
-pub type CommandHandler<A> = Arc<dyn Command<A> + Send + Sync>;
 
 /// This type is used to define the queries that are used to query the view repositories. We make use of `dyn` here, so
 /// that any type of repository that implements the `ViewRepository` trait can be used, but the corresponding `View` and
@@ -87,24 +74,11 @@ impl Clone for Queries {
     }
 }
 
-/// Returns a new `GenericQuery` instance.
-pub fn generic_query<R, A, V>(view_repository: Arc<R>) -> GenericQuery<R, V, A>
-where
-    R: ViewRepository<V, A>,
-    A: Aggregate,
-    V: View<A>,
-{
-    let mut generic_query = GenericQuery::new(view_repository);
-    generic_query.use_error_handler(Box::new(|e| println!("{}", e)));
-
-    generic_query
-}
-
 /// The unique identifier for the server configuration.
 pub const SERVER_CONFIG_ID: &str = "SERVER-CONFIG-001";
 
 /// Initialize the application state by executing the startup commands.
-pub async fn initialize(state: ApplicationState, startup_commands: Vec<ServerConfigCommand>) {
+pub async fn initialize(state: &IssuanceState, startup_commands: Vec<ServerConfigCommand>) {
     info!("Initializing ...");
 
     for command in startup_commands {

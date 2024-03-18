@@ -1,8 +1,6 @@
-mod credential_issuer;
-mod credentials;
-mod offers;
+mod issuance;
 
-use agent_issuance::state::ApplicationState;
+use agent_issuance::state::IssuanceState;
 use agent_shared::{config, ConfigError};
 use axum::{
     body::Bytes,
@@ -12,17 +10,18 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use credential_issuer::{
+use issuance::credential_issuer::{
     credential::credential,
     token::token,
     well_known::{
         oauth_authorization_server::oauth_authorization_server, openid_credential_issuer::openid_credential_issuer,
     },
 };
-use credentials::{credentials, get_credentials};
-use offers::offers;
+use issuance::credentials::{credentials, get_credentials};
+use issuance::offers::offers;
 use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
+pub type ApplicationState = agent_shared::application_state::ApplicationState<IssuanceState>;
 
 pub fn app(state: ApplicationState) -> Router {
     let base_path = get_base_path();
@@ -36,7 +35,7 @@ pub fn app(state: ApplicationState) -> Router {
     };
 
     Router::new()
-        // Agent Preparations
+        // Agent Issuance Preparations
         .route(&path("/v1/credentials"), post(credentials))
         .route(&path("/v1/credentials/:credential_id"), get(get_credentials))
         .route(&path("/v1/offers"), post(offers))

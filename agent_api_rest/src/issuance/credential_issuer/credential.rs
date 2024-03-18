@@ -1,13 +1,13 @@
 use agent_issuance::{
     credential::queries::CredentialView,
-    handlers::{command_handler, query_handler},
     offer::{
         command::OfferCommand,
         queries::{access_token::AccessTokenView, OfferView},
     },
     server_config::queries::ServerConfigView,
-    state::{ApplicationState, SERVER_CONFIG_ID},
+    state::{IssuanceState, SERVER_CONFIG_ID},
 };
+use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -20,7 +20,7 @@ use tracing::info;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
-    State(state): State<ApplicationState>,
+    State(state): State<IssuanceState>,
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
     // TODO: implement official oid4vci error response. This TODO is also in the `token` endpoint.
@@ -85,8 +85,8 @@ pub(crate) async fn credential(
 #[cfg(test)]
 mod tests {
     use crate::{
-        app, credential_issuer::token::tests::token, credentials::tests::credentials, offers::tests::offers,
-        tests::BASE_URL,
+        app, issuance::credential_issuer::token::tests::token, issuance::credentials::tests::credentials,
+        issuance::offers::tests::offers, tests::BASE_URL,
     };
 
     use super::*;
@@ -104,7 +104,7 @@ mod tests {
     async fn test_credential_endpoint() {
         let state = in_memory::application_state().await;
 
-        initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
+        initialize(&state.issuance, startup_commands(BASE_URL.clone())).await;
 
         let mut app = app(state);
 

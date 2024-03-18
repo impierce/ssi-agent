@@ -29,7 +29,7 @@ async fn main() {
 
     let url = url::Url::parse(&url).unwrap();
 
-    initialize(state.clone(), startup_commands(url)).await;
+    initialize(&state.issuance, startup_commands(url)).await;
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await.unwrap();
     info!("listening on {}", listener.local_addr().unwrap());

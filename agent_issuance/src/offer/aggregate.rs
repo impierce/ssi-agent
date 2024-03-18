@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use agent_secret_manager::services::SecretManagerServices;
+use agent_shared::generate_random_string;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use jsonwebtoken::{Algorithm, Header};
@@ -13,7 +14,6 @@ use oid4vci::credential_response::{CredentialResponse, CredentialResponseType};
 use oid4vci::token_request::TokenRequest;
 use oid4vci::token_response::TokenResponse;
 use oid4vci::VerifiableCredentialJwt;
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::info;
@@ -22,21 +22,6 @@ use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError::{self, *};
 use crate::offer::event::OfferEvent;
 use crate::offer::services::OfferServices;
-
-fn generate_random_string() -> String {
-    let mut rng = rand::thread_rng();
-
-    // Generate 32 random bytes (256 bits)
-    let random_bytes: [u8; 32] = rng.gen();
-
-    // Convert the random bytes to a hexadecimal string
-    let random_string: String = random_bytes.iter().fold(String::new(), |mut acc, byte| {
-        acc.push_str(&format!("{:02x}", byte));
-        acc
-    });
-
-    random_string
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Offer {

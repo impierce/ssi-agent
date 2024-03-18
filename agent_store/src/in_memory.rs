@@ -9,8 +9,12 @@ use agent_issuance::{
         services::OfferServices,
     },
     server_config::services::ServerConfigServices,
-    state::{generic_query, ApplicationState, Command, CommandHandlers, ViewRepositories},
+    state::{CommandHandlers, IssuanceState, ViewRepositories},
     SimpleLoggingQuery,
+};
+use agent_shared::{
+    application_state::{ApplicationState, Command},
+    generic_query::generic_query,
 };
 use async_trait::async_trait;
 use cqrs_es::{
@@ -107,7 +111,7 @@ where
     }
 }
 
-pub async fn application_state() -> agent_issuance::state::ApplicationState {
+pub async fn application_state() -> ApplicationState<IssuanceState> {
     // Initialize the in-memory repositories.
     let server_config = Arc::new(MemRepository::default());
     let credential = Arc::new(MemRepository::default());
@@ -119,7 +123,7 @@ pub async fn application_state() -> agent_issuance::state::ApplicationState {
     let pre_authorized_code_query = PreAuthorizedCodeQuery::new(pre_authorized_code.clone());
     let access_token_query = AccessTokenQuery::new(access_token.clone());
 
-    ApplicationState {
+    let issuance = IssuanceState {
         command: CommandHandlers {
             server_config: Arc::new(
                 AggregateHandler::new(ServerConfigServices)
@@ -146,5 +150,7 @@ pub async fn application_state() -> agent_issuance::state::ApplicationState {
             pre_authorized_code,
             access_token,
         },
-    }
+    };
+
+    ApplicationState { issuance }
 }

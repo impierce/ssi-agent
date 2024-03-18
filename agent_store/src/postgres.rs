@@ -5,10 +5,14 @@ use agent_issuance::{
         services::OfferServices,
     },
     server_config::services::ServerConfigServices,
-    state::{generic_query, ApplicationState, Command, CommandHandlers, ViewRepositories},
+    state::{CommandHandlers, IssuanceState, ViewRepositories},
     SimpleLoggingQuery,
 };
-use agent_shared::config;
+use agent_shared::{
+    application_state::{ApplicationState, Command},
+    config,
+    generic_query::generic_query,
+};
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, Query};
 use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
@@ -58,7 +62,7 @@ where
     }
 }
 
-pub async fn application_state() -> agent_issuance::state::ApplicationState {
+pub async fn application_state() -> ApplicationState<IssuanceState> {
     let pool = default_postgress_pool(&config!("db_connection_string").unwrap()).await;
 
     // Initialize the postgres repositories.
@@ -72,7 +76,7 @@ pub async fn application_state() -> agent_issuance::state::ApplicationState {
     let pre_authorized_code_query = PreAuthorizedCodeQuery::new(pre_authorized_code.clone());
     let access_token_query = AccessTokenQuery::new(access_token.clone());
 
-    ApplicationState {
+    let issuance = IssuanceState {
         command: CommandHandlers {
             server_config: Arc::new(
                 AggregateHandler::new(pool.clone(), ServerConfigServices)
@@ -99,5 +103,7 @@ pub async fn application_state() -> agent_issuance::state::ApplicationState {
             pre_authorized_code,
             access_token,
         },
-    }
+    };
+
+    ApplicationState { issuance }
 }

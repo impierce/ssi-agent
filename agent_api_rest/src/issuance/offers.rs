@@ -1,9 +1,9 @@
 use agent_issuance::{
-    handlers::{command_handler, query_handler},
-    offer::command::OfferCommand,
+    offer::{command::OfferCommand, queries::OfferView},
     server_config::queries::ServerConfigView,
-    state::{ApplicationState, SERVER_CONFIG_ID},
+    state::{IssuanceState, SERVER_CONFIG_ID},
 };
+use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -13,7 +13,7 @@ use serde_json::Value;
 use tracing::info;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> Response {
+pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Json<Value>) -> Response {
     info!("Request Body: {}", payload);
 
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
@@ -43,7 +43,10 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
     }
 
     match query_handler(subject_id, &state.query.offer).await {
-        Ok(Some(offer_view)) => (StatusCode::OK, Json(offer_view.form_url_encoded_credential_offer)).into_response(),
+        Ok(Some(OfferView {
+            form_url_encoded_credential_offer,
+            ..
+        })) => (StatusCode::OK, Json(form_url_encoded_credential_offer)).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
@@ -54,7 +57,7 @@ pub mod tests {
 
     use crate::{
         app,
-        credentials::tests::credentials,
+        issuance::credentials::tests::credentials,
         tests::{BASE_URL, SUBJECT_ID},
     };
 
@@ -115,7 +118,7 @@ pub mod tests {
     async fn test_offers_endpoint() {
         let state = in_memory::application_state().await;
 
-        initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
+        initialize(&state.issuance, startup_commands(BASE_URL.clone())).await;
 
         let mut app = app(state);
 
