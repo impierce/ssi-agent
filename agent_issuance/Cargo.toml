@@ -11,7 +11,6 @@ agent_secret_manager = { path = "../agent_secret_manager" }
 async-trait = "0.1"
 cqrs-es = "0.4.2"
 derivative = "2.2"
-did_manager.workspace = true
 futures = "0.3"
 jsonschema = "0.17"
 jsonwebtoken = "8.2"
@@ -28,6 +27,8 @@ url.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+agent_shared = { path = "../agent_shared", features = ["test"] }
+did_manager.workspace = true
 lazy_static.workspace = true
 serial_test = "3.0"
 tokio.workspace = true

@@ -36,8 +36,7 @@ mod tests {
     };
     use oid4vci::{
         credential_format_profiles::{
-            w3c_verifiable_credentials::jwt_vc_json::{CredentialDefinition, JwtVcJson},
-            CredentialFormats, Parameters,
+            w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, CredentialFormats, Parameters,
         },
         credential_issuer::{
             credential_issuer_metadata::CredentialIssuerMetadata, credentials_supported::CredentialsSupportedObject,
@@ -76,7 +75,6 @@ mod tests {
                 credentials_supported: vec![CredentialsSupportedObject {
                     id: None,
                     credential_format: CredentialFormats::JwtVcJson(Parameters {
-                        format: JwtVcJson,
                         parameters: (
                             CredentialDefinition {
                                 type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],

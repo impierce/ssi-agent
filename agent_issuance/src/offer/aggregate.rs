@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
+use agent_secret_manager::services::SecretManagerServices;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use did_manager::SecretManager;
 use jsonwebtoken::{Algorithm, Header};
 use oid4vc_core::authentication::subject::Subject;
 use oid4vc_core::{jwt, Decoder, Subjects};
-use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
 use oid4vci::credential_format_profiles::{self, CredentialFormats};
 use oid4vci::credential_issuer::CredentialIssuer;
 use oid4vci::credential_offer::{CredentialOffer, CredentialOfferQuery, CredentialsObject, Grants, PreAuthorizedCode};
@@ -141,14 +140,10 @@ impl Aggregate for Offer {
                 // TODO: support batch credentials.
                 let mut credential = credentials.pop().ok_or(MissingCredentialError)?;
 
-                let issuer: Arc<SecretManager> = Arc::new(futures::executor::block_on(async {
-                    SecretManager::load(
-                        "../agent_secret_manager/tests/res/test.stronghold".to_string(),
-                        "secure_password".to_string(),
-                        "9O66nzWqYYy1LmmiOudOlh2SMIaUWoTS".to_string(),
-                    )
-                    .await
-                    .unwrap()
+                let issuer = Arc::new(futures::executor::block_on(async {
+                    let mut services = SecretManagerServices::new(None);
+                    services.init().await.unwrap();
+                    services.secret_manager.unwrap()
                 }));
                 let issuer_did = issuer.identifier().unwrap();
 
@@ -178,7 +173,6 @@ impl Aggregate for Offer {
                 let credential_response = CredentialResponse {
                     credential: CredentialResponseType::Immediate(CredentialFormats::JwtVcJson(
                         credential_format_profiles::Credential {
-                            format: JwtVcJson,
                             credential: json!(jwt::encode(
                                 issuer.clone(),
                                 Header::new(Algorithm::EdDSA),
@@ -241,21 +235,21 @@ impl Aggregate for Offer {
 
 #[cfg(test)]
 pub mod tests {
-
-    use std::{collections::VecDeque, sync::Mutex};
-
-    use crate::{
-        credential::entity::Data,
-        server_config::aggregate::server_config_tests::{AUTHORIZATION_SERVER_METADATA, CREDENTIAL_ISSUER_METADATA},
-    };
-
     use super::*;
+
     use cqrs_es::test::TestFramework;
+    use did_manager::SecretManager;
     use lazy_static::lazy_static;
     use oid4vci::{
         credential_format_profiles::{w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, Parameters},
         credential_request::CredentialRequest,
         Proof, ProofType,
+    };
+    use std::{collections::VecDeque, sync::Mutex};
+
+    use crate::{
+        credential::entity::Data,
+        server_config::aggregate::server_config_tests::{AUTHORIZATION_SERVER_METADATA, CREDENTIAL_ISSUER_METADATA},
     };
 
     type OfferTestFramework = TestFramework<Offer>;
@@ -473,24 +467,8 @@ pub mod tests {
               "credentialSubject": CREDENTIAL_SUBJECT["credentialSubject"].clone(),
             })
         };
-        static ref SUBJECT_1_KEY_DID: Arc<SecretManager> = Arc::new(futures::executor::block_on(async {
-            SecretManager::load(
-                "../agent_secret_manager/tests/res/test.stronghold".to_string(),
-                "secure_password".to_string(),
-                "9O66nzWqYYy1LmmiOudOlh2SMIaUWoTS".to_string(),
-            )
-            .await
-            .unwrap()
-        }));
-        static ref SUBJECT_2_KEY_DID: Arc<SecretManager> = Arc::new(futures::executor::block_on(async {
-            SecretManager::load(
-                "../agent_secret_manager/tests/res/test.stronghold".to_string(),
-                "secure_password".to_string(),
-                "9O66nzWqYYy1LmmiOudOlh2SMIaUWoTS".to_string(),
-            )
-            .await
-            .unwrap()
-        }));
+        static ref SUBJECT_1_KEY_DID: Arc<SecretManager> = Arc::new(secret_manager());
+        static ref SUBJECT_2_KEY_DID: Arc<SecretManager> = Arc::new(secret_manager());
         static ref VERIFIABLE_CREDENTIAL_JWT_1: String = {
             "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGO\
             GtiY3JqWnBYM3FkI3o2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCJ9.eyJpc3MiOiJkaWQ6a2V5On\
@@ -566,7 +544,6 @@ pub mod tests {
     fn credential_request(subject: TestSubject) -> CredentialRequest {
         CredentialRequest {
             credential_format: CredentialFormats::JwtVcJson(Parameters {
-                format: JwtVcJson,
                 parameters: (
                     CredentialDefinition {
                         type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
@@ -595,12 +572,19 @@ pub mod tests {
         CredentialResponse {
             credential: CredentialResponseType::Immediate(CredentialFormats::JwtVcJson(
                 credential_format_profiles::Credential {
-                    format: JwtVcJson,
                     credential: json!(subject.credential.clone()),
                 },
             )),
             c_nonce: None,
             c_nonce_expires_in: None,
         }
+    }
+
+    fn secret_manager() -> SecretManager {
+        futures::executor::block_on(async {
+            let mut services = SecretManagerServices::new(None);
+            services.init().await.unwrap();
+            services.secret_manager.unwrap()
+        })
     }
 }

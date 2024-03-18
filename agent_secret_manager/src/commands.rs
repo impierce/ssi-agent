@@ -3,6 +3,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum SecretManagerCommand {
-    LoadStronghold,
+    Initialize,
     EnableDidMethod { method: Method },
 }
