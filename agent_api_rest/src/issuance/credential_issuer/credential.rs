@@ -102,11 +102,11 @@ mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_credential_endpoint() {
-        let state = in_memory::application_state().await;
+        let issuance_state = in_memory::issuance_state().await;
 
-        initialize(&state.issuance, startup_commands(BASE_URL.clone())).await;
+        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
-        let mut app = app(state);
+        let mut app = app((issuance_state, ()));
 
         credentials(&mut app).await;
         let pre_authorized_code = offers(&mut app).await;

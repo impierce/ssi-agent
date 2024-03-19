@@ -104,11 +104,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
-        let state = in_memory::application_state().await;
+        let issuance_state = in_memory::issuance_state().await;
 
-        initialize(&state.issuance, startup_commands(BASE_URL.clone())).await;
+        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
-        let mut app = app(state);
+        let mut app = app((issuance_state, ()));
 
         let _credential_issuer_metadata = openid_credential_issuer(&mut app).await;
     }

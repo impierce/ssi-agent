@@ -203,11 +203,11 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_credentials_endpoint() {
-        let state = in_memory::application_state().await;
+        let issuance_state = in_memory::issuance_state().await;
 
-        initialize(&state.issuance, startup_commands(BASE_URL.clone())).await;
+        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
-        let mut app = app(state);
+        let mut app = app((issuance_state, ()));
 
         credentials(&mut app).await;
     }
