@@ -1,4 +1,3 @@
-use crate::state::CommandHandler;
 use cqrs_es::{
     persist::{PersistenceError, ViewRepository},
     Aggregate, AggregateError, View,
@@ -6,6 +5,8 @@ use cqrs_es::{
 use std::{collections::HashMap, sync::Arc};
 use time::format_description::well_known::Rfc3339;
 use tracing::{debug, error, info};
+
+use crate::application_state::CommandHandler;
 
 /// The `query_handler` function is used to query the view repository for a specific view.
 pub async fn query_handler<A, V>(
