@@ -13,7 +13,6 @@ use crate::offer::queries::OfferView;
 use crate::server_config::aggregate::ServerConfig;
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::queries::ServerConfigView;
-use agent_shared::application_state::ApplicationState;
 use axum::extract::FromRef;
 
 #[derive(Clone)]
@@ -22,9 +21,9 @@ pub struct IssuanceState {
     pub query: Queries,
 }
 
-impl FromRef<ApplicationState<IssuanceState>> for IssuanceState {
-    fn from_ref(application_state: &ApplicationState<IssuanceState>) -> IssuanceState {
-        application_state.issuance.clone()
+impl<V> FromRef<(IssuanceState, V)> for IssuanceState {
+    fn from_ref(application_state: &(IssuanceState, V)) -> IssuanceState {
+        application_state.0.clone()
     }
 }
 

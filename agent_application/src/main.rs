@@ -18,9 +18,9 @@ async fn main() {
         _ => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
     }
 
-    let state = match config!("event_store").unwrap().as_str() {
-        "postgres" => postgres::application_state().await,
-        _ => in_memory::application_state().await,
+    let issuance_state = match config!("event_store").unwrap().as_str() {
+        "postgres" => postgres::issuance_state().await,
+        _ => in_memory::issuance_state().await,
     };
 
     let url = config!("url").expect("AGENT_APPLICATION_URL is not set");
@@ -29,9 +29,9 @@ async fn main() {
 
     let url = url::Url::parse(&url).unwrap();
 
-    initialize(&state.issuance, startup_commands(url)).await;
+    initialize(&issuance_state, startup_commands(url)).await;
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await.unwrap();
     info!("listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app(state)).await.unwrap();
+    axum::serve(listener, app((issuance_state, ()))).await.unwrap();
 }
