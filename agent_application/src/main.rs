@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use agent_api_rest::app;
 use agent_issuance::{startup_commands::startup_commands, state::initialize};
-use agent_shared::config;
+use agent_shared::{config, secret_manager::secret_manager};
 use agent_store::{in_memory, postgres};
+use agent_verification::services::VerificationServices;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -18,9 +21,11 @@ async fn main() {
         _ => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
     }
 
+    let verification_services = Arc::new(VerificationServices::new(Arc::new(secret_manager().await)));
+
     let state = match config!("event_store").unwrap().as_str() {
-        "postgres" => postgres::application_state().await,
-        _ => in_memory::application_state().await,
+        "postgres" => postgres::application_state(verification_services).await,
+        _ => in_memory::application_state(verification_services).await,
     };
 
     let url = config!("url").expect("AGENT_APPLICATION_URL is not set");

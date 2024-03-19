@@ -22,8 +22,8 @@ pub struct IssuanceState {
     pub query: Queries,
 }
 
-impl FromRef<ApplicationState<IssuanceState>> for IssuanceState {
-    fn from_ref(application_state: &ApplicationState<IssuanceState>) -> IssuanceState {
+impl<V> FromRef<ApplicationState<IssuanceState, V>> for IssuanceState {
+    fn from_ref(application_state: &ApplicationState<IssuanceState, V>) -> IssuanceState {
         application_state.issuance.clone()
     }
 }

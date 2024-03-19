@@ -2,10 +2,8 @@ pub mod application_state;
 pub mod config;
 pub mod generic_query;
 pub mod handlers;
-pub mod url_utils;
-
-#[cfg(feature = "test")]
 pub mod secret_manager;
+pub mod url_utils;
 
 pub use ::config::ConfigError;
 use rand::Rng;

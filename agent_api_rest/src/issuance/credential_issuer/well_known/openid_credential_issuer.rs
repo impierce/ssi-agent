@@ -29,6 +29,7 @@ mod tests {
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
     use agent_shared::{config, UrlAppendHelpers};
     use agent_store::in_memory;
+    use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -104,7 +105,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
-        let state = in_memory::application_state().await;
+        let state = in_memory::application_state(test_verification_services()).await;
 
         initialize(&state.issuance, startup_commands(BASE_URL.clone())).await;
 

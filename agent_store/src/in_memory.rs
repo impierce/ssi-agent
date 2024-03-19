@@ -16,6 +16,7 @@ use agent_shared::{
     application_state::{ApplicationState, Command},
     generic_query::generic_query,
 };
+use agent_verification::{services::VerificationServices, state::VerificationState};
 use async_trait::async_trait;
 use cqrs_es::{
     mem_store::MemStore,
@@ -111,7 +112,9 @@ where
     }
 }
 
-pub async fn application_state() -> ApplicationState<IssuanceState> {
+pub async fn application_state(
+    verification_services: Arc<VerificationServices>,
+) -> ApplicationState<IssuanceState, VerificationState> {
     // Initialize the in-memory repositories.
     let server_config = Arc::new(MemRepository::default());
     let credential = Arc::new(MemRepository::default());
@@ -152,5 +155,28 @@ pub async fn application_state() -> ApplicationState<IssuanceState> {
         },
     };
 
-    ApplicationState { issuance }
+    // Initialize the in-memory repositories.
+    let authorization_request = Arc::new(MemRepository::default());
+    let connection = Arc::new(MemRepository::default());
+
+    let verification = VerificationState {
+        command: agent_verification::state::CommandHandlers {
+            authorization_request: Arc::new(
+                AggregateHandler::new(verification_services.clone())
+                    .append_query(SimpleLoggingQuery {})
+                    .append_query(generic_query(authorization_request.clone())),
+            ),
+            connection: Arc::new(
+                AggregateHandler::new(verification_services)
+                    .append_query(SimpleLoggingQuery {})
+                    .append_query(generic_query(connection.clone())),
+            ),
+        },
+        query: agent_verification::state::ViewRepositories {
+            authorization_request,
+            connection,
+        },
+    };
+
+    ApplicationState { issuance, verification }
 }

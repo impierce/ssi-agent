@@ -2,6 +2,7 @@ mod issuance;
 
 use agent_issuance::state::IssuanceState;
 use agent_shared::{config, ConfigError};
+use agent_verification::state::VerificationState;
 use axum::{
     body::Bytes,
     extract::MatchedPath,
@@ -21,7 +22,7 @@ use issuance::credentials::{credentials, get_credentials};
 use issuance::offers::offers;
 use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
-pub type ApplicationState = agent_shared::application_state::ApplicationState<IssuanceState>;
+pub type ApplicationState = agent_shared::application_state::ApplicationState<IssuanceState, VerificationState>;
 
 pub fn app(state: ApplicationState) -> Router {
     let base_path = get_base_path();
@@ -95,6 +96,7 @@ fn get_base_path() -> Result<String, ConfigError> {
 #[cfg(test)]
 mod tests {
     use agent_store::in_memory;
+    use agent_verification::services::test_utils::test_verification_services;
     use axum::routing::post;
     use oid4vci::credential_issuer::{
         credential_issuer_metadata::CredentialIssuerMetadata, credentials_supported::CredentialsSupportedObject,
@@ -143,7 +145,7 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn test_base_path_routes() {
-        let state = in_memory::application_state().await;
+        let state = in_memory::application_state(test_verification_services()).await;
 
         std::env::set_var("AGENT_APPLICATION_BASE_PATH", "unicore");
         let router = app(state);

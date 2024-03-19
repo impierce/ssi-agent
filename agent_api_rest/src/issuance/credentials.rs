@@ -104,6 +104,7 @@ pub mod tests {
     };
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
     use agent_store::in_memory;
+    use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -178,17 +179,7 @@ pub mod tests {
                     .method(http::Method::GET)
                     .uri(get_credentials_endpoint)
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-                    .body(Body::from(
-                        serde_json::to_vec(&json!({
-                            "subjectId": SUBJECT_ID,
-                            "credential": {
-                                "credentialSubject": {
-                                "first_name": "Ferris",
-                                "last_name": "Rustacean"
-                            }},
-                        }))
-                        .unwrap(),
-                    ))
+                    .body(Body::empty())
                     .unwrap(),
             )
             .await
@@ -203,7 +194,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_credentials_endpoint() {
-        let state = in_memory::application_state().await;
+        let state = in_memory::application_state(test_verification_services()).await;
 
         initialize(&state.issuance, startup_commands(BASE_URL.clone())).await;
 

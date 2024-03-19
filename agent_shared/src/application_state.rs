@@ -4,10 +4,9 @@ use axum::async_trait;
 use cqrs_es::Aggregate;
 
 #[derive(Clone)]
-pub struct ApplicationState<I> {
+pub struct ApplicationState<I, V> {
     pub issuance: I,
-    // TODO: add `agent_verification`
-    // pub verification: V,
+    pub verification: V,
 }
 
 /// The `Command` trait is used to define the command handlers for the aggregates.
