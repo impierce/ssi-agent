@@ -9,6 +9,7 @@ use agent_issuance::{
     SimpleLoggingQuery,
 };
 use agent_shared::{application_state::Command, config, generic_query::generic_query};
+use agent_verification::{services::VerificationServices, state::VerificationState};
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, Query};
 use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
@@ -85,7 +86,7 @@ pub async fn issuance_state() -> IssuanceState {
                     .append_query(generic_query(credential.clone())),
             ),
             offer: Arc::new(
-                AggregateHandler::new(pool, OfferServices)
+                AggregateHandler::new(pool.clone(), OfferServices)
                     .append_query(SimpleLoggingQuery {})
                     .append_query(generic_query(offer.clone()))
                     .append_query(pre_authorized_code_query)
@@ -98,6 +99,33 @@ pub async fn issuance_state() -> IssuanceState {
             offer,
             pre_authorized_code,
             access_token,
+        },
+    }
+}
+
+pub async fn verification_state(verification_services: Arc<VerificationServices>) -> VerificationState {
+    let pool = default_postgress_pool(&config!("db_connection_string").unwrap()).await;
+
+    // Initialize the postgres repositories.
+    let authorization_request = Arc::new(PostgresViewRepository::new("authorization_request", pool.clone()));
+    let connection = Arc::new(PostgresViewRepository::new("connection", pool.clone()));
+
+    VerificationState {
+        command: agent_verification::state::CommandHandlers {
+            authorization_request: Arc::new(
+                AggregateHandler::new(pool.clone(), verification_services.clone())
+                    .append_query(SimpleLoggingQuery {})
+                    .append_query(generic_query(authorization_request.clone())),
+            ),
+            connection: Arc::new(
+                AggregateHandler::new(pool, verification_services)
+                    .append_query(SimpleLoggingQuery {})
+                    .append_query(generic_query(connection.clone())),
+            ),
+        },
+        query: agent_verification::state::ViewRepositories {
+            authorization_request,
+            connection,
         },
     }
 }
