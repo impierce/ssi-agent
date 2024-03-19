@@ -99,14 +99,14 @@ pub mod tests {
 
     use super::*;
 
-    type AuthorizationRequestTestFramework = TestFramework<Connection>;
+    type ConnectionTestFramework = TestFramework<Connection>;
 
     #[test]
     #[serial_test::serial]
     fn test_verify_siopv2_authorization_response() {
         let verification_services = test_verification_services();
 
-        AuthorizationRequestTestFramework::with(verification_services)
+        ConnectionTestFramework::with(verification_services)
             .given_no_previous_events()
             .when(ConnectionCommand::VerifySIOPv2AuthorizationResponse {
                 siopv2_authorization_request: SIOPV2_AUTHORIZATION_REQUEST.clone(),
@@ -123,7 +123,7 @@ pub mod tests {
     fn test_verify_siopv2_authorization_response_with_connection_notification_uri() {
         let verification_services = test_verification_services();
 
-        AuthorizationRequestTestFramework::with(verification_services)
+        ConnectionTestFramework::with(verification_services)
             .given_no_previous_events()
             .when(ConnectionCommand::VerifySIOPv2AuthorizationResponse {
                 siopv2_authorization_request: SIOPV2_AUTHORIZATION_REQUEST.clone(),
