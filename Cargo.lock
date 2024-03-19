@@ -188,7 +188,6 @@ dependencies = [
  "lazy_static",
  "oid4vc-core",
  "oid4vc-manager",
- "reqwest",
  "serde",
  "serial_test",
  "siopv2",

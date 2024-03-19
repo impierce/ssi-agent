@@ -40,7 +40,6 @@ impl Aggregate for Connection {
                 // TODO: use this once `RelyingPartyManager` uses the official SIOPv2 validation logic.
                 siopv2_authorization_request: _,
                 siopv2_authorization_response,
-                connection_notification_uri,
             } => {
                 let relying_party = &services.relying_party;
 
@@ -51,21 +50,9 @@ impl Aggregate for Connection {
 
                 let id_token = siopv2_authorization_response.extension.id_token.clone();
 
-                let mut events = vec![SIOPv2AuthorizationResponseVerified {
+                Ok(vec![SIOPv2AuthorizationResponseVerified {
                     id_token: id_token.clone(),
-                }];
-
-                // Send connection notification if URI is provided.
-                if let Some(connection_notification_uri) = connection_notification_uri {
-                    services
-                        .send_connection_notification(&connection_notification_uri)
-                        .await
-                        .unwrap();
-
-                    events.push(ConnectionNotificationSent);
-                };
-
-                Ok(events)
+                }])
             }
         }
     }
@@ -79,7 +66,6 @@ impl Aggregate for Connection {
             SIOPv2AuthorizationResponseVerified { id_token } => {
                 self.id_token = id_token;
             }
-            ConnectionNotificationSent => {}
         }
     }
 }
@@ -111,31 +97,10 @@ pub mod tests {
             .when(ConnectionCommand::VerifySIOPv2AuthorizationResponse {
                 siopv2_authorization_request: SIOPV2_AUTHORIZATION_REQUEST.clone(),
                 siopv2_authorization_response: SIOPV2_AUTHORIZATION_RESPONSE.clone(),
-                connection_notification_uri: None,
             })
             .then_expect_events(vec![ConnectionEvent::SIOPv2AuthorizationResponseVerified {
                 id_token: ID_TOKEN.clone(),
             }]);
-    }
-
-    #[test]
-    #[serial_test::serial]
-    fn test_verify_siopv2_authorization_response_with_connection_notification_uri() {
-        let verification_services = test_verification_services();
-
-        ConnectionTestFramework::with(verification_services)
-            .given_no_previous_events()
-            .when(ConnectionCommand::VerifySIOPv2AuthorizationResponse {
-                siopv2_authorization_request: SIOPV2_AUTHORIZATION_REQUEST.clone(),
-                siopv2_authorization_response: SIOPV2_AUTHORIZATION_RESPONSE.clone(),
-                connection_notification_uri: Some("https://example.com".parse().unwrap()),
-            })
-            .then_expect_events(vec![
-                ConnectionEvent::SIOPv2AuthorizationResponseVerified {
-                    id_token: ID_TOKEN.clone(),
-                },
-                ConnectionEvent::ConnectionNotificationSent,
-            ]);
     }
 
     lazy_static! {

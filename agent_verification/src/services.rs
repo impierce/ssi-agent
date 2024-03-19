@@ -4,11 +4,9 @@ use oid4vc_core::Subject;
 use oid4vc_manager::RelyingPartyManager;
 
 /// Verification services. This struct is used to generate authorization requests and validate authorization responses.
-/// It also sends connection notifications on a successful authorization response.
 pub struct VerificationServices {
     pub verifier: Arc<dyn Subject>,
     pub relying_party: RelyingPartyManager,
-    pub client: reqwest::Client,
 }
 
 impl VerificationServices {
@@ -16,13 +14,7 @@ impl VerificationServices {
         Self {
             verifier: verifier.clone(),
             relying_party: RelyingPartyManager::new([verifier]).unwrap(),
-            client: reqwest::Client::new(),
         }
-    }
-
-    pub async fn send_connection_notification(&self, notification_uri: &url::Url) -> Result<(), reqwest::Error> {
-        self.client.post(notification_uri.clone()).send().await?;
-        Ok(())
     }
 }
 
