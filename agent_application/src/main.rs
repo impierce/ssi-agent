@@ -24,6 +24,8 @@ async fn main() {
     };
 
     let url = config!("url").expect("AGENT_APPLICATION_URL is not set");
+    // TODO: Temporary solution. In the future we need to read these kinds of values from a config file.
+    std::env::set_var("AGENT_VERIFICATION_URL", &url);
 
     info!("Application url: {:?}", url);
 
