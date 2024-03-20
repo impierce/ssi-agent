@@ -1,27 +1,65 @@
 use agent_shared::config;
-use serde_json::json;
+use async_trait::async_trait;
+use cqrs_es::{Aggregate, EventEnvelope, Query};
 
-async fn publish_event() -> Result<(), Box<dyn std::error::Error>> {
-    let target_url = config!("target_url").unwrap();
+/// An event publisher that dispatches events to an HTTP endpoint.
+pub struct EventPublisherHttp<A>
+where
+    A: Aggregate,
+{
+    pub target_url: String,
+    pub client: reqwest::Client,
+    _phantom: std::marker::PhantomData<A>,
+}
 
-    println!("target_url: {}", target_url);
+impl<A> EventPublisherHttp<A>
+where
+    A: Aggregate,
+{
+    pub fn new() -> Self {
+        let target_url = config!("target_url").unwrap();
+        let client = reqwest::Client::new();
 
-    let client = reqwest::Client::new();
-    let resp = client
-        .post(target_url)
-        .json(&json!({
-            "key": "value",
-        }))
-        .send()
-        .await?;
-    println!("{:#?}", resp);
-    Ok(())
+        EventPublisherHttp {
+            target_url,
+            client,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<A> Default for EventPublisherHttp<A>
+where
+    A: Aggregate,
+{
+    fn default() -> Self {
+        EventPublisherHttp::new()
+    }
+}
+
+#[async_trait]
+impl<A> Query<A> for EventPublisherHttp<A>
+where
+    A: Aggregate,
+{
+    async fn dispatch(&self, _view_id: &str, events: &[EventEnvelope<A>]) {
+        for event in events {
+            self.client
+                .post(self.target_url.as_str())
+                .json(&event.payload)
+                .send()
+                .await
+                .unwrap();
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use agent_verification::connection::aggregate::Connection;
+    use agent_verification::connection::event::ConnectionEvent;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -35,11 +73,31 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let target_url = format!("http://{}/ssi-events-subscriber", &mock_server.address().to_string());
+        let target_url = format!("{}/ssi-events-subscriber", &mock_server.uri());
 
-        std::env::set_var("TEST_TARGET_URL", &target_url); // which one needs to be set?
-        std::env::set_var("AGENT_EVENT_PUBLISHER_HTTP_TARGET_URL", &target_url); // which one needs to be set?
+        std::env::set_var("TEST_TARGET_URL", &target_url);
 
-        assert!(publish_event().await.is_ok());
+        let publisher = EventPublisherHttp::new();
+
+        // A new event for the `Connection` aggregate.
+        let connection_event = ConnectionEvent::SIOPv2AuthorizationResponseVerified {
+            id_token: "id_token".to_string(),
+        };
+
+        let events = [EventEnvelope::<Connection> {
+            aggregate_id: "connection-0001".to_string(),
+            sequence: 0,
+            payload: connection_event.clone(),
+            metadata: Default::default(),
+        }];
+
+        // Dispatch the event.
+        publisher.dispatch("view_id", &events).await;
+
+        // Assert that the event was dispatched to the target URL.
+        assert_eq!(
+            connection_event,
+            serde_json::from_slice(&mock_server.received_requests().await.unwrap().first().unwrap().body).unwrap()
+        );
     }
 }
