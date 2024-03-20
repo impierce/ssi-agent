@@ -1,9 +1,8 @@
-mod credential_issuer;
-mod credentials;
-mod offers;
+mod issuance;
 
-use agent_issuance::state::ApplicationState;
+use agent_issuance::state::IssuanceState;
 use agent_shared::{config, ConfigError};
+use agent_verification::state::VerificationState;
 use axum::{
     body::Bytes,
     extract::MatchedPath,
@@ -12,17 +11,19 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use credential_issuer::{
+use issuance::credential_issuer::{
     credential::credential,
     token::token,
     well_known::{
         oauth_authorization_server::oauth_authorization_server, openid_credential_issuer::openid_credential_issuer,
     },
 };
-use credentials::{credentials, get_credentials};
-use offers::offers;
+use issuance::credentials::{credentials, get_credentials};
+use issuance::offers::offers;
 use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
+
+pub type ApplicationState = (IssuanceState, VerificationState);
 
 pub fn app(state: ApplicationState) -> Router {
     let base_path = get_base_path();
@@ -36,7 +37,7 @@ pub fn app(state: ApplicationState) -> Router {
     };
 
     Router::new()
-        // Agent Preparations
+        // Agent Issuance Preparations
         .route(&path("/v1/credentials"), post(credentials))
         .route(&path("/v1/credentials/:credential_id"), get(get_credentials))
         .route(&path("/v1/offers"), post(offers))
@@ -96,6 +97,7 @@ fn get_base_path() -> Result<String, ConfigError> {
 #[cfg(test)]
 mod tests {
     use agent_store::in_memory;
+    use agent_verification::services::test_utils::test_verification_services;
     use axum::routing::post;
     use oid4vci::credential_issuer::{
         credential_issuer_metadata::CredentialIssuerMetadata, credentials_supported::CredentialsSupportedObject,
@@ -144,10 +146,11 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn test_base_path_routes() {
-        let state = in_memory::application_state().await;
+        let issuance_state = in_memory::issuance_state().await;
+        let verification_state = in_memory::verification_state(test_verification_services()).await;
 
         std::env::set_var("AGENT_APPLICATION_BASE_PATH", "unicore");
-        let router = app(state);
+        let router = app((issuance_state, verification_state));
 
         let _ = router.route("/auth/token", post(handler));
     }

@@ -15,8 +15,7 @@ use crate::server_config::services::ServerConfigServices;
 #[derive(Clone, Default, Deserialize, Serialize, Debug)]
 pub struct ServerConfig {
     authorization_server_metadata: AuthorizationServerMetadata,
-    // TODO: Remove `Option` once CredentialIssuerMetadata is `Default`
-    credential_issuer_metadata: Option<CredentialIssuerMetadata>,
+    credential_issuer_metadata: CredentialIssuerMetadata,
 }
 
 #[async_trait]
@@ -36,7 +35,6 @@ impl Aggregate for ServerConfig {
         _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         use ServerConfigCommand::*;
-        use ServerConfigError::*;
         use ServerConfigEvent::*;
 
         info!("Handling command: {:?}", command);
@@ -51,9 +49,6 @@ impl Aggregate for ServerConfig {
             }]),
 
             CreateCredentialsSupported { credentials_supported } => {
-                self.credential_issuer_metadata
-                    .as_ref()
-                    .ok_or(MissingCredentialIssuerMetadataError)?;
                 Ok(vec![CredentialsSupportedCreated { credentials_supported }])
             }
         }
@@ -70,10 +65,10 @@ impl Aggregate for ServerConfig {
                 credential_issuer_metadata,
             } => {
                 self.authorization_server_metadata = *authorization_server_metadata;
-                self.credential_issuer_metadata.replace(credential_issuer_metadata);
+                self.credential_issuer_metadata = credential_issuer_metadata;
             }
             CredentialsSupportedCreated { credentials_supported } => {
-                self.credential_issuer_metadata.as_mut().unwrap().credentials_supported = credentials_supported
+                self.credential_issuer_metadata.credentials_supported = credentials_supported
             }
         }
     }

@@ -9,19 +9,19 @@ use agent_issuance::{
         services::OfferServices,
     },
     server_config::services::ServerConfigServices,
-    state::{generic_query, ApplicationState, Command, CommandHandlers, ViewRepositories},
+    state::{CommandHandlers, IssuanceState, ViewRepositories},
     SimpleLoggingQuery,
 };
+use agent_shared::{application_state::Command, generic_query::generic_query};
+use agent_verification::{services::VerificationServices, state::VerificationState};
 use async_trait::async_trait;
 use cqrs_es::{
     mem_store::MemStore,
     persist::{PersistenceError, ViewContext, ViewRepository},
     Aggregate, CqrsFramework, Query, View,
 };
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::Mutex;
 
 #[derive(Default)]
 struct MemRepository<V: View<A>, A: Aggregate> {
@@ -45,13 +45,13 @@ where
         Ok(self
             .map
             .lock()
-            .unwrap()
+            .await
             .get(view_id)
             .map(|view| serde_json::from_value(view.clone()).unwrap()))
     }
 
     async fn load_with_context(&self, view_id: &str) -> Result<Option<(V, ViewContext)>, PersistenceError> {
-        Ok(self.map.lock().unwrap().get(view_id).map(|view| {
+        Ok(self.map.lock().await.get(view_id).map(|view| {
             let view = serde_json::from_value(view.clone()).unwrap();
             let view_context = ViewContext::new(view_id.to_string(), 0);
             (view, view_context)
@@ -60,7 +60,7 @@ where
 
     async fn update_view(&self, view: V, context: ViewContext) -> Result<(), PersistenceError> {
         let payload = serde_json::to_value(&view).unwrap();
-        self.map.lock().unwrap().insert(context.view_instance_id, payload);
+        self.map.lock().await.insert(context.view_instance_id, payload);
         Ok(())
     }
 }
@@ -109,7 +109,7 @@ where
     }
 }
 
-pub async fn application_state() -> agent_issuance::state::ApplicationState {
+pub async fn issuance_state() -> IssuanceState {
     // Initialize the in-memory repositories.
     let server_config = Arc::new(MemRepository::default());
     let credential = Arc::new(MemRepository::default());
@@ -121,7 +121,7 @@ pub async fn application_state() -> agent_issuance::state::ApplicationState {
     let pre_authorized_code_query = PreAuthorizedCodeQuery::new(pre_authorized_code.clone());
     let access_token_query = AccessTokenQuery::new(access_token.clone());
 
-    ApplicationState {
+    IssuanceState {
         command: CommandHandlers {
             server_config: Arc::new(
                 AggregateHandler::new(ServerConfigServices)
@@ -147,6 +147,31 @@ pub async fn application_state() -> agent_issuance::state::ApplicationState {
             offer,
             pre_authorized_code,
             access_token,
+        },
+    }
+}
+
+pub async fn verification_state(verification_services: Arc<VerificationServices>) -> VerificationState {
+    // Initialize the in-memory repositories.
+    let authorization_request = Arc::new(MemRepository::default());
+    let connection = Arc::new(MemRepository::default());
+
+    VerificationState {
+        command: agent_verification::state::CommandHandlers {
+            authorization_request: Arc::new(
+                AggregateHandler::new(verification_services.clone())
+                    .append_query(SimpleLoggingQuery {})
+                    .append_query(generic_query(authorization_request.clone())),
+            ),
+            connection: Arc::new(
+                AggregateHandler::new(verification_services)
+                    .append_query(SimpleLoggingQuery {})
+                    .append_query(generic_query(connection.clone())),
+            ),
+        },
+        query: agent_verification::state::ViewRepositories {
+            authorization_request,
+            connection,
         },
     }
 }

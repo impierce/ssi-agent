@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
+use agent_secret_manager::services::SecretManagerServices;
+use agent_shared::generate_random_string;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use did_key::{from_existing_key, Ed25519KeyPair};
 use jsonwebtoken::{Algorithm, Header};
+use oid4vc_core::authentication::subject::Subject;
 use oid4vc_core::{jwt, Decoder, Subjects};
-use oid4vc_manager::methods::key_method::KeySubject;
-use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
 use oid4vci::credential_format_profiles::{self, CredentialFormats};
 use oid4vci::credential_issuer::CredentialIssuer;
 use oid4vci::credential_offer::{CredentialOffer, CredentialOfferQuery, CredentialsObject, Grants, PreAuthorizedCode};
@@ -14,7 +14,6 @@ use oid4vci::credential_response::{CredentialResponse, CredentialResponseType};
 use oid4vci::token_request::TokenRequest;
 use oid4vci::token_response::TokenResponse;
 use oid4vci::VerifiableCredentialJwt;
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::info;
@@ -23,24 +22,6 @@ use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError::{self, *};
 use crate::offer::event::OfferEvent;
 use crate::offer::services::OfferServices;
-
-// TODO: remove this.
-const UNSAFE_ISSUER_KEY: &str = "this-is-a-very-UNSAFE-issuer-key";
-
-fn generate_random_string() -> String {
-    let mut rng = rand::thread_rng();
-
-    // Generate 32 random bytes (256 bits)
-    let random_bytes: [u8; 32] = rng.gen();
-
-    // Convert the random bytes to a hexadecimal string
-    let random_string: String = random_bytes.iter().fold(String::new(), |mut acc, byte| {
-        acc.push_str(&format!("{:02x}", byte));
-        acc
-    });
-
-    random_string
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Offer {
@@ -141,16 +122,14 @@ impl Aggregate for Offer {
                 mut credentials,
                 credential_request,
             } => {
-                use oid4vc_core::Subject;
-
                 // TODO: support batch credentials.
                 let mut credential = credentials.pop().ok_or(MissingCredentialError)?;
 
-                // TODO: utilize `agent_kms`.
-                let issuer = Arc::new(KeySubject::from_keypair(
-                    from_existing_key::<Ed25519KeyPair>(b"", Some(UNSAFE_ISSUER_KEY.as_bytes())),
-                    None,
-                ));
+                let issuer = Arc::new(futures::executor::block_on(async {
+                    let mut services = SecretManagerServices::new(None);
+                    services.init().await.unwrap();
+                    services.secret_manager.unwrap()
+                }));
                 let issuer_did = issuer.identifier().unwrap();
 
                 let credential_issuer = CredentialIssuer {
@@ -179,7 +158,6 @@ impl Aggregate for Offer {
                 let credential_response = CredentialResponse {
                     credential: CredentialResponseType::Immediate(CredentialFormats::JwtVcJson(
                         credential_format_profiles::Credential {
-                            format: JwtVcJson,
                             credential: json!(jwt::encode(
                                 issuer.clone(),
                                 Header::new(Algorithm::EdDSA),
@@ -242,21 +220,21 @@ impl Aggregate for Offer {
 
 #[cfg(test)]
 pub mod tests {
-
-    use std::{collections::VecDeque, sync::Mutex};
-
-    use crate::{
-        credential::entity::Data,
-        server_config::aggregate::server_config_tests::{AUTHORIZATION_SERVER_METADATA, CREDENTIAL_ISSUER_METADATA},
-    };
-
     use super::*;
+
     use cqrs_es::test::TestFramework;
+    use did_manager::SecretManager;
     use lazy_static::lazy_static;
     use oid4vci::{
         credential_format_profiles::{w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, Parameters},
         credential_request::CredentialRequest,
         Proof, ProofType,
+    };
+    use std::{collections::VecDeque, sync::Mutex};
+
+    use crate::{
+        credential::entity::Data,
+        server_config::aggregate::server_config_tests::{AUTHORIZATION_SERVER_METADATA, CREDENTIAL_ISSUER_METADATA},
     };
 
     type OfferTestFramework = TestFramework<Offer>;
@@ -426,7 +404,7 @@ pub mod tests {
 
     #[derive(Clone)]
     struct TestSubject {
-        key_did: Arc<KeySubject>,
+        secret_manager: Arc<SecretManager>,
         credential: String,
         access_token: String,
         pre_authorized_code: String,
@@ -474,31 +452,25 @@ pub mod tests {
               "credentialSubject": CREDENTIAL_SUBJECT["credentialSubject"].clone(),
             })
         };
-        static ref SUBJECT_1_KEY_DID: Arc<KeySubject> = Arc::new(KeySubject::from_keypair(
-            from_existing_key::<Ed25519KeyPair>(b"", Some("this-is-a-very-UNSAFE-subj-key-1".as_bytes())),
-            None,
-        ));
-        static ref SUBJECT_2_KEY_DID: Arc<KeySubject> = Arc::new(KeySubject::from_keypair(
-            from_existing_key::<Ed25519KeyPair>(b"", Some("this-is-a-very-UNSAFE-subj-key-2".as_bytes())),
-            None,
-        ));
+        static ref SUBJECT_1_KEY_DID: Arc<SecretManager> = Arc::new(secret_manager());
+        static ref SUBJECT_2_KEY_DID: Arc<SecretManager> = Arc::new(secret_manager());
         static ref VERIFIABLE_CREDENTIAL_JWT_1: String = {
-            "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa3F5WmpEZmhzeVo1YzZOdUpoYm9zV2tTajg2Mmp5V2lDQ\
-            0tIRHpOTkttOGtoI3o2TWtxeVpqRGZoc3laNWM2TnVKaGJvc1drU2o4NjJqeVdpQ0NLSER6Tk5LbThraCJ9.eyJpc3MiOiJkaWQ6a2V5On\
-            o2TWtxeVpqRGZoc3laNWM2TnVKaGJvc1drU2o4NjJqeVdpQ0NLSER6Tk5LbThraCIsInN1YiI6ImRpZDprZXk6ejZNa2pNaDdieDNyd25t\
-            aWRONzdkYWkxZ2tKWWJSY3J6d1dGOFV1OWtpa2tzMzFmIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbIm\
+            "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGO\
+            GtiY3JqWnBYM3FkI3o2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCJ9.eyJpc3MiOiJkaWQ6a2V5On\
+            o2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNK\
+            QVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbIm\
             h0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3Aw\
             L2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHA6Ly9leGFtcGxlLmNvbS9jcmVkZW50aWFscy8zNTI3IiwidHlwZSI6WyJWZXJpZm\
-            lhYmxlQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rcXlaakRmaHN5WjVjNk51Smhi\
-            b3NXa1NqODYyanlXaUNDS0hEek5OS204a2giLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5hbWUiOiJUZWFtd2\
-            9yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rak1oN2J4M3J3bm1pZE43N2RhaTFna0pZYlJjcnp3\
-            V0Y4VXU5a2lra3MzMWYiLCJ0eXBlIjoiQWNoaWV2ZW1lbnRTdWJqZWN0IiwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbG\
+            lhYmxlQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3Smpl\
+            NXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5hbWUiOiJUZWFtd2\
+            9yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdr\
+            eUY4a2JjcmpacFgzcWQiLCJ0eXBlIjoiQWNoaWV2ZW1lbnRTdWJqZWN0IiwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbG\
             UuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEi\
             OnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY2\
             9nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNv\
             Z25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbn\
-            QuIiwibmFtZSI6IlRlYW13b3JrIn19fX0.7hsVlJTwTcZkxI7H0dVjjdtTsmaKE3uLAhLBkavu0eqjQGZWPZqq62tOPVJF_4csi1EvCgeG\
-            I5uhrYD2cxM8Bw"
+            QuIiwibmFtZSI6IlRlYW13b3JrIn19fX0.ynkpX-rZlw0S4Vgnffn8y8fZhVOIqVid8yEUCMUNT20EC143uOMtuvpmktu5NvhXlLZTaNPe\
+            _cLt0BYnPMcKDg"
                 .to_string()
         };
         static ref VERIFIABLE_CREDENTIAL_JWT_2: String = {
@@ -526,7 +498,7 @@ pub mod tests {
         let pre_authorized_code = PRE_AUTHORIZED_CODES.lock().unwrap()[0].clone();
 
         TestSubject {
-            key_did: SUBJECT_1_KEY_DID.clone(),
+            secret_manager: SUBJECT_1_KEY_DID.clone(),
             credential: VERIFIABLE_CREDENTIAL_JWT_1.clone(),
             pre_authorized_code: pre_authorized_code.clone(),
             access_token: ACCESS_TOKENS.lock().unwrap()[0].clone(),
@@ -555,11 +527,8 @@ pub mod tests {
     }
 
     fn credential_request(subject: TestSubject) -> CredentialRequest {
-        use oid4vc_core::Subject;
-
         CredentialRequest {
             credential_format: CredentialFormats::JwtVcJson(Parameters {
-                format: JwtVcJson,
                 parameters: (
                     CredentialDefinition {
                         type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
@@ -572,8 +541,8 @@ pub mod tests {
             proof: Some(
                 Proof::builder()
                     .proof_type(ProofType::Jwt)
-                    .signer(subject.key_did.clone())
-                    .iss(subject.key_did.identifier().unwrap())
+                    .signer(subject.secret_manager.clone())
+                    .iss(subject.secret_manager.identifier().unwrap())
                     .aud(CREDENTIAL_ISSUER_METADATA.credential_issuer.clone())
                     .iat(1571324800)
                     .exp(9999999999i64)
@@ -588,12 +557,19 @@ pub mod tests {
         CredentialResponse {
             credential: CredentialResponseType::Immediate(CredentialFormats::JwtVcJson(
                 credential_format_profiles::Credential {
-                    format: JwtVcJson,
                     credential: json!(subject.credential.clone()),
                 },
             )),
             c_nonce: None,
             c_nonce_expires_in: None,
         }
+    }
+
+    fn secret_manager() -> SecretManager {
+        futures::executor::block_on(async {
+            let mut services = SecretManagerServices::new(None);
+            services.init().await.unwrap();
+            services.secret_manager.unwrap()
+        })
     }
 }

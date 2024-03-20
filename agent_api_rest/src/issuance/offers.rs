@@ -1,9 +1,9 @@
 use agent_issuance::{
-    handlers::{command_handler, query_handler},
-    offer::command::OfferCommand,
+    offer::{command::OfferCommand, queries::OfferView},
     server_config::queries::ServerConfigView,
-    state::{ApplicationState, SERVER_CONFIG_ID},
+    state::{IssuanceState, SERVER_CONFIG_ID},
 };
+use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -13,7 +13,7 @@ use serde_json::Value;
 use tracing::info;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> Response {
+pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Json<Value>) -> Response {
     info!("Request Body: {}", payload);
 
     let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
@@ -43,7 +43,10 @@ pub(crate) async fn offers(State(state): State<ApplicationState>, Json(payload):
     }
 
     match query_handler(subject_id, &state.query.offer).await {
-        Ok(Some(offer_view)) => (StatusCode::OK, Json(offer_view.form_url_encoded_credential_offer)).into_response(),
+        Ok(Some(OfferView {
+            form_url_encoded_credential_offer,
+            ..
+        })) => (StatusCode::OK, Json(form_url_encoded_credential_offer)).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
@@ -54,22 +57,20 @@ pub mod tests {
 
     use crate::{
         app,
-        credentials::tests::credentials,
+        issuance::credentials::tests::credentials,
         tests::{BASE_URL, SUBJECT_ID},
     };
 
     use super::*;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
     use agent_store::in_memory;
+    use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
         http::{self, Request},
         Router,
     };
-    use oid4vci::{
-        credential_format_profiles::CredentialFormats,
-        credential_offer::{CredentialOffer, CredentialOfferQuery, Grants, PreAuthorizedCode},
-    };
+    use oid4vci::credential_offer::{CredentialOffer, CredentialOfferQuery, Grants, PreAuthorizedCode};
     use serde_json::json;
     use tower::Service;
 
@@ -106,7 +107,7 @@ pub mod tests {
                     ..
                 }),
             ..
-        }) = CredentialOfferQuery::<CredentialFormats>::from_str(value.as_str().unwrap()).unwrap()
+        }) = CredentialOfferQuery::from_str(value.as_str().unwrap()).unwrap()
         else {
             unreachable!()
         };
@@ -116,11 +117,12 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_offers_endpoint() {
-        let state = in_memory::application_state().await;
+        let issuance_state = in_memory::issuance_state().await;
+        let verification_state = in_memory::verification_state(test_verification_services()).await;
 
-        initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
+        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
-        let mut app = app(state);
+        let mut app = app((issuance_state, verification_state));
 
         credentials(&mut app).await;
         let _pre_authorized_code = offers(&mut app).await;
