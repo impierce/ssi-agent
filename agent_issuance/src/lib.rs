@@ -7,7 +7,6 @@ pub mod credential;
 pub mod offer;
 pub mod server_config;
 
-pub mod handlers;
 pub mod startup_commands;
 pub mod state;
 

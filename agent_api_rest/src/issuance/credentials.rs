@@ -1,9 +1,9 @@
 use agent_issuance::{
     credential::{command::CredentialCommand, entity::Data, queries::CredentialView},
-    handlers::{command_handler, query_handler},
     offer::command::OfferCommand,
-    state::ApplicationState,
+    state::IssuanceState,
 };
+use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -14,10 +14,7 @@ use serde_json::Value;
 use tracing::info;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn get_credentials(
-    State(state): State<ApplicationState>,
-    Path(credential_id): Path<String>,
-) -> Response {
+pub(crate) async fn get_credentials(State(state): State<IssuanceState>, Path(credential_id): Path<String>) -> Response {
     // Get the credential if it exists.
     match query_handler(&credential_id, &state.query.credential).await {
         Ok(Some(CredentialView { data: Data { raw }, .. })) => (StatusCode::OK, Json(raw)).into_response(),
@@ -27,7 +24,7 @@ pub(crate) async fn get_credentials(
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn credentials(State(state): State<ApplicationState>, Json(payload): Json<Value>) -> Response {
+pub(crate) async fn credentials(State(state): State<IssuanceState>, Json(payload): Json<Value>) -> Response {
     info!("Request Body: {}", payload);
 
     // TODO: should we rename this to `offer_id`?
@@ -48,7 +45,7 @@ pub(crate) async fn credentials(State(state): State<ApplicationState>, Json(payl
     let command = CredentialCommand::CreateUnsignedCredential {
         data: Data { raw: data },
         credential_format_template: serde_json::from_str(include_str!(
-            "../../agent_issuance/res/credential_format_templates/openbadges_v3.json"
+            "../../../agent_issuance/res/credential_format_templates/openbadges_v3.json"
         ))
         .unwrap(),
     };
@@ -206,11 +203,11 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_credentials_endpoint() {
-        let state = in_memory::application_state().await;
+        let issuance_state = in_memory::issuance_state().await;
 
-        initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
+        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
-        let mut app = app(state);
+        let mut app = app((issuance_state, ()));
 
         credentials(&mut app).await;
     }

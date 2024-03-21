@@ -105,6 +105,7 @@ dependencies = [
  "agent_secret_manager",
  "agent_shared",
  "async-trait",
+ "axum 0.7.4",
  "cqrs-es",
  "derivative",
  "did_manager",
@@ -115,12 +116,10 @@ dependencies = [
  "oid4vc-core",
  "oid4vc-manager",
  "oid4vci",
- "rand 0.8.5",
  "serde",
  "serde_json",
  "serial_test",
  "thiserror",
- "time",
  "tokio",
  "tracing",
  "tracing-test",
@@ -149,8 +148,13 @@ dependencies = [
 name = "agent_shared"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "axum 0.7.4",
  "config",
+ "cqrs-es",
  "dotenvy",
+ "rand 0.8.5",
+ "time",
  "tracing",
  "url",
 ]

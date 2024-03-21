@@ -20,7 +20,9 @@ oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "10a6bd
 oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "10a6bd7" }
 oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "10a6bd7" }
 
+async-trait = "0.1"
 axum = { version = "0.7", features = ["tracing"] }
+cqrs-es = "0.4.2"
 lazy_static = "1.4"
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0" }
