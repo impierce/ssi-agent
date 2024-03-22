@@ -4,6 +4,9 @@ pub mod generic_query;
 pub mod handlers;
 pub mod url_utils;
 
+#[cfg(feature = "test")]
+pub mod secret_manager;
+
 pub use ::config::ConfigError;
 use rand::Rng;
 pub use url_utils::UrlAppendHelpers;
