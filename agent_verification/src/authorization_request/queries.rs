@@ -18,8 +18,6 @@ impl View<AuthorizationRequest> for AuthorizationRequestView {
     fn update(&mut self, event: &EventEnvelope<AuthorizationRequest>) {
         use crate::authorization_request::event::AuthorizationRequestEvent::*;
 
-        println!("AuthorizationRequestView::update: {:?}", event.payload);
-
         match &event.payload {
             AuthorizationRequestCreated { authorization_request } => {
                 self.siopv2_authorization_request = Some(*authorization_request.clone());
