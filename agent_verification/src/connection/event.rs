@@ -11,7 +11,7 @@ impl DomainEvent for ConnectionEvent {
         use ConnectionEvent::*;
 
         let event_type: &str = match self {
-            SIOPv2AuthorizationResponseVerified { .. } => "AuthorizationRequestVerified",
+            SIOPv2AuthorizationResponseVerified { .. } => "SIOPv2AuthorizationResponseVerified",
         };
         event_type.to_string()
     }
