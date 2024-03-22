@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use agent_api_rest::app;
 use agent_issuance::{startup_commands::startup_commands, state::initialize};
-use agent_shared::config;
+use agent_shared::{config, secret_manager::secret_manager};
 use agent_store::{in_memory, postgres};
+use agent_verification::services::VerificationServices;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -18,9 +21,16 @@ async fn main() {
         _ => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
     }
 
-    let issuance_state = match config!("event_store").unwrap().as_str() {
-        "postgres" => postgres::issuance_state().await,
-        _ => in_memory::issuance_state().await,
+    let verification_services = Arc::new(VerificationServices::new(Arc::new(secret_manager().await)));
+    let (issuance_state, verification_state) = match config!("event_store").unwrap().as_str() {
+        "postgres" => (
+            postgres::issuance_state().await,
+            postgres::verification_state(verification_services).await,
+        ),
+        _ => (
+            in_memory::issuance_state().await,
+            in_memory::verification_state(verification_services).await,
+        ),
     };
 
     let url = config!("url").expect("AGENT_APPLICATION_URL is not set");
@@ -35,5 +45,7 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await.unwrap();
     info!("listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app((issuance_state, ()))).await.unwrap();
+    axum::serve(listener, app((issuance_state, verification_state)))
+        .await
+        .unwrap();
 }
