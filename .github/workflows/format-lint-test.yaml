@@ -16,7 +16,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Format
-        run: cargo fmt -- --check
+        run: cargo fmt --all -- --check
 
       - name: Lint
         run: cargo clippy --all-targets --all-features -- -D warnings
