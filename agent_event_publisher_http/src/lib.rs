@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_with::skip_serializing_none;
 
 #[cfg(feature = "test")]
-pub static TEST_EVENT_PUBLISHER_HTTP_CONFIG: Mutex<Option<serde_yaml::Value>> = Mutex::new(None);
+pub static TEST_EVENT_PUBLISHER_HTTP_CONFIG: std::sync::Mutex<Option<serde_yaml::Value>> = std::sync::Mutex::new(None);
 
 /// A struct that contains all the event publishers for the different aggregates.
 #[skip_serializing_none]
