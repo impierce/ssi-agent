@@ -20,8 +20,10 @@ use cqrs_es::{
     persist::{PersistenceError, ViewContext, ViewRepository},
     Aggregate, CqrsFramework, Query, View,
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, vec};
 use tokio::sync::Mutex;
+
+use crate::{partition_adapters, OutboundAdapter};
 
 #[derive(Default)]
 struct MemRepository<V: View<A>, A: Aggregate> {
@@ -107,6 +109,12 @@ where
             cqrs: self.cqrs.append_query(Box::new(query)),
         }
     }
+
+    fn append_adapter(self, query: Box<dyn Query<A>>) -> Self {
+        Self {
+            cqrs: self.cqrs.append_query(query),
+        }
+    }
 }
 
 pub async fn issuance_state() -> IssuanceState {
@@ -151,22 +159,34 @@ pub async fn issuance_state() -> IssuanceState {
     }
 }
 
-pub async fn verification_state(verification_services: Arc<VerificationServices>) -> VerificationState {
+pub async fn verification_state(
+    verification_services: Arc<VerificationServices>,
+    outbound_adapters: Vec<Box<dyn OutboundAdapter>>,
+) -> VerificationState {
     // Initialize the in-memory repositories.
     let authorization_request = Arc::new(MemRepository::default());
     let connection = Arc::new(MemRepository::default());
 
+    // Partition the outbound adapters into the different aggregates.
+    let (_, _, _, authorization_request_adapters, connection_adapters) = partition_adapters(outbound_adapters);
+
     VerificationState {
         command: agent_verification::state::CommandHandlers {
             authorization_request: Arc::new(
-                AggregateHandler::new(verification_services.clone())
-                    .append_query(SimpleLoggingQuery {})
-                    .append_query(generic_query(authorization_request.clone())),
+                authorization_request_adapters.into_iter().fold(
+                    AggregateHandler::new(verification_services.clone())
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(authorization_request.clone())),
+                    |aggregate_handler, adapter| aggregate_handler.append_adapter(adapter),
+                ),
             ),
             connection: Arc::new(
-                AggregateHandler::new(verification_services)
-                    .append_query(SimpleLoggingQuery {})
-                    .append_query(generic_query(connection.clone())),
+                connection_adapters.into_iter().fold(
+                    AggregateHandler::new(verification_services)
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(connection.clone())),
+                    |aggregate_handler, adapter| aggregate_handler.append_adapter(adapter),
+                ),
             ),
         },
         query: agent_verification::state::ViewRepositories {
