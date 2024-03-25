@@ -16,13 +16,13 @@ pub static TEST_EVENT_PUBLISHER_HTTP_CONFIG: std::sync::Mutex<Option<serde_yaml:
 #[derive(Debug, Deserialize)]
 pub struct EventPublisherHttp {
     // Issuance
-    pub server_config_publisher: Option<AggregateEventPublisherHttp<ServerConfig>>,
-    pub credential_publisher: Option<AggregateEventPublisherHttp<Credential>>,
-    pub offer_publisher: Option<AggregateEventPublisherHttp<Offer>>,
+    pub server_config: Option<AggregateEventPublisherHttp<ServerConfig>>,
+    pub credential: Option<AggregateEventPublisherHttp<Credential>>,
+    pub offer: Option<AggregateEventPublisherHttp<Offer>>,
 
     // Verification
-    pub connection_publisher: Option<AggregateEventPublisherHttp<Connection>>,
-    pub authorization_request_publisher: Option<AggregateEventPublisherHttp<AuthorizationRequest>>,
+    pub connection: Option<AggregateEventPublisherHttp<Connection>>,
+    pub authorization_request: Option<AggregateEventPublisherHttp<AuthorizationRequest>>,
 }
 
 impl EventPublisherHttp {
@@ -45,31 +45,31 @@ impl EventPublisherHttp {
 
 impl OutboundAdapter for EventPublisherHttp {
     fn server_config(&mut self) -> Option<Box<dyn Query<ServerConfig>>> {
-        self.server_config_publisher
+        self.server_config
             .take()
             .map(|publisher| Box::new(publisher) as Box<dyn Query<ServerConfig>>)
     }
 
     fn credential(&mut self) -> Option<Box<dyn Query<Credential>>> {
-        self.credential_publisher
+        self.credential
             .take()
             .map(|publisher| Box::new(publisher) as Box<dyn Query<Credential>>)
     }
 
     fn offer(&mut self) -> Option<Box<dyn Query<Offer>>> {
-        self.offer_publisher
+        self.offer
             .take()
             .map(|publisher| Box::new(publisher) as Box<dyn Query<Offer>>)
     }
 
     fn connection(&mut self) -> Option<Box<dyn Query<Connection>>> {
-        self.connection_publisher
+        self.connection
             .take()
             .map(|publisher| Box::new(publisher) as Box<dyn Query<Connection>>)
     }
 
     fn authorization_request(&mut self) -> Option<Box<dyn Query<AuthorizationRequest>>> {
-        self.authorization_request_publisher
+        self.authorization_request
             .take()
             .map(|publisher| Box::new(publisher) as Box<dyn Query<AuthorizationRequest>>)
     }
@@ -123,11 +123,8 @@ where
     }
 }
 
-#[cfg(feature = "test")]
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
-
     use super::*;
 
     use agent_issuance::offer::event::OfferEvent;
@@ -178,12 +175,7 @@ mod tests {
         }];
 
         // Dispatch the event.
-        publisher
-            .offer_publisher
-            .as_ref()
-            .unwrap()
-            .dispatch("view_id", &events)
-            .await;
+        publisher.offer.as_ref().unwrap().dispatch("view_id", &events).await;
 
         // Assert that the event was dispatched to the target URL.
         assert_eq!(
@@ -204,12 +196,7 @@ mod tests {
         }];
 
         // Dispatch the event.
-        publisher
-            .offer_publisher
-            .as_ref()
-            .unwrap()
-            .dispatch("view_id", &events)
-            .await;
+        publisher.offer.as_ref().unwrap().dispatch("view_id", &events).await;
 
         // Assert that the event was not dispatched to the target URL.
         assert!(mock_server.received_requests().await.unwrap().len() == 1);
