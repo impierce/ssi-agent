@@ -62,13 +62,21 @@ pub mod tests {
     }
 
     #[tokio::test]
+    #[tracing_test::traced_test]
     async fn test_request_endpoint() {
         let issuance_state = in_memory::issuance_state().await;
         let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
 
         let mut app = app((issuance_state, verification_state));
 
-        let state = authorization_requests(&mut app).await;
+        let form_url_encoded_authorization_request = authorization_requests(&mut app).await;
+
+        // Extract the state from the form_url_encoded_authorization_request.
+        let state = form_url_encoded_authorization_request
+            .split("%2F")
+            .last()
+            .unwrap()
+            .to_string();
 
         request(&mut app, state).await;
     }

@@ -17,8 +17,11 @@ pub(crate) async fn redirect(
     State(verification_state): State<VerificationState>,
     Form(siopv2_authorization_response): Form<AuthorizationResponse<SIOPv2>>,
 ) -> Response {
-    // TODO: fix unwrap();
-    let authorization_request_id = siopv2_authorization_response.state.as_ref().unwrap().clone();
+    let authorization_request_id = if let Some(state) = siopv2_authorization_response.state.as_ref() {
+        state.clone()
+    } else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
 
     let siopv2_authorization_request = match query_handler(
         &authorization_request_id,
@@ -33,12 +36,18 @@ pub(crate) async fn redirect(
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
+    let connection_id = if let Some(state) = siopv2_authorization_request.body.state.as_ref() {
+        state.clone()
+    } else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+
     let command = ConnectionCommand::VerifySIOPv2AuthorizationResponse {
         siopv2_authorization_request,
         siopv2_authorization_response,
     };
 
-    if command_handler("connection_id", &verification_state.command.connection, command)
+    if command_handler(&connection_id, &verification_state.command.connection, command)
         .await
         .is_err()
     {
@@ -56,8 +65,9 @@ pub mod tests {
         app,
         verification::{authorization_requests::tests::authorization_requests, relying_party::request::tests::request},
     };
+    use agent_event_publisher_http::{EventPublisherHttp, TEST_EVENT_PUBLISHER_HTTP_CONFIG};
     use agent_shared::secret_manager::secret_manager;
-    use agent_store::in_memory;
+    use agent_store::{in_memory, OutboundAdapter};
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
@@ -72,6 +82,10 @@ pub mod tests {
     };
     use oid4vc_manager::ProviderManager;
     use tower::Service;
+    use wiremock::{
+        matchers::{method, path},
+        Mock, MockServer, ResponseTemplate,
+    };
 
     pub async fn redirect(app: &mut Router, state: String) {
         let authorization_request = AuthorizationRequest::<Object<SIOPv2>>::builder()
@@ -112,15 +126,54 @@ pub mod tests {
     }
 
     #[tokio::test]
+    #[tracing_test::traced_test]
     async fn test_redirect_endpoint() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/ssi-events-subscriber"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&mock_server)
+            .await;
+
+        let target_url = format!("{}/ssi-events-subscriber", &mock_server.uri());
+
+        TEST_EVENT_PUBLISHER_HTTP_CONFIG.lock().unwrap().replace(
+            serde_yaml::from_str(&format!(
+                r#"
+                    target_url: &target_url {target_url}
+
+                    connection: {{
+                        target_url: *target_url,
+                        target_events: [
+                            SIOPv2AuthorizationResponseVerified
+                        ]
+                    }}
+                "#,
+            ))
+            .unwrap(),
+        );
+
+        let outbound_adapters = vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn OutboundAdapter>];
+
         let issuance_state = in_memory::issuance_state().await;
-        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
+        let verification_state = in_memory::verification_state(test_verification_services(), outbound_adapters).await;
 
         let mut app = app((issuance_state, verification_state));
 
-        let state = authorization_requests(&mut app).await;
+        let form_url_encoded_authorization_request = authorization_requests(&mut app).await;
+
+        // Extract the state from the form_url_encoded_authorization_request.
+        let state = form_url_encoded_authorization_request
+            .split("%2F")
+            .last()
+            .unwrap()
+            .to_string();
 
         request(&mut app, state.clone()).await;
         redirect(&mut app, state).await;
+
+        // Assert that the event was dispatched to the target URL.
+        assert!(mock_server.received_requests().await.unwrap().len() == 1);
     }
 }

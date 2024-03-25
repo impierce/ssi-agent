@@ -15,7 +15,7 @@ cqrs-es.workspace = true
 reqwest = { version = "0.11", features = ["json"] }
 serde.workspace = true
 serde_with.workspace = true
-serde_yaml = "0.9"
+serde_yaml.workspace = true
 
 [dev-dependencies]
 agent_event_publisher_http = { path = ".", features = ["test"] }
@@ -23,7 +23,7 @@ agent_shared = { path = "../agent_shared", features = ["test"] }
 
 serde_json.workspace = true
 tokio.workspace = true
-wiremock = "0.6"
+wiremock.workspace = true
 
 [features]
 test = []

@@ -31,6 +31,7 @@ lazy_static = "1.4"
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_with = "3.7"
+serde_yaml = "0.9"
 thiserror = "1.0"
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.5", features = ["trace"] }
@@ -39,3 +40,4 @@ tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tracing-test = { version = "0.2" }
 url = "2.5"
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
+wiremock = "0.6"

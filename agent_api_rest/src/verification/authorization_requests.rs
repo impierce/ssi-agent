@@ -108,8 +108,8 @@ pub mod tests {
         let state = get_request_endpoint.split('/').last().unwrap().to_string();
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let body: String = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body, format!("siopv2://idtoken?client_id=did%3Akey%3Az6MkiieyoLMSVsJAZv7Jje5wWSkDEymUgkyF8kbcrjZpX3qd&request_uri=https%3A%2F%2Fmy-domain.example.org%2Fsiopv2%2Frequest%2F{state}"));
+        let form_url_encoded_authorization_request: String = serde_json::from_slice(&body).unwrap();
+        assert_eq!(form_url_encoded_authorization_request, format!("siopv2://idtoken?client_id=did%3Akey%3Az6MkiieyoLMSVsJAZv7Jje5wWSkDEymUgkyF8kbcrjZpX3qd&request_uri=https%3A%2F%2Fmy-domain.example.org%2Fsiopv2%2Frequest%2F{state}"));
 
         let response = app
             .call(
@@ -125,10 +125,11 @@ pub mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        state
+        form_url_encoded_authorization_request
     }
 
     #[tokio::test]
+    #[tracing_test::traced_test]
     async fn test_authorization_requests_endpoint() {
         let issuance_state = in_memory::issuance_state().await;
         let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
