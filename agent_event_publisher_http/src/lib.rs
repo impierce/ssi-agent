@@ -1,55 +1,124 @@
-use agent_shared::config;
+use agent_issuance::{
+    credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
+};
+use agent_store::OutboundAdapter;
+use agent_verification::{authorization_request::aggregate::AuthorizationRequest, connection::aggregate::Connection};
 use async_trait::async_trait;
-use cqrs_es::{Aggregate, EventEnvelope, Query};
+use cqrs_es::{Aggregate, DomainEvent, EventEnvelope, Query};
+use serde::Deserialize;
+use serde_with::skip_serializing_none;
 
-/// An event publisher that dispatches events to an HTTP endpoint.
-pub struct EventPublisherHttp<A>
+#[cfg(feature = "test")]
+pub static TEST_EVENT_PUBLISHER_HTTP_CONFIG: Mutex<Option<serde_yaml::Value>> = Mutex::new(None);
+
+/// A struct that contains all the event publishers for the different aggregates.
+#[skip_serializing_none]
+#[derive(Debug, Deserialize)]
+pub struct EventPublisherHttp {
+    // Issuance
+    pub server_config_publisher: Option<AggregateEventPublisherHttp<ServerConfig>>,
+    pub credential_publisher: Option<AggregateEventPublisherHttp<Credential>>,
+    pub offer_publisher: Option<AggregateEventPublisherHttp<Offer>>,
+
+    // Verification
+    pub connection_publisher: Option<AggregateEventPublisherHttp<Connection>>,
+    pub authorization_request_publisher: Option<AggregateEventPublisherHttp<AuthorizationRequest>>,
+}
+
+impl EventPublisherHttp {
+    pub fn load() -> anyhow::Result<Self> {
+        #[cfg(feature = "test")]
+        let mut config = TEST_EVENT_PUBLISHER_HTTP_CONFIG
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .clone();
+        #[cfg(not(feature = "test"))]
+        let mut config: serde_yaml::Value = serde_yaml::from_str(include_str!("../config.yml"))?;
+
+        config.apply_merge()?;
+
+        serde_yaml::from_value(config).map_err(Into::into)
+    }
+}
+
+impl OutboundAdapter for EventPublisherHttp {
+    fn server_config(&mut self) -> Option<Box<dyn Query<ServerConfig>>> {
+        self.server_config_publisher
+            .take()
+            .map(|publisher| Box::new(publisher) as Box<dyn Query<ServerConfig>>)
+    }
+
+    fn credential(&mut self) -> Option<Box<dyn Query<Credential>>> {
+        self.credential_publisher
+            .take()
+            .map(|publisher| Box::new(publisher) as Box<dyn Query<Credential>>)
+    }
+
+    fn offer(&mut self) -> Option<Box<dyn Query<Offer>>> {
+        self.offer_publisher
+            .take()
+            .map(|publisher| Box::new(publisher) as Box<dyn Query<Offer>>)
+    }
+
+    fn connection(&mut self) -> Option<Box<dyn Query<Connection>>> {
+        self.connection_publisher
+            .take()
+            .map(|publisher| Box::new(publisher) as Box<dyn Query<Connection>>)
+    }
+
+    fn authorization_request(&mut self) -> Option<Box<dyn Query<AuthorizationRequest>>> {
+        self.authorization_request_publisher
+            .take()
+            .map(|publisher| Box::new(publisher) as Box<dyn Query<AuthorizationRequest>>)
+    }
+}
+
+/// An event publisher for a specific aggregate that dispatches events to an HTTP endpoint.
+#[skip_serializing_none]
+#[derive(Debug, Deserialize)]
+pub struct AggregateEventPublisherHttp<A>
 where
     A: Aggregate,
 {
     pub target_url: String,
+    pub target_events: Vec<String>,
+    #[serde(skip)]
     pub client: reqwest::Client,
-    _phantom: std::marker::PhantomData<A>,
+    #[serde(skip)]
+    _marker: std::marker::PhantomData<A>,
 }
 
-impl<A> EventPublisherHttp<A>
+impl<A> AggregateEventPublisherHttp<A>
 where
     A: Aggregate,
 {
-    pub fn new() -> Self {
-        let target_url = config!("target_url").unwrap();
-        let client = reqwest::Client::new();
-
-        EventPublisherHttp {
+    pub fn new(target_url: String, target_events: Vec<String>) -> Self {
+        AggregateEventPublisherHttp {
             target_url,
-            client,
-            _phantom: std::marker::PhantomData,
+            target_events,
+            client: reqwest::Client::new(),
+            _marker: std::marker::PhantomData,
         }
     }
 }
 
-impl<A> Default for EventPublisherHttp<A>
-where
-    A: Aggregate,
-{
-    fn default() -> Self {
-        EventPublisherHttp::new()
-    }
-}
-
 #[async_trait]
-impl<A> Query<A> for EventPublisherHttp<A>
+impl<A> Query<A> for AggregateEventPublisherHttp<A>
 where
     A: Aggregate,
 {
     async fn dispatch(&self, _view_id: &str, events: &[EventEnvelope<A>]) {
         for event in events {
+            if self.target_events.contains(&event.payload.event_type()) {
             self.client
-                .post(self.target_url.as_str())
+                    .post(&self.target_url)
                 .json(&event.payload)
                 .send()
                 .await
-                .unwrap();
+                    .ok();
+            }
         }
     }
 }
