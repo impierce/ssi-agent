@@ -7,7 +7,6 @@ use crate::authorization_request::queries::AuthorizationRequestView;
 use crate::connection::aggregate::Connection;
 use crate::connection::queries::ConnectionView;
 
-use agent_shared::application_state::ApplicationState;
 use axum::extract::FromRef;
 
 #[derive(Clone)]
@@ -16,9 +15,9 @@ pub struct VerificationState {
     pub query: Queries,
 }
 
-impl<I> FromRef<ApplicationState<I, VerificationState>> for VerificationState {
-    fn from_ref(application_state: &ApplicationState<I, VerificationState>) -> VerificationState {
-        application_state.verification.clone()
+impl<I> FromRef<(I, VerificationState)> for VerificationState {
+    fn from_ref(application_state: &(I, VerificationState)) -> VerificationState {
+        application_state.1.clone()
     }
 }
 

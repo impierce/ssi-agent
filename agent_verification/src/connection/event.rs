@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum ConnectionEvent {
     SIOPv2AuthorizationResponseVerified { id_token: String },
-    ConnectionNotificationSent,
 }
 
 impl DomainEvent for ConnectionEvent {
@@ -12,8 +11,7 @@ impl DomainEvent for ConnectionEvent {
         use ConnectionEvent::*;
 
         let event_type: &str = match self {
-            SIOPv2AuthorizationResponseVerified { .. } => "AuthorizationRequestVerified",
-            ConnectionNotificationSent => "ConnectionNotificationSent",
+            SIOPv2AuthorizationResponseVerified { .. } => "SIOPv2AuthorizationResponseVerified",
         };
         event_type.to_string()
     }

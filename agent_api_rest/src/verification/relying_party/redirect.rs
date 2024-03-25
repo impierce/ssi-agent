@@ -36,7 +36,6 @@ pub(crate) async fn redirect(
     let command = ConnectionCommand::VerifySIOPv2AuthorizationResponse {
         siopv2_authorization_request,
         siopv2_authorization_response,
-        connection_notification_uri: None,
     };
 
     if command_handler("connection_id", &verification_state.command.connection, command)
@@ -114,9 +113,10 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_redirect_endpoint() {
-        let state = in_memory::application_state(test_verification_services()).await;
+        let issuance_state = in_memory::issuance_state().await;
+        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
 
-        let mut app = app(state);
+        let mut app = app((issuance_state, verification_state));
 
         let state = authorization_requests(&mut app).await;
 

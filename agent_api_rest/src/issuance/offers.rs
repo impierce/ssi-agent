@@ -117,11 +117,12 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_offers_endpoint() {
-        let state = in_memory::application_state(test_verification_services()).await;
+        let issuance_state = in_memory::issuance_state().await;
+        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
 
-        initialize(&state.issuance, startup_commands(BASE_URL.clone())).await;
+        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
-        let mut app = app(state);
+        let mut app = app((issuance_state, verification_state));
 
         credentials(&mut app).await;
         let _pre_authorized_code = offers(&mut app).await;

@@ -8,17 +8,15 @@ use agent_issuance::{
     state::{CommandHandlers, IssuanceState, ViewRepositories},
     SimpleLoggingQuery,
 };
-use agent_shared::{
-    application_state::{ApplicationState, Command},
-    config,
-    generic_query::generic_query,
-};
+use agent_shared::{application_state::Command, config, generic_query::generic_query};
 use agent_verification::{services::VerificationServices, state::VerificationState};
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, Query};
 use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
 use sqlx::{Pool, Postgres};
 use std::{collections::HashMap, sync::Arc};
+
+use crate::{partition_adapters, OutboundAdapter};
 
 struct AggregateHandler<A>
 where
@@ -61,11 +59,15 @@ where
             cqrs: self.cqrs.append_query(Box::new(query)),
         }
     }
+
+    fn append_adapter(self, query: Box<dyn Query<A>>) -> Self {
+        Self {
+            cqrs: self.cqrs.append_query(query),
+        }
+    }
 }
 
-pub async fn application_state(
-    verification_services: Arc<VerificationServices>,
-) -> ApplicationState<IssuanceState, VerificationState> {
+pub async fn issuance_state() -> IssuanceState {
     let pool = default_postgress_pool(&config!("db_connection_string").unwrap()).await;
 
     // Initialize the postgres repositories.
@@ -79,7 +81,7 @@ pub async fn application_state(
     let pre_authorized_code_query = PreAuthorizedCodeQuery::new(pre_authorized_code.clone());
     let access_token_query = AccessTokenQuery::new(access_token.clone());
 
-    let issuance = IssuanceState {
+    IssuanceState {
         command: CommandHandlers {
             server_config: Arc::new(
                 AggregateHandler::new(pool.clone(), ServerConfigServices)
@@ -106,30 +108,44 @@ pub async fn application_state(
             pre_authorized_code,
             access_token,
         },
-    };
+    }
+}
+
+pub async fn verification_state(
+    verification_services: Arc<VerificationServices>,
+    outbound_adapters: Vec<Box<dyn OutboundAdapter>>,
+) -> VerificationState {
+    let pool = default_postgress_pool(&config!("db_connection_string").unwrap()).await;
 
     // Initialize the postgres repositories.
     let authorization_request = Arc::new(PostgresViewRepository::new("authorization_request", pool.clone()));
     let connection = Arc::new(PostgresViewRepository::new("connection", pool.clone()));
 
-    let verification = VerificationState {
+    // Partition the outbound adapters into the different aggregates.
+    let (_, _, _, authorization_request_adapters, connection_adapters) = partition_adapters(outbound_adapters);
+
+    VerificationState {
         command: agent_verification::state::CommandHandlers {
             authorization_request: Arc::new(
-                AggregateHandler::new(pool.clone(), verification_services.clone())
-                    .append_query(SimpleLoggingQuery {})
-                    .append_query(generic_query(authorization_request.clone())),
+                authorization_request_adapters.into_iter().fold(
+                    AggregateHandler::new(pool.clone(), verification_services.clone())
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(authorization_request.clone())),
+                    |aggregate_handler, adapter| aggregate_handler.append_adapter(adapter),
+                ),
             ),
             connection: Arc::new(
-                AggregateHandler::new(pool, verification_services)
-                    .append_query(SimpleLoggingQuery {})
-                    .append_query(generic_query(connection.clone())),
+                connection_adapters.into_iter().fold(
+                    AggregateHandler::new(pool, verification_services)
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(connection.clone())),
+                    |aggregate_handler, adapter| aggregate_handler.append_adapter(adapter),
+                ),
             ),
         },
         query: agent_verification::state::ViewRepositories {
             authorization_request,
             connection,
         },
-    };
-
-    ApplicationState { issuance, verification }
+    }
 }

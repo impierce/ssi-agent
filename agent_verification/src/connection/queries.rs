@@ -20,7 +20,6 @@ impl View<Connection> for ConnectionView {
             SIOPv2AuthorizationResponseVerified { id_token } => {
                 self.id_token = Some(id_token.clone());
             }
-            ConnectionNotificationSent => {}
         }
     }
 }
