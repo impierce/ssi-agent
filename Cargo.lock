@@ -90,6 +90,7 @@ name = "agent_application"
 version = "0.1.0"
 dependencies = [
  "agent_api_rest",
+ "agent_event_publisher_http",
  "agent_issuance",
  "agent_shared",
  "agent_store",
@@ -108,12 +109,18 @@ dependencies = [
 name = "agent_event_publisher_http"
 version = "0.1.0"
 dependencies = [
+ "agent_issuance",
  "agent_shared",
+ "agent_store",
  "agent_verification",
+ "anyhow",
  "async-trait",
  "cqrs-es",
  "reqwest",
+ "serde",
  "serde_json",
+ "serde_with 3.7.0",
+ "serde_yaml",
  "tokio",
  "wiremock",
 ]
@@ -5899,6 +5906,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_yaml"
+version = "0.9.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0623d197252096520c6f2a5e1171ee436e5af99a5d7caa2891e55e61950e6d9"
+dependencies = [
+ "indexmap 2.2.5",
+ "itoa",
+ "ryu",
+ "serde",
+ "unsafe-libyaml",
+]
+
+[[package]]
 name = "serdect"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7182,6 +7202,12 @@ dependencies = [
  "crypto-common",
  "subtle",
 ]
+
+[[package]]
+name = "unsafe-libyaml"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "unsigned-varint"
