@@ -94,7 +94,7 @@ pub mod tests {
             .redirect_uri("https://example.com".parse::<url::Url>().unwrap())
             .response_mode("direct_post".to_string())
             .client_metadata(ClientMetadata::default().with_subject_syntax_types_supported(vec![
-                SubjectSyntaxType::Did(DidMethod::from_str("did:test").unwrap()),
+                SubjectSyntaxType::Did(DidMethod::from_str("did:key").unwrap()),
             ]))
             .nonce("nonce".to_string())
             .state(state)

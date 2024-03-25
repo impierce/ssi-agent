@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 use agent_api_rest::app;
 use agent_event_publisher_http::EventPublisherHttp;
@@ -6,6 +6,7 @@ use agent_issuance::{startup_commands::startup_commands, state::initialize};
 use agent_shared::{config, secret_manager::secret_manager};
 use agent_store::{in_memory, postgres, OutboundAdapter};
 use agent_verification::services::VerificationServices;
+use oid4vc_core::{client_metadata::ClientMetadata, DidMethod, SubjectSyntaxType};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -22,7 +23,12 @@ async fn main() {
         _ => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
     }
 
-    let verification_services = Arc::new(VerificationServices::new(Arc::new(secret_manager().await)));
+    let verification_services = Arc::new(VerificationServices::new(
+        Arc::new(secret_manager().await),
+        // TODO: Temporary solution. Remove this once `ClientMetadata` is part of `RelyingPartyManager`.
+        ClientMetadata::default()
+            .with_subject_syntax_types_supported(vec![SubjectSyntaxType::Did(DidMethod::from_str("did:key").unwrap())]),
+    ));
 
     let outbound_adapters: Vec<Box<dyn OutboundAdapter>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
 

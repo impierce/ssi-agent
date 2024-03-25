@@ -42,11 +42,7 @@ impl Aggregate for AuthorizationRequest {
         info!("Handling command: {:?}", command);
 
         match command {
-            CreateAuthorizationRequest {
-                client_metadata,
-                state,
-                nonce,
-            } => {
+            CreateAuthorizationRequest { state, nonce } => {
                 let verifier = &services.verifier;
                 let verifier_did = verifier.identifier().unwrap();
 
@@ -60,7 +56,7 @@ impl Aggregate for AuthorizationRequest {
                         .scope(Scope::openid())
                         .redirect_uri(redirect_uri)
                         .response_mode("direct_post".to_string())
-                        .client_metadata(*client_metadata)
+                        .client_metadata(services.client_metadata.clone())
                         .state(state)
                         .nonce(nonce)
                         .build()
@@ -145,7 +141,6 @@ pub mod tests {
         AuthorizationRequestTestFramework::with(verification_services)
             .given_no_previous_events()
             .when(AuthorizationRequestCommand::CreateAuthorizationRequest {
-                client_metadata: Box::new(CLIENT_METADATA.clone()),
                 state: "state".to_string(),
                 nonce: "nonce".to_string(),
             })
@@ -184,7 +179,7 @@ pub mod tests {
         static ref VERIFIER_DID: String = VERIFIER.identifier().unwrap();
         static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
         static ref CLIENT_METADATA: ClientMetadata = ClientMetadata::default().with_subject_syntax_types_supported(
-            vec![SubjectSyntaxType::Did(DidMethod::from_str("did:test").unwrap()),]
+            vec![SubjectSyntaxType::Did(DidMethod::from_str("did:key").unwrap()),]
         );
         pub static ref SIOPV2_AUTHORIZATION_REQUEST: SIOPv2AuthorizationRequest = SIOPv2AuthorizationRequest::builder()
             .client_id(VERIFIER_DID.clone())
@@ -211,8 +206,8 @@ pub mod tests {
              lc3BvbnNlX3R5cGUiOiJpZF90b2tlbiIsInNjb3BlIjoib3BlbmlkIiwicmVzcG9\
              uc2VfbW9kZSI6ImRpcmVjdF9wb3N0Iiwibm9uY2UiOiJub25jZSIsImNsaWVudF9\
              tZXRhZGF0YSI6eyJzdWJqZWN0X3N5bnRheF90eXBlc19zdXBwb3J0ZWQiOlsiZGl\
-             kOnRlc3QiXX19.yA-N6nmGFLbAf2JsSJ0w_Yxyk-PFxQ6lKD1e-8tf7EfJKb6w8I\
-             O3Fin4thUSIj1qS33SBLYN0BQ7rpSlkCkkAQ"
+             kOmtleSJdfX0.Q9SLE69k4qk1L72yHq3PlY0YyZm1m9do7Wlu3HjzjbHnKnzB6gT\
+             5ZfG04krgRf99CgyVeDh9DKnUGrHBUQN2CA"
                 .to_string();
     }
 }

@@ -100,6 +100,7 @@ dependencies = [
  "agent_verification",
  "axum 0.7.4",
  "lazy_static",
+ "oid4vc-core",
  "serde_json",
  "tokio",
  "tower-http 0.5.2",

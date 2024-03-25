@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use agent_shared::{
     generate_random_string,
     handlers::{command_handler, query_handler},
@@ -15,7 +13,6 @@ use axum::{
     Json,
 };
 use hyper::header;
-use oid4vc_core::{client_metadata::ClientMetadata, DidMethod, SubjectSyntaxType};
 use tracing::info;
 
 #[axum_macros::debug_handler]
@@ -30,10 +27,6 @@ pub(crate) async fn authorization_requests(
     let command = AuthorizationRequestCommand::CreateAuthorizationRequest {
         nonce,
         state: state.clone(),
-        // TODO: all this is SERVER_CONFIG
-        client_metadata: Box::new(ClientMetadata::default().with_subject_syntax_types_supported(vec![
-            SubjectSyntaxType::Did(DidMethod::from_str("did:key").unwrap()),
-        ])),
     };
 
     if command_handler(&state, &verification_state.command.authorization_request, command)
