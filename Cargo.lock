@@ -109,6 +109,7 @@ dependencies = [
 name = "agent_event_publisher_http"
 version = "0.1.0"
 dependencies = [
+ "agent_event_publisher_http",
  "agent_issuance",
  "agent_shared",
  "agent_store",
