@@ -112,23 +112,25 @@ where
     async fn dispatch(&self, _view_id: &str, events: &[EventEnvelope<A>]) {
         for event in events {
             if self.target_events.contains(&event.payload.event_type()) {
-            self.client
+                self.client
                     .post(&self.target_url)
-                .json(&event.payload)
-                .send()
-                .await
+                    .json(&event.payload)
+                    .send()
+                    .await
                     .ok();
             }
         }
     }
 }
 
+#[cfg(feature = "test")]
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use super::*;
 
-    use agent_verification::connection::aggregate::Connection;
-    use agent_verification::connection::event::ConnectionEvent;
+    use agent_issuance::offer::event::OfferEvent;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -144,29 +146,72 @@ mod tests {
 
         let target_url = format!("{}/ssi-events-subscriber", &mock_server.uri());
 
-        std::env::set_var("TEST_TARGET_URL", &target_url);
+        // Set the test configuration.
+        TEST_EVENT_PUBLISHER_HTTP_CONFIG.lock().unwrap().replace(
+            serde_yaml::from_str(&format!(
+                r#"
+                    target_url: &target_url {target_url}
 
-        let publisher = EventPublisherHttp::new();
+                    offer: {{
+                        target_url: *target_url,
+                        target_events: [
+                            FormUrlEncodedCredentialOfferCreated
+                        ]
+                    }}
+                "#
+            ))
+            .unwrap(),
+        );
 
-        // A new event for the `Connection` aggregate.
-        let connection_event = ConnectionEvent::SIOPv2AuthorizationResponseVerified {
-            id_token: "id_token".to_string(),
+        let publisher = EventPublisherHttp::load().unwrap();
+
+        // A new event for the `Offer` aggregate.
+        let offer_event = OfferEvent::FormUrlEncodedCredentialOfferCreated {
+            form_url_encoded_credential_offer: "form_url_encoded_credential_offer".to_string(),
         };
 
-        let events = [EventEnvelope::<Connection> {
-            aggregate_id: "connection-0001".to_string(),
+        let events = [EventEnvelope::<Offer> {
+            aggregate_id: "offer-0001".to_string(),
             sequence: 0,
-            payload: connection_event.clone(),
+            payload: offer_event.clone(),
             metadata: Default::default(),
         }];
 
         // Dispatch the event.
-        publisher.dispatch("view_id", &events).await;
+        publisher
+            .offer_publisher
+            .as_ref()
+            .unwrap()
+            .dispatch("view_id", &events)
+            .await;
 
         // Assert that the event was dispatched to the target URL.
         assert_eq!(
-            connection_event,
+            offer_event,
             serde_json::from_slice(&mock_server.received_requests().await.unwrap().first().unwrap().body).unwrap()
         );
+
+        // A new event for the `Offer` aggregate that the publisher is not interested in.
+        let offer_event = OfferEvent::CredentialsAdded {
+            credential_ids: vec!["credential-0001".to_string()],
+        };
+
+        let events = [EventEnvelope::<Offer> {
+            aggregate_id: "offer-0002".to_string(),
+            sequence: 0,
+            payload: offer_event.clone(),
+            metadata: Default::default(),
+        }];
+
+        // Dispatch the event.
+        publisher
+            .offer_publisher
+            .as_ref()
+            .unwrap()
+            .dispatch("view_id", &events)
+            .await;
+
+        // Assert that the event was not dispatched to the target URL.
+        assert!(mock_server.received_requests().await.unwrap().len() == 1);
     }
 }
