@@ -45,7 +45,7 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method(http::Method::GET)
-                    .uri(format!("/siopv2/request/{state}"))
+                    .uri(format!("/request/{state}"))
                     .body(Body::empty())
                     .unwrap(),
             )

@@ -51,15 +51,17 @@ pub fn app(state: ApplicationState) -> Router {
             &path("/.well-known/oauth-authorization-server"),
             get(oauth_authorization_server),
         )
-        .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
-        .route("/auth/token", post(token))
-        .route("/openid4vci/credential", post(credential))
+        .route(
+            &path("/.well-known/openid-credential-issuer"),
+            get(openid_credential_issuer),
+        )
+        .route(&path("/auth/token"), post(token))
+        .route(&path("/openid4vci/credential"), post(credential))
         // Agent Verification Preparations
         .route(&path("/v1/authorization_requests"), post(authorization_requests))
         // SIOPv2
-        // TODO: reconsider the route + path
-        .route("/siopv2/request/:request_id", get(request))
-        .route("/siopv2/redirect", post(redirect))
+        .route(&path("/request/:request_id"), get(request))
+        .route(&path("/redirect"), post(redirect))
         // Trace layer
         .layer(
             TraceLayer::new_for_http()
