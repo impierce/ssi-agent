@@ -35,7 +35,13 @@ impl EventPublisherHttp {
             .unwrap()
             .clone();
         #[cfg(not(feature = "test"))]
-        let mut config: serde_yaml::Value = serde_yaml::from_str(include_str!("../config.yml"))?;
+        let mut config: serde_yaml::Value = {
+            match std::fs::File::open("config.yml") {
+                Ok(config_file) => serde_yaml::from_reader(config_file)?,
+                // If the config file does not exist, return an empty config.
+                Err(_) => serde_yaml::Value::Null,
+            }
+        };
 
         config.apply_merge()?;
 
