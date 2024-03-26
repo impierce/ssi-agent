@@ -55,7 +55,7 @@ pub mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let body: String = serde_json::from_slice(&body).unwrap();
+        let body: String = String::from_utf8(body.to_vec()).unwrap();
 
         let header = body.split_once('.').unwrap().0;
         assert_eq!(header, "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkI3o2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCJ9");
