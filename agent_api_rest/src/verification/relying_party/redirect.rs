@@ -36,11 +36,7 @@ pub(crate) async fn redirect(
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
-    let connection_id = if let Some(state) = siopv2_authorization_request.body.state.as_ref() {
-        state.clone()
-    } else {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
+    let connection_id = siopv2_authorization_request.body.client_id.clone();
 
     let command = ConnectionCommand::VerifySIOPv2AuthorizationResponse {
         siopv2_authorization_request,
