@@ -36,7 +36,7 @@ impl EventPublisherHttp {
             .clone();
         #[cfg(not(feature = "test"))]
         let mut config: serde_yaml::Value = {
-            match std::fs::File::open("config.yml") {
+            match std::fs::File::open("agent_event_publisher_http/config.yml") {
                 Ok(config_file) => serde_yaml::from_reader(config_file)?,
                 // If the config file does not exist, return an empty config.
                 Err(_) => serde_yaml::Value::Null,
