@@ -29,6 +29,7 @@ pub(crate) async fn authorization_requests(
         state: state.clone(),
     };
 
+    // Create the authorization request.
     if command_handler(&state, &verification_state.command.authorization_request, command)
         .await
         .is_err()
@@ -36,6 +37,7 @@ pub(crate) async fn authorization_requests(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
+    // Sign the authorization request object.
     if command_handler(
         &state,
         &verification_state.command.authorization_request,

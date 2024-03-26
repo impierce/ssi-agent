@@ -23,6 +23,7 @@ pub(crate) async fn redirect(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
+    // Retrieve the SIOPv2 authorization request.
     let siopv2_authorization_request = match query_handler(
         &authorization_request_id,
         &verification_state.query.authorization_request,
@@ -43,6 +44,7 @@ pub(crate) async fn redirect(
         siopv2_authorization_response,
     };
 
+    // Verify the SIOPv2 authorization response.
     if command_handler(&connection_id, &verification_state.command.connection, command)
         .await
         .is_err()

@@ -11,6 +11,7 @@ pub(crate) async fn request(
     State(verification_state): State<VerificationState>,
     Path(request_id): Path<String>,
 ) -> Response {
+    // Return the authorization request object.
     match query_handler(&request_id, &verification_state.query.authorization_request).await {
         Ok(Some(AuthorizationRequestView {
             signed_authorization_request_object: Some(signed_authorization_request_object),
