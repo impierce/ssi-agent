@@ -46,7 +46,7 @@ impl Aggregate for Connection {
                 let _ = relying_party
                     .validate_response(&siopv2_authorization_response)
                     .await
-                    .unwrap();
+                    .map_err(|e| ConnectionError::InvalidSIOPv2AuthorizationResponse(e))?;
 
                 let id_token = siopv2_authorization_response.extension.id_token.clone();
 
