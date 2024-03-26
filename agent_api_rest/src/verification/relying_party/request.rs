@@ -4,7 +4,6 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 
 #[axum_macros::debug_handler]
@@ -19,7 +18,7 @@ pub(crate) async fn request(
         })) => (
             StatusCode::OK,
             // TODO: set the content type to `application/jwt` also check if this is necessary for other endpoints
-            Json(signed_authorization_request_object),
+            signed_authorization_request_object,
         )
             .into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
