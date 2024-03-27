@@ -34,8 +34,13 @@ services:
     ports:
       - 3033:3033
     environment:
-      #AGENT_CONFIG_LOG_FORMAT: json
+      # AGENT_CONFIG_LOG_FORMAT: json
       AGENT_CONFIG_EVENT_STORE: postgres
-      #AGENT_CONFIG_BASE_PATH: "unicore"
-      AGENT_APPLICATION_URL: ${AGENT_APPLICATION_URL}
+      # AGENT_CONFIG_BASE_PATH: "unicore"
+      AGENT_APPLICATION_URL: http://192.168.1.127:3033
       AGENT_STORE_DB_CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo
+      AGENT_CONFIG_STRONGHOLD_PATH: /app/res/stronghold
+      AGENT_CONFIG_STRONGHOLD_PASSWORD: "secure_password"
+    volumes:
+      # - /path/to/stronghold:/app/res/stronghold
+      - ../../agent_event_publisher_http/config.yml:/app/agent_event_publisher_http/config.yml

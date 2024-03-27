@@ -1,0 +1,12 @@
+# Configure here to which events will be dispatched to a specific `target_url`. In the example below, the
+# `EventPublisherHttp` will listen for the `SIOPv2AuthorizationResponseVerified` event which is part of the `connection`
+# aggregate. The events will be dispatched to the `https://my-domain.example.org/event-subscriber` endpoint.
+
+# target_url: &target_url "https://eohvttd05q6jjuo.m.pipedream.net"
+
+# connection: {
+#   target_url: *target_url,
+#   target_events: [
+#     SIOPv2AuthorizationResponseVerified
+#   ]
+# }
