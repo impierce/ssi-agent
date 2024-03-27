@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use axum::async_trait;
+use async_trait::async_trait;
 use cqrs_es::Aggregate;
 
 /// The `Command` trait is used to define the command handlers for the aggregates.

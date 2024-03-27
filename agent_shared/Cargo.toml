@@ -6,10 +6,8 @@ rust-version.workspace = true
 
 [dependencies]
 async-trait.workspace = true
-axum.workspace = true
 config = { version = "0.14" }
 cqrs-es.workspace = true
-did_manager.workspace = true
 dotenvy = { version = "0.15" }
 rand = "0.8"
 time = { version = "0.3" }

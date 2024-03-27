@@ -25,6 +25,8 @@ tracing-subscriber.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+agent_event_publisher_http = { path = "../agent_event_publisher_http", features = ["test"] }
+agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared", features = ["test"] }
 agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification", features = ["test"] }
@@ -35,7 +37,9 @@ mime = { version = "0.3" }
 oid4vc-core.workspace = true
 oid4vc-manager.workspace = true
 serde_urlencoded = "0.7"
+serde_yaml.workspace = true
 tokio.workspace = true
 tower = { version = "0.4" }
 tracing-test.workspace = true
 url.workspace = true
+wiremock.workspace = true

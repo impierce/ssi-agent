@@ -2,7 +2,6 @@ pub mod application_state;
 pub mod config;
 pub mod generic_query;
 pub mod handlers;
-pub mod secret_manager;
 pub mod url_utils;
 
 pub use ::config::ConfigError;
