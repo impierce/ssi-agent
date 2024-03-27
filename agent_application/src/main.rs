@@ -4,7 +4,7 @@ use agent_api_rest::app;
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_issuance::{startup_commands::startup_commands, state::initialize};
 use agent_shared::{config, secret_manager::secret_manager};
-use agent_store::{in_memory, postgres, OutboundAdapter};
+use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use oid4vc_core::{client_metadata::ClientMetadata, DidMethod, SubjectSyntaxType};
 use tracing::info;
@@ -30,16 +30,16 @@ async fn main() {
             .with_subject_syntax_types_supported(vec![SubjectSyntaxType::Did(DidMethod::from_str("did:key").unwrap())]),
     ));
 
-    let outbound_adapters: Vec<Box<dyn OutboundAdapter>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
+    let event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
 
     let (issuance_state, verification_state) = match agent_shared::config!("event_store").unwrap().as_str() {
         "postgres" => (
             postgres::issuance_state().await,
-            postgres::verification_state(verification_services, outbound_adapters).await,
+            postgres::verification_state(verification_services, event_publishers).await,
         ),
         _ => (
             in_memory::issuance_state().await,
-            in_memory::verification_state(verification_services, outbound_adapters).await,
+            in_memory::verification_state(verification_services, event_publishers).await,
         ),
     };
 
