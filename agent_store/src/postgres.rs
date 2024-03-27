@@ -16,7 +16,7 @@ use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
 use sqlx::{Pool, Postgres};
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{partition_adapters, OutboundAdapter};
+use crate::{partition_event_publishers, EventPublisher};
 
 struct AggregateHandler<A>
 where
@@ -60,7 +60,7 @@ where
         }
     }
 
-    fn append_adapter(self, query: Box<dyn Query<A>>) -> Self {
+    fn append_event_publisher(self, query: Box<dyn Query<A>>) -> Self {
         Self {
             cqrs: self.cqrs.append_query(query),
         }
@@ -113,7 +113,7 @@ pub async fn issuance_state() -> IssuanceState {
 
 pub async fn verification_state(
     verification_services: Arc<VerificationServices>,
-    outbound_adapters: Vec<Box<dyn OutboundAdapter>>,
+    event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> VerificationState {
     let pool = default_postgress_pool(&config!("db_connection_string").unwrap()).await;
 
@@ -121,25 +121,26 @@ pub async fn verification_state(
     let authorization_request = Arc::new(PostgresViewRepository::new("authorization_request", pool.clone()));
     let connection = Arc::new(PostgresViewRepository::new("connection", pool.clone()));
 
-    // Partition the outbound adapters into the different aggregates.
-    let (_, _, _, authorization_request_adapters, connection_adapters) = partition_adapters(outbound_adapters);
+    // Partition the event_publishers into the different aggregates.
+    let (_, _, _, authorization_request_event_publishers, connection_event_publishers) =
+        partition_event_publishers(event_publishers);
 
     VerificationState {
         command: agent_verification::state::CommandHandlers {
             authorization_request: Arc::new(
-                authorization_request_adapters.into_iter().fold(
+                authorization_request_event_publishers.into_iter().fold(
                     AggregateHandler::new(pool.clone(), verification_services.clone())
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(authorization_request.clone())),
-                    |aggregate_handler, adapter| aggregate_handler.append_adapter(adapter),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
             connection: Arc::new(
-                connection_adapters.into_iter().fold(
+                connection_event_publishers.into_iter().fold(
                     AggregateHandler::new(pool, verification_services)
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(connection.clone())),
-                    |aggregate_handler, adapter| aggregate_handler.append_adapter(adapter),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
         },

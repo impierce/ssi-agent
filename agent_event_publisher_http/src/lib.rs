@@ -2,8 +2,8 @@ use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
 use agent_store::{
-    AuthorizationRequestAdapter, ConnectionAdapter, CredentialAdapter, OfferAdapter, OutboundAdapter,
-    ServerConfigAdapter,
+    AuthorizationRequestEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, EventPublisher,
+    OfferEventPublisher, ServerConfigEventPublisher,
 };
 use agent_verification::{authorization_request::aggregate::AuthorizationRequest, connection::aggregate::Connection};
 use async_trait::async_trait;
@@ -52,33 +52,35 @@ impl EventPublisherHttp {
     }
 }
 
-impl OutboundAdapter for EventPublisherHttp {
-    fn server_config(&mut self) -> Option<ServerConfigAdapter> {
+impl EventPublisher for EventPublisherHttp {
+    fn server_config(&mut self) -> Option<ServerConfigEventPublisher> {
         self.server_config
             .take()
-            .map(|publisher| Box::new(publisher) as ServerConfigAdapter)
+            .map(|publisher| Box::new(publisher) as ServerConfigEventPublisher)
     }
 
-    fn credential(&mut self) -> Option<CredentialAdapter> {
+    fn credential(&mut self) -> Option<CredentialEventPublisher> {
         self.credential
             .take()
-            .map(|publisher| Box::new(publisher) as CredentialAdapter)
+            .map(|publisher| Box::new(publisher) as CredentialEventPublisher)
     }
 
-    fn offer(&mut self) -> Option<OfferAdapter> {
-        self.offer.take().map(|publisher| Box::new(publisher) as OfferAdapter)
+    fn offer(&mut self) -> Option<OfferEventPublisher> {
+        self.offer
+            .take()
+            .map(|publisher| Box::new(publisher) as OfferEventPublisher)
     }
 
-    fn connection(&mut self) -> Option<ConnectionAdapter> {
+    fn connection(&mut self) -> Option<ConnectionEventPublisher> {
         self.connection
             .take()
-            .map(|publisher| Box::new(publisher) as ConnectionAdapter)
+            .map(|publisher| Box::new(publisher) as ConnectionEventPublisher)
     }
 
-    fn authorization_request(&mut self) -> Option<AuthorizationRequestAdapter> {
+    fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher> {
         self.authorization_request
             .take()
-            .map(|publisher| Box::new(publisher) as AuthorizationRequestAdapter)
+            .map(|publisher| Box::new(publisher) as AuthorizationRequestEventPublisher)
     }
 }
 
