@@ -17,3 +17,8 @@ oid4vc-core.workspace = true
 serde.workspace = true
 serde_json = "1.0"
 tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+agent_shared = { path = "../agent_shared", features = ["test"] }
+tracing-test.workspace = true
