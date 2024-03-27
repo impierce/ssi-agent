@@ -26,6 +26,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 agent_event_publisher_http = { path = "../agent_event_publisher_http", features = ["test"] }
+agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared", features = ["test"] }
 agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification", features = ["test"] }

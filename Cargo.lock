@@ -58,6 +58,7 @@ version = "0.1.0"
 dependencies = [
  "agent_event_publisher_http",
  "agent_issuance",
+ "agent_secret_manager",
  "agent_shared",
  "agent_store",
  "agent_verification",
@@ -95,6 +96,7 @@ dependencies = [
  "agent_api_rest",
  "agent_event_publisher_http",
  "agent_issuance",
+ "agent_secret_manager",
  "agent_shared",
  "agent_store",
  "agent_verification",
@@ -182,10 +184,8 @@ name = "agent_shared"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "axum 0.7.4",
  "config",
  "cqrs-es",
- "did_manager",
  "dotenvy",
  "rand 0.8.5",
  "time",
@@ -212,6 +212,7 @@ dependencies = [
 name = "agent_verification"
 version = "0.1.0"
 dependencies = [
+ "agent_secret_manager",
  "agent_shared",
  "agent_verification",
  "anyhow",

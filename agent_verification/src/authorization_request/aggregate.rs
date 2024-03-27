@@ -120,7 +120,7 @@ impl Aggregate for AuthorizationRequest {
 pub mod tests {
     use std::str::FromStr;
 
-    use agent_shared::secret_manager::secret_manager;
+    use agent_secret_manager::secret_manager;
     use cqrs_es::test::TestFramework;
     use did_manager::SecretManager;
     use lazy_static::lazy_static;

@@ -75,7 +75,7 @@ impl Aggregate for Connection {
 pub mod tests {
     use std::sync::Arc;
 
-    use agent_shared::secret_manager::secret_manager;
+    use agent_secret_manager::secret_manager;
     use cqrs_es::test::TestFramework;
     use lazy_static::lazy_static;
     use oid4vc_core::authorization_response::AuthorizationResponse;

@@ -64,8 +64,8 @@ pub mod tests {
         verification::{authorization_requests::tests::authorization_requests, relying_party::request::tests::request},
     };
     use agent_event_publisher_http::{EventPublisherHttp, TEST_EVENT_PUBLISHER_HTTP_CONFIG};
-    use agent_shared::secret_manager::secret_manager;
-    use agent_store::{in_memory, OutboundAdapter};
+    use agent_secret_manager::secret_manager;
+    use agent_store::{in_memory, EventPublisher};
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
@@ -152,10 +152,10 @@ pub mod tests {
             .unwrap(),
         );
 
-        let outbound_adapters = vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn OutboundAdapter>];
+        let event_publishers = vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>];
 
         let issuance_state = in_memory::issuance_state().await;
-        let verification_state = in_memory::verification_state(test_verification_services(), outbound_adapters).await;
+        let verification_state = in_memory::verification_state(test_verification_services(), event_publishers).await;
 
         let mut app = app((issuance_state, verification_state));
 

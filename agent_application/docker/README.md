@@ -26,11 +26,11 @@ Inside the folder `/agent_application/docker`:
      - /path/to/stronghold:/app/res/stronghold
    ```
    You will also need to set the following environment variables: 
-   - `AGENT_CONFIG_STRONGHOLD_PATH`: The path to the Stronghold file. This value must correspond to the path to which
+   - `AGENT_SECRET_MANAGER_STRONGHOLD_PATH`: The path to the Stronghold file. This value must correspond to the path to which
      the Stronghold is mounted. Set to `/app/res/stronghold` by default. It
      is recommended to not change this environment variable.
-   - `AGENT_CONFIG_STRONGHOLD_PASSWORD`: To set the password
-   - `AGENT_CONFIG_ISSUER_KEY_ID`: To set the key id
+   - `AGENT_SECRET_MANAGER_STRONGHOLD_PASSWORD`: To set the password
+   - `AGENT_SECRET_MANAGER_ISSUER_KEY_ID`: To set the key id
 1. Optionally it is possible to configure an HTTP Event Publisher that can listen to certain events in `UniCore`
    and publish them to a `target_url`. More information about the HTTP Event Publisher can be found [here](../../agent_event_publisher_http/README.md).
 2. To start the **SSI Agent**, a **Postgres** database along with **pgadmin** (Postgres Admin Interface) simply run:
