@@ -147,7 +147,7 @@ mod tests {
     #[should_panic]
     async fn test_base_path_routes() {
         let issuance_state = in_memory::issuance_state().await;
-        let verification_state = in_memory::verification_state(test_verification_services()).await;
+        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
 
         std::env::set_var("AGENT_APPLICATION_BASE_PATH", "unicore");
         let router = app((issuance_state, verification_state));

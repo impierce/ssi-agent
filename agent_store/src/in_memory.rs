@@ -23,6 +23,8 @@ use cqrs_es::{
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 
+use crate::{partition_event_publishers, EventPublisher};
+
 #[derive(Default)]
 struct MemRepository<V: View<A>, A: Aggregate> {
     pub map: Mutex<HashMap<String, serde_json::Value>>,
@@ -107,6 +109,12 @@ where
             cqrs: self.cqrs.append_query(Box::new(query)),
         }
     }
+
+    fn append_event_publisher(self, query: Box<dyn Query<A>>) -> Self {
+        Self {
+            cqrs: self.cqrs.append_query(query),
+        }
+    }
 }
 
 pub async fn issuance_state() -> IssuanceState {
@@ -151,22 +159,35 @@ pub async fn issuance_state() -> IssuanceState {
     }
 }
 
-pub async fn verification_state(verification_services: Arc<VerificationServices>) -> VerificationState {
+pub async fn verification_state(
+    verification_services: Arc<VerificationServices>,
+    event_publishers: Vec<Box<dyn EventPublisher>>,
+) -> VerificationState {
     // Initialize the in-memory repositories.
     let authorization_request = Arc::new(MemRepository::default());
     let connection = Arc::new(MemRepository::default());
 
+    // Partition the event_publishers into the different aggregates.
+    let (_, _, _, authorization_request_event_publishers, connection_event_publishers) =
+        partition_event_publishers(event_publishers);
+
     VerificationState {
         command: agent_verification::state::CommandHandlers {
             authorization_request: Arc::new(
-                AggregateHandler::new(verification_services.clone())
-                    .append_query(SimpleLoggingQuery {})
-                    .append_query(generic_query(authorization_request.clone())),
+                authorization_request_event_publishers.into_iter().fold(
+                    AggregateHandler::new(verification_services.clone())
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(authorization_request.clone())),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
+                ),
             ),
             connection: Arc::new(
-                AggregateHandler::new(verification_services)
-                    .append_query(SimpleLoggingQuery {})
-                    .append_query(generic_query(connection.clone())),
+                connection_event_publishers.into_iter().fold(
+                    AggregateHandler::new(verification_services)
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(connection.clone())),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
+                ),
             ),
         },
         query: agent_verification::state::ViewRepositories {

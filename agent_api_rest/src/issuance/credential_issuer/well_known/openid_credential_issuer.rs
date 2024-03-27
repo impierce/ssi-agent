@@ -106,7 +106,7 @@ mod tests {
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
         let issuance_state = in_memory::issuance_state().await;
-        let verification_state = in_memory::verification_state(test_verification_services()).await;
+        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
 
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 

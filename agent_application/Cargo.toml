@@ -5,8 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-agent_issuance = { path = "../agent_issuance" }
 agent_api_rest = { path = "../agent_api_rest" }
+agent_event_publisher_http = { path = "../agent_event_publisher_http" }
+agent_issuance = { path = "../agent_issuance" }
 agent_shared = { path = "../agent_shared" }
 agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification" }
