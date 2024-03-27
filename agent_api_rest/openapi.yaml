@@ -138,3 +138,49 @@ paths:
       summary: Standard OpenID Connect endpoint for redeeming a token for a credential
       tags:
         - (proxied)
+
+  /v1/authorization_requests:
+    post:
+      summary: Create a new Authorization Request
+      # description: n/a
+      tags:
+        - Creation
+      requestBody:
+        # description: n/a
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nonce:
+                  type: string
+                  example: "0d520cbe176ab9e1f7888c70888020d84a69672a4baabd3ce1c6aaad8f6420c0"
+              required:
+                - nonce
+      responses:
+        "201":
+          description: An Authorization Request has successfully been created
+          headers:
+            Location:
+              schema:
+                type: string
+                example: "/request/43482b98aa2e071231082fc29db7a59f342a643b0c590f71083af3c7ae83f3c3"
+              description: URL of the created resource
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: siopv2://idtoken?client_id=did%3Akey%3Az6MkiieyoLMSVsJAZv7Jje5wWSkDEymUgkyF8kbcrjZpX3qd&request_uri=http%3A%2F%2F192.168.1.127%3A3033%2Frequest%2F43482b98aa2e071231082fc29db7a59f342a643b0c590f71083af3c7ae83f3c3
+
+  # (proxied)
+  /request/{state}:
+    get:
+      summary: Standard request endpoint for fetching the Authorization Request object
+      tags:
+        - (proxied)
+  /redirect:
+    post:
+      summary: Standard OAuth 2.0 redirection endpoint
+      tags:
+        - (proxied)
