@@ -13,19 +13,26 @@ use axum::{
     Json,
 };
 use hyper::header;
+use serde_json::Value;
 use tracing::info;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_requests(
     State(verification_state): State<VerificationState>,
-    nonce: String,
+    Json(payload): Json<Value>,
 ) -> Response {
-    info!("Request Body: {}", nonce);
+    info!("Request Body: {}", payload);
+
+    let nonce = if let Some(nonce) = payload["nonce"].as_str() {
+        nonce
+    } else {
+        return (StatusCode::BAD_REQUEST, "nonce is required").into_response();
+    };
 
     let state = generate_random_string();
 
     let command = AuthorizationRequestCommand::CreateAuthorizationRequest {
-        nonce,
+        nonce: nonce.to_string(),
         state: state.clone(),
     };
 
@@ -75,6 +82,7 @@ pub mod tests {
         http::{self, Request},
         Router,
     };
+    use serde_json::json;
     use tower::Service;
 
     pub async fn authorization_requests(app: &mut Router) -> String {
@@ -83,8 +91,13 @@ pub mod tests {
                 Request::builder()
                     .method(http::Method::POST)
                     .uri("/v1/authorization_requests")
-                    .header(http::header::CONTENT_TYPE, mime::TEXT.as_ref())
-                    .body(Body::from("nonce".to_string()))
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "nonce": "nonce"
+                        }))
+                        .unwrap(),
+                    ))
                     .unwrap(),
             )
             .await
