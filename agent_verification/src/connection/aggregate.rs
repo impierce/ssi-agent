@@ -31,6 +31,7 @@ impl Aggregate for Connection {
 
     async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
         use ConnectionCommand::*;
+        use ConnectionError::*;
         use ConnectionEvent::*;
 
         info!("Handling command: {:?}", command);
@@ -46,7 +47,7 @@ impl Aggregate for Connection {
                 let _ = relying_party
                     .validate_response(&siopv2_authorization_response)
                     .await
-                    .map_err(|e| ConnectionError::InvalidSIOPv2AuthorizationResponse(e))?;
+                    .map_err(InvalidSIOPv2AuthorizationResponse)?;
 
                 let id_token = siopv2_authorization_response.extension.id_token.clone();
 
