@@ -30,7 +30,7 @@ pub trait OutboundAdapter {
     fn server_config(&mut self) -> Option<ServerConfigAdapter> {
         None
     }
-    fn credential(&mut self) -> Option<Box<dyn Query<Credential>>> {
+    fn credential(&mut self) -> Option<CredentialAdapter> {
         None
     }
     fn offer(&mut self) -> Option<OfferAdapter> {

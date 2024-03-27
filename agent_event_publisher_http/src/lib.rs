@@ -1,7 +1,10 @@
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
-use agent_store::OutboundAdapter;
+use agent_store::{
+    AuthorizationRequestAdapter, ConnectionAdapter, CredentialAdapter, OfferAdapter, OutboundAdapter,
+    ServerConfigAdapter,
+};
 use agent_verification::{authorization_request::aggregate::AuthorizationRequest, connection::aggregate::Connection};
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, DomainEvent, EventEnvelope, Query};
@@ -50,34 +53,32 @@ impl EventPublisherHttp {
 }
 
 impl OutboundAdapter for EventPublisherHttp {
-    fn server_config(&mut self) -> Option<Box<dyn Query<ServerConfig>>> {
+    fn server_config(&mut self) -> Option<ServerConfigAdapter> {
         self.server_config
             .take()
-            .map(|publisher| Box::new(publisher) as Box<dyn Query<ServerConfig>>)
+            .map(|publisher| Box::new(publisher) as ServerConfigAdapter)
     }
 
-    fn credential(&mut self) -> Option<Box<dyn Query<Credential>>> {
+    fn credential(&mut self) -> Option<CredentialAdapter> {
         self.credential
             .take()
-            .map(|publisher| Box::new(publisher) as Box<dyn Query<Credential>>)
+            .map(|publisher| Box::new(publisher) as CredentialAdapter)
     }
 
-    fn offer(&mut self) -> Option<Box<dyn Query<Offer>>> {
-        self.offer
-            .take()
-            .map(|publisher| Box::new(publisher) as Box<dyn Query<Offer>>)
+    fn offer(&mut self) -> Option<OfferAdapter> {
+        self.offer.take().map(|publisher| Box::new(publisher) as OfferAdapter)
     }
 
-    fn connection(&mut self) -> Option<Box<dyn Query<Connection>>> {
+    fn connection(&mut self) -> Option<ConnectionAdapter> {
         self.connection
             .take()
-            .map(|publisher| Box::new(publisher) as Box<dyn Query<Connection>>)
+            .map(|publisher| Box::new(publisher) as ConnectionAdapter)
     }
 
-    fn authorization_request(&mut self) -> Option<Box<dyn Query<AuthorizationRequest>>> {
+    fn authorization_request(&mut self) -> Option<AuthorizationRequestAdapter> {
         self.authorization_request
             .take()
-            .map(|publisher| Box::new(publisher) as Box<dyn Query<AuthorizationRequest>>)
+            .map(|publisher| Box::new(publisher) as AuthorizationRequestAdapter)
     }
 }
 
