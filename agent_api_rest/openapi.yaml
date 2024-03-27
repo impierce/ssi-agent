@@ -171,7 +171,32 @@ paths:
             text/plain:
               schema:
                 type: string
-                example: siopv2://idtoken?client_id=did%3Akey%3Az6MkiieyoLMSVsJAZv7Jje5wWSkDEymUgkyF8kbcrjZpX3qd&request_uri=http%3A%2F%2F192.168.1.127%3A3033%2Frequest%2F43482b98aa2e071231082fc29db7a59f342a643b0c590f71083af3c7ae83f3c3
+                example: "siopv2://idtoken?client_id=did%3Akey%3Az6MkiieyoLMSVsJAZv7Jje5wWSkDEymUgkyF8kbcrjZpX3qd&request_uri=http%3A%2F%2F192.168.1.127%3A3033%2Frequest%2F43482b98aa2e071231082fc29db7a59f342a643b0c590f71083af3c7ae83f3c3"
+  /v1/authorization_requests/{authorization_requests_id}:
+    get:
+      summary: Get the Authorization Request with the given Authorization Request ID
+      tags:
+        - Retrieval
+      # description: n/a
+      parameters:
+        - in: path
+          name: authorization_requests_id
+          required: true
+          schema:
+            type: string
+            minimum: 1
+          description: The Authorization Request ID
+      responses:
+        "200":
+          description: An Authorization Request with the given Authorization Request ID has been successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+              examples:
+                open-badges-3:
+                  summary: SIOPv2 Authorization Request
+                  externalValue: res/siopv2-authorization-request.json
 
   # (proxied)
   /request/{state}:

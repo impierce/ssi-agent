@@ -24,7 +24,7 @@ use issuance::offers::offers;
 use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
 use verification::{
-    authorization_requests::authorization_requests,
+    authorization_requests::{authorization_requests, get_authorization_requests},
     relying_party::{redirect::redirect, request::request},
 };
 
@@ -59,6 +59,10 @@ pub fn app(state: ApplicationState) -> Router {
         .route(&path("/openid4vci/credential"), post(credential))
         // Agent Verification Preparations
         .route(&path("/v1/authorization_requests"), post(authorization_requests))
+        .route(
+            &path("/v1/authorization_requests/:authorization_request_id"),
+            get(get_authorization_requests),
+        )
         // SIOPv2
         .route(&path("/request/:request_id"), get(request))
         .route(&path("/redirect"), post(redirect))

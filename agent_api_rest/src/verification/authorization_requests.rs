@@ -7,7 +7,7 @@ use agent_verification::{
     state::VerificationState,
 };
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
@@ -15,6 +15,22 @@ use axum::{
 use hyper::header;
 use serde_json::Value;
 use tracing::info;
+
+#[axum_macros::debug_handler]
+pub(crate) async fn get_authorization_requests(
+    State(state): State<VerificationState>,
+    Path(authorization_request_id): Path<String>,
+) -> Response {
+    // Get the authorization request if it exists.
+    match query_handler(&authorization_request_id, &state.query.authorization_request).await {
+        Ok(Some(AuthorizationRequestView {
+            siopv2_authorization_request: Some(siopv2_authorization_request),
+            ..
+        })) => (StatusCode::OK, Json(siopv2_authorization_request)).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
 
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_requests(
@@ -63,7 +79,7 @@ pub(crate) async fn authorization_requests(
             ..
         })) => (
             StatusCode::CREATED,
-            [(header::LOCATION, &format!("/request/{state}"))],
+            [(header::LOCATION, &format!("/v1/authorization_requests/{state}"))],
             form_url_encoded_authorization_request,
         )
             .into_response(),
