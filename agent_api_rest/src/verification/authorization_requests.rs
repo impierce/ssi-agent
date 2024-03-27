@@ -64,7 +64,7 @@ pub(crate) async fn authorization_requests(
         })) => (
             StatusCode::CREATED,
             [(header::LOCATION, &format!("/request/{state}"))],
-            Json(form_url_encoded_authorization_request),
+            form_url_encoded_authorization_request,
         )
             .into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
