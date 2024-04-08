@@ -74,11 +74,12 @@ pub mod tests {
     };
     use oid4vc_core::{
         authorization_request::{AuthorizationRequest, Object},
-        client_metadata::ClientMetadata,
+        client_metadata::ClientMetadataResource,
         scope::Scope,
         DidMethod, SubjectSyntaxType,
     };
     use oid4vc_manager::ProviderManager;
+    use siopv2::authorization_request::ClientMetadataParameters;
     use tower::Service;
     use wiremock::{
         matchers::{method, path},
@@ -91,9 +92,15 @@ pub mod tests {
             .scope(Scope::openid())
             .redirect_uri("https://example.com".parse::<url::Url>().unwrap())
             .response_mode("direct_post".to_string())
-            .client_metadata(ClientMetadata::default().with_subject_syntax_types_supported(vec![
-                SubjectSyntaxType::Did(DidMethod::from_str("did:key").unwrap()),
-            ]))
+            .client_metadata(ClientMetadataResource::ClientMetadata {
+                client_name: None,
+                logo_uri: None,
+                extension: ClientMetadataParameters {
+                    subject_syntax_types_supported: vec![SubjectSyntaxType::Did(
+                        DidMethod::from_str("did:key").unwrap(),
+                    )],
+                },
+            })
             .nonce("nonce".to_string())
             .state(state)
             .build()

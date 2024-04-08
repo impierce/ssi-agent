@@ -125,7 +125,8 @@ pub mod tests {
     use did_manager::SecretManager;
     use lazy_static::lazy_static;
     use oid4vc_core::Subject;
-    use oid4vc_core::{client_metadata::ClientMetadata, DidMethod, SubjectSyntaxType};
+    use oid4vc_core::{client_metadata::ClientMetadataResource, DidMethod, SubjectSyntaxType};
+    use siopv2::authorization_request::ClientMetadataParameters;
 
     use crate::services::test_utils::test_verification_services;
 
@@ -178,9 +179,16 @@ pub mod tests {
         static ref VERIFIER: SecretManager = futures::executor::block_on(async { secret_manager().await });
         static ref VERIFIER_DID: String = VERIFIER.identifier().unwrap();
         static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
-        static ref CLIENT_METADATA: ClientMetadata = ClientMetadata::default().with_subject_syntax_types_supported(
-            vec![SubjectSyntaxType::Did(DidMethod::from_str("did:key").unwrap()),]
-        );
+        static ref CLIENT_METADATA: ClientMetadataResource<ClientMetadataParameters> =
+            ClientMetadataResource::ClientMetadata {
+                client_name: None,
+                logo_uri: None,
+                extension: ClientMetadataParameters {
+                    subject_syntax_types_supported: vec![SubjectSyntaxType::Did(
+                        DidMethod::from_str("did:key").unwrap(),
+                    )],
+                },
+            };
         pub static ref SIOPV2_AUTHORIZATION_REQUEST: SIOPv2AuthorizationRequest = SIOPv2AuthorizationRequest::builder()
             .client_id(VERIFIER_DID.clone())
             .scope(Scope::openid())

@@ -7,7 +7,8 @@ use agent_secret_manager::secret_manager;
 use agent_shared::config;
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
-use oid4vc_core::{client_metadata::ClientMetadata, DidMethod, SubjectSyntaxType};
+use oid4vc_core::{client_metadata::ClientMetadataResource, DidMethod, SubjectSyntaxType};
+use siopv2::authorization_request::ClientMetadataParameters;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -27,8 +28,13 @@ async fn main() {
     let verification_services = Arc::new(VerificationServices::new(
         Arc::new(secret_manager().await),
         // TODO: Temporary solution. Remove this once `ClientMetadata` is part of `RelyingPartyManager`.
-        ClientMetadata::default()
-            .with_subject_syntax_types_supported(vec![SubjectSyntaxType::Did(DidMethod::from_str("did:key").unwrap())]),
+        ClientMetadataResource::ClientMetadata {
+            client_name: None,
+            logo_uri: None,
+            extension: ClientMetadataParameters {
+                subject_syntax_types_supported: vec![SubjectSyntaxType::Did(DidMethod::from_str("did:key").unwrap())],
+            },
+        },
     ));
 
     let event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
