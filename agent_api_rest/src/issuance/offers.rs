@@ -70,7 +70,7 @@ pub mod tests {
         http::{self, Request},
         Router,
     };
-    use oid4vci::credential_offer::{CredentialOffer, CredentialOfferQuery, Grants, PreAuthorizedCode};
+    use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants, PreAuthorizedCode};
     use serde_json::json;
     use tower::Service;
 
@@ -97,18 +97,25 @@ pub mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
 
         let value: Value = serde_json::from_slice(&body).unwrap();
-        let CredentialOfferQuery::CredentialOffer(CredentialOffer {
-            grants:
-                Some(Grants {
-                    pre_authorized_code:
-                        Some(PreAuthorizedCode {
-                            pre_authorized_code, ..
-                        }),
-                    ..
-                }),
-            ..
-        }) = CredentialOfferQuery::from_str(value.as_str().unwrap()).unwrap()
-        else {
+        let pre_authorized_code = if let CredentialOffer::CredentialOffer(credential_offer) =
+            CredentialOffer::from_str(value.as_str().unwrap()).unwrap()
+        {
+            let CredentialOfferParameters {
+                grants:
+                    Some(Grants {
+                        pre_authorized_code:
+                            Some(PreAuthorizedCode {
+                                pre_authorized_code, ..
+                            }),
+                        ..
+                    }),
+                ..
+            } = *credential_offer
+            else {
+                unreachable!()
+            };
+            pre_authorized_code
+        } else {
             unreachable!()
         };
 

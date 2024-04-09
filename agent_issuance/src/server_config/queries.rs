@@ -25,8 +25,13 @@ impl View<ServerConfig> for ServerConfigView {
                 self.credential_issuer_metadata
                     .replace(credential_issuer_metadata.clone());
             }
-            CredentialsSupportedCreated { credentials_supported } => {
-                self.credential_issuer_metadata.as_mut().unwrap().credentials_supported = credentials_supported.clone()
+            CredentialsSupportedCreated {
+                credential_configurations_supported,
+            } => {
+                self.credential_issuer_metadata
+                    .as_mut()
+                    .unwrap()
+                    .credential_configurations_supported = credential_configurations_supported.clone()
             }
         }
     }

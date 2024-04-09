@@ -44,7 +44,7 @@ impl Aggregate for AuthorizationRequest {
         match command {
             CreateAuthorizationRequest { state, nonce } => {
                 let verifier = &services.verifier;
-                let verifier_did = verifier.identifier().unwrap();
+                let verifier_did = verifier.identifier("did:key").unwrap();
 
                 let url = config!("url").unwrap();
                 let request_uri = format!("{url}/request/{state}").parse().unwrap();
@@ -64,6 +64,7 @@ impl Aggregate for AuthorizationRequest {
                 );
 
                 let form_url_encoded_authorization_request = oid4vc_core::authorization_request::AuthorizationRequest {
+                    custom_url_scheme: "openid".to_string(),
                     body: ByReference {
                         client_id: verifier_did,
                         request_uri,
@@ -177,7 +178,7 @@ pub mod tests {
 
     lazy_static! {
         static ref VERIFIER: SecretManager = futures::executor::block_on(async { secret_manager().await });
-        static ref VERIFIER_DID: String = VERIFIER.identifier().unwrap();
+        static ref VERIFIER_DID: String = VERIFIER.identifier("did:key").unwrap();
         static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
         static ref CLIENT_METADATA: ClientMetadataResource<ClientMetadataParameters> =
             ClientMetadataResource::ClientMetadata {
@@ -200,7 +201,7 @@ pub mod tests {
             .build()
             .unwrap();
         static ref FORM_URL_ENCODED_AUTHORIZATION_REQUEST: String = "\
-        siopv2://idtoken?\
+        openid://?\
             client_id=did%3Akey%3Az6MkiieyoLMSVsJAZv7Jje5wWSkDEymUgkyF8kbcrjZpX3qd&\
             request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2Fstate"
             .to_string();

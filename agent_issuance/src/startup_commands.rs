@@ -6,9 +6,9 @@ use oid4vci::{
     },
     credential_issuer::{
         authorization_server_metadata::AuthorizationServerMetadata,
-        credential_issuer_metadata::CredentialIssuerMetadata, credentials_supported::CredentialsSupportedObject,
+        credential_configurations_supported::CredentialConfigurationsSupportedObject,
+        credential_issuer_metadata::CredentialIssuerMetadata,
     },
-    ProofType,
 };
 use serde_json::json;
 
@@ -26,12 +26,8 @@ pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
         }),
         credential_issuer_metadata: CredentialIssuerMetadata {
             credential_issuer: base_url.clone(),
-            authorization_server: None,
             credential_endpoint: base_url.append_path_segment("openid4vci/credential"),
-            deferred_credential_endpoint: None,
-            batch_credential_endpoint: None,
-            credentials_supported: vec![],
-            display: None,
+            ..Default::default()
         },
     }
 }
@@ -39,31 +35,36 @@ pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
 // TODO: Should not be a static startup command. Should be dynamic based on the configuration and/or updatable.
 pub fn create_credentials_supported() -> ServerConfigCommand {
     ServerConfigCommand::CreateCredentialsSupported {
-        credentials_supported: vec![CredentialsSupportedObject {
-            id: None,
-            credential_format: CredentialFormats::JwtVcJson(Parameters {
-                parameters: (
-                    CredentialDefinition {
-                        type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
-                        credential_subject: None,
-                    },
-                    None,
-                )
-                    .into(),
-            }),
-            scope: None,
-            cryptographic_binding_methods_supported: Some(vec!["did:key".to_string()]),
-            cryptographic_suites_supported: Some(vec!["EdDSA".to_string()]),
-            proof_types_supported: Some(vec![ProofType::Jwt]),
-            display: match (config!("credential_name"), config!("credential_logo_url")) {
-                (Ok(name), Ok(logo_url)) => Some(vec![json!({
-                    "name": name,
-                    "logo": {
-                        "url": logo_url
-                    }
-                })]),
-                _ => None,
+        credential_configurations_supported: vec![(
+            "temp".to_string(),
+            CredentialConfigurationsSupportedObject {
+                credential_format: CredentialFormats::JwtVcJson(Parameters {
+                    parameters: (
+                        CredentialDefinition {
+                            type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
+                            credential_subject: Default::default(),
+                        },
+                        None,
+                    )
+                        .into(),
+                }),
+                cryptographic_binding_methods_supported: vec!["did:key".to_string()],
+                credential_signing_alg_values_supported: vec!["EdDSA".to_string()],
+                // TODO
+                // proof_types_supported: vec![ProofType::Jwt],
+                display: match (config!("credential_name"), config!("credential_logo_url")) {
+                    (Ok(name), Ok(logo_url)) => vec![json!({
+                        "name": name,
+                        "logo": {
+                            "url": logo_url
+                        }
+                    })],
+                    _ => vec![],
+                },
+                ..Default::default()
             },
-        }],
+        )]
+        .into_iter()
+        .collect(),
     }
 }

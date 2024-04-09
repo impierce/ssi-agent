@@ -106,9 +106,11 @@ pub mod tests {
 
     lazy_static! {
         static ref SIOPV2_AUTHORIZATION_RESPONSE: AuthorizationResponse<SIOPv2> = {
-            let provider_manager =
-                ProviderManager::new([Arc::new(futures::executor::block_on(async { secret_manager().await }))])
-                    .unwrap();
+            let provider_manager = ProviderManager::new(
+                Arc::new(futures::executor::block_on(async { secret_manager().await })),
+                "did:key",
+            )
+            .unwrap();
             provider_manager
                 .generate_response(&SIOPV2_AUTHORIZATION_REQUEST, Default::default())
                 .unwrap()

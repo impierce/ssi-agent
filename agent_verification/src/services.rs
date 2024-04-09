@@ -15,7 +15,7 @@ impl VerificationServices {
     pub fn new(verifier: Arc<dyn Subject>, client_metadata: ClientMetadataResource<ClientMetadataParameters>) -> Self {
         Self {
             verifier: verifier.clone(),
-            relying_party: RelyingPartyManager::new([verifier]).unwrap(),
+            relying_party: RelyingPartyManager::new(verifier, "did:key").unwrap(),
             client_metadata,
         }
     }

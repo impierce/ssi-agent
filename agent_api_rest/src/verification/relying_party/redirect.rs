@@ -106,8 +106,11 @@ pub mod tests {
             .build()
             .unwrap();
 
-        let provider_manager =
-            ProviderManager::new([Arc::new(futures::executor::block_on(async { secret_manager().await }))]).unwrap();
+        let provider_manager = ProviderManager::new(
+            Arc::new(futures::executor::block_on(async { secret_manager().await })),
+            "did:key",
+        )
+        .unwrap();
         let authorization_response = provider_manager
             .generate_response(&authorization_request, Default::default())
             .unwrap();
