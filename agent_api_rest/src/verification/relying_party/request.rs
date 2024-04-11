@@ -5,6 +5,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use hyper::header;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn request(
@@ -18,7 +19,7 @@ pub(crate) async fn request(
             ..
         })) => (
             StatusCode::OK,
-            // TODO: set the content type to `application/jwt` also check if this is necessary for other endpoints
+            [(header::CONTENT_TYPE, "application/jwt")],
             signed_authorization_request_object,
         )
             .into_response(),
@@ -53,6 +54,8 @@ pub mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+
+        assert_eq!(response.headers().get("Content-Type").unwrap(), "application/jwt");
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: String = String::from_utf8(body.to_vec()).unwrap();
