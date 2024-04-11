@@ -7,12 +7,14 @@ use axum::{
 };
 use hyper::header;
 
+/// Instead of directly embedding the Authorization Request into a QR-code or deeplink, the `Relying Party` can embed a
+/// `request_uri` that points to this endpoint from where the Authorization Request Object can be retrieved.
+/// As described here: https://www.rfc-editor.org/rfc/rfc9101.html#name-passing-a-request-object-by-
 #[axum_macros::debug_handler]
 pub(crate) async fn request(
     State(verification_state): State<VerificationState>,
     Path(request_id): Path<String>,
 ) -> Response {
-    // Return the authorization request object.
     match query_handler(&request_id, &verification_state.query.authorization_request).await {
         Ok(Some(AuthorizationRequestView {
             signed_authorization_request_object: Some(signed_authorization_request_object),
