@@ -66,19 +66,16 @@
 									"// Split the string on the first '=' character and take the second item",
 									"const [, secondItem] = decodedString.split('=', 2);",
 									"",
-									"// Remove the last character from secondItem",
-									"const secondItemWithoutLastChar = secondItem.slice(0, -1);",
-									"",
-									"const { grants } = JSON.parse(secondItemWithoutLastChar);",
-									"",
-									"const pre_authorized_code = grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']['pre-authorized_code'];",
+									"var jsonObject = JSON.parse(secondItem);",
+									"const pre_authorized_code = jsonObject.grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']['pre-authorized_code'];",
 									"",
 									"if(pre_authorized_code){",
 									"    pm.collectionVariables.set(\"PRE_AUTHORIZED_CODE\",pre_authorized_code)",
 									"}",
 									""
 								],
-								"type": "text/javascript"
+								"type": "text/javascript",
+								"packages": {}
 							}
 						}
 					],
@@ -199,7 +196,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\n            \"VerifiableCredential\",\n            \"OpenBadgeCredential\"\n        ]\n    },\n    \"proof\": {\n        \"proof_type\": \"jwt\",\n        \"jwt\": \"eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ\"\n    }\n}",
+							"raw": "{\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\n            \"VerifiableCredential\",\n            \"OpenBadgeCredential\"\n        ]\n    },\n    \"proof\": {\n        \"proof_type\": \"jwt\",\n        \"jwt\": \"eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1rdWlSS3ExZktyekFYZVNOaUd3cnBKUFB1Z1k4QXhKWUE1Y3BDdlpDWUJEN0IjejZNa3VpUktxMWZLcnpBWGVTTmlHd3JwSlBQdWdZOEF4SllBNWNwQ3ZaQ1lCRDdCIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWt1aVJLcTFmS3J6QVhlU05pR3dycEpQUHVnWThBeEpZQTVjcEN2WkNZQkQ3QiIsImF1ZCI6Imh0dHA6Ly8xOTIuMTY4LjEuMTI3OjMwMzMvIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoidW5zYWZlX2Nfbm9uY2UifQ.wR2e4VUnVjG6IK9cntcqvc_8KEJQUd3SEjsPZwDYDlYqijZ4ZaQLxyHtzNmLkIS3FpChLrZrcvIUJrZxrWcKAg\"\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -207,6 +204,84 @@
 							}
 						},
 						"url": "http://{{HOST}}/openid4vci/credential"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Verification",
+			"item": [
+				{
+					"name": "authorization_requests",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const location = pm.response.headers.get(\"LOCATION\");",
+									"",
+									"if(location){",
+									"    pm.collectionVariables.set(\"AUTHORIZATION_REQUEST_LOCATION\",location)",
+									"}",
+									"",
+									"const authorization_request = responseBody;",
+									"",
+									"const decodedString = decodeURIComponent(authorization_request);",
+									"",
+									"// Regular expression to match the value of request_uri",
+									"const regex = /request_uri=([^&]+)/;",
+									"",
+									"// Executing the regular expression on the input string",
+									"const match = regex.exec(decodedString);",
+									"",
+									"// Extracting the value of request_uri",
+									"const requestUri = match ? decodeURIComponent(match[1]) : null;",
+									"",
+									"pm.collectionVariables.set(\"REQUEST_URI\",requestUri)",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"nonce\": \"this is a nonce\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{HOST}}/v1/authorization_requests"
+					},
+					"response": []
+				},
+				{
+					"name": "authorization_requests",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "http://{{HOST}}{{AUTHORIZATION_REQUEST_LOCATION}}"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "siopv2",
+			"item": [
+				{
+					"name": "request",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{REQUEST_URI}}"
 					},
 					"response": []
 				}
@@ -266,6 +341,16 @@
 		},
 		{
 			"key": "CREDENTIAL_LOCATION",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "AUTHORIZATION_REQUEST_LOCATION",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "REQUEST_URI",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		}

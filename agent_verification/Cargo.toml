@@ -5,8 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
 
+anyhow = "1.0"
 async-trait.workspace = true
 axum.workspace = true
 cqrs-es.workspace = true
@@ -21,8 +23,9 @@ url.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
-agent_verification = { path = ".", features = ["test"] }
 agent_shared = { path = "../agent_shared", features = ["test"] }
+agent_verification = { path = ".", features = ["test"] }
+
 did_manager.workspace = true
 lazy_static.workspace = true
 serial_test = "3.0"

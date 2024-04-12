@@ -9,6 +9,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use hyper::header;
 use serde_json::Value;
 use tracing::info;
 
@@ -46,7 +47,12 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
         Ok(Some(OfferView {
             form_url_encoded_credential_offer,
             ..
-        })) => (StatusCode::OK, Json(form_url_encoded_credential_offer)).into_response(),
+        })) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "application/x-www-form-urlencoded")],
+            form_url_encoded_credential_offer,
+        )
+            .into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
@@ -93,10 +99,14 @@ pub mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get("Content-Type").unwrap(),
+            "application/x-www-form-urlencoded"
+        );
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: String = String::from_utf8(body.to_vec()).unwrap();
 
-        let value: Value = serde_json::from_slice(&body).unwrap();
         let CredentialOfferQuery::CredentialOffer(CredentialOffer {
             grants:
                 Some(Grants {
@@ -107,7 +117,7 @@ pub mod tests {
                     ..
                 }),
             ..
-        }) = CredentialOfferQuery::from_str(value.as_str().unwrap()).unwrap()
+        }) = CredentialOfferQuery::from_str(&body).unwrap()
         else {
             unreachable!()
         };

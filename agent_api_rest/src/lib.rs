@@ -1,4 +1,5 @@
 mod issuance;
+mod verification;
 
 use agent_issuance::state::IssuanceState;
 use agent_shared::{config, ConfigError};
@@ -22,6 +23,10 @@ use issuance::credentials::{credentials, get_credentials};
 use issuance::offers::offers;
 use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
+use verification::{
+    authorization_requests::{authorization_requests, get_authorization_requests},
+    relying_party::{redirect::redirect, request::request},
+};
 
 pub type ApplicationState = (IssuanceState, VerificationState);
 
@@ -46,9 +51,22 @@ pub fn app(state: ApplicationState) -> Router {
             &path("/.well-known/oauth-authorization-server"),
             get(oauth_authorization_server),
         )
-        .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
-        .route("/auth/token", post(token))
-        .route("/openid4vci/credential", post(credential))
+        .route(
+            &path("/.well-known/openid-credential-issuer"),
+            get(openid_credential_issuer),
+        )
+        .route(&path("/auth/token"), post(token))
+        .route(&path("/openid4vci/credential"), post(credential))
+        // Agent Verification Preparations
+        .route(&path("/v1/authorization_requests"), post(authorization_requests))
+        .route(
+            &path("/v1/authorization_requests/:authorization_request_id"),
+            get(get_authorization_requests),
+        )
+        // SIOPv2
+        .route(&path("/request/:request_id"), get(request))
+        .route(&path("/redirect"), post(redirect))
+        // Trace layer
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<_>| {

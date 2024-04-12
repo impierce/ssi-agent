@@ -31,6 +31,7 @@ impl Aggregate for Connection {
 
     async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
         use ConnectionCommand::*;
+        use ConnectionError::*;
         use ConnectionEvent::*;
 
         info!("Handling command: {:?}", command);
@@ -46,7 +47,7 @@ impl Aggregate for Connection {
                 let _ = relying_party
                     .validate_response(&siopv2_authorization_response)
                     .await
-                    .unwrap();
+                    .map_err(InvalidSIOPv2AuthorizationResponse)?;
 
                 let id_token = siopv2_authorization_response.extension.id_token.clone();
 
@@ -74,7 +75,7 @@ impl Aggregate for Connection {
 pub mod tests {
     use std::sync::Arc;
 
-    use agent_shared::secret_manager::secret_manager;
+    use agent_secret_manager::secret_manager;
     use cqrs_es::test::TestFramework;
     use lazy_static::lazy_static;
     use oid4vc_core::authorization_response::AuthorizationResponse;
