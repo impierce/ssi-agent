@@ -1,3 +1,6 @@
+### 11-04-2024
+`/v1/offers` incorrectly returned with Content-Type `application/json`. The Content-Type has now been changed to `application/x-www-form-urlencoded`.
+
 ### 24-01-2024
 
 Environment variable `AGENT_APPLICATION_HOST` has changed to `AGENT_APPLICATION_URL` and requires the complete URL. e.g.:

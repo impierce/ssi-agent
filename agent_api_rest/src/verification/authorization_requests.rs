@@ -79,7 +79,10 @@ pub(crate) async fn authorization_requests(
             ..
         })) => (
             StatusCode::CREATED,
-            [(header::LOCATION, &format!("/v1/authorization_requests/{state}"))],
+            [
+                (header::LOCATION, format!("/v1/authorization_requests/{state}").as_str()),
+                (header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
+            ],
             form_url_encoded_authorization_request,
         )
             .into_response(),
@@ -120,6 +123,10 @@ pub mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::CREATED);
+        assert_eq!(
+            response.headers().get("Content-Type").unwrap(),
+            "application/x-www-form-urlencoded"
+        );
 
         let get_request_endpoint = response
             .headers()

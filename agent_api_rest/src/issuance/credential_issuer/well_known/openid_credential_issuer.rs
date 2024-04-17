@@ -61,6 +61,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get("Content-Type").unwrap(), "application/json");
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let credential_issuer_metadata: CredentialIssuerMetadata = serde_json::from_slice(&body).unwrap();

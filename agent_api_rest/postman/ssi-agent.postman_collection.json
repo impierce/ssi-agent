@@ -66,19 +66,16 @@
 									"// Split the string on the first '=' character and take the second item",
 									"const [, secondItem] = decodedString.split('=', 2);",
 									"",
-									"// Remove the last character from secondItem",
-									"const secondItemWithoutLastChar = secondItem.slice(0, -1);",
-									"",
-									"const { grants } = JSON.parse(secondItemWithoutLastChar);",
-									"",
-									"const pre_authorized_code = grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']['pre-authorized_code'];",
+									"var jsonObject = JSON.parse(secondItem);",
+									"const pre_authorized_code = jsonObject.grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']['pre-authorized_code'];",
 									"",
 									"if(pre_authorized_code){",
 									"    pm.collectionVariables.set(\"PRE_AUTHORIZED_CODE\",pre_authorized_code)",
 									"}",
 									""
 								],
-								"type": "text/javascript"
+								"type": "text/javascript",
+								"packages": {}
 							}
 						}
 					],

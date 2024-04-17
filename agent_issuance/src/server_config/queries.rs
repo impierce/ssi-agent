@@ -28,10 +28,10 @@ impl View<ServerConfig> for ServerConfigView {
             CredentialsSupportedCreated {
                 credential_configurations_supported,
             } => {
-                self.credential_issuer_metadata
-                    .as_mut()
-                    .unwrap()
-                    .credential_configurations_supported = credential_configurations_supported.clone()
+                if let Some(credential_issuer_metadata) = self.credential_issuer_metadata.as_mut() {
+                    credential_issuer_metadata.credential_configurations_supported =
+                        credential_configurations_supported.clone();
+                }
             }
         }
     }
