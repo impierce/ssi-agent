@@ -12,10 +12,14 @@ pub struct VerificationServices {
 }
 
 impl VerificationServices {
-    pub fn new(verifier: Arc<dyn Subject>, client_metadata: ClientMetadataResource<ClientMetadataParameters>) -> Self {
+    pub fn new(
+        verifier: Arc<dyn Subject>,
+        client_metadata: ClientMetadataResource<ClientMetadataParameters>,
+        default_did_method: &str,
+    ) -> Self {
         Self {
             verifier: verifier.clone(),
-            relying_party: RelyingPartyManager::new(verifier, "did:key").unwrap(),
+            relying_party: RelyingPartyManager::new(verifier, default_did_method).unwrap(),
             client_metadata,
         }
     }
@@ -31,7 +35,7 @@ pub mod test_utils {
 
     use super::*;
 
-    pub fn test_verification_services() -> Arc<VerificationServices> {
+    pub fn test_verification_services(default_did_method: &str) -> Arc<VerificationServices> {
         Arc::new(VerificationServices::new(
             Arc::new(futures::executor::block_on(async { secret_manager().await })),
             ClientMetadataResource::ClientMetadata {
@@ -39,10 +43,11 @@ pub mod test_utils {
                 logo_uri: None,
                 extension: ClientMetadataParameters {
                     subject_syntax_types_supported: vec![SubjectSyntaxType::Did(
-                        DidMethod::from_str("did:key").unwrap(),
+                        DidMethod::from_str(default_did_method).unwrap(),
                     )],
                 },
             },
+            default_did_method,
         ))
     }
 }

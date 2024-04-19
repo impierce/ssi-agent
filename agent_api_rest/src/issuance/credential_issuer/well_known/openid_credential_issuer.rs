@@ -72,7 +72,7 @@ mod tests {
                 credential_issuer: BASE_URL.clone(),
                 credential_endpoint: BASE_URL.append_path_segment("openid4vci/credential"),
                 credential_configurations_supported: vec![(
-                    "temp".to_string(),
+                    "badge".to_string(),
                     CredentialConfigurationsSupportedObject {
                         credential_format: CredentialFormats::JwtVcJson(Parameters {
                             parameters: (
@@ -110,8 +110,11 @@ mod tests {
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
         let issuance_state = in_memory::issuance_state().await;
-        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
-
+        let verification_state = in_memory::verification_state(
+            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
+            Default::default(),
+        )
+        .await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
         let mut app = app((issuance_state, verification_state));

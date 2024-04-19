@@ -43,8 +43,9 @@ impl Aggregate for AuthorizationRequest {
 
         match command {
             CreateAuthorizationRequest { state, nonce } => {
+                let default_subject_syntax_type = services.relying_party.default_subject_syntax_type().to_string();
                 let verifier = &services.verifier;
-                let verifier_did = verifier.identifier("did:key").unwrap();
+                let verifier_did = verifier.identifier(&default_subject_syntax_type).unwrap();
 
                 let url = config!("url").unwrap();
                 let request_uri = format!("{url}/request/{state}").parse().unwrap();
@@ -127,6 +128,7 @@ pub mod tests {
     use lazy_static::lazy_static;
     use oid4vc_core::Subject;
     use oid4vc_core::{client_metadata::ClientMetadataResource, DidMethod, SubjectSyntaxType};
+    use rstest::rstest;
     use siopv2::authorization_request::ClientMetadataParameters;
 
     use crate::services::test_utils::test_verification_services;
@@ -135,10 +137,10 @@ pub mod tests {
 
     type AuthorizationRequestTestFramework = TestFramework<AuthorizationRequest>;
 
-    #[test]
+    #[rstest]
     #[serial_test::serial]
-    fn test_create_authorization_request() {
-        let verification_services = test_verification_services();
+    fn test_create_authorization_request(#[values("did:key", "did:jwk")] verifier_did_method: &str) {
+        let verification_services = test_verification_services(verifier_did_method);
 
         AuthorizationRequestTestFramework::with(verification_services)
             .given_no_previous_events()
@@ -148,64 +150,91 @@ pub mod tests {
             })
             .then_expect_events(vec![
                 AuthorizationRequestEvent::AuthorizationRequestCreated {
-                    authorization_request: Box::new(SIOPV2_AUTHORIZATION_REQUEST.clone()),
+                    authorization_request: Box::new(siopv2_authorization_request(verifier_did_method)),
                 },
                 AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
-                    form_url_encoded_authorization_request: FORM_URL_ENCODED_AUTHORIZATION_REQUEST.clone(),
+                    form_url_encoded_authorization_request: form_url_encoded_authorization_request(verifier_did_method),
                 },
             ]);
     }
 
-    #[test]
+    #[rstest]
     #[serial_test::serial]
-    fn test_sign_authorization_request_object() {
-        let verification_services = test_verification_services();
+    fn test_sign_authorization_request_object(#[values("did:key", "did:jwk")] verifier_did_method: &str) {
+        let verification_services = test_verification_services(verifier_did_method);
 
         AuthorizationRequestTestFramework::with(verification_services)
             .given(vec![
                 AuthorizationRequestEvent::AuthorizationRequestCreated {
-                    authorization_request: Box::new(SIOPV2_AUTHORIZATION_REQUEST.clone()),
+                    authorization_request: Box::new(siopv2_authorization_request(verifier_did_method)),
                 },
                 AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
-                    form_url_encoded_authorization_request: FORM_URL_ENCODED_AUTHORIZATION_REQUEST.clone(),
+                    form_url_encoded_authorization_request: form_url_encoded_authorization_request(verifier_did_method),
                 },
             ])
             .when(AuthorizationRequestCommand::SignAuthorizationRequestObject)
             .then_expect_events(vec![AuthorizationRequestEvent::AuthorizationRequestObjectSigned {
-                signed_authorization_request_object: SIGNED_AUTHORIZATION_REQUEST_OBJECT.clone(),
+                signed_authorization_request_object: signed_authorization_request_object(verifier_did_method),
             }]);
+    }
+
+    fn verifier_did(did_method: &str) -> String {
+        VERIFIER.identifier(did_method).unwrap()
+    }
+
+    pub fn client_metadata(did_method: &str) -> ClientMetadataResource<ClientMetadataParameters> {
+        ClientMetadataResource::ClientMetadata {
+            client_name: None,
+            logo_uri: None,
+            extension: ClientMetadataParameters {
+                subject_syntax_types_supported: vec![SubjectSyntaxType::Did(DidMethod::from_str(did_method).unwrap())],
+            },
+        }
+    }
+
+    pub fn siopv2_authorization_request(did_method: &str) -> SIOPv2AuthorizationRequest {
+        SIOPv2AuthorizationRequest::builder()
+            .client_id(verifier_did(did_method))
+            .scope(Scope::openid())
+            .redirect_uri(REDIRECT_URI.clone())
+            .response_mode("direct_post".to_string())
+            .client_metadata(client_metadata(did_method))
+            .nonce("nonce".to_string())
+            .state("state".to_string())
+            .build()
+            .unwrap()
+    }
+
+    pub fn form_url_encoded_authorization_request(did_method: &str) -> String {
+        match did_method {
+            "did:key" => FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_KEY.clone(),
+            "did:jwk" => FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_JWK.clone(),
+            _ => unimplemented!("Unknown DID method: {}", did_method),
+        }
+    }
+
+    pub fn signed_authorization_request_object(did_method: &str) -> String {
+        match did_method {
+            "did:key" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_KEY.clone(),
+            "did:jwk" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK.clone(),
+            _ => unimplemented!("Unknown DID method: {}", did_method),
+        }
     }
 
     lazy_static! {
         static ref VERIFIER: SecretManager = futures::executor::block_on(async { secret_manager().await });
-        static ref VERIFIER_DID: String = VERIFIER.identifier("did:key").unwrap();
-        static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
-        static ref CLIENT_METADATA: ClientMetadataResource<ClientMetadataParameters> =
-            ClientMetadataResource::ClientMetadata {
-                client_name: None,
-                logo_uri: None,
-                extension: ClientMetadataParameters {
-                    subject_syntax_types_supported: vec![SubjectSyntaxType::Did(
-                        DidMethod::from_str("did:key").unwrap(),
-                    )],
-                },
-            };
-        pub static ref SIOPV2_AUTHORIZATION_REQUEST: SIOPv2AuthorizationRequest = SIOPv2AuthorizationRequest::builder()
-            .client_id(VERIFIER_DID.clone())
-            .scope(Scope::openid())
-            .redirect_uri(REDIRECT_URI.clone())
-            .response_mode("direct_post".to_string())
-            .client_metadata(CLIENT_METADATA.clone())
-            .nonce("nonce".to_string())
-            .state("state".to_string())
-            .build()
-            .unwrap();
-        static ref FORM_URL_ENCODED_AUTHORIZATION_REQUEST: String = "\
+        pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
+        static ref FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_KEY: String = "\
         openid://?\
             client_id=did%3Akey%3Az6MkiieyoLMSVsJAZv7Jje5wWSkDEymUgkyF8kbcrjZpX3qd&\
             request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2Fstate"
             .to_string();
-        static ref SIGNED_AUTHORIZATION_REQUEST_OBJECT: String =
+        static ref FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_JWK: String = "\
+        openid://?\
+            client_id=did%3Ajwk%3AeyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJhSHEtMFBJZjZfbGpMaHl4NFc4Nkd2aXFiLTY3MU9BSTY3RTZ2WHBaYzdRIiwia3R5IjoiT0tQIiwieCI6IlAyQmtZUzZ6NFVIbXN4bjZGWDFvSHN5eDdlaVVTRkVNSjFEX1JDOE0wLXcifQ&\
+            request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2Fstate"
+            .to_string();
+        static ref SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_KEY: String =
             "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2lp\
              ZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkI3o2TWtp\
              aWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCJ9.eyJ\
@@ -217,6 +246,24 @@ pub mod tests {
              tZXRhZGF0YSI6eyJzdWJqZWN0X3N5bnRheF90eXBlc19zdXBwb3J0ZWQiOlsiZGl\
              kOmtleSJdfX0.Q9SLE69k4qk1L72yHq3PlY0YyZm1m9do7Wlu3HjzjbHnKnzB6gT\
              5ZfG04krgRf99CgyVeDh9DKnUGrHBUQN2CA"
+                .to_string();
+        static ref SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK: String =
+            "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDpqd2s6ZXlKaGJH\
+             Y2lPaUpGWkVSVFFTSXNJbU55ZGlJNklrVmtNalUxTVRraUxDSnJhV1FpT2lKaFNI\
+             RXRNRkJKWmpaZmJHcE1hSGw0TkZjNE5rZDJhWEZpTFRZM01VOUJTVFkzUlRaMldI\
+             QmFZemRSSWl3aWEzUjVJam9pVDB0UUlpd2llQ0k2SWxBeVFtdFpVelo2TkZWSWJY\
+             TjRialpHV0RGdlNITjVlRGRsYVZWVFJrVk5TakZFWDFKRE9FMHdMWGNpZlEjMCJ9\
+             .eyJjbGllbnRfaWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWR\
+             pSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmhTSEV0TUZCSlpqWmZiR3BNYUhsNE5\
+             GYzROa2QyYVhGaUxUWTNNVTlCU1RZM1JUWjJXSEJhWXpkUklpd2lhM1I1SWpvaVQ\
+             wdFFJaXdpZUNJNklsQXlRbXRaVXpaNk5GVkliWE40YmpaR1dERnZTSE41ZURkbGF\
+             WVlRSa1ZOU2pGRVgxSkRPRTB3TFhjaWZRIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM\
+             6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXR\
+             lIiwicmVzcG9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJ\
+             yZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2x\
+             pZW50X21ldGFkYXRhIjp7InN1YmplY3Rfc3ludGF4X3R5cGVzX3N1cHBvcnRlZCI\
+             6WyJkaWQ6andrIl19fQ.Zd-zz7WwTpitagNWUBUAV-PmZ2SP8ceEaLSh4jY-Q2Tw\
+             W3NsoNGvTbd2xXy1BG8NP3xW3sqmWzObcc0UN6YqCQ"
                 .to_string();
     }
 }

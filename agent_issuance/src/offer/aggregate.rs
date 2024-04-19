@@ -119,12 +119,15 @@ impl Aggregate for Offer {
                 // TODO: support batch credentials.
                 let mut credential = credentials.pop().ok_or(MissingCredentialError)?;
 
-                let issuer = Arc::new(futures::executor::block_on(async {
+                let (issuer, default_did_method) = futures::executor::block_on(async {
                     let mut services = SecretManagerServices::new(None);
                     services.init().await.unwrap();
-                    services.secret_manager.unwrap()
-                }));
-                let issuer_did = issuer.identifier("did:key").unwrap();
+                    (
+                        Arc::new(services.secret_manager.unwrap()),
+                        services.default_did_method.clone(),
+                    )
+                });
+                let issuer_did = issuer.identifier(&default_did_method).unwrap();
 
                 let credential_issuer = CredentialIssuer {
                     subject: issuer.clone(),
@@ -162,7 +165,7 @@ impl Aggregate for Offer {
                                 .verifiable_credential(credential.raw)
                                 .build()
                                 .ok(),
-                            "did:key"
+                            &default_did_method
                         )
                         .ok()),
                         notification_id: None,

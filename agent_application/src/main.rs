@@ -25,6 +25,7 @@ async fn main() {
         _ => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
     }
 
+    let default_did_method = config!("default_did_method").unwrap_or("did:key".to_string());
     let verification_services = Arc::new(VerificationServices::new(
         Arc::new(secret_manager().await),
         // TODO: Temporary solution. Remove this once `ClientMetadata` is part of `RelyingPartyManager`.
@@ -32,9 +33,12 @@ async fn main() {
             client_name: None,
             logo_uri: None,
             extension: ClientMetadataParameters {
-                subject_syntax_types_supported: vec![SubjectSyntaxType::Did(DidMethod::from_str("did:key").unwrap())],
+                subject_syntax_types_supported: vec![SubjectSyntaxType::Did(
+                    DidMethod::from_str(&default_did_method).unwrap(),
+                )],
             },
         },
+        &default_did_method,
     ));
 
     let event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];

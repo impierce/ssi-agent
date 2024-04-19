@@ -36,7 +36,7 @@ pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
 pub fn create_credentials_supported() -> ServerConfigCommand {
     ServerConfigCommand::CreateCredentialsSupported {
         credential_configurations_supported: vec![(
-            "temp".to_string(),
+            "badge".to_string(),
             CredentialConfigurationsSupportedObject {
                 credential_format: CredentialFormats::JwtVcJson(Parameters {
                     parameters: (
@@ -48,7 +48,9 @@ pub fn create_credentials_supported() -> ServerConfigCommand {
                     )
                         .into(),
                 }),
-                cryptographic_binding_methods_supported: vec!["did:key".to_string()],
+                cryptographic_binding_methods_supported: vec![
+                    config!("default_did_method").unwrap_or("did:key".to_string())
+                ],
                 credential_signing_alg_values_supported: vec!["EdDSA".to_string()],
                 // TODO
                 // proof_types_supported: vec![ProofType::Jwt],
