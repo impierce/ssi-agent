@@ -108,28 +108,25 @@ pub mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: String = String::from_utf8(body.to_vec()).unwrap();
 
-        let pre_authorized_code =
-            if let CredentialOffer::CredentialOffer(credential_offer) = CredentialOffer::from_str(&body).unwrap() {
-                let CredentialOfferParameters {
-                    grants:
-                        Some(Grants {
-                            pre_authorized_code:
-                                Some(PreAuthorizedCode {
-                                    pre_authorized_code, ..
-                                }),
-                            ..
-                        }),
-                    ..
-                } = *credential_offer
-                else {
-                    unreachable!()
-                };
-                pre_authorized_code
-            } else {
+        if let CredentialOffer::CredentialOffer(credential_offer) = CredentialOffer::from_str(&body).unwrap() {
+            let CredentialOfferParameters {
+                grants:
+                    Some(Grants {
+                        pre_authorized_code:
+                            Some(PreAuthorizedCode {
+                                pre_authorized_code, ..
+                            }),
+                        ..
+                    }),
+                ..
+            } = *credential_offer
+            else {
                 unreachable!()
             };
-
-        pre_authorized_code
+            pre_authorized_code
+        } else {
+            unreachable!()
+        }
     }
 
     #[tokio::test]
