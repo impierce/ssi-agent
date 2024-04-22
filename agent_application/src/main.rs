@@ -41,16 +41,21 @@ async fn main() {
         &default_did_method,
     ));
 
-    let event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
+    // TODO: Currently `issuance_event_publishers` and `verification_event_publishers` are exactly the same, which is
+    // weird. We need some sort of layer between `agent_application` and `agent_store` that will provide a cleaner way
+    // of initializing the event publishers and sending them over to `agent_store`.
+    let issuance_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
+    let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
+        vec![Box::new(EventPublisherHttp::load().unwrap())];
 
     let (issuance_state, verification_state) = match agent_shared::config!("event_store").unwrap().as_str() {
         "postgres" => (
-            postgres::issuance_state().await,
-            postgres::verification_state(verification_services, event_publishers).await,
+            postgres::issuance_state(issuance_event_publishers).await,
+            postgres::verification_state(verification_services, verification_event_publishers).await,
         ),
         _ => (
-            in_memory::issuance_state().await,
-            in_memory::verification_state(verification_services, event_publishers).await,
+            in_memory::issuance_state(issuance_event_publishers).await,
+            in_memory::verification_state(verification_services, verification_event_publishers).await,
         ),
     };
 

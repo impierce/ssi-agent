@@ -29,15 +29,19 @@ paths:
                 #     credentialTemplate:
                 #       type: string
                 #       description: The template to be used to create the credential
-                subjectId:
+                offerId:
                   type: string
                 credential:
-                  type: object
-                  properties:
-                    credentialSubject:
-                      type: object
+                  oneOf:
+                    - type: object
+                      properties:
+                        credentialSubject:
+                          type: object
+                    - type: string
+                isSigned:
+                  type: boolean
               required:
-                - subjectId
+                - offerId
                 - credential
             examples:
               open-badges-3:
@@ -99,14 +103,14 @@ paths:
             schema:
               type: object
               properties:
-                subjectId:
+                offerId:
                   type: string
                 preAuthorizedCode:
                   type: string
               required:
-                - subjectId
+                - offerId
             example:
-              subjectId: "c86289fa-b105-4ec3-9326-a02436788f11"
+              offerId: "c86289fa-b105-4ec3-9326-a02436788f11"
       responses:
         "200":
           description: Offer created successfully. Response value should be displayed to the user in the form of a QR code.

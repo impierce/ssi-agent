@@ -32,7 +32,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"subjectId\":\"{{SUBJECT_ID}}\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"type\":[\n                \"AchievementSubject\"\n            ],\n            \"achievement\":{\n                \"id\":\"https://demo.edubadges.nl/public/assertions/6pEB--n-SwiZPtWXMCB2jQ\",\n                \"name\":\"Edubadge account complete\",\n                \"type\":[\n                    \"Achievement\"\n                ],\n                \"image\":{\n                    \"id\":\"https://api-demo.edubadges.nl/media/uploads/badges/issuer_badgeclass_548517aa-cbab-4a7b-a971-55cdcce0e2a5.png\"\n                },\n                \"criteria\":{\n                    \"narrative\":\"To qualify for this edubadge:\\r\\n\\r\\n*  you successfully created an eduID,\\r\\n* you successfully linked your institution to your eduID,\\r\\n*  you can store and manage them safely in your backpack.\"\n                },\n                \"description\":\"### Welcome to edubadges. Let your life long learning begin! ###\\r\\n\\r\\nYou are now ready to collect all your edubadges in your backpack. In your backpack you can store and manage them safely.\\r\\n\\r\\nShare them anytime you like and with whom you like.\\r\\n\\r\\nEdubadges are visual representations of your knowledge, skills and competences.\"\n            }\n        }\n    }\n}",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"type\":[\n                \"AchievementSubject\"\n            ],\n            \"achievement\":{\n                \"id\":\"https://demo.edubadges.nl/public/assertions/6pEB--n-SwiZPtWXMCB2jQ\",\n                \"name\":\"Edubadge account complete\",\n                \"type\":[\n                    \"Achievement\"\n                ],\n                \"image\":{\n                    \"id\":\"https://api-demo.edubadges.nl/media/uploads/badges/issuer_badgeclass_548517aa-cbab-4a7b-a971-55cdcce0e2a5.png\"\n                },\n                \"criteria\":{\n                    \"narrative\":\"To qualify for this edubadge:\\r\\n\\r\\n*  you successfully created an eduID,\\r\\n* you successfully linked your institution to your eduID,\\r\\n*  you can store and manage them safely in your backpack.\"\n                },\n                \"description\":\"### Welcome to edubadges. Let your life long learning begin! ###\\r\\n\\r\\nYou are now ready to collect all your edubadges in your backpack. In your backpack you can store and manage them safely.\\r\\n\\r\\nShare them anytime you like and with whom you like.\\r\\n\\r\\nEdubadges are visual representations of your knowledge, skills and competences.\"\n            }\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -84,7 +84,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"subjectId\": \"{{SUBJECT_ID}}\"\n}",
+							"raw": "{\n    \"offerId\": \"{{OFFER_ID}}\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -320,7 +320,7 @@
 			"type": "string"
 		},
 		{
-			"key": "SUBJECT_ID",
+			"key": "OFFER_ID",
 			"value": "001",
 			"type": "string"
 		},

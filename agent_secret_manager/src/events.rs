@@ -1,11 +1,11 @@
 use cqrs_es::DomainEvent;
-use did_manager::Method;
+use did_manager::DidMethod;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SecretManagerEvent {
     Initialized,
-    DidMethodEnabled { method: Method },
+    DidMethodEnabled { method: DidMethod },
 }
 
 impl DomainEvent for SecretManagerEvent {

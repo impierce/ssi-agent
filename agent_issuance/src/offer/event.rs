@@ -17,6 +17,10 @@ pub enum OfferEvent {
     TokenResponseCreated {
         token_response: TokenResponse,
     },
+    CredentialRequestVerified {
+        offer_id: String,
+        subject_id: String,
+    },
     CredentialResponseCreated {
         credential_response: CredentialResponse,
     },
@@ -31,6 +35,7 @@ impl DomainEvent for OfferEvent {
             CredentialsAdded { .. } => "CredentialAdded",
             FormUrlEncodedCredentialOfferCreated { .. } => "FormUrlEncodedCredentialOfferCreated",
             TokenResponseCreated { .. } => "TokenResponseCreated",
+            CredentialRequestVerified { .. } => "CredentialRequestVerified",
             CredentialResponseCreated { .. } => "CredentialResponseCreated",
         };
         event_type.to_string()

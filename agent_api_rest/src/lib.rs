@@ -128,7 +128,7 @@ mod tests {
 
     use crate::app;
 
-    pub const SUBJECT_ID: &str = "00000000-0000-0000-0000-000000000000";
+    pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
 
     lazy_static::lazy_static! {
         pub static ref BASE_URL: url::Url = url::Url::parse("https://example.com").unwrap();
@@ -172,7 +172,7 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn test_base_path_routes() {
-        let issuance_state = in_memory::issuance_state().await;
+        let issuance_state = in_memory::issuance_state(Default::default()).await;
         let verification_state = in_memory::verification_state(
             test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
             Default::default(),

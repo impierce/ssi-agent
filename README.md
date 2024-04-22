@@ -89,14 +89,14 @@ sequenceDiagram
 
     Note over client, store: Agent Preparations
 
-    client->>api_rest: POST /v1/credentials<br/>subjectId: <string><br/>credential: <object>
+    client->>api_rest: POST /v1/credentials<br/>offerId: <string><br/>credential: <object>
     api_rest->>issuance: Command
     issuance->>store: Event(s)
     api_rest->>store: Query
     store->>api_rest: View
     api_rest->>client: 201 CREATED application/json
 
-    client->>api_rest: POST /v1/offers<br/>subjectId: <string>
+    client->>api_rest: POST /v1/offers<br/>offerId: <string>
     api_rest->>issuance: Command
     issuance->>store: Event(s)
     api_rest->>store: Query

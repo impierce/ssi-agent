@@ -117,7 +117,7 @@ where
     }
 }
 
-pub async fn issuance_state() -> IssuanceState {
+pub async fn issuance_state(event_publishers: Vec<Box<dyn EventPublisher>>) -> IssuanceState {
     // Initialize the in-memory repositories.
     let server_config = Arc::new(MemRepository::default());
     let credential = Arc::new(MemRepository::default());
@@ -129,24 +129,37 @@ pub async fn issuance_state() -> IssuanceState {
     let pre_authorized_code_query = PreAuthorizedCodeQuery::new(pre_authorized_code.clone());
     let access_token_query = AccessTokenQuery::new(access_token.clone());
 
+    // Partition the event_publishers into the different aggregates.
+    let (server_config_event_publishers, credential_event_publishers, offer_event_publishers, _, _) =
+        partition_event_publishers(event_publishers);
+
     IssuanceState {
         command: CommandHandlers {
             server_config: Arc::new(
-                AggregateHandler::new(ServerConfigServices)
-                    .append_query(SimpleLoggingQuery {})
-                    .append_query(generic_query(server_config.clone())),
+                server_config_event_publishers.into_iter().fold(
+                    AggregateHandler::new(ServerConfigServices)
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(server_config.clone())),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
+                ),
             ),
             credential: Arc::new(
-                AggregateHandler::new(CredentialServices)
-                    .append_query(SimpleLoggingQuery {})
-                    .append_query(generic_query(credential.clone())),
+                credential_event_publishers.into_iter().fold(
+                    AggregateHandler::new(CredentialServices)
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(credential.clone())),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
+                ),
             ),
             offer: Arc::new(
-                AggregateHandler::new(OfferServices)
-                    .append_query(SimpleLoggingQuery {})
-                    .append_query(generic_query(offer.clone()))
-                    .append_query(pre_authorized_code_query)
-                    .append_query(access_token_query),
+                offer_event_publishers.into_iter().fold(
+                    AggregateHandler::new(OfferServices)
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(offer.clone()))
+                        .append_query(pre_authorized_code_query)
+                        .append_query(access_token_query),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
+                ),
             ),
         },
         query: ViewRepositories {

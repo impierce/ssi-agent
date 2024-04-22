@@ -10,17 +10,35 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use hyper::header;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::info;
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OffersRequest {
+    pub offer_id: String,
+}
 
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Json<Value>) -> Response {
     info!("Request Body: {}", payload);
 
-    let subject_id = if let Some(subject_id) = payload["subjectId"].as_str() {
-        subject_id
-    } else {
-        return (StatusCode::BAD_REQUEST, "subjectId is required").into_response();
+    let Ok(OffersRequest { offer_id }) = serde_json::from_value(payload) else {
+        return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
+    };
+
+    // Create an offer if it does not exist yet.
+    match query_handler(&offer_id, &state.query.offer).await {
+        Ok(Some(_)) => {}
+        _ => {
+            if command_handler(&offer_id, &state.command.offer, OfferCommand::CreateCredentialOffer)
+                .await
+                .is_err()
+            {
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        }
     };
 
     // Get the `CredentialIssuerMetadata` from the `ServerConfigView`.
@@ -36,14 +54,11 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
         credential_issuer_metadata,
     };
 
-    if command_handler(subject_id, &state.command.offer, command)
-        .await
-        .is_err()
-    {
+    if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    match query_handler(subject_id, &state.query.offer).await {
+    match query_handler(&offer_id, &state.query.offer).await {
         Ok(Some(OfferView {
             form_url_encoded_credential_offer,
             ..
@@ -64,7 +79,7 @@ pub mod tests {
     use crate::{
         app,
         issuance::credentials::tests::credentials,
-        tests::{BASE_URL, SUBJECT_ID},
+        tests::{BASE_URL, OFFER_ID},
     };
 
     use super::*;
@@ -90,7 +105,7 @@ pub mod tests {
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "subjectId": SUBJECT_ID
+                            "offerId": OFFER_ID
                         }))
                         .unwrap(),
                     ))
@@ -130,8 +145,9 @@ pub mod tests {
     }
 
     #[tokio::test]
+    #[tracing_test::traced_test]
     async fn test_offers_endpoint() {
-        let issuance_state = in_memory::issuance_state().await;
+        let issuance_state = in_memory::issuance_state(Default::default()).await;
 
         let verification_state = in_memory::verification_state(
             test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),

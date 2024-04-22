@@ -28,6 +28,7 @@ where
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct OfferView {
+    pub subject_id: Option<String>,
     pub credential_ids: Vec<String>,
     pub pre_authorized_code: String,
     pub access_token: String,
@@ -57,6 +58,9 @@ impl View<Offer> for OfferView {
                 form_url_encoded_credential_offer,
             } => {
                 self.form_url_encoded_credential_offer = form_url_encoded_credential_offer.clone();
+            }
+            CredentialRequestVerified { subject_id, .. } => {
+                self.subject_id.replace(subject_id.clone());
             }
             TokenResponseCreated { token_response } => {
                 self.token_response.replace(token_response.clone());
