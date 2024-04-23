@@ -1180,7 +1180,7 @@ checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=49e964c#49e964c95d965d3d3c646efcb020e51eb03ed2b1"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=11ce737#11ce737f0c8204029b70b831c1a6ed3a54d6ae15"
 dependencies = [
  "did_jwk",
  "did_key",
@@ -1714,7 +1714,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=49e964c#49e964c95d965d3d3c646efcb020e51eb03ed2b1"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=11ce737#11ce737f0c8204029b70b831c1a6ed3a54d6ae15"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -1731,7 +1731,7 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=49e964c#49e964c95d965d3d3c646efcb020e51eb03ed2b1"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=11ce737#11ce737f0c8204029b70b831c1a6ed3a54d6ae15"
 dependencies = [
  "did-key",
  "did-method-key",
@@ -1750,7 +1750,7 @@ dependencies = [
 [[package]]
 name = "did_manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=49e964c#49e964c95d965d3d3c646efcb020e51eb03ed2b1"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=11ce737#11ce737f0c8204029b70b831c1a6ed3a54d6ae15"
 dependencies = [
  "consumer",
  "producer",
@@ -1778,7 +1778,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=49e964c#49e964c95d965d3d3c646efcb020e51eb03ed2b1"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=11ce737#11ce737f0c8204029b70b831c1a6ed3a54d6ae15"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -5001,7 +5001,7 @@ dependencies = [
 [[package]]
 name = "producer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=49e964c#49e964c95d965d3d3c646efcb020e51eb03ed2b1"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=11ce737#11ce737f0c8204029b70b831c1a6ed3a54d6ae15"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5019,7 +5019,6 @@ dependencies = [
  "oid4vc-core",
  "serde",
  "serde_json",
- "serde_plain",
  "shared",
  "signature 2.2.0",
  "url",
@@ -5887,15 +5886,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_plain"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ce1fc6db65a611022b23a0dec6975d63fb80a302cb3388835ff02c097258d50"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "serde_repr"
 version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6080,7 +6070,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=49e964c#49e964c95d965d3d3c646efcb020e51eb03ed2b1"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=11ce737#11ce737f0c8204029b70b831c1a6ed3a54d6ae15"
 dependencies = [
  "identity_iota",
  "identity_stronghold",
