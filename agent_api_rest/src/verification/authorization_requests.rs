@@ -94,6 +94,7 @@ pub(crate) async fn authorization_requests(
 pub mod tests {
     use super::*;
     use crate::app;
+    use agent_shared::config;
     use agent_store::in_memory;
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
@@ -140,7 +141,7 @@ pub mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let form_url_encoded_authorization_request: String = String::from_utf8(body.to_vec()).unwrap();
-        assert_eq!(form_url_encoded_authorization_request, format!("siopv2://idtoken?client_id=did%3Akey%3Az6MkiieyoLMSVsJAZv7Jje5wWSkDEymUgkyF8kbcrjZpX3qd&request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2F{state}"));
+        assert_eq!(form_url_encoded_authorization_request, format!("openid://?client_id=did%3Akey%3Az6MkiieyoLMSVsJAZv7Jje5wWSkDEymUgkyF8kbcrjZpX3qd&request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2F{state}"));
 
         let response = app
             .call(
@@ -163,8 +164,11 @@ pub mod tests {
     #[tracing_test::traced_test]
     async fn test_authorization_requests_endpoint() {
         let issuance_state = in_memory::issuance_state().await;
-        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
-
+        let verification_state = in_memory::verification_state(
+            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
+            Default::default(),
+        )
+        .await;
         let mut app = app((issuance_state, verification_state));
 
         authorization_requests(&mut app).await;

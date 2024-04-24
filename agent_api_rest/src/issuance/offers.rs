@@ -69,6 +69,7 @@ pub mod tests {
 
     use super::*;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use agent_shared::config;
     use agent_store::in_memory;
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
@@ -76,7 +77,7 @@ pub mod tests {
         http::{self, Request},
         Router,
     };
-    use oid4vci::credential_offer::{CredentialOffer, CredentialOfferQuery, Grants, PreAuthorizedCode};
+    use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants, PreAuthorizedCode};
     use serde_json::json;
     use tower::Service;
 
@@ -107,28 +108,36 @@ pub mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: String = String::from_utf8(body.to_vec()).unwrap();
 
-        let CredentialOfferQuery::CredentialOffer(CredentialOffer {
-            grants:
-                Some(Grants {
-                    pre_authorized_code:
-                        Some(PreAuthorizedCode {
-                            pre_authorized_code, ..
-                        }),
-                    ..
-                }),
-            ..
-        }) = CredentialOfferQuery::from_str(&body).unwrap()
-        else {
+        if let CredentialOffer::CredentialOffer(credential_offer) = CredentialOffer::from_str(&body).unwrap() {
+            let CredentialOfferParameters {
+                grants:
+                    Some(Grants {
+                        pre_authorized_code:
+                            Some(PreAuthorizedCode {
+                                pre_authorized_code, ..
+                            }),
+                        ..
+                    }),
+                ..
+            } = *credential_offer
+            else {
+                unreachable!()
+            };
+            pre_authorized_code
+        } else {
             unreachable!()
-        };
-
-        pre_authorized_code
+        }
     }
 
     #[tokio::test]
     async fn test_offers_endpoint() {
         let issuance_state = in_memory::issuance_state().await;
-        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
+
+        let verification_state = in_memory::verification_state(
+            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
+            Default::default(),
+        )
+        .await;
 
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 

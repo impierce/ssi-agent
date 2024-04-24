@@ -6,10 +6,9 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use jsonwebtoken::{Algorithm, Header};
 use oid4vc_core::authentication::subject::Subject;
-use oid4vc_core::{jwt, Decoder, Subjects};
-use oid4vci::credential_format_profiles::{self, CredentialFormats};
+use oid4vc_core::{jwt, Validator};
 use oid4vci::credential_issuer::CredentialIssuer;
-use oid4vci::credential_offer::{CredentialOffer, CredentialOfferQuery, CredentialsObject, Grants, PreAuthorizedCode};
+use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants, PreAuthorizedCode};
 use oid4vci::credential_response::{CredentialResponse, CredentialResponseType};
 use oid4vci::token_request::TokenRequest;
 use oid4vci::token_response::TokenResponse;
@@ -74,15 +73,10 @@ impl Aggregate for Offer {
             CreateFormUrlEncodedCredentialOffer {
                 credential_issuer_metadata,
             } => {
-                let credentials_supported = credential_issuer_metadata.credentials_supported.clone();
-                let credential_offer = CredentialOfferQuery::CredentialOffer(CredentialOffer {
+                let credentials_supported = credential_issuer_metadata.credential_configurations_supported.clone();
+                let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
                     credential_issuer: credential_issuer_metadata.credential_issuer.clone(),
-                    credentials: credentials_supported
-                        .iter()
-                        .map(|credentials_supported_object| {
-                            CredentialsObject::ByValue(credentials_supported_object.credential_format.clone())
-                        })
-                        .collect(),
+                    credential_configuration_ids: credentials_supported.keys().cloned().collect(),
                     grants: Some(Grants {
                         authorization_code: None,
                         pre_authorized_code: Some(PreAuthorizedCode {
@@ -90,7 +84,7 @@ impl Aggregate for Offer {
                             ..Default::default()
                         }),
                     }),
-                });
+                }));
                 Ok(vec![FormUrlEncodedCredentialOfferCreated {
                     form_url_encoded_credential_offer: credential_offer.to_string(),
                 }])
@@ -125,12 +119,15 @@ impl Aggregate for Offer {
                 // TODO: support batch credentials.
                 let mut credential = credentials.pop().ok_or(MissingCredentialError)?;
 
-                let issuer = Arc::new(futures::executor::block_on(async {
+                let (issuer, default_did_method) = futures::executor::block_on(async {
                     let mut services = SecretManagerServices::new(None);
                     services.init().await.unwrap();
-                    services.secret_manager.unwrap()
-                }));
-                let issuer_did = issuer.identifier().unwrap();
+                    (
+                        Arc::new(services.secret_manager.unwrap()),
+                        services.default_did_method.clone(),
+                    )
+                });
+                let issuer_did = issuer.identifier(&default_did_method).unwrap();
 
                 let credential_issuer = CredentialIssuer {
                     subject: issuer.clone(),
@@ -141,7 +138,7 @@ impl Aggregate for Offer {
                 let proof = credential_issuer
                     .validate_proof(
                         credential_request.proof.ok_or(MissingProofError)?,
-                        Decoder::from(&Subjects::try_from([issuer.clone() as Arc<dyn Subject>]).unwrap()),
+                        Validator::Subject(issuer.clone()),
                     )
                     .await
                     .map_err(|e| InvalidProofError(e.to_string()))?;
@@ -156,23 +153,23 @@ impl Aggregate for Offer {
                 credential.raw["issuer"] = json!(issuer_did);
                 credential.raw["credentialSubject"]["id"] = json!(subject_did);
                 let credential_response = CredentialResponse {
-                    credential: CredentialResponseType::Immediate(CredentialFormats::JwtVcJson(
-                        credential_format_profiles::Credential {
-                            credential: json!(jwt::encode(
-                                issuer.clone(),
-                                Header::new(Algorithm::EdDSA),
-                                VerifiableCredentialJwt::builder()
-                                    .sub(subject_did)
-                                    .iss(issuer_did)
-                                    .iat(0)
-                                    .exp(9999999999i64)
-                                    .verifiable_credential(credential.raw)
-                                    .build()
-                                    .ok(),
-                            )
-                            .ok()),
-                        },
-                    )),
+                    credential: CredentialResponseType::Immediate {
+                        credential: json!(jwt::encode(
+                            issuer.clone(),
+                            Header::new(Algorithm::EdDSA),
+                            VerifiableCredentialJwt::builder()
+                                .sub(subject_did)
+                                .iss(issuer_did)
+                                .iat(0)
+                                .exp(9999999999i64)
+                                .verifiable_credential(credential.raw)
+                                .build()
+                                .ok(),
+                            &default_did_method
+                        )
+                        .ok()),
+                        notification_id: None,
+                    },
                     c_nonce: None,
                     c_nonce_expires_in: None,
                 };
@@ -226,9 +223,11 @@ pub mod tests {
     use did_manager::SecretManager;
     use lazy_static::lazy_static;
     use oid4vci::{
-        credential_format_profiles::{w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, Parameters},
+        credential_format_profiles::{
+            w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, CredentialFormats, Parameters,
+        },
         credential_request::CredentialRequest,
-        Proof, ProofType,
+        KeyProofType, ProofType,
     };
     use std::{collections::VecDeque, sync::Mutex};
 
@@ -502,7 +501,7 @@ pub mod tests {
             credential: VERIFIABLE_CREDENTIAL_JWT_1.clone(),
             pre_authorized_code: pre_authorized_code.clone(),
             access_token: ACCESS_TOKENS.lock().unwrap()[0].clone(),
-            form_url_encoded_credential_offer: format!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fexample.com%2F%22%2C%22credentials%22%3A%5B%7B%22format%22%3A%22jwt_vc_json%22%2C%22credential_definition%22%3A%7B%22type%22%3A%5B%22VerifiableCredential%22%2C%22OpenBadgeCredential%22%5D%7D%7D%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%2C%22user_pin_required%22%3Afalse%7D%7D%7D"),
+            form_url_encoded_credential_offer: format!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fexample.com%2F%22%2C%22credential_configuration_ids%22%3A%5B%220%22%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%7D%7D%7D"),
             c_nonce: C_NONCES.lock().unwrap()[0].clone(),
         }
     }
@@ -510,7 +509,7 @@ pub mod tests {
     fn token_request(subject: TestSubject) -> TokenRequest {
         TokenRequest::PreAuthorizedCode {
             pre_authorized_code: subject.pre_authorized_code,
-            user_pin: None,
+            tx_code: None,
         }
     }
 
@@ -532,21 +531,22 @@ pub mod tests {
                 parameters: (
                     CredentialDefinition {
                         type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
-                        credential_subject: None,
+                        credential_subject: Default::default(),
                     },
                     None,
                 )
                     .into(),
             }),
             proof: Some(
-                Proof::builder()
+                KeyProofType::builder()
                     .proof_type(ProofType::Jwt)
                     .signer(subject.secret_manager.clone())
-                    .iss(subject.secret_manager.identifier().unwrap())
+                    .iss(subject.secret_manager.identifier("did:key").unwrap())
                     .aud(CREDENTIAL_ISSUER_METADATA.credential_issuer.clone())
                     .iat(1571324800)
                     .exp(9999999999i64)
                     .nonce(subject.c_nonce.clone())
+                    .subject_syntax_type("did:key")
                     .build()
                     .unwrap(),
             ),
@@ -555,11 +555,10 @@ pub mod tests {
 
     fn credential_response(subject: TestSubject) -> CredentialResponse {
         CredentialResponse {
-            credential: CredentialResponseType::Immediate(CredentialFormats::JwtVcJson(
-                credential_format_profiles::Credential {
-                    credential: json!(subject.credential.clone()),
-                },
-            )),
+            credential: CredentialResponseType::Immediate {
+                credential: json!(subject.credential.clone()),
+                notification_id: None,
+            },
             c_nonce: None,
             c_nonce_expires_in: None,
         }

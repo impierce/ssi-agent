@@ -114,11 +114,15 @@ fn get_base_path() -> Result<String, ConfigError> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
+    use agent_shared::config;
     use agent_store::in_memory;
     use agent_verification::services::test_utils::test_verification_services;
     use axum::routing::post;
     use oid4vci::credential_issuer::{
-        credential_issuer_metadata::CredentialIssuerMetadata, credentials_supported::CredentialsSupportedObject,
+        credential_configurations_supported::CredentialConfigurationsSupportedObject,
+        credential_issuer_metadata::CredentialIssuerMetadata,
     };
     use serde_json::json;
 
@@ -128,34 +132,38 @@ mod tests {
 
     lazy_static::lazy_static! {
         pub static ref BASE_URL: url::Url = url::Url::parse("https://example.com").unwrap();
-        static ref CREDENTIALS_SUPPORTED: Vec<CredentialsSupportedObject> = vec![serde_json::from_value(json!({
-            "format": "jwt_vc_json",
-            "cryptographic_binding_methods_supported": [
-                "did:key",
-            ],
-            "cryptographic_suites_supported": [
-                "EdDSA"
-            ],
-            "credential_definition":{
-                "type": [
-                    "VerifiableCredential",
-                    "OpenBadgeCredential"
-                ]
-            },
-            "proof_types_supported": [
-                "jwt"
-            ]
-        }
-        ))
-        .unwrap()];
+        static ref CREDENTIAL_CONFIGURATIONS_SUPPORTED: HashMap<String, CredentialConfigurationsSupportedObject> =
+            vec![(
+                "0".to_string(),
+                serde_json::from_value(json!({
+                    "format": "jwt_vc_json",
+                    "cryptographic_binding_methods_supported": [
+                        "did:key",
+                    ],
+                    "credential_signing_alg_values_supported": [
+                        "EdDSA"
+                    ],
+                    "credential_definition":{
+                        "type": [
+                            "VerifiableCredential",
+                            "OpenBadgeCredential"
+                        ]
+                    },
+                    "proof_types_supported": [
+                        "jwt"
+                    ]
+                }
+                ))
+                .unwrap()
+            )]
+            .into_iter()
+            .collect();
         pub static ref CREDENTIAL_ISSUER_METADATA: CredentialIssuerMetadata = CredentialIssuerMetadata {
             credential_issuer: BASE_URL.clone(),
-            authorization_server: None,
             credential_endpoint: BASE_URL.join("credential").unwrap(),
-            deferred_credential_endpoint: None,
             batch_credential_endpoint: Some(BASE_URL.join("batch_credential").unwrap()),
-            credentials_supported: CREDENTIALS_SUPPORTED.clone(),
-            display: None,
+            credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
+            ..Default::default()
         };
     }
 
@@ -165,8 +173,11 @@ mod tests {
     #[should_panic]
     async fn test_base_path_routes() {
         let issuance_state = in_memory::issuance_state().await;
-        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
-
+        let verification_state = in_memory::verification_state(
+            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
+            Default::default(),
+        )
+        .await;
         std::env::set_var("AGENT_APPLICATION_BASE_PATH", "unicore");
         let router = app((issuance_state, verification_state));
 

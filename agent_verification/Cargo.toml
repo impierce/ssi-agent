@@ -28,6 +28,7 @@ agent_verification = { path = ".", features = ["test"] }
 
 did_manager.workspace = true
 lazy_static.workspace = true
+rstest.workspace = true
 serial_test = "3.0"
 
 [features]

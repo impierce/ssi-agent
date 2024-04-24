@@ -40,9 +40,9 @@ mod tests {
             w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, CredentialFormats, Parameters,
         },
         credential_issuer::{
-            credential_issuer_metadata::CredentialIssuerMetadata, credentials_supported::CredentialsSupportedObject,
+            credential_configurations_supported::CredentialConfigurationsSupportedObject,
+            credential_issuer_metadata::CredentialIssuerMetadata,
         },
-        ProofType,
     };
     use serde_json::json;
     use tower::Service;
@@ -70,34 +70,37 @@ mod tests {
             credential_issuer_metadata,
             CredentialIssuerMetadata {
                 credential_issuer: BASE_URL.clone(),
-                authorization_server: None,
                 credential_endpoint: BASE_URL.append_path_segment("openid4vci/credential"),
-                batch_credential_endpoint: None,
-                deferred_credential_endpoint: None,
-                credentials_supported: vec![CredentialsSupportedObject {
-                    id: None,
-                    credential_format: CredentialFormats::JwtVcJson(Parameters {
-                        parameters: (
-                            CredentialDefinition {
-                                type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
-                                credential_subject: None,
-                            },
-                            None,
-                        )
-                            .into(),
-                    }),
-                    scope: None,
-                    cryptographic_binding_methods_supported: Some(vec!["did:key".to_string()]),
-                    cryptographic_suites_supported: Some(vec!["EdDSA".to_string()]),
-                    proof_types_supported: Some(vec![ProofType::Jwt]),
-                    display: Some(vec![json!({
-                       "name": config!("credential_name").unwrap(),
-                       "logo": {
-                            "url": config!("credential_logo_url").unwrap()
-                       }
-                    })]),
-                }],
-                display: None,
+                credential_configurations_supported: vec![(
+                    "badge".to_string(),
+                    CredentialConfigurationsSupportedObject {
+                        credential_format: CredentialFormats::JwtVcJson(Parameters {
+                            parameters: (
+                                CredentialDefinition {
+                                    type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
+                                    credential_subject: Default::default(),
+                                },
+                                None,
+                            )
+                                .into(),
+                        }),
+                        scope: None,
+                        cryptographic_binding_methods_supported: vec!["did:key".to_string()],
+                        credential_signing_alg_values_supported: vec!["EdDSA".to_string()],
+                        // TODO
+                        // proof_types_supported: Some(vec![ProofType::Jwt]),
+                        display: vec![json!({
+                           "name": config!("credential_name").unwrap(),
+                           "logo": {
+                                "url": config!("credential_logo_url").unwrap()
+                           }
+                        })],
+                        ..Default::default()
+                    }
+                )]
+                .into_iter()
+                .collect(),
+                ..Default::default()
             }
         );
 
@@ -107,8 +110,11 @@ mod tests {
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
         let issuance_state = in_memory::issuance_state().await;
-        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
-
+        let verification_state = in_memory::verification_state(
+            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
+            Default::default(),
+        )
+        .await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
         let mut app = app((issuance_state, verification_state));

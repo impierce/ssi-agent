@@ -27,6 +27,7 @@ mod tests {
 
     use super::*;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use agent_shared::config;
     use agent_store::in_memory;
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
@@ -71,8 +72,11 @@ mod tests {
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
         let issuance_state = in_memory::issuance_state().await;
-        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
-
+        let verification_state = in_memory::verification_state(
+            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
+            Default::default(),
+        )
+        .await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
         let mut app = app((issuance_state, verification_state));
