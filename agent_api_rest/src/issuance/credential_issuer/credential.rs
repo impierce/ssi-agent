@@ -204,11 +204,11 @@ mod tests {
 
                             true
                         }
-                        _ => return false,
+                        _ => false,
                     },
                 )
                 .respond_with(ResponseTemplate::new(200))
-                .mount(&self)
+                .mount(self)
                 .await;
         }
     }
