@@ -15,7 +15,9 @@ cqrs-es.workspace = true
 futures.workspace = true
 oid4vc-core.workspace = true
 oid4vc-manager.workspace = true
+oid4vp.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 siopv2.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
@@ -27,7 +29,15 @@ agent_shared = { path = "../agent_shared", features = ["test"] }
 agent_verification = { path = ".", features = ["test"] }
 
 did_manager.workspace = true
+identity_core = "1.2.0"
+identity_credential = { version = "1.2.0", default-features = false, features = [
+    "validator",
+    "credential",
+    "presentation"
+] }
+jsonwebtoken = "8.3"
 lazy_static.workspace = true
+oid4vci.workspace = true
 rstest.workspace = true
 serial_test = "3.0"
 

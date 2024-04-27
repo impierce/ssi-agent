@@ -4,4 +4,6 @@ use thiserror::Error;
 pub enum ConnectionError {
     #[error("Invalid SIOPv2 authorization response: {0}")]
     InvalidSIOPv2AuthorizationResponse(#[source] anyhow::Error),
+    #[error("Invalid OID4VP authorization response: {0}")]
+    InvalidOID4VPAuthorizationResponse(#[source] anyhow::Error),
 }

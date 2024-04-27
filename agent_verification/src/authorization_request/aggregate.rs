@@ -4,9 +4,10 @@ use agent_shared::config;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use oid4vc_core::{
-    authorization_request::{ByReference, Object},
+    authorization_request::{Body, ByReference, Object},
     scope::Scope,
 };
+use oid4vp::{authorization_request::ClientIdScheme, oid4vp::OID4VP, PresentationDefinition};
 use serde::{Deserialize, Serialize};
 use siopv2::siopv2::SIOPv2;
 use tracing::info;
@@ -16,10 +17,45 @@ use crate::services::VerificationServices;
 use super::{command::AuthorizationRequestCommand, error::AuthorizationRequestError, event::AuthorizationRequestEvent};
 
 pub type SIOPv2AuthorizationRequest = oid4vc_core::authorization_request::AuthorizationRequest<Object<SIOPv2>>;
+pub type OID4VPAuthorizationRequest = oid4vc_core::authorization_request::AuthorizationRequest<Object<OID4VP>>;
+
+// TODO: come up with a better name for this type.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum GenericAuthorizationRequest {
+    SIOPv2(SIOPv2AuthorizationRequest),
+    OID4VP(OID4VPAuthorizationRequest),
+}
+
+impl GenericAuthorizationRequest {
+    pub fn as_siopv2_authorization_request(&self) -> Option<&SIOPv2AuthorizationRequest> {
+        match self {
+            GenericAuthorizationRequest::SIOPv2(authorization_request) => Some(authorization_request),
+            _ => None,
+        }
+    }
+
+    pub fn as_oid4vp_authorization_request(&self) -> Option<&OID4VPAuthorizationRequest> {
+        match self {
+            GenericAuthorizationRequest::OID4VP(authorization_request) => Some(authorization_request),
+            _ => None,
+        }
+    }
+
+    pub fn client_id(&self) -> String {
+        match self {
+            GenericAuthorizationRequest::SIOPv2(authorization_request) => {
+                authorization_request.body.client_id().clone()
+            }
+            GenericAuthorizationRequest::OID4VP(authorization_request) => {
+                authorization_request.body.client_id().clone()
+            }
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct AuthorizationRequest {
-    authorization_request: Option<SIOPv2AuthorizationRequest>,
+    authorization_request: Option<GenericAuthorizationRequest>,
     form_url_encoded_authorization_request: Option<String>,
     signed_authorization_request_object: Option<String>,
 }
@@ -42,7 +78,11 @@ impl Aggregate for AuthorizationRequest {
         info!("Handling command: {:?}", command);
 
         match command {
-            CreateAuthorizationRequest { state, nonce } => {
+            CreateAuthorizationRequest {
+                state,
+                nonce,
+                presentation_definition_id,
+            } => {
                 let default_subject_syntax_type = services.relying_party.default_subject_syntax_type().to_string();
                 let verifier = &services.verifier;
                 let verifier_did = verifier.identifier(&default_subject_syntax_type).unwrap();
@@ -51,18 +91,48 @@ impl Aggregate for AuthorizationRequest {
                 let request_uri = format!("{url}/request/{state}").parse().unwrap();
                 let redirect_uri = format!("{url}/redirect").parse::<url::Url>().unwrap();
 
-                let authorization_request = Box::new(
-                    SIOPv2AuthorizationRequest::builder()
-                        .client_id(verifier_did.clone())
-                        .scope(Scope::openid())
-                        .redirect_uri(redirect_uri)
-                        .response_mode("direct_post".to_string())
-                        .client_metadata(services.client_metadata.clone())
-                        .state(state)
-                        .nonce(nonce)
-                        .build()
-                        .unwrap(),
-                );
+                let authorization_request =
+                    Box::new(if let Some(presentation_definition_id) = presentation_definition_id {
+                        // TODO: Fix this path
+                        let presentation_definition: PresentationDefinition = match std::fs::File::open(format!(
+                            "../agent_verification/presentation_definitions/{presentation_definition_id}.json"
+                        )) {
+                            // FIX THISS
+                            Ok(presentation_definition) => serde_json::from_reader(presentation_definition).unwrap(),
+                            // FIX THISS
+                            Err(hello) => panic!("{}", hello),
+                        };
+
+                        GenericAuthorizationRequest::OID4VP(
+                            OID4VPAuthorizationRequest::builder()
+                                .client_id(verifier_did.clone())
+                                .client_id_scheme(ClientIdScheme::Did)
+                                .scope(Scope::openid())
+                                .redirect_uri(redirect_uri)
+                                .response_mode("direct_post".to_string())
+                                .presentation_definition(presentation_definition)
+                                .client_metadata(services.oid4vp_client_metadata.clone())
+                                .state(state)
+                                .nonce(nonce)
+                                .build()
+                                // FIX THISS
+                                .unwrap(),
+                        )
+                    } else {
+                        GenericAuthorizationRequest::SIOPv2(
+                            SIOPv2AuthorizationRequest::builder()
+                                .client_id(verifier_did.clone())
+                                .scope(Scope::openid())
+                                .redirect_uri(redirect_uri)
+                                .response_mode("direct_post".to_string())
+                                .client_metadata(services.siopv2_client_metadata.clone())
+                                .state(state)
+                                .nonce(nonce)
+                                .build()
+                                // FIX THISS
+                                .unwrap(),
+                        )
+                    });
 
                 let form_url_encoded_authorization_request = oid4vc_core::authorization_request::AuthorizationRequest {
                     custom_url_scheme: "openid".to_string(),
@@ -83,9 +153,18 @@ impl Aggregate for AuthorizationRequest {
             SignAuthorizationRequestObject => {
                 let relying_party = &services.relying_party;
 
-                // TODO: Add error handling
-                let signed_authorization_request_object = relying_party
-                    .encode(self.authorization_request.as_ref().unwrap())
+                // FIX THISS
+                let temp = self.authorization_request.as_ref().unwrap();
+
+                let signed_authorization_request_object =
+                    if let Some(siopv2_authorization_request) = temp.as_siopv2_authorization_request() {
+                        relying_party.encode(siopv2_authorization_request)
+                    } else if let Some(oid4vp_authorization_request) = temp.as_oid4vp_authorization_request() {
+                        relying_party.encode(oid4vp_authorization_request)
+                    } else {
+                        todo!()
+                    }
+                    // FIX THISS
                     .unwrap();
 
                 Ok(vec![AuthorizationRequestObjectSigned {
@@ -129,7 +208,7 @@ pub mod tests {
     use oid4vc_core::Subject;
     use oid4vc_core::{client_metadata::ClientMetadataResource, DidMethod, SubjectSyntaxType};
     use rstest::rstest;
-    use siopv2::authorization_request::ClientMetadataParameters;
+    use serde_json::json;
 
     use crate::services::test_utils::test_verification_services;
 
@@ -147,10 +226,11 @@ pub mod tests {
             .when(AuthorizationRequestCommand::CreateAuthorizationRequest {
                 state: "state".to_string(),
                 nonce: "nonce".to_string(),
+                presentation_definition_id: None,
             })
             .then_expect_events(vec![
                 AuthorizationRequestEvent::AuthorizationRequestCreated {
-                    authorization_request: Box::new(siopv2_authorization_request(verifier_did_method)),
+                    authorization_request: Box::new(authorization_request("id_token", verifier_did_method)),
                 },
                 AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
                     form_url_encoded_authorization_request: form_url_encoded_authorization_request(verifier_did_method),
@@ -166,7 +246,7 @@ pub mod tests {
         AuthorizationRequestTestFramework::with(verification_services)
             .given(vec![
                 AuthorizationRequestEvent::AuthorizationRequestCreated {
-                    authorization_request: Box::new(siopv2_authorization_request(verifier_did_method)),
+                    authorization_request: Box::new(authorization_request("id_token", verifier_did_method)),
                 },
                 AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
                     form_url_encoded_authorization_request: form_url_encoded_authorization_request(verifier_did_method),
@@ -178,31 +258,64 @@ pub mod tests {
             }]);
     }
 
-    fn verifier_did(did_method: &str) -> String {
+    pub fn verifier_did(did_method: &str) -> String {
         VERIFIER.identifier(did_method).unwrap()
     }
 
-    pub fn client_metadata(did_method: &str) -> ClientMetadataResource<ClientMetadataParameters> {
+    pub fn siopv2_client_metadata(
+        did_method: &str,
+    ) -> ClientMetadataResource<siopv2::authorization_request::ClientMetadataParameters> {
         ClientMetadataResource::ClientMetadata {
             client_name: None,
             logo_uri: None,
-            extension: ClientMetadataParameters {
+            extension: siopv2::authorization_request::ClientMetadataParameters {
                 subject_syntax_types_supported: vec![SubjectSyntaxType::Did(DidMethod::from_str(did_method).unwrap())],
             },
         }
     }
 
-    pub fn siopv2_authorization_request(did_method: &str) -> SIOPv2AuthorizationRequest {
-        SIOPv2AuthorizationRequest::builder()
-            .client_id(verifier_did(did_method))
-            .scope(Scope::openid())
-            .redirect_uri(REDIRECT_URI.clone())
-            .response_mode("direct_post".to_string())
-            .client_metadata(client_metadata(did_method))
-            .nonce("nonce".to_string())
-            .state("state".to_string())
-            .build()
-            .unwrap()
+    pub fn oid4vp_client_metadata() -> ClientMetadataResource<oid4vp::authorization_request::ClientMetadataParameters> {
+        ClientMetadataResource::ClientMetadata {
+            client_name: None,
+            logo_uri: None,
+            // TODO: fix this once `vp_formats` is public.
+            extension: serde_json::from_value(json!({
+                "vp_formats": {}
+            }))
+            .unwrap(),
+        }
+    }
+
+    pub fn authorization_request(response_type: &str, did_method: &str) -> GenericAuthorizationRequest {
+        match response_type {
+            "id_token" => GenericAuthorizationRequest::SIOPv2(
+                SIOPv2AuthorizationRequest::builder()
+                    .client_id(verifier_did(did_method))
+                    .scope(Scope::openid())
+                    .redirect_uri(REDIRECT_URI.clone())
+                    .response_mode("direct_post".to_string())
+                    .client_metadata(siopv2_client_metadata(did_method))
+                    .nonce("nonce".to_string())
+                    .state("state".to_string())
+                    .build()
+                    .unwrap(),
+            ),
+            "vp_token" => GenericAuthorizationRequest::OID4VP(
+                OID4VPAuthorizationRequest::builder()
+                    .client_id(verifier_did(did_method))
+                    .client_id_scheme(ClientIdScheme::Did)
+                    .scope(Scope::openid())
+                    .redirect_uri(REDIRECT_URI.clone())
+                    .response_mode("direct_post".to_string())
+                    .presentation_definition(PRESENTATION_DEFINITION.clone())
+                    .client_metadata(oid4vp_client_metadata())
+                    .nonce("nonce".to_string())
+                    .state("state".to_string())
+                    .build()
+                    .unwrap(),
+            ),
+            _ => unimplemented!(),
+        }
     }
 
     pub fn form_url_encoded_authorization_request(did_method: &str) -> String {
@@ -222,8 +335,33 @@ pub mod tests {
     }
 
     lazy_static! {
-        static ref VERIFIER: SecretManager = futures::executor::block_on(async { secret_manager().await });
+        pub static ref VERIFIER: SecretManager = futures::executor::block_on(async { secret_manager().await });
         pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
+        pub static ref PRESENTATION_DEFINITION: PresentationDefinition = serde_json::from_value(json!(
+            {
+                "id":"Verifiable Presentation request for sign-on",
+                    "input_descriptors":[
+                    {
+                        "id":"Request for Verifiable Credential",
+                        "constraints":{
+                            "fields":[
+                                {
+                                    "path":[
+                                        "$.vc.type"
+                                    ],
+                                    "filter":{
+                                        "type":"array",
+                                        "contains":{
+                                            "const":"TestCredential"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        )).unwrap();
         static ref FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_KEY: String = "\
         openid://?\
             client_id=did%3Akey%3Az6MkiieyoLMSVsJAZv7Jje5wWSkDEymUgkyF8kbcrjZpX3qd&\

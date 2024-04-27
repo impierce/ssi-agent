@@ -13,6 +13,7 @@ use axum::{
     Json,
 };
 use hyper::header;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::info;
 
@@ -24,12 +25,18 @@ pub(crate) async fn get_authorization_requests(
     // Get the authorization request if it exists.
     match query_handler(&authorization_request_id, &state.query.authorization_request).await {
         Ok(Some(AuthorizationRequestView {
-            siopv2_authorization_request: Some(siopv2_authorization_request),
+            authorization_request: Some(authorization_request),
             ..
-        })) => (StatusCode::OK, Json(siopv2_authorization_request)).into_response(),
+        })) => (StatusCode::OK, Json(authorization_request)).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct AuthorizationRequestsRequest {
+    pub nonce: String,
+    pub presentation_definition_id: Option<String>,
 }
 
 #[axum_macros::debug_handler]
@@ -39,10 +46,12 @@ pub(crate) async fn authorization_requests(
 ) -> Response {
     info!("Request Body: {}", payload);
 
-    let nonce = if let Some(nonce) = payload["nonce"].as_str() {
-        nonce
-    } else {
-        return (StatusCode::BAD_REQUEST, "nonce is required").into_response();
+    let Ok(AuthorizationRequestsRequest {
+        nonce,
+        presentation_definition_id,
+    }) = serde_json::from_value(payload)
+    else {
+        return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
     };
 
     let state = generate_random_string();
@@ -50,6 +59,7 @@ pub(crate) async fn authorization_requests(
     let command = AuthorizationRequestCommand::CreateAuthorizationRequest {
         nonce: nonce.to_string(),
         state: state.clone(),
+        presentation_definition_id,
     };
 
     // Create the authorization request.
@@ -75,7 +85,7 @@ pub(crate) async fn authorization_requests(
     // Return the credential.
     match query_handler(&state, &verification_state.query.authorization_request).await {
         Ok(Some(AuthorizationRequestView {
-            form_url_encoded_authorization_request,
+            form_url_encoded_authorization_request: Some(form_url_encoded_authorization_request),
             ..
         })) => (
             StatusCode::CREATED,
@@ -114,7 +124,8 @@ pub mod tests {
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "nonce": "nonce"
+                            "nonce": "nonce",
+                            "presentation_definition_id": "test_definition"
                         }))
                         .unwrap(),
                     ))
