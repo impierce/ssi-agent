@@ -20,8 +20,13 @@ impl SecretManagerServices {
         let snapshot_path = config!("stronghold_path").unwrap();
         let password = config!("stronghold_password").unwrap();
         let key_id = config!("issuer_key_id").unwrap();
+        let issuer_did = config!("issuer_did");
+        let issuer_fragment = config!("issuer_fragment");
 
-        let secret_manager = SecretManager::load(snapshot_path, password, key_id).await.unwrap();
+        let secret_manager =
+            SecretManager::load(snapshot_path, password, key_id, issuer_did.ok(), issuer_fragment.ok())
+                .await
+                .unwrap();
 
         self.secret_manager = Some(secret_manager);
 

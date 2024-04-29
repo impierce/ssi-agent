@@ -82,7 +82,7 @@ impl Aggregate for Credential {
                         services.default_did_method.clone(),
                     )
                 });
-                let issuer_did = issuer.identifier(&default_did_method).unwrap();
+                let issuer_did = issuer.identifier(&default_did_method).await.unwrap();
                 let signed_credential = {
                     // TODO: Add error message here.
                     let mut credential = self.data.clone().unwrap();
@@ -103,6 +103,7 @@ impl Aggregate for Credential {
                             .ok(),
                         &default_did_method
                     )
+                    .await
                     .ok())
                 };
 
@@ -139,17 +140,19 @@ pub mod credential_tests {
     use super::*;
 
     use lazy_static::lazy_static;
+    use rstest::rstest;
     use serde_json::json;
 
     use cqrs_es::test::TestFramework;
 
     use crate::credential::aggregate::Credential;
     use crate::credential::event::CredentialEvent;
-    use crate::offer::aggregate::tests::SUBJECT_IDENTIFIER_KEY_ID;
+    use crate::offer::aggregate::tests::SUBJECT_KEY_DID;
 
     type CredentialTestFramework = TestFramework<Credential>;
 
-    #[test]
+    #[rstest]
+    #[serial_test::serial]
     fn test_create_unsigned_credential() {
         CredentialTestFramework::with(CredentialServices)
             .given_no_previous_events()
@@ -167,8 +170,9 @@ pub mod credential_tests {
             }])
     }
 
-    #[test]
-    fn test_sign_credential() {
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_sign_credential() {
         CredentialTestFramework::with(CredentialServices)
             .given(vec![CredentialEvent::UnsignedCredentialCreated {
                 data: Data {
@@ -177,7 +181,7 @@ pub mod credential_tests {
                 credential_format_template: CREDENTIAL_FORMAT_TEMPLATE.clone(),
             }])
             .when(CredentialCommand::SignCredential {
-                subject_id: SUBJECT_IDENTIFIER_KEY_ID.clone(),
+                subject_id: SUBJECT_KEY_DID.identifier("did:key").await.unwrap(),
                 overwrite: false,
             })
             .then_expect_events(vec![CredentialEvent::CredentialSigned {
@@ -222,22 +226,7 @@ pub mod credential_tests {
           "credentialSubject": CREDENTIAL_SUBJECT["credentialSubject"].clone(),
         });
         pub static ref VERIFIABLE_CREDENTIAL_JWT: String = {
-            "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGO\
-            GtiY3JqWnBYM3FkI3o2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCJ9.eyJpc3MiOiJkaWQ6a2V5On\
-            o2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNK\
-            QVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbIm\
-            h0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3Aw\
-            L2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHA6Ly9leGFtcGxlLmNvbS9jcmVkZW50aWFscy8zNTI3IiwidHlwZSI6WyJWZXJpZm\
-            lhYmxlQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3Smpl\
-            NXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5hbWUiOiJUZWFtd2\
-            9yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdr\
-            eUY4a2JjcmpacFgzcWQiLCJ0eXBlIjoiQWNoaWV2ZW1lbnRTdWJqZWN0IiwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbG\
-            UuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEi\
-            OnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY2\
-            9nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNv\
-            Z25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbn\
-            QuIiwibmFtZSI6IlRlYW13b3JrIn19fX0.ynkpX-rZlw0S4Vgnffn8y8fZhVOIqVid8yEUCMUNT20EC143uOMtuvpmktu5NvhXlLZTaNPe\
-            _cLt0BYnPMcKDg"
+            "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHA6Ly9leGFtcGxlLmNvbS9jcmVkZW50aWFscy8zNTI3IiwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5hbWUiOiJUZWFtd29yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJ0eXBlIjoiQWNoaWV2ZW1lbnRTdWJqZWN0IiwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEiOnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY29nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNvZ25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbnQuIiwibmFtZSI6IlRlYW13b3JrIn19fX0.meErQE7y_AnGa4le_8L8FVhIQDdTUPBVHdeW8Q4UGU3BeeT3O-7OeagveXh4_5aZEYj-eoiaR_JNgAkpzjdpCA"
                 .to_string()
         };
     }

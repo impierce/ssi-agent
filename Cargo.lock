@@ -104,6 +104,7 @@ dependencies = [
  "agent_store",
  "agent_verification",
  "axum 0.7.5",
+ "iota-sdk",
  "lazy_static",
  "oid4vc-core",
  "serde_json",
@@ -143,6 +144,7 @@ version = "0.1.0"
 dependencies = [
  "agent_secret_manager",
  "agent_shared",
+ "async-std",
  "async-trait",
  "axum 0.7.5",
  "cqrs-es",
@@ -155,6 +157,7 @@ dependencies = [
  "oid4vc-core",
  "oid4vc-manager",
  "oid4vci",
+ "rstest",
  "serde",
  "serde_json",
  "serial_test",
@@ -220,6 +223,7 @@ dependencies = [
  "agent_shared",
  "agent_verification",
  "anyhow",
+ "async-std",
  "async-trait",
  "axum 0.7.5",
  "cqrs-es",
@@ -442,6 +446,7 @@ dependencies = [
  "blocking",
  "futures-lite 2.3.0",
  "once_cell",
+ "tokio",
 ]
 
 [[package]]
@@ -1189,13 +1194,13 @@ checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=29260ba#29260bada7a333ae954e151942807fd5c3222405"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=1ac546a#1ac546aada159f6343d2881671ccb07decb2a3da"
 dependencies = [
+ "did_iota",
  "did_jwk",
  "did_key",
  "did_web",
  "identity_iota",
- "iota-sdk",
  "shared",
  "signature 2.2.0",
  "tokio",
@@ -1721,9 +1726,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "did_iota"
+version = "0.1.0"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=1ac546a#1ac546aada159f6343d2881671ccb07decb2a3da"
+dependencies = [
+ "identity_iota",
+ "identity_stronghold",
+ "iota-sdk",
+ "log",
+ "shared",
+ "tokio",
+]
+
+[[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=29260ba#29260bada7a333ae954e151942807fd5c3222405"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=1ac546a#1ac546aada159f6343d2881671ccb07decb2a3da"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -1740,7 +1758,7 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=29260ba#29260bada7a333ae954e151942807fd5c3222405"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=1ac546a#1ac546aada159f6343d2881671ccb07decb2a3da"
 dependencies = [
  "did-key",
  "did-method-key",
@@ -1759,7 +1777,7 @@ dependencies = [
 [[package]]
 name = "did_manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=29260ba#29260bada7a333ae954e151942807fd5c3222405"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=1ac546a#1ac546aada159f6343d2881671ccb07decb2a3da"
 dependencies = [
  "consumer",
  "producer",
@@ -1787,7 +1805,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=29260ba#29260bada7a333ae954e151942807fd5c3222405"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=1ac546a#1ac546aada159f6343d2881671ccb07decb2a3da"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -1806,7 +1824,7 @@ dependencies = [
 [[package]]
 name = "dif-presentation-exchange"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=ce4e3fd#ce4e3fdcc5781660ab8900b22d8026a4b7ca9932"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=e9c91e1#e9c91e19b8c2f19fac95dddd4b04d2633a6bb5f6"
 dependencies = [
  "getset",
  "jsonpath_lib",
@@ -4271,7 +4289,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=ce4e3fd#ce4e3fdcc5781660ab8900b22d8026a4b7ca9932"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=e9c91e1#e9c91e19b8c2f19fac95dddd4b04d2633a6bb5f6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4295,7 +4313,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=ce4e3fd#ce4e3fdcc5781660ab8900b22d8026a4b7ca9932"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=e9c91e1#e9c91e19b8c2f19fac95dddd4b04d2633a6bb5f6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4327,7 +4345,7 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=ce4e3fd#ce4e3fdcc5781660ab8900b22d8026a4b7ca9932"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=e9c91e1#e9c91e19b8c2f19fac95dddd4b04d2633a6bb5f6"
 dependencies = [
  "anyhow",
  "derivative",
@@ -4350,7 +4368,7 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=ce4e3fd#ce4e3fdcc5781660ab8900b22d8026a4b7ca9932"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=e9c91e1#e9c91e19b8c2f19fac95dddd4b04d2633a6bb5f6"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5010,16 +5028,16 @@ dependencies = [
 [[package]]
 name = "producer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=29260ba#29260bada7a333ae954e151942807fd5c3222405"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=1ac546a#1ac546aada159f6343d2881671ccb07decb2a3da"
 dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.0",
  "consumer",
+ "did_iota",
  "did_jwk",
  "did_key",
  "did_web",
- "futures",
  "identity_iota",
  "identity_stronghold",
  "iota-sdk",
@@ -6079,7 +6097,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=29260ba#29260bada7a333ae954e151942807fd5c3222405"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=1ac546a#1ac546aada159f6343d2881671ccb07decb2a3da"
 dependencies = [
  "identity_iota",
  "identity_stronghold",
@@ -6146,7 +6164,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=ce4e3fd#ce4e3fdcc5781660ab8900b22d8026a4b7ca9932"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=e9c91e1#e9c91e19b8c2f19fac95dddd4b04d2633a6bb5f6"
 dependencies = [
  "anyhow",
  "async-trait",
