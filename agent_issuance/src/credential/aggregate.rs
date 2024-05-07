@@ -121,14 +121,14 @@ impl Aggregate for Credential {
                 data,
                 credential_format_template,
             } => {
-                self.data = Some(data);
-                self.credential_format_template = Some(credential_format_template);
+                self.data.replace(data);
+                self.credential_format_template.replace(credential_format_template);
             }
             SignedCredentialCreated { signed_credential } => {
-                self.signed = Some(signed_credential);
+                self.signed.replace(signed_credential);
             }
             CredentialSigned { signed_credential } => {
-                self.signed = Some(signed_credential);
+                self.signed.replace(signed_credential);
             }
         }
     }

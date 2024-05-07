@@ -18,7 +18,7 @@ impl View<Connection> for ConnectionView {
 
         match &event.payload {
             SIOPv2AuthorizationResponseVerified { id_token } => {
-                self.id_token = Some(id_token.clone());
+                self.id_token.replace(id_token.clone());
             }
         }
     }
