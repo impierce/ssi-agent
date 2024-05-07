@@ -48,9 +48,7 @@ docker compose up
 
 ## Leveraging Just-in-Time Data Request Events
 
-UniCore empowers dynamic integration with external systems through just-in-time data request events. By configuring an HTTP Event Publisher, events can seamlessly dispatch to external systems, enabling systematic integration with existing infrastructures. This feature proves invaluable in scenarios requiring real-time data retrieval from external sources or on-demand data generation.
-
-By leveraging just-in-time data request events, you enhance the flexibility and efficiency of data management within your SSI ecosystem. UniCore seamlessly integrates with external systems, facilitating on-demand data access and enriching the versatility of your infrastructure.
+UniCore facilitates dynamic integration with external systems through just-in-time data request events, dispatched seamlessly via an HTTP Event Publisher. This enables real-time data retrieval and on-demand generation, enhancing flexibility and efficiency in your SSI ecosystem.
 
 ### Practical Applications
 
