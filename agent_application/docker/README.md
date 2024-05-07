@@ -50,7 +50,7 @@ docker compose up
 
 UniCore facilitates dynamic integration with external systems through just-in-time data request events, dispatched seamlessly via an HTTP Event Publisher. This enables real-time data retrieval and on-demand generation, enhancing flexibility and efficiency in your SSI ecosystem.
 
-### Practical Applications
+### Example Scenarios
 
 **Custom Credential Signing**
 
