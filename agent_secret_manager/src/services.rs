@@ -23,7 +23,7 @@ impl SecretManagerServices {
 
         let secret_manager = SecretManager::load(snapshot_path, password, key_id).await.unwrap();
 
-        self.secret_manager = Some(secret_manager);
+        self.secret_manager.replace(secret_manager);
 
         Ok(())
     }

@@ -65,7 +65,7 @@ where
                 pre_authorized_code, ..
             } = &event.payload
             {
-                view_context.view_instance_id = pre_authorized_code.clone();
+                view_context.view_instance_id.clone_from(pre_authorized_code);
                 view.update(event);
                 self.view_repository.update_view(view, view_context).await?;
             }
@@ -84,7 +84,7 @@ impl View<Offer> for PreAuthorizedCodeView {
         use crate::offer::event::OfferEvent::*;
 
         if let CredentialOfferCreated { .. } = event.payload {
-            self.offer_id = event.aggregate_id.clone();
+            self.offer_id.clone_from(&event.aggregate_id)
         }
     }
 }

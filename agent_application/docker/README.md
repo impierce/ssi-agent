@@ -45,3 +45,29 @@ docker compose up
 
 > [!NOTE]
 > If you don't have rewrite rules enabled on your reverse proxy, you can set the `AGENT_CONFIG_BASE_PATH` to a value such as `ssi-agent`.
+
+## Leveraging Just-in-Time Data Request Events
+
+UniCore facilitates dynamic integration with external systems through just-in-time data request events, dispatched seamlessly via an HTTP Event Publisher. This enables real-time data retrieval and on-demand generation, enhancing flexibility and efficiency in your SSI ecosystem.
+
+### Example Scenarios
+
+**Custom Credential Signing**
+
+UniCore facilitates the utilization of just-in-time data request events for customized credential signing workflows. This approach enables users to manage the signing process independently, offering greater control over credential issuance. When UniCore verifies a Credential Request from a Wallet, it triggers the `CredentialRequestVerified` event. By utilizing the HTTP Event Publisher, this event, containing essential identifiers like `offer_id` and `subject_id`, can be dispatched to external systems. Subsequently, external systems leverage these identifiers to generate and sign credentials, which are then submitted to UniCore's `/v1/credentials` endpoint.
+
+To integrate just-in-time data request events into your workflow, adhere to the following steps:
+
+1. Configure the HTTP Event Publisher to listen for the `CredentialRequestVerified` event. Refer to the [HTTP Event Publisher documentation](../../agent_event_publisher_http/README.md) for detailed configuration instructions:
+   ```yaml
+   target_url: &target_url "https://my-domain.example.org/ssi-event-subscriber"
+
+   offer: {
+      target_url: *target_url,
+      target_events: [
+         CredentialRequestVerified
+      ]
+   }
+   ```
+2. Upon initiation of the OpenID4VCI flow by a Wallet, the CredentialRequestVerified event is triggered, containing relevant identifiers.
+3. The HTTP Event Publisher dispatches the event to the external system. Leveraging the provided identifiers, the external system generates and signs the credential, then submits it to UniCore's `/v1/credentials` endpoint. Refer to the [API specification](../../agent_api_rest/README.md)) for additional details on endpoint usage.

@@ -28,6 +28,7 @@ where
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct OfferView {
+    pub subject_id: Option<String>,
     pub credential_ids: Vec<String>,
     pub pre_authorized_code: String,
     pub access_token: String,
@@ -45,18 +46,21 @@ impl View<Offer> for OfferView {
                 pre_authorized_code,
                 access_token,
             } => {
-                self.pre_authorized_code = pre_authorized_code.clone();
-                self.access_token = access_token.clone();
+                self.pre_authorized_code.clone_from(pre_authorized_code);
+                self.access_token.clone_from(access_token)
             }
             CredentialsAdded {
                 credential_ids: credential_id,
             } => {
-                self.credential_ids = credential_id.clone();
+                self.credential_ids.clone_from(credential_id);
             }
             FormUrlEncodedCredentialOfferCreated {
                 form_url_encoded_credential_offer,
-            } => {
-                self.form_url_encoded_credential_offer = form_url_encoded_credential_offer.clone();
+            } => self
+                .form_url_encoded_credential_offer
+                .clone_from(form_url_encoded_credential_offer),
+            CredentialRequestVerified { subject_id, .. } => {
+                self.subject_id.replace(subject_id.clone());
             }
             TokenResponseCreated { token_response } => {
                 self.token_response.replace(token_response.clone());

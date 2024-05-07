@@ -20,17 +20,19 @@ impl View<AuthorizationRequest> for AuthorizationRequestView {
 
         match &event.payload {
             AuthorizationRequestCreated { authorization_request } => {
-                self.siopv2_authorization_request = Some(*authorization_request.clone());
+                self.siopv2_authorization_request
+                    .replace(*authorization_request.clone());
             }
             FormUrlEncodedAuthorizationRequestCreated {
                 form_url_encoded_authorization_request,
-            } => {
-                self.form_url_encoded_authorization_request = form_url_encoded_authorization_request.clone();
-            }
+            } => self
+                .form_url_encoded_authorization_request
+                .clone_from(form_url_encoded_authorization_request),
             AuthorizationRequestObjectSigned {
                 signed_authorization_request_object,
             } => {
-                self.signed_authorization_request_object = Some(signed_authorization_request_object.clone());
+                self.signed_authorization_request_object
+                    .replace(signed_authorization_request_object.clone());
             }
         }
     }

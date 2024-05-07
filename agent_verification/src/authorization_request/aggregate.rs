@@ -102,17 +102,19 @@ impl Aggregate for AuthorizationRequest {
 
         match event {
             AuthorizationRequestCreated { authorization_request } => {
-                self.authorization_request = Some(*authorization_request);
+                self.authorization_request.replace(*authorization_request);
             }
             FormUrlEncodedAuthorizationRequestCreated {
                 form_url_encoded_authorization_request,
             } => {
-                self.form_url_encoded_authorization_request = Some(form_url_encoded_authorization_request);
+                self.form_url_encoded_authorization_request
+                    .replace(form_url_encoded_authorization_request);
             }
             AuthorizationRequestObjectSigned {
                 signed_authorization_request_object,
             } => {
-                self.signed_authorization_request_object = Some(signed_authorization_request_object);
+                self.signed_authorization_request_object
+                    .replace(signed_authorization_request_object);
             }
         }
     }

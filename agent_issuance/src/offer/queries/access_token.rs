@@ -62,7 +62,7 @@ where
         for event in events {
             let (mut view, mut view_context) = self.load_mut(view_id.to_string()).await?;
             if let OfferEvent::CredentialOfferCreated { access_token, .. } = &event.payload {
-                view_context.view_instance_id = access_token.clone();
+                view_context.view_instance_id.clone_from(access_token);
                 view.update(event);
                 self.view_repository.update_view(view, view_context).await?;
             }
@@ -81,7 +81,7 @@ impl View<Offer> for AccessTokenView {
         use crate::offer::event::OfferEvent::*;
 
         if let CredentialOfferCreated { .. } = event.payload {
-            self.offer_id = event.aggregate_id.clone();
+            self.offer_id.clone_from(&event.aggregate_id)
         }
     }
 }
