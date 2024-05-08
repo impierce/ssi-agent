@@ -28,19 +28,20 @@ impl Aggregate for AgentSecretManager {
         match command {
             SecretManagerCommand::Initialize => {
                 let mut guard = services.lock().await;
-                assert!(guard.secret_manager.is_none());
+                assert!(guard.subject.is_none());
                 guard.init().await.unwrap();
-                assert!(guard.secret_manager.is_some());
+                assert!(guard.subject.is_some());
 
                 Ok(vec![SecretManagerEvent::Initialized {}])
             }
             SecretManagerCommand::EnableDidMethod { method } => {
                 let guard = services.lock().await;
-                assert!(guard.secret_manager.is_some());
+                assert!(guard.subject.is_some());
                 let result = guard
-                    .secret_manager
+                    .subject
                     .as_ref()
                     .unwrap()
+                    .secret_manager
                     .produce_document(method.clone())
                     .await;
 

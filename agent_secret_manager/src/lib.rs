@@ -5,6 +5,7 @@ pub mod aggregate;
 pub mod commands;
 pub mod events;
 pub mod services;
+pub mod subject;
 
 // TODO: find better solution for this
 pub async fn secret_manager() -> SecretManager {
@@ -14,7 +15,7 @@ pub async fn secret_manager() -> SecretManager {
 
     match (snapshot_path, password, key_id) {
         (Ok(snapshot_path), Ok(password), Ok(key_id)) => {
-            SecretManager::load(snapshot_path, password, key_id).await.unwrap()
+            SecretManager::load(snapshot_path, password, key_id, None, None).await.unwrap()
         }
         (Ok(snapshot_path), Ok(password), _) => SecretManager::generate(snapshot_path, password).await.unwrap(),
         _ => panic!("Unable to load or generate `SecretManager`. Please make sure to set both `AGENT_SECRET_MANAGER_STRONGHOLD_PATH` and `AGENT_SECRET_MANAGER_STRONGHOLD_PASSWORD` environment variables."),

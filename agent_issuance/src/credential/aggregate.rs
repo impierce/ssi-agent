@@ -77,12 +77,9 @@ impl Aggregate for Credential {
                 let (issuer, default_did_method) = futures::executor::block_on(async {
                     let mut services = SecretManagerServices::new(None);
                     services.init().await.unwrap();
-                    (
-                        Arc::new(services.secret_manager.unwrap()),
-                        services.default_did_method.clone(),
-                    )
+                    (Arc::new(services.subject.unwrap()), services.default_did_method.clone())
                 });
-                let issuer_did = issuer.identifier(&default_did_method).unwrap();
+                let issuer_did = issuer.identifier(&default_did_method).await.unwrap();
                 let signed_credential = {
                     // TODO: Add error message here.
                     let mut credential = self.data.clone().unwrap();
@@ -103,6 +100,7 @@ impl Aggregate for Credential {
                             .ok(),
                         &default_did_method
                     )
+                    .await
                     .ok())
                 };
 

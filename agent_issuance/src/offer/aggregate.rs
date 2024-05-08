@@ -115,7 +115,7 @@ impl Aggregate for Offer {
                 let issuer = futures::executor::block_on(async {
                     let mut services = SecretManagerServices::new(None);
                     services.init().await.unwrap();
-                    Arc::new(services.secret_manager.unwrap())
+                    Arc::new(services.subject.unwrap())
                 });
 
                 let credential_issuer = CredentialIssuer {
@@ -479,7 +479,7 @@ pub mod tests {
         futures::executor::block_on(async {
             let mut services = SecretManagerServices::new(None);
             services.init().await.unwrap();
-            services.secret_manager.unwrap()
+            services.subject.unwrap()
         })
     }
 }
