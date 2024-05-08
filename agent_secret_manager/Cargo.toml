@@ -9,9 +9,11 @@ agent_shared = { path = "../agent_shared" }
 
 anyhow = "1.0"
 async-trait = "0.1"
+base64 = { version = "0.22.0" }
 cqrs-es = "0.4.2"
 did_manager.workspace = true
 futures.workspace = true
+identity_iota = { version = "1.2" }
 log = "0.4"
 oid4vc-core.workspace = true
 serde.workspace = true

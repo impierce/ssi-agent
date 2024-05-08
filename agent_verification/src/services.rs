@@ -30,6 +30,7 @@ pub mod test_utils {
     use std::str::FromStr;
 
     use agent_secret_manager::secret_manager;
+    use agent_secret_manager::subject::Subject;
     use oid4vc_core::{DidMethod, SubjectSyntaxType};
     use siopv2::authorization_request::ClientMetadataParameters;
 
@@ -37,7 +38,11 @@ pub mod test_utils {
 
     pub fn test_verification_services(default_did_method: &str) -> Arc<VerificationServices> {
         Arc::new(VerificationServices::new(
-            Arc::new(futures::executor::block_on(async { secret_manager().await })),
+            Arc::new(futures::executor::block_on(async {
+                Subject {
+                    secret_manager: secret_manager().await,
+                }
+            })),
             ClientMetadataResource::ClientMetadata {
                 client_name: None,
                 logo_uri: None,

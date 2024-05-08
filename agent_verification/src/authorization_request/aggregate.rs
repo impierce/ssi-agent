@@ -125,10 +125,10 @@ pub mod tests {
     use std::str::FromStr;
 
     use agent_secret_manager::secret_manager;
+    use agent_secret_manager::subject::Subject;
     use cqrs_es::test::TestFramework;
-    use did_manager::SecretManager;
     use lazy_static::lazy_static;
-    use oid4vc_core::Subject;
+    use oid4vc_core::Subject as _;
     use oid4vc_core::{client_metadata::ClientMetadataResource, DidMethod, SubjectSyntaxType};
     use rstest::rstest;
     use siopv2::authorization_request::ClientMetadataParameters;
@@ -224,7 +224,7 @@ pub mod tests {
     }
 
     lazy_static! {
-        static ref VERIFIER: SecretManager = futures::executor::block_on(async { secret_manager().await });
+        static ref VERIFIER: Subject = futures::executor::block_on(async { Subject { secret_manager: secret_manager().await } });
         pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
         static ref FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_KEY: String = "\
         openid://?\

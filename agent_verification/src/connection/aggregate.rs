@@ -76,6 +76,7 @@ pub mod tests {
     use std::sync::Arc;
 
     use agent_secret_manager::secret_manager;
+    use agent_secret_manager::subject::Subject;
     use cqrs_es::test::TestFramework;
     use oid4vc_core::authorization_response::AuthorizationResponse;
     use oid4vc_manager::ProviderManager;
@@ -116,7 +117,11 @@ pub mod tests {
         siopv2_authorization_request: &SIOPv2AuthorizationRequest,
     ) -> AuthorizationResponse<SIOPv2> {
         let provider_manager = ProviderManager::new(
-            Arc::new(futures::executor::block_on(async { secret_manager().await })),
+            Arc::new(futures::executor::block_on(async {
+                Subject {
+                    secret_manager: secret_manager().await,
+                }
+            })),
             did_method,
         )
         .unwrap();
