@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;
 use jsonwebtoken::{Algorithm, Header};
-use oid4vc_core::{jwt, Subject};
+use oid4vc_core::{jwt, Subject as _};
 use oid4vci::VerifiableCredentialJwt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -74,12 +74,12 @@ impl Aggregate for Credential {
                 if self.signed.is_some() && !overwrite {
                     return Ok(vec![]);
                 }
-                let (issuer, default_did_method) = futures::executor::block_on(async {
+                let (issuer, default_did_method) = {
                     let mut services = SecretManagerServices::new(None);
                     services.init().await.unwrap();
                     (Arc::new(services.subject.unwrap()), services.default_did_method.clone())
-                });
-                let issuer_did = issuer.identifier(&default_did_method).await.unwrap();
+                };
+                let issuer_did = issuer.identifier(&default_did_method).unwrap();
                 let signed_credential = {
                     // TODO: Add error message here.
                     let mut credential = self.data.clone().unwrap();
@@ -100,7 +100,6 @@ impl Aggregate for Credential {
                             .ok(),
                         &default_did_method
                     )
-                    .await
                     .ok())
                 };
 

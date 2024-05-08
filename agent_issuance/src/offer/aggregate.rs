@@ -112,11 +112,11 @@ impl Aggregate for Offer {
                 authorization_server_metadata,
                 credential_request,
             } => {
-                let issuer = futures::executor::block_on(async {
+                let issuer = {
                     let mut services = SecretManagerServices::new(None);
                     services.init().await.unwrap();
                     Arc::new(services.subject.unwrap())
-                });
+                };
 
                 let credential_issuer = CredentialIssuer {
                     subject: issuer.clone(),
@@ -200,10 +200,10 @@ impl Aggregate for Offer {
 pub mod tests {
     use super::*;
 
+    use agent_secret_manager::subject::Subject;
     use cqrs_es::test::TestFramework;
-    use did_manager::SecretManager;
     use lazy_static::lazy_static;
-    use oid4vc_core::Subject;
+    use oid4vc_core::Subject as _;
     use oid4vci::{
         credential_format_profiles::{
             w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, CredentialFormats, Parameters,
@@ -228,7 +228,7 @@ pub mod tests {
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
-        let subject = subject();
+        let subject = test_subject();
         OfferTestFramework::with(OfferServices)
             .given_no_previous_events()
             .when(OfferCommand::CreateCredentialOffer)
@@ -245,7 +245,7 @@ pub mod tests {
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
-        let subject = subject();
+        let subject = test_subject();
         OfferTestFramework::with(OfferServices)
             .given(vec![OfferEvent::CredentialOfferCreated {
                 pre_authorized_code: subject.pre_authorized_code.clone(),
@@ -266,7 +266,7 @@ pub mod tests {
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
-        let subject = subject();
+        let subject = test_subject();
         OfferTestFramework::with(OfferServices)
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
@@ -292,7 +292,7 @@ pub mod tests {
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
-        let subject = subject();
+        let subject = test_subject();
         OfferTestFramework::with(OfferServices)
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
@@ -321,7 +321,7 @@ pub mod tests {
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
-        let subject = subject();
+        let subject = test_subject();
         OfferTestFramework::with(OfferServices)
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
@@ -357,7 +357,7 @@ pub mod tests {
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
 
-        let subject = subject();
+        let subject = test_subject();
         OfferTestFramework::with(OfferServices)
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
@@ -388,7 +388,7 @@ pub mod tests {
 
     #[derive(Clone)]
     struct TestSubject {
-        secret_manager: Arc<SecretManager>,
+        subject: Arc<Subject>,
         credential: String,
         access_token: String,
         pre_authorized_code: String,
@@ -400,15 +400,15 @@ pub mod tests {
         pub static ref PRE_AUTHORIZED_CODES: Mutex<VecDeque<String>> = Mutex::new(vec![].into());
         pub static ref ACCESS_TOKENS: Mutex<VecDeque<String>> = Mutex::new(vec![].into());
         pub static ref C_NONCES: Mutex<VecDeque<String>> = Mutex::new(vec![].into());
-        static ref SUBJECT_KEY_DID: Arc<SecretManager> = Arc::new(secret_manager());
+        pub static ref SUBJECT_KEY_DID: Arc<Subject> = Arc::new(subject());
         pub static ref SUBJECT_IDENTIFIER_KEY_ID: String = SUBJECT_KEY_DID.identifier("did:key").unwrap();
     }
 
-    fn subject() -> TestSubject {
+    fn test_subject() -> TestSubject {
         let pre_authorized_code = PRE_AUTHORIZED_CODES.lock().unwrap()[0].clone();
 
         TestSubject {
-            secret_manager: SUBJECT_KEY_DID.clone(),
+            subject: SUBJECT_KEY_DID.clone(),
             credential: VERIFIABLE_CREDENTIAL_JWT.clone(),
             pre_authorized_code: pre_authorized_code.clone(),
             access_token: ACCESS_TOKENS.lock().unwrap()[0].clone(),
@@ -451,8 +451,8 @@ pub mod tests {
             proof: Some(
                 KeyProofType::builder()
                     .proof_type(ProofType::Jwt)
-                    .signer(subject.secret_manager.clone())
-                    .iss(subject.secret_manager.identifier("did:key").unwrap())
+                    .signer(subject.subject.clone())
+                    .iss(subject.subject.identifier("did:key").unwrap())
                     .aud(CREDENTIAL_ISSUER_METADATA.credential_issuer.clone())
                     .iat(1571324800)
                     .exp(9999999999i64)
@@ -475,7 +475,7 @@ pub mod tests {
         }
     }
 
-    fn secret_manager() -> SecretManager {
+    fn subject() -> Subject {
         futures::executor::block_on(async {
             let mut services = SecretManagerServices::new(None);
             services.init().await.unwrap();
