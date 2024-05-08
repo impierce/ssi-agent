@@ -1,9 +1,9 @@
 {
 	"info": {
-		"_postman_id": "53b46e18-de7f-4973-8304-8238844a71ce",
+		"_postman_id": "91fc7356-1c5b-4b30-ac7b-e320477cfbbf",
 		"name": "ssi-agent",
 		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
-		"_exporter_id": "24972330"
+		"_exporter_id": "30650915"
 	},
 	"item": [
 		{
@@ -191,8 +191,7 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "Bearer {{ACCESS_TOKEN}}",
-								"type": "text"
+								"value": "Bearer {{ACCESS_TOKEN}}"
 							}
 						],
 						"body": {
@@ -283,6 +282,20 @@
 						"method": "GET",
 						"header": [],
 						"url": "{{REQUEST_URI}}"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "metrics",
+			"item": [
+				{
+					"name": "health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "http://{{HOST}}/health"
 					},
 					"response": []
 				}
