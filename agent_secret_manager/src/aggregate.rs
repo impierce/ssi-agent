@@ -64,7 +64,7 @@ mod aggregate_tests {
     use super::*;
 
     use cqrs_es::test::TestFramework;
-    use did_manager::Method;
+    use did_manager::DidMethod;
 
     use crate::aggregate::AgentSecretManager;
     use crate::commands::SecretManagerCommand;
@@ -87,8 +87,8 @@ mod aggregate_tests {
 
     #[test]
     fn successfully_enables_did_key_method() {
-        let expected = SecretManagerEvent::DidMethodEnabled { method: Method::Key };
-        let command = SecretManagerCommand::EnableDidMethod { method: Method::Key };
+        let expected = SecretManagerEvent::DidMethodEnabled { method: DidMethod::Key };
+        let command = SecretManagerCommand::EnableDidMethod { method: DidMethod::Key };
         let services = futures::executor::block_on(async {
             let mut services = SecretManagerServices::new(None);
             services.init().await.unwrap();
@@ -104,8 +104,8 @@ mod aggregate_tests {
     #[test]
     #[tracing_test::traced_test]
     fn successfully_enables_did_web_method() {
-        let expected = SecretManagerEvent::DidMethodEnabled { method: Method::Web };
-        let command = SecretManagerCommand::EnableDidMethod { method: Method::Web };
+        let expected = SecretManagerEvent::DidMethodEnabled { method: DidMethod::Web };
+        let command = SecretManagerCommand::EnableDidMethod { method: DidMethod::Web };
         let services = futures::executor::block_on(async {
             let mut services = SecretManagerServices::new(None);
             services.init().await.unwrap();
@@ -120,9 +120,9 @@ mod aggregate_tests {
 
     #[test]
     fn two_methods_cannot_be_enabled_at_the_same_time() {
-        let events = vec![SecretManagerEvent::DidMethodEnabled { method: Method::Key }];
+        let events = vec![SecretManagerEvent::DidMethodEnabled { method: DidMethod::Key }];
         // let expected = SecretManagerEvent::DidMethodEnabled { method: Method::Web };
-        let command = SecretManagerCommand::EnableDidMethod { method: Method::Web };
+        let command = SecretManagerCommand::EnableDidMethod { method: DidMethod::Web };
         let services = futures::executor::block_on(async {
             let mut services = SecretManagerServices::new(None);
             services.init().await.unwrap();

@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct CredentialView {
-    pub data: Data,
-    pub credential_format_template: serde_json::Value,
+    pub data: Option<Data>,
+    pub credential_format_template: Option<serde_json::Value>,
+    pub signed: Option<serde_json::Value>,
 }
 
 impl View<Credential> for CredentialView {
@@ -16,8 +17,15 @@ impl View<Credential> for CredentialView {
                 data,
                 credential_format_template,
             } => {
-                self.data = data.clone();
-                self.credential_format_template = credential_format_template.clone();
+                self.data.replace(data.clone());
+                self.credential_format_template
+                    .replace(credential_format_template.clone());
+            }
+            CredentialEvent::SignedCredentialCreated { signed_credential } => {
+                self.signed.replace(signed_credential.clone());
+            }
+            CredentialEvent::CredentialSigned { signed_credential } => {
+                self.signed.replace(signed_credential.clone());
             }
         }
     }

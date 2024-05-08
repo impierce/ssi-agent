@@ -1,8 +1,8 @@
 use agent_issuance::{
-    handlers::query_handler,
     server_config::queries::ServerConfigView,
-    state::{ApplicationState, SERVER_CONFIG_ID},
+    state::{IssuanceState, SERVER_CONFIG_ID},
 };
+use agent_shared::handlers::query_handler;
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -10,7 +10,7 @@ use axum::{
 };
 
 #[axum_macros::debug_handler]
-pub(crate) async fn oauth_authorization_server(State(state): State<ApplicationState>) -> Response {
+pub(crate) async fn oauth_authorization_server(State(state): State<IssuanceState>) -> Response {
     match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
         Ok(Some(ServerConfigView {
             authorization_server_metadata,
@@ -27,7 +27,9 @@ mod tests {
 
     use super::*;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use agent_shared::config;
     use agent_store::in_memory;
+    use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -50,6 +52,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get("Content-Type").unwrap(), "application/json");
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let authorization_server_metadata: AuthorizationServerMetadata = serde_json::from_slice(&body).unwrap();
@@ -68,11 +71,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
-        let state = in_memory::application_state().await;
+        let issuance_state = in_memory::issuance_state(Default::default()).await;
+        let verification_state = in_memory::verification_state(
+            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
+            Default::default(),
+        )
+        .await;
+        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
-        initialize(state.clone(), startup_commands(BASE_URL.clone())).await;
-
-        let mut app = app(state);
+        let mut app = app((issuance_state, verification_state));
 
         let _authorization_server_metadata = oauth_authorization_server(&mut app).await;
     }

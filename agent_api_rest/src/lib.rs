@@ -1,9 +1,9 @@
-mod credential_issuer;
-mod credentials;
-mod offers;
+mod issuance;
+mod verification;
 
-use agent_issuance::state::ApplicationState;
+use agent_issuance::state::IssuanceState;
 use agent_shared::{config, ConfigError};
+use agent_verification::state::VerificationState;
 use axum::{
     body::Bytes,
     extract::MatchedPath,
@@ -12,17 +12,23 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use credential_issuer::{
+use issuance::credential_issuer::{
     credential::credential,
     token::token,
     well_known::{
         oauth_authorization_server::oauth_authorization_server, openid_credential_issuer::openid_credential_issuer,
     },
 };
-use credentials::{credentials, get_credentials};
-use offers::offers;
+use issuance::credentials::{credentials, get_credentials};
+use issuance::offers::offers;
 use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
+use verification::{
+    authorization_requests::{authorization_requests, get_authorization_requests},
+    relying_party::{redirect::redirect, request::request},
+};
+
+pub type ApplicationState = (IssuanceState, VerificationState);
 
 pub fn app(state: ApplicationState) -> Router {
     let base_path = get_base_path();
@@ -36,7 +42,7 @@ pub fn app(state: ApplicationState) -> Router {
     };
 
     Router::new()
-        // Agent Preparations
+        // Agent Issuance Preparations
         .route(&path("/v1/credentials"), post(credentials))
         .route(&path("/v1/credentials/:credential_id"), get(get_credentials))
         .route(&path("/v1/offers"), post(offers))
@@ -45,9 +51,22 @@ pub fn app(state: ApplicationState) -> Router {
             &path("/.well-known/oauth-authorization-server"),
             get(oauth_authorization_server),
         )
-        .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
-        .route("/auth/token", post(token))
-        .route("/openid4vci/credential", post(credential))
+        .route(
+            &path("/.well-known/openid-credential-issuer"),
+            get(openid_credential_issuer),
+        )
+        .route(&path("/auth/token"), post(token))
+        .route(&path("/openid4vci/credential"), post(credential))
+        // Agent Verification Preparations
+        .route(&path("/v1/authorization_requests"), post(authorization_requests))
+        .route(
+            &path("/v1/authorization_requests/:authorization_request_id"),
+            get(get_authorization_requests),
+        )
+        // SIOPv2
+        .route(&path("/request/:request_id"), get(request))
+        .route(&path("/redirect"), post(redirect))
+        // Trace layer
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &Request<_>| {
@@ -95,47 +114,56 @@ fn get_base_path() -> Result<String, ConfigError> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
+    use agent_shared::config;
     use agent_store::in_memory;
+    use agent_verification::services::test_utils::test_verification_services;
     use axum::routing::post;
     use oid4vci::credential_issuer::{
-        credential_issuer_metadata::CredentialIssuerMetadata, credentials_supported::CredentialsSupportedObject,
+        credential_configurations_supported::CredentialConfigurationsSupportedObject,
+        credential_issuer_metadata::CredentialIssuerMetadata,
     };
     use serde_json::json;
 
     use crate::app;
 
-    pub const SUBJECT_ID: &str = "00000000-0000-0000-0000-000000000000";
+    pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
 
     lazy_static::lazy_static! {
         pub static ref BASE_URL: url::Url = url::Url::parse("https://example.com").unwrap();
-        static ref CREDENTIALS_SUPPORTED: Vec<CredentialsSupportedObject> = vec![serde_json::from_value(json!({
-            "format": "jwt_vc_json",
-            "cryptographic_binding_methods_supported": [
-                "did:key",
-            ],
-            "cryptographic_suites_supported": [
-                "EdDSA"
-            ],
-            "credential_definition":{
-                "type": [
-                    "VerifiableCredential",
-                    "OpenBadgeCredential"
-                ]
-            },
-            "proof_types_supported": [
-                "jwt"
-            ]
-        }
-        ))
-        .unwrap()];
+        static ref CREDENTIAL_CONFIGURATIONS_SUPPORTED: HashMap<String, CredentialConfigurationsSupportedObject> =
+            vec![(
+                "0".to_string(),
+                serde_json::from_value(json!({
+                    "format": "jwt_vc_json",
+                    "cryptographic_binding_methods_supported": [
+                        "did:key",
+                    ],
+                    "credential_signing_alg_values_supported": [
+                        "EdDSA"
+                    ],
+                    "credential_definition":{
+                        "type": [
+                            "VerifiableCredential",
+                            "OpenBadgeCredential"
+                        ]
+                    },
+                    "proof_types_supported": [
+                        "jwt"
+                    ]
+                }
+                ))
+                .unwrap()
+            )]
+            .into_iter()
+            .collect();
         pub static ref CREDENTIAL_ISSUER_METADATA: CredentialIssuerMetadata = CredentialIssuerMetadata {
             credential_issuer: BASE_URL.clone(),
-            authorization_server: None,
             credential_endpoint: BASE_URL.join("credential").unwrap(),
-            deferred_credential_endpoint: None,
             batch_credential_endpoint: Some(BASE_URL.join("batch_credential").unwrap()),
-            credentials_supported: CREDENTIALS_SUPPORTED.clone(),
-            display: None,
+            credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
+            ..Default::default()
         };
     }
 
@@ -144,10 +172,14 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn test_base_path_routes() {
-        let state = in_memory::application_state().await;
-
+        let issuance_state = in_memory::issuance_state(Default::default()).await;
+        let verification_state = in_memory::verification_state(
+            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
+            Default::default(),
+        )
+        .await;
         std::env::set_var("AGENT_APPLICATION_BASE_PATH", "unicore");
-        let router = app(state);
+        let router = app((issuance_state, verification_state));
 
         let _ = router.route("/auth/token", post(handler));
     }

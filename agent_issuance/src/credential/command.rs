@@ -9,4 +9,12 @@ pub enum CredentialCommand {
         data: Data,
         credential_format_template: serde_json::Value,
     },
+    CreateSignedCredential {
+        signed_credential: serde_json::Value,
+    },
+    SignCredential {
+        subject_id: String,
+        // When true, a credential will be re-signed if it already exists.
+        overwrite: bool,
+    },
 }

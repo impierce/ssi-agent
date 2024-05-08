@@ -15,8 +15,7 @@ use crate::server_config::services::ServerConfigServices;
 #[derive(Clone, Default, Deserialize, Serialize, Debug)]
 pub struct ServerConfig {
     authorization_server_metadata: AuthorizationServerMetadata,
-    // TODO: Remove `Option` once CredentialIssuerMetadata is `Default`
-    credential_issuer_metadata: Option<CredentialIssuerMetadata>,
+    credential_issuer_metadata: CredentialIssuerMetadata,
 }
 
 #[async_trait]
@@ -36,7 +35,6 @@ impl Aggregate for ServerConfig {
         _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         use ServerConfigCommand::*;
-        use ServerConfigError::*;
         use ServerConfigEvent::*;
 
         info!("Handling command: {:?}", command);
@@ -50,12 +48,11 @@ impl Aggregate for ServerConfig {
                 credential_issuer_metadata,
             }]),
 
-            CreateCredentialsSupported { credentials_supported } => {
-                self.credential_issuer_metadata
-                    .as_ref()
-                    .ok_or(MissingCredentialIssuerMetadataError)?;
-                Ok(vec![CredentialsSupportedCreated { credentials_supported }])
-            }
+            CreateCredentialsSupported {
+                credential_configurations_supported,
+            } => Ok(vec![CredentialsSupportedCreated {
+                credential_configurations_supported,
+            }]),
         }
     }
 
@@ -70,10 +67,13 @@ impl Aggregate for ServerConfig {
                 credential_issuer_metadata,
             } => {
                 self.authorization_server_metadata = *authorization_server_metadata;
-                self.credential_issuer_metadata.replace(credential_issuer_metadata);
+                self.credential_issuer_metadata = credential_issuer_metadata;
             }
-            CredentialsSupportedCreated { credentials_supported } => {
-                self.credential_issuer_metadata.as_mut().unwrap().credentials_supported = credentials_supported
+            CredentialsSupportedCreated {
+                credential_configurations_supported,
+            } => {
+                self.credential_issuer_metadata.credential_configurations_supported =
+                    credential_configurations_supported
             }
         }
     }
@@ -81,10 +81,12 @@ impl Aggregate for ServerConfig {
 
 #[cfg(test)]
 pub mod server_config_tests {
+    use std::collections::HashMap;
+
     use super::*;
 
     use lazy_static::lazy_static;
-    use oid4vci::credential_issuer::credentials_supported::CredentialsSupportedObject;
+    use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
     use serde_json::json;
 
     use cqrs_es::test::TestFramework;
@@ -115,35 +117,38 @@ pub mod server_config_tests {
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
             }])
             .when(ServerConfigCommand::CreateCredentialsSupported {
-                credentials_supported: CREDENTIALS_SUPPORTED.clone(),
+                credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
             })
             .then_expect_events(vec![ServerConfigEvent::CredentialsSupportedCreated {
-                credentials_supported: CREDENTIALS_SUPPORTED.clone(),
+                credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
             }]);
     }
 
     lazy_static! {
         static ref BASE_URL: url::Url = "https://example.com/".parse().unwrap();
-        static ref CREDENTIALS_SUPPORTED: Vec<CredentialsSupportedObject> = vec![serde_json::from_value(json!({
-            "format": "jwt_vc_json",
-            "cryptographic_binding_methods_supported": [
-                "did:key",
-            ],
-            "cryptographic_suites_supported": [
-                "EdDSA"
-            ],
-            "credential_definition":{
-                "type": [
-                    "VerifiableCredential",
-                    "OpenBadgeCredential"
-                ]
-            },
-            "proof_types_supported": [
-                "jwt"
-            ]
-        }
-        ))
-        .unwrap()];
+        static ref CREDENTIAL_CONFIGURATIONS_SUPPORTED: HashMap<String, CredentialConfigurationsSupportedObject> =
+            vec![(
+                "0".to_string(),
+                serde_json::from_value(json!({
+                    "format": "jwt_vc_json",
+                    "cryptographic_binding_methods_supported": [
+                        "did:key",
+                    ],
+                    "credential_signing_alg_values_supported": [
+                        "EdDSA"
+                    ],
+                    "credential_definition":{
+                        "type": [
+                            "VerifiableCredential",
+                            "OpenBadgeCredential"
+                        ]
+                    }
+                }
+                ))
+                .unwrap()
+            )]
+            .into_iter()
+            .collect();
         pub static ref AUTHORIZATION_SERVER_METADATA: Box<AuthorizationServerMetadata> =
             Box::new(AuthorizationServerMetadata {
                 issuer: BASE_URL.clone(),
@@ -152,12 +157,10 @@ pub mod server_config_tests {
             });
         pub static ref CREDENTIAL_ISSUER_METADATA: CredentialIssuerMetadata = CredentialIssuerMetadata {
             credential_issuer: BASE_URL.clone(),
-            authorization_server: None,
             credential_endpoint: BASE_URL.join("credential").unwrap(),
-            deferred_credential_endpoint: None,
             batch_credential_endpoint: Some(BASE_URL.join("batch_credential").unwrap()),
-            credentials_supported: CREDENTIALS_SUPPORTED.clone(),
-            display: None,
+            credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
+            ..Default::default()
         };
     }
 }

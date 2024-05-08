@@ -8,8 +8,6 @@ use oid4vci::{
 };
 use serde::Deserialize;
 
-use crate::credential::entity::Data;
-
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum OfferCommand {
@@ -26,10 +24,13 @@ pub enum OfferCommand {
     CreateTokenResponse {
         token_request: TokenRequest,
     },
-    CreateCredentialResponse {
+    VerifyCredentialRequest {
+        offer_id: String,
         credential_issuer_metadata: CredentialIssuerMetadata,
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
-        credentials: Vec<Data>,
         credential_request: CredentialRequest,
+    },
+    CreateCredentialResponse {
+        signed_credentials: Vec<serde_json::Value>,
     },
 }

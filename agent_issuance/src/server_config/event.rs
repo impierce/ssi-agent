@@ -1,7 +1,10 @@
+use std::collections::HashMap;
+
 use cqrs_es::DomainEvent;
 use oid4vci::credential_issuer::{
-    authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
-    credentials_supported::CredentialsSupportedObject,
+    authorization_server_metadata::AuthorizationServerMetadata,
+    credential_configurations_supported::CredentialConfigurationsSupportedObject,
+    credential_issuer_metadata::CredentialIssuerMetadata,
 };
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +15,7 @@ pub enum ServerConfigEvent {
         credential_issuer_metadata: CredentialIssuerMetadata,
     },
     CredentialsSupportedCreated {
-        credentials_supported: Vec<CredentialsSupportedObject>,
+        credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
     },
 }
 

@@ -1,0 +1,34 @@
+[package]
+name = "agent_event_publisher_http"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+agent_issuance = { path = "../agent_issuance" }
+agent_store = { path = "../agent_store" }
+agent_verification = { path = "../agent_verification" }
+
+anyhow = "1.0"
+async-trait.workspace = true
+cqrs-es.workspace = true
+rustls = { version = "0.23", default-features = false, features = [
+    "logging",
+    "std",
+    "tls12"
+] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde.workspace = true
+serde_with.workspace = true
+serde_yaml.workspace = true
+
+[dev-dependencies]
+agent_event_publisher_http = { path = ".", features = ["test"] }
+agent_shared = { path = "../agent_shared", features = ["test"] }
+
+serde_json.workspace = true
+tokio.workspace = true
+wiremock.workspace = true
+
+[features]
+test = []

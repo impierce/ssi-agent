@@ -1,7 +1,13 @@
+use agent_secret_manager::services::SecretManagerServices;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;
+use jsonwebtoken::{Algorithm, Header};
+use oid4vc_core::{jwt, Subject};
+use oid4vci::VerifiableCredentialJwt;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::sync::Arc;
 use tracing::info;
 
 use crate::credential::command::CredentialCommand;
@@ -14,8 +20,9 @@ use super::entity::Data;
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
 #[derivative(PartialEq)]
 pub struct Credential {
-    pub data: Data,
-    pub credential_format_template: serde_json::Value,
+    data: Option<Data>,
+    credential_format_template: Option<serde_json::Value>,
+    signed: Option<serde_json::Value>,
 }
 
 #[async_trait]
@@ -34,10 +41,13 @@ impl Aggregate for Credential {
         command: Self::Command,
         _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
+        use CredentialCommand::*;
+        use CredentialEvent::*;
+
         info!("Handling command: {:?}", command);
 
         match command {
-            CredentialCommand::CreateUnsignedCredential {
+            CreateUnsignedCredential {
                 data,
                 credential_format_template,
             } => {
@@ -50,7 +60,7 @@ impl Aggregate for Credential {
                     .ok_or(InvalidCredentialError)?
                     .insert("credentialSubject".to_string(), data.raw["credentialSubject"].clone());
 
-                events.push(CredentialEvent::UnsignedCredentialCreated {
+                events.push(UnsignedCredentialCreated {
                     data: Data {
                         raw: unsigned_credential.clone(),
                     },
@@ -58,6 +68,45 @@ impl Aggregate for Credential {
                 });
 
                 Ok(events)
+            }
+            CreateSignedCredential { signed_credential } => Ok(vec![SignedCredentialCreated { signed_credential }]),
+            SignCredential { subject_id, overwrite } => {
+                if self.signed.is_some() && !overwrite {
+                    return Ok(vec![]);
+                }
+                let (issuer, default_did_method) = futures::executor::block_on(async {
+                    let mut services = SecretManagerServices::new(None);
+                    services.init().await.unwrap();
+                    (
+                        Arc::new(services.secret_manager.unwrap()),
+                        services.default_did_method.clone(),
+                    )
+                });
+                let issuer_did = issuer.identifier(&default_did_method).unwrap();
+                let signed_credential = {
+                    // TODO: Add error message here.
+                    let mut credential = self.data.clone().unwrap();
+
+                    credential.raw["issuer"] = json!(issuer_did);
+                    credential.raw["credentialSubject"]["id"] = json!(subject_id);
+
+                    json!(jwt::encode(
+                        issuer.clone(),
+                        Header::new(Algorithm::EdDSA),
+                        VerifiableCredentialJwt::builder()
+                            .sub(subject_id)
+                            .iss(issuer_did)
+                            .iat(0)
+                            .exp(9999999999i64)
+                            .verifiable_credential(credential.raw)
+                            .build()
+                            .ok(),
+                        &default_did_method
+                    )
+                    .ok())
+                };
+
+                Ok(vec![CredentialSigned { signed_credential }])
             }
         }
     }
@@ -72,8 +121,14 @@ impl Aggregate for Credential {
                 data,
                 credential_format_template,
             } => {
-                self.data = data;
-                self.credential_format_template = credential_format_template;
+                self.data.replace(data);
+                self.credential_format_template.replace(credential_format_template);
+            }
+            SignedCredentialCreated { signed_credential } => {
+                self.signed.replace(signed_credential);
+            }
+            CredentialSigned { signed_credential } => {
+                self.signed.replace(signed_credential);
             }
         }
     }
@@ -90,6 +145,7 @@ pub mod credential_tests {
 
     use crate::credential::aggregate::Credential;
     use crate::credential::event::CredentialEvent;
+    use crate::offer::aggregate::tests::SUBJECT_IDENTIFIER_KEY_ID;
 
     type CredentialTestFramework = TestFramework<Credential>;
 
@@ -108,6 +164,24 @@ pub mod credential_tests {
                     raw: UNSIGNED_CREDENTIAL.clone(),
                 },
                 credential_format_template: CREDENTIAL_FORMAT_TEMPLATE.clone(),
+            }])
+    }
+
+    #[test]
+    fn test_sign_credential() {
+        CredentialTestFramework::with(CredentialServices)
+            .given(vec![CredentialEvent::UnsignedCredentialCreated {
+                data: Data {
+                    raw: UNSIGNED_CREDENTIAL.clone(),
+                },
+                credential_format_template: CREDENTIAL_FORMAT_TEMPLATE.clone(),
+            }])
+            .when(CredentialCommand::SignCredential {
+                subject_id: SUBJECT_IDENTIFIER_KEY_ID.clone(),
+                overwrite: false,
+            })
+            .then_expect_events(vec![CredentialEvent::CredentialSigned {
+                signed_credential: json!(VERIFIABLE_CREDENTIAL_JWT.clone()),
             }])
     }
 
@@ -147,5 +221,24 @@ pub mod credential_tests {
           "name": "Teamwork Badge",
           "credentialSubject": CREDENTIAL_SUBJECT["credentialSubject"].clone(),
         });
+        pub static ref VERIFIABLE_CREDENTIAL_JWT: String = {
+            "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGO\
+            GtiY3JqWnBYM3FkI3o2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCJ9.eyJpc3MiOiJkaWQ6a2V5On\
+            o2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNK\
+            QVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbIm\
+            h0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3Aw\
+            L2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHA6Ly9leGFtcGxlLmNvbS9jcmVkZW50aWFscy8zNTI3IiwidHlwZSI6WyJWZXJpZm\
+            lhYmxlQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3Smpl\
+            NXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5hbWUiOiJUZWFtd2\
+            9yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdr\
+            eUY4a2JjcmpacFgzcWQiLCJ0eXBlIjoiQWNoaWV2ZW1lbnRTdWJqZWN0IiwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbG\
+            UuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEi\
+            OnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY2\
+            9nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNv\
+            Z25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbn\
+            QuIiwibmFtZSI6IlRlYW13b3JrIn19fX0.ynkpX-rZlw0S4Vgnffn8y8fZhVOIqVid8yEUCMUNT20EC143uOMtuvpmktu5NvhXlLZTaNPe\
+            _cLt0BYnPMcKDg"
+                .to_string()
+        };
     }
 }
