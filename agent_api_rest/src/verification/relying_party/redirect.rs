@@ -64,7 +64,7 @@ pub mod tests {
         verification::{authorization_requests::tests::authorization_requests, relying_party::request::tests::request},
     };
     use agent_event_publisher_http::{EventPublisherHttp, TEST_EVENT_PUBLISHER_HTTP_CONFIG};
-    use agent_secret_manager::secret_manager;
+    use agent_secret_manager::{secret_manager, subject::Subject};
     use agent_shared::config;
     use agent_store::{in_memory, EventPublisher};
     use agent_verification::services::test_utils::test_verification_services;
@@ -108,7 +108,9 @@ pub mod tests {
             .unwrap();
 
         let provider_manager = ProviderManager::new(
-            Arc::new(futures::executor::block_on(async { secret_manager().await })),
+            Arc::new(Subject {
+                secret_manager: secret_manager().await,
+            }),
             "did:key",
         )
         .unwrap();
