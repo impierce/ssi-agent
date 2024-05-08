@@ -155,6 +155,8 @@ pub mod tests {
         )
         .unwrap();
 
+        let default_did_method = provider_manager.default_subject_syntax_type().to_string();
+
         match authorization_request {
             GenericAuthorizationRequest::SIOPv2(siopv2_authorization_request) => GenericAuthorizationResponse::SIOPv2(
                 provider_manager
@@ -164,7 +166,7 @@ pub mod tests {
             ),
             GenericAuthorizationRequest::OID4VP(oid4vp_authorization_request) => {
                 // TODO: implement test fixture for subject and issuer instead of using the same did as verifier.
-                let issuer_did = verifier_did(did_method).await;
+                let issuer_did = verifier_did(&default_did_method).await;
                 let subject_did = issuer_did.clone();
 
                 // Create a new verifiable credential.

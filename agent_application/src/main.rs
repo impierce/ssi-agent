@@ -34,7 +34,7 @@ async fn main() {
             logo_uri: None,
             extension: siopv2::authorization_request::ClientMetadataParameters {
                 subject_syntax_types_supported: vec![SubjectSyntaxType::Did(
-                    DidMethod::from_str(&default_did_method).unwrap(),
+                    DidMethod::from_str_with_namespace(&default_did_method).unwrap(),
                 )],
             },
         },

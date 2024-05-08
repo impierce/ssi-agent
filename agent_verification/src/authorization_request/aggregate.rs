@@ -218,7 +218,9 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
-    async fn test_create_authorization_request(#[values("did:key", "did:jwk", "did:iota")] verifier_did_method: &str) {
+    async fn test_create_authorization_request(
+        #[values("did:key", "did:jwk", "did:iota:rms")] verifier_did_method: &str,
+    ) {
         let verification_services = test_verification_services(verifier_did_method);
 
         AuthorizationRequestTestFramework::with(verification_services)
@@ -241,7 +243,7 @@ pub mod tests {
     #[rstest]
     #[serial_test::serial]
     async fn test_sign_authorization_request_object(
-        #[values("did:key", "did:jwk", "did:iota")] verifier_did_method: &str,
+        #[values("did:key", "did:jwk", "did:iota:rms")] verifier_did_method: &str,
     ) {
         let verification_services = test_verification_services(verifier_did_method);
 
@@ -324,7 +326,7 @@ pub mod tests {
         match did_method {
             "did:key" => FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_KEY.clone(),
             "did:jwk" => FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_JWK.clone(),
-            "did:iota" => FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_IOTA.clone(),
+            "did:iota:rms" => FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_IOTA.clone(),
             _ => unimplemented!("Unknown DID method: {}", did_method),
         }
     }
@@ -333,7 +335,7 @@ pub mod tests {
         match did_method {
             "did:key" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_KEY.clone(),
             "did:jwk" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK.clone(),
-            "did:iota" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_IOTA.clone(),
+            "did:iota:rms" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_IOTA.clone(),
             _ => unimplemented!("Unknown DID method: {}", did_method),
         }
     }
