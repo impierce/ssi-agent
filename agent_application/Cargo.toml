@@ -23,5 +23,3 @@ tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 url.workspace = true
-
-iota-sdk = { version = "1.0", features = ["stronghold"] }

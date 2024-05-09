@@ -104,7 +104,6 @@ dependencies = [
  "agent_store",
  "agent_verification",
  "axum 0.7.5",
- "iota-sdk",
  "lazy_static",
  "oid4vc-core",
  "serde_json",

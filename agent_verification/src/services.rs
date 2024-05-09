@@ -29,13 +29,11 @@ impl VerificationServices {
 
 #[cfg(feature = "test")]
 pub mod test_utils {
-
-    use std::str::FromStr;
-
     use agent_secret_manager::secret_manager;
     use agent_secret_manager::subject::Subject;
     use oid4vc_core::SubjectSyntaxType;
     use serde_json::json;
+    use std::str::FromStr;
 
     use super::*;
 
