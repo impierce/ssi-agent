@@ -117,8 +117,8 @@ pub mod tests {
         // "id_token" represents the `SIOPv2` flow, and "vp_token" represents the `OID4VP` flow.
         #[values("id_token", "vp_token")] response_type: &str,
         // TODO: add `did:web`, check for other tests as well. Probably should be moved to E2E test.
-        #[values("did:key", "did:jwk", "did:iota")] verifier_did_method: &str,
-        #[values("did:key", "did:jwk", "did:iota")] provider_did_method: &str,
+        #[values("did:key", "did:jwk", "did:iota:rms")] verifier_did_method: &str,
+        #[values("did:key", "did:jwk", "did:iota:rms")] provider_did_method: &str,
     ) {
         let verification_services = test_verification_services(verifier_did_method);
 
