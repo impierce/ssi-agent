@@ -12,7 +12,7 @@
                         "filter":{
                             "type":"array",
                             "contains":{
-                                "const":"TestCredential"
+                                "const":"VerifiableCredential"
                             }
                         }
                     }
