@@ -1,17 +1,18 @@
+use crate::subject::Subject;
 use agent_shared::config;
 use anyhow::Result;
 use did_manager::SecretManager;
 
 pub struct SecretManagerServices {
-    pub secret_manager: Option<SecretManager>,
+    pub subject: Option<Subject>,
     pub default_did_method: String,
 }
 
 impl SecretManagerServices {
-    pub fn new(secret_manager: Option<SecretManager>) -> Self {
+    pub fn new(subject: Option<Subject>) -> Self {
         let default_did_method = config!("default_did_method").unwrap_or("did:key".to_string());
         Self {
-            secret_manager,
+            subject,
             default_did_method,
         }
     }
@@ -28,7 +29,7 @@ impl SecretManagerServices {
                 .await
                 .unwrap();
 
-        self.secret_manager = Some(secret_manager);
+        self.subject.replace(Subject { secret_manager });
 
         Ok(())
     }

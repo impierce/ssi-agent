@@ -1,14 +1,13 @@
-use std::{str::FromStr, sync::Arc};
-
 use agent_api_rest::app;
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_issuance::{startup_commands::startup_commands, state::initialize};
-use agent_secret_manager::secret_manager;
+use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::config;
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use oid4vc_core::{client_metadata::ClientMetadataResource, DidMethod, SubjectSyntaxType};
 use serde_json::json;
+use std::sync::Arc;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -27,7 +26,9 @@ async fn main() {
 
     let default_did_method = config!("default_did_method").unwrap_or("did:key".to_string());
     let verification_services = Arc::new(VerificationServices::new(
-        Arc::new(secret_manager().await),
+        Arc::new(Subject {
+            secret_manager: secret_manager().await,
+        }),
         // TODO: Temporary solution. Remove this once `ClientMetadata` is part of `RelyingPartyManager`.
         ClientMetadataResource::ClientMetadata {
             client_name: None,

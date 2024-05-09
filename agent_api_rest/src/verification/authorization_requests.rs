@@ -36,6 +36,7 @@ pub(crate) async fn get_authorization_requests(
 #[derive(Deserialize, Serialize)]
 pub struct AuthorizationRequestsRequest {
     pub nonce: String,
+    pub state: Option<String>,
     pub presentation_definition_id: Option<String>,
 }
 
@@ -48,18 +49,34 @@ pub(crate) async fn authorization_requests(
 
     let Ok(AuthorizationRequestsRequest {
         nonce,
+        state,
         presentation_definition_id,
     }) = serde_json::from_value(payload)
     else {
         return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
     };
 
-    let state = generate_random_string();
+    let state = state.unwrap_or(generate_random_string());
+
+    // TODO: This needs to be properly fixed instead of reading the presentation definitions from the file system
+    // everytime a request is made. `PresentationDefinition`'s should be implemented as a proper `Aggregate`. This
+    // current suboptimal solution requires the `./tmp:/app/agent_api_rest` volume to be mounted in the `docker-compose.yml`.
+    let presentation_definition = presentation_definition_id.map(|presentation_definition_id| {
+        let project_root_dir = env!("CARGO_MANIFEST_DIR");
+
+        serde_json::from_reader(
+            std::fs::File::open(format!(
+                "{project_root_dir}/../agent_verification/presentation_definitions/{presentation_definition_id}.json"
+            ))
+            .unwrap(),
+        )
+        .unwrap()
+    });
 
     let command = AuthorizationRequestCommand::CreateAuthorizationRequest {
         nonce: nonce.to_string(),
         state: state.clone(),
-        presentation_definition_id,
+        presentation_definition,
     };
 
     // Create the authorization request.
@@ -125,7 +142,7 @@ pub mod tests {
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "nonce": "nonce",
-                            "presentation_definition_id": "test_definition"
+                            "presentation_definition_id": "presentation_definition"
                         }))
                         .unwrap(),
                     ))

@@ -1,17 +1,11 @@
+use super::{command::ConnectionCommand, error::ConnectionError, event::ConnectionEvent};
+use crate::{generic_oid4vc::GenericAuthorizationResponse, services::VerificationServices};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use oid4vc_core::authorization_request::Object;
 use oid4vp::Oid4vpParams;
 use serde::{Deserialize, Serialize};
-use siopv2::siopv2::SIOPv2;
 use std::{sync::Arc, vec};
 use tracing::info;
-
-use crate::{connection::command::GenericAuthorizationResponse, services::VerificationServices};
-
-use super::{command::ConnectionCommand, error::ConnectionError, event::ConnectionEvent};
-
-pub type SIOPv2AuthorizationRequest = oid4vc_core::authorization_request::AuthorizationRequest<Object<SIOPv2>>;
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Connection {
@@ -65,8 +59,7 @@ impl Aggregate for Connection {
 
                         let vp_token = match oid4vp_authorization_response.extension.oid4vp_parameters {
                             Oid4vpParams::Params { vp_token, .. } => vp_token,
-                            // TODO: add error here
-                            _ => unimplemented!("Only `Params` type is supported for OID4VP."),
+                            Oid4vpParams::Jwt { .. } => return Err(UnsupportedJwtParameterError),
                         };
 
                         Ok(vec![OID4VPAuthorizationResponseVerified { vp_token }])
@@ -97,6 +90,7 @@ pub mod tests {
     use std::sync::Arc;
 
     use agent_secret_manager::secret_manager;
+    use agent_secret_manager::subject::Subject;
     use cqrs_es::test::TestFramework;
     use identity_credential::credential::Jwt;
     use identity_credential::presentation::Presentation;
@@ -110,7 +104,7 @@ pub mod tests {
     use crate::authorization_request::aggregate::tests::{
         authorization_request, verifier_did, PRESENTATION_DEFINITION,
     };
-    use crate::authorization_request::aggregate::GenericAuthorizationRequest;
+    use crate::generic_oid4vc::GenericAuthorizationRequest;
     use crate::services::test_utils::test_verification_services;
 
     use super::*;
@@ -150,7 +144,11 @@ pub mod tests {
         authorization_request: &GenericAuthorizationRequest,
     ) -> GenericAuthorizationResponse {
         let provider_manager = ProviderManager::new(
-            Arc::new(futures::executor::block_on(async { secret_manager().await })),
+            Arc::new(futures::executor::block_on(async {
+                Subject {
+                    secret_manager: secret_manager().await,
+                }
+            })),
             did_method,
         )
         .unwrap();
@@ -166,6 +164,7 @@ pub mod tests {
             ),
             GenericAuthorizationRequest::OID4VP(oid4vp_authorization_request) => {
                 // TODO: implement test fixture for subject and issuer instead of using the same did as verifier.
+                // Fixtures can be implemented using the `rstest` crate as described here: https://docs.rs/rstest/latest/rstest/attr.fixture.html
                 let issuer_did = verifier_did(&default_did_method).await;
                 let subject_did = issuer_did.clone();
 
@@ -203,7 +202,7 @@ pub mod tests {
                 // Create presentation submission using the presentation definition and the verifiable credential.
                 let presentation_submission = create_presentation_submission(
                     &PRESENTATION_DEFINITION,
-                    &vec![serde_json::to_value(&verifiable_credential).unwrap()],
+                    &[serde_json::to_value(&verifiable_credential).unwrap()],
                 )
                 .unwrap();
 

@@ -18,6 +18,8 @@ use oid4vci::credential_request::CredentialRequest;
 use serde_json::json;
 use tracing::info;
 
+const EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 250;
+
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<IssuanceState>,
@@ -55,7 +57,9 @@ pub(crate) async fn credential(
         StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
-    std::thread::sleep(std::time::Duration::from_millis(100));
+    // This ensures that the server waits for a sufficient duration to potentially receive a credential from an external
+    // server.
+    std::thread::sleep(std::time::Duration::from_millis(EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS));
 
     // Use the `offer_id` to get the `credential_ids` and `subject_id` from the `OfferView`.
     let (credential_ids, subject_id) = match query_handler(&offer_id, &state.query.offer).await {

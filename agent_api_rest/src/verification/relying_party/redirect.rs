@@ -1,8 +1,7 @@
 use agent_shared::handlers::{command_handler, query_handler};
 use agent_verification::{
-    authorization_request::queries::AuthorizationRequestView,
-    connection::command::{ConnectionCommand, GenericAuthorizationResponse},
-    state::VerificationState,
+    authorization_request::queries::AuthorizationRequestView, connection::command::ConnectionCommand,
+    generic_oid4vc::GenericAuthorizationResponse, state::VerificationState,
 };
 use axum::{
     extract::State,
@@ -43,7 +42,7 @@ pub(crate) async fn redirect(
         authorization_response,
     };
 
-    // Verify the SIOPv2 authorization response.
+    // Verify the authorization response.
     if command_handler(&connection_id, &verification_state.command.connection, command)
         .await
         .is_err()
@@ -63,7 +62,7 @@ pub mod tests {
         verification::{authorization_requests::tests::authorization_requests, relying_party::request::tests::request},
     };
     use agent_event_publisher_http::{EventPublisherHttp, TEST_EVENT_PUBLISHER_HTTP_CONFIG};
-    use agent_secret_manager::secret_manager;
+    use agent_secret_manager::{secret_manager, subject::Subject};
     use agent_shared::config;
     use agent_store::{in_memory, EventPublisher};
     use agent_verification::services::test_utils::test_verification_services;
@@ -107,7 +106,9 @@ pub mod tests {
             .unwrap();
 
         let provider_manager = ProviderManager::new(
-            Arc::new(futures::executor::block_on(async { secret_manager().await })),
+            Arc::new(Subject {
+                secret_manager: secret_manager().await,
+            }),
             "did:key",
         )
         .unwrap();

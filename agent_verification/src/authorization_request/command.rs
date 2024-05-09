@@ -1,3 +1,4 @@
+use oid4vp::PresentationDefinition;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -6,7 +7,7 @@ pub enum AuthorizationRequestCommand {
     CreateAuthorizationRequest {
         state: String,
         nonce: String,
-        presentation_definition_id: Option<String>,
+        presentation_definition: Option<PresentationDefinition>,
     },
     SignAuthorizationRequestObject,
 }

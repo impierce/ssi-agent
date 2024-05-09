@@ -29,8 +29,9 @@ impl View<ServerConfig> for ServerConfigView {
                 credential_configurations_supported,
             } => {
                 if let Some(credential_issuer_metadata) = self.credential_issuer_metadata.as_mut() {
-                    credential_issuer_metadata.credential_configurations_supported =
-                        credential_configurations_supported.clone();
+                    credential_issuer_metadata
+                        .credential_configurations_supported
+                        .clone_from(credential_configurations_supported)
                 }
             }
         }

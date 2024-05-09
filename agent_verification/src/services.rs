@@ -29,24 +29,28 @@ impl VerificationServices {
 
 #[cfg(feature = "test")]
 pub mod test_utils {
+
     use std::str::FromStr;
 
     use agent_secret_manager::secret_manager;
-    use oid4vc_core::{DidMethod, SubjectSyntaxType};
+    use agent_secret_manager::subject::Subject;
+    use oid4vc_core::SubjectSyntaxType;
     use serde_json::json;
 
     use super::*;
 
     pub fn test_verification_services(default_did_method: &str) -> Arc<VerificationServices> {
         Arc::new(VerificationServices::new(
-            Arc::new(futures::executor::block_on(async { secret_manager().await })),
+            Arc::new(futures::executor::block_on(async {
+                Subject {
+                    secret_manager: secret_manager().await,
+                }
+            })),
             ClientMetadataResource::ClientMetadata {
                 client_name: None,
                 logo_uri: None,
                 extension: siopv2::authorization_request::ClientMetadataParameters {
-                    subject_syntax_types_supported: vec![SubjectSyntaxType::Did(
-                        DidMethod::from_str(default_did_method).unwrap(),
-                    )],
+                    subject_syntax_types_supported: vec![SubjectSyntaxType::from_str(default_did_method).unwrap()],
                 },
             },
             ClientMetadataResource::ClientMetadata {

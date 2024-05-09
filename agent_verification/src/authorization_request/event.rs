@@ -1,7 +1,6 @@
+use crate::generic_oid4vc::GenericAuthorizationRequest;
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
-
-use super::aggregate::GenericAuthorizationRequest;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum AuthorizationRequestEvent {

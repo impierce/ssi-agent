@@ -17,14 +17,15 @@ impl View<Credential> for CredentialView {
                 data,
                 credential_format_template,
             } => {
-                self.data = Some(data.clone());
-                self.credential_format_template = Some(credential_format_template.clone());
+                self.data.replace(data.clone());
+                self.credential_format_template
+                    .replace(credential_format_template.clone());
             }
             CredentialEvent::SignedCredentialCreated { signed_credential } => {
-                self.signed = Some(signed_credential.clone());
+                self.signed.replace(signed_credential.clone());
             }
             CredentialEvent::CredentialSigned { signed_credential } => {
-                self.signed = Some(signed_credential.clone());
+                self.signed.replace(signed_credential.clone());
             }
         }
     }
