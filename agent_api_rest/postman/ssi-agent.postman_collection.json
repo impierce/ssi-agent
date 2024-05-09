@@ -23,7 +23,8 @@
 									"}",
 									""
 								],
-								"type": "text/javascript"
+								"type": "text/javascript",
+								"packages": {}
 							}
 						}
 					],
@@ -251,7 +252,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"nonce\": \"this is a nonce\"\n}",
+							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"presentation_definition_id\": \"presentation_definition\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
