@@ -199,7 +199,7 @@ pub mod tests {
                 // Create presentation submission using the presentation definition and the verifiable credential.
                 let presentation_submission = create_presentation_submission(
                     &PRESENTATION_DEFINITION,
-                    &vec![serde_json::to_value(&verifiable_credential).unwrap()],
+                    &[serde_json::to_value(&verifiable_credential).unwrap()],
                 )
                 .unwrap();
 
