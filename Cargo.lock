@@ -73,6 +73,7 @@ dependencies = [
  "oid4vc-core",
  "oid4vc-manager",
  "oid4vci",
+ "oid4vp",
  "rstest",
  "serde",
  "serde_json",
@@ -149,7 +150,7 @@ dependencies = [
  "did_manager",
  "futures",
  "jsonschema",
- "jsonwebtoken",
+ "jsonwebtoken 8.3.0",
  "lazy_static",
  "oid4vc-core",
  "oid4vc-manager",
@@ -226,11 +227,17 @@ dependencies = [
  "cqrs-es",
  "did_manager",
  "futures",
+ "identity_core",
+ "identity_credential",
+ "jsonwebtoken 9.3.0",
  "lazy_static",
  "oid4vc-core",
  "oid4vc-manager",
+ "oid4vci",
+ "oid4vp",
  "rstest",
  "serde",
+ "serde_json",
  "serial_test",
  "siopv2",
  "thiserror",
@@ -1814,7 +1821,7 @@ dependencies = [
 [[package]]
 name = "dif-presentation-exchange"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=a932af7#a932af797117bd8f042335bf29695e00905800e8"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=ce4e3fd#ce4e3fdcc5781660ab8900b22d8026a4b7ca9932"
 dependencies = [
  "getset",
  "jsonpath_lib",
@@ -3668,8 +3675,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6971da4d9c3aa03c3d8f3ff0f4155b534aad021292003895a469716b2a230378"
 dependencies = [
  "base64 0.21.7",
- "pem",
+ "pem 1.1.1",
  "ring 0.16.20",
+ "serde",
+ "serde_json",
+ "simple_asn1 0.6.2",
+]
+
+[[package]]
+name = "jsonwebtoken"
+version = "9.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9ae10193d25051e74945f1ea2d0b42e03cc3b890f7e4cc5faa44997d808193f"
+dependencies = [
+ "base64 0.21.7",
+ "js-sys",
+ "pem 3.0.4",
+ "ring 0.17.8",
  "serde",
  "serde_json",
  "simple_asn1 0.6.2",
@@ -4279,7 +4301,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=a932af7#a932af797117bd8f042335bf29695e00905800e8"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=ce4e3fd#ce4e3fdcc5781660ab8900b22d8026a4b7ca9932"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4290,7 +4312,7 @@ dependencies = [
  "ed25519-dalek 2.1.1",
  "getset",
  "is_empty",
- "jsonwebtoken",
+ "jsonwebtoken 8.3.0",
  "lazy_static",
  "rand 0.8.5",
  "serde",
@@ -4303,7 +4325,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=a932af7#a932af797117bd8f042335bf29695e00905800e8"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=ce4e3fd#ce4e3fdcc5781660ab8900b22d8026a4b7ca9932"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4316,7 +4338,7 @@ dependencies = [
  "getset",
  "identity_core",
  "identity_credential",
- "jsonwebtoken",
+ "jsonwebtoken 8.3.0",
  "oid4vc-core",
  "oid4vci",
  "oid4vp",
@@ -4335,13 +4357,13 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=a932af7#a932af797117bd8f042335bf29695e00905800e8"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=ce4e3fd#ce4e3fdcc5781660ab8900b22d8026a4b7ca9932"
 dependencies = [
  "anyhow",
  "derivative",
  "dif-presentation-exchange",
  "getset",
- "jsonwebtoken",
+ "jsonwebtoken 8.3.0",
  "lazy_static",
  "oid4vc-core",
  "paste",
@@ -4358,7 +4380,7 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=a932af7#a932af797117bd8f042335bf29695e00905800e8"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=ce4e3fd#ce4e3fdcc5781660ab8900b22d8026a4b7ca9932"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4368,7 +4390,7 @@ dependencies = [
  "identity_core",
  "identity_credential",
  "is_empty",
- "jsonwebtoken",
+ "jsonwebtoken 8.3.0",
  "monostate",
  "oid4vc-core",
  "oid4vci",
@@ -4636,6 +4658,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8835c273a76a90455d7344889b0964598e3316e2a79ede8e36f16bdcf2228b8"
 dependencies = [
  "base64 0.13.1",
+]
+
+[[package]]
+name = "pem"
+version = "3.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e459365e590736a54c3fa561947c84837534b8e9af6fc5bf781307e82658fae"
+dependencies = [
+ "base64 0.22.1",
+ "serde",
 ]
 
 [[package]]
@@ -6147,7 +6179,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=a932af7#a932af797117bd8f042335bf29695e00905800e8"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=ce4e3fd#ce4e3fdcc5781660ab8900b22d8026a4b7ca9932"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6158,7 +6190,7 @@ dependencies = [
  "futures",
  "getset",
  "is_empty",
- "jsonwebtoken",
+ "jsonwebtoken 8.3.0",
  "monostate",
  "oid4vc-core",
  "reqwest 0.11.27",

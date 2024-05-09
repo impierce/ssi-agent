@@ -8,7 +8,7 @@ use agent_shared::config;
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use oid4vc_core::{client_metadata::ClientMetadataResource, DidMethod, SubjectSyntaxType};
-use siopv2::authorization_request::ClientMetadataParameters;
+use serde_json::json;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -34,11 +34,20 @@ async fn main() {
         ClientMetadataResource::ClientMetadata {
             client_name: None,
             logo_uri: None,
-            extension: ClientMetadataParameters {
+            extension: siopv2::authorization_request::ClientMetadataParameters {
                 subject_syntax_types_supported: vec![SubjectSyntaxType::Did(
                     DidMethod::from_str(&default_did_method).unwrap(),
                 )],
             },
+        },
+        ClientMetadataResource::ClientMetadata {
+            client_name: None,
+            logo_uri: None,
+            // TODO: fix this once `vp_formats` is public.
+            extension: serde_json::from_value(json!({
+                "vp_formats": {}
+            }))
+            .unwrap(),
         },
         &default_did_method,
     ));

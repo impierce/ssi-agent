@@ -1,0 +1,23 @@
+{
+    "id":"Verifiable Presentation request for sign-on",
+        "input_descriptors":[
+        {
+            "id":"Request for Verifiable Credential",
+            "constraints":{
+                "fields":[
+                    {
+                        "path":[
+                            "$.vc.type"
+                        ],
+                        "filter":{
+                            "type":"array",
+                            "contains":{
+                                "const":"TestCredential"
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+}
