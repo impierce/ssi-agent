@@ -48,7 +48,7 @@ docker compose up
 
 ## Utilizing the IOTA DID Method
 By default, UniCore uses the JWK DID Method to generate and manage DIDs. However, UniCore also supports the IOTA DID
-Method, which leverages the IOTA Tangle for DID operations. To enable the IOTA DID Method, set these environment
+Method, which leverages the IOTA Tangle to store your DID document. To enable the IOTA DID Method, set these environment
 variables:
 ```yaml
       AGENT_CONFIG_ISSUER_DID: <your-pre-existing-IOTA-DID>
@@ -56,7 +56,7 @@ variables:
       AGENT_CONFIG_DEFAULT_DID_METHOD: "did:iota"
 ```
 
-UniCore supports any IOTA-Network. For example, if you want to enable the development network for Shimmer, the 
+UniCore supports any of the IOTA networks (Testnet, Shimmer, Mainnet). For example, if you want to enable the development network for Shimmer, the 
 aforementioned environment variables would look like this:
 ```yaml
       AGENT_CONFIG_ISSUER_DID: "did:iota:rms:0x42ad588322e58b3c07aa39e4948d021ee17ecb5747915e9e1f35f028d7ecaf90"
