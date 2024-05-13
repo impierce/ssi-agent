@@ -10,6 +10,7 @@ pub type OID4VPAuthorizationResponse = oid4vc_core::authorization_response::Auth
 pub type SIOPv2AuthorizationRequest = oid4vc_core::authorization_request::AuthorizationRequest<Object<SIOPv2>>;
 pub type OID4VPAuthorizationRequest = oid4vc_core::authorization_request::AuthorizationRequest<Object<OID4VP>>;
 
+/// This enum serves as an abstraction over the different types of authorization responses UniCore can provide
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum GenericAuthorizationResponse {
