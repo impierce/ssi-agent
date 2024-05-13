@@ -34,7 +34,7 @@ pub(crate) async fn get_authorization_requests(
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct AuthorizationRequestsRequest {
+pub struct AuthorizationRequestsEndpointRequest {
     pub nonce: String,
     pub state: Option<String>,
     pub presentation_definition_id: Option<String>,
@@ -47,7 +47,7 @@ pub(crate) async fn authorization_requests(
 ) -> Response {
     info!("Request Body: {}", payload);
 
-    let Ok(AuthorizationRequestsRequest {
+    let Ok(AuthorizationRequestsEndpointRequest {
         nonce,
         state,
         presentation_definition_id,

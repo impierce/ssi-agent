@@ -120,7 +120,9 @@ mod tests {
 
     use crate::{
         app,
-        issuance::{credential_issuer::token::tests::token, credentials::CredentialsRequest, offers::tests::offers},
+        issuance::{
+            credential_issuer::token::tests::token, credentials::CredentialsEndpointRequest, offers::tests::offers,
+        },
         tests::{BASE_URL, OFFER_ID},
     };
 
@@ -189,14 +191,14 @@ mod tests {
 
                                 // The 'backend' server can either opt for an already signed credential...
                                 let credentials_endpoint_request = if is_self_signed {
-                                    CredentialsRequest {
+                                    CredentialsEndpointRequest {
                                         offer_id: offer_id.clone(),
                                         credential: json!(CREDENTIAL_JWT),
                                         is_signed: true,
                                     }
                                 } else {
                                     // ...or else, submitting the data that will be signed inside `UniCore`.
-                                    CredentialsRequest {
+                                    CredentialsEndpointRequest {
                                         offer_id: offer_id.clone(),
                                         credential: json!({
                                             "credentialSubject": {
