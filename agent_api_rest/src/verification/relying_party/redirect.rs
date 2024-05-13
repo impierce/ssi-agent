@@ -1,7 +1,7 @@
 use agent_shared::handlers::{command_handler, query_handler};
 use agent_verification::{
     authorization_request::queries::AuthorizationRequestView, connection::command::ConnectionCommand,
-    state::VerificationState,
+    generic_oid4vc::GenericAuthorizationResponse, state::VerificationState,
 };
 use axum::{
     extract::State,
@@ -9,42 +9,40 @@ use axum::{
     response::{IntoResponse, Response},
     Form,
 };
-use oid4vc_core::authorization_response::AuthorizationResponse;
-use siopv2::siopv2::SIOPv2;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn redirect(
     State(verification_state): State<VerificationState>,
-    Form(siopv2_authorization_response): Form<AuthorizationResponse<SIOPv2>>,
+    Form(authorization_response): Form<GenericAuthorizationResponse>,
 ) -> Response {
-    let authorization_request_id = if let Some(state) = siopv2_authorization_response.state.as_ref() {
+    let authorization_request_id = if let Some(state) = authorization_response.state() {
         state.clone()
     } else {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
-    // Retrieve the SIOPv2 authorization request.
-    let siopv2_authorization_request = match query_handler(
+    // Retrieve the authorization request.
+    let authorization_request = match query_handler(
         &authorization_request_id,
         &verification_state.query.authorization_request,
     )
     .await
     {
         Ok(Some(AuthorizationRequestView {
-            siopv2_authorization_request: Some(siopv2_authorization_request),
+            authorization_request: Some(authorization_request),
             ..
-        })) => siopv2_authorization_request,
+        })) => authorization_request,
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
-    let connection_id = siopv2_authorization_request.body.client_id.clone();
+    let connection_id = authorization_request.client_id();
 
-    let command = ConnectionCommand::VerifySIOPv2AuthorizationResponse {
-        siopv2_authorization_request,
-        siopv2_authorization_response,
+    let command = ConnectionCommand::VerifyAuthorizationResponse {
+        authorization_request,
+        authorization_response,
     };
 
-    // Verify the SIOPv2 authorization response.
+    // Verify the authorization response.
     if command_handler(&connection_id, &verification_state.command.connection, command)
         .await
         .is_err()
@@ -80,7 +78,7 @@ pub mod tests {
         DidMethod, SubjectSyntaxType,
     };
     use oid4vc_manager::ProviderManager;
-    use siopv2::authorization_request::ClientMetadataParameters;
+    use siopv2::{authorization_request::ClientMetadataParameters, siopv2::SIOPv2};
     use tower::Service;
     use wiremock::{
         matchers::{method, path},

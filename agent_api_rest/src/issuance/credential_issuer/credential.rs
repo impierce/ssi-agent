@@ -120,7 +120,9 @@ mod tests {
 
     use crate::{
         app,
-        issuance::{credential_issuer::token::tests::token, credentials::CredentialsRequest, offers::tests::offers},
+        issuance::{
+            credential_issuer::token::tests::token, credentials::CredentialsEndpointRequest, offers::tests::offers,
+        },
         tests::{BASE_URL, OFFER_ID},
     };
 
@@ -170,14 +172,14 @@ mod tests {
 
                                 // The 'backend' server can either opt for an already signed credential...
                                 let credentials_endpoint_request = if is_self_signed {
-                                    CredentialsRequest {
+                                    CredentialsEndpointRequest {
                                         offer_id: offer_id.clone(),
                                         credential: json!("eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkI3o2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHA6Ly9leGFtcGxlLmNvbS9jcmVkZW50aWFscy8zNTI3IiwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5hbWUiOiJUZWFtd29yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn19fQ.r7T_zOXP7E2k7eAPq5EF20shwrnPKK0mOCfNaB0phPEXVkYSG_sf6QygUDuJ8-P0yU4EEajgE0dxJuRfdMVDAQ"),
                                         is_signed: true,
                                     }
                                 } else {
                                     // ...or else, submitting the data that will be signed inside `UniCore`.
-                                    CredentialsRequest {
+                                    CredentialsEndpointRequest {
                                         offer_id: offer_id.clone(),
                                         credential: json!({
                                             "credentialSubject": {
