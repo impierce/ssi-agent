@@ -29,7 +29,7 @@ pub(crate) async fn get_credentials(State(state): State<IssuanceState>, Path(cre
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CredentialsRequest {
+pub struct CredentialsEndpointRequest {
     pub offer_id: String,
     pub credential: Value,
     #[serde(default)]
@@ -43,7 +43,7 @@ pub(crate) async fn credentials(
 ) -> Response {
     info!("Request Body: {}", payload);
 
-    let Ok(CredentialsRequest {
+    let Ok(CredentialsEndpointRequest {
         offer_id,
         credential: data,
         is_signed,

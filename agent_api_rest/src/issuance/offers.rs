@@ -16,7 +16,7 @@ use tracing::info;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct OffersRequest {
+pub struct OffersEndpointRequest {
     pub offer_id: String,
 }
 
@@ -24,7 +24,7 @@ pub struct OffersRequest {
 pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Json<Value>) -> Response {
     info!("Request Body: {}", payload);
 
-    let Ok(OffersRequest { offer_id }) = serde_json::from_value(payload) else {
+    let Ok(OffersEndpointRequest { offer_id }) = serde_json::from_value(payload) else {
         return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
     };
 
