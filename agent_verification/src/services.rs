@@ -29,12 +29,11 @@ impl VerificationServices {
 
 #[cfg(feature = "test")]
 pub mod test_utils {
-    use std::str::FromStr;
-
     use agent_secret_manager::secret_manager;
     use agent_secret_manager::subject::Subject;
-    use oid4vc_core::{DidMethod, SubjectSyntaxType};
+    use oid4vc_core::SubjectSyntaxType;
     use serde_json::json;
+    use std::str::FromStr;
 
     use super::*;
 
@@ -49,9 +48,7 @@ pub mod test_utils {
                 client_name: None,
                 logo_uri: None,
                 extension: siopv2::authorization_request::ClientMetadataParameters {
-                    subject_syntax_types_supported: vec![SubjectSyntaxType::Did(
-                        DidMethod::from_str(default_did_method).unwrap(),
-                    )],
+                    subject_syntax_types_supported: vec![SubjectSyntaxType::from_str(default_did_method).unwrap()],
                 },
             },
             ClientMetadataResource::ClientMetadata {

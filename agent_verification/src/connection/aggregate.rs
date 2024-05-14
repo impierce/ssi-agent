@@ -113,17 +113,17 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
-    fn test_verify_authorization_response(
+    async fn test_verify_authorization_response(
         // "id_token" represents the `SIOPv2` flow, and "vp_token" represents the `OID4VP` flow.
         #[values("id_token", "vp_token")] response_type: &str,
         // TODO: add `did:web`, check for other tests as well. Probably should be moved to E2E test.
-        #[values("did:key", "did:jwk")] verifier_did_method: &str,
-        #[values("did:key", "did:jwk")] provider_did_method: &str,
+        #[values("did:key", "did:jwk", "did:iota:rms")] verifier_did_method: &str,
+        #[values("did:key", "did:jwk", "did:iota:rms")] provider_did_method: &str,
     ) {
         let verification_services = test_verification_services(verifier_did_method);
 
-        let authorization_request = authorization_request(response_type, verifier_did_method);
-        let authorization_response = authorization_response(provider_did_method, &authorization_request);
+        let authorization_request = authorization_request(response_type, verifier_did_method).await;
+        let authorization_response = authorization_response(provider_did_method, &authorization_request).await;
         let token = authorization_response.token();
 
         ConnectionTestFramework::with(verification_services)
@@ -139,7 +139,7 @@ pub mod tests {
             }]);
     }
 
-    fn authorization_response(
+    async fn authorization_response(
         did_method: &str,
         authorization_request: &GenericAuthorizationRequest,
     ) -> GenericAuthorizationResponse {
@@ -153,16 +153,19 @@ pub mod tests {
         )
         .unwrap();
 
+        let default_did_method = provider_manager.default_subject_syntax_type().to_string();
+
         match authorization_request {
             GenericAuthorizationRequest::SIOPv2(siopv2_authorization_request) => GenericAuthorizationResponse::SIOPv2(
                 provider_manager
                     .generate_response(siopv2_authorization_request, Default::default())
+                    .await
                     .unwrap(),
             ),
             GenericAuthorizationRequest::OID4VP(oid4vp_authorization_request) => {
                 // TODO: implement test fixture for subject and issuer instead of using the same did as verifier.
                 // Fixtures can be implemented using the `rstest` crate as described here: https://docs.rs/rstest/latest/rstest/attr.fixture.html
-                let issuer_did = verifier_did(did_method);
+                let issuer_did = verifier_did(&default_did_method).await;
                 let subject_did = issuer_did.clone();
 
                 // Create a new verifiable credential.
@@ -219,6 +222,7 @@ pub mod tests {
                                 presentation_submission,
                             },
                         )
+                        .await
                         .unwrap(),
                 )
             }

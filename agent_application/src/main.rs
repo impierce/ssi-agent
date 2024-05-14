@@ -1,5 +1,3 @@
-use std::{str::FromStr, sync::Arc};
-
 use agent_api_rest::app;
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_issuance::{startup_commands::startup_commands, state::initialize};
@@ -7,8 +5,9 @@ use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::config;
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
-use oid4vc_core::{client_metadata::ClientMetadataResource, DidMethod, SubjectSyntaxType};
+use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
 use serde_json::json;
+use std::{str::FromStr, sync::Arc};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -35,9 +34,7 @@ async fn main() {
             client_name: None,
             logo_uri: None,
             extension: siopv2::authorization_request::ClientMetadataParameters {
-                subject_syntax_types_supported: vec![SubjectSyntaxType::Did(
-                    DidMethod::from_str(&default_did_method).unwrap(),
-                )],
+                subject_syntax_types_supported: vec![SubjectSyntaxType::from_str(&default_did_method).unwrap()],
             },
         },
         ClientMetadataResource::ClientMetadata {

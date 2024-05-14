@@ -114,6 +114,7 @@ pub mod tests {
         .unwrap();
         let authorization_response = provider_manager
             .generate_response(&authorization_request, Default::default())
+            .await
             .unwrap();
 
         let response = app

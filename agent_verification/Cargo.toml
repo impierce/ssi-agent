@@ -28,6 +28,7 @@ tokio.workspace = true
 agent_shared = { path = "../agent_shared", features = ["test"] }
 agent_verification = { path = ".", features = ["test"] }
 
+async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 did_manager.workspace = true
 identity_core = "1.2.0"
 identity_credential = { version = "1.2.0", default-features = false, features = [
