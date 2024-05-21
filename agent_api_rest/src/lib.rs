@@ -70,6 +70,8 @@ pub fn app(state: ApplicationState) -> Router {
         // SIOPv2
         .route(&path("/request/:request_id"), get(request))
         .route(&path("/redirect"), post(redirect))
+        // Health (simple, TODO: liveness and readiness probes)
+        .route("/health", get(axum::http::StatusCode::OK))
         // Metrics
         .route_layer(axum::middleware::from_fn(track_metrics))
         // Trace layer

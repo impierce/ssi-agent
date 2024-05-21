@@ -10,17 +10,8 @@ alerting:
       timeout: 10s
       api_version: v1
 scrape_configs:
-  - job_name: prometheus
-    honor_timestamps: true
-    scrape_interval: 15s
-    scrape_timeout: 10s
-    metrics_path: /metrics
-    scheme: http
-    static_configs:
-      - targets:
-          - localhost:9090
   - job_name: ssi-agent
     scrape_interval: 5s
     static_configs:
       - targets:
-          - ssi-agent:3033
+          - ssi-agent:3031

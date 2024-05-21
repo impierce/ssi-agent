@@ -29,6 +29,8 @@ services:
   prometheus:
     image: prom/prometheus
     container_name: prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yaml"
     ports:
       - 9090:9090
     volumes:
@@ -44,6 +46,8 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: grafana
     volumes:
       - ./monitoring/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - ./monitoring/grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
 
   ssi-agent:
     #image: ssi-agent
