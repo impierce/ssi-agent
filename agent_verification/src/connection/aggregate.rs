@@ -78,6 +78,7 @@ pub mod tests {
     use agent_secret_manager::secret_manager;
     use agent_secret_manager::subject::Subject;
     use cqrs_es::test::TestFramework;
+    use futures::executor::block_on;
     use oid4vc_core::authorization_response::AuthorizationResponse;
     use oid4vc_manager::ProviderManager;
     use rstest::rstest;
@@ -125,8 +126,11 @@ pub mod tests {
             did_method,
         )
         .unwrap();
-        provider_manager
-            .generate_response(siopv2_authorization_request, Default::default())
-            .unwrap()
+        block_on(async {
+            provider_manager
+                .generate_response(siopv2_authorization_request, Default::default())
+                .await
+                .unwrap()
+        })
     }
 }

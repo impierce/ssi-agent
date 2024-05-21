@@ -45,7 +45,7 @@ impl Aggregate for AuthorizationRequest {
             CreateAuthorizationRequest { state, nonce } => {
                 let default_subject_syntax_type = services.relying_party.default_subject_syntax_type().to_string();
                 let verifier = &services.verifier;
-                let verifier_did = verifier.identifier(&default_subject_syntax_type).unwrap();
+                let verifier_did = verifier.identifier(&default_subject_syntax_type).await.unwrap();
 
                 let url = config!("url").unwrap();
                 let request_uri = format!("{url}/request/{state}").parse().unwrap();
@@ -86,6 +86,7 @@ impl Aggregate for AuthorizationRequest {
                 // TODO: Add error handling
                 let signed_authorization_request_object = relying_party
                     .encode(self.authorization_request.as_ref().unwrap())
+                    .await
                     .unwrap();
 
                 Ok(vec![AuthorizationRequestObjectSigned {
@@ -127,6 +128,7 @@ pub mod tests {
     use agent_secret_manager::secret_manager;
     use agent_secret_manager::subject::Subject;
     use cqrs_es::test::TestFramework;
+    use futures::executor::block_on;
     use lazy_static::lazy_static;
     use oid4vc_core::Subject as _;
     use oid4vc_core::{client_metadata::ClientMetadataResource, DidMethod, SubjectSyntaxType};
@@ -181,7 +183,7 @@ pub mod tests {
     }
 
     fn verifier_did(did_method: &str) -> String {
-        VERIFIER.identifier(did_method).unwrap()
+        block_on(async { VERIFIER.identifier(did_method).await.unwrap() })
     }
 
     pub fn client_metadata(did_method: &str) -> ClientMetadataResource<ClientMetadataParameters> {

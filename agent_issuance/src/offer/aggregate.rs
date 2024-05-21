@@ -202,6 +202,7 @@ pub mod tests {
 
     use agent_secret_manager::subject::Subject;
     use cqrs_es::test::TestFramework;
+    use futures::executor::block_on;
     use lazy_static::lazy_static;
     use oid4vc_core::Subject as _;
     use oid4vci::{
@@ -401,7 +402,8 @@ pub mod tests {
         pub static ref ACCESS_TOKENS: Mutex<VecDeque<String>> = Mutex::new(vec![].into());
         pub static ref C_NONCES: Mutex<VecDeque<String>> = Mutex::new(vec![].into());
         pub static ref SUBJECT_KEY_DID: Arc<Subject> = Arc::new(subject());
-        pub static ref SUBJECT_IDENTIFIER_KEY_ID: String = SUBJECT_KEY_DID.identifier("did:key").unwrap();
+        pub static ref SUBJECT_IDENTIFIER_KEY_ID: String =
+            block_on(async { SUBJECT_KEY_DID.identifier("did:key").await.unwrap() });
     }
 
     fn test_subject() -> TestSubject {
@@ -448,19 +450,20 @@ pub mod tests {
                 )
                     .into(),
             }),
-            proof: Some(
+            proof: Some(block_on(async {
                 KeyProofType::builder()
                     .proof_type(ProofType::Jwt)
                     .signer(subject.subject.clone())
-                    .iss(subject.subject.identifier("did:key").unwrap())
+                    .iss(subject.subject.identifier("did:key").await.unwrap())
                     .aud(CREDENTIAL_ISSUER_METADATA.credential_issuer.clone())
                     .iat(1571324800)
                     .exp(9999999999i64)
                     .nonce(subject.c_nonce.clone())
                     .subject_syntax_type("did:key")
                     .build()
-                    .unwrap(),
-            ),
+                    .await
+                    .unwrap()
+            })),
         }
     }
 

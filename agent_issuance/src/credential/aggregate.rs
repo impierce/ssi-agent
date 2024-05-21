@@ -79,7 +79,7 @@ impl Aggregate for Credential {
                     services.init().await.unwrap();
                     (Arc::new(services.subject.unwrap()), services.default_did_method.clone())
                 };
-                let issuer_did = issuer.identifier(&default_did_method).unwrap();
+                let issuer_did = issuer.identifier(&default_did_method).await.unwrap();
                 let signed_credential = {
                     // TODO: Add error message here.
                     let mut credential = self.data.clone().unwrap();
@@ -100,6 +100,7 @@ impl Aggregate for Credential {
                             .ok(),
                         &default_did_method
                     )
+                    .await
                     .ok())
                 };
 
