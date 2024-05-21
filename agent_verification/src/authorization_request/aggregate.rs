@@ -166,7 +166,7 @@ pub mod tests {
     use lazy_static::lazy_static;
     use oid4vc_core::Subject as _;
     use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
-    use oid4vp::PresentationDefinition;
+    use oid4vp::{ClaimFormatDesignation, ClaimFormatProperty, PresentationDefinition};
     use rstest::rstest;
     use serde_json::json;
 
@@ -243,11 +243,14 @@ pub mod tests {
         ClientMetadataResource::ClientMetadata {
             client_name: None,
             logo_uri: None,
-            // TODO: fix this once `vp_formats` is public.
-            extension: serde_json::from_value(json!({
-                "vp_formats": {}
-            }))
-            .unwrap(),
+            extension: oid4vp::authorization_request::ClientMetadataParameters {
+                vp_formats: vec![(
+                    ClaimFormatDesignation::JwtVcJson,
+                    ClaimFormatProperty::Alg(vec![Algorithm::EdDSA]),
+                )]
+                .into_iter()
+                .collect(),
+            },
         }
     }
 
@@ -354,40 +357,43 @@ pub mod tests {
              lc3BvbnNlX3R5cGUiOiJpZF90b2tlbiIsInNjb3BlIjoib3BlbmlkIiwicmVzcG9\
              uc2VfbW9kZSI6ImRpcmVjdF9wb3N0Iiwibm9uY2UiOiJub25jZSIsImNsaWVudF9\
              tZXRhZGF0YSI6eyJzdWJqZWN0X3N5bnRheF90eXBlc19zdXBwb3J0ZWQiOlsiZGl\
-             kOmtleSJdfX0.38tCXF1QH3ihT4TgIDPToXG2EnmoRbGHRxdpLNRly8nnKPxmU4m\
-             AiroIBWA5E2SEjCpGlx_wOToymX6G0xqOBQ"
+             kOmtleSJdLCJpZF90b2tlbl9zaWduZWRfcmVzcG9uc2VfYWxnIjoiRWREU0EifX0\
+             .kGdBe4FRDmtJ5a2t4WIbaFTCYyiNSpzaJTrKJu0h3OXpKITepxyuP28XzTjn7aj\
+             47mK7ST02doALk8syHyz8CQ"
                 .to_string();
         static ref SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK: String =
             "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDpqd2s6ZXlKaGJH\
-            Y2lPaUpGWkVSVFFTSXNJbU55ZGlJNklrVmtNalUxTVRraUxDSnJhV1FpT2lKaVVVd\
-            FJVbnBoYjNBM1EyZEZkbkZXY1RoVmJHZE1SM05rUmkxU0xXaHVURVpyUzBaYWNWY3\
-            lWazR3SWl3aWEzUjVJam9pVDB0UUlpd2llQ0k2SWtkc2JrczVaVkJ6T0RBeVdIaEJ\
-            aMnhTVDFGNmIwZDFjbTA1VVhCMk1FbEdVRVZpWkUxRFNVeE9YMVVpZlEjMCJ9.eyJ\
-            jbGllbnRfaWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJ\
-            a1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2NUaFZiR\
-            2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQwdFFJaX\
-            dpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVVYQjJNRWx\
-            HVUVWaVpFMURTVXhPWDFVaWZRIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1k\
-            b21haW4uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzc\
-            G9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV\
-            9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGF\
-            kYXRhIjp7InN1YmplY3Rfc3ludGF4X3R5cGVzX3N1cHBvcnRlZCI6WyJkaWQ6andr\
-            Il19fQ.pgRD8qLjRn1FdKYVyY6AJpUIesYSM1Bn9UR00ZM4J22E41Vs9FwAeTOSis\
-            SseTNonZJBl3OHkj_9MBO9WnOTAg"
+             Y2lPaUpGWkVSVFFTSXNJbU55ZGlJNklrVmtNalUxTVRraUxDSnJhV1FpT2lKaVVV\
+             dFJVbnBoYjNBM1EyZEZkbkZXY1RoVmJHZE1SM05rUmkxU0xXaHVURVpyUzBaYWNW\
+             Y3lWazR3SWl3aWEzUjVJam9pVDB0UUlpd2llQ0k2SWtkc2JrczVaVkJ6T0RBeVdI\
+             aEJaMnhTVDFGNmIwZDFjbTA1VVhCMk1FbEdVRVZpWkUxRFNVeE9YMVVpZlEjMCJ9\
+             .eyJjbGllbnRfaWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWR\
+             pSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2N\
+             UaFZiR2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQ\
+             wdFFJaXdpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVV\
+             YQjJNRWxHVUVWaVpFMURTVXhPWDFVaWZRIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM\
+             6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXR\
+             lIiwicmVzcG9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJ\
+             yZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2x\
+             pZW50X21ldGFkYXRhIjp7InN1YmplY3Rfc3ludGF4X3R5cGVzX3N1cHBvcnRlZCI\
+             6WyJkaWQ6andrIl0sImlkX3Rva2VuX3NpZ25lZF9yZXNwb25zZV9hbGciOiJFZER\
+             TQSJ9fQ.e15G49kEIZjzoNoKRbe6rTq9f1Cc0BAcelOAf4dtDfPog_727qsK1fJ8\
+             sqTOOV2WmN7yv113jIKlLv8R9iOmCQ"
                 .to_string();
         static ref SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_IOTA: String =
             "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDppb3RhOnJtczow\
-            eDQyYWQ1ODgzMjJlNThiM2MwN2FhMzllNDk0OGQwMjFlZTE3ZWNiNTc0NzkxNWU5Z\
-            TFmMzVmMDI4ZDdlY2FmOTAjYlFLUVJ6YW9wN0NnRXZxVnE4VWxnTEdzZEYtUi1obk\
-            xGa0tGWnFXMlZOMCJ9.eyJjbGllbnRfaWQiOiJkaWQ6aW90YTpybXM6MHg0MmFkNT\
-            g4MzIyZTU4YjNjMDdhYTM5ZTQ5NDhkMDIxZWUxN2VjYjU3NDc5MTVlOWUxZjM1ZjA\
-            yOGQ3ZWNhZjkwIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhh\
-            bXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzcG9uc2VfdHlwZ\
-            SI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2RlIjoiZG\
-            lyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGFkYXRhIjp7InN\
-            1YmplY3Rfc3ludGF4X3R5cGVzX3N1cHBvcnRlZCI6WyJkaWQ6aW90YTpybXMiXX19\
-            .2JJOLSsMbFSKZVRPHYMGjorCJLsQE2ZV-GLQKIu86sC5VxqbQ0J37Nsrj_9U1Cz4\
-            kEU_VGYoyhOKQ7wYcJjfDA"
+             eDQyYWQ1ODgzMjJlNThiM2MwN2FhMzllNDk0OGQwMjFlZTE3ZWNiNTc0NzkxNWU5\
+             ZTFmMzVmMDI4ZDdlY2FmOTAjYlFLUVJ6YW9wN0NnRXZxVnE4VWxnTEdzZEYtUi1o\
+             bkxGa0tGWnFXMlZOMCJ9.eyJjbGllbnRfaWQiOiJkaWQ6aW90YTpybXM6MHg0MmF\
+             kNTg4MzIyZTU4YjNjMDdhYTM5ZTQ5NDhkMDIxZWUxN2VjYjU3NDc5MTVlOWUxZjM\
+             1ZjAyOGQ3ZWNhZjkwIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1kb21haW4\
+             uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzcG9uc2V\
+             fdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2R\
+             lIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGFkYXR\
+             hIjp7InN1YmplY3Rfc3ludGF4X3R5cGVzX3N1cHBvcnRlZCI6WyJkaWQ6aW90YTp\
+             ybXMiXSwiaWRfdG9rZW5fc2lnbmVkX3Jlc3BvbnNlX2FsZyI6IkVkRFNBIn19.Tz\
+             DvCkrzVQ-uzBA6e-Q7txVgNzcn8B4uKULzgTbCsdr7_aNYOArSM4XFBlY3YeuIul\
+             1XzM_rLNwONxwz1FAoCw"
                 .to_string();
     }
 }

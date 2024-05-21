@@ -35,6 +35,7 @@ mod tests {
         http::{self, Request},
         Router,
     };
+    use jsonwebtoken::Algorithm;
     use oid4vci::{
         credential_format_profiles::{
             w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, CredentialFormats, Parameters,
@@ -43,6 +44,8 @@ mod tests {
             credential_configurations_supported::CredentialConfigurationsSupportedObject,
             credential_issuer_metadata::CredentialIssuerMetadata,
         },
+        proof::KeyProofMetadata,
+        ProofType,
     };
     use serde_json::json;
     use tower::Service;
@@ -87,8 +90,14 @@ mod tests {
                         scope: None,
                         cryptographic_binding_methods_supported: vec!["did:key".to_string()],
                         credential_signing_alg_values_supported: vec!["EdDSA".to_string()],
-                        // TODO
-                        // proof_types_supported: Some(vec![ProofType::Jwt]),
+                        proof_types_supported: vec![(
+                            ProofType::Jwt,
+                            KeyProofMetadata {
+                                proof_signing_alg_values_supported: vec![Algorithm::EdDSA, Algorithm::ES256],
+                            },
+                        )]
+                        .into_iter()
+                        .collect(),
                         display: vec![json!({
                            "name": config!("credential_name").unwrap(),
                            "logo": {
@@ -108,7 +117,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_oauth_authorization_server_endpoint() {
+    async fn test_openid_credential_issuer_endpoint() {
         let issuance_state = in_memory::issuance_state(Default::default()).await;
         let verification_state = in_memory::verification_state(
             test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),

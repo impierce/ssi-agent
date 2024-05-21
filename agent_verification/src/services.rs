@@ -33,7 +33,7 @@ pub mod test_utils {
     use agent_secret_manager::secret_manager;
     use agent_secret_manager::subject::Subject;
     use oid4vc_core::SubjectSyntaxType;
-    use serde_json::json;
+    use oid4vp::{ClaimFormatDesignation, ClaimFormatProperty};
     use std::str::FromStr;
 
     use super::*;
@@ -56,11 +56,14 @@ pub mod test_utils {
             ClientMetadataResource::ClientMetadata {
                 client_name: None,
                 logo_uri: None,
-                // TODO: fix this once `vp_formats` is public.
-                extension: serde_json::from_value(json!({
-                    "vp_formats": {}
-                }))
-                .unwrap(),
+                extension: oid4vp::authorization_request::ClientMetadataParameters {
+                    vp_formats: vec![(
+                        ClaimFormatDesignation::JwtVcJson,
+                        ClaimFormatProperty::Alg(vec![Algorithm::EdDSA]),
+                    )]
+                    .into_iter()
+                    .collect(),
+                },
             },
             default_did_method,
         ))

@@ -452,11 +452,11 @@ pub mod tests {
             proof: Some(
                 KeyProofType::builder()
                     .proof_type(ProofType::Jwt)
+                    .algorithm(Algorithm::EdDSA)
                     .signer(subject.subject.clone())
                     .iss(subject.subject.identifier("did:key", Algorithm::EdDSA).await.unwrap())
                     .aud(CREDENTIAL_ISSUER_METADATA.credential_issuer.clone())
                     .iat(1571324800)
-                    .exp(9999999999i64)
                     .nonce(subject.c_nonce.clone())
                     .subject_syntax_type("did:key")
                     .build()
