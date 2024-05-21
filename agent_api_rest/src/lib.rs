@@ -2,6 +2,8 @@ mod issuance;
 mod metrics;
 mod verification;
 
+pub use metrics::metrics;
+
 use agent_issuance::state::IssuanceState;
 use agent_shared::{config, ConfigError};
 use agent_verification::state::VerificationState;
@@ -22,7 +24,7 @@ use issuance::credential_issuer::{
 };
 use issuance::credentials::{credentials, get_credentials};
 use issuance::offers::offers;
-use metrics::health;
+use metrics::track_metrics;
 use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
 use verification::{
@@ -68,8 +70,8 @@ pub fn app(state: ApplicationState) -> Router {
         // SIOPv2
         .route(&path("/request/:request_id"), get(request))
         .route(&path("/redirect"), post(redirect))
-        // Monitoring
-        .route(&path("/health"), get(health))
+        // Metrics
+        .route_layer(axum::middleware::from_fn(track_metrics))
         // Trace layer
         .layer(
             TraceLayer::new_for_http()

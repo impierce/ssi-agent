@@ -1,10 +1,11 @@
-use agent_api_rest::app;
+use agent_api_rest::{app, metrics};
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_issuance::{startup_commands::startup_commands, state::initialize};
 use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::config;
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
+use axum::Router;
 use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
 use serde_json::json;
 use std::{str::FromStr, sync::Arc};
@@ -77,9 +78,17 @@ async fn main() {
 
     initialize(&issuance_state, startup_commands(url)).await;
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await.unwrap();
+    tokio::join!(
+        start_server(app((issuance_state, verification_state)), 3033),
+        // The `/metrics` endpoint should not be publicly available. If behind a reverse proxy, this
+        // can be achieved by rejecting requests to `/metrics`. In this example, a second server is
+        // started on another port to expose `/metrics`.
+        start_server(metrics(), 3031)
+    );
+}
+
+async fn start_server(router: Router, port: u16) {
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await.unwrap();
     info!("listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app((issuance_state, verification_state)))
-        .await
-        .unwrap();
+    axum::serve(listener, router).await.unwrap();
 }
