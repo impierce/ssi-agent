@@ -35,13 +35,12 @@ impl Verify for Subject {
                 .and_then(|public_key_jwk| match public_key_jwk.params() {
                     JwkParams::Okp(okp_params) => URL_SAFE_NO_PAD.decode(&okp_params.x).ok(),
                     JwkParams::Ec(ec_params) => {
-                        // FIX THIS: Error handling
-                        let x_bytes = URL_SAFE_NO_PAD.decode(&ec_params.x).unwrap();
-                        let y_bytes = URL_SAFE_NO_PAD.decode(&ec_params.y).unwrap();
+                        let x_bytes = URL_SAFE_NO_PAD.decode(&ec_params.x).ok()?;
+                        let y_bytes = URL_SAFE_NO_PAD.decode(&ec_params.y).ok()?;
 
                         let encoded_point = p256::EncodedPoint::from_affine_coordinates(
-                            &p256::FieldBytes::from_slice(&x_bytes),
-                            &p256::FieldBytes::from_slice(&y_bytes),
+                            p256::FieldBytes::from_slice(&x_bytes),
+                            p256::FieldBytes::from_slice(&y_bytes),
                             false, // false for uncompressed point
                         );
 
@@ -54,12 +53,6 @@ impl Verify for Subject {
                 })
                 .ok_or(anyhow::anyhow!("Failed to decode public key for DID URL: {}", did_url))
         })
-        // .and_then(|encoded_public_key| {
-        //     URL_SAFE_NO_PAD
-        //         .decode(encoded_public_key)
-        //         .map_err(Into::into)
-        //         .inspect_err(|e| log::info!("Failed to decode public key: {}", e))
-        // })
     }
 }
 

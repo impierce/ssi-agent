@@ -104,7 +104,6 @@ mod tests {
                                 "url": config!("credential_logo_url").unwrap()
                            }
                         })],
-                        ..Default::default()
                     }
                 )]
                 .into_iter()
