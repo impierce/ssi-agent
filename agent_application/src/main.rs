@@ -79,16 +79,16 @@ async fn main() {
     initialize(&issuance_state, startup_commands(url)).await;
 
     tokio::join!(
-        start_server(app((issuance_state, verification_state)), 3033),
+        start_server("app".to_string(), app((issuance_state, verification_state)), 3033),
         // The `/metrics` endpoint should not be publicly available. If behind a reverse proxy, this
         // can be achieved by rejecting requests to `/metrics`. In this example, a second server is
         // started on another port to expose `/metrics`.
-        start_server(metrics(), 3031)
+        start_server("metrics".to_string(), metrics(), 3031)
     );
 }
 
-async fn start_server(router: Router, port: u16) {
+async fn start_server(alias: String, router: Router, port: u16) {
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await.unwrap();
-    info!("listening on {}", listener.local_addr().unwrap());
+    info!("`{alias}` server listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, router).await.unwrap();
 }
