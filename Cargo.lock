@@ -1238,6 +1238,7 @@ checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
 [[package]]
 name = "consumer"
 version = "0.1.0"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=584c16b#584c16b5c0b10f33c75eb04c9e976c09f08c30f6"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -1808,6 +1809,7 @@ dependencies = [
 [[package]]
 name = "did_iota"
 version = "0.1.0"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=584c16b#584c16b5c0b10f33c75eb04c9e976c09f08c30f6"
 dependencies = [
  "identity_iota",
  "identity_stronghold",
@@ -1820,6 +1822,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=584c16b#584c16b5c0b10f33c75eb04c9e976c09f08c30f6"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -1838,6 +1841,7 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=584c16b#584c16b5c0b10f33c75eb04c9e976c09f08c30f6"
 dependencies = [
  "did-key",
  "did-method-key",
@@ -1856,6 +1860,7 @@ dependencies = [
 [[package]]
 name = "did_manager"
 version = "0.1.0"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=584c16b#584c16b5c0b10f33c75eb04c9e976c09f08c30f6"
 dependencies = [
  "consumer",
  "producer",
@@ -1883,6 +1888,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=584c16b#584c16b5c0b10f33c75eb04c9e976c09f08c30f6"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -1901,6 +1907,7 @@ dependencies = [
 [[package]]
 name = "dif-presentation-exchange"
 version = "0.1.0"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=274a3e9#274a3e925a2e5d3921c8f5f0546214efac287cc5"
 dependencies = [
  "getset",
  "jsonpath_lib",
@@ -3316,6 +3323,7 @@ dependencies = [
 [[package]]
 name = "identity_stronghold_ext"
 version = "0.1.0"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=584c16b#584c16b5c0b10f33c75eb04c9e976c09f08c30f6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4598,6 +4606,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=274a3e9#274a3e925a2e5d3921c8f5f0546214efac287cc5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4621,6 +4630,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=274a3e9#274a3e925a2e5d3921c8f5f0546214efac287cc5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4652,6 +4662,7 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=274a3e9#274a3e925a2e5d3921c8f5f0546214efac287cc5"
 dependencies = [
  "anyhow",
  "derivative",
@@ -4674,6 +4685,7 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=274a3e9#274a3e925a2e5d3921c8f5f0546214efac287cc5"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5323,6 +5335,7 @@ dependencies = [
 [[package]]
 name = "producer"
 version = "0.1.0"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=584c16b#584c16b5c0b10f33c75eb04c9e976c09f08c30f6"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -6426,6 +6439,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=584c16b#584c16b5c0b10f33c75eb04c9e976c09f08c30f6"
 dependencies = [
  "identity_iota",
  "identity_storage 1.2.0 (git+https://github.com/iotaledger/identity.rs)",
@@ -6495,6 +6509,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=274a3e9#274a3e925a2e5d3921c8f5f0546214efac287cc5"
 dependencies = [
  "anyhow",
  "async-trait",
