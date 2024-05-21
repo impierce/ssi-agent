@@ -24,10 +24,16 @@ impl SecretManagerServices {
         let issuer_did = config!("issuer_did");
         let issuer_fragment = config!("issuer_fragment");
 
-        let secret_manager =
-            SecretManager::load(snapshot_path, password, key_id, issuer_did.ok(), issuer_fragment.ok())
-                .await
-                .unwrap();
+        let secret_manager = SecretManager::load(
+            snapshot_path,
+            password,
+            Some(key_id),
+            None,
+            issuer_did.ok(),
+            issuer_fragment.ok(),
+        )
+        .await
+        .unwrap();
 
         self.subject.replace(Subject { secret_manager });
 

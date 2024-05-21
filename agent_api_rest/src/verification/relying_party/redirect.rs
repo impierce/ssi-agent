@@ -71,6 +71,7 @@ pub mod tests {
         http::{self, Request},
         Router,
     };
+    use jsonwebtoken::Algorithm;
     use oid4vc_core::{
         authorization_request::{AuthorizationRequest, Object},
         client_metadata::ClientMetadataResource,
@@ -98,6 +99,7 @@ pub mod tests {
                     subject_syntax_types_supported: vec![SubjectSyntaxType::Did(
                         DidMethod::from_str("did:key").unwrap(),
                     )],
+                    id_token_signed_response_alg: Some(Algorithm::EdDSA),
                 },
             })
             .nonce("nonce".to_string())
@@ -110,6 +112,7 @@ pub mod tests {
                 secret_manager: secret_manager().await,
             }),
             "did:key",
+            vec![Algorithm::EdDSA],
         )
         .unwrap();
         let authorization_response = provider_manager

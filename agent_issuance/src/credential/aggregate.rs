@@ -79,7 +79,7 @@ impl Aggregate for Credential {
                     services.init().await.unwrap();
                     (Arc::new(services.subject.unwrap()), services.default_did_method.clone())
                 };
-                let issuer_did = issuer.identifier(&default_did_method).await.unwrap();
+                let issuer_did = issuer.identifier(&default_did_method, Algorithm::EdDSA).await.unwrap();
                 let signed_credential = {
                     // TODO: Add error message here.
                     let mut credential = self.data.clone().unwrap();
@@ -178,7 +178,7 @@ pub mod credential_tests {
                 credential_format_template: CREDENTIAL_FORMAT_TEMPLATE.clone(),
             }])
             .when(CredentialCommand::SignCredential {
-                subject_id: SUBJECT_KEY_DID.identifier("did:key").await.unwrap(),
+                subject_id: SUBJECT_KEY_DID.identifier("did:key", Algorithm::EdDSA).await.unwrap(),
                 overwrite: false,
             })
             .then_expect_events(vec![CredentialEvent::CredentialSigned {

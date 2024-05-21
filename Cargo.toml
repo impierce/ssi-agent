@@ -17,17 +17,24 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
-did_manager = { git = "https://git@github.com/impierce/did-manager.git", rev = "c70c0f1" }
-siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
-oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
-oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
-oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
-oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
+# did_manager = { git = "https://git@github.com/impierce/did-manager.git", rev = "c70c0f1" }
+did_manager = { path = "../did-manager" }
+# siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
+siopv2 = { path = "../openid4vc/siopv2" }
+# oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
+oid4vci = { path = "../openid4vc/oid4vci" }
+# oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
+oid4vc-core = { path = "../openid4vc/oid4vc-core" }
+# oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
+oid4vc-manager = { path = "../openid4vc/oid4vc-manager" }
+# oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
+oid4vp = { path = "../openid4vc/oid4vp" }
 
 async-trait = "0.1"
 axum = { version = "0.7", features = ["tracing"] }
 cqrs-es = "0.4.2"
 futures = "0.3"
+jsonwebtoken = "9.3"
 lazy_static = "1.4"
 rstest = "0.19"
 serde = { version = "1.0", default-features = false, features = ["derive"] }

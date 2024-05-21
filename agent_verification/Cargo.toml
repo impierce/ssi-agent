@@ -13,6 +13,7 @@ async-trait.workspace = true
 axum.workspace = true
 cqrs-es.workspace = true
 futures.workspace = true
+jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
 oid4vc-manager.workspace = true
 oid4vp.workspace = true
@@ -36,7 +37,7 @@ identity_credential = { version = "1.2.0", default-features = false, features = 
     "credential",
     "presentation"
 ] }
-jsonwebtoken = "9.3"
+jsonwebtoken.workspace = true
 lazy_static.workspace = true
 oid4vci.workspace = true
 rstest.workspace = true

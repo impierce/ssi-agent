@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use jsonwebtoken::Algorithm;
 use oid4vc_core::{client_metadata::ClientMetadataResource, Subject};
 use oid4vc_manager::RelyingPartyManager;
 
@@ -20,7 +21,7 @@ impl VerificationServices {
     ) -> Self {
         Self {
             verifier: verifier.clone(),
-            relying_party: RelyingPartyManager::new(verifier, default_did_method).unwrap(),
+            relying_party: RelyingPartyManager::new(verifier, default_did_method, vec![Algorithm::EdDSA]).unwrap(),
             siopv2_client_metadata,
             oid4vp_client_metadata,
         }
@@ -49,6 +50,7 @@ pub mod test_utils {
                 logo_uri: None,
                 extension: siopv2::authorization_request::ClientMetadataParameters {
                     subject_syntax_types_supported: vec![SubjectSyntaxType::from_str(default_did_method).unwrap()],
+                    id_token_signed_response_alg: Some(Algorithm::EdDSA),
                 },
             },
             ClientMetadataResource::ClientMetadata {

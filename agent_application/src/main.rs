@@ -5,8 +5,9 @@ use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::config;
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
+use jsonwebtoken::Algorithm;
 use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
-use serde_json::json;
+use oid4vp::{ClaimFormatDesignation, ClaimFormatProperty};
 use std::{str::FromStr, sync::Arc};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -35,16 +36,20 @@ async fn main() {
             logo_uri: None,
             extension: siopv2::authorization_request::ClientMetadataParameters {
                 subject_syntax_types_supported: vec![SubjectSyntaxType::from_str(&default_did_method).unwrap()],
+                id_token_signed_response_alg: Some(Algorithm::ES256),
             },
         },
         ClientMetadataResource::ClientMetadata {
             client_name: None,
             logo_uri: None,
-            // TODO: fix this once `vp_formats` is public.
-            extension: serde_json::from_value(json!({
-                "vp_formats": {}
-            }))
-            .unwrap(),
+            extension: oid4vp::authorization_request::ClientMetadataParameters {
+                vp_formats: vec![(
+                    ClaimFormatDesignation::JwtVcJson,
+                    ClaimFormatProperty::Alg(vec![Algorithm::ES256]),
+                )]
+                .into_iter()
+                .collect(),
+            },
         },
         &default_did_method,
     ));

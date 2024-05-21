@@ -6,6 +6,7 @@ use crate::{
 use agent_shared::config;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
+use jsonwebtoken::Algorithm;
 use oid4vc_core::{authorization_request::ByReference, scope::Scope};
 use oid4vp::authorization_request::ClientIdScheme;
 use serde::{Deserialize, Serialize};
@@ -45,7 +46,10 @@ impl Aggregate for AuthorizationRequest {
             } => {
                 let default_subject_syntax_type = services.relying_party.default_subject_syntax_type().to_string();
                 let verifier = &services.verifier;
-                let verifier_did = verifier.identifier(&default_subject_syntax_type).await.unwrap();
+                let verifier_did = verifier
+                    .identifier(&default_subject_syntax_type, Algorithm::EdDSA)
+                    .await
+                    .unwrap();
 
                 let url = config!("url").unwrap();
                 let request_uri = format!("{url}/request/{state}").parse().unwrap();
@@ -219,7 +223,7 @@ pub mod tests {
     }
 
     pub async fn verifier_did(did_method: &str) -> String {
-        VERIFIER.identifier(did_method).await.unwrap()
+        VERIFIER.identifier(did_method, Algorithm::EdDSA).await.unwrap()
     }
 
     pub fn siopv2_client_metadata(
@@ -230,6 +234,7 @@ pub mod tests {
             logo_uri: None,
             extension: siopv2::authorization_request::ClientMetadataParameters {
                 subject_syntax_types_supported: vec![SubjectSyntaxType::from_str(did_method).unwrap()],
+                id_token_signed_response_alg: Some(Algorithm::EdDSA),
             },
         }
     }

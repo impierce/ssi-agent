@@ -95,6 +95,7 @@ pub mod tests {
     use identity_credential::credential::Jwt;
     use identity_credential::presentation::Presentation;
 
+    use jsonwebtoken::Algorithm;
     use oid4vc_manager::managers::presentation::create_presentation_submission;
     use oid4vc_manager::ProviderManager;
     use oid4vci::VerifiableCredentialJwt;
@@ -150,6 +151,7 @@ pub mod tests {
                 }
             })),
             did_method,
+            vec![Algorithm::EdDSA],
         )
         .unwrap();
 
