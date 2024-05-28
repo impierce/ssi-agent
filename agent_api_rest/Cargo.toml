@@ -14,6 +14,8 @@ axum-auth = "0.7"
 axum-macros = "0.4"
 http-api-problem = "0.57"
 hyper = { version = "1.2" }
+metrics = { version = "0.22", default-features = false }
+metrics-exporter-prometheus = { version = "0.14", default-features = false }
 oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true
@@ -26,7 +28,9 @@ tracing-subscriber.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-agent_event_publisher_http = { path = "../agent_event_publisher_http", features = ["test"] }
+agent_event_publisher_http = { path = "../agent_event_publisher_http", features = [
+    "test",
+] }
 agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared", features = ["test"] }
 agent_store = { path = "../agent_store" }
