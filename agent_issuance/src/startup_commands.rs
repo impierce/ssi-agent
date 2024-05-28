@@ -10,11 +10,25 @@ use oid4vci::{
         credential_issuer_metadata::CredentialIssuerMetadata,
     },
 };
-use serde_json::json;
+use serde_json::{json, Value};
 
 /// Returns the startup commands for the application.
 pub fn startup_commands(host: url::Url) -> Vec<ServerConfigCommand> {
     vec![load_server_metadata(host.clone()), create_credentials_supported()]
+}
+
+fn display() -> Option<Vec<Value>> {
+    match (config!("display_name"), config!("display_logo_uri")) {
+        (Ok(name), Ok(logo_uri)) => Some(vec![json!({
+            "client_name": name,
+            "logo_uri": logo_uri
+        })]),
+        (Ok(name), Err(_)) => Some(vec![json!({
+            "client_name": name
+        })]),
+        (Err(_), Ok(_)) => panic!("When configuring the `AGENT_CONFIG_DISPLAY_LOGO_URI`, ensure that to also configure the `AGENT_CONFIG_DISPLAY_NAME` environment variable."),
+        _ => None,
+    }
 }
 
 pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
@@ -27,6 +41,7 @@ pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
         credential_issuer_metadata: CredentialIssuerMetadata {
             credential_issuer: base_url.clone(),
             credential_endpoint: base_url.append_path_segment("openid4vci/credential"),
+            display: display(),
             ..Default::default()
         },
     }
@@ -55,10 +70,10 @@ pub fn create_credentials_supported() -> ServerConfigCommand {
                 // TODO
                 // proof_types_supported: vec![ProofType::Jwt],
                 display: match (config!("credential_name"), config!("credential_logo_url")) {
-                    (Ok(name), Ok(logo_url)) => vec![json!({
+                    (Ok(name), Ok(logo_uri)) => vec![json!({
                         "name": name,
                         "logo": {
-                            "url": logo_url
+                            "url": logo_uri
                         }
                     })],
                     _ => vec![],
