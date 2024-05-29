@@ -150,12 +150,17 @@ pub mod tests {
                     secret_manager: secret_manager().await,
                 }
             })),
-            did_method,
+            vec![did_method],
             vec![Algorithm::EdDSA],
         )
         .unwrap();
 
-        let default_did_method = provider_manager.default_subject_syntax_type().to_string();
+        let default_did_method = provider_manager
+            .default_subject_syntax_types()
+            .first()
+            .map(ToString::to_string)
+            // FIX THIS
+            .unwrap();
 
         match authorization_request {
             GenericAuthorizationRequest::SIOPv2(siopv2_authorization_request) => GenericAuthorizationResponse::SIOPv2(

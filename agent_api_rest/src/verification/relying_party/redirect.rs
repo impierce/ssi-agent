@@ -101,6 +101,7 @@ pub mod tests {
                     )],
                     id_token_signed_response_alg: Some(Algorithm::EdDSA),
                 },
+                other: Default::default(),
             })
             .nonce("nonce".to_string())
             .state(state)
@@ -111,7 +112,7 @@ pub mod tests {
             Arc::new(Subject {
                 secret_manager: secret_manager().await,
             }),
-            "did:key",
+            vec!["did:key"],
             vec![Algorithm::EdDSA],
         )
         .unwrap();

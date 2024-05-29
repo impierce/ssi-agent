@@ -158,6 +158,7 @@ impl Aggregate for AuthorizationRequest {
 
 #[cfg(test)]
 pub mod tests {
+    use std::collections::HashMap;
     use std::str::FromStr;
 
     use agent_secret_manager::secret_manager;
@@ -236,10 +237,13 @@ pub mod tests {
                 subject_syntax_types_supported: vec![SubjectSyntaxType::from_str(did_method).unwrap()],
                 id_token_signed_response_alg: Some(Algorithm::EdDSA),
             },
+            other: HashMap::default(),
         }
     }
 
-    pub fn oid4vp_client_metadata() -> ClientMetadataResource<oid4vp::authorization_request::ClientMetadataParameters> {
+    pub fn oid4vp_client_metadata(
+        did_method: &str,
+    ) -> ClientMetadataResource<oid4vp::authorization_request::ClientMetadataParameters> {
         ClientMetadataResource::ClientMetadata {
             client_name: None,
             logo_uri: None,
@@ -251,6 +255,10 @@ pub mod tests {
                 .into_iter()
                 .collect(),
             },
+            other: HashMap::from_iter(vec![(
+                "subject_syntax_types_supported".to_string(),
+                json!(vec![did_method]),
+            )]),
         }
     }
 
@@ -276,7 +284,7 @@ pub mod tests {
                     .redirect_uri(REDIRECT_URI.clone())
                     .response_mode("direct_post".to_string())
                     .presentation_definition(PRESENTATION_DEFINITION.clone())
-                    .client_metadata(oid4vp_client_metadata())
+                    .client_metadata(oid4vp_client_metadata(did_method))
                     .nonce("nonce".to_string())
                     .state("state".to_string())
                     .build()

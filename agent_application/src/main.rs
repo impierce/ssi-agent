@@ -8,7 +8,8 @@ use agent_verification::services::VerificationServices;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
 use oid4vp::{ClaimFormatDesignation, ClaimFormatProperty};
-use std::{str::FromStr, sync::Arc};
+use serde_json::json;
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -38,6 +39,7 @@ async fn main() {
                 subject_syntax_types_supported: vec![SubjectSyntaxType::from_str(&default_did_method).unwrap()],
                 id_token_signed_response_alg: Some(Algorithm::ES256),
             },
+            other: HashMap::default(),
         },
         ClientMetadataResource::ClientMetadata {
             client_name: None,
@@ -50,6 +52,10 @@ async fn main() {
                 .into_iter()
                 .collect(),
             },
+            other: HashMap::from_iter(vec![(
+                "subject_syntax_types_supported".to_string(),
+                json!(vec![&default_did_method]),
+            )]),
         },
         &default_did_method,
     ));

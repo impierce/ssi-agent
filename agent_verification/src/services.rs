@@ -34,11 +34,17 @@ pub mod test_utils {
     use agent_secret_manager::subject::Subject;
     use oid4vc_core::SubjectSyntaxType;
     use oid4vp::{ClaimFormatDesignation, ClaimFormatProperty};
-    use std::str::FromStr;
+    use serde_json::json;
+    use std::{collections::HashMap, str::FromStr};
 
     use super::*;
 
     pub fn test_verification_services(default_did_method: &str) -> Arc<VerificationServices> {
+        let default_did_methods = vec![
+            SubjectSyntaxType::from_str("did:key").unwrap(),
+            SubjectSyntaxType::from_str("did:jwk").unwrap(),
+            SubjectSyntaxType::from_str("did:iota:rms").unwrap(),
+        ];
         Arc::new(VerificationServices::new(
             Arc::new(futures::executor::block_on(async {
                 Subject {
@@ -49,9 +55,10 @@ pub mod test_utils {
                 client_name: None,
                 logo_uri: None,
                 extension: siopv2::authorization_request::ClientMetadataParameters {
-                    subject_syntax_types_supported: vec![SubjectSyntaxType::from_str(default_did_method).unwrap()],
+                    subject_syntax_types_supported: default_did_methods.clone(),
                     id_token_signed_response_alg: Some(Algorithm::EdDSA),
                 },
+                other: HashMap::default(),
             },
             ClientMetadataResource::ClientMetadata {
                 client_name: None,
@@ -64,6 +71,10 @@ pub mod test_utils {
                     .into_iter()
                     .collect(),
                 },
+                other: HashMap::from_iter(vec![(
+                    "subject_syntax_types_supported".to_string(),
+                    json!(&default_did_methods),
+                )]),
             },
             default_did_method,
         ))
