@@ -31,15 +31,27 @@ async fn main() {
         }),
         // TODO: Temporary solution. Remove this once `ClientMetadata` is part of `RelyingPartyManager`.
         ClientMetadataResource::ClientMetadata {
-            client_name: None,
-            logo_uri: None,
+            client_name: config!("display_name").ok(),
+            logo_uri: config!("display_logo_uri")
+                .map(|display_logo_uri| {
+                    display_logo_uri
+                        .parse()
+                        .expect("`AGENT_CONFIG_DISPLAY_LOGO_URI` must be a valid URL string.")
+                })
+                .ok(),
             extension: siopv2::authorization_request::ClientMetadataParameters {
                 subject_syntax_types_supported: vec![SubjectSyntaxType::from_str(&default_did_method).unwrap()],
             },
         },
         ClientMetadataResource::ClientMetadata {
-            client_name: None,
-            logo_uri: None,
+            client_name: config!("display_name").ok(),
+            logo_uri: config!("display_logo_uri")
+                .map(|display_logo_uri| {
+                    display_logo_uri
+                        .parse()
+                        .expect("`AGENT_CONFIG_DISPLAY_LOGO_URI` must be a valid URL string.")
+                })
+                .ok(),
             // TODO: fix this once `vp_formats` is public.
             extension: serde_json::from_value(json!({
                 "vp_formats": {}

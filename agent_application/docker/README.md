@@ -14,6 +14,8 @@ Inside the folder `/agent_application/docker`:
 
 1. Inside `docker-compose.yml` replace the environment value: `AGENT_APPLICATION_URL` with your actual local IP address or URL (such as http://192.168.1.234:3033)
 2. Optionally, add the following environment variables:
+   - `AGENT_CONFIG_DISPLAY_NAME`: To set the display name of the agent.
+   - `AGENT_CONFIG_DISPLAY_LOGO_URI`: To set the display logo URI of the agent.
    - `AGENT_ISSUANCE_CREDENTIAL_NAME`: To set the name of the credentials that will be issued.
    - `AGENT_ISSUANCE_CREDENTIAL_LOGO_URL`: To set the URL of the logo that will be used in the credentials.
 > [!IMPORTANT] 
