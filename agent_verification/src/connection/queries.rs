@@ -11,6 +11,7 @@ pub type SIOPv2AuthorizationRequest = oid4vc_core::authorization_request::Author
 pub struct ConnectionView {
     id_token: Option<String>,
     vp_token: Option<String>,
+    state: Option<String>,
 }
 
 impl View<Connection> for ConnectionView {
@@ -18,11 +19,13 @@ impl View<Connection> for ConnectionView {
         use crate::connection::event::ConnectionEvent::*;
 
         match &event.payload {
-            SIOPv2AuthorizationResponseVerified { id_token } => {
+            SIOPv2AuthorizationResponseVerified { id_token, state } => {
                 self.id_token.replace(id_token.clone());
+                self.state.clone_from(state);
             }
-            OID4VPAuthorizationResponseVerified { vp_token } => {
+            OID4VPAuthorizationResponseVerified { vp_token, state } => {
                 self.vp_token.replace(vp_token.clone());
+                self.state.clone_from(state);
             }
         }
     }

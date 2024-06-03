@@ -12,6 +12,7 @@ pub struct Connection {
     // TODO: Does user data need to be stored in UniCore at all?
     id_token: Option<String>,
     vp_token: Option<String>,
+    state: Option<String>,
 }
 
 #[async_trait]
@@ -49,7 +50,10 @@ impl Aggregate for Connection {
 
                         let id_token = authorization_response.extension.id_token.clone();
 
-                        Ok(vec![SIOPv2AuthorizationResponseVerified { id_token }])
+                        Ok(vec![SIOPv2AuthorizationResponseVerified {
+                            id_token,
+                            state: authorization_response.state,
+                        }])
                     }
                     GenericAuthorizationResponse::OID4VP(oid4vp_authorization_response) => {
                         let _ = relying_party
@@ -62,7 +66,10 @@ impl Aggregate for Connection {
                             Oid4vpParams::Jwt { .. } => return Err(UnsupportedJwtParameterError),
                         };
 
-                        Ok(vec![OID4VPAuthorizationResponseVerified { vp_token }])
+                        Ok(vec![OID4VPAuthorizationResponseVerified {
+                            vp_token,
+                            state: oid4vp_authorization_response.state,
+                        }])
                     }
                 }
             }
@@ -75,11 +82,13 @@ impl Aggregate for Connection {
         info!("Applying event: {:?}", event);
 
         match event {
-            SIOPv2AuthorizationResponseVerified { id_token } => {
+            SIOPv2AuthorizationResponseVerified { id_token, state } => {
                 self.id_token.replace(id_token);
+                self.state = state;
             }
-            OID4VPAuthorizationResponseVerified { vp_token } => {
+            OID4VPAuthorizationResponseVerified { vp_token, state } => {
                 self.vp_token.replace(vp_token);
+                self.state = state;
             }
         }
     }
@@ -133,8 +142,14 @@ pub mod tests {
                 authorization_response,
             })
             .then_expect_events(vec![match response_type {
-                "id_token" => ConnectionEvent::SIOPv2AuthorizationResponseVerified { id_token: token },
-                "vp_token" => ConnectionEvent::OID4VPAuthorizationResponseVerified { vp_token: token },
+                "id_token" => ConnectionEvent::SIOPv2AuthorizationResponseVerified {
+                    id_token: token,
+                    state: Some("state".to_string()),
+                },
+                "vp_token" => ConnectionEvent::OID4VPAuthorizationResponseVerified {
+                    vp_token: token,
+                    state: Some("state".to_string()),
+                },
                 _ => unreachable!("Invalid response type."),
             }]);
     }
