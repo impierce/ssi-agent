@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum ConnectionEvent {
-    SIOPv2AuthorizationResponseVerified { id_token: String },
-    OID4VPAuthorizationResponseVerified { vp_token: String },
+    SIOPv2AuthorizationResponseVerified { id_token: String, state: Option<String> },
+    OID4VPAuthorizationResponseVerified { vp_token: String, state: Option<String> },
 }
 
 impl DomainEvent for ConnectionEvent {
