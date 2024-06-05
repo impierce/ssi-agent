@@ -22,6 +22,7 @@ pub enum OfferCommand {
         credential_issuer_metadata: CredentialIssuerMetadata,
     },
     CreateTokenResponse {
+        offer_id: String,
         token_request: TokenRequest,
     },
     VerifyCredentialRequest {
@@ -31,6 +32,7 @@ pub enum OfferCommand {
         credential_request: CredentialRequest,
     },
     CreateCredentialResponse {
+        offer_id: String,
         signed_credentials: Vec<serde_json::Value>,
     },
 }

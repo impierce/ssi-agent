@@ -85,7 +85,10 @@ impl Aggregate for Offer {
                     form_url_encoded_credential_offer: credential_offer.to_string(),
                 }])
             }
-            CreateTokenResponse { token_request } => {
+            CreateTokenResponse {
+                offer_id,
+                token_request,
+            } => {
                 #[cfg(test)]
                 let c_nonce = tests::C_NONCES.lock().unwrap().pop_front().unwrap();
                 #[cfg(not(test))]
@@ -93,6 +96,7 @@ impl Aggregate for Offer {
 
                 match token_request {
                     TokenRequest::PreAuthorizedCode { .. } => Ok(vec![TokenResponseCreated {
+                        offer_id,
                         token_response: TokenResponse {
                             access_token: self.access_token.clone(),
                             token_type: "bearer".to_string(),
@@ -144,7 +148,10 @@ impl Aggregate for Offer {
                     subject_id: subject_did,
                 }])
             }
-            CreateCredentialResponse { mut signed_credentials } => {
+            CreateCredentialResponse {
+                offer_id,
+                mut signed_credentials,
+            } => {
                 // TODO: support batch credentials.
                 let signed_credential = signed_credentials.pop().ok_or(MissingCredentialError)?;
 
@@ -157,7 +164,10 @@ impl Aggregate for Offer {
                     c_nonce_expires_in: None,
                 };
 
-                Ok(vec![CredentialResponseCreated { credential_response }])
+                Ok(vec![CredentialResponseCreated {
+                    offer_id,
+                    credential_response,
+                }])
             }
         }
     }
@@ -186,10 +196,12 @@ impl Aggregate for Offer {
             CredentialRequestVerified { subject_id, .. } => {
                 self.subject_id.replace(subject_id);
             }
-            TokenResponseCreated { token_response } => {
+            TokenResponseCreated { token_response, .. } => {
                 self.token_response.replace(token_response);
             }
-            CredentialResponseCreated { credential_response } => {
+            CredentialResponseCreated {
+                credential_response, ..
+            } => {
                 self.credential_response.replace(credential_response);
             }
         }
@@ -308,9 +320,11 @@ pub mod tests {
                 },
             ])
             .when(OfferCommand::CreateTokenResponse {
+                offer_id: Default::default(),
                 token_request: token_request(subject.clone()),
             })
             .then_expect_events(vec![OfferEvent::TokenResponseCreated {
+                offer_id: Default::default(),
                 token_response: token_response(subject),
             }]);
     }
@@ -336,6 +350,7 @@ pub mod tests {
                     form_url_encoded_credential_offer: subject.form_url_encoded_credential_offer.clone(),
                 },
                 OfferEvent::TokenResponseCreated {
+                    offer_id: Default::default(),
                     token_response: token_response(subject.clone()),
                 },
             ])
@@ -372,6 +387,7 @@ pub mod tests {
                     form_url_encoded_credential_offer: subject.form_url_encoded_credential_offer.clone(),
                 },
                 OfferEvent::TokenResponseCreated {
+                    offer_id: Default::default(),
                     token_response: token_response(subject.clone()),
                 },
                 OfferEvent::CredentialRequestVerified {
@@ -380,9 +396,11 @@ pub mod tests {
                 },
             ])
             .when(OfferCommand::CreateCredentialResponse {
+                offer_id: Default::default(),
                 signed_credentials: vec![json!(VERIFIABLE_CREDENTIAL_JWT.clone())],
             })
             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
+                offer_id: Default::default(),
                 credential_response: credential_response(subject),
             }]);
     }

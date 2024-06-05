@@ -15,6 +15,7 @@ pub enum OfferEvent {
         form_url_encoded_credential_offer: String,
     },
     TokenResponseCreated {
+        offer_id: String,
         token_response: TokenResponse,
     },
     CredentialRequestVerified {
@@ -22,6 +23,7 @@ pub enum OfferEvent {
         subject_id: String,
     },
     CredentialResponseCreated {
+        offer_id: String,
         credential_response: CredentialResponse,
     },
 }

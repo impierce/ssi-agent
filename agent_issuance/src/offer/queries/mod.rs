@@ -62,10 +62,12 @@ impl View<Offer> for OfferView {
             CredentialRequestVerified { subject_id, .. } => {
                 self.subject_id.replace(subject_id.clone());
             }
-            TokenResponseCreated { token_response } => {
+            TokenResponseCreated { token_response, .. } => {
                 self.token_response.replace(token_response.clone());
             }
-            CredentialResponseCreated { credential_response } => {
+            CredentialResponseCreated {
+                credential_response, ..
+            } => {
                 self.credential_response.replace(credential_response.clone());
             }
         }
