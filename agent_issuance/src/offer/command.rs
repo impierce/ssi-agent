@@ -11,14 +11,18 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum OfferCommand {
-    CreateCredentialOffer,
+    CreateCredentialOffer {
+        offer_id: String,
+    },
     AddCredentials {
+        offer_id: String,
         credential_ids: Vec<String>,
     },
 
     // OpenID4VCI Pre-Authorized Code Flow
     // TODO: add option for credential_offer_uri (by reference)
     CreateFormUrlEncodedCredentialOffer {
+        offer_id: String,
         credential_issuer_metadata: CredentialIssuerMetadata,
     },
     CreateTokenResponse {

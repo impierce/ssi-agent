@@ -45,17 +45,20 @@ impl View<Offer> for OfferView {
             CredentialOfferCreated {
                 pre_authorized_code,
                 access_token,
+                ..
             } => {
                 self.pre_authorized_code.clone_from(pre_authorized_code);
                 self.access_token.clone_from(access_token)
             }
             CredentialsAdded {
                 credential_ids: credential_id,
+                ..
             } => {
                 self.credential_ids.clone_from(credential_id);
             }
             FormUrlEncodedCredentialOfferCreated {
                 form_url_encoded_credential_offer,
+                ..
             } => self
                 .form_url_encoded_credential_offer
                 .clone_from(form_url_encoded_credential_offer),
