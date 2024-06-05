@@ -33,7 +33,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"type\":[\n                \"AchievementSubject\"\n            ],\n            \"achievement\":{\n                \"id\":\"https://demo.edubadges.nl/public/assertions/6pEB--n-SwiZPtWXMCB2jQ\",\n                \"name\":\"Edubadge account complete\",\n                \"type\":[\n                    \"Achievement\"\n                ],\n                \"image\":{\n                    \"id\":\"https://api-demo.edubadges.nl/media/uploads/badges/issuer_badgeclass_548517aa-cbab-4a7b-a971-55cdcce0e2a5.png\"\n                },\n                \"criteria\":{\n                    \"narrative\":\"To qualify for this edubadge:\\r\\n\\r\\n*  you successfully created an eduID,\\r\\n* you successfully linked your institution to your eduID,\\r\\n*  you can store and manage them safely in your backpack.\"\n                },\n                \"description\":\"### Welcome to edubadges. Let your life long learning begin! ###\\r\\n\\r\\nYou are now ready to collect all your edubadges in your backpack. In your backpack you can store and manage them safely.\\r\\n\\r\\nShare them anytime you like and with whom you like.\\r\\n\\r\\nEdubadges are visual representations of your knowledge, skills and competences.\"\n            }\n        }\n    }\n}",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -214,7 +214,7 @@
 			"name": "Verification",
 			"item": [
 				{
-					"name": "authorization_requests",
+					"name": "siopv2_authorization_requests",
 					"event": [
 						{
 							"listen": "test",
@@ -249,7 +249,125 @@
 					],
 					"request": {
 						"method": "POST",
-						"header": [],
+						"header": [
+							{
+								"key": "Access-Control-Allow-Origin",
+								"value": "*",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"presentation_definition_id\": \"presentation_definition\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{HOST}}/v1/authorization_requests"
+					},
+					"response": []
+				},
+				{
+					"name": "oid4vp_authorization_requests_with_presentation_definition",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const location = pm.response.headers.get(\"LOCATION\");",
+									"",
+									"if(location){",
+									"    pm.collectionVariables.set(\"AUTHORIZATION_REQUEST_LOCATION\",location)",
+									"}",
+									"",
+									"const authorization_request = responseBody;",
+									"",
+									"const decodedString = decodeURIComponent(authorization_request);",
+									"",
+									"// Regular expression to match the value of request_uri",
+									"const regex = /request_uri=([^&]+)/;",
+									"",
+									"// Executing the regular expression on the input string",
+									"const match = regex.exec(decodedString);",
+									"",
+									"// Extracting the value of request_uri",
+									"const requestUri = match ? decodeURIComponent(match[1]) : null;",
+									"",
+									"pm.collectionVariables.set(\"REQUEST_URI\",requestUri)",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Access-Control-Allow-Origin",
+								"value": "*",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"presentation_definition\": {\n        \"id\":\"Verifiable Presentation request for sign-on\",\n        \"input_descriptors\":[\n            {\n                \"id\":\"Request for Verifiable Credential\",\n                \"constraints\":{\n                    \"fields\":[\n                        {\n                            \"path\":[\n                                \"$.vc.type\"\n                            ],\n                            \"filter\":{\n                                \"type\":\"array\",\n                                \"contains\":{\n                                    \"const\":\"VerifiableCredential\"\n                                }\n                            }\n                        }\n                    ]\n                }\n            }\n        ]\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{HOST}}/v1/authorization_requests"
+					},
+					"response": []
+				},
+				{
+					"name": "oid4vp_authorization_requests_with_presentation_definition_id",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const location = pm.response.headers.get(\"LOCATION\");",
+									"",
+									"if(location){",
+									"    pm.collectionVariables.set(\"AUTHORIZATION_REQUEST_LOCATION\",location)",
+									"}",
+									"",
+									"const authorization_request = responseBody;",
+									"",
+									"const decodedString = decodeURIComponent(authorization_request);",
+									"",
+									"// Regular expression to match the value of request_uri",
+									"const regex = /request_uri=([^&]+)/;",
+									"",
+									"// Executing the regular expression on the input string",
+									"const match = regex.exec(decodedString);",
+									"",
+									"// Extracting the value of request_uri",
+									"const requestUri = match ? decodeURIComponent(match[1]) : null;",
+									"",
+									"pm.collectionVariables.set(\"REQUEST_URI\",requestUri)",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Access-Control-Allow-Origin",
+								"value": "*",
+								"type": "text"
+							}
+						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"presentation_definition_id\": \"presentation_definition\"\n}",
