@@ -121,12 +121,12 @@ where
     async fn dispatch(&self, _view_id: &str, events: &[EventEnvelope<A>]) {
         for event in events {
             if self.target_events.contains(&event.payload.event_type()) {
-                self.client
-                    .post(&self.target_url)
-                    .json(&event.payload)
-                    .send()
-                    .await
-                    .ok();
+                let request = self.client.post(&self.target_url).json(&event.payload);
+
+                // Send the request in a separate thread so that we don't have to await the response in the current thread.
+                tokio::task::spawn(async move {
+                    request.send().await.ok();
+                });
             }
         }
     }

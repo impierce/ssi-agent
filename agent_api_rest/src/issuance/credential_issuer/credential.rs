@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use agent_issuance::{
     credential::{command::CredentialCommand, queries::CredentialView},
     offer::{
@@ -7,7 +9,10 @@ use agent_issuance::{
     server_config::queries::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::{
+    config,
+    handlers::{command_handler, query_handler},
+};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -16,9 +21,10 @@ use axum::{
 use axum_auth::AuthBearer;
 use oid4vci::credential_request::CredentialRequest;
 use serde_json::json;
-use tracing::info;
+use tokio::time::sleep;
+use tracing::{error, info};
 
-const EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 250;
+const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u128 = 1000;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
@@ -57,18 +63,33 @@ pub(crate) async fn credential(
         StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
-    // This ensures that the server waits for a sufficient duration to potentially receive a credential from an external
-    // server.
-    std::thread::sleep(std::time::Duration::from_millis(EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS));
+    let timeout = config!("external_server_response_timeout_ms")
+        .ok()
+        .and_then(|external_server_response_timeout_ms| external_server_response_timeout_ms.parse().ok())
+        .unwrap_or(DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS);
+    let start_time = Instant::now();
 
     // Use the `offer_id` to get the `credential_ids` and `subject_id` from the `OfferView`.
-    let (credential_ids, subject_id) = match query_handler(&offer_id, &state.query.offer).await {
-        Ok(Some(OfferView {
-            credential_ids,
-            subject_id: Some(subject_id),
-            ..
-        })) => (credential_ids, subject_id),
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    let (credential_ids, subject_id) = loop {
+        match query_handler(&offer_id, &state.query.offer).await {
+            // When the Offer does not include the credential id's yet, wait for the external server to provide them.
+            Ok(Some(OfferView { credential_ids, .. })) if credential_ids.is_empty() => {
+                if start_time.elapsed().as_millis() <= timeout {
+                    sleep(Duration::from_millis(50)).await;
+                } else {
+                    error!("timeout failure");
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            }
+            Ok(Some(OfferView {
+                credential_ids,
+                subject_id: Some(subject_id),
+                ..
+            })) => break (credential_ids, subject_id),
+            _ => {
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        }
     };
 
     // Use the `credential_ids` and `subject_id` to sign all the credentials.
@@ -169,14 +190,24 @@ mod tests {
                                   6jZ4IwAtEwt6XfbV9luFalRL3qtsmDvaNBf7CA";
 
     trait CredentialEventTrigger {
-        async fn prepare_credential_event_trigger(&self, app: Arc<Mutex<Option<Router>>>, is_self_signed: bool);
+        async fn prepare_credential_event_trigger(
+            &self,
+            app: Arc<Mutex<Option<Router>>>,
+            is_self_signed: bool,
+            delay: u128,
+        );
     }
 
     // Adds a method to `MockServer` which can be used to mount a mock endpoint that will be triggered when a
     // `CredentialRequestVerified` event is dispatched from the `UniCore` server. The `MockServer` used in this test
     // module must be seen as a representation of an outside backend server.
     impl CredentialEventTrigger for MockServer {
-        async fn prepare_credential_event_trigger(&self, app: Arc<Mutex<Option<Router>>>, is_self_signed: bool) {
+        async fn prepare_credential_event_trigger(
+            &self,
+            app: Arc<Mutex<Option<Router>>>,
+            is_self_signed: bool,
+            delay: u128,
+        ) {
             Mock::given(method("POST"))
                 .and(path("/ssi-events-subscriber"))
                 .and(
@@ -214,6 +245,8 @@ mod tests {
                                     }
                                 };
 
+                                std::thread::sleep(Duration::from_millis(delay.try_into().unwrap()));
+
                                 // Sends the `CredentialsRequest` to the `credentials` endpoint.
                                 app_clone
                                     .oneshot(
@@ -242,13 +275,19 @@ mod tests {
     }
 
     #[rstest]
-    #[case::without_external_server(false, false)]
-    #[case::with_external_server(true, false)]
-    #[case::with_external_server_and_self_signed_credential(true, true)]
+    #[case::without_external_server(false, false, 0)]
+    #[case::with_external_server(true, false, 0)]
+    #[case::with_external_server_and_self_signed_credential(true, true, 0)]
+    #[should_panic(expected = "assertion `left == right` failed\n  left: 500\n right: 200")]
+    #[case::should_panic_due_to_timout(true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100)]
     #[serial_test::serial]
-    #[tokio::test]
-    #[tracing_test::traced_test]
-    async fn test_credential_endpoint(#[case] with_external_server: bool, #[case] is_self_signed: bool) {
+    #[tokio::test(flavor = "multi_thread")]
+    // #[tracing_test::traced_test]
+    async fn test_credential_endpoint(
+        #[case] with_external_server: bool,
+        #[case] is_self_signed: bool,
+        #[case] delay: u128,
+    ) {
         use crate::issuance::credentials::tests::credentials;
 
         let (external_server, issuance_event_publishers, verification_event_publishers) = if with_external_server {
@@ -293,7 +332,7 @@ mod tests {
 
         if let Some(external_server) = &external_server {
             external_server
-                .prepare_credential_event_trigger(Arc::new(Mutex::new(Some(app.clone()))), is_self_signed)
+                .prepare_credential_event_trigger(Arc::new(Mutex::new(Some(app.clone()))), is_self_signed, delay)
                 .await;
         }
 
@@ -342,7 +381,7 @@ mod tests {
                     .unwrap(),
             )
             .await
-            .unwrap();
+            .expect("hello");
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers().get("Content-Type").unwrap(), "application/json");
