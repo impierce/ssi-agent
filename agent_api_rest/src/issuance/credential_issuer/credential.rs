@@ -25,6 +25,7 @@ use tokio::time::sleep;
 use tracing::{error, info};
 
 const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u128 = 1000;
+const POLLING_INTERVAL_MS: u64 = 50;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
@@ -75,7 +76,7 @@ pub(crate) async fn credential(
             // When the Offer does not include the credential id's yet, wait for the external server to provide them.
             Ok(Some(OfferView { credential_ids, .. })) if credential_ids.is_empty() => {
                 if start_time.elapsed().as_millis() <= timeout {
-                    sleep(Duration::from_millis(50)).await;
+                    sleep(Duration::from_millis(POLLING_INTERVAL_MS)).await;
                 } else {
                     error!("timeout failure");
                     return StatusCode::INTERNAL_SERVER_ERROR.into_response();
