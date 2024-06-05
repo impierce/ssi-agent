@@ -140,7 +140,7 @@ mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn it_works() {
         let mock_server = MockServer::start().await;
 
@@ -186,6 +186,9 @@ mod tests {
 
         // Dispatch the event.
         publisher.offer.as_ref().unwrap().dispatch("view_id", &events).await;
+
+        // Wait for the request to arrive at the mock server endpoint.
+        std::thread::sleep(std::time::Duration::from_millis(10));
 
         // Assert that the event was dispatched to the target URL.
         assert_eq!(
