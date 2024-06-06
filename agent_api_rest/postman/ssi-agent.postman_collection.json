@@ -258,7 +258,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"presentation_definition_id\": \"presentation_definition\"\n}",
+							"raw": "{\n    \"nonce\": \"this is a nonce\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
