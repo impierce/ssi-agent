@@ -12,8 +12,7 @@ async-trait = "0.1"
 base64 = "0.22"
 cqrs-es = "0.4.2"
 did_manager.workspace = true
-futures.workspace = true
-identity_iota = { version = "1.2.0" }
+identity_iota = { version = "1.2" }
 log = "0.4"
 oid4vc-core.workspace = true
 serde.workspace = true
@@ -23,4 +22,5 @@ tracing.workspace = true
 
 [dev-dependencies]
 agent_shared = { path = "../agent_shared", features = ["test"] }
+futures.workspace = true
 tracing-test.workspace = true

@@ -1,5 +1,3 @@
-use std::{str::FromStr, sync::Arc};
-
 use agent_api_rest::app;
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_issuance::{startup_commands::startup_commands, state::initialize};
@@ -7,8 +5,10 @@ use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::config;
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
-use oid4vc_core::{client_metadata::ClientMetadataResource, DidMethod, SubjectSyntaxType};
-use siopv2::authorization_request::ClientMetadataParameters;
+use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
+use serde_json::json;
+use std::{str::FromStr, sync::Arc};
+use tower_http::cors::CorsLayer;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -32,13 +32,32 @@ async fn main() {
         }),
         // TODO: Temporary solution. Remove this once `ClientMetadata` is part of `RelyingPartyManager`.
         ClientMetadataResource::ClientMetadata {
-            client_name: None,
-            logo_uri: None,
-            extension: ClientMetadataParameters {
-                subject_syntax_types_supported: vec![SubjectSyntaxType::Did(
-                    DidMethod::from_str(&default_did_method).unwrap(),
-                )],
+            client_name: config!("display_name").ok(),
+            logo_uri: config!("display_logo_uri")
+                .map(|display_logo_uri| {
+                    display_logo_uri
+                        .parse()
+                        .expect("`AGENT_CONFIG_DISPLAY_LOGO_URI` must be a valid URL string.")
+                })
+                .ok(),
+            extension: siopv2::authorization_request::ClientMetadataParameters {
+                subject_syntax_types_supported: vec![SubjectSyntaxType::from_str(&default_did_method).unwrap()],
             },
+        },
+        ClientMetadataResource::ClientMetadata {
+            client_name: config!("display_name").ok(),
+            logo_uri: config!("display_logo_uri")
+                .map(|display_logo_uri| {
+                    display_logo_uri
+                        .parse()
+                        .expect("`AGENT_CONFIG_DISPLAY_LOGO_URI` must be a valid URL string.")
+                })
+                .ok(),
+            // TODO: fix this once `vp_formats` is public.
+            extension: serde_json::from_value(json!({
+                "vp_formats": {}
+            }))
+            .unwrap(),
         },
         &default_did_method,
     ));
@@ -71,9 +90,21 @@ async fn main() {
 
     initialize(&issuance_state, startup_commands(url)).await;
 
+    let app = app((issuance_state, verification_state));
+
+    // CORS
+    let enable_cors = config!("enable_cors")
+        .unwrap_or("false".to_string())
+        .parse::<bool>()
+        .expect("AGENT_APPLICATION_ENABLE_CORS must be a boolean");
+    let app = if enable_cors {
+        info!("CORS (permissive) enabled for all routes");
+        app.layer(CorsLayer::permissive())
+    } else {
+        app
+    };
+
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await.unwrap();
     info!("listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app((issuance_state, verification_state)))
-        .await
-        .unwrap();
+    axum::serve(listener, app).await.unwrap();
 }

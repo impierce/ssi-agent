@@ -18,10 +18,11 @@ rust-version = "1.76.0"
 
 [workspace.dependencies]
 did_manager = { git = "https://git@github.com/impierce/did-manager.git", rev = "c70c0f1" }
-siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "a932af7" }
-oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "a932af7" }
-oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "a932af7" }
-oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "a932af7" }
+siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
+oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
+oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
+oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
+oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
 
 async-trait = "0.1"
 axum = { version = "0.7", features = ["tracing"] }
@@ -35,7 +36,7 @@ serde_with = "3.7"
 serde_yaml = "0.9"
 thiserror = "1.0"
 tokio = { version = "1", features = ["full"] }
-tower-http = { version = "0.5", features = ["trace"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tracing-test = { version = "0.2" }

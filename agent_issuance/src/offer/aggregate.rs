@@ -211,6 +211,7 @@ pub mod tests {
         credential_request::CredentialRequest,
         KeyProofType, ProofType,
     };
+    use rstest::rstest;
     use serde_json::json;
     use std::{collections::VecDeque, sync::Mutex};
 
@@ -314,9 +315,9 @@ pub mod tests {
             }]);
     }
 
-    #[test]
+    #[rstest]
     #[serial_test::serial]
-    fn test_verify_credential_response() {
+    async fn test_verify_credential_response() {
         *PRE_AUTHORIZED_CODES.lock().unwrap() = vec![generate_random_string()].into();
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
@@ -342,17 +343,17 @@ pub mod tests {
                 offer_id: Default::default(),
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
                 authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
-                credential_request: credential_request(subject.clone()),
+                credential_request: credential_request(subject.clone()).await,
             })
             .then_expect_events(vec![OfferEvent::CredentialRequestVerified {
                 offer_id: Default::default(),
-                subject_id: SUBJECT_IDENTIFIER_KEY_ID.clone(),
+                subject_id: SUBJECT_KEY_DID.identifier("did:key").await.unwrap(),
             }]);
     }
 
-    #[test]
+    #[rstest]
     #[serial_test::serial]
-    fn test_create_credential_response() {
+    async fn test_create_credential_response() {
         *PRE_AUTHORIZED_CODES.lock().unwrap() = vec![generate_random_string()].into();
         *ACCESS_TOKENS.lock().unwrap() = vec![generate_random_string()].into();
         *C_NONCES.lock().unwrap() = vec![generate_random_string()].into();
@@ -375,7 +376,7 @@ pub mod tests {
                 },
                 OfferEvent::CredentialRequestVerified {
                     offer_id: Default::default(),
-                    subject_id: SUBJECT_IDENTIFIER_KEY_ID.clone(),
+                    subject_id: SUBJECT_KEY_DID.identifier("did:key").await.unwrap(),
                 },
             ])
             .when(OfferCommand::CreateCredentialResponse {
@@ -401,7 +402,6 @@ pub mod tests {
         pub static ref ACCESS_TOKENS: Mutex<VecDeque<String>> = Mutex::new(vec![].into());
         pub static ref C_NONCES: Mutex<VecDeque<String>> = Mutex::new(vec![].into());
         pub static ref SUBJECT_KEY_DID: Arc<Subject> = Arc::new(subject());
-        pub static ref SUBJECT_IDENTIFIER_KEY_ID: String = SUBJECT_KEY_DID.identifier("did:key").unwrap();
     }
 
     fn test_subject() -> TestSubject {
@@ -436,7 +436,7 @@ pub mod tests {
         }
     }
 
-    fn credential_request(subject: TestSubject) -> CredentialRequest {
+    async fn credential_request(subject: TestSubject) -> CredentialRequest {
         CredentialRequest {
             credential_format: CredentialFormats::JwtVcJson(Parameters {
                 parameters: (
@@ -452,13 +452,14 @@ pub mod tests {
                 KeyProofType::builder()
                     .proof_type(ProofType::Jwt)
                     .signer(subject.subject.clone())
-                    .iss(subject.subject.identifier("did:key").unwrap())
+                    .iss(subject.subject.identifier("did:key").await.unwrap())
                     .aud(CREDENTIAL_ISSUER_METADATA.credential_issuer.clone())
                     .iat(1571324800)
                     .exp(9999999999i64)
                     .nonce(subject.c_nonce.clone())
                     .subject_syntax_type("did:key")
                     .build()
+                    .await
                     .unwrap(),
             ),
         }

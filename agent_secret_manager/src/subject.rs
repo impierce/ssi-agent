@@ -1,11 +1,9 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager::{DidMethod, Resolver, SecretManager};
-use futures::executor::block_on;
 use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
+use std::sync::Arc;
 
 /// Reponsible for signing and verifying data.
 pub struct Subject {
@@ -49,21 +47,19 @@ impl Verify for Subject {
 
 #[async_trait]
 impl Sign for Subject {
-    fn key_id(&self, subject_syntax_type: &str) -> Option<String> {
+    async fn key_id(&self, subject_syntax_type: &str) -> Option<String> {
         let method: DidMethod = serde_json::from_str(&format!("{subject_syntax_type:?}")).ok()?;
 
-        block_on(async {
-            self.secret_manager
-                .produce_document(method)
-                .await
-                .ok()
-                .and_then(|document| document.verification_method().first().cloned())
-                .map(|first| first.id().to_string())
-        })
+        self.secret_manager
+            .produce_document(method)
+            .await
+            .ok()
+            .and_then(|document| document.verification_method().first().cloned())
+            .map(|first| first.id().to_string())
     }
 
-    fn sign(&self, message: &str, _subject_syntax_type: &str) -> anyhow::Result<Vec<u8>> {
-        Ok(block_on(async { self.secret_manager.sign(message.as_bytes()).await })?)
+    async fn sign(&self, message: &str, _subject_syntax_type: &str) -> anyhow::Result<Vec<u8>> {
+        Ok(self.secret_manager.sign(message.as_bytes()).await?)
     }
 
     fn external_signer(&self) -> Option<Arc<dyn ExternalSign>> {
@@ -73,14 +69,13 @@ impl Sign for Subject {
 
 #[async_trait]
 impl oid4vc_core::Subject for Subject {
-    fn identifier(&self, subject_syntax_type: &str) -> anyhow::Result<String> {
+    async fn identifier(&self, subject_syntax_type: &str) -> anyhow::Result<String> {
         let method: DidMethod = serde_json::from_str(&format!("{subject_syntax_type:?}"))?;
 
-        Ok(block_on(async {
-            self.secret_manager
-                .produce_document(method)
-                .await
-                .map(|document| document.id().to_string())
-        })?)
+        Ok(self
+            .secret_manager
+            .produce_document(method)
+            .await
+            .map(|document| document.id().to_string())?)
     }
 }

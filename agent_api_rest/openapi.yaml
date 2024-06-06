@@ -160,6 +160,12 @@ paths:
                 nonce:
                   type: string
                   example: "0d520cbe176ab9e1f7888c70888020d84a69672a4baabd3ce1c6aaad8f6420c0"
+                state:
+                  type: string
+                  example: "84266fdbd31d4c2c6d0665f7e8380fa3"
+                presentation_definition_id:
+                  type: string
+                  example: "presentation_definition"
               required:
                 - nonce
       responses:

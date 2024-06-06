@@ -1,11 +1,11 @@
-use crate::connection::aggregate::SIOPv2AuthorizationRequest;
+use crate::generic_oid4vc::GenericAuthorizationRequest;
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum AuthorizationRequestEvent {
     AuthorizationRequestCreated {
-        authorization_request: Box<SIOPv2AuthorizationRequest>,
+        authorization_request: Box<GenericAuthorizationRequest>,
     },
     FormUrlEncodedAuthorizationRequestCreated {
         form_url_encoded_authorization_request: String,

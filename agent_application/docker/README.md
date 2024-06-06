@@ -14,6 +14,8 @@ Inside the folder `/agent_application/docker`:
 
 1. Inside `docker-compose.yml` replace the environment value: `AGENT_APPLICATION_URL` with your actual local IP address or URL (such as http://192.168.1.234:3033)
 2. Optionally, add the following environment variables:
+   - `AGENT_CONFIG_DISPLAY_NAME`: To set the display name of the agent.
+   - `AGENT_CONFIG_DISPLAY_LOGO_URI`: To set the display logo URI of the agent.
    - `AGENT_ISSUANCE_CREDENTIAL_NAME`: To set the name of the credentials that will be issued.
    - `AGENT_ISSUANCE_CREDENTIAL_LOGO_URL`: To set the URL of the logo that will be used in the credentials.
 > [!IMPORTANT] 
@@ -45,6 +47,24 @@ docker compose up
 
 > [!NOTE]
 > If you don't have rewrite rules enabled on your reverse proxy, you can set the `AGENT_CONFIG_BASE_PATH` to a value such as `ssi-agent`.
+
+## Utilizing the IOTA DID Method
+By default, UniCore uses the JWK DID Method to generate and manage DIDs. However, UniCore also supports the IOTA DID
+Method, which leverages the IOTA Tangle to store your DID document. To enable the IOTA DID Method, set these environment
+variables:
+```yaml
+      AGENT_CONFIG_ISSUER_DID: <your-pre-existing-IOTA-DID>
+      AGENT_CONFIG_ISSUER_FRAGMENT: <your-pre-existing-IOTA-DID-fragment>
+      AGENT_CONFIG_DEFAULT_DID_METHOD: "did:iota"
+```
+
+UniCore supports any of the IOTA networks (Testnet, Shimmer, Mainnet). For example, if you want to enable the development network for Shimmer, the 
+aforementioned environment variables would look like this:
+```yaml
+      AGENT_CONFIG_ISSUER_DID: "did:iota:rms:0x42ad588322e58b3c07aa39e4948d021ee17ecb5747915e9e1f35f028d7ecaf90"
+      AGENT_CONFIG_ISSUER_FRAGMENT: "bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"
+      AGENT_CONFIG_DEFAULT_DID_METHOD: "did:iota:rms"
+```
 
 ## Leveraging Just-in-Time Data Request Events
 

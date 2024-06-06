@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum ConnectionEvent {
-    SIOPv2AuthorizationResponseVerified { id_token: String },
+    SIOPv2AuthorizationResponseVerified { id_token: String, state: Option<String> },
+    OID4VPAuthorizationResponseVerified { vp_token: String, state: Option<String> },
 }
 
 impl DomainEvent for ConnectionEvent {
@@ -12,6 +13,7 @@ impl DomainEvent for ConnectionEvent {
 
         let event_type: &str = match self {
             SIOPv2AuthorizationResponseVerified { .. } => "SIOPv2AuthorizationResponseVerified",
+            OID4VPAuthorizationResponseVerified { .. } => "OID4VPAuthorizationResponseVerified",
         };
         event_type.to_string()
     }

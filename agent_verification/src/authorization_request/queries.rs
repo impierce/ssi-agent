@@ -1,16 +1,12 @@
-use cqrs_es::{EventEnvelope, View};
-use oid4vc_core::authorization_request::Object;
-use serde::{Deserialize, Serialize};
-use siopv2::siopv2::SIOPv2;
-
 use super::aggregate::AuthorizationRequest;
-
-pub type SIOPv2AuthorizationRequest = oid4vc_core::authorization_request::AuthorizationRequest<Object<SIOPv2>>;
+use crate::generic_oid4vc::GenericAuthorizationRequest;
+use cqrs_es::{EventEnvelope, View};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AuthorizationRequestView {
-    pub siopv2_authorization_request: Option<SIOPv2AuthorizationRequest>,
-    pub form_url_encoded_authorization_request: String,
+    pub authorization_request: Option<GenericAuthorizationRequest>,
+    pub form_url_encoded_authorization_request: Option<String>,
     pub signed_authorization_request_object: Option<String>,
 }
 
@@ -20,14 +16,14 @@ impl View<AuthorizationRequest> for AuthorizationRequestView {
 
         match &event.payload {
             AuthorizationRequestCreated { authorization_request } => {
-                self.siopv2_authorization_request
-                    .replace(*authorization_request.clone());
+                self.authorization_request.replace(*authorization_request.clone());
             }
             FormUrlEncodedAuthorizationRequestCreated {
                 form_url_encoded_authorization_request,
-            } => self
-                .form_url_encoded_authorization_request
-                .clone_from(form_url_encoded_authorization_request),
+            } => {
+                self.form_url_encoded_authorization_request
+                    .replace(form_url_encoded_authorization_request.clone());
+            }
             AuthorizationRequestObjectSigned {
                 signed_authorization_request_object,
             } => {
