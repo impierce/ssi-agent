@@ -188,7 +188,7 @@ pub mod tests {
         redirect(&mut app, state).await;
 
         // Wait for the request to arrive at the mock server endpoint.
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(std::time::Duration::from_millis(100));
 
         // Assert that the event was dispatched to the target URL.
         assert!(mock_server.received_requests().await.unwrap().len() == 1);

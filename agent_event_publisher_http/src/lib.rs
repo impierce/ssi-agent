@@ -188,7 +188,7 @@ mod tests {
         publisher.offer.as_ref().unwrap().dispatch("view_id", &events).await;
 
         // Wait for the request to arrive at the mock server endpoint.
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(std::time::Duration::from_millis(100));
 
         // Assert that the event was dispatched to the target URL.
         assert_eq!(
