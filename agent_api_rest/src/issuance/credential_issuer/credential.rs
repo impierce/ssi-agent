@@ -283,7 +283,7 @@ mod tests {
     #[case::should_panic_due_to_timout(true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100)]
     #[serial_test::serial]
     #[tokio::test(flavor = "multi_thread")]
-    // #[tracing_test::traced_test]
+    #[tracing_test::traced_test]
     async fn test_credential_endpoint(
         #[case] with_external_server: bool,
         #[case] is_self_signed: bool,
@@ -382,7 +382,7 @@ mod tests {
                     .unwrap(),
             )
             .await
-            .expect("hello");
+            .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers().get("Content-Type").unwrap(), "application/json");
