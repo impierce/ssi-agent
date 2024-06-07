@@ -38,7 +38,10 @@ pub(crate) async fn token(
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
-    let command = OfferCommand::CreateTokenResponse { token_request };
+    let command = OfferCommand::CreateTokenResponse {
+        offer_id: offer_id.clone(),
+        token_request,
+    };
 
     // Create a `TokenResponse` using the `offer_id` and `token_request`.
     if command_handler(&offer_id, &state.command.offer, command).await.is_err() {

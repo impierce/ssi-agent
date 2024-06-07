@@ -50,7 +50,7 @@ impl Aggregate for Offer {
         info!("Handling command: {:?}", command);
 
         match command {
-            CreateCredentialOffer => {
+            CreateCredentialOffer { offer_id } => {
                 #[cfg(test)]
                 let (pre_authorized_code, access_token) = {
                     let pre_authorized_code = tests::PRE_AUTHORIZED_CODES.lock().unwrap().pop_front().unwrap();
@@ -61,12 +61,20 @@ impl Aggregate for Offer {
                 let (pre_authorized_code, access_token) = { (generate_random_string(), generate_random_string()) };
 
                 Ok(vec![CredentialOfferCreated {
+                    offer_id,
                     pre_authorized_code,
                     access_token,
                 }])
             }
-            AddCredentials { credential_ids } => Ok(vec![CredentialsAdded { credential_ids }]),
+            AddCredentials {
+                offer_id,
+                credential_ids,
+            } => Ok(vec![CredentialsAdded {
+                offer_id,
+                credential_ids,
+            }]),
             CreateFormUrlEncodedCredentialOffer {
+                offer_id,
                 credential_issuer_metadata,
             } => {
                 let credentials_supported = credential_issuer_metadata.credential_configurations_supported.clone();
@@ -82,10 +90,14 @@ impl Aggregate for Offer {
                     }),
                 }));
                 Ok(vec![FormUrlEncodedCredentialOfferCreated {
+                    offer_id,
                     form_url_encoded_credential_offer: credential_offer.to_string(),
                 }])
             }
-            CreateTokenResponse { token_request } => {
+            CreateTokenResponse {
+                offer_id,
+                token_request,
+            } => {
                 #[cfg(test)]
                 let c_nonce = tests::C_NONCES.lock().unwrap().pop_front().unwrap();
                 #[cfg(not(test))]
@@ -93,6 +105,7 @@ impl Aggregate for Offer {
 
                 match token_request {
                     TokenRequest::PreAuthorizedCode { .. } => Ok(vec![TokenResponseCreated {
+                        offer_id,
                         token_response: TokenResponse {
                             access_token: self.access_token.clone(),
                             token_type: "bearer".to_string(),
@@ -144,7 +157,10 @@ impl Aggregate for Offer {
                     subject_id: subject_did,
                 }])
             }
-            CreateCredentialResponse { mut signed_credentials } => {
+            CreateCredentialResponse {
+                offer_id,
+                mut signed_credentials,
+            } => {
                 // TODO: support batch credentials.
                 let signed_credential = signed_credentials.pop().ok_or(MissingCredentialError)?;
 
@@ -157,7 +173,10 @@ impl Aggregate for Offer {
                     c_nonce_expires_in: None,
                 };
 
-                Ok(vec![CredentialResponseCreated { credential_response }])
+                Ok(vec![CredentialResponseCreated {
+                    offer_id,
+                    credential_response,
+                }])
             }
         }
     }
@@ -171,25 +190,29 @@ impl Aggregate for Offer {
             CredentialOfferCreated {
                 pre_authorized_code,
                 access_token,
+                ..
             } => {
                 self.pre_authorized_code = pre_authorized_code;
                 self.access_token = access_token;
             }
-            CredentialsAdded { credential_ids } => {
+            CredentialsAdded { credential_ids, .. } => {
                 self.credential_ids = credential_ids;
             }
             FormUrlEncodedCredentialOfferCreated {
                 form_url_encoded_credential_offer,
+                ..
             } => {
                 self.form_url_encoded_credential_offer = form_url_encoded_credential_offer;
             }
             CredentialRequestVerified { subject_id, .. } => {
                 self.subject_id.replace(subject_id);
             }
-            TokenResponseCreated { token_response } => {
+            TokenResponseCreated { token_response, .. } => {
                 self.token_response.replace(token_response);
             }
-            CredentialResponseCreated { credential_response } => {
+            CredentialResponseCreated {
+                credential_response, ..
+            } => {
                 self.credential_response.replace(credential_response);
             }
         }
@@ -232,8 +255,11 @@ pub mod tests {
         let subject = test_subject();
         OfferTestFramework::with(OfferServices)
             .given_no_previous_events()
-            .when(OfferCommand::CreateCredentialOffer)
+            .when(OfferCommand::CreateCredentialOffer {
+                offer_id: Default::default(),
+            })
             .then_expect_events(vec![OfferEvent::CredentialOfferCreated {
+                offer_id: Default::default(),
                 pre_authorized_code: subject.pre_authorized_code,
                 access_token: subject.access_token,
             }]);
@@ -249,13 +275,16 @@ pub mod tests {
         let subject = test_subject();
         OfferTestFramework::with(OfferServices)
             .given(vec![OfferEvent::CredentialOfferCreated {
+                offer_id: Default::default(),
                 pre_authorized_code: subject.pre_authorized_code.clone(),
                 access_token: subject.access_token.clone(),
             }])
             .when(OfferCommand::AddCredentials {
+                offer_id: Default::default(),
                 credential_ids: vec!["credential-id".to_string()],
             })
             .then_expect_events(vec![OfferEvent::CredentialsAdded {
+                offer_id: Default::default(),
                 credential_ids: vec!["credential-id".to_string()],
             }]);
     }
@@ -271,17 +300,21 @@ pub mod tests {
         OfferTestFramework::with(OfferServices)
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
+                    offer_id: Default::default(),
                     pre_authorized_code: subject.pre_authorized_code,
                     access_token: subject.access_token,
                 },
                 OfferEvent::CredentialsAdded {
+                    offer_id: Default::default(),
                     credential_ids: vec!["credential-id".to_string()],
                 },
             ])
             .when(OfferCommand::CreateFormUrlEncodedCredentialOffer {
+                offer_id: Default::default(),
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
             })
             .then_expect_events(vec![OfferEvent::FormUrlEncodedCredentialOfferCreated {
+                offer_id: Default::default(),
                 form_url_encoded_credential_offer: subject.form_url_encoded_credential_offer,
             }]);
     }
@@ -297,20 +330,25 @@ pub mod tests {
         OfferTestFramework::with(OfferServices)
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
+                    offer_id: Default::default(),
                     pre_authorized_code: subject.pre_authorized_code.clone(),
                     access_token: subject.access_token.clone(),
                 },
                 OfferEvent::CredentialsAdded {
+                    offer_id: Default::default(),
                     credential_ids: vec!["credential-id".to_string()],
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
+                    offer_id: Default::default(),
                     form_url_encoded_credential_offer: subject.form_url_encoded_credential_offer.clone(),
                 },
             ])
             .when(OfferCommand::CreateTokenResponse {
+                offer_id: Default::default(),
                 token_request: token_request(subject.clone()),
             })
             .then_expect_events(vec![OfferEvent::TokenResponseCreated {
+                offer_id: Default::default(),
                 token_response: token_response(subject),
             }]);
     }
@@ -326,16 +364,20 @@ pub mod tests {
         OfferTestFramework::with(OfferServices)
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
+                    offer_id: Default::default(),
                     pre_authorized_code: subject.pre_authorized_code.clone(),
                     access_token: subject.access_token.clone(),
                 },
                 OfferEvent::CredentialsAdded {
+                    offer_id: Default::default(),
                     credential_ids: vec!["credential-id".to_string()],
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
+                    offer_id: Default::default(),
                     form_url_encoded_credential_offer: subject.form_url_encoded_credential_offer.clone(),
                 },
                 OfferEvent::TokenResponseCreated {
+                    offer_id: Default::default(),
                     token_response: token_response(subject.clone()),
                 },
             ])
@@ -362,16 +404,20 @@ pub mod tests {
         OfferTestFramework::with(OfferServices)
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
+                    offer_id: Default::default(),
                     pre_authorized_code: subject.pre_authorized_code.clone(),
                     access_token: subject.access_token.clone(),
                 },
                 OfferEvent::CredentialsAdded {
+                    offer_id: Default::default(),
                     credential_ids: vec!["credential-id".to_string()],
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
+                    offer_id: Default::default(),
                     form_url_encoded_credential_offer: subject.form_url_encoded_credential_offer.clone(),
                 },
                 OfferEvent::TokenResponseCreated {
+                    offer_id: Default::default(),
                     token_response: token_response(subject.clone()),
                 },
                 OfferEvent::CredentialRequestVerified {
@@ -380,9 +426,11 @@ pub mod tests {
                 },
             ])
             .when(OfferCommand::CreateCredentialResponse {
+                offer_id: Default::default(),
                 signed_credentials: vec![json!(VERIFIABLE_CREDENTIAL_JWT.clone())],
             })
             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
+                offer_id: Default::default(),
                 credential_response: credential_response(subject),
             }]);
     }

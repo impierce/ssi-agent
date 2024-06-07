@@ -5,16 +5,20 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum OfferEvent {
     CredentialOfferCreated {
+        offer_id: String,
         pre_authorized_code: String,
         access_token: String,
     },
     CredentialsAdded {
+        offer_id: String,
         credential_ids: Vec<String>,
     },
     FormUrlEncodedCredentialOfferCreated {
+        offer_id: String,
         form_url_encoded_credential_offer: String,
     },
     TokenResponseCreated {
+        offer_id: String,
         token_response: TokenResponse,
     },
     CredentialRequestVerified {
@@ -22,6 +26,7 @@ pub enum OfferEvent {
         subject_id: String,
     },
     CredentialResponseCreated {
+        offer_id: String,
         credential_response: CredentialResponse,
     },
 }

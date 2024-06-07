@@ -173,6 +173,7 @@ mod tests {
 
         // A new event for the `Offer` aggregate.
         let offer_event = OfferEvent::FormUrlEncodedCredentialOfferCreated {
+            offer_id: Default::default(),
             form_url_encoded_credential_offer: "form_url_encoded_credential_offer".to_string(),
         };
 
@@ -194,6 +195,7 @@ mod tests {
 
         // A new event for the `Offer` aggregate that the publisher is not interested in.
         let offer_event = OfferEvent::CredentialsAdded {
+            offer_id: Default::default(),
             credential_ids: vec!["credential-0001".to_string()],
         };
 
