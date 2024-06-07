@@ -104,6 +104,7 @@ dependencies = [
  "agent_store",
  "agent_verification",
  "axum 0.7.5",
+ "did_manager",
  "lazy_static",
  "oid4vc-core",
  "serde_json",

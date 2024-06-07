@@ -5,6 +5,7 @@ use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::config;
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
+use axum::{routing::get, Json};
 use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
 use serde_json::json;
 use std::{str::FromStr, sync::Arc};
@@ -100,6 +101,27 @@ async fn main() {
     let app = if enable_cors {
         info!("CORS (permissive) enabled for all routes");
         app.layer(CorsLayer::permissive())
+    } else {
+        app
+    };
+
+    // did:web
+    let enable_did_web = config!("enable_method_did_web")
+        .unwrap_or("false".to_string())
+        .parse::<bool>()
+        .expect("AGENT_APPLICATION_ENABLE_METHOD_DID_WEB must be a boolean");
+    let app = if enable_did_web {
+        let subject = Subject {
+            secret_manager: secret_manager().await,
+        };
+        let did_document = subject
+            .secret_manager
+            .produce_document(did_manager::DidMethod::Web)
+            .await
+            .unwrap();
+        let path = "/.well-known/did.json";
+        info!("Serving `did:web` document at `{path}`");
+        app.route(path, get(Json(did_document)))
     } else {
         app
     };
