@@ -89,7 +89,7 @@ async fn main() {
 
     let url = url::Url::parse(&url).unwrap();
 
-    initialize(&issuance_state, startup_commands(url)).await;
+    initialize(&issuance_state, startup_commands(url.clone())).await;
 
     let app = app((issuance_state, verification_state));
 
@@ -116,7 +116,10 @@ async fn main() {
         };
         let did_document = subject
             .secret_manager
-            .produce_document(did_manager::DidMethod::Web)
+            .produce_document(
+                did_manager::DidMethod::Web,
+                Some(did_manager::MethodSpecificParameters::Web { origin: url.origin() }),
+            )
             .await
             .unwrap();
         let path = "/.well-known/did.json";

@@ -188,6 +188,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-test",
+ "url",
 ]
 
 [[package]]
@@ -1198,7 +1199,7 @@ checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=c70c0f1#c70c0f175fdbbd4b7c4b05e466aad4969ae3b627"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=1e785f2#1e785f2b81f75420aa55f819f826316084b17659"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -1669,8 +1670,8 @@ dependencies = [
  "multibase 0.8.0",
  "serde_jcs",
  "serde_json",
- "ssi-dids",
- "ssi-jwk",
+ "ssi-dids 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ssi-jwk 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "static-iref",
 ]
 
@@ -1710,29 +1711,28 @@ dependencies = [
  "p256 0.13.2",
  "serde_json",
  "simple_asn1 0.5.4",
- "ssi-crypto",
- "ssi-dids",
- "ssi-jwk",
+ "ssi-crypto 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ssi-dids 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ssi-jwk 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "thiserror",
 ]
 
 [[package]]
 name = "did-web"
 version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e239187ee5cf6b778c75252ad22bb8289508dcaf05a7c718222a3093460ca0d2"
+source = "git+https://github.com/impierce/spruceid-ssi.git#192a1fab2eb8e8113fd9aea42ac0fcbb72044d5f"
 dependencies = [
  "async-trait",
  "http 0.2.12",
  "reqwest 0.11.27",
  "serde_json",
- "ssi-dids",
+ "ssi-dids 0.1.1 (git+https://github.com/impierce/spruceid-ssi.git)",
 ]
 
 [[package]]
 name = "did_iota"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=c70c0f1#c70c0f175fdbbd4b7c4b05e466aad4969ae3b627"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=1e785f2#1e785f2b81f75420aa55f819f826316084b17659"
 dependencies = [
  "identity_iota",
  "identity_stronghold",
@@ -1745,7 +1745,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=c70c0f1#c70c0f175fdbbd4b7c4b05e466aad4969ae3b627"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=1e785f2#1e785f2b81f75420aa55f819f826316084b17659"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -1754,15 +1754,15 @@ dependencies = [
  "log",
  "serde_json",
  "shared",
- "ssi-dids",
- "ssi-jwk",
+ "ssi-dids 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ssi-jwk 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio",
 ]
 
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=c70c0f1#c70c0f175fdbbd4b7c4b05e466aad4969ae3b627"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=1e785f2#1e785f2b81f75420aa55f819f826316084b17659"
 dependencies = [
  "did-key",
  "did-method-key",
@@ -1773,15 +1773,15 @@ dependencies = [
  "log",
  "serde_json",
  "shared",
- "ssi-dids",
- "ssi-jwk",
+ "ssi-dids 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ssi-jwk 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio",
 ]
 
 [[package]]
 name = "did_manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=c70c0f1#c70c0f175fdbbd4b7c4b05e466aad4969ae3b627"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=1e785f2#1e785f2b81f75420aa55f819f826316084b17659"
 dependencies = [
  "consumer",
  "producer",
@@ -1809,7 +1809,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=c70c0f1#c70c0f175fdbbd4b7c4b05e466aad4969ae3b627"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=1e785f2#1e785f2b81f75420aa55f819f826316084b17659"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -1818,8 +1818,8 @@ dependencies = [
  "log",
  "serde_json",
  "shared",
- "ssi-dids",
- "ssi-jwk",
+ "ssi-dids 0.1.1 (git+https://github.com/impierce/spruceid-ssi.git)",
+ "ssi-jwk 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio",
  "url",
  "urlencoding",
@@ -2248,21 +2248,6 @@ name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
-
-[[package]]
-name = "foreign-types"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1"
-dependencies = [
- "foreign-types-shared",
-]
-
-[[package]]
-name = "foreign-types-shared"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 
 [[package]]
 name = "form_urlencoded"
@@ -2903,19 +2888,6 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.25.0",
  "tower-service",
-]
-
-[[package]]
-name = "hyper-tls"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6183ddfa99b85da61a140bea0efc93fdf56ceaa041b37d553518030827f9905"
-dependencies = [
- "bytes",
- "hyper 0.14.28",
- "native-tls",
- "tokio",
- "tokio-native-tls",
 ]
 
 [[package]]
@@ -4110,24 +4082,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "native-tls"
-version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07226173c32f2926027b63cce4bcd8076c3552846cbe7925f3aaffeac0a3b92e"
-dependencies = [
- "lazy_static",
- "libc",
- "log",
- "openssl",
- "openssl-probe",
- "openssl-sys",
- "schannel",
- "security-framework",
- "security-framework-sys",
- "tempfile",
-]
-
-[[package]]
 name = "nix"
 version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4421,58 +4375,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 
 [[package]]
-name = "openssl"
-version = "0.10.64"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95a0481286a310808298130d22dd1fef0fa571e05a8f44ec801801e84b216b1f"
-dependencies = [
- "bitflags 2.5.0",
- "cfg-if",
- "foreign-types",
- "libc",
- "once_cell",
- "openssl-macros",
- "openssl-sys",
-]
-
-[[package]]
-name = "openssl-macros"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.58",
-]
-
-[[package]]
 name = "openssl-probe"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
-
-[[package]]
-name = "openssl-src"
-version = "300.2.3+3.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5cff92b6f71555b61bb9315f7c64da3ca43d87531622120fea0195fc761b4843"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "openssl-sys"
-version = "0.9.102"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c597637d56fbc83893a35eb0dd04b2b8e7a50c91e64e9493e398b5df4fb45fa2"
-dependencies = [
- "cc",
- "libc",
- "openssl-src",
- "pkg-config",
- "vcpkg",
-]
 
 [[package]]
 name = "ordered-multimap"
@@ -5057,7 +4963,7 @@ dependencies = [
 [[package]]
 name = "producer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=c70c0f1#c70c0f175fdbbd4b7c4b05e466aad4969ae3b627"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=1e785f2#1e785f2b81f75420aa55f819f826316084b17659"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -5069,6 +4975,7 @@ dependencies = [
  "iota_stronghold",
  "log",
  "serde",
+ "serde_json",
  "shared",
  "url",
 ]
@@ -5287,13 +5194,11 @@ dependencies = [
  "http-body 0.4.6",
  "hyper 0.14.28",
  "hyper-rustls 0.24.2",
- "hyper-tls",
  "ipnet",
  "js-sys",
  "log",
  "mime",
  "mime_guess",
- "native-tls",
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
@@ -5305,7 +5210,6 @@ dependencies = [
  "sync_wrapper 0.1.2",
  "system-configuration",
  "tokio",
- "tokio-native-tls",
  "tokio-rustls 0.24.1",
  "tower-service",
  "url",
@@ -6119,7 +6023,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=c70c0f1#c70c0f175fdbbd4b7c4b05e466aad4969ae3b627"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=1e785f2#1e785f2b81f75420aa55f819f826316084b17659"
 dependencies = [
  "identity_iota",
  "identity_stronghold",
@@ -6515,7 +6419,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da2c479690955bebece0279a5b1ab9d7d584402caed9f56ecec346d0bc63661f"
 dependencies = [
  "bs58",
- "ssi-jwk",
+ "ssi-jwk 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "thiserror",
+]
+
+[[package]]
+name = "ssi-caips"
+version = "0.1.0"
+source = "git+https://github.com/impierce/spruceid-ssi.git#192a1fab2eb8e8113fd9aea42ac0fcbb72044d5f"
+dependencies = [
+ "bs58",
+ "ssi-jwk 0.1.2 (git+https://github.com/impierce/spruceid-ssi.git)",
  "thiserror",
 ]
 
@@ -6524,6 +6438,11 @@ name = "ssi-contexts"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3009b82cbae3d88a76f15460fb5fb3f30a1673eb0359ac6917ffaa3c57f7164"
+
+[[package]]
+name = "ssi-contexts"
+version = "0.1.5"
+source = "git+https://github.com/impierce/spruceid-ssi.git#192a1fab2eb8e8113fd9aea42ac0fcbb72044d5f"
 
 [[package]]
 name = "ssi-core"
@@ -6537,10 +6456,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "ssi-core"
+version = "0.1.0"
+source = "git+https://github.com/impierce/spruceid-ssi.git#192a1fab2eb8e8113fd9aea42ac0fcbb72044d5f"
+dependencies = [
+ "async-trait",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "ssi-crypto"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c511fdba8466006f4de1086fee5f38fd220eac5eeaf0270dbfde3e9d538030e7"
+dependencies = [
+ "bs58",
+ "digest 0.9.0",
+ "k256",
+ "keccak-hash",
+ "ripemd160",
+ "sha2 0.10.8",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
+name = "ssi-crypto"
+version = "0.1.1"
+source = "git+https://github.com/impierce/spruceid-ssi.git#192a1fab2eb8e8113fd9aea42ac0fcbb72044d5f"
 dependencies = [
  "bs58",
  "digest 0.9.0",
@@ -6569,10 +6513,34 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
- "ssi-caips",
- "ssi-core",
- "ssi-json-ld",
- "ssi-jwk",
+ "ssi-caips 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ssi-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ssi-json-ld 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ssi-jwk 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "static-iref",
+ "thiserror",
+]
+
+[[package]]
+name = "ssi-dids"
+version = "0.1.1"
+source = "git+https://github.com/impierce/spruceid-ssi.git#192a1fab2eb8e8113fd9aea42ac0fcbb72044d5f"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bs58",
+ "chrono",
+ "derive_builder",
+ "hex",
+ "iref",
+ "multibase 0.8.0",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "ssi-caips 0.1.0 (git+https://github.com/impierce/spruceid-ssi.git)",
+ "ssi-core 0.1.0 (git+https://github.com/impierce/spruceid-ssi.git)",
+ "ssi-json-ld 0.2.2 (git+https://github.com/impierce/spruceid-ssi.git)",
+ "ssi-jwk 0.1.2 (git+https://github.com/impierce/spruceid-ssi.git)",
  "static-iref",
  "thiserror",
 ]
@@ -6593,8 +6561,29 @@ dependencies = [
  "lazy_static",
  "locspan",
  "rdf-types",
- "ssi-contexts",
- "ssi-crypto",
+ "ssi-contexts 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ssi-crypto 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "static-iref",
+ "thiserror",
+]
+
+[[package]]
+name = "ssi-json-ld"
+version = "0.2.2"
+source = "git+https://github.com/impierce/spruceid-ssi.git#192a1fab2eb8e8113fd9aea42ac0fcbb72044d5f"
+dependencies = [
+ "async-std",
+ "combination",
+ "futures",
+ "grdf",
+ "iref",
+ "json-ld",
+ "json-syntax",
+ "lazy_static",
+ "locspan",
+ "rdf-types",
+ "ssi-contexts 0.1.5 (git+https://github.com/impierce/spruceid-ssi.git)",
+ "ssi-crypto 0.1.1 (git+https://github.com/impierce/spruceid-ssi.git)",
  "static-iref",
  "thiserror",
 ]
@@ -6619,7 +6608,26 @@ dependencies = [
  "rsa 0.6.1",
  "serde",
  "simple_asn1 0.5.4",
- "ssi-crypto",
+ "ssi-crypto 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "thiserror",
+ "unsigned-varint",
+ "zeroize",
+]
+
+[[package]]
+name = "ssi-jwk"
+version = "0.1.2"
+source = "git+https://github.com/impierce/spruceid-ssi.git#192a1fab2eb8e8113fd9aea42ac0fcbb72044d5f"
+dependencies = [
+ "base64 0.12.3",
+ "lazy_static",
+ "multibase 0.9.1",
+ "num-bigint",
+ "num-derive 0.3.3",
+ "num-traits",
+ "serde",
+ "simple_asn1 0.5.4",
+ "ssi-crypto 0.1.1 (git+https://github.com/impierce/spruceid-ssi.git)",
  "thiserror",
  "unsigned-varint",
  "zeroize",
@@ -6956,16 +6964,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.58",
-]
-
-[[package]]
-name = "tokio-native-tls"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbae76ab933c85776efabc971569dd6119c580d8f5d448769dec1764bf796ef2"
-dependencies = [
- "native-tls",
- "tokio",
 ]
 
 [[package]]
