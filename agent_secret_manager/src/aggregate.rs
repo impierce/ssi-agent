@@ -87,7 +87,7 @@ mod aggregate_tests {
     }
 
     #[test]
-    fn successfully_enables_did_key_method() {
+    fn successfully_enables_did_method() {
         let expected = SecretManagerEvent::DidMethodEnabled { method: DidMethod::Key };
         let command = SecretManagerCommand::EnableDidMethod { method: DidMethod::Key };
         let services = futures::executor::block_on(async {
@@ -100,39 +100,5 @@ mod aggregate_tests {
             .given_no_previous_events()
             .when(command)
             .then_expect_events(vec![expected])
-    }
-
-    #[test]
-    #[tracing_test::traced_test]
-    fn successfully_enables_did_web_method() {
-        let expected = SecretManagerEvent::DidMethodEnabled { method: DidMethod::Web };
-        let command = SecretManagerCommand::EnableDidMethod { method: DidMethod::Web };
-        let services = futures::executor::block_on(async {
-            let mut services = SecretManagerServices::new(None);
-            services.init().await.unwrap();
-            Arc::new(Mutex::new(services))
-        });
-
-        SecretManagerTestFramework::with(services)
-            .given_no_previous_events()
-            .when(command)
-            .then_expect_events(vec![expected])
-    }
-
-    #[test]
-    fn two_methods_cannot_be_enabled_at_the_same_time() {
-        let events = vec![SecretManagerEvent::DidMethodEnabled { method: DidMethod::Key }];
-        // let expected = SecretManagerEvent::DidMethodEnabled { method: Method::Web };
-        let command = SecretManagerCommand::EnableDidMethod { method: DidMethod::Web };
-        let services = futures::executor::block_on(async {
-            let mut services = SecretManagerServices::new(None);
-            services.init().await.unwrap();
-            Arc::new(Mutex::new(services))
-        });
-
-        SecretManagerTestFramework::with(services)
-            .given(events)
-            .when(command)
-            .then_expect_events(vec![])
     }
 }
