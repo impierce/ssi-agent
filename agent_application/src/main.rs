@@ -106,10 +106,10 @@ async fn main() {
     };
 
     // did:web
-    let enable_did_web = config!("enable_method_did_web")
+    let enable_did_web = config!("did_method_web_enabled")
         .unwrap_or("false".to_string())
         .parse::<bool>()
-        .expect("AGENT_APPLICATION_ENABLE_METHOD_DID_WEB must be a boolean");
+        .expect("AGENT_CONFIG_DID_METHOD_WEB_ENABLED must be a boolean");
     let app = if enable_did_web {
         let subject = Subject {
             secret_manager: secret_manager().await,
