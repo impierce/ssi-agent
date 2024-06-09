@@ -97,7 +97,10 @@ pub(crate) async fn credential(
         signed_credentials.push(signed_credential);
     }
 
-    let command = OfferCommand::CreateCredentialResponse { signed_credentials };
+    let command = OfferCommand::CreateCredentialResponse {
+        offer_id: offer_id.clone(),
+        signed_credentials,
+    };
 
     // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
     if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
