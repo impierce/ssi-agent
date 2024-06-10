@@ -383,7 +383,7 @@ mod tests {
                     .unwrap(),
             )
             .await
-            .expect("hello");
+            .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers().get("Content-Type").unwrap(), "application/json");
