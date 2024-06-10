@@ -249,13 +249,7 @@
 					],
 					"request": {
 						"method": "POST",
-						"header": [
-							{
-								"key": "Access-Control-Allow-Origin",
-								"value": "*",
-								"type": "text"
-							}
-						],
+						"header": [],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"nonce\": \"this is a nonce\"\n}",
@@ -305,13 +299,7 @@
 					],
 					"request": {
 						"method": "POST",
-						"header": [
-							{
-								"key": "Access-Control-Allow-Origin",
-								"value": "*",
-								"type": "text"
-							}
-						],
+						"header": [],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"presentation_definition\": {\n        \"id\":\"Verifiable Presentation request for sign-on\",\n        \"input_descriptors\":[\n            {\n                \"id\":\"Request for Verifiable Credential\",\n                \"constraints\":{\n                    \"fields\":[\n                        {\n                            \"path\":[\n                                \"$.vc.type\"\n                            ],\n                            \"filter\":{\n                                \"type\":\"array\",\n                                \"contains\":{\n                                    \"const\":\"VerifiableCredential\"\n                                }\n                            }\n                        }\n                    ]\n                }\n            }\n        ]\n    }\n}",
@@ -361,13 +349,7 @@
 					],
 					"request": {
 						"method": "POST",
-						"header": [
-							{
-								"key": "Access-Control-Allow-Origin",
-								"value": "*",
-								"type": "text"
-							}
-						],
+						"header": [],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"presentation_definition_id\": \"presentation_definition\"\n}",
