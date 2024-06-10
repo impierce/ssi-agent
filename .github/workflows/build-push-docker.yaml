@@ -9,13 +9,15 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - linux/amd64
-          - linux/arm64
+        include:
+          - platform: linux/amd64
+            runs-on: ubuntu-latest
+          - platform: linux/arm64
+            runs-on: linux-arm64_4-core-16gb
+    runs-on: ${{ matrix.runs-on }}
     steps:
       - name: Prepare
         run: |
