@@ -2,7 +2,8 @@
 name: Build and push Docker image
 
 on:
-  workflow_dispatch:
+  push:
+    branches: ["dev"]
 
 env:
   REGISTRY_IMAGE: impiercetechnologies/ssi-agent
