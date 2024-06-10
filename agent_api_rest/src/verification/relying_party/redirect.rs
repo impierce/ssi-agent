@@ -135,7 +135,7 @@ pub mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
     async fn test_redirect_endpoint() {
         let mock_server = MockServer::start().await;
@@ -186,6 +186,9 @@ pub mod tests {
 
         request(&mut app, state.clone()).await;
         redirect(&mut app, state).await;
+
+        // Wait for the request to arrive at the mock server endpoint.
+        std::thread::sleep(std::time::Duration::from_millis(100));
 
         // Assert that the event was dispatched to the target URL.
         assert!(mock_server.received_requests().await.unwrap().len() == 1);
