@@ -1,9 +1,9 @@
 {
 	"info": {
-		"_postman_id": "53b46e18-de7f-4973-8304-8238844a71ce",
+		"_postman_id": "a196fe6f-81d0-4e6f-b57d-78d557a98789",
 		"name": "ssi-agent",
-		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
-		"_exporter_id": "24972330"
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "30650915"
 	},
 	"item": [
 		{
@@ -40,7 +40,16 @@
 								}
 							}
 						},
-						"url": "http://{{HOST}}/v1/credentials"
+						"url": {
+							"raw": "{{HOST}}/v1/credentials",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v1",
+								"credentials"
+							]
+						}
 					},
 					"response": []
 				},
@@ -49,7 +58,12 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": "http://{{HOST}}{{CREDENTIAL_LOCATION}}"
+						"url": {
+							"raw": "{{HOST}}{{CREDENTIAL_LOCATION}}",
+							"host": [
+								"{{HOST}}{{CREDENTIAL_LOCATION}}"
+							]
+						}
 					},
 					"response": []
 				},
@@ -92,7 +106,16 @@
 								}
 							}
 						},
-						"url": "http://{{HOST}}/v1/offers"
+						"url": {
+							"raw": "{{HOST}}/v1/offers",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v1",
+								"offers"
+							]
+						}
 					},
 					"response": []
 				}
@@ -101,47 +124,6 @@
 		{
 			"name": "oid4vci",
 			"item": [
-				{
-					"name": "oauth-authorization-server",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"const jsonData = JSON.parse(responseBody);",
-									"",
-									"const issuer = jsonData?.issuer;",
-									"const tokenEndpoint = jsonData?.token_endpoint;",
-									"",
-									"if(issuer){",
-									"    pm.collectionVariables.set(\"ISSUER\",issuer)",
-									"}",
-									"",
-									"if(tokenEndpoint){",
-									"    pm.collectionVariables.set(\"TOKEN_ENDPOINT\",tokenEndpoint)",
-									"}",
-									""
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": "http://{{HOST}}/.well-known/oauth-authorization-server"
-					},
-					"response": []
-				},
-				{
-					"name": "openid-credential-issuer",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": "http://{{HOST}}/.well-known/openid-credential-issuer"
-					},
-					"response": []
-				},
 				{
 					"name": "token",
 					"event": [
@@ -158,7 +140,8 @@
 									"}",
 									""
 								],
-								"type": "text/javascript"
+								"type": "text/javascript",
+								"packages": {}
 							}
 						}
 					],
@@ -180,7 +163,16 @@
 								}
 							]
 						},
-						"url": "http://{{HOST}}/auth/token"
+						"url": {
+							"raw": "{{HOST}}/auth/token",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"auth",
+								"token"
+							]
+						}
 					},
 					"response": []
 				},
@@ -191,8 +183,7 @@
 						"header": [
 							{
 								"key": "Authorization",
-								"value": "Bearer {{ACCESS_TOKEN}}",
-								"type": "text"
+								"value": "Bearer {{ACCESS_TOKEN}}"
 							}
 						],
 						"body": {
@@ -204,7 +195,16 @@
 								}
 							}
 						},
-						"url": "http://{{HOST}}/openid4vci/credential"
+						"url": {
+							"raw": "{{HOST}}/openid4vci/credential",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"openid4vci",
+								"credential"
+							]
+						}
 					},
 					"response": []
 				}
@@ -259,7 +259,16 @@
 								}
 							}
 						},
-						"url": "http://{{HOST}}/v1/authorization_requests"
+						"url": {
+							"raw": "{{HOST}}/v1/authorization_requests",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v1",
+								"authorization_requests"
+							]
+						}
 					},
 					"response": []
 				},
@@ -268,7 +277,12 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": "http://{{HOST}}{{AUTHORIZATION_REQUEST_LOCATION}}"
+						"url": {
+							"raw": "{{HOST}}{{AUTHORIZATION_REQUEST_LOCATION}}",
+							"host": [
+								"{{HOST}}{{AUTHORIZATION_REQUEST_LOCATION}}"
+							]
+						}
 					},
 					"response": []
 				}
@@ -282,7 +296,95 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": "{{REQUEST_URI}}"
+						"url": {
+							"raw": "{{REQUEST_URI}}",
+							"host": [
+								"{{REQUEST_URI}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": ".well-known",
+			"item": [
+				{
+					"name": "oauth-authorization-server",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"const issuer = jsonData?.issuer;",
+									"const tokenEndpoint = jsonData?.token_endpoint;",
+									"",
+									"if(issuer){",
+									"    pm.collectionVariables.set(\"ISSUER\",issuer)",
+									"}",
+									"",
+									"if(tokenEndpoint){",
+									"    pm.collectionVariables.set(\"TOKEN_ENDPOINT\",tokenEndpoint)",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/.well-known/oauth-authorization-server",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								".well-known",
+								"oauth-authorization-server"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "openid-credential-issuer",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/.well-known/openid-credential-issuer",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								".well-known",
+								"openid-credential-issuer"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "did:web",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/.well-known/did.json",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								".well-known",
+								"did.json"
+							]
+						}
 					},
 					"response": []
 				}
@@ -312,7 +414,7 @@
 	"variable": [
 		{
 			"key": "HOST",
-			"value": "192.168.1.127:3033",
+			"value": "http://192.168.1.127:3033",
 			"type": "string"
 		},
 		{
