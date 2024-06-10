@@ -25,7 +25,7 @@ use tokio::time::sleep;
 use tracing::{error, info};
 
 const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u128 = 1000;
-const POLLING_INTERVAL_MS: u64 = 50;
+const POLLING_INTERVAL_MS: u64 = 100;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
@@ -70,6 +70,7 @@ pub(crate) async fn credential(
         .unwrap_or(DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS);
     let start_time = Instant::now();
 
+    // TODO: replace this polling solution with a call to the `TxChannelRegistry` as described here: https://github.com/impierce/ssi-agent/issues/75
     // Use the `offer_id` to get the `credential_ids` and `subject_id` from the `OfferView`.
     let (credential_ids, subject_id) = loop {
         match query_handler(&offer_id, &state.query.offer).await {
@@ -283,7 +284,7 @@ mod tests {
     #[case::should_panic_due_to_timout(true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100)]
     #[serial_test::serial]
     #[tokio::test(flavor = "multi_thread")]
-    // #[tracing_test::traced_test]
+    #[tracing_test::traced_test]
     async fn test_credential_endpoint(
         #[case] with_external_server: bool,
         #[case] is_self_signed: bool,

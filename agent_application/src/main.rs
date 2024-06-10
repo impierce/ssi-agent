@@ -8,6 +8,7 @@ use agent_verification::services::VerificationServices;
 use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
 use serde_json::json;
 use std::{str::FromStr, sync::Arc};
+use tower_http::cors::CorsLayer;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -89,9 +90,21 @@ async fn main() {
 
     initialize(&issuance_state, startup_commands(url)).await;
 
+    let app = app((issuance_state, verification_state));
+
+    // CORS
+    let enable_cors = config!("enable_cors")
+        .unwrap_or("false".to_string())
+        .parse::<bool>()
+        .expect("AGENT_APPLICATION_ENABLE_CORS must be a boolean");
+    let app = if enable_cors {
+        info!("CORS (permissive) enabled for all routes");
+        app.layer(CorsLayer::permissive())
+    } else {
+        app
+    };
+
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await.unwrap();
     info!("listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app((issuance_state, verification_state)))
-        .await
-        .unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
