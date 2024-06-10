@@ -121,12 +121,12 @@ where
     async fn dispatch(&self, _view_id: &str, events: &[EventEnvelope<A>]) {
         for event in events {
             if self.target_events.contains(&event.payload.event_type()) {
-                self.client
-                    .post(&self.target_url)
-                    .json(&event.payload)
-                    .send()
-                    .await
-                    .ok();
+                let request = self.client.post(&self.target_url).json(&event.payload);
+
+                // Send the request in a separate thread so that we don't have to await the response in the current thread.
+                tokio::task::spawn(async move {
+                    request.send().await.ok();
+                });
             }
         }
     }
@@ -140,7 +140,7 @@ mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn it_works() {
         let mock_server = MockServer::start().await;
 
@@ -186,6 +186,9 @@ mod tests {
 
         // Dispatch the event.
         publisher.offer.as_ref().unwrap().dispatch("view_id", &events).await;
+
+        // Wait for the request to arrive at the mock server endpoint.
+        std::thread::sleep(std::time::Duration::from_millis(100));
 
         // Assert that the event was dispatched to the target URL.
         assert_eq!(
