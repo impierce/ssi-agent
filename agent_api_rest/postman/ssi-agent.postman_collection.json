@@ -1,6 +1,6 @@
 {
 	"info": {
-		"_postman_id": "a196fe6f-81d0-4e6f-b57d-78d557a98789",
+		"_postman_id": "b3d2a73c-c215-4f02-99d2-4521bd3076c1",
 		"name": "ssi-agent",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "30650915"
@@ -124,6 +124,66 @@
 		{
 			"name": "oid4vci",
 			"item": [
+				{
+					"name": "oauth-authorization-server",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"const issuer = jsonData?.issuer;",
+									"const tokenEndpoint = jsonData?.token_endpoint;",
+									"",
+									"if(issuer){",
+									"    pm.collectionVariables.set(\"ISSUER\",issuer)",
+									"}",
+									"",
+									"if(tokenEndpoint){",
+									"    pm.collectionVariables.set(\"TOKEN_ENDPOINT\",tokenEndpoint)",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/.well-known/oauth-authorization-server",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								".well-known",
+								"oauth-authorization-server"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "openid-credential-issuer",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/.well-known/openid-credential-issuer",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								".well-known",
+								"openid-credential-issuer"
+							]
+						}
+					},
+					"response": []
+				},
 				{
 					"name": "token",
 					"event": [
@@ -259,7 +319,16 @@
 								}
 							}
 						},
-						"url": "http://{{HOST}}/v1/authorization_requests"
+						"url": {
+							"raw": "{{HOST}}/v1/authorization_requests",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v1",
+								"authorization_requests"
+							]
+						}
 					},
 					"response": []
 				},
@@ -309,7 +378,16 @@
 								}
 							}
 						},
-						"url": "http://{{HOST}}/v1/authorization_requests"
+						"url": {
+							"raw": "{{HOST}}/v1/authorization_requests",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v1",
+								"authorization_requests"
+							]
+						}
 					},
 					"response": []
 				},
@@ -410,66 +488,6 @@
 		{
 			"name": ".well-known",
 			"item": [
-				{
-					"name": "oauth-authorization-server",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"const jsonData = JSON.parse(responseBody);",
-									"",
-									"const issuer = jsonData?.issuer;",
-									"const tokenEndpoint = jsonData?.token_endpoint;",
-									"",
-									"if(issuer){",
-									"    pm.collectionVariables.set(\"ISSUER\",issuer)",
-									"}",
-									"",
-									"if(tokenEndpoint){",
-									"    pm.collectionVariables.set(\"TOKEN_ENDPOINT\",tokenEndpoint)",
-									"}",
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/.well-known/oauth-authorization-server",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								".well-known",
-								"oauth-authorization-server"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "openid-credential-issuer",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/.well-known/openid-credential-issuer",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								".well-known",
-								"openid-credential-issuer"
-							]
-						}
-					},
-					"response": []
-				},
 				{
 					"name": "did:web",
 					"request": {
