@@ -2,7 +2,7 @@ use agent_api_rest::app;
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_issuance::{startup_commands::startup_commands, state::initialize};
 use agent_secret_manager::{secret_manager, subject::Subject};
-use agent_shared::config;
+use agent_shared::{config, domain_linkage::create_did_configuration_resource};
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use axum::{routing::get, Json};
@@ -128,6 +128,23 @@ async fn main() {
     } else {
         app
     };
+
+    // Domain Linkage
+    let enable_domain_linkage = config!("domain_linkage_enabled")
+        .unwrap_or("false".to_string())
+        .parse::<bool>()
+        .expect("AGENT_CONFIG_DOMAIN_LINKAGE_ENABLED must be a boolean");
+    let app = if enable_domain_linkage {
+        create_did_configuration_resource(url, did_document, secret_manager()).await;
+        // logic here
+        let path = "/.well-known/did-configuration.json";
+        info!("Serving DID Configuration (Domain Linkage) at `{path}`");
+        app // TODO: add route here
+    } else {
+        app
+    };
+
+    // TODO: then update `did:web` document and serve the service endpoint
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await.unwrap();
     info!("listening on {}", listener.local_addr().unwrap());
