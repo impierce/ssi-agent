@@ -78,7 +78,7 @@ pub mod tests {
         .await;
         let mut app = app((issuance_state, verification_state));
 
-        let form_url_encoded_authorization_request = authorization_requests(&mut app).await;
+        let form_url_encoded_authorization_request = authorization_requests(&mut app, false).await;
 
         // Extract the state from the form_url_encoded_authorization_request.
         let state = form_url_encoded_authorization_request
