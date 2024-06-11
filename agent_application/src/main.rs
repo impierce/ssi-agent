@@ -5,6 +5,7 @@ use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::config;
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
+use axum::{routing::get, Json};
 use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
 use serde_json::json;
 use std::{str::FromStr, sync::Arc};
@@ -88,7 +89,7 @@ async fn main() {
 
     let url = url::Url::parse(&url).unwrap();
 
-    initialize(&issuance_state, startup_commands(url)).await;
+    initialize(&issuance_state, startup_commands(url.clone())).await;
 
     let app = app((issuance_state, verification_state));
 
@@ -100,6 +101,30 @@ async fn main() {
     let app = if enable_cors {
         info!("CORS (permissive) enabled for all routes");
         app.layer(CorsLayer::permissive())
+    } else {
+        app
+    };
+
+    // did:web
+    let enable_did_web = config!("did_method_web_enabled")
+        .unwrap_or("false".to_string())
+        .parse::<bool>()
+        .expect("AGENT_CONFIG_DID_METHOD_WEB_ENABLED must be a boolean");
+    let app = if enable_did_web {
+        let subject = Subject {
+            secret_manager: secret_manager().await,
+        };
+        let did_document = subject
+            .secret_manager
+            .produce_document(
+                did_manager::DidMethod::Web,
+                Some(did_manager::MethodSpecificParameters::Web { origin: url.origin() }),
+            )
+            .await
+            .unwrap();
+        let path = "/.well-known/did.json";
+        info!("Serving `did:web` document at `{path}`");
+        app.route(path, get(Json(did_document)))
     } else {
         app
     };

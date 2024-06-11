@@ -1,3 +1,4 @@
+use agent_shared::config;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager::{DidMethod, Resolver, SecretManager};
@@ -50,8 +51,21 @@ impl Sign for Subject {
     async fn key_id(&self, subject_syntax_type: &str) -> Option<String> {
         let method: DidMethod = serde_json::from_str(&format!("{subject_syntax_type:?}")).ok()?;
 
+        if method == DidMethod::Web {
+            return self
+                .secret_manager
+                .produce_document(
+                    method,
+                    Some(did_manager::MethodSpecificParameters::Web { origin: origin() }),
+                )
+                .await
+                .ok()
+                .and_then(|document| document.verification_method().first().cloned())
+                .map(|first| first.id().to_string());
+        }
+
         self.secret_manager
-            .produce_document(method)
+            .produce_document(method, None)
             .await
             .ok()
             .and_then(|document| document.verification_method().first().cloned())
@@ -72,10 +86,28 @@ impl oid4vc_core::Subject for Subject {
     async fn identifier(&self, subject_syntax_type: &str) -> anyhow::Result<String> {
         let method: DidMethod = serde_json::from_str(&format!("{subject_syntax_type:?}"))?;
 
+        if method == DidMethod::Web {
+            return Ok(self
+                .secret_manager
+                .produce_document(
+                    method,
+                    Some(did_manager::MethodSpecificParameters::Web { origin: origin() }),
+                )
+                .await
+                .map(|document| document.id().to_string())?);
+        }
+
         Ok(self
             .secret_manager
-            .produce_document(method)
+            .produce_document(method, None)
             .await
             .map(|document| document.id().to_string())?)
     }
+}
+
+fn origin() -> url::Origin {
+    config!("url")
+        .map(|url| url::Url::parse(&url).unwrap())
+        .map(|url| url.origin())
+        .expect("AGENT_CONFIG_URL is not set")
 }

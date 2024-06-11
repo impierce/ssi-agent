@@ -14,9 +14,10 @@ agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification" }
 
 axum.workspace = true
+did_manager.workspace = true
 lazy_static.workspace = true
-serde_json.workspace = true
 oid4vc-core.workspace = true
+serde_json.workspace = true
 siopv2.workspace = true
 tokio.workspace = true
 tower-http.workspace = true
