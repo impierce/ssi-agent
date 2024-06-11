@@ -17,7 +17,7 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
-did_manager = { git = "https://git@github.com/impierce/did-manager.git", rev = "1e785f2" }
+did_manager = { git = "https://git@github.com/impierce/did-manager.git", rev = "f1d3099" }
 siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
 oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
 oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207" }
