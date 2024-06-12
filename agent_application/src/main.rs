@@ -110,24 +110,53 @@ async fn main() {
         .unwrap_or("false".to_string())
         .parse::<bool>()
         .expect("AGENT_CONFIG_DID_METHOD_WEB_ENABLED must be a boolean");
-    let app = if enable_did_web {
+
+    let did_document = if enable_did_web {
         let subject = Subject {
             secret_manager: secret_manager().await,
         };
-        let did_document = subject
-            .secret_manager
-            .produce_document(
-                did_manager::DidMethod::Web,
-                Some(did_manager::MethodSpecificParameters::Web { origin: url.origin() }),
-            )
-            .await
-            .unwrap();
+        Some(
+            subject
+                .secret_manager
+                .produce_document(
+                    did_manager::DidMethod::Web,
+                    Some(did_manager::MethodSpecificParameters::Web { origin: url.origin() }),
+                )
+                .await
+                .unwrap(),
+        )
+    } else {
+        None
+    };
+
+    let app = if did_document.is_some() {
         let path = "/.well-known/did.json";
         info!("Serving `did:web` document at `{path}`");
-        app.route(path, get(Json(did_document)))
+        app.route(path, get(Json(did_document.clone().unwrap())))
     } else {
         app
     };
+
+    // let app = if enable_did_web {
+    //     let subject = Subject {
+    //         secret_manager: secret_manager().await,
+    //     };
+    //     let did_document = subject
+    //         .secret_manager
+    //         .produce_document(
+    //             did_manager::DidMethod::Web,
+    //             Some(did_manager::MethodSpecificParameters::Web { origin: url.origin() }),
+    //         )
+    //         .await
+    //         .unwrap();
+    //     let path = "/.well-known/did.json";
+    //     info!("Serving `did:web` document at `{path}`");
+    //     app.route(path, get(Json(did_document)))
+    // } else {
+    //     app
+    // };
+
+    let url = url::Url::parse("https://foobar.example.com").unwrap();
 
     // Domain Linkage
     let enable_domain_linkage = config!("domain_linkage_enabled")
@@ -135,11 +164,17 @@ async fn main() {
         .parse::<bool>()
         .expect("AGENT_CONFIG_DOMAIN_LINKAGE_ENABLED must be a boolean");
     let app = if enable_domain_linkage {
-        create_did_configuration_resource(url, did_document, secret_manager()).await;
+        let did_configuration_resource = create_did_configuration_resource(
+            url,
+            did_document.expect("No DID document found to create a DID Configuration Resource for"),
+            secret_manager().await,
+        )
+        .await
+        .expect("Failed to create DID Configuration Resource");
         // logic here
         let path = "/.well-known/did-configuration.json";
         info!("Serving DID Configuration (Domain Linkage) at `{path}`");
-        app // TODO: add route here
+        app.route(path, get(Json(did_configuration_resource)))
     } else {
         app
     };
