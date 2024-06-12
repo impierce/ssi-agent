@@ -6,6 +6,7 @@ use agent_shared::{config, domain_linkage::create_did_configuration_resource};
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use axum::{routing::get, Json};
+use identity_document::service::{Service, ServiceBuilder, ServiceEndpoint};
 use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
 use serde_json::json;
 use std::{str::FromStr, sync::Arc};
@@ -111,7 +112,7 @@ async fn main() {
         .parse::<bool>()
         .expect("AGENT_CONFIG_DID_METHOD_WEB_ENABLED must be a boolean");
 
-    let did_document = if enable_did_web {
+    let mut did_document = if enable_did_web {
         let subject = Subject {
             secret_manager: secret_manager().await,
         };
@@ -128,14 +129,70 @@ async fn main() {
     } else {
         None
     };
+    // Domain Linkage
+    let enable_domain_linkage = config!("domain_linkage_enabled")
+        .unwrap_or("false".to_string())
+        .parse::<bool>()
+        .expect("AGENT_CONFIG_DOMAIN_LINKAGE_ENABLED must be a boolean");
+    let did_configuration_resource = if enable_domain_linkage {
+        Some(
+            create_did_configuration_resource(
+                url.clone(),
+                did_document
+                    .clone()
+                    .expect("No DID document found to create a DID Configuration Resource for"),
+                secret_manager().await,
+            )
+            .await
+            .expect("Failed to create DID Configuration Resource"),
+        )
+    } else {
+        None
+    };
 
     let app = if did_document.is_some() {
+        let app = if did_configuration_resource.is_some() {
+            let service = Service::builder(Default::default())
+                .id(format!("{}#service-1", did_document.as_ref().unwrap().id())
+                    .parse()
+                    .unwrap())
+                .type_("LinkedDomains")
+                .service_endpoint(
+                    serde_json::from_value::<ServiceEndpoint>(serde_json::json!(
+                        {
+                            "origins": [url.origin().ascii_serialization()]
+                        }
+                    ))
+                    .unwrap(),
+                )
+                .build()
+                .unwrap();
+            let _ = did_document.as_mut().unwrap().insert_service(service).unwrap();
+
+            // logic here
+            let path = "/.well-known/did-configuration.json";
+            info!("Serving DID Configuration (Domain Linkage) at `{path}`");
+            app.route(path, get(Json(did_configuration_resource)))
+        } else {
+            app
+        };
+
         let path = "/.well-known/did.json";
         info!("Serving `did:web` document at `{path}`");
-        app.route(path, get(Json(did_document.clone().unwrap())))
+        app.route(path, get(Json(did_document.unwrap())))
     } else {
         app
     };
+
+    // let app = if did_document.is_some() {
+    //     if enable_domain_linkage {}
+
+    //     let path = "/.well-known/did.json";
+    //     info!("Serving `did:web` document at `{path}`");
+    //     app.route(path, get(Json(did_document.clone().unwrap())))
+    // } else {
+    //     app
+    // };
 
     // let app = if enable_did_web {
     //     let subject = Subject {
@@ -155,29 +212,6 @@ async fn main() {
     // } else {
     //     app
     // };
-
-    let url = url::Url::parse("https://foobar.example.com").unwrap();
-
-    // Domain Linkage
-    let enable_domain_linkage = config!("domain_linkage_enabled")
-        .unwrap_or("false".to_string())
-        .parse::<bool>()
-        .expect("AGENT_CONFIG_DOMAIN_LINKAGE_ENABLED must be a boolean");
-    let app = if enable_domain_linkage {
-        let did_configuration_resource = create_did_configuration_resource(
-            url,
-            did_document.expect("No DID document found to create a DID Configuration Resource for"),
-            secret_manager().await,
-        )
-        .await
-        .expect("Failed to create DID Configuration Resource");
-        // logic here
-        let path = "/.well-known/did-configuration.json";
-        info!("Serving DID Configuration (Domain Linkage) at `{path}`");
-        app.route(path, get(Json(did_configuration_resource)))
-    } else {
-        app
-    };
 
     // TODO: then update `did:web` document and serve the service endpoint
 

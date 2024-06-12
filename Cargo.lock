@@ -105,6 +105,7 @@ dependencies = [
  "agent_verification",
  "axum 0.7.5",
  "did_manager",
+ "identity_document",
  "lazy_static",
  "oid4vc-core",
  "serde_json",
@@ -194,6 +195,7 @@ name = "agent_shared"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "config",
  "cqrs-es",
  "did_manager",
@@ -203,7 +205,12 @@ dependencies = [
  "identity_did",
  "identity_document",
  "identity_storage",
+ "is_empty",
+ "jsonwebtoken 9.3.0",
  "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "serde_with 3.7.0",
  "thiserror",
  "time",
  "tracing",

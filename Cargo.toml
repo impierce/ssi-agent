@@ -27,6 +27,7 @@ oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7fdd207
 
 async-trait = "0.1"
 axum = { version = "0.7", features = ["tracing"] }
+base64 = "0.22"
 cqrs-es = "0.4.2"
 futures = "0.3"
 lazy_static = "1.4"

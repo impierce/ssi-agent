@@ -9,7 +9,7 @@ agent_shared = { path = "../agent_shared" }
 
 anyhow = "1.0"
 async-trait = "0.1"
-base64 = "0.22"
+base64.workspace = true
 cqrs-es = "0.4.2"
 did_manager.workspace = true
 identity_iota = { version = "1.2" }
