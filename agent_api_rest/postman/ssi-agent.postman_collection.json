@@ -42,8 +42,13 @@
 						},
 						"url": {
 							"raw": "{{HOST}}/v1/credentials",
-              "host": ["{{HOST}}"],
-              "path": ["v1", "credentials"]
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v1",
+								"credentials"
+							]
 						}
 					},
 					"response": []
@@ -55,7 +60,9 @@
 						"header": [],
 						"url": {
 							"raw": "{{HOST}}{{CREDENTIAL_LOCATION}}",
-              "host": ["{{HOST}}{{CREDENTIAL_LOCATION}}"]
+							"host": [
+								"{{HOST}}{{CREDENTIAL_LOCATION}}"
+							]
 						}
 					},
 					"response": []
@@ -101,8 +108,13 @@
 						},
 						"url": {
 							"raw": "{{HOST}}/v1/offers",
-              "host": ["{{HOST}}"],
-              "path": ["v1", "offers"]
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v1",
+								"offers"
+							]
 						}
 					},
 					"response": []
@@ -143,8 +155,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{HOST}}/.well-known/oauth-authorization-server",
-              "host": ["{{HOST}}"],
-              "path": [".well-known", "oauth-authorization-server"]
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								".well-known",
+								"oauth-authorization-server"
+							]
 						}
 					},
 					"response": []
@@ -156,8 +173,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{HOST}}/.well-known/openid-credential-issuer",
-              "host": ["{{HOST}}"],
-              "path": [".well-known", "openid-credential-issuer"]
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								".well-known",
+								"openid-credential-issuer"
+							]
 						}
 					},
 					"response": []
@@ -203,8 +225,13 @@
 						},
 						"url": {
 							"raw": "{{HOST}}/auth/token",
-              "host": ["{{HOST}}"],
-              "path": ["auth", "token"]
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"auth",
+								"token"
+							]
 						}
 					},
 					"response": []
@@ -230,8 +257,13 @@
 						},
 						"url": {
 							"raw": "{{HOST}}/openid4vci/credential",
-              "host": ["{{HOST}}"],
-              "path": ["openid4vci", "credential"]
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"openid4vci",
+								"credential"
+							]
 						}
 					},
 					"response": []
@@ -289,8 +321,13 @@
 						},
 						"url": {
 							"raw": "{{HOST}}/v1/authorization_requests",
-              "host": ["{{HOST}}"],
-              "path": ["v1", "authorization_requests"]
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v1",
+								"authorization_requests"
+							]
 						}
 					},
 					"response": []
@@ -343,8 +380,13 @@
 						},
 						"url": {
 							"raw": "{{HOST}}/v1/authorization_requests",
-              "host": ["{{HOST}}"],
-              "path": ["v1", "authorization_requests"]
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v1",
+								"authorization_requests"
+							]
 						}
 					},
 					"response": []
@@ -397,8 +439,13 @@
 						},
 						"url": {
 							"raw": "{{HOST}}/v1/authorization_requests",
-              "host": ["{{HOST}}"],
-              "path": ["v1", "authorization_requests"]
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v1",
+								"authorization_requests"
+							]
 						}
 					},
 					"response": []
@@ -410,7 +457,9 @@
 						"header": [],
 						"url": {
 							"raw": "{{HOST}}{{AUTHORIZATION_REQUEST_LOCATION}}",
-              "host": ["{{HOST}}{{AUTHORIZATION_REQUEST_LOCATION}}"]
+							"host": [
+								"{{HOST}}{{AUTHORIZATION_REQUEST_LOCATION}}"
+							]
 						}
 					},
 					"response": []
@@ -427,7 +476,9 @@
 						"header": [],
 						"url": {
 							"raw": "{{REQUEST_URI}}",
-              "host": ["{{REQUEST_URI}}"]
+							"host": [
+								"{{REQUEST_URI}}"
+							]
 						}
 					},
 					"response": []
@@ -444,8 +495,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{HOST}}/.well-known/did.json",
-							"host": ["{{HOST}}"],
-							"path": [".well-known", "did.json"]
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								".well-known",
+								"did.json"
+							]
 						}
 					},
 					"response": []
@@ -476,14 +532,18 @@
 			"listen": "prerequest",
 			"script": {
 				"type": "text/javascript",
-        "exec": [""]
+				"exec": [
+					""
+				]
 			}
 		},
 		{
 			"listen": "test",
 			"script": {
 				"type": "text/javascript",
-        "exec": [""]
+				"exec": [
+					""
+				]
 			}
 		}
 	],
