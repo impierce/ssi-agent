@@ -64,6 +64,8 @@ impl Sign for Subject {
                 .map(|first| first.id().to_string());
         }
 
+        // TODO: refactor: https://github.com/impierce/ssi-agent/pull/31#discussion_r1634590990
+
         self.secret_manager
             .produce_document(method, None)
             .await
