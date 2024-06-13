@@ -31,11 +31,7 @@ agent_verification = { path = ".", features = ["test"] }
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 did_manager.workspace = true
 identity_core = "1.2.0"
-identity_credential = { version = "1.2.0", default-features = false, features = [
-    "validator",
-    "credential",
-    "presentation"
-] }
+identity_credential.workspace = true
 jsonwebtoken = "9.3"
 lazy_static.workspace = true
 oid4vci.workspace = true
