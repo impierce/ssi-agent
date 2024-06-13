@@ -49,13 +49,6 @@ ServerMetadataLoaded
 CredentialsSupportedCreated
 ```
 
-#### `agent_secret_manager`
-
-```
-Initialized
-DidMethodEnabled
-```
-
 #### `authorization_request`
 
 ```
