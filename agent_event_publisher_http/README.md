@@ -4,6 +4,7 @@ A simple HTTP event publisher for the SSI Agent.
 
 To make use of this publisher you need to configure it by creating a `config.yaml` file in this same directory. For each
 aggregate you want to publish events for, you need to set the following properties:
+
 - The `target_url` is the URL to which the events will be published.
 - The `target_events` is a list of events that will be published to the `target_url`.
 
@@ -18,4 +19,54 @@ connection: {
     SIOPv2AuthorizationResponseVerified
   ]
 }
+```
+
+### Available events
+
+#### `credential`
+
+```
+UnsignedCredentialCreated
+SignedCredentialCreated
+CredentialSigned
+```
+
+#### `offer`
+
+```
+CredentialOfferCreated
+CredentialAdded
+FormUrlEncodedCredentialOfferCreated
+TokenResponseCreated
+CredentialRequestVerified
+CredentialResponseCreated
+```
+
+#### `server_config`
+
+```
+ServerMetadataLoaded
+CredentialsSupportedCreated
+```
+
+#### `agent_secret_manager`
+
+```
+Initialized
+DidMethodEnabled
+```
+
+#### `authorization_request`
+
+```
+AuthorizationRequestCreated
+FormUrlEncodedAuthorizationRequestCreated
+AuthorizationRequestObjectSigned
+```
+
+#### `connection`
+
+```
+SIOPv2AuthorizationResponseVerified
+OID4VPAuthorizationResponseVerified
 ```
