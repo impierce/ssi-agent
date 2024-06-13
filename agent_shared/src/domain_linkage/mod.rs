@@ -3,9 +3,9 @@ pub mod verifiable_credential_jwt;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::error::SharedError;
 use did_manager::SecretManager;
 use identity_core::common::{Duration, Timestamp};
-use identity_core::convert::ToJson;
 use identity_credential::credential::{Credential, Jwt};
 use identity_credential::domain_linkage::{DomainLinkageConfiguration, DomainLinkageCredentialBuilder};
 use identity_did::DID;
@@ -14,24 +14,6 @@ use identity_storage::{JwkDocumentExt, JwsSignatureOptions, Storage};
 use jsonwebtoken::{Algorithm, Header};
 use tracing::info;
 use verifiable_credential_jwt::VerifiableCredentialJwt;
-
-use crate::error::SharedError;
-
-// {
-//     let algorithm = header.alg;
-//     let kid = signer
-//         .key_id(subject_syntax_type, algorithm)
-//         .await
-//         .ok_or(anyhow!("No key identifier found."))?;
-
-//     let jwt = JsonWebToken::new(header, claims).kid(kid);
-
-//     let message = [base64_url_encode(&jwt.header)?, base64_url_encode(&jwt.payload)?].join(".");
-
-//     let proof_value = signer.sign(&message, subject_syntax_type, algorithm).await?;
-//     let signature = base64_url::encode(proof_value.as_slice());
-//     let message = [message, signature].join(".");
-// }
 
 pub async fn create_did_configuration_resource(
     url: url::Url,
@@ -46,8 +28,6 @@ pub async fn create_did_configuration_resource(
 
     let origin = identity_core::common::Url::parse(url.origin().ascii_serialization())
         .map_err(|e| SharedError::Generic(e.to_string()))?;
-    // info!("DID Document: {did_document:#}");
-    // info!("CoreDID: {}", did_document.id());
     let domain_linkage_credential: Credential = DomainLinkageCredentialBuilder::new()
         .issuer(did_document.id().clone())
         .origin(origin)
@@ -74,9 +54,6 @@ pub async fn create_did_configuration_resource(
     // identity.rs currently doesn't know how to handle a `did:web` document in `create_credential_jwt()`.
 
     // Compose JWT and sign
-
-    // header: { "alg": "EdDSA", "typ": "JWT", kid: <did_fragment> }
-
     let jwt: Jwt = match did_document.id().method() {
         "iota" => did_document
             .create_credential_jwt(
@@ -120,7 +97,7 @@ pub async fn create_did_configuration_resource(
             ]
             .join(".");
 
-            let proof_value = secret_manager.sign(&message.as_bytes()).await.unwrap();
+            let proof_value = secret_manager.sign(message.as_bytes()).await.unwrap();
             let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
             let message = [message, signature].join(".");
 
@@ -133,11 +110,6 @@ pub async fn create_did_configuration_resource(
 
     let configuration_resource: DomainLinkageConfiguration = DomainLinkageConfiguration::new(vec![jwt]);
     println!("Configuration Resource >>: {configuration_resource:#}");
-
-    // // The DID Configuration resource can be made available on `https://foo.example.com/.well-known/did-configuration.json`.
-    // let configuration_resource_json: String = configuration_resource
-    //     .to_json()
-    //     .map_err(|e| SharedError::Generic(e.to_string()))?;
 
     Ok(configuration_resource)
 }

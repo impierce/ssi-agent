@@ -2,6 +2,8 @@ use is_empty::IsEmpty;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
+use crate::error::SharedError;
+
 /// Set of IANA registered claims by the Internet Engineering Task Force (IETF) in
 /// [RFC 7519](https://tools.ietf.org/html/rfc7519#section-4.1).
 #[skip_serializing_none]
@@ -60,10 +62,12 @@ impl VerifiableCredentialJwtBuilder {
         VerifiableCredentialJwtBuilder::default()
     }
 
-    pub fn build(self) -> Result<VerifiableCredentialJwt, ()> {
+    pub fn build(self) -> Result<VerifiableCredentialJwt, SharedError> {
         Ok(VerifiableCredentialJwt {
             rfc7519_claims: self.rfc7519_claims,
-            verifiable_credential: self.verifiable_credential.unwrap(),
+            verifiable_credential: self
+                .verifiable_credential
+                .ok_or(SharedError::Generic("`verifiable_credential` is required".to_string()))?,
         })
     }
 
