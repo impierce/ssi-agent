@@ -22,6 +22,7 @@ serde.workspace = true
 serde_with.workspace = true
 serde_yaml.workspace = true
 tokio.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 agent_event_publisher_http = { path = ".", features = ["test"] }
