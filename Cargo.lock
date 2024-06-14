@@ -136,6 +136,7 @@ dependencies = [
  "serde_with 3.7.0",
  "serde_yaml",
  "tokio",
+ "tracing",
  "wiremock",
 ]
 

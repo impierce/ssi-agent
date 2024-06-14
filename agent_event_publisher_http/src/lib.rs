@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use cqrs_es::{Aggregate, DomainEvent, EventEnvelope, Query};
 use serde::Deserialize;
 use serde_with::skip_serializing_none;
+use tracing::info;
 
 #[cfg(feature = "test")]
 pub static TEST_EVENT_PUBLISHER_HTTP_CONFIG: std::sync::Mutex<Option<serde_yaml::Value>> = std::sync::Mutex::new(None);
@@ -48,7 +49,11 @@ impl EventPublisherHttp {
 
         config.apply_merge()?;
 
-        serde_yaml::from_value(config).map_err(Into::into)
+        serde_yaml::from_value(config)
+            .map_err(Into::into)
+            .inspect(|event_publisher| {
+                info!("Loaded HTTP event publisher: {:?}", event_publisher);
+            })
     }
 }
 
@@ -123,9 +128,23 @@ where
             if self.target_events.contains(&event.payload.event_type()) {
                 let request = self.client.post(&self.target_url).json(&event.payload);
 
+                info!(
+                    "Dispatching event: {:?} to HTTP endpoint: {:?}",
+                    &event.payload, &self.target_url
+                );
+
                 // Send the request in a separate thread so that we don't have to await the response in the current thread.
                 tokio::task::spawn(async move {
-                    request.send().await.ok();
+                    request
+                        .send()
+                        .await
+                        .inspect(|response| {
+                            info!("Response: {:?}", response);
+                        })
+                        .inspect_err(|error| {
+                            info!("Error: {:?}", error);
+                        })
+                        .ok();
                 });
             }
         }
