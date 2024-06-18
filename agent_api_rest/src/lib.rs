@@ -93,7 +93,7 @@ pub fn app(state: ApplicationState) -> Router {
 }
 
 fn get_base_path() -> Result<String, ConfigError> {
-    config!("base_path").map(|mut base_path| {
+    config!("base_path", String).map(|mut base_path| {
         if base_path.starts_with('/') {
             base_path.remove(0);
         }

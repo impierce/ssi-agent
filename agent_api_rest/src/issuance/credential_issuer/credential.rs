@@ -64,7 +64,7 @@ pub(crate) async fn credential(
         StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
-    let timeout = config!("external_server_response_timeout_ms")
+    let timeout = config!("external_server_response_timeout_ms", String)
         .ok()
         .and_then(|external_server_response_timeout_ms| external_server_response_timeout_ms.parse().ok())
         .unwrap_or(DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS);

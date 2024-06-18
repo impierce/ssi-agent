@@ -109,8 +109,7 @@ impl oid4vc_core::Subject for Subject {
 }
 
 fn origin() -> url::Origin {
-    config!("url")
-        .map(|url| url::Url::parse(&url).unwrap())
+    config!("url", url::Url)
         .map(|url| url.origin())
         .expect("AGENT_CONFIG_URL is not set")
 }

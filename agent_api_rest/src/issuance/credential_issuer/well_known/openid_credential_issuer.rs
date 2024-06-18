@@ -108,9 +108,9 @@ mod tests {
                             },
                         )]),
                         display: vec![json!({
-                           "name": config!("credential_name").unwrap(),
+                           "name": config!("credential_name", String).unwrap(),
                            "logo": {
-                                "url": config!("credential_logo_url").unwrap()
+                                "url": config!("credential_logo_url", String).unwrap()
                            }
                         })],
                     }

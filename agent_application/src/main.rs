@@ -24,7 +24,7 @@ async fn main() {
         // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
         .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
 
-    match config!("log_format") {
+    match config!("log_format", String) {
         Ok(log_format) if log_format == "json" => {
             tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init()
         }
@@ -45,7 +45,7 @@ async fn main() {
     let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
-    let (issuance_state, verification_state) = match agent_shared::config!("event_store").unwrap().as_str() {
+    let (issuance_state, verification_state) = match agent_shared::config!("event_store", String).unwrap().as_str() {
         "postgres" => (
             postgres::issuance_state(issuance_event_publishers).await,
             postgres::verification_state(verification_services, verification_event_publishers).await,
@@ -56,7 +56,7 @@ async fn main() {
         ),
     };
 
-    let url = config!("url").expect("AGENT_APPLICATION_URL is not set");
+    let url = config!("url", String).expect("AGENT_APPLICATION_URL is not set");
     // TODO: Temporary solution. In the future we need to read these kinds of values from a config file.
     std::env::set_var("AGENT_VERIFICATION_URL", &url);
 
@@ -69,7 +69,7 @@ async fn main() {
     let mut app = app((issuance_state, verification_state));
 
     // CORS
-    let enable_cors = config!("enable_cors")
+    let enable_cors = config!("enable_cors", String)
         .unwrap_or("false".to_string())
         .parse::<bool>()
         .expect("AGENT_APPLICATION_ENABLE_CORS must be a boolean");
@@ -79,7 +79,7 @@ async fn main() {
     }
 
     // did:web
-    let enable_did_web = config!("did_method_web_enabled")
+    let enable_did_web = config!("did_method_web_enabled", String)
         .unwrap_or("false".to_string())
         .parse::<bool>()
         .expect("AGENT_CONFIG_DID_METHOD_WEB_ENABLED must be a boolean");
@@ -102,7 +102,7 @@ async fn main() {
         None
     };
     // Domain Linkage
-    let enable_domain_linkage = config!("domain_linkage_enabled")
+    let enable_domain_linkage = config!("domain_linkage_enabled", String)
         .unwrap_or("false".to_string())
         .parse::<bool>()
         .expect("AGENT_CONFIG_DOMAIN_LINKAGE_ENABLED must be a boolean");

@@ -51,7 +51,7 @@ impl Aggregate for AuthorizationRequest {
                     .await
                     .unwrap();
 
-                let url = config!("url").unwrap();
+                let url = config!("url", String).unwrap();
                 let request_uri = format!("{url}/request/{state}").parse().unwrap();
                 let redirect_uri = format!("{url}/redirect").parse::<url::Url>().unwrap();
 

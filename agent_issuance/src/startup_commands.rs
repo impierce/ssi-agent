@@ -81,7 +81,10 @@ pub fn create_credentials_supported(metadata: &Metadata) -> ServerConfigCommand 
                         proof_signing_alg_values_supported: metadata.signing_algorithms_supported.clone(),
                     },
                 )]),
-                display: match (config!("credential_name"), config!("credential_logo_url")) {
+                display: match (
+                    config!("credential_name", String),
+                    config!("credential_logo_url", String),
+                ) {
                     (Ok(name), Ok(logo_uri)) => vec![json!({
                         "name": name,
                         "logo": {
