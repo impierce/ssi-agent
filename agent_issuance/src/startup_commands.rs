@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::server_config::command::ServerConfigCommand;
 use agent_shared::{metadata::Metadata, url_utils::UrlAppendHelpers};
 use oid4vci::credential_issuer::{
