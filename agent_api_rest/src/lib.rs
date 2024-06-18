@@ -116,7 +116,6 @@ fn get_base_path() -> Result<String, ConfigError> {
 mod tests {
     use std::collections::HashMap;
 
-    use agent_shared::config;
     use agent_store::in_memory;
     use agent_verification::services::test_utils::test_verification_services;
     use axum::routing::post;
@@ -173,11 +172,7 @@ mod tests {
     #[should_panic]
     async fn test_base_path_routes() {
         let issuance_state = in_memory::issuance_state(Default::default()).await;
-        let verification_state = in_memory::verification_state(
-            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
-            Default::default(),
-        )
-        .await;
+        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
         std::env::set_var("AGENT_APPLICATION_BASE_PATH", "unicore");
         let router = app((issuance_state, verification_state));
 

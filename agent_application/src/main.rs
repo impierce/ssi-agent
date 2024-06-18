@@ -2,20 +2,24 @@ use agent_api_rest::app;
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_issuance::{startup_commands::startup_commands, state::initialize};
 use agent_secret_manager::{secret_manager, subject::Subject};
-use agent_shared::{config, domain_linkage::create_did_configuration_resource};
+use agent_shared::{
+    config,
+    domain_linkage::create_did_configuration_resource,
+    metadata::{load_metadata, Metadata},
+};
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use axum::{routing::get, Json};
 use identity_document::service::{Service, ServiceEndpoint};
-use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
-use serde_json::json;
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() {
+    let metadata: Metadata = load_metadata();
+
     let tracing_subscriber = tracing_subscriber::registry()
         // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
         .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
@@ -27,41 +31,11 @@ async fn main() {
         _ => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
     }
 
-    let default_did_method = config!("default_did_method").unwrap_or("did:key".to_string());
     let verification_services = Arc::new(VerificationServices::new(
         Arc::new(Subject {
             secret_manager: secret_manager().await,
         }),
-        // TODO: Temporary solution. Remove this once `ClientMetadata` is part of `RelyingPartyManager`.
-        ClientMetadataResource::ClientMetadata {
-            client_name: config!("display_name").ok(),
-            logo_uri: config!("display_logo_uri")
-                .map(|display_logo_uri| {
-                    display_logo_uri
-                        .parse()
-                        .expect("`AGENT_CONFIG_DISPLAY_LOGO_URI` must be a valid URL string.")
-                })
-                .ok(),
-            extension: siopv2::authorization_request::ClientMetadataParameters {
-                subject_syntax_types_supported: vec![SubjectSyntaxType::from_str(&default_did_method).unwrap()],
-            },
-        },
-        ClientMetadataResource::ClientMetadata {
-            client_name: config!("display_name").ok(),
-            logo_uri: config!("display_logo_uri")
-                .map(|display_logo_uri| {
-                    display_logo_uri
-                        .parse()
-                        .expect("`AGENT_CONFIG_DISPLAY_LOGO_URI` must be a valid URL string.")
-                })
-                .ok(),
-            // TODO: fix this once `vp_formats` is public.
-            extension: serde_json::from_value(json!({
-                "vp_formats": {}
-            }))
-            .unwrap(),
-        },
-        &default_did_method,
+        &metadata,
     ));
 
     // TODO: Currently `issuance_event_publishers` and `verification_event_publishers` are exactly the same, which is
@@ -90,7 +64,7 @@ async fn main() {
 
     let url = url::Url::parse(&url).unwrap();
 
-    initialize(&issuance_state, startup_commands(url.clone())).await;
+    initialize(&issuance_state, startup_commands(url.clone(), &metadata)).await;
 
     let mut app = app((issuance_state, verification_state));
 

@@ -17,13 +17,16 @@ identity_did = { version = "1.3" }
 identity_document = { version = "1.3" }
 identity_storage = { version = "1.3" }
 is_empty = "0.2"
-jsonwebtoken = "9.3"
+jsonwebtoken.workspace = true
 # TODO: replace all identity_* with identity_iota?
 # identity_iota = { version = "1.3" }
+oid4vc-core.workspace = true
+oid4vp.workspace = true
 rand = "0.8"
 serde.workspace = true
 serde_json.workspace = true
 serde_with = "3.0"
+serde_yaml.workspace = true
 thiserror.workspace = true
 time = { version = "0.3" }
 tracing.workspace = true

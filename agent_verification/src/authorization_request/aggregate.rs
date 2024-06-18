@@ -6,6 +6,7 @@ use crate::{
 use agent_shared::config;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
+use jsonwebtoken::Algorithm;
 use oid4vc_core::{authorization_request::ByReference, scope::Scope};
 use oid4vp::authorization_request::ClientIdScheme;
 use serde::{Deserialize, Serialize};
@@ -45,7 +46,10 @@ impl Aggregate for AuthorizationRequest {
             } => {
                 let default_subject_syntax_type = services.relying_party.default_subject_syntax_type().to_string();
                 let verifier = &services.verifier;
-                let verifier_did = verifier.identifier(&default_subject_syntax_type).await.unwrap();
+                let verifier_did = verifier
+                    .identifier(&default_subject_syntax_type, Algorithm::EdDSA)
+                    .await
+                    .unwrap();
 
                 let url = config!("url").unwrap();
                 let request_uri = format!("{url}/request/{state}").parse().unwrap();
@@ -158,6 +162,7 @@ pub mod tests {
 
     use agent_secret_manager::secret_manager;
     use agent_secret_manager::subject::Subject;
+    use agent_shared::metadata::set_metadata_configuration;
     use cqrs_es::test::TestFramework;
     use lazy_static::lazy_static;
     use oid4vc_core::Subject as _;
@@ -177,7 +182,11 @@ pub mod tests {
     async fn test_create_authorization_request(
         #[values("did:key", "did:jwk", "did:iota:rms")] verifier_did_method: &str,
     ) {
-        let verification_services = test_verification_services(verifier_did_method);
+        set_metadata_configuration(verifier_did_method);
+
+        let verification_services = test_verification_services();
+        let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
+        let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
 
         AuthorizationRequestTestFramework::with(verification_services)
             .given_no_previous_events()
@@ -188,7 +197,15 @@ pub mod tests {
             })
             .then_expect_events(vec![
                 AuthorizationRequestEvent::AuthorizationRequestCreated {
-                    authorization_request: Box::new(authorization_request("id_token", verifier_did_method).await),
+                    authorization_request: Box::new(
+                        authorization_request(
+                            "id_token",
+                            verifier_did_method,
+                            siopv2_client_metadata,
+                            oid4vp_client_metadata,
+                        )
+                        .await,
+                    ),
                 },
                 AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
                     form_url_encoded_authorization_request: form_url_encoded_authorization_request(verifier_did_method),
@@ -201,12 +218,24 @@ pub mod tests {
     async fn test_sign_authorization_request_object(
         #[values("did:key", "did:jwk", "did:iota:rms")] verifier_did_method: &str,
     ) {
-        let verification_services = test_verification_services(verifier_did_method);
+        set_metadata_configuration(verifier_did_method);
+
+        let verification_services = test_verification_services();
+        let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
+        let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
 
         AuthorizationRequestTestFramework::with(verification_services)
             .given(vec![
                 AuthorizationRequestEvent::AuthorizationRequestCreated {
-                    authorization_request: Box::new(authorization_request("id_token", verifier_did_method).await),
+                    authorization_request: Box::new(
+                        authorization_request(
+                            "id_token",
+                            verifier_did_method,
+                            siopv2_client_metadata,
+                            oid4vp_client_metadata,
+                        )
+                        .await,
+                    ),
                 },
                 AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
                     form_url_encoded_authorization_request: form_url_encoded_authorization_request(verifier_did_method),
@@ -219,7 +248,7 @@ pub mod tests {
     }
 
     pub async fn verifier_did(did_method: &str) -> String {
-        VERIFIER.identifier(did_method).await.unwrap()
+        VERIFIER.identifier(did_method, Algorithm::EdDSA).await.unwrap()
     }
 
     pub fn siopv2_client_metadata(
@@ -230,7 +259,9 @@ pub mod tests {
             logo_uri: None,
             extension: siopv2::authorization_request::ClientMetadataParameters {
                 subject_syntax_types_supported: vec![SubjectSyntaxType::from_str(did_method).unwrap()],
+                id_token_signed_response_alg: None,
             },
+            other: Default::default(),
         }
     }
 
@@ -240,13 +271,23 @@ pub mod tests {
             logo_uri: None,
             // TODO: fix this once `vp_formats` is public.
             extension: serde_json::from_value(json!({
-                "vp_formats": {}
+                "vp_formats": {
+                    "jwt_vc_json": {
+                        "alg": ["EdDSA"]
+                    }
+                }
             }))
             .unwrap(),
+            other: Default::default(),
         }
     }
 
-    pub async fn authorization_request(response_type: &str, did_method: &str) -> GenericAuthorizationRequest {
+    pub async fn authorization_request(
+        response_type: &str,
+        did_method: &str,
+        siopv2_client_metadata: ClientMetadataResource<siopv2::authorization_request::ClientMetadataParameters>,
+        oid4vp_client_metadata: ClientMetadataResource<oid4vp::authorization_request::ClientMetadataParameters>,
+    ) -> GenericAuthorizationRequest {
         match response_type {
             "id_token" => GenericAuthorizationRequest::SIOPv2(Box::new(
                 SIOPv2AuthorizationRequest::builder()
@@ -254,7 +295,7 @@ pub mod tests {
                     .scope(Scope::openid())
                     .redirect_uri(REDIRECT_URI.clone())
                     .response_mode("direct_post".to_string())
-                    .client_metadata(siopv2_client_metadata(did_method))
+                    .client_metadata(siopv2_client_metadata)
                     .nonce("nonce".to_string())
                     .state("state".to_string())
                     .build()
@@ -268,7 +309,7 @@ pub mod tests {
                     .redirect_uri(REDIRECT_URI.clone())
                     .response_mode("direct_post".to_string())
                     .presentation_definition(PRESENTATION_DEFINITION.clone())
-                    .client_metadata(oid4vp_client_metadata())
+                    .client_metadata(oid4vp_client_metadata)
                     .nonce("nonce".to_string())
                     .state("state".to_string())
                     .build()
@@ -340,49 +381,13 @@ pub mod tests {
             request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2Fstate"
             .to_string();
         static ref SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_KEY: String =
-            "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dF\
-             ODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtn\
-             RTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJ\
-             jbGllbnRfaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGd\
-             jWjl4dXdKdkcxZTd3Tms4S0NndCIsInJlZGlyZWN0X3VyaSI6Imh0dHBzOi8vbXk\
-             tZG9tYWluLmV4YW1wbGUub3JnL3JlZGlyZWN0Iiwic3RhdGUiOiJzdGF0ZSIsInJ\
-             lc3BvbnNlX3R5cGUiOiJpZF90b2tlbiIsInNjb3BlIjoib3BlbmlkIiwicmVzcG9\
-             uc2VfbW9kZSI6ImRpcmVjdF9wb3N0Iiwibm9uY2UiOiJub25jZSIsImNsaWVudF9\
-             tZXRhZGF0YSI6eyJzdWJqZWN0X3N5bnRheF90eXBlc19zdXBwb3J0ZWQiOlsiZGl\
-             kOmtleSJdfX0.38tCXF1QH3ihT4TgIDPToXG2EnmoRbGHRxdpLNRly8nnKPxmU4m\
-             AiroIBWA5E2SEjCpGlx_wOToymX6G0xqOBQ"
+            "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJjbGllbnRfaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInJlZGlyZWN0X3VyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL3JlZGlyZWN0Iiwic3RhdGUiOiJzdGF0ZSIsInJlc3BvbnNlX3R5cGUiOiJpZF90b2tlbiIsInNjb3BlIjoib3BlbmlkIiwicmVzcG9uc2VfbW9kZSI6ImRpcmVjdF9wb3N0Iiwibm9uY2UiOiJub25jZSIsImNsaWVudF9tZXRhZGF0YSI6eyJzdWJqZWN0X3N5bnRheF90eXBlc19zdXBwb3J0ZWQiOlsiZGlkOmtleSIsImRpZDprZXkiLCJkaWQ6aW90YTpybXMiLCJkaWQ6andrIl0sImlkX3Rva2VuX3NpZ25lZF9yZXNwb25zZV9hbGciOiJFZERTQSIsImlkX3Rva2VuX3NpZ25pbmdfYWxnX3ZhbHVlc19zdXBwb3J0ZWQiOlsiRWREU0EiXX19.6DN2rFytg2WIajKr2GrAEbCMAKX8rqJzmj7dTvA-KxFcVi-fOQnHOrZo8mAwC-DhQQMgxyeiAJcTvVOi12V7AA"
                 .to_string();
         static ref SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK: String =
-            "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDpqd2s6ZXlKaGJH\
-            Y2lPaUpGWkVSVFFTSXNJbU55ZGlJNklrVmtNalUxTVRraUxDSnJhV1FpT2lKaVVVd\
-            FJVbnBoYjNBM1EyZEZkbkZXY1RoVmJHZE1SM05rUmkxU0xXaHVURVpyUzBaYWNWY3\
-            lWazR3SWl3aWEzUjVJam9pVDB0UUlpd2llQ0k2SWtkc2JrczVaVkJ6T0RBeVdIaEJ\
-            aMnhTVDFGNmIwZDFjbTA1VVhCMk1FbEdVRVZpWkUxRFNVeE9YMVVpZlEjMCJ9.eyJ\
-            jbGllbnRfaWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJ\
-            a1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2NUaFZiR\
-            2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQwdFFJaX\
-            dpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVVYQjJNRWx\
-            HVUVWaVpFMURTVXhPWDFVaWZRIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1k\
-            b21haW4uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzc\
-            G9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV\
-            9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGF\
-            kYXRhIjp7InN1YmplY3Rfc3ludGF4X3R5cGVzX3N1cHBvcnRlZCI6WyJkaWQ6andr\
-            Il19fQ.pgRD8qLjRn1FdKYVyY6AJpUIesYSM1Bn9UR00ZM4J22E41Vs9FwAeTOSis\
-            SseTNonZJBl3OHkj_9MBO9WnOTAg"
+            "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGWkVSVFFTSXNJbU55ZGlJNklrVmtNalUxTVRraUxDSnJhV1FpT2lKaVVVdFJVbnBoYjNBM1EyZEZkbkZXY1RoVmJHZE1SM05rUmkxU0xXaHVURVpyUzBaYWNWY3lWazR3SWl3aWEzUjVJam9pVDB0UUlpd2llQ0k2SWtkc2JrczVaVkJ6T0RBeVdIaEJaMnhTVDFGNmIwZDFjbTA1VVhCMk1FbEdVRVZpWkUxRFNVeE9YMVVpZlEjMCJ9.eyJjbGllbnRfaWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2NUaFZiR2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVVYQjJNRWxHVUVWaVpFMURTVXhPWDFVaWZRIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzcG9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGFkYXRhIjp7InN1YmplY3Rfc3ludGF4X3R5cGVzX3N1cHBvcnRlZCI6WyJkaWQ6andrIiwiZGlkOmtleSIsImRpZDppb3RhOnJtcyIsImRpZDpqd2siXSwiaWRfdG9rZW5fc2lnbmVkX3Jlc3BvbnNlX2FsZyI6IkVkRFNBIiwiaWRfdG9rZW5fc2lnbmluZ19hbGdfdmFsdWVzX3N1cHBvcnRlZCI6WyJFZERTQSJdfX0.LB6LWjXH4NBKpq5Tf1uNXZzahbTYiCNvHkFBeSzXsuSCURCU8eowdMvZUak1kjUxQbgfI-7uLxhyMsNCssY4CQ"
                 .to_string();
         static ref SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_IOTA: String =
-            "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDppb3RhOnJtczow\
-            eDQyYWQ1ODgzMjJlNThiM2MwN2FhMzllNDk0OGQwMjFlZTE3ZWNiNTc0NzkxNWU5Z\
-            TFmMzVmMDI4ZDdlY2FmOTAjYlFLUVJ6YW9wN0NnRXZxVnE4VWxnTEdzZEYtUi1obk\
-            xGa0tGWnFXMlZOMCJ9.eyJjbGllbnRfaWQiOiJkaWQ6aW90YTpybXM6MHg0MmFkNT\
-            g4MzIyZTU4YjNjMDdhYTM5ZTQ5NDhkMDIxZWUxN2VjYjU3NDc5MTVlOWUxZjM1ZjA\
-            yOGQ3ZWNhZjkwIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhh\
-            bXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzcG9uc2VfdHlwZ\
-            SI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2RlIjoiZG\
-            lyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGFkYXRhIjp7InN\
-            1YmplY3Rfc3ludGF4X3R5cGVzX3N1cHBvcnRlZCI6WyJkaWQ6aW90YTpybXMiXX19\
-            .2JJOLSsMbFSKZVRPHYMGjorCJLsQE2ZV-GLQKIu86sC5VxqbQ0J37Nsrj_9U1Cz4\
-            kEU_VGYoyhOKQ7wYcJjfDA"
+            "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDppb3RhOnJtczoweDQyYWQ1ODgzMjJlNThiM2MwN2FhMzllNDk0OGQwMjFlZTE3ZWNiNTc0NzkxNWU5ZTFmMzVmMDI4ZDdlY2FmOTAjYlFLUVJ6YW9wN0NnRXZxVnE4VWxnTEdzZEYtUi1obkxGa0tGWnFXMlZOMCJ9.eyJjbGllbnRfaWQiOiJkaWQ6aW90YTpybXM6MHg0MmFkNTg4MzIyZTU4YjNjMDdhYTM5ZTQ5NDhkMDIxZWUxN2VjYjU3NDc5MTVlOWUxZjM1ZjAyOGQ3ZWNhZjkwIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzcG9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGFkYXRhIjp7InN1YmplY3Rfc3ludGF4X3R5cGVzX3N1cHBvcnRlZCI6WyJkaWQ6aW90YTpybXMiLCJkaWQ6a2V5IiwiZGlkOmlvdGE6cm1zIiwiZGlkOmp3ayJdLCJpZF90b2tlbl9zaWduZWRfcmVzcG9uc2VfYWxnIjoiRWREU0EiLCJpZF90b2tlbl9zaWduaW5nX2FsZ192YWx1ZXNfc3VwcG9ydGVkIjpbIkVkRFNBIl19fQ.nM5k3QZb3BqYaOqeUYOoQmIOSlTsy1weeiXSAZr2oeEYweYJ01hmYckMxhQNaUD91qe6w9GS4jakZCmU4j7eBg"
                 .to_string();
     }
 }

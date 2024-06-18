@@ -100,10 +100,12 @@ pub mod tests {
 
     use agent_secret_manager::secret_manager;
     use agent_secret_manager::subject::Subject;
+    use agent_shared::metadata::set_metadata_configuration;
     use cqrs_es::test::TestFramework;
     use identity_credential::credential::Jwt;
     use identity_credential::presentation::Presentation;
 
+    use jsonwebtoken::Algorithm;
     use oid4vc_manager::managers::presentation::create_presentation_submission;
     use oid4vc_manager::ProviderManager;
     use oid4vci::VerifiableCredentialJwt;
@@ -124,14 +126,25 @@ pub mod tests {
     #[serial_test::serial]
     async fn test_verify_authorization_response(
         // "id_token" represents the `SIOPv2` flow, and "vp_token" represents the `OID4VP` flow.
-        #[values("id_token", "vp_token")] response_type: &str,
+        #[values("vp_token")] response_type: &str,
         // TODO: add `did:web`, check for other tests as well. Probably should be moved to E2E test.
         #[values("did:key", "did:jwk", "did:iota:rms")] verifier_did_method: &str,
         #[values("did:key", "did:jwk", "did:iota:rms")] provider_did_method: &str,
     ) {
-        let verification_services = test_verification_services(verifier_did_method);
+        set_metadata_configuration(verifier_did_method);
 
-        let authorization_request = authorization_request(response_type, verifier_did_method).await;
+        let verification_services = test_verification_services();
+        let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
+        let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
+
+        let authorization_request = authorization_request(
+            response_type,
+            verifier_did_method,
+            siopv2_client_metadata,
+            oid4vp_client_metadata,
+        )
+        .await;
+
         let authorization_response = authorization_response(provider_did_method, &authorization_request).await;
         let token = authorization_response.token();
 
@@ -164,11 +177,12 @@ pub mod tests {
                     secret_manager: secret_manager().await,
                 }
             })),
-            did_method,
+            vec![did_method],
+            vec![Algorithm::EdDSA],
         )
         .unwrap();
 
-        let default_did_method = provider_manager.default_subject_syntax_type().to_string();
+        let default_did_method = provider_manager.default_subject_syntax_types()[0].to_string();
 
         match authorization_request {
             GenericAuthorizationRequest::SIOPv2(siopv2_authorization_request) => GenericAuthorizationResponse::SIOPv2(

@@ -13,6 +13,7 @@ async-trait.workspace = true
 axum.workspace = true
 cqrs-es.workspace = true
 futures.workspace = true
+jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
 oid4vc-manager.workspace = true
 oid4vp.workspace = true
@@ -32,7 +33,6 @@ async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 did_manager.workspace = true
 identity_core = "1.2.0"
 identity_credential.workspace = true
-jsonwebtoken = "9.3"
 lazy_static.workspace = true
 oid4vci.workspace = true
 rstest.workspace = true

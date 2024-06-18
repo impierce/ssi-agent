@@ -1,3 +1,10 @@
+### 18-06-2024
+Deprecated the following environment variables, which can now be configured in the `agent_application/config.yml` file:
+* `AGENT_CONFIG_DEFAULT_DID_METHOD`: The first item in the `subject_syntax_types_supported` sequence will be used as the
+  default DID Method
+* `AGENT_CONFIG_DISPLAY_NAME`: The display name can now be configured through `display` -> `name` in the `agent_application/config.yml` file
+* `AGENT_CONFIG_DISPLAY_LOGO_URI`": The display logo URI can now be configured through `display` -> `logo` -> `uri` in the `agent_application/config.yml` file
+
 ### 23-04-2024
 Renamed `subjectId` to `offerId`. This has effect on both the `/v1/credentials` and `/v2/offers` endpoints.
 

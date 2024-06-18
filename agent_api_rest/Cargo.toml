@@ -34,6 +34,7 @@ agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification", features = ["test"] }
 
 futures.workspace = true
+jsonwebtoken.workspace = true
 lazy_static.workspace = true
 mime = { version = "0.3" }
 oid4vc-core.workspace = true

@@ -225,6 +225,7 @@ pub mod tests {
 
     use agent_secret_manager::subject::Subject;
     use cqrs_es::test::TestFramework;
+    use jsonwebtoken::Algorithm;
     use lazy_static::lazy_static;
     use oid4vc_core::Subject as _;
     use oid4vci::{
@@ -389,7 +390,7 @@ pub mod tests {
             })
             .then_expect_events(vec![OfferEvent::CredentialRequestVerified {
                 offer_id: Default::default(),
-                subject_id: SUBJECT_KEY_DID.identifier("did:key").await.unwrap(),
+                subject_id: SUBJECT_KEY_DID.identifier("did:key", Algorithm::EdDSA).await.unwrap(),
             }]);
     }
 
@@ -422,7 +423,7 @@ pub mod tests {
                 },
                 OfferEvent::CredentialRequestVerified {
                     offer_id: Default::default(),
-                    subject_id: SUBJECT_KEY_DID.identifier("did:key").await.unwrap(),
+                    subject_id: SUBJECT_KEY_DID.identifier("did:key", Algorithm::EdDSA).await.unwrap(),
                 },
             ])
             .when(OfferCommand::CreateCredentialResponse {
@@ -499,11 +500,11 @@ pub mod tests {
             proof: Some(
                 KeyProofType::builder()
                     .proof_type(ProofType::Jwt)
+                    .algorithm(Algorithm::EdDSA)
                     .signer(subject.subject.clone())
-                    .iss(subject.subject.identifier("did:key").await.unwrap())
+                    .iss(subject.subject.identifier("did:key", Algorithm::EdDSA).await.unwrap())
                     .aud(CREDENTIAL_ISSUER_METADATA.credential_issuer.clone())
                     .iat(1571324800)
-                    .exp(9999999999i64)
                     .nonce(subject.c_nonce.clone())
                     .subject_syntax_type("did:key")
                     .build()

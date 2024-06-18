@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager::{DidMethod, Resolver, SecretManager};
 use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
+use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
 use std::sync::Arc;
 
@@ -48,7 +49,7 @@ impl Verify for Subject {
 
 #[async_trait]
 impl Sign for Subject {
-    async fn key_id(&self, subject_syntax_type: &str) -> Option<String> {
+    async fn key_id(&self, subject_syntax_type: &str, _algorithm: Algorithm) -> Option<String> {
         let method: DidMethod = serde_json::from_str(&format!("{subject_syntax_type:?}")).ok()?;
 
         if method == DidMethod::Web {
@@ -74,7 +75,7 @@ impl Sign for Subject {
             .map(|first| first.id().to_string())
     }
 
-    async fn sign(&self, message: &str, _subject_syntax_type: &str) -> anyhow::Result<Vec<u8>> {
+    async fn sign(&self, message: &str, _subject_syntax_type: &str, _algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
         Ok(self.secret_manager.sign(message.as_bytes()).await?)
     }
 
@@ -85,7 +86,7 @@ impl Sign for Subject {
 
 #[async_trait]
 impl oid4vc_core::Subject for Subject {
-    async fn identifier(&self, subject_syntax_type: &str) -> anyhow::Result<String> {
+    async fn identifier(&self, subject_syntax_type: &str, _algorithm: Algorithm) -> anyhow::Result<String> {
         let method: DidMethod = serde_json::from_str(&format!("{subject_syntax_type:?}"))?;
 
         if method == DidMethod::Web {
