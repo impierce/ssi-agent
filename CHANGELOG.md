@@ -1,3 +1,26 @@
+### 20-16-2024
+Deprecated the following environment variables:
+* `AGENT_ISSUANCE_CREDENTIAL_NAME`
+* `AGENT_ISSUANCE_CREDENTIAL_LOGO_URL`
+
+Both can now be dynamically configured through the `/v1/configurations/credential_configurations` endpoint. Example:
+```json
+// HTTP POST: /v1/configurations/credential_configurations
+{
+  "display": [{
+    "name": "Identity Credential", // <-- Credential Name
+        "locale": "en",
+        "logo": {
+          "url": "https://impierce.com/images/logo-blue.png", // <-- Credential Logo URL
+            "alt_text": "UniCore Logo"
+        }
+    }],
+    "credentialConfigurationId": ...,
+    "format": ...,
+    "credential_definition": ...
+}
+```
+
 ### 18-06-2024
 Deprecated the following environment variables, which can now be configured in the `agent_application/config.yml` file:
 * `AGENT_CONFIG_DEFAULT_DID_METHOD`: The first item in the `subject_syntax_types_supported` sequence will be used as the
