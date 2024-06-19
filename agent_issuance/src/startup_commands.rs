@@ -59,7 +59,7 @@ pub fn create_credentials_supported(metadata: &Metadata) -> ServerConfigCommand 
         .map(|algorithm| json!(algorithm).as_str().unwrap().to_string())
         .collect();
 
-    ServerConfigCommand::CreateCredentialsSupported {
+    ServerConfigCommand::CreateCredentialConfiguration {
         credential_configurations_supported: vec![(
             "badge".to_string(),
             CredentialConfigurationsSupportedObject {

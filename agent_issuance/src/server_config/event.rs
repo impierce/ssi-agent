@@ -14,7 +14,7 @@ pub enum ServerConfigEvent {
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_issuer_metadata: CredentialIssuerMetadata,
     },
-    CredentialsSupportedCreated {
+    CredentialConfigurationCreated {
         credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
     },
 }
@@ -25,7 +25,7 @@ impl DomainEvent for ServerConfigEvent {
 
         let event_type: &str = match self {
             ServerMetadataInitialized { .. } => "ServerMetadataLoaded",
-            CredentialsSupportedCreated { .. } => "CredentialsSupportedCreated",
+            CredentialConfigurationCreated { .. } => "CredentialConfigurationCreated",
         };
         event_type.to_string()
     }

@@ -14,7 +14,7 @@ pub enum ServerConfigCommand {
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_issuer_metadata: CredentialIssuerMetadata,
     },
-    CreateCredentialsSupported {
+    CreateCredentialConfiguration {
         credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
     },
 }

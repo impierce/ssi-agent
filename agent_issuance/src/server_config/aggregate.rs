@@ -48,9 +48,9 @@ impl Aggregate for ServerConfig {
                 credential_issuer_metadata,
             }]),
 
-            CreateCredentialsSupported {
+            CreateCredentialConfiguration {
                 credential_configurations_supported,
-            } => Ok(vec![CredentialsSupportedCreated {
+            } => Ok(vec![CredentialConfigurationCreated {
                 credential_configurations_supported,
             }]),
         }
@@ -69,7 +69,7 @@ impl Aggregate for ServerConfig {
                 self.authorization_server_metadata = *authorization_server_metadata;
                 self.credential_issuer_metadata = credential_issuer_metadata;
             }
-            CredentialsSupportedCreated {
+            CredentialConfigurationCreated {
                 credential_configurations_supported,
             } => {
                 self.credential_issuer_metadata.credential_configurations_supported =
@@ -116,10 +116,10 @@ pub mod server_config_tests {
                 authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
             }])
-            .when(ServerConfigCommand::CreateCredentialsSupported {
+            .when(ServerConfigCommand::CreateCredentialConfiguration {
                 credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
             })
-            .then_expect_events(vec![ServerConfigEvent::CredentialsSupportedCreated {
+            .then_expect_events(vec![ServerConfigEvent::CredentialConfigurationCreated {
                 credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
             }]);
     }
