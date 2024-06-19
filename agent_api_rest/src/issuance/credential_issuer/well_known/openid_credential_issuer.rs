@@ -25,12 +25,11 @@ pub(crate) async fn openid_credential_issuer(State(state): State<IssuanceState>)
 mod tests {
     use std::collections::HashMap;
 
-    use crate::{app, tests::BASE_URL};
+    use crate::{app, configurations::credential_configurations::tests::credential_configurations, tests::BASE_URL};
 
     use super::*;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
     use agent_shared::{
-        config,
         metadata::{load_metadata, set_metadata_configuration},
         UrlAppendHelpers,
     };
@@ -108,9 +107,9 @@ mod tests {
                             },
                         )]),
                         display: vec![json!({
-                           "name": config!("credential_name", String).unwrap(),
+                           "name": "Badge",
                            "logo": {
-                                "url": config!("credential_logo_url", String).unwrap()
+                                "url": "https://example.com/logo.png",
                            }
                         })],
                     }
@@ -133,6 +132,8 @@ mod tests {
         initialize(&issuance_state, startup_commands(BASE_URL.clone(), &load_metadata())).await;
 
         let mut app = app((issuance_state, verification_state));
+
+        credential_configurations(&mut app).await;
 
         let _credential_issuer_metadata = openid_credential_issuer(&mut app).await;
     }

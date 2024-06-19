@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-
-use oid4vci::credential_issuer::{
-    authorization_server_metadata::AuthorizationServerMetadata,
-    credential_configurations_supported::CredentialConfigurationsSupportedObject,
-    credential_issuer_metadata::CredentialIssuerMetadata,
+use oid4vci::{
+    credential_format_profiles::{CredentialFormats, WithParameters},
+    credential_issuer::{
+        authorization_server_metadata::AuthorizationServerMetadata,
+        credential_issuer_metadata::CredentialIssuerMetadata,
+    },
 };
 use serde::Deserialize;
 
@@ -14,7 +14,9 @@ pub enum ServerConfigCommand {
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_issuer_metadata: CredentialIssuerMetadata,
     },
-    CreateCredentialConfiguration {
-        credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
+    AddCredentialConfiguration {
+        credential_configuration_id: String,
+        credential_format_with_parameters: CredentialFormats<WithParameters>,
+        display: Vec<serde_json::Value>,
     },
 }

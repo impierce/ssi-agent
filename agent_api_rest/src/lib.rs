@@ -1,3 +1,4 @@
+mod configurations;
 mod issuance;
 mod verification;
 
@@ -43,6 +44,10 @@ pub fn app(state: ApplicationState) -> Router {
 
     Router::new()
         // Agent Issuance Preparations
+        .route(
+            &path("/v1/configurations/credential_configurations"),
+            post(configurations::credential_configurations),
+        )
         .route(&path("/v1/credentials"), post(credentials))
         .route(&path("/v1/credentials/:credential_id"), get(get_credentials))
         .route(&path("/v1/offers"), post(offers))

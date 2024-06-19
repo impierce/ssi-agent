@@ -1,8 +1,15 @@
+use std::collections::HashMap;
+
+use agent_shared::config;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
+use jsonwebtoken::Algorithm;
+use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
+use oid4vci::proof::KeyProofMetadata;
+use oid4vci::ProofType;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -48,11 +55,44 @@ impl Aggregate for ServerConfig {
                 credential_issuer_metadata,
             }]),
 
-            CreateCredentialConfiguration {
-                credential_configurations_supported,
-            } => Ok(vec![CredentialConfigurationCreated {
-                credential_configurations_supported,
-            }]),
+            AddCredentialConfiguration {
+                credential_configuration_id,
+                credential_format_with_parameters,
+                display,
+            } => {
+                let cryptographic_binding_methods_supported =
+                    config!("subject_syntax_types_supported", Vec<String>).unwrap_or_default();
+
+                let credential_signing_alg_values_supported =
+                    config!("signing_algorithms_supported", Vec<String>).unwrap_or_default();
+
+                let proof_types_supported = HashMap::from_iter(vec![(
+                    ProofType::Jwt,
+                    KeyProofMetadata {
+                        proof_signing_alg_values_supported: config!("signing_algorithms_supported", Vec<Algorithm>)
+                            .unwrap_or_default(),
+                    },
+                )]);
+
+                let credential_configuration = CredentialConfigurationsSupportedObject {
+                    credential_format: credential_format_with_parameters,
+                    cryptographic_binding_methods_supported,
+                    credential_signing_alg_values_supported,
+                    proof_types_supported,
+                    display,
+                    ..Default::default()
+                };
+
+                let mut credential_configurations = self
+                    .credential_issuer_metadata
+                    .credential_configurations_supported
+                    .clone();
+
+                credential_configurations.insert(credential_configuration_id, credential_configuration);
+                Ok(vec![CredentialConfigurationAdded {
+                    credential_configurations,
+                }])
+            }
         }
     }
 
@@ -69,12 +109,9 @@ impl Aggregate for ServerConfig {
                 self.authorization_server_metadata = *authorization_server_metadata;
                 self.credential_issuer_metadata = credential_issuer_metadata;
             }
-            CredentialConfigurationCreated {
-                credential_configurations_supported,
-            } => {
-                self.credential_issuer_metadata.credential_configurations_supported =
-                    credential_configurations_supported
-            }
+            CredentialConfigurationAdded {
+                credential_configurations,
+            } => self.credential_issuer_metadata.credential_configurations_supported = credential_configurations,
         }
     }
 }
@@ -85,7 +122,10 @@ pub mod server_config_tests {
 
     use super::*;
 
+    use agent_shared::metadata::set_metadata_configuration;
     use lazy_static::lazy_static;
+    use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
+    use oid4vci::credential_format_profiles::{w3c_verifiable_credentials, CredentialFormats, Parameters};
     use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
     use serde_json::json;
 
@@ -111,16 +151,28 @@ pub mod server_config_tests {
     }
     #[test]
     fn test_create_credentials_supported() {
+        set_metadata_configuration("did:key");
+
         ServerConfigTestFramework::with(ServerConfigServices)
             .given(vec![ServerConfigEvent::ServerMetadataInitialized {
                 authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
             }])
-            .when(ServerConfigCommand::CreateCredentialConfiguration {
-                credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
+            .when(ServerConfigCommand::AddCredentialConfiguration {
+                credential_configuration_id: "0".to_string(),
+                credential_format_with_parameters: CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
+                    parameters: w3c_verifiable_credentials::jwt_vc_json::JwtVcJsonParameters {
+                        credential_definition: w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition {
+                            type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
+                            credential_subject: Default::default(),
+                        },
+                        order: None,
+                    },
+                }),
+                display: vec![],
             })
-            .then_expect_events(vec![ServerConfigEvent::CredentialConfigurationCreated {
-                credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
+            .then_expect_events(vec![ServerConfigEvent::CredentialConfigurationAdded {
+                credential_configurations: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
             }]);
     }
 
@@ -133,10 +185,20 @@ pub mod server_config_tests {
                     "format": "jwt_vc_json",
                     "cryptographic_binding_methods_supported": [
                         "did:key",
+                        "did:key",
+                        "did:iota:rms",
+                        "did:jwk",
                     ],
                     "credential_signing_alg_values_supported": [
                         "EdDSA"
                     ],
+                    "proof_types_supported": {
+                        "jwt": {
+                            "proof_signing_alg_values_supported": [
+                                "EdDSA"
+                            ]
+                        }
+                    },
                     "credential_definition":{
                         "type": [
                             "VerifiableCredential",

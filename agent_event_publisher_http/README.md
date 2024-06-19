@@ -46,7 +46,7 @@ CredentialResponseCreated
 
 ```
 ServerMetadataLoaded
-CredentialConfigurationCreated
+CredentialConfigurationAdded
 ```
 
 #### `authorization_request`
