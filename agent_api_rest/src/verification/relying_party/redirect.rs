@@ -63,7 +63,7 @@ pub mod tests {
     };
     use agent_event_publisher_http::{EventPublisherHttp, TEST_EVENT_PUBLISHER_HTTP_CONFIG};
     use agent_secret_manager::{secret_manager, subject::Subject};
-    use agent_shared::config;
+    use agent_shared::metadata::set_metadata_configuration;
     use agent_store::{in_memory, EventPublisher};
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
@@ -71,6 +71,7 @@ pub mod tests {
         http::{self, Request},
         Router,
     };
+    use jsonwebtoken::Algorithm;
     use oid4vc_core::{
         authorization_request::{AuthorizationRequest, Object},
         client_metadata::ClientMetadataResource,
@@ -98,7 +99,9 @@ pub mod tests {
                     subject_syntax_types_supported: vec![SubjectSyntaxType::Did(
                         DidMethod::from_str("did:key").unwrap(),
                     )],
+                    id_token_signed_response_alg: None,
                 },
+                other: Default::default(),
             })
             .nonce("nonce".to_string())
             .state(state)
@@ -109,7 +112,8 @@ pub mod tests {
             Arc::new(Subject {
                 secret_manager: secret_manager().await,
             }),
-            "did:key",
+            vec!["did:key"],
+            vec![Algorithm::EdDSA],
         )
         .unwrap();
         let authorization_response = provider_manager
@@ -138,6 +142,8 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
     async fn test_redirect_endpoint() {
+        set_metadata_configuration("did:key");
+
         let mock_server = MockServer::start().await;
 
         Mock::given(method("POST"))
@@ -167,11 +173,7 @@ pub mod tests {
         let event_publishers = vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>];
 
         let issuance_state = in_memory::issuance_state(Default::default()).await;
-        let verification_state = in_memory::verification_state(
-            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
-            event_publishers,
-        )
-        .await;
+        let verification_state = in_memory::verification_state(test_verification_services(), event_publishers).await;
 
         let mut app = app((issuance_state, verification_state));
 

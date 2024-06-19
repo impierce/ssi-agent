@@ -49,6 +49,7 @@ services:
       # AGENT_CONFIG_ISSUER_FRAGMENT: "bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"
       # AGENT_CONFIG_DEFAULT_DID_METHOD: "did:iota:rms"
     volumes:
+      - ../../agent_application/config.yml:/app/agent_application/config.yml
       - ../../agent_secret_manager/tests/res/selv.stronghold:/app/res/stronghold
       - ../../agent_event_publisher_http/config.yml:/app/agent_event_publisher_http/config.yml
       - ../../agent_verification/presentation_definitions:/app/agent_verification/presentation_definitions

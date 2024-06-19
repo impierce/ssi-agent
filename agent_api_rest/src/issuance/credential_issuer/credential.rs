@@ -64,7 +64,7 @@ pub(crate) async fn credential(
         StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
-    let timeout = config!("external_server_response_timeout_ms")
+    let timeout = config!("external_server_response_timeout_ms", String)
         .ok()
         .and_then(|external_server_response_timeout_ms| external_server_response_timeout_ms.parse().ok())
         .unwrap_or(DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS);
@@ -142,6 +142,7 @@ pub(crate) async fn credential(
 
 #[cfg(test)]
 mod tests {
+    use agent_shared::metadata::{load_metadata, set_metadata_configuration};
     use std::sync::Arc;
 
     use crate::{
@@ -153,9 +154,9 @@ mod tests {
     };
 
     use super::*;
+    use crate::issuance::credentials::tests::credentials;
     use agent_event_publisher_http::{EventPublisherHttp, TEST_EVENT_PUBLISHER_HTTP_CONFIG};
     use agent_issuance::{offer::event::OfferEvent, startup_commands::startup_commands, state::initialize};
-    use agent_shared::config;
     use agent_store::{in_memory, EventPublisher};
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
@@ -290,7 +291,7 @@ mod tests {
         #[case] is_self_signed: bool,
         #[case] delay: u128,
     ) {
-        use crate::issuance::credentials::tests::credentials;
+        set_metadata_configuration("did:key");
 
         let (external_server, issuance_event_publishers, verification_event_publishers) = if with_external_server {
             let external_server = MockServer::start().await;
@@ -323,12 +324,9 @@ mod tests {
         };
 
         let issuance_state = in_memory::issuance_state(issuance_event_publishers).await;
-        let verification_state = in_memory::verification_state(
-            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
-            verification_event_publishers,
-        )
-        .await;
-        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
+        let verification_state =
+            in_memory::verification_state(test_verification_services(), verification_event_publishers).await;
+        initialize(&issuance_state, startup_commands(BASE_URL.clone(), &load_metadata())).await;
 
         let mut app = app((issuance_state, verification_state));
 

@@ -135,7 +135,7 @@ pub(crate) async fn authorization_requests(
 pub mod tests {
     use super::*;
     use crate::app;
-    use agent_shared::config;
+    use agent_shared::metadata::set_metadata_configuration;
     use agent_store::in_memory;
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
@@ -217,12 +217,10 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_authorization_requests_endpoint(#[case] by_value: bool) {
+        set_metadata_configuration("did:key");
+
         let issuance_state = in_memory::issuance_state(Default::default()).await;
-        let verification_state = in_memory::verification_state(
-            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
-            Default::default(),
-        )
-        .await;
+        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
         let mut app = app((issuance_state, verification_state));
 
         authorization_requests(&mut app, by_value).await;

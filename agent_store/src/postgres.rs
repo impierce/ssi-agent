@@ -68,7 +68,7 @@ where
 }
 
 pub async fn issuance_state(event_publishers: Vec<Box<dyn EventPublisher>>) -> IssuanceState {
-    let pool = default_postgress_pool(&config!("db_connection_string").unwrap()).await;
+    let pool = default_postgress_pool(&config!("db_connection_string", String).unwrap()).await;
 
     // Initialize the postgres repositories.
     let server_config = Arc::new(PostgresViewRepository::new("server_config", pool.clone()));
@@ -128,7 +128,7 @@ pub async fn verification_state(
     verification_services: Arc<VerificationServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> VerificationState {
-    let pool = default_postgress_pool(&config!("db_connection_string").unwrap()).await;
+    let pool = default_postgress_pool(&config!("db_connection_string", String).unwrap()).await;
 
     // Initialize the postgres repositories.
     let authorization_request = Arc::new(PostgresViewRepository::new("authorization_request", pool.clone()));

@@ -23,11 +23,17 @@ pub(crate) async fn openid_credential_issuer(State(state): State<IssuanceState>)
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use crate::{app, tests::BASE_URL};
 
     use super::*;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
-    use agent_shared::{config, UrlAppendHelpers};
+    use agent_shared::{
+        config,
+        metadata::{load_metadata, set_metadata_configuration},
+        UrlAppendHelpers,
+    };
     use agent_store::in_memory;
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
@@ -35,6 +41,7 @@ mod tests {
         http::{self, Request},
         Router,
     };
+    use jsonwebtoken::Algorithm;
     use oid4vci::{
         credential_format_profiles::{
             w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, CredentialFormats, Parameters,
@@ -43,6 +50,8 @@ mod tests {
             credential_configurations_supported::CredentialConfigurationsSupportedObject,
             credential_issuer_metadata::CredentialIssuerMetadata,
         },
+        proof::KeyProofMetadata,
+        ProofType,
     };
     use serde_json::json;
     use tower::Service;
@@ -85,17 +94,25 @@ mod tests {
                                 .into(),
                         }),
                         scope: None,
-                        cryptographic_binding_methods_supported: vec!["did:key".to_string()],
+                        cryptographic_binding_methods_supported: vec![
+                            "did:key".to_string(),
+                            "did:key".to_string(),
+                            "did:iota:rms".to_string(),
+                            "did:jwk".to_string(),
+                        ],
                         credential_signing_alg_values_supported: vec!["EdDSA".to_string()],
-                        // TODO
-                        // proof_types_supported: Some(vec![ProofType::Jwt]),
+                        proof_types_supported: HashMap::from_iter(vec![(
+                            ProofType::Jwt,
+                            KeyProofMetadata {
+                                proof_signing_alg_values_supported: vec![Algorithm::EdDSA],
+                            },
+                        )]),
                         display: vec![json!({
-                           "name": config!("credential_name").unwrap(),
+                           "name": config!("credential_name", String).unwrap(),
                            "logo": {
-                                "url": config!("credential_logo_url").unwrap()
+                                "url": config!("credential_logo_url", String).unwrap()
                            }
                         })],
-                        ..Default::default()
                     }
                 )]
                 .into_iter()
@@ -108,14 +125,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_oauth_authorization_server_endpoint() {
+    async fn test_openid_credential_issuer_endpoint() {
+        set_metadata_configuration("did:key");
+
         let issuance_state = in_memory::issuance_state(Default::default()).await;
-        let verification_state = in_memory::verification_state(
-            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
-            Default::default(),
-        )
-        .await;
-        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
+        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
+        initialize(&issuance_state, startup_commands(BASE_URL.clone(), &load_metadata())).await;
 
         let mut app = app((issuance_state, verification_state));
 
