@@ -83,12 +83,17 @@ impl Aggregate for ServerConfig {
                     ..Default::default()
                 };
 
-                let mut credential_configurations = self
-                    .credential_issuer_metadata
-                    .credential_configurations_supported
-                    .clone();
+                let credential_configurations = HashMap::from_iter(vec![(
+                    credential_configuration_id.clone(),
+                    credential_configuration.clone(),
+                )]);
+                // TODO: Uncomment this once we support Batch credentials.
+                // let mut credential_configurations = self
+                //     .credential_issuer_metadata
+                //     .credential_configurations_supported
+                //     .clone();
+                // credential_configurations.insert(credential_configuration_id, credential_configuration);
 
-                credential_configurations.insert(credential_configuration_id, credential_configuration);
                 Ok(vec![CredentialConfigurationAdded {
                     credential_configurations,
                 }])
