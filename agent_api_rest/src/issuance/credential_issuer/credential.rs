@@ -323,7 +323,6 @@ mod tests {
                 .prepare_credential_event_trigger(Arc::new(Mutex::new(Some(app.clone()))), is_self_signed, delay)
                 .await;
         }
-        println!("HERE2");
 
         // When `with_external_server` is false, then the credentials endpoint does not need to be called before the
         // start of the flow, since the `external_server` will do this once it is triggered by the
@@ -331,13 +330,10 @@ mod tests {
         if !with_external_server {
             credentials(&mut app).await;
         }
-        println!("HERE3");
 
         let pre_authorized_code = offers(&mut app).await;
-        println!("HERE4");
 
         let access_token = token(&mut app, pre_authorized_code).await;
-        println!("HERE5");
 
         let response = app
             .oneshot(
@@ -375,11 +371,9 @@ mod tests {
             .await
             .unwrap();
 
-        println!("HERE6");
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers().get("Content-Type").unwrap(), "application/json");
 
-        println!("HERE7");
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(
