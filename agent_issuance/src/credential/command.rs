@@ -1,3 +1,4 @@
+use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use serde::Deserialize;
 
 use super::entity::Data;
@@ -7,7 +8,7 @@ use super::entity::Data;
 pub enum CredentialCommand {
     CreateUnsignedCredential {
         data: Data,
-        credential_format_template: serde_json::Value,
+        credential_configuration: CredentialConfigurationsSupportedObject,
     },
     CreateSignedCredential {
         signed_credential: serde_json::Value,

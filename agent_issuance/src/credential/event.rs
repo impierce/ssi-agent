@@ -1,4 +1,5 @@
 use cqrs_es::DomainEvent;
+use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use serde::{Deserialize, Serialize};
 
 use super::entity::Data;
@@ -8,7 +9,7 @@ pub enum CredentialEvent {
     // TODO: rename to `DataCredentialCreated`?
     UnsignedCredentialCreated {
         data: Data,
-        credential_format_template: serde_json::Value,
+        credential_configuration: CredentialConfigurationsSupportedObject,
     },
     SignedCredentialCreated {
         signed_credential: serde_json::Value,

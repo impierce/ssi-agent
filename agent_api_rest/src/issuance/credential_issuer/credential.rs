@@ -150,10 +150,11 @@ mod tests {
         issuance::{
             credential_issuer::token::tests::token, credentials::CredentialsEndpointRequest, offers::tests::offers,
         },
-        tests::{BASE_URL, OFFER_ID},
+        tests::{BASE_URL, CREDENTIAL_CONFIGURATION_ID, OFFER_ID},
     };
 
     use super::*;
+    use crate::configurations::credential_configurations::tests::credential_configurations;
     use crate::issuance::credentials::tests::credentials;
     use agent_event_publisher_http::{EventPublisherHttp, TEST_EVENT_PUBLISHER_HTTP_CONFIG};
     use agent_issuance::{offer::event::OfferEvent, startup_commands::startup_commands, state::initialize};
@@ -173,24 +174,7 @@ mod tests {
         Mock, MockServer, ResponseTemplate,
     };
 
-    const CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dF\
-                                  ODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtn\
-                                  RTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJ\
-                                  pc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXd\
-                                  KdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp\
-                                  2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwiZXhwIjo5OTk5OTk5OTk\
-                                  5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8\
-                                  yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmc\
-                                  vc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHA6Ly9\
-                                  leGFtcGxlLmNvbS9jcmVkZW50aWFscy8zNTI3IiwidHlwZSI6WyJWZXJpZmlhYmx\
-                                  lQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGl\
-                                  kOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05\
-                                  rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5\
-                                  hbWUiOiJUZWFtd29yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN\
-                                  0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJpZCI6ImR\
-                                  pZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3J\
-                                  qWnBYM3FkIn19fQ.MzHsluxKNsnA01df0kUyXVBIzkBJajKhHbuG-_vNGz0QAPQ1\
-                                  6jZ4IwAtEwt6XfbV9luFalRL3qtsmDvaNBf7CA";
+    const CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjoiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJ0eXBlIjoiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwiZmlyc3RfbmFtZSI6IkZlcnJpcyIsImxhc3RfbmFtZSI6IlJ1c3RhY2VhbiJ9LCJpc3N1ZXIiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIn19.ZSfzXAbpDix-TWAP1721soqYOPebM9YlpzcT1qs-mtSiWOOAfURh3edLUBhojXCLU1auX_qKPYb8zXoJ0YYrDw";
 
     trait CredentialEventTrigger {
         async fn prepare_credential_event_trigger(
@@ -232,6 +216,7 @@ mod tests {
                                         offer_id: offer_id.clone(),
                                         credential: json!(CREDENTIAL_JWT),
                                         is_signed: true,
+                                        credential_configuration_id: CREDENTIAL_CONFIGURATION_ID.to_string(),
                                     }
                                 } else {
                                     // ...or else, submitting the data that will be signed inside `UniCore`.
@@ -245,6 +230,7 @@ mod tests {
                                             }
                                         }),
                                         is_signed: false,
+                                        credential_configuration_id: CREDENTIAL_CONFIGURATION_ID.to_string(),
                                     }
                                 };
 
@@ -330,11 +316,15 @@ mod tests {
 
         let mut app = app((issuance_state, verification_state));
 
+        credential_configurations(&mut app).await;
+
+        println!("HERE1");
         if let Some(external_server) = &external_server {
             external_server
                 .prepare_credential_event_trigger(Arc::new(Mutex::new(Some(app.clone()))), is_self_signed, delay)
                 .await;
         }
+        println!("HERE2");
 
         // When `with_external_server` is false, then the credentials endpoint does not need to be called before the
         // start of the flow, since the `external_server` will do this once it is triggered by the
@@ -342,10 +332,13 @@ mod tests {
         if !with_external_server {
             credentials(&mut app).await;
         }
+        println!("HERE3");
 
         let pre_authorized_code = offers(&mut app).await;
+        println!("HERE4");
 
         let access_token = token(&mut app, pre_authorized_code).await;
+        println!("HERE5");
 
         let response = app
             .oneshot(
@@ -383,9 +376,11 @@ mod tests {
             .await
             .unwrap();
 
+        println!("HERE6");
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers().get("Content-Type").unwrap(), "application/json");
 
+        println!("HERE7");
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(
