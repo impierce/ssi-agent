@@ -42,7 +42,7 @@ impl VerificationServices {
                 subject_syntax_types_supported: metadata.subject_syntax_types_supported.clone(),
                 id_token_signed_response_alg,
             },
-            other: HashMap::from_iter(vec![(
+            other: HashMap::from_iter([(
                 "id_token_signing_alg_values_supported".to_string(),
                 json!(metadata.id_token_signing_alg_values_supported),
             )]),
@@ -74,7 +74,7 @@ impl VerificationServices {
                     })
                     .collect(),
             },
-            other: HashMap::from_iter(vec![(
+            other: HashMap::from_iter([(
                 "subject_syntax_types_supported".to_string(),
                 json!(metadata.subject_syntax_types_supported),
             )]),

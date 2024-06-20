@@ -7,6 +7,51 @@
 	},
 	"item": [
 		{
+			"name": "Configurations",
+			"item": [
+				{
+					"name": "credential_configurations",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"credentialConfigurationId\":\"{{CREDENTIAL_CONFIGURATION_ID}}\",\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\n            \"VerifiableCredential\"\n        ]\n    },\n    \"display\": [{\n        \"name\": \"Identity Credential\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"url\": \"https://impierce.com/images/logo-blue.png\",\n            \"alt_text\": \"UniCore Logo\"\n        }\n    }]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v1/configurations/credential_configurations",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v1",
+								"configurations",
+								"credential_configurations"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "Issuance",
 			"item": [
 				{
@@ -551,6 +596,11 @@
 		{
 			"key": "HOST",
 			"value": "http://192.168.1.127:3033",
+			"type": "string"
+		},
+		{
+			"key": "CREDENTIAL_CONFIGURATION_ID",
+			"value": "identity_credential",
 			"type": "string"
 		},
 		{
