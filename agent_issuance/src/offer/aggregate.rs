@@ -429,7 +429,7 @@ pub mod tests {
             ])
             .when(OfferCommand::CreateCredentialResponse {
                 offer_id: Default::default(),
-                signed_credentials: vec![json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.clone())],
+                signed_credentials: vec![json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT)],
             })
             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
                 offer_id: Default::default(),
@@ -459,7 +459,7 @@ pub mod tests {
 
         TestSubject {
             subject: SUBJECT_KEY_DID.clone(),
-            credential: OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.clone(),
+            credential: OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string(),
             pre_authorized_code: pre_authorized_code.clone(),
             access_token: ACCESS_TOKENS.lock().unwrap()[0].clone(),
             form_url_encoded_credential_offer: format!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fexample.com%2F%22%2C%22credential_configuration_ids%22%3A%5B%220%22%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%7D%7D%7D"),
