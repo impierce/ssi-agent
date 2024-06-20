@@ -177,8 +177,11 @@ pub mod tests {
         });
         pub static ref CREDENTIAL: serde_json::Value = json!({
             "@context": "https://www.w3.org/2018/credentials/v1",
-            "type": "VerifiableCredential",
-            "issuer": "did:temp:FIXTHISS",
+            "type": [ "VerifiableCredential" ],
+            "issuer": {
+                "id": "https://my-domain.example.org/",
+                "name": "UniCore"
+            },
             "issuanceDate": "2010-01-01T00:00:00Z",
             "credentialSubject": {
                 "first_name": "Ferris",
