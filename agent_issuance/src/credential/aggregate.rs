@@ -79,24 +79,27 @@ impl Aggregate for Credential {
                     #[cfg(not(feature = "test"))]
                     let issuance_date = chrono::Utc::now().to_rfc3339();
 
-                    let name = config!("display", Vec<Display>)
+                    let name = match config!("display", Vec<Display>)
                         .ok()
                         .as_ref()
                         .and_then(|displays| displays.first())
-                        .and_then(|display| display.name.clone())
-                        .unwrap_or("FIX THISS".to_string());
+                        .map(|display| display.name.clone())
+                    {
+                        Some(name) => name,
+                        None => unreachable!("The display.name parameter is not set"),
+                    };
 
-                    let issuer: Profile = config!("url", String)
-                        .ok()
-                        .and_then(|url| {
-                            ProfileBuilder::default()
-                                .id(url)
-                                .type_("Profile")
-                                .name(name)
-                                .try_into()
-                                .ok()
-                        })
-                        .expect("FIX THISS");
+                    let issuer: Profile = match config!("url", String).ok().and_then(|url| {
+                        ProfileBuilder::default()
+                            .id(url)
+                            .type_("Profile")
+                            .name(name)
+                            .try_into()
+                            .ok()
+                    }) {
+                        Some(issuer) => issuer,
+                        None => unreachable!("The `AGENT_CONFIG_URL` environment variable is not set."),
+                    };
 
                     let mut credential_types: Vec<String> = type_.clone();
 
@@ -104,27 +107,31 @@ impl Aggregate for Credential {
                     while let Some(credential_format) = credential_types.pop() {
                         match credential_format.as_str() {
                             "VerifiableCredential" => {
-                                let subject = {
-                                    identity_credential::credential::Subject::from_json_value(
-                                        data.raw.get("credentialSubject").expect("FIX THIS").clone(),
-                                    )
-                                    .unwrap()
-                                };
+                                let subject = data
+                                    .raw
+                                    .get("credentialSubject")
+                                    .and_then(|credential_subject| {
+                                        identity_credential::credential::Subject::from_json_value(
+                                            credential_subject.clone(),
+                                        )
+                                        .ok()
+                                    })
+                                    .ok_or(MissingOrInvalidCredentialSubjectError)?;
 
-                                let credential: W3CVerifiableCredential = serde_json::from_value::<Issuer>(json!({
+                                let issuer = match serde_json::from_value::<Issuer>(json!({
                                     "id": issuer.id,
                                     "name": issuer.name,
-                                }))
-                                .ok()
-                                .and_then(|issuer| {
-                                    W3CVerifiableCredentialBuilder::default()
-                                        .issuer(issuer)
-                                        .subject(subject)
-                                        .issuance_date(issuance_date.parse().expect("Could not parse issuance_date"))
-                                        .build()
-                                        .ok()
-                                })
-                                .expect("FIX THISS");
+                                })) {
+                                    Ok(issuer) => issuer,
+                                    Err(_) => unreachable!("Couldn't parse issuer"),
+                                };
+
+                                let credential: W3CVerifiableCredential = W3CVerifiableCredentialBuilder::default()
+                                    .issuer(issuer)
+                                    .subject(subject)
+                                    .issuance_date(issuance_date.parse().expect("Could not parse issuance_date"))
+                                    .build()
+                                    .map_err(|e| InvalidVerifiableCredentialError(e.to_string()))?;
 
                                 // Set the type to the original credential configuration type.
                                 let mut raw = json!(credential);
@@ -150,7 +157,7 @@ impl Aggregate for Credential {
                                     .and_then(|credential_subject| {
                                         serde_json::from_value::<AchievementSubject>(credential_subject.clone()).ok()
                                     })
-                                    .expect("FIX THISS");
+                                    .ok_or(MissingOrInvalidCredentialSubjectError)?;
 
                                 let credential: AchievementCredential = AchievementCredentialBuilder::default()
                                     .context(vec![
@@ -167,7 +174,7 @@ impl Aggregate for Credential {
                                     .credential_subject(credential_subject)
                                     .issuance_date(issuance_date)
                                     .try_into()
-                                    .expect("FIX THISS");
+                                    .map_err(InvalidVerifiableCredentialError)?;
 
                                 return Ok(vec![UnsignedCredentialCreated {
                                     data: Data { raw: json!(credential) },
@@ -180,7 +187,7 @@ impl Aggregate for Credential {
 
                     Err(UnsupportedCredentialFormat)
                 }
-                _ => panic!("FIX THIS"),
+                _ => Err(UnsupportedCredentialFormat),
             },
             CreateSignedCredential { signed_credential } => Ok(vec![SignedCredentialCreated { signed_credential }]),
             SignCredential { subject_id, overwrite } => {

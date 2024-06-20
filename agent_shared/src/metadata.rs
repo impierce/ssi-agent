@@ -20,7 +20,7 @@ pub struct Logo {
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Display {
-    pub name: Option<String>,
+    pub name: String,
     pub locale: Option<String>,
     pub logo: Option<Logo>,
 }

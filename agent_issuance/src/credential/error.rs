@@ -7,4 +7,10 @@ pub enum CredentialError {
 
     #[error("This Credential format it not supported")]
     UnsupportedCredentialFormat,
+
+    #[error("The supplied `credentialSubject` is missing or invalid")]
+    MissingOrInvalidCredentialSubjectError,
+
+    #[error("The verifiable credential is invalid: {0}")]
+    InvalidVerifiableCredentialError(String),
 }
