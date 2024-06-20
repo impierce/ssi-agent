@@ -12,7 +12,7 @@ async-trait.workspace = true
 axum.workspace = true
 cqrs-es.workspace = true
 chrono = "0.4"
-types-ob-v3 = { git = "https://github.com/impierce/digital-credential-data-models.git" }
+types-ob-v3 = { git = "https://github.com/impierce/digital-credential-data-models.git", rev = "9f16c27" }
 derivative = "2.2"
 futures.workspace = true
 identity_core = "1.3"
