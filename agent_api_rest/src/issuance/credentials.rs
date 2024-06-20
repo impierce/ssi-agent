@@ -50,7 +50,7 @@ pub(crate) async fn credentials(
         offer_id,
         credential: data,
         is_signed,
-        credential_configuration_id, // <-- not really necessary yet.
+        credential_configuration_id,
     }) = serde_json::from_value(payload)
     else {
         return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
@@ -70,11 +70,19 @@ pub(crate) async fn credentials(
                     ..
                 }),
             ..
-        })) => credential_configurations_supported
-            .get(&credential_configuration_id)
-            // FIXI THISS
-            .expect("THIS IS THE ERROR")
-            .clone(),
+        })) => {
+            if let Some(credential_configuration) =
+                credential_configurations_supported.get(&credential_configuration_id)
+            {
+                credential_configuration.clone()
+            } else {
+                return (
+                    StatusCode::NOT_FOUND,
+                    format!("No Credential Configuration found with id: `{credential_configuration_id}`"),
+                )
+                    .into_response();
+            }
+        }
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 

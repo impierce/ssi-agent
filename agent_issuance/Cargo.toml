@@ -12,7 +12,7 @@ async-trait.workspace = true
 axum.workspace = true
 cqrs-es.workspace = true
 chrono = "0.4"
-types-ob-v3 = { path = "../../digital-credential-data-models/crates/types-ob-v3" }
+types-ob-v3 = { git = "https://github.com/impierce/digital-credential-data-models.git" }
 derivative = "2.2"
 futures.workspace = true
 identity_core = "1.3"

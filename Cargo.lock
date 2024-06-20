@@ -4256,7 +4256,9 @@ dependencies = [
 [[package]]
 name = "macro-derive"
 version = "0.1.0"
+source = "git+https://github.com/impierce/digital-credential-data-models.git#9f16c27b4fa2d413269fc10b38c4ce66a10a0d49"
 dependencies = [
+ "convert_case 0.6.0",
  "proc-macro2",
  "quote",
  "syn 2.0.58",
@@ -7658,6 +7660,7 @@ checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
 [[package]]
 name = "types-common"
 version = "0.1.0"
+source = "git+https://github.com/impierce/digital-credential-data-models.git#9f16c27b4fa2d413269fc10b38c4ce66a10a0d49"
 dependencies = [
  "chrono",
  "email_address",
@@ -7672,6 +7675,7 @@ dependencies = [
 [[package]]
 name = "types-ob-v3"
 version = "0.1.0"
+source = "git+https://github.com/impierce/digital-credential-data-models.git#9f16c27b4fa2d413269fc10b38c4ce66a10a0d49"
 dependencies = [
  "chrono",
  "regex",

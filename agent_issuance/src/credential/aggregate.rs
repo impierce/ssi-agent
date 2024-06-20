@@ -4,8 +4,9 @@ use agent_shared::metadata::Display;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;
+use identity_core::convert::FromJson;
 use identity_credential::credential::{
-    Credential as W3CVerifiableCredential, CredentialBuilder as W3CVerifiableCredentialBuilder,
+    Credential as W3CVerifiableCredential, CredentialBuilder as W3CVerifiableCredentialBuilder, Issuer,
 };
 use jsonwebtoken::{Algorithm, Header};
 use oid4vc_core::{jwt, Subject as _};
@@ -20,7 +21,8 @@ use serde_json::json;
 use std::sync::Arc;
 use tracing::info;
 use types_ob_v3::prelude::{
-    AchievementCredential, AchievementCredentialBuilder, AchievementCredentialType, AchievementSubject, ProfileBuilder,
+    AchievementCredential, AchievementCredentialBuilder, AchievementCredentialType, AchievementSubject, Profile,
+    ProfileBuilder,
 };
 
 use crate::credential::command::CredentialCommand;
@@ -55,6 +57,7 @@ impl Aggregate for Credential {
         _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         use CredentialCommand::*;
+        use CredentialError::*;
         use CredentialEvent::*;
 
         info!("Handling command: {:?}", command);
@@ -71,85 +74,111 @@ impl Aggregate for Credential {
                             ..
                         },
                 }) => {
-                    let displays = config!("display", Vec<Display>).expect("FIX THISS");
-
-                    let display = displays.first().expect("FIX THISS");
-
                     #[cfg(feature = "test")]
                     let issuance_date = "2010-01-01T00:00:00Z";
                     #[cfg(not(feature = "test"))]
                     let issuance_date = chrono::Utc::now().to_rfc3339();
 
-                    let credential_format = type_.last().expect("FIX THISS").as_str();
-                    match credential_format {
-                        "VerifiableCredential" => {
-                            let subject = {
-                                use identity_core::convert::FromJson;
+                    let name = config!("display", Vec<Display>)
+                        .ok()
+                        .as_ref()
+                        .and_then(|displays| displays.first())
+                        .and_then(|display| display.name.clone())
+                        .unwrap_or("FIX THISS".to_string());
 
-                                identity_credential::credential::Subject::from_json_value(
-                                    data.raw.get("credentialSubject").expect("FIX THIS").clone(),
-                                )
-                                .unwrap()
-                            };
-
-                            let credential: W3CVerifiableCredential = W3CVerifiableCredentialBuilder::default()
-                                .issuer("did:temp:FIXTHISS".parse::<url::Url>().unwrap())
-                                .subject(subject)
-                                .issuance_date(issuance_date.parse().expect("FIX THISS"))
-                                .build()
-                                // FIX THISS
-                                .unwrap();
-
-                            Ok(vec![UnsignedCredentialCreated {
-                                data: Data { raw: json!(credential) },
-                                credential_configuration,
-                            }])
-                        }
-                        "AchievementCredential" | "OpenBadgeCredential" => {
-                            let name = credential_configuration
-                                .display
-                                .first()
-                                .expect("FIX THISS)")
-                                .get("name")
-                                .expect("FIX THISS")
-                                .as_str()
-                                .expect("FIX THISS");
-
-                            let credential: AchievementCredential = AchievementCredentialBuilder::default()
-                                .context(vec![
-                                    "https://www.w3.org/2018/credentials/v1",
-                                    "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json",
-                                ])
-                                .type_(AchievementCredentialType::from(vec![
-                                    "VerifiableCredential",
-                                    credential_format,
-                                ]))
-                                .id("http://example.com/credentials/3527")
-                                // TODO: get from Display parameters
+                    let issuer: Profile = config!("url", String)
+                        .ok()
+                        .and_then(|url| {
+                            ProfileBuilder::default()
+                                .id(url)
+                                .type_("Profile")
                                 .name(name)
-                                .issuer(
-                                    ProfileBuilder::default()
-                                        .id("https://example.com/issuers/876543")
-                                        .type_("Profile")
-                                        .name(display.name.as_ref().expect("FIX THISS").clone()),
-                                )
-                                .credential_subject(
-                                    serde_json::from_value::<AchievementSubject>(
+                                .try_into()
+                                .ok()
+                        })
+                        .expect("FIX THISS");
+
+                    let mut credential_types: Vec<String> = type_.clone();
+
+                    // Loop through all the items in the `type` array in reverse until we find a match.
+                    while let Some(credential_format) = credential_types.pop() {
+                        match credential_format.as_str() {
+                            "VerifiableCredential" => {
+                                let subject = {
+                                    identity_credential::credential::Subject::from_json_value(
                                         data.raw.get("credentialSubject").expect("FIX THIS").clone(),
                                     )
-                                    .unwrap(),
-                                )
-                                .issuance_date(issuance_date)
-                                .try_into()
-                                .unwrap();
+                                    .unwrap()
+                                };
 
-                            Ok(vec![UnsignedCredentialCreated {
-                                data: Data { raw: json!(credential) },
-                                credential_configuration,
-                            }])
+                                let credential: W3CVerifiableCredential = serde_json::from_value::<Issuer>(json!({
+                                    "id": issuer.id,
+                                    "name": issuer.name,
+                                }))
+                                .ok()
+                                .and_then(|issuer| {
+                                    W3CVerifiableCredentialBuilder::default()
+                                        .issuer(issuer)
+                                        .subject(subject)
+                                        .issuance_date(issuance_date.parse().expect("Could not parse issuance_date"))
+                                        .build()
+                                        .ok()
+                                })
+                                .expect("FIX THISS");
+
+                                // Set the type to the original credential configuration type.
+                                let mut raw = json!(credential);
+                                raw["type"] = json!(type_);
+
+                                return Ok(vec![UnsignedCredentialCreated {
+                                    data: Data { raw },
+                                    credential_configuration,
+                                }]);
+                            }
+                            "AchievementCredential" | "OpenBadgeCredential" => {
+                                let name = credential_configuration
+                                    .display
+                                    .first()
+                                    .and_then(|display| display.get("name"))
+                                    .and_then(|name| name.as_str())
+                                    .map(ToString::to_string)
+                                    .unwrap_or("UniCore".to_string());
+
+                                let credential_subject = data
+                                    .raw
+                                    .get("credentialSubject")
+                                    .and_then(|credential_subject| {
+                                        serde_json::from_value::<AchievementSubject>(credential_subject.clone()).ok()
+                                    })
+                                    .expect("FIX THISS");
+
+                                let credential: AchievementCredential = AchievementCredentialBuilder::default()
+                                    .context(vec![
+                                        "https://www.w3.org/2018/credentials/v1",
+                                        "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json",
+                                    ])
+                                    .type_(AchievementCredentialType::from(vec![
+                                        "VerifiableCredential",
+                                        &credential_format,
+                                    ]))
+                                    .id("http://example.com/credentials/3527")
+                                    .name(name)
+                                    .issuer(issuer)
+                                    .credential_subject(credential_subject)
+                                    .issuance_date(issuance_date)
+                                    .try_into()
+                                    .expect("FIX THISS");
+
+                                return Ok(vec![UnsignedCredentialCreated {
+                                    data: Data { raw: json!(credential) },
+                                    credential_configuration,
+                                }]);
+                            }
+                            _ => continue,
                         }
-                        _ => panic!("FIX THIS"),
                     }
+
+                    Err(UnsupportedCredentialFormat)
                 }
                 _ => panic!("FIX THIS"),
             },
@@ -184,14 +213,13 @@ impl Aggregate for Credential {
                     // Replace the original credentialSubject with the new map
                     credential.raw["credentialSubject"] = serde_json::Value::Object(new_credential_subject);
 
-                    // panic!("{}", serde_json::to_string_pretty(&credential.raw).unwrap());
-
                     json!(jwt::encode(
                         issuer.clone(),
                         Header::new(Algorithm::EdDSA),
                         VerifiableCredentialJwt::builder()
                             .sub(subject_id)
                             .iss(issuer_did)
+                            // TODO: add iat
                             .iat(0)
                             .exp(9999999999i64)
                             .verifiable_credential(credential.raw)
