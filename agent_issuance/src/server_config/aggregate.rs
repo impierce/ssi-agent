@@ -66,7 +66,7 @@ impl Aggregate for ServerConfig {
                 let credential_signing_alg_values_supported =
                     config!("signing_algorithms_supported", Vec<String>).unwrap_or_default();
 
-                let proof_types_supported = HashMap::from_iter(vec![(
+                let proof_types_supported = HashMap::from_iter([(
                     ProofType::Jwt,
                     KeyProofMetadata {
                         proof_signing_alg_values_supported: config!("signing_algorithms_supported", Vec<Algorithm>)

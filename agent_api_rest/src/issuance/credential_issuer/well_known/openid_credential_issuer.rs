@@ -100,7 +100,7 @@ mod tests {
                             "did:jwk".to_string(),
                         ],
                         credential_signing_alg_values_supported: vec!["EdDSA".to_string()],
-                        proof_types_supported: HashMap::from_iter(vec![(
+                        proof_types_supported: HashMap::from_iter([(
                             ProofType::Jwt,
                             KeyProofMetadata {
                                 proof_signing_alg_values_supported: vec![Algorithm::EdDSA],
