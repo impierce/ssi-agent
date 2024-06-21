@@ -29,6 +29,8 @@ use verification::{
     relying_party::{redirect::redirect, request::request},
 };
 
+pub const API_VERSION: &str = "v0";
+
 pub type ApplicationState = (IssuanceState, VerificationState);
 
 pub fn app(state: ApplicationState) -> Router {
@@ -45,12 +47,15 @@ pub fn app(state: ApplicationState) -> Router {
     Router::new()
         // Agent Issuance Preparations
         .route(
-            &path("/v1/configurations/credential_configurations"),
+            &path(&format!("/{API_VERSION}/configurations/credential_configurations")),
             post(configurations::credential_configurations),
         )
-        .route(&path("/v1/credentials"), post(credentials))
-        .route(&path("/v1/credentials/:credential_id"), get(get_credentials))
-        .route(&path("/v1/offers"), post(offers))
+        .route(&path(&format!("/{API_VERSION}/credentials")), post(credentials))
+        .route(
+            &path(&format!("/{API_VERSION}/credentials/:credential_id")),
+            get(get_credentials),
+        )
+        .route(&path(&format!("/{API_VERSION}/offers")), post(offers))
         // OpenID4VCI Pre-Authorized Code Flow
         .route(
             &path("/.well-known/oauth-authorization-server"),
@@ -63,9 +68,14 @@ pub fn app(state: ApplicationState) -> Router {
         .route(&path("/auth/token"), post(token))
         .route(&path("/openid4vci/credential"), post(credential))
         // Agent Verification Preparations
-        .route(&path("/v1/authorization_requests"), post(authorization_requests))
         .route(
-            &path("/v1/authorization_requests/:authorization_request_id"),
+            &path(&format!("/{API_VERSION}/authorization_requests")),
+            post(authorization_requests),
+        )
+        .route(
+            &path(&format!(
+                "/{API_VERSION}/authorization_requests/:authorization_request_id"
+            )),
             get(get_authorization_requests),
         )
         // SIOPv2

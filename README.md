@@ -89,14 +89,14 @@ sequenceDiagram
 
     Note over client, store: Agent Preparations
 
-    client->>api_rest: POST /v1/credentials<br/>offerId: <string><br/>credential: <object>
+    client->>api_rest: POST /v0/credentials<br/>offerId: <string><br/>credential: <object>
     api_rest->>issuance: Command
     issuance->>store: Event(s)
     api_rest->>store: Query
     store->>api_rest: View
     api_rest->>client: 201 CREATED application/json
 
-    client->>api_rest: POST /v1/offers<br/>offerId: <string>
+    client->>api_rest: POST /v0/offers<br/>offerId: <string>
     api_rest->>issuance: Command
     issuance->>store: Event(s)
     api_rest->>store: Query
@@ -132,11 +132,11 @@ sequenceDiagram
 
 ```
 Agent Preparations
-    1: The client sends a `POST` request to the `/v1/credentials` endpoint. The request body contains a (unique) subject ID and a credential object.
+    1: The client sends a `POST` request to the `/v0/credentials` endpoint. The request body contains a (unique) subject ID and a credential object.
   2-3: The API translates the request into a Command and sends it to the core. The core processes the Command and emits one or more Events. The Events are stored in the Event Store.
   4-5: The API sends a Query to the event store to retrieve the View(s) to be returned by the API.
     6: The API returns a `201 CREATED` response with the Credentials View(s) in the response body.
-    7: The client sends a `POST` request to the `/v1/offers` endpoint. The request body contains the subject ID of the subject for which the offer is being created.
+    7: The client sends a `POST` request to the `/v0/offers` endpoint. The request body contains the subject ID of the subject for which the offer is being created.
   8-9: See steps 2-3.
 10-11: See steps 4-5
    12: The API returns a `200 OK` response with the Offer View in the response body.

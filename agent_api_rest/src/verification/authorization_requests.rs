@@ -1,3 +1,4 @@
+use crate::API_VERSION;
 use agent_shared::{
     generate_random_string,
     handlers::{command_handler, query_handler},
@@ -121,7 +122,10 @@ pub(crate) async fn authorization_requests(
         })) => (
             StatusCode::CREATED,
             [
-                (header::LOCATION, format!("/v1/authorization_requests/{state}").as_str()),
+                (
+                    header::LOCATION,
+                    format!("/{API_VERSION}/authorization_requests/{state}").as_str(),
+                ),
                 (header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
             ],
             form_url_encoded_authorization_request,
@@ -166,7 +170,7 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri("/v1/authorization_requests")
+                    .uri(&format!("/{API_VERSION}/authorization_requests"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
                     .unwrap(),

@@ -9,7 +9,7 @@ servers:
     description: Development
 
 paths:
-  /v1/configurations/credential_configurations:
+  /v0/configurations/credential_configurations:
     post:
       tags:
       - Configurations
@@ -101,7 +101,7 @@ paths:
         '200':
           description: A Credential Configuration has been successfully added to the Credential Issuer Metadata
 
-  /v1/credentials:
+  /v0/credentials:
     post:
       summary: Create a new Credential for a given Subject
       # description: n/a
@@ -172,7 +172,7 @@ paths:
             Location:
               schema:
                 type: string
-                example: "/v1/credentials/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
+                example: "/v0/credentials/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
               description: URL of the created resource
           content:
             application/json:
@@ -222,7 +222,7 @@ paths:
                       name: UniCore
                     issuanceDate: '2024-06-21T12:43:20Z'
 
-  /v1/credentials/{credential_id}:
+  /v0/credentials/{credential_id}:
     get:
       summary: Get the Credential with the given Credential ID
       tags:
@@ -248,7 +248,7 @@ paths:
                   summary: Open Badges 3.0
                   externalValue: res/open-badge-response.json
 
-  /v1/offers:
+  /v0/offers:
     post:
       summary: Create a new Offer for one or more Credentials
       tags:
@@ -301,7 +301,7 @@ paths:
       tags:
         - (proxied)
 
-  /v1/authorization_requests:
+  /v0/authorization_requests:
     post:
       summary: Create a new Authorization Request
       # description: n/a
@@ -376,7 +376,7 @@ paths:
               schema:
                 type: string
                 example: "openid://?client_id=did%3Ajwk%3AeyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ&request_uri=http%3A%2F%2F192.168.1.127%3A3033%2Frequest%2F0fc2af709c435975ab5ebbc6dd2d5508c7f4a1cc3a59145a73a39e532bcbfdc7"
-  /v1/authorization_requests/{authorization_requests_id}:
+  /v0/authorization_requests/{authorization_requests_id}:
     get:
       summary: Get the Authorization Request with the given Authorization Request ID
       tags:

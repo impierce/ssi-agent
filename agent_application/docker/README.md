@@ -71,7 +71,7 @@ UniCore facilitates dynamic integration with external systems through just-in-ti
 
 **Custom Credential Signing**
 
-UniCore facilitates the utilization of just-in-time data request events for customized credential signing workflows. This approach enables users to manage the signing process independently, offering greater control over credential issuance. When UniCore verifies a Credential Request from a Wallet, it triggers the `CredentialRequestVerified` event. By utilizing the HTTP Event Publisher, this event, containing essential identifiers like `offer_id` and `subject_id`, can be dispatched to external systems. Subsequently, external systems leverage these identifiers to generate and sign credentials, which are then submitted to UniCore's `/v1/credentials` endpoint.
+UniCore facilitates the utilization of just-in-time data request events for customized credential signing workflows. This approach enables users to manage the signing process independently, offering greater control over credential issuance. When UniCore verifies a Credential Request from a Wallet, it triggers the `CredentialRequestVerified` event. By utilizing the HTTP Event Publisher, this event, containing essential identifiers like `offer_id` and `subject_id`, can be dispatched to external systems. Subsequently, external systems leverage these identifiers to generate and sign credentials, which are then submitted to UniCore's `/v0/credentials` endpoint.
 
 To integrate just-in-time data request events into your workflow, adhere to the following steps:
 
@@ -87,7 +87,7 @@ To integrate just-in-time data request events into your workflow, adhere to the 
    }
    ```
 2. Upon initiation of the OpenID4VCI flow by a Wallet, the CredentialRequestVerified event is triggered, containing relevant identifiers.
-3. The HTTP Event Publisher dispatches the event to the external system. Leveraging the provided identifiers, the external system generates and signs the credential, then submits it to UniCore's `/v1/credentials` endpoint. Refer to the [API specification](../../agent_api_rest/README.md)) for additional details on endpoint usage.
+3. The HTTP Event Publisher dispatches the event to the external system. Leveraging the provided identifiers, the external system generates and signs the credential, then submits it to UniCore's `/v0/credentials` endpoint. Refer to the [API specification](../../agent_api_rest/README.md)) for additional details on endpoint usage.
 
 By default, UniCore will wait up to 1000 ms for the signed credential to arrive. This parameter can be changed by
 setting the `AGENT_API_REST_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS` environment variable.

@@ -36,12 +36,12 @@
 							}
 						},
 						"url": {
-							"raw": "{{HOST}}/v1/configurations/credential_configurations",
+							"raw": "{{HOST}}/v0/configurations/credential_configurations",
 							"host": [
 								"{{HOST}}"
 							],
 							"path": [
-								"v1",
+								"v0",
 								"configurations",
 								"credential_configurations"
 							]
@@ -76,12 +76,12 @@
 							}
 						},
 						"url": {
-							"raw": "{{HOST}}/v1/configurations/credential_configurations",
+							"raw": "{{HOST}}/v0/configurations/credential_configurations",
 							"host": [
 								"{{HOST}}"
 							],
 							"path": [
-								"v1",
+								"v0",
 								"configurations",
 								"credential_configurations"
 							]
@@ -126,12 +126,12 @@
 							}
 						},
 						"url": {
-							"raw": "{{HOST}}/v1/credentials",
+							"raw": "{{HOST}}/v0/credentials",
 							"host": [
 								"{{HOST}}"
 							],
 							"path": [
-								"v1",
+								"v0",
 								"credentials"
 							]
 						}
@@ -170,12 +170,12 @@
 							}
 						},
 						"url": {
-							"raw": "{{HOST}}/v1/credentials",
+							"raw": "{{HOST}}/v0/credentials",
 							"host": [
 								"{{HOST}}"
 							],
 							"path": [
-								"v1",
+								"v0",
 								"credentials"
 							]
 						}
@@ -236,12 +236,12 @@
 							}
 						},
 						"url": {
-							"raw": "{{HOST}}/v1/offers",
+							"raw": "{{HOST}}/v0/offers",
 							"host": [
 								"{{HOST}}"
 							],
 							"path": [
-								"v1",
+								"v0",
 								"offers"
 							]
 						}
@@ -449,12 +449,12 @@
 							}
 						},
 						"url": {
-							"raw": "{{HOST}}/v1/authorization_requests",
+							"raw": "{{HOST}}/v0/authorization_requests",
 							"host": [
 								"{{HOST}}"
 							],
 							"path": [
-								"v1",
+								"v0",
 								"authorization_requests"
 							]
 						}
@@ -518,12 +518,12 @@
 							}
 						},
 						"url": {
-							"raw": "{{HOST}}/v1/authorization_requests",
+							"raw": "{{HOST}}/v0/authorization_requests",
 							"host": [
 								"{{HOST}}"
 							],
 							"path": [
-								"v1",
+								"v0",
 								"authorization_requests"
 							]
 						}
@@ -577,12 +577,12 @@
 							}
 						},
 						"url": {
-							"raw": "{{HOST}}/v1/authorization_requests",
+							"raw": "{{HOST}}/v0/authorization_requests",
 							"host": [
 								"{{HOST}}"
 							],
 							"path": [
-								"v1",
+								"v0",
 								"authorization_requests"
 							]
 						}
