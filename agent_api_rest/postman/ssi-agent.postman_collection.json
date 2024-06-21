@@ -10,7 +10,7 @@
 			"name": "Configurations",
 			"item": [
 				{
-					"name": "credential_configurations",
+					"name": "openbadgesv3_credential_configurations",
 					"event": [
 						{
 							"listen": "test",
@@ -28,7 +28,47 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"credentialConfigurationId\":\"{{CREDENTIAL_CONFIGURATION_ID}}\",\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\n            \"VerifiableCredential\"\n        ]\n    },\n    \"display\": [{\n        \"name\": \"Identity Credential\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"url\": \"https://impierce.com/images/logo-blue.png\",\n            \"alt_text\": \"UniCore Logo\"\n        }\n    }]\n}",
+							"raw": "{\n    \"credentialConfigurationId\":\"openbadge_credential\",\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\n            \"VerifiableCredential\",\n            \"OpenBadgeCredential\"\n        ]\n    },\n    \"display\": [{\n        \"name\": \"Identity Credential\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"url\": \"https://impierce.com/images/logo-blue.png\",\n            \"alt_text\": \"UniCore Logo\"\n        }\n    }]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v1/configurations/credential_configurations",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v1",
+								"configurations",
+								"credential_configurations"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "w3c_vc_credential_configurations",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"credentialConfigurationId\":\"w3c_vc_credential\",\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\n            \"VerifiableCredential\"\n        ]\n    },\n    \"display\": [{\n        \"name\": \"Identity Credential\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"url\": \"https://impierce.com/images/logo-blue.png\",\n            \"alt_text\": \"UniCore Logo\"\n        }\n    }]\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -55,7 +95,7 @@
 			"name": "Issuance",
 			"item": [
 				{
-					"name": "credentials",
+					"name": "openbadgesv3_credentials",
 					"event": [
 						{
 							"listen": "test",
@@ -78,7 +118,51 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    }\n}",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"openbadge_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"type\": [ \"AchievementSubject\" ],\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v1/credentials",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v1",
+								"credentials"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "w3c_vc_credentials",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const location = pm.response.headers.get(\"LOCATION\");",
+									"",
+									"if(location){",
+									"    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -409,6 +493,16 @@
 								"type": "text/javascript",
 								"packages": {}
 							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
 						}
 					],
 					"request": {
@@ -557,13 +651,13 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{HOST}}/.well-known/did.json",
+							"raw": "{{HOST}}/.well-known/did-configuration.json",
 							"host": [
 								"{{HOST}}"
 							],
 							"path": [
 								".well-known",
-								"did.json"
+								"did-configuration.json"
 							]
 						}
 					},
@@ -593,16 +687,6 @@
 		}
 	],
 	"variable": [
-		{
-			"key": "HOST",
-			"value": "http://192.168.1.127:3033",
-			"type": "string"
-		},
-		{
-			"key": "CREDENTIAL_CONFIGURATION_ID",
-			"value": "identity_credential",
-			"type": "string"
-		},
 		{
 			"key": "PRE_AUTHORIZED_CODE",
 			"value": "INITIAL_VALUE",

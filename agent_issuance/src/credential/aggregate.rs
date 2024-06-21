@@ -77,7 +77,7 @@ impl Aggregate for Credential {
                     #[cfg(feature = "test")]
                     let issuance_date = "2010-01-01T00:00:00Z";
                     #[cfg(not(feature = "test"))]
-                    let issuance_date = chrono::Utc::now().to_rfc3339();
+                    let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
                     let name = match config!("display", Vec<Display>)
                         .ok()
@@ -103,20 +103,17 @@ impl Aggregate for Credential {
 
                     let mut credential_types: Vec<String> = type_.clone();
 
+                    let credential_subject_json =
+                        data.raw.get("credentialSubject").ok_or(MissingCredentialSubjectError)?;
+
                     // Loop through all the items in the `type` array in reverse until we find a match.
                     while let Some(credential_format) = credential_types.pop() {
                         match credential_format.as_str() {
                             "VerifiableCredential" => {
-                                let subject = data
-                                    .raw
-                                    .get("credentialSubject")
-                                    .and_then(|credential_subject| {
-                                        identity_credential::credential::Subject::from_json_value(
-                                            credential_subject.clone(),
-                                        )
-                                        .ok()
-                                    })
-                                    .ok_or(MissingOrInvalidCredentialSubjectError)?;
+                                let subject = identity_credential::credential::Subject::from_json_value(
+                                    credential_subject_json.clone(),
+                                )
+                                .map_err(|e| InvalidVerifiableCredentialError(e.to_string()))?;
 
                                 let issuer = match serde_json::from_value::<Issuer>(json!({
                                     "id": issuer.id,
@@ -149,15 +146,11 @@ impl Aggregate for Credential {
                                     .and_then(|display| display.get("name"))
                                     .and_then(|name| name.as_str())
                                     .map(ToString::to_string)
-                                    .unwrap_or("UniCore".to_string());
+                                    .unwrap_or("OpenBadge Credential".to_string());
 
-                                let credential_subject = data
-                                    .raw
-                                    .get("credentialSubject")
-                                    .and_then(|credential_subject| {
-                                        serde_json::from_value::<AchievementSubject>(credential_subject.clone()).ok()
-                                    })
-                                    .ok_or(MissingOrInvalidCredentialSubjectError)?;
+                                let credential_subject =
+                                    serde_json::from_value::<AchievementSubject>(credential_subject_json.clone())
+                                        .map_err(|e| InvalidVerifiableCredentialError(e.to_string()))?;
 
                                 let credential: AchievementCredential = AchievementCredentialBuilder::default()
                                     .context(vec![
@@ -168,6 +161,7 @@ impl Aggregate for Credential {
                                         "VerifiableCredential",
                                         &credential_format,
                                     ]))
+                                    // TODO: Come up with a way to get the credential id.
                                     .id("http://example.com/credentials/3527")
                                     .name(name)
                                     .issuer(issuer)
@@ -201,8 +195,7 @@ impl Aggregate for Credential {
                 };
                 let issuer_did = issuer.identifier(&default_did_method, Algorithm::EdDSA).await.unwrap();
                 let signed_credential = {
-                    // TODO: Add error message here.
-                    let mut credential = self.data.clone().unwrap();
+                    let mut credential = self.data.as_ref().ok_or(MissingCredentialDataError)?.clone();
 
                     credential.raw["issuer"] = json!(issuer_did);
 
@@ -220,14 +213,22 @@ impl Aggregate for Credential {
                     // Replace the original credentialSubject with the new map
                     credential.raw["credentialSubject"] = serde_json::Value::Object(new_credential_subject);
 
+                    #[cfg(feature = "test")]
+                    let iat = 0;
+                    #[cfg(not(feature = "test"))]
+                    let iat = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs() as i64;
+
                     json!(jwt::encode(
                         issuer.clone(),
                         Header::new(Algorithm::EdDSA),
                         VerifiableCredentialJwt::builder()
                             .sub(subject_id)
                             .iss(issuer_did)
-                            // TODO: add iat
-                            .iat(0)
+                            .iat(iat)
+                            // TODO: find out whether this is a required field.
                             .exp(9999999999i64)
                             .verifiable_credential(credential.raw)
                             .build()
