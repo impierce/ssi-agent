@@ -1,7 +1,8 @@
 use agent_issuance::{
     credential::{command::CredentialCommand, entity::Data, queries::CredentialView},
     offer::command::OfferCommand,
-    state::IssuanceState,
+    server_config::queries::ServerConfigView,
+    state::{IssuanceState, SERVER_CONFIG_ID},
 };
 use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
@@ -10,6 +11,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use hyper::header;
+use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::info;
@@ -34,6 +36,7 @@ pub struct CredentialsEndpointRequest {
     pub credential: Value,
     #[serde(default)]
     pub is_signed: bool,
+    pub credential_configuration_id: String,
 }
 
 #[axum_macros::debug_handler]
@@ -47,6 +50,7 @@ pub(crate) async fn credentials(
         offer_id,
         credential: data,
         is_signed,
+        credential_configuration_id,
     }) = serde_json::from_value(payload)
     else {
         return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
@@ -58,6 +62,30 @@ pub(crate) async fn credentials(
 
     let credential_id = uuid::Uuid::new_v4().to_string();
 
+    let credential_configuration = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
+        Ok(Some(ServerConfigView {
+            credential_issuer_metadata:
+                Some(CredentialIssuerMetadata {
+                    credential_configurations_supported,
+                    ..
+                }),
+            ..
+        })) => {
+            if let Some(credential_configuration) =
+                credential_configurations_supported.get(&credential_configuration_id)
+            {
+                credential_configuration.clone()
+            } else {
+                return (
+                    StatusCode::NOT_FOUND,
+                    format!("No Credential Configuration found with id: `{credential_configuration_id}`"),
+                )
+                    .into_response();
+            }
+        }
+        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
     let command = if is_signed {
         CredentialCommand::CreateSignedCredential {
             signed_credential: data,
@@ -65,10 +93,7 @@ pub(crate) async fn credentials(
     } else {
         CredentialCommand::CreateUnsignedCredential {
             data: Data { raw: data },
-            credential_format_template: serde_json::from_str(include_str!(
-                "../../../agent_issuance/res/credential_format_templates/openbadges_v3.json"
-            ))
-            .unwrap(),
+            credential_configuration,
         }
     };
 
@@ -129,7 +154,8 @@ pub mod tests {
     use super::*;
     use crate::{
         app,
-        tests::{BASE_URL, OFFER_ID},
+        configurations::credential_configurations::tests::credential_configurations,
+        tests::{BASE_URL, CREDENTIAL_CONFIGURATION_ID, OFFER_ID},
     };
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
     use agent_shared::metadata::{load_metadata, set_metadata_configuration};
@@ -150,19 +176,13 @@ pub mod tests {
             "last_name": "Rustacean"
         });
         pub static ref CREDENTIAL: serde_json::Value = json!({
-            "@context": [
-                "https://www.w3.org/2018/credentials/v1",
-                "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
-                ],
-                "id": "http://example.com/credentials/3527",
-                "type": ["VerifiableCredential", "OpenBadgeCredential"],
-                "issuer": {
-                    "id": "https://example.com/issuers/876543",
-                    "type": "Profile",
-                    "name": "Example Corp"
-                },
+            "@context": "https://www.w3.org/2018/credentials/v1",
+            "type": [ "VerifiableCredential" ],
+            "issuer": {
+                "id": "https://my-domain.example.org/",
+                "name": "UniCore"
+            },
             "issuanceDate": "2010-01-01T00:00:00Z",
-            "name": "Teamwork Badge",
             "credentialSubject": {
                 "first_name": "Ferris",
                 "last_name": "Rustacean"
@@ -185,6 +205,7 @@ pub mod tests {
                                 "first_name": "Ferris",
                                 "last_name": "Rustacean"
                             }},
+                            "credentialConfigurationId": CREDENTIAL_CONFIGURATION_ID
                         }))
                         .unwrap(),
                     ))
@@ -238,6 +259,8 @@ pub mod tests {
         initialize(&issuance_state, startup_commands(BASE_URL.clone(), &load_metadata())).await;
 
         let mut app = app((issuance_state, verification_state));
+
+        credential_configurations(&mut app).await;
 
         credentials(&mut app).await;
     }

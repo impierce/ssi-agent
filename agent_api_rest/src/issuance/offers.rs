@@ -85,6 +85,7 @@ pub mod tests {
 
     use crate::{
         app,
+        configurations::credential_configurations::tests::credential_configurations,
         issuance::credentials::tests::credentials,
         tests::{BASE_URL, OFFER_ID},
     };
@@ -163,6 +164,8 @@ pub mod tests {
         initialize(&issuance_state, startup_commands(BASE_URL.clone(), &load_metadata())).await;
 
         let mut app = app((issuance_state, verification_state));
+
+        credential_configurations(&mut app).await;
 
         credentials(&mut app).await;
         let _pre_authorized_code = offers(&mut app).await;

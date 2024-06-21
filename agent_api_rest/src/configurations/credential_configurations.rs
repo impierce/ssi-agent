@@ -73,7 +73,10 @@ pub(crate) async fn credential_configurations(
 pub mod tests {
     use std::collections::HashMap;
 
-    use crate::{app, tests::BASE_URL};
+    use crate::{
+        app,
+        tests::{BASE_URL, CREDENTIAL_CONFIGURATION_ID},
+    };
 
     use super::*;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
@@ -104,12 +107,11 @@ pub mod tests {
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credentialConfigurationId": "badge",
+                            "credentialConfigurationId": CREDENTIAL_CONFIGURATION_ID,
                             "format": "jwt_vc_json",
                             "credential_definition": {
                                 "type": [
-                                    "VerifiableCredential",
-                                    "OpenBadgeCredential"
+                                    "VerifiableCredential"
                                 ]
                             },
                             "display": [{
@@ -141,7 +143,7 @@ pub mod tests {
                     credential_format: CredentialFormats::JwtVcJson(Parameters {
                         parameters: (
                             CredentialDefinition {
-                                type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
+                                type_: vec!["VerifiableCredential".to_string()],
                                 credential_subject: Default::default(),
                             },
                             None,

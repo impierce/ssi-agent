@@ -85,7 +85,7 @@ mod tests {
                         credential_format: CredentialFormats::JwtVcJson(Parameters {
                             parameters: (
                                 CredentialDefinition {
-                                    type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
+                                    type_: vec!["VerifiableCredential".to_string()],
                                     credential_subject: Default::default(),
                                 },
                                 None,
@@ -116,6 +116,14 @@ mod tests {
                 )]
                 .into_iter()
                 .collect(),
+                display: Some(vec![json!({
+                    "name": "UniCore",
+                    "locale": "en",
+                    "logo": {
+                        "url": "https://impierce.com/images/logo-blue.png",
+                        "alt_text": "UniCore Logo"
+                    }
+                })]),
                 ..Default::default()
             }
         );

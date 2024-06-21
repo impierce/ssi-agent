@@ -132,6 +132,7 @@ mod tests {
 
     use crate::app;
 
+    pub const CREDENTIAL_CONFIGURATION_ID: &str = "badge";
     pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
 
     lazy_static::lazy_static! {

@@ -20,7 +20,7 @@ pub struct Logo {
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Display {
-    pub name: Option<String>,
+    pub name: String,
     pub locale: Option<String>,
     pub logo: Option<Logo>,
 }
@@ -94,6 +94,12 @@ pub fn set_metadata_configuration(default_did_method: &str) {
                         alg: *signing_algorithms_supported
                     jwt_vp_json:
                         alg: *signing_algorithms_supported
+                display:
+                    - name: UniCore
+                      locale: en
+                      logo:
+                        uri: https://impierce.com/images/logo-blue.png
+                        alt_text: UniCore Logo
             "#
         ))
         .unwrap(),

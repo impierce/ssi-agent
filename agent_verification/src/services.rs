@@ -22,11 +22,7 @@ impl VerificationServices {
             .expect("`subject_syntax_types_supported` must contain at least one element.")
             .to_string();
 
-        let client_name = metadata
-            .display
-            .first()
-            .as_ref()
-            .and_then(|display| display.name.clone());
+        let client_name = metadata.display.first().as_ref().map(|display| display.name.clone());
 
         let logo_uri = metadata
             .display
