@@ -43,6 +43,7 @@ services:
 
       AGENT_CONFIG_STRONGHOLD_PASSWORD: "VNvRtH4tKyWwvJDpL6Vuc2aoLiKAecGQ"
       AGENT_CONFIG_ISSUER_KEY_ID: "UVDxWhG2rB39FkaR7I27mHeUNrGtUgcr"
+      NO_COLOR: true
       
       # Uncomment the following lines to use the DID method `did:iota:rms`
       # AGENT_CONFIG_ISSUER_DID: "did:iota:rms:0x42ad588322e58b3c07aa39e4948d021ee17ecb5747915e9e1f35f028d7ecaf90"
