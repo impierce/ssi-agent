@@ -141,6 +141,9 @@ async fn main() -> io::Result<()> {
         app = app.route(path, get(Json(did_document)));
     }
 
+    // This is used to indicate that the server accepts requests.
+    // In a docker container this file can be searched to see if its ready.
+    // A better solution can be made later (needed for impierce-demo)
     fs::create_dir_all("/tmp/unicore/").await?;
     fs::write("/tmp/unicore/accept_requests", []).await?;
 
