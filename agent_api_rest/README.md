@@ -76,7 +76,7 @@ Now there is a new Credential Configuration, we can create our first Credential.
 
 ##### Parameters
 - `offerId`: **REQUIRED**: A unique identifier for the Credential Offer. This ID will bind the Credential to the
-  [Credential Offer that we will receive later](#retrieving-the-percent-encoded-credential-offer)
+  [Credential Offer that we will receive later](#retrieving-the-url-encoded-credential-offer)
 - `credentialConfigurationId`: **REQUIRED** 
 - `credential`: **REQUIRED** An object containing the data that will be included in the Credential. This data should
   adhere to the Credential Definition that was defined in the Credential Configuration.
@@ -97,12 +97,12 @@ Now there is a new Credential Configuration, we can create our first Credential.
 
 </details>
 
-#### Retrieving the percent-encoded Credential Offer
+#### Retrieving the url-encoded Credential Offer
 
 <details>
  <summary><code>POST</code> <code><b>/offers</b></code></summary>
 
-After creating a new Credential, we can retrieve the Credential Offer. The Credential Offer is a percent-encoded string
+After creating a new Credential, we can retrieve the Credential Offer. The Credential Offer is a url-encoded string
 that can be rendered as a QR-Code which in turn can be scanned with an [Identity Wallet](https://github.com/impierce/identity-wallet).
 
 ##### Parameters
@@ -119,12 +119,12 @@ that can be rendered as a QR-Code which in turn can be scanned with an [Identity
 ### Verification
 Typical usage of the Verification of Authorization Responses.
 
-#### Creating a percent-encoded SIOPv2 Authorization Request
+#### Creating a url-encoded SIOPv2 Authorization Request
 
 <details>
  <summary><code>POST</code> <code><b>/authorization_request</b></code></summary>
 
-Through this endpoint, we can create a percent-encoded Authorization Request that can be rendered as a QR-Code. This
+Through this endpoint, we can create a url-encoded Authorization Request that can be rendered as a QR-Code. This
 QR-Code can be scanned by an [Identity Wallet](https://github.com/impierce/identity-wallet) which in turn will answer the Authorization Request.
 
 ##### Parameters
@@ -139,12 +139,12 @@ QR-Code can be scanned by an [Identity Wallet](https://github.com/impierce/ident
 
 </details>
 
-#### Creating a percent-encoded OID4VP Authorization Request
+#### Creating a url-encoded OID4VP Authorization Request
 
 <details>
  <summary><code>POST</code> <code><b>/authorization_request</b></code></summary>
 
-Through this endpoint, we can create a percent-encoded Authorization Request that can be rendered as a QR-Code. This
+Through this endpoint, we can create a url-encoded Authorization Request that can be rendered as a QR-Code. This
 QR-Code can be scanned by an [Identity Wallet](https://github.com/impierce/identity-wallet) which in turn will answer
 the Authorization Request. The only extra required parameter is the `presentation_definition` which describes the
 Verifiable Credential(s) that will be requested from the Identity Wallet.
