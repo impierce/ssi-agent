@@ -11,13 +11,14 @@ use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use axum::{routing::get, Json};
 use identity_document::service::{Service, ServiceEndpoint};
+use tokio::{fs, io};
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> io::Result<()> {
     let metadata: Metadata = load_metadata();
 
     let tracing_subscriber = tracing_subscriber::registry()
@@ -69,10 +70,9 @@ async fn main() {
     let mut app = app((issuance_state, verification_state));
 
     // CORS
-    let enable_cors = config!("enable_cors", String)
-        .unwrap_or("false".to_string())
-        .parse::<bool>()
-        .expect("AGENT_APPLICATION_ENABLE_CORS must be a boolean");
+    let enable_cors = config!("enable_cors", bool)
+        .unwrap_or(false);
+
     if enable_cors {
         info!("CORS (permissive) enabled for all routes");
         app = app.layer(CorsLayer::permissive());
@@ -151,7 +151,11 @@ async fn main() {
         app = app.route(path, get(Json(did_document)));
     }
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await.unwrap();
-    info!("listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app).await.unwrap();
+    fs::write("/tmp/unicore/accept_requests", []).await?;
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await?;
+    info!("listening on {}", listener.local_addr()?);
+    axum::serve(listener, app).await?;
+
+    Ok(())
 }
