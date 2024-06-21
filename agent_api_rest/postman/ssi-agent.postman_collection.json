@@ -118,7 +118,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"openbadge_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": \"did:temp:placeholder\",\n            \"type\": [ \"AchievementSubject\" ],\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    }\n}",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"openbadge_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"type\": [ \"AchievementSubject\" ],\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -497,8 +497,11 @@
 						{
 							"listen": "prerequest",
 							"script": {
-								"exec": [],
-								"type": "text/javascript"
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
 							}
 						}
 					],
@@ -507,7 +510,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"presentation_definition\": {\n        \"id\":\"Verifiable Presentation request for sign-on\",\n        \"input_descriptors\":[\n            {\n                \"id\":\"Request for Verifiable Credential\",\n                \"constraints\":{\n                    \"fields\":[\n                        {\n                            \"path\":[\n                                \"$.vc.type\"\n                            ],\n                            \"filter\":{\n                                \"type\":\"array\",\n                                \"contains\":{\n                                    \"const\":\"DemoCredential\"\n                                }\n                            }\n                        }\n                    ]\n                }\n            }\n        ]\n    }\n}",
+							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"presentation_definition\": {\n        \"id\":\"Verifiable Presentation request for sign-on\",\n        \"input_descriptors\":[\n            {\n                \"id\":\"Request for Verifiable Credential\",\n                \"constraints\":{\n                    \"fields\":[\n                        {\n                            \"path\":[\n                                \"$.vc.type\"\n                            ],\n                            \"filter\":{\n                                \"type\":\"array\",\n                                \"contains\":{\n                                    \"const\":\"VerifiableCredential\"\n                                }\n                            }\n                        }\n                    ]\n                }\n            }\n        ]\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
