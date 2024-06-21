@@ -18,6 +18,7 @@ If you want to access UniCore's API from a browser, you can set the `AGENT_APPLI
 Below we describe a typical usage of the REST API for UniCore. 
 
 ### Issuance
+Typical usage of the Issuance of Credentials
 
 #### Creating new/overwriting existing Credential Configuration
 
@@ -110,6 +111,88 @@ that can be rendered as a QR-Code which in turn can be scanned with an [Identity
 ```json
 {
     "offerId":"my-first-offer"
+}
+```
+
+</details>
+
+### Verification
+Typical usage of the Verification of Authorization Responses.
+
+#### Creating a percent-encoded SIOPv2 Authorization Request
+
+<details>
+ <summary><code>POST</code> <code><b>/authorization_request</b></code></summary>
+
+Through this endpoint, we can create a percent-encoded Authorization Request that can be rendered as a QR-Code. This
+QR-Code can be scanned by an [Identity Wallet](https://github.com/impierce/identity-wallet) which in turn will answer the Authorization Request.
+
+##### Parameters
+- `nonce`: **REQUIRED**: A unique identifier for the Authorization Request.
+- `state`: **OPTIONAL**: A unique string representing the state of the Authorization Request.
+
+```json
+{
+    "nonce":"this is a nonce"
+}
+```
+
+</details>
+
+#### Creating a percent-encoded OID4VP Authorization Request
+
+<details>
+ <summary><code>POST</code> <code><b>/authorization_request</b></code></summary>
+
+Through this endpoint, we can create a percent-encoded Authorization Request that can be rendered as a QR-Code. This
+QR-Code can be scanned by an [Identity Wallet](https://github.com/impierce/identity-wallet) which in turn will answer
+the Authorization Request. The only extra required parameter is the `presentation_definition` which describes the
+Verifiable Credential(s) that will be requested from the Identity Wallet.
+
+##### Parameters
+- `nonce`: **REQUIRED**: A unique identifier for the Authorization Request.
+- `presentation_definition`: An object describing the Verifiable Credential(s) that will be requested from the Identity
+  Wallet to ensure a successful Authorization. In most cases, the `presentation_definition` below will 
+- `state`: **OPTIONAL**: A unique string representing the state of the Authorization Request.
+
+```json
+{
+    "nonce": "this is a nonce",
+    "presentation_definition": {
+        "id":"Verifiable Presentation request for sign-on",
+        "input_descriptors":[
+            {
+                "id":"Request for Verifiable Credential",
+                "constraints":{
+                    "fields":[
+                        {
+                            "path":[
+                                "$.vc.type"
+                            ],
+                            "filter":{
+                                "type":"array",
+                                "contains":{
+                                    "const":"VerifiableCredential"
+                                    // "const":"OpenBadgesCredential" <-- for OpenBadges
+                                }
+                            }
+                        },
+                        // Extra constraints can be added to the Presentation Definition.
+                        // {
+                        //     "path":[
+                        //         "$.vc.credentialSubject.first_name"
+                        //     ]
+                        // },
+                        // {
+                        //     "path":[
+                        //         "$.vc.credentialSubject.last_name"
+                        //     ]
+                        // },
+                    ]
+                }
+            }
+        ]
+    }
 }
 ```
 
