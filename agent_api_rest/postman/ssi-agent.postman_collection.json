@@ -28,7 +28,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"credentialConfigurationId\":\"{{CREDENTIAL_CONFIGURATION_ID}}\",\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\n            \"VerifiableCredential\",\n            \"OpenBadgeCredential\"\n        ]\n    },\n    \"display\": [{\n        \"name\": \"Identity Credential\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"url\": \"https://impierce.com/images/logo-blue.png\",\n            \"alt_text\": \"UniCore Logo\"\n        }\n    }]\n}",
+							"raw": "{\n    \"credentialConfigurationId\":\"openbadge_credential\",\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\n            \"VerifiableCredential\",\n            \"OpenBadgeCredential\"\n        ]\n    },\n    \"display\": [{\n        \"name\": \"Identity Credential\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"url\": \"https://impierce.com/images/logo-blue.png\",\n            \"alt_text\": \"UniCore Logo\"\n        }\n    }]\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -68,7 +68,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"credentialConfigurationId\":\"{{CREDENTIAL_CONFIGURATION_ID}}\",\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\n            \"VerifiableCredential\"\n        ]\n    },\n    \"display\": [{\n        \"name\": \"Identity Credential\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"url\": \"https://impierce.com/images/logo-blue.png\",\n            \"alt_text\": \"UniCore Logo\"\n        }\n    }]\n}",
+							"raw": "{\n    \"credentialConfigurationId\":\"w3c_vc_credential\",\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\n            \"VerifiableCredential\"\n        ]\n    },\n    \"display\": [{\n        \"name\": \"Identity Credential\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"url\": \"https://impierce.com/images/logo-blue.png\",\n            \"alt_text\": \"UniCore Logo\"\n        }\n    }]\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -118,7 +118,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"{{CREDENTIAL_CONFIGURATION_ID}}\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": \"did:temp:placeholder\",\n            \"type\": [ \"AchievementSubject\" ],\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    }\n}",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"openbadge_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": \"did:temp:placeholder\",\n            \"type\": [ \"AchievementSubject\" ],\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -162,7 +162,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"{{CREDENTIAL_CONFIGURATION_ID}}\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    }\n}",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -493,6 +493,13 @@
 								"type": "text/javascript",
 								"packages": {}
 							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [],
+								"type": "text/javascript"
+							}
 						}
 					],
 					"request": {
@@ -677,11 +684,6 @@
 		}
 	],
 	"variable": [
-		{
-			"key": "CREDENTIAL_CONFIGURATION_ID",
-			"value": "identity_credential",
-			"type": "string"
-		},
 		{
 			"key": "PRE_AUTHORIZED_CODE",
 			"value": "INITIAL_VALUE",
