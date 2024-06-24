@@ -45,17 +45,24 @@ pub fn app(state: ApplicationState) -> Router {
     };
 
     Router::new()
-        // Agent Issuance Preparations
-        .route(
-            &path(&format!("/{API_VERSION}/configurations/credential_configurations")),
-            post(configurations::credential_configurations),
+        .nest(
+            &path(&format!("/{API_VERSION}")),
+            Router::new()
+                // Agent Issuance Preparations
+                .route(
+                    "/configurations/credential_configurations",
+                    post(configurations::credential_configurations),
+                )
+                .route("/credentials", post(credentials))
+                .route("/credentials/:credential_id", get(get_credentials))
+                .route("/offers", post(offers))
+                // Agent Verification Preparations
+                .route("/authorization_requests", post(authorization_requests))
+                .route(
+                    "/authorization_requests/:authorization_request_id",
+                    get(get_authorization_requests),
+                ),
         )
-        .route(&path(&format!("/{API_VERSION}/credentials")), post(credentials))
-        .route(
-            &path(&format!("/{API_VERSION}/credentials/:credential_id")),
-            get(get_credentials),
-        )
-        .route(&path(&format!("/{API_VERSION}/offers")), post(offers))
         // OpenID4VCI Pre-Authorized Code Flow
         .route(
             &path("/.well-known/oauth-authorization-server"),
@@ -67,17 +74,6 @@ pub fn app(state: ApplicationState) -> Router {
         )
         .route(&path("/auth/token"), post(token))
         .route(&path("/openid4vci/credential"), post(credential))
-        // Agent Verification Preparations
-        .route(
-            &path(&format!("/{API_VERSION}/authorization_requests")),
-            post(authorization_requests),
-        )
-        .route(
-            &path(&format!(
-                "/{API_VERSION}/authorization_requests/:authorization_request_id"
-            )),
-            get(get_authorization_requests),
-        )
         // SIOPv2
         .route(&path("/request/:request_id"), get(request))
         .route(&path("/redirect"), post(redirect))
