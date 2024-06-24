@@ -12,12 +12,13 @@ use agent_verification::services::VerificationServices;
 use axum::{routing::get, Json};
 use identity_document::service::{Service, ServiceEndpoint};
 use std::sync::Arc;
+use tokio::{fs, io};
 use tower_http::cors::CorsLayer;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> io::Result<()> {
     let metadata: Metadata = load_metadata();
 
     let tracing_subscriber = tracing_subscriber::registry()
@@ -69,20 +70,13 @@ async fn main() {
     let mut app = app((issuance_state, verification_state));
 
     // CORS
-    let enable_cors = config!("enable_cors", String)
-        .unwrap_or("false".to_string())
-        .parse::<bool>()
-        .expect("AGENT_APPLICATION_ENABLE_CORS must be a boolean");
-    if enable_cors {
+    if config!("enable_cors", bool).unwrap_or(false) {
         info!("CORS (permissive) enabled for all routes");
         app = app.layer(CorsLayer::permissive());
     }
 
     // did:web
-    let enable_did_web = config!("did_method_web_enabled", String)
-        .unwrap_or("false".to_string())
-        .parse::<bool>()
-        .expect("AGENT_CONFIG_DID_METHOD_WEB_ENABLED must be a boolean");
+    let enable_did_web = config!("did_method_web_enabled", bool).unwrap_or(false);
 
     let did_document = if enable_did_web {
         let subject = Subject {
@@ -102,11 +96,7 @@ async fn main() {
         None
     };
     // Domain Linkage
-    let enable_domain_linkage = config!("domain_linkage_enabled", String)
-        .unwrap_or("false".to_string())
-        .parse::<bool>()
-        .expect("AGENT_CONFIG_DOMAIN_LINKAGE_ENABLED must be a boolean");
-    let did_configuration_resource = if enable_domain_linkage {
+    let did_configuration_resource = if config!("domain_linkage_enabled", bool).unwrap_or(false) {
         Some(
             create_did_configuration_resource(
                 url.clone(),
@@ -151,7 +141,15 @@ async fn main() {
         app = app.route(path, get(Json(did_document)));
     }
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await.unwrap();
-    info!("listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app).await.unwrap();
+    // This is used to indicate that the server accepts requests.
+    // In a docker container this file can be searched to see if its ready.
+    // A better solution can be made later (needed for impierce-demo)
+    fs::create_dir_all("/tmp/unicore/").await?;
+    fs::write("/tmp/unicore/accept_requests", []).await?;
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await?;
+    info!("listening on {}", listener.local_addr()?);
+    axum::serve(listener, app).await?;
+
+    Ok(())
 }
