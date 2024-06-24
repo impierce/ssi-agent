@@ -12,7 +12,7 @@ docker build -f docker/Dockerfile -t ssi-agent ..
 
 Inside the folder `/agent_application/docker`:
 
-1. Inside `docker-compose.yml` replace the environment value: `AGENT_APPLICATION_URL` with your actual local IP address or URL (such as http://192.168.1.234:3033)
+1. Inside `docker-compose.yml` replace the environment value: `AGENT_CONFIG_URL` with your actual local IP address or URL (such as http://192.168.1.234:3033)
 > [!IMPORTANT] 
 > 2. By default, UniCore currently uses a default Stronghold file which is used for storing secrets. Using this default
 >    Stronghold is for testing purposes only and should not be used in production. To use your own Stronghold file, you
@@ -71,7 +71,7 @@ UniCore facilitates dynamic integration with external systems through just-in-ti
 
 **Custom Credential Signing**
 
-UniCore facilitates the utilization of just-in-time data request events for customized credential signing workflows. This approach enables users to manage the signing process independently, offering greater control over credential issuance. When UniCore verifies a Credential Request from a Wallet, it triggers the `CredentialRequestVerified` event. By utilizing the HTTP Event Publisher, this event, containing essential identifiers like `offer_id` and `subject_id`, can be dispatched to external systems. Subsequently, external systems leverage these identifiers to generate and sign credentials, which are then submitted to UniCore's `/v1/credentials` endpoint.
+UniCore facilitates the utilization of just-in-time data request events for customized credential signing workflows. This approach enables users to manage the signing process independently, offering greater control over credential issuance. When UniCore verifies a Credential Request from a Wallet, it triggers the `CredentialRequestVerified` event. By utilizing the HTTP Event Publisher, this event, containing essential identifiers like `offer_id` and `subject_id`, can be dispatched to external systems. Subsequently, external systems leverage these identifiers to generate and sign credentials, which are then submitted to UniCore's `/v0/credentials` endpoint.
 
 To integrate just-in-time data request events into your workflow, adhere to the following steps:
 
@@ -87,7 +87,7 @@ To integrate just-in-time data request events into your workflow, adhere to the 
    }
    ```
 2. Upon initiation of the OpenID4VCI flow by a Wallet, the CredentialRequestVerified event is triggered, containing relevant identifiers.
-3. The HTTP Event Publisher dispatches the event to the external system. Leveraging the provided identifiers, the external system generates and signs the credential, then submits it to UniCore's `/v1/credentials` endpoint. Refer to the [API specification](../../agent_api_rest/README.md)) for additional details on endpoint usage.
+3. The HTTP Event Publisher dispatches the event to the external system. Leveraging the provided identifiers, the external system generates and signs the credential, then submits it to UniCore's `/v0/credentials` endpoint. Refer to the [API specification](../../agent_api_rest/README.md)) for additional details on endpoint usage.
 
 By default, UniCore will wait up to 1000 ms for the signed credential to arrive. This parameter can be changed by
 setting the `AGENT_API_REST_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS` environment variable.

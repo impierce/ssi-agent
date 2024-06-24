@@ -1,3 +1,4 @@
+use crate::API_VERSION;
 use agent_issuance::{
     credential::{command::CredentialCommand, entity::Data, queries::CredentialView},
     offer::command::OfferCommand,
@@ -141,7 +142,7 @@ pub(crate) async fn credentials(
             ..
         })) => (
             StatusCode::CREATED,
-            [(header::LOCATION, &format!("/v1/credentials/{credential_id}"))],
+            [(header::LOCATION, &format!("{API_VERSION}/credentials/{credential_id}"))],
             Json(raw),
         )
             .into_response(),
@@ -152,6 +153,7 @@ pub(crate) async fn credentials(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::API_VERSION;
     use crate::{
         app,
         configurations::credential_configurations::tests::credential_configurations,
@@ -195,7 +197,7 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri("/v1/credentials")
+                    .uri(&format!("{API_VERSION}/credentials"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({

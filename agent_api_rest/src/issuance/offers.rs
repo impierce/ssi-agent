@@ -91,6 +91,7 @@ pub mod tests {
     };
 
     use super::*;
+    use crate::API_VERSION;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
     use agent_shared::metadata::{load_metadata, set_metadata_configuration};
     use agent_store::in_memory;
@@ -109,7 +110,7 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri("/v1/offers")
+                    .uri(&format!("{API_VERSION}/offers"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({

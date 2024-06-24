@@ -156,6 +156,7 @@ mod tests {
     use super::*;
     use crate::configurations::credential_configurations::tests::credential_configurations;
     use crate::issuance::credentials::tests::credentials;
+    use crate::API_VERSION;
     use agent_event_publisher_http::{EventPublisherHttp, TEST_EVENT_PUBLISHER_HTTP_CONFIG};
     use agent_issuance::{offer::event::OfferEvent, startup_commands::startup_commands, state::initialize};
     use agent_store::{in_memory, EventPublisher};
@@ -241,7 +242,7 @@ mod tests {
                                     .oneshot(
                                         Request::builder()
                                             .method(http::Method::POST)
-                                            .uri("/v1/credentials")
+                                            .uri(&format!("{API_VERSION}/credentials"))
                                             .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                                             .body(Body::from(
                                                 serde_json::to_vec(&credentials_endpoint_request).unwrap(),

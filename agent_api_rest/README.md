@@ -2,6 +2,12 @@
 
 A lightweight REST API for the SSI Agent.
 
+
+UniCore's REST API is currently still in the pre-release stage meaning that the API is still under active development.
+Breaking changes may occur before the API reaches a stable version.
+
+The current version of the REST API is `v0`.
+
 ### OpenAPI specification (Swagger UI)
 
 ```bash
@@ -31,7 +37,7 @@ be created and issued](#creating-a-new-credential) accordingly.
 
 ##### Parameters
 - `credentialConfigurationId`: **REQUIRED** This identifier can be used to refer to the Credential Configuration when creating a new
-  Credential through the `/v1/credentials` endpoint.
+  Credential through the `/v0/credentials` endpoint.
 - `format`: **REQUIRED** The format of the Credential. Currently, only `jwt_vc_json` is supported.
 - `credential_definition`: **REQUIRED** An object describing the Credentials that will be issued through this Credential
   Configuration.
@@ -70,13 +76,13 @@ be created and issued](#creating-a-new-credential) accordingly.
 #### Creating a new Credential
 
 <details>
- <summary><code>POST</code> <code><b>/credentials</b></code></summary>
+ <summary><code>POST</code> <code><b>/v0/credentials</b></code></summary>
 
 Now there is a new Credential Configuration, we can create our first Credential. 
 
 ##### Parameters
 - `offerId`: **REQUIRED**: A unique identifier for the Credential Offer. This ID will bind the Credential to the
-  [Credential Offer that we will receive later](#retrieving-the-url-encoded-credential-offer)
+  [Credential Offer that we will receive later](#retrieving-the-URL-encoded-credential-offer)
 - `credentialConfigurationId`: **REQUIRED** 
 - `credential`: **REQUIRED** An object containing the data that will be included in the Credential. This data should
   adhere to the Credential Definition that was defined in the Credential Configuration.
@@ -97,12 +103,12 @@ Now there is a new Credential Configuration, we can create our first Credential.
 
 </details>
 
-#### Retrieving the url-encoded Credential Offer
+#### Retrieving the URL-encoded Credential Offer
 
 <details>
- <summary><code>POST</code> <code><b>/offers</b></code></summary>
+ <summary><code>POST</code> <code><b>/v0/offers</b></code></summary>
 
-After creating a new Credential, we can retrieve the Credential Offer. The Credential Offer is a url-encoded string
+After creating a new Credential, we can retrieve the Credential Offer. The Credential Offer is a URL-encoded string
 that can be rendered as a QR-Code which in turn can be scanned with an [Identity Wallet](https://github.com/impierce/identity-wallet).
 
 ##### Parameters
@@ -119,12 +125,12 @@ that can be rendered as a QR-Code which in turn can be scanned with an [Identity
 ### Verification
 Typical usage of the Verification of Authorization Responses.
 
-#### Creating a url-encoded SIOPv2 Authorization Request
+#### Creating a URL-encoded SIOPv2 Authorization Request
 
 <details>
- <summary><code>POST</code> <code><b>/authorization_request</b></code></summary>
+ <summary><code>POST</code> <code><b>/v0/authorization_request</b></code></summary>
 
-Through this endpoint, we can create a url-encoded Authorization Request that can be rendered as a QR-Code. This
+Through this endpoint, we can create a URL-encoded Authorization Request that can be rendered as a QR-Code. This
 QR-Code can be scanned by an [Identity Wallet](https://github.com/impierce/identity-wallet) which in turn will answer the Authorization Request.
 
 ##### Parameters
@@ -139,12 +145,12 @@ QR-Code can be scanned by an [Identity Wallet](https://github.com/impierce/ident
 
 </details>
 
-#### Creating a url-encoded OID4VP Authorization Request
+#### Creating a URL-encoded OID4VP Authorization Request
 
 <details>
- <summary><code>POST</code> <code><b>/authorization_request</b></code></summary>
+ <summary><code>POST</code> <code><b>/v0/authorization_request</b></code></summary>
 
-Through this endpoint, we can create a url-encoded Authorization Request that can be rendered as a QR-Code. This
+Through this endpoint, we can create a URL-encoded Authorization Request that can be rendered as a QR-Code. This
 QR-Code can be scanned by an [Identity Wallet](https://github.com/impierce/identity-wallet) which in turn will answer
 the Authorization Request. The only extra required parameter is the `presentation_definition` which describes the
 Verifiable Credential(s) that will be requested from the Identity Wallet.

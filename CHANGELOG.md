@@ -1,4 +1,8 @@
-### 20-16-2024
+### 24-06-2024
+- Reverted the API version to V0, which means that all endpoints previously prefixed with `/v1` are now prefixed with `/v0`.
+- Changed `AGENT_APPLICATION_URL` to `AGENT_CONFIG_URL`.
+
+### 20-06-2024
 Deprecated the following environment variables:
 * `AGENT_ISSUANCE_CREDENTIAL_NAME`
 * `AGENT_ISSUANCE_CREDENTIAL_LOGO_URL`
