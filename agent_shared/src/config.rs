@@ -14,6 +14,7 @@ pub fn config(package_name: &str) -> config::Config {
             .add_source(config::Environment::with_prefix(package_name))
             .add_source(config::Environment::with_prefix("AGENT_CONFIG"))
             .add_source(config::File::with_name("agent_application/config.yml"))
+            .add_source(config::File::with_name("agent_issuance/issuance-config.yml"))
             .build()
             .unwrap()
     };
