@@ -12,7 +12,7 @@ docker build -f docker/Dockerfile -t ssi-agent ..
 
 Inside the folder `/agent_application/docker`:
 
-1. Inside `docker-compose.yml` replace the environment value: `AGENT_APPLICATION_URL` with your actual local IP address or URL (such as http://192.168.1.234:3033)
+1. Inside `docker-compose.yml` replace the environment value: `AGENT_CONFIG_URL` with your actual local IP address or URL (such as http://192.168.1.234:3033)
 > [!IMPORTANT] 
 > 2. By default, UniCore currently uses a default Stronghold file which is used for storing secrets. Using this default
 >    Stronghold is for testing purposes only and should not be used in production. To use your own Stronghold file, you

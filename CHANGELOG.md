@@ -1,7 +1,6 @@
-### 21-06-2024
-- Added a REQUIRED `credentialConfigurationId` parameter for the HTTP request to POST `/v0/credentials` endpoint. For
-  more information about this parameter see the [API documentation](./agent_api_rest/README.md).
+### 24-06-2024
 - Reverted the API version to V0, which means that all endpoints previously prefixed with `/v1` are now prefixed with `/v0`.
+- Changed `AGENT_APPLICATION_URL` to `AGENT_CONFIG_URL`.
 
 ### 20-06-2024
 Deprecated the following environment variables:

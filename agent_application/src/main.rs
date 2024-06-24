@@ -57,7 +57,7 @@ async fn main() -> io::Result<()> {
         ),
     };
 
-    let url = config!("url", String).expect("AGENT_APPLICATION_URL is not set");
+    let url = config!("url", String).expect("AGENT_CONFIG_URL is not set");
     // TODO: Temporary solution. In the future we need to read these kinds of values from a config file.
     std::env::set_var("AGENT_VERIFICATION_URL", &url);
 
