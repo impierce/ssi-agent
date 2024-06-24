@@ -62,14 +62,16 @@ pub(crate) async fn token(
 pub mod tests {
     use crate::{
         app,
-        configurations::credential_configurations::tests::credential_configurations,
         issuance::{credentials::tests::credentials, offers::tests::offers},
         tests::BASE_URL,
     };
 
     use super::*;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
-    use agent_shared::metadata::{load_metadata, set_metadata_configuration};
+    use agent_shared::{
+        issuance::set_issuer_configuration,
+        metadata::{load_metadata, set_metadata_configuration},
+    };
     use agent_store::in_memory;
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
@@ -113,6 +115,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_token_endpoint() {
         set_metadata_configuration("did:key");
+        set_issuer_configuration();
 
         let metadata = load_metadata();
         let issuance_state = in_memory::issuance_state(Default::default()).await;
@@ -120,8 +123,6 @@ pub mod tests {
         initialize(&issuance_state, startup_commands(BASE_URL.clone(), &metadata)).await;
 
         let mut app = app((issuance_state, verification_state));
-
-        credential_configurations(&mut app).await;
 
         credentials(&mut app).await;
         let pre_authorized_code = offers(&mut app).await;

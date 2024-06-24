@@ -285,6 +285,7 @@ pub mod credential_tests {
     use crate::credential::aggregate::Credential;
     use crate::credential::event::CredentialEvent;
     use crate::offer::aggregate::tests::SUBJECT_KEY_DID;
+    use agent_shared::issuance::set_issuer_configuration;
 
     type CredentialTestFramework = TestFramework<Credential>;
 
@@ -306,6 +307,7 @@ pub mod credential_tests {
         #[case] unsigned_credential: serde_json::Value,
     ) {
         set_metadata_configuration("did:key");
+        set_issuer_configuration();
 
         CredentialTestFramework::with(CredentialServices)
             .given_no_previous_events()

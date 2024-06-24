@@ -1,13 +1,8 @@
 use crate::server_config::command::ServerConfigCommand;
-use agent_shared::{config, metadata::Metadata, url_utils::UrlAppendHelpers};
-use oid4vci::{
-    credential_format_profiles::{CredentialFormats, WithParameters},
-    credential_issuer::{
-        authorization_server_metadata::AuthorizationServerMetadata,
-        credential_issuer_metadata::CredentialIssuerMetadata,
-    },
+use agent_shared::{config, issuance::ServerConfig, metadata::Metadata, url_utils::UrlAppendHelpers};
+use oid4vci::credential_issuer::{
+    authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
-use serde::{Deserialize, Serialize};
 
 /// Returns the startup commands for the application.
 pub fn startup_commands(host: url::Url, metadata: &Metadata) -> Vec<ServerConfigCommand> {
@@ -36,20 +31,6 @@ pub fn load_server_metadata(base_url: url::Url, metadata: &Metadata) -> ServerCo
             ..Default::default()
         },
     }
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-pub struct CredentialConfiguration {
-    pub credential_configuration_id: String,
-    #[serde(flatten)]
-    pub credential_format_with_parameters: CredentialFormats<WithParameters>,
-    #[serde(default)]
-    pub display: Vec<serde_json::Value>,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-pub struct ServerConfig {
-    pub credential_configurations: Vec<CredentialConfiguration>,
 }
 
 pub fn create_credentials_supported() -> ServerConfigCommand {

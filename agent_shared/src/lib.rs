@@ -7,6 +7,9 @@ pub mod handlers;
 pub mod metadata;
 pub mod url_utils;
 
+#[cfg(feature = "test")]
+pub mod issuance;
+
 pub use ::config::ConfigError;
 use rand::Rng;
 pub use url_utils::UrlAppendHelpers;

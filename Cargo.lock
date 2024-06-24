@@ -219,6 +219,7 @@ dependencies = [
  "is_empty",
  "jsonwebtoken",
  "oid4vc-core",
+ "oid4vci",
  "oid4vp",
  "rand 0.8.5",
  "serde",

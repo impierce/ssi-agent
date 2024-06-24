@@ -154,7 +154,6 @@ mod tests {
     };
 
     use super::*;
-    use crate::configurations::credential_configurations::tests::credential_configurations;
     use crate::issuance::credentials::tests::credentials;
     use crate::API_VERSION;
     use agent_event_publisher_http::{EventPublisherHttp, TEST_EVENT_PUBLISHER_HTTP_CONFIG};
@@ -278,7 +277,10 @@ mod tests {
         #[case] is_self_signed: bool,
         #[case] delay: u128,
     ) {
+        use agent_shared::issuance::set_issuer_configuration;
+
         set_metadata_configuration("did:key");
+        set_issuer_configuration();
 
         let (external_server, issuance_event_publishers, verification_event_publishers) = if with_external_server {
             let external_server = MockServer::start().await;
@@ -316,8 +318,6 @@ mod tests {
         initialize(&issuance_state, startup_commands(BASE_URL.clone(), &load_metadata())).await;
 
         let mut app = app((issuance_state, verification_state));
-
-        credential_configurations(&mut app).await;
 
         if let Some(external_server) = &external_server {
             external_server
