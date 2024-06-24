@@ -29,7 +29,7 @@ use verification::{
     relying_party::{redirect::redirect, request::request},
 };
 
-pub const API_VERSION: &str = "v0";
+pub const API_VERSION: &str = "/v0";
 
 pub type ApplicationState = (IssuanceState, VerificationState);
 
@@ -46,7 +46,7 @@ pub fn app(state: ApplicationState) -> Router {
 
     Router::new()
         .nest(
-            &path(&format!("/{API_VERSION}")),
+            &path(API_VERSION),
             Router::new()
                 // Agent Issuance Preparations
                 .route(

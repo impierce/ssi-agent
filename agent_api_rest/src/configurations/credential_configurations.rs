@@ -104,7 +104,7 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri(&format!("/{API_VERSION}/configurations/credential_configurations"))
+                    .uri(&format!("{API_VERSION}/configurations/credential_configurations"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({

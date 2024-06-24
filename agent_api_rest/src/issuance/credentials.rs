@@ -142,7 +142,7 @@ pub(crate) async fn credentials(
             ..
         })) => (
             StatusCode::CREATED,
-            [(header::LOCATION, &format!("/{API_VERSION}/credentials/{credential_id}"))],
+            [(header::LOCATION, &format!("{API_VERSION}/credentials/{credential_id}"))],
             Json(raw),
         )
             .into_response(),
@@ -197,7 +197,7 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri(&format!("/{API_VERSION}/credentials"))
+                    .uri(&format!("{API_VERSION}/credentials"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
