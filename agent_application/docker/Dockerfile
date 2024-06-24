@@ -13,11 +13,6 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 
-COPY ../../agent_application/config.yml agent_application/config.yml
-COPY ../../agent_secret_manager/tests/res/selv.stronghold res/stronghold
-COPY ../../agent_event_publisher_http/config.yml agent_event_publisher_http/config.yml
-COPY ../../agent_verification/presentation_definitions agent_verification/presentation_definitions
-
 RUN cargo build --release --bin agent_application
 
 FROM debian:bookworm-slim AS runtime
