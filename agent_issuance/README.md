@@ -37,6 +37,7 @@ server_config:
       credential_definition:
         type:
           - VerifiableCredential
+          # - OpenBadgeCredential <-- uncomment this to specify that the to be issued Credentials are OpenBadgev3 Credentials
       display:
         - name: Verifiable Credential
           locale: en
