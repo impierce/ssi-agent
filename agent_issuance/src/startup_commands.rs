@@ -6,10 +6,7 @@ use oid4vci::credential_issuer::{
 
 /// Returns the startup commands for the application.
 pub fn startup_commands(host: url::Url, metadata: &Metadata) -> Vec<ServerConfigCommand> {
-    vec![
-        load_server_metadata(host.clone(), metadata),
-        create_credentials_supported(),
-    ]
+    vec![load_server_metadata(host, metadata), create_credentials_supported()]
 }
 
 pub fn load_server_metadata(base_url: url::Url, metadata: &Metadata) -> ServerConfigCommand {
@@ -40,11 +37,10 @@ pub fn create_credentials_supported() -> ServerConfigCommand {
     let credential_configuration = server_config
         .credential_configurations
         .first()
-        .expect("Failed due to empty `credential_configurations` array in `issuance-config.yml` file");
+        .expect("Failed due to empty `credential_configurations` array in `issuance-config.yml` file")
+        .clone();
 
     ServerConfigCommand::AddCredentialConfiguration {
-        credential_configuration_id: credential_configuration.credential_configuration_id.clone(),
-        credential_format_with_parameters: credential_configuration.credential_format_with_parameters.clone(),
-        display: credential_configuration.display.clone(),
+        credential_configuration,
     }
 }

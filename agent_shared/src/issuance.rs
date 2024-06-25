@@ -2,7 +2,7 @@ use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct CredentialConfiguration {
     pub credential_configuration_id: String,
     #[serde(flatten)]
