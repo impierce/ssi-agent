@@ -1,9 +1,6 @@
-use oid4vci::{
-    credential_format_profiles::{CredentialFormats, WithParameters},
-    credential_issuer::{
-        authorization_server_metadata::AuthorizationServerMetadata,
-        credential_issuer_metadata::CredentialIssuerMetadata,
-    },
+use agent_shared::issuance::CredentialConfiguration;
+use oid4vci::credential_issuer::{
+    authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
 use serde::Deserialize;
 
@@ -15,8 +12,6 @@ pub enum ServerConfigCommand {
         credential_issuer_metadata: CredentialIssuerMetadata,
     },
     AddCredentialConfiguration {
-        credential_configuration_id: String,
-        credential_format_with_parameters: CredentialFormats<WithParameters>,
-        display: Vec<serde_json::Value>,
+        credential_configuration: CredentialConfiguration,
     },
 }

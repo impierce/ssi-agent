@@ -4,6 +4,7 @@ pub mod domain_linkage;
 pub mod error;
 pub mod generic_query;
 pub mod handlers;
+pub mod issuance;
 pub mod metadata;
 pub mod url_utils;
 

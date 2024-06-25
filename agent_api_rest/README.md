@@ -26,51 +26,6 @@ Below we describe a typical usage of the REST API for UniCore.
 ### Issuance
 Typical usage of the Issuance of Credentials
 
-#### Creating new/overwriting existing Credential Configuration
-
-<details>
- <summary><code>POST</code> <code><b>/configurations/credential_configurations</b></code></summary>
-
-The Credential Configuration is a JSON object that defines the format of the credentials that will be issued. This
-typically only needs to be configured once and will ensure that through the `credentialConfigurationId` [Credentials can
-be created and issued](#creating-a-new-credential) accordingly. 
-
-##### Parameters
-- `credentialConfigurationId`: **REQUIRED** This identifier can be used to refer to the Credential Configuration when creating a new
-  Credential through the `/v0/credentials` endpoint.
-- `format`: **REQUIRED** The format of the Credential. Currently, only `jwt_vc_json` is supported.
-- `credential_definition`: **REQUIRED** An object describing the Credentials that will be issued through this Credential
-  Configuration.
-    - `type`: **REQUIRED** The type of Credentials that will be issued through this Credential Configuration.
-    - `credentialSubject`: **OPTIONAL** This parameter can be used to add a more precise description of the Credentials.
-- `display`: **OPTIONAL** An array of objects that describe how the Credential will be displayed in the UniCore Wallet.
-    - `name`: **REQUIRED** The name of the Credential.
-    - `locale`: **OPTIONAL** The locale of the Credential.
-    - `logo`: **OPTIONAL** An object that describes the logo of the Credential.
-        - `url`: **REQUIRED** The URL of the logo.
-        - `alt_text`: **OPTIONAL** The alt text of the logo.
-
-```json
-{
-    "credentialConfigurationId":"w3c_vc_credential",
-    "format": "jwt_vc_json",
-    "credential_definition": {
-        "type": [
-            "VerifiableCredential",
-            // "OpenBadgeCredential"
-        ]
-    },
-    "display": [{
-        "name": "Identity Credential",
-        "locale": "en",
-        "logo": {
-            "url": "https://impierce.com/images/logo-blue.png",
-            "alt_text": "UniCore Logo"
-        }
-    }]
-}
-```
-
 </details>
 
 #### Creating a new Credential
@@ -85,7 +40,8 @@ Now there is a new Credential Configuration, we can create our first Credential.
   [Credential Offer that we will receive later](#retrieving-the-URL-encoded-credential-offer)
 - `credentialConfigurationId`: **REQUIRED** 
 - `credential`: **REQUIRED** An object containing the data that will be included in the Credential. This data should
-  adhere to the Credential Definition that was defined in the Credential Configuration.
+  adhere to the Credential Definition that was defined in the Credential Configuration. See the [Issuance
+  Configuration](../agent_issuance/README.md) for more information about how the Credential Configuration is defined.
 
 ```json
 {

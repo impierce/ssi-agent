@@ -23,5 +23,6 @@ COPY ../../agent_application/config.yml agent_application/config.yml
 COPY ../../agent_secret_manager/tests/res/selv.stronghold res/stronghold
 COPY ../../agent_event_publisher_http/config.yml agent_event_publisher_http/config.yml
 COPY ../../agent_verification/presentation_definitions agent_verification/presentation_definitions
+COPY ../../agent_issuance/issuance-config.yml agent_issuance/issuance-config.yml
 
 ENTRYPOINT ["/usr/local/bin/agent_application"]

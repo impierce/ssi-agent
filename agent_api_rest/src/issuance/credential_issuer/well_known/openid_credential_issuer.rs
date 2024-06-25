@@ -25,7 +25,7 @@ pub(crate) async fn openid_credential_issuer(State(state): State<IssuanceState>)
 mod tests {
     use std::collections::HashMap;
 
-    use crate::{app, configurations::credential_configurations::tests::credential_configurations, tests::BASE_URL};
+    use crate::{app, tests::BASE_URL};
 
     use super::*;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
@@ -140,8 +140,6 @@ mod tests {
         initialize(&issuance_state, startup_commands(BASE_URL.clone(), &load_metadata())).await;
 
         let mut app = app((issuance_state, verification_state));
-
-        credential_configurations(&mut app).await;
 
         let _credential_issuer_metadata = openid_credential_issuer(&mut app).await;
     }

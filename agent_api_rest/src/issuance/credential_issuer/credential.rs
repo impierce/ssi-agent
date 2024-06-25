@@ -154,7 +154,6 @@ mod tests {
     };
 
     use super::*;
-    use crate::configurations::credential_configurations::tests::credential_configurations;
     use crate::issuance::credentials::tests::credentials;
     use crate::API_VERSION;
     use agent_event_publisher_http::{EventPublisherHttp, TEST_EVENT_PUBLISHER_HTTP_CONFIG};
@@ -316,8 +315,6 @@ mod tests {
         initialize(&issuance_state, startup_commands(BASE_URL.clone(), &load_metadata())).await;
 
         let mut app = app((issuance_state, verification_state));
-
-        credential_configurations(&mut app).await;
 
         if let Some(external_server) = &external_server {
             external_server

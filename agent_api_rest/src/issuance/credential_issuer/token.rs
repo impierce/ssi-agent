@@ -62,7 +62,6 @@ pub(crate) async fn token(
 pub mod tests {
     use crate::{
         app,
-        configurations::credential_configurations::tests::credential_configurations,
         issuance::{credentials::tests::credentials, offers::tests::offers},
         tests::BASE_URL,
     };
@@ -120,8 +119,6 @@ pub mod tests {
         initialize(&issuance_state, startup_commands(BASE_URL.clone(), &metadata)).await;
 
         let mut app = app((issuance_state, verification_state));
-
-        credential_configurations(&mut app).await;
 
         credentials(&mut app).await;
         let pre_authorized_code = offers(&mut app).await;

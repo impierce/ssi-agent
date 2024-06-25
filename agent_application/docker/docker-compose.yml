@@ -53,6 +53,7 @@ services:
       - ../../agent_secret_manager/tests/res/selv.stronghold:/app/res/stronghold
       - ../../agent_event_publisher_http/config.yml:/app/agent_event_publisher_http/config.yml
       - ../../agent_verification/presentation_definitions:/app/agent_verification/presentation_definitions
+      - ../../agent_issuance/issuance-config.yml:/app/agent_issuance/issuance-config.yml
       # TODO: Remove this. This is a workaround that ensures that the `agent_verification/presentation_definitions`
       # folder can be accessed by the agent from the `fn authorization_requests` endpoint.
       - ./tmp:/app/agent_api_rest

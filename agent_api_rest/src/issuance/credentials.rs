@@ -156,7 +156,6 @@ pub mod tests {
     use crate::API_VERSION;
     use crate::{
         app,
-        configurations::credential_configurations::tests::credential_configurations,
         tests::{BASE_URL, CREDENTIAL_CONFIGURATION_ID, OFFER_ID},
     };
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
@@ -261,8 +260,6 @@ pub mod tests {
         initialize(&issuance_state, startup_commands(BASE_URL.clone(), &load_metadata())).await;
 
         let mut app = app((issuance_state, verification_state));
-
-        credential_configurations(&mut app).await;
 
         credentials(&mut app).await;
     }

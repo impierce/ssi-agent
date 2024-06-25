@@ -12,7 +12,7 @@ use serde::Deserialize;
 use serde_with::skip_serializing_none;
 use tracing::info;
 
-#[cfg(feature = "test")]
+#[cfg(feature = "test_utils")]
 pub static TEST_EVENT_PUBLISHER_HTTP_CONFIG: std::sync::Mutex<Option<serde_yaml::Value>> = std::sync::Mutex::new(None);
 
 /// A struct that contains all the event publishers for the different aggregates.
@@ -31,14 +31,14 @@ pub struct EventPublisherHttp {
 
 impl EventPublisherHttp {
     pub fn load() -> anyhow::Result<Self> {
-        #[cfg(feature = "test")]
+        #[cfg(feature = "test_utils")]
         let mut config = TEST_EVENT_PUBLISHER_HTTP_CONFIG
             .lock()
             .unwrap()
             .as_ref()
             .unwrap()
             .clone();
-        #[cfg(not(feature = "test"))]
+        #[cfg(not(feature = "test_utils"))]
         let mut config: serde_yaml::Value = {
             match std::fs::File::open("agent_event_publisher_http/config.yml") {
                 Ok(config_file) => serde_yaml::from_reader(config_file)?,
