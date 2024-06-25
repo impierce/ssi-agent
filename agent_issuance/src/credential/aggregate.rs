@@ -307,7 +307,7 @@ pub mod credential_tests {
         #[case] unsigned_credential: serde_json::Value,
     ) {
         set_metadata_configuration("did:key");
-        set_issuer_configuration();
+         
 
         CredentialTestFramework::with(CredentialServices)
             .given_no_previous_events()

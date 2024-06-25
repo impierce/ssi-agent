@@ -1,4 +1,5 @@
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -16,27 +17,21 @@ pub struct ServerConfig {
 }
 
 #[cfg(feature = "test")]
-pub static TEST_ISSUER_CONFIG: std::sync::Mutex<Option<serde_yaml::Value>> = std::sync::Mutex::new(None);
-
-#[cfg(feature = "test")]
-pub fn set_issuer_configuration() {
-    // Set the test configuration.
-    TEST_ISSUER_CONFIG.lock().unwrap().replace(
-        serde_yaml::from_str(
-            r#"
-                server_config:
-                  credential_configurations:
-                    - credential_configuration_id: badge
-                      format: jwt_vc_json
-                      credential_definition:
-                        type:
-                          - VerifiableCredential
-                      display:
-                        - name: Badge
-                          logo:
-                            url: https://example.com/logo.png
-            "#,
-        )
-        .unwrap(),
-    );
-}
+pub static TEST_ISSUER_CONFIG: Lazy<serde_yaml::Value> = Lazy::new(|| {
+    serde_yaml::from_str(
+        r#"
+            server_config:
+              credential_configurations:
+                - credential_configuration_id: badge
+                  format: jwt_vc_json
+                  credential_definition:
+                    type:
+                      - VerifiableCredential
+                  display:
+                    - name: Badge
+                      logo:
+                        url: https://example.com/logo.png
+        "#,
+    )
+    .unwrap()
+});

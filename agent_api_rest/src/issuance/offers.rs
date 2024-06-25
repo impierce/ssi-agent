@@ -92,10 +92,7 @@ pub mod tests {
     use super::*;
     use crate::API_VERSION;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
-    use agent_shared::{
-        issuance::set_issuer_configuration,
-        metadata::{load_metadata, set_metadata_configuration},
-    };
+    use agent_shared::metadata::{load_metadata, set_metadata_configuration};
     use agent_store::in_memory;
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
@@ -159,7 +156,6 @@ pub mod tests {
     #[tracing_test::traced_test]
     async fn test_offers_endpoint() {
         set_metadata_configuration("did:key");
-        set_issuer_configuration();
 
         let issuance_state = in_memory::issuance_state(Default::default()).await;
 

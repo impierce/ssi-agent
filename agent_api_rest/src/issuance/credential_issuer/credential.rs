@@ -277,10 +277,7 @@ mod tests {
         #[case] is_self_signed: bool,
         #[case] delay: u128,
     ) {
-        use agent_shared::issuance::set_issuer_configuration;
-
         set_metadata_configuration("did:key");
-        set_issuer_configuration();
 
         let (external_server, issuance_event_publishers, verification_event_publishers) = if with_external_server {
             let external_server = MockServer::start().await;

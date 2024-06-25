@@ -43,14 +43,10 @@ fn test_config() -> config::Config {
         config_builder = config_builder.add_source(config::File::from_str(&metadata_string, config::FileFormat::Yaml));
     }
 
-    // If some test issuer configuration is set then add it to the global configuration.
-    let issuer_config = TEST_ISSUER_CONFIG.lock().unwrap();
-
-    if let Some(issuer_config) = issuer_config.as_ref() {
-        let issuer_config_string = serde_yaml::to_string(issuer_config).unwrap();
-        config_builder =
-            config_builder.add_source(config::File::from_str(&issuer_config_string, config::FileFormat::Yaml));
-    }
+    config_builder = config_builder.add_source(config::File::from_str(
+        &serde_yaml::to_string(&*TEST_ISSUER_CONFIG).unwrap(),
+        config::FileFormat::Yaml,
+    ));
 
     config_builder.build().unwrap()
 }
