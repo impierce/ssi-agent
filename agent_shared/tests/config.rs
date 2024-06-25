@@ -1,6 +1,6 @@
 use agent_shared::config;
 
-#[cfg(feature = "test")]
+#[cfg(feature = "test_utils")]
 #[test]
 fn test_config() {
     assert_eq!(config!("variable", String).unwrap(), "env_value");

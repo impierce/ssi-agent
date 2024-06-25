@@ -30,8 +30,8 @@ url.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-agent_issuance = { path = ".", features = ["test"] }
-agent_shared = { path = "../agent_shared", features = ["test"] }
+agent_issuance = { path = ".", features = ["test_utils"] }
+agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 
 did_manager.workspace = true
 lazy_static.workspace = true
@@ -42,4 +42,4 @@ async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 rstest.workspace = true
 
 [features]
-test = []
+test_utils = []

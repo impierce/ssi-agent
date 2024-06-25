@@ -41,13 +41,13 @@ pub struct Metadata {
     pub display: Vec<Display>,
 }
 
-#[cfg(feature = "test")]
+#[cfg(feature = "test_utils")]
 pub static TEST_METADATA: std::sync::Mutex<Option<serde_yaml::Value>> = std::sync::Mutex::new(None);
 
 pub fn load_metadata() -> Metadata {
-    #[cfg(feature = "test")]
+    #[cfg(feature = "test_utils")]
     let mut config = TEST_METADATA.lock().unwrap().as_ref().unwrap().clone();
-    #[cfg(not(feature = "test"))]
+    #[cfg(not(feature = "test_utils"))]
     let mut config: serde_yaml::Value = {
         match std::fs::File::open("agent_application/config.yml") {
             Ok(config_file) => serde_yaml::from_reader(config_file).unwrap(),
@@ -74,7 +74,7 @@ pub fn load_metadata() -> Metadata {
     metadata
 }
 
-#[cfg(feature = "test")]
+#[cfg(feature = "test_utils")]
 pub fn set_metadata_configuration(default_did_method: &str) {
     // Set the test configuration.
     TEST_METADATA.lock().unwrap().replace(

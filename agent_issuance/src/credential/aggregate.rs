@@ -74,9 +74,9 @@ impl Aggregate for Credential {
                             ..
                         },
                 }) => {
-                    #[cfg(feature = "test")]
+                    #[cfg(feature = "test_utils")]
                     let issuance_date = "2010-01-01T00:00:00Z";
-                    #[cfg(not(feature = "test"))]
+                    #[cfg(not(feature = "test_utils"))]
                     let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
                     let name = match config!("display", Vec<Display>)
@@ -213,9 +213,9 @@ impl Aggregate for Credential {
                     // Replace the original credentialSubject with the new map
                     credential.raw["credentialSubject"] = serde_json::Value::Object(new_credential_subject);
 
-                    #[cfg(feature = "test")]
+                    #[cfg(feature = "test_utils")]
                     let iat = 0;
-                    #[cfg(not(feature = "test"))]
+                    #[cfg(not(feature = "test_utils"))]
                     let iat = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap()

@@ -1,5 +1,4 @@
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -16,7 +15,10 @@ pub struct ServerConfig {
     pub credential_configurations: Vec<CredentialConfiguration>,
 }
 
-#[cfg(feature = "test")]
+#[cfg(feature = "test_utils")]
+use once_cell::sync::Lazy;
+
+#[cfg(feature = "test_utils")]
 pub static TEST_ISSUER_CONFIG: Lazy<serde_yaml::Value> = Lazy::new(|| {
     serde_yaml::from_str(
         r#"

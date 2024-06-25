@@ -90,7 +90,7 @@ impl VerificationServices {
     }
 }
 
-#[cfg(feature = "test")]
+#[cfg(feature = "test_utils")]
 pub mod test_utils {
     use agent_secret_manager::secret_manager;
     use agent_secret_manager::subject::Subject;

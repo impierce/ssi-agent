@@ -26,8 +26,8 @@ url.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
-agent_shared = { path = "../agent_shared", features = ["test"] }
-agent_verification = { path = ".", features = ["test"] }
+agent_shared = { path = "../agent_shared", features = ["test_utils"] }
+agent_verification = { path = ".", features = ["test_utils"] }
 
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 did_manager.workspace = true
@@ -39,4 +39,4 @@ rstest.workspace = true
 serial_test = "3.0"
 
 [features]
-test = []
+test_utils = []

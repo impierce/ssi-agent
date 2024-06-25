@@ -3,10 +3,10 @@ use tracing::info;
 /// Read environment variables
 #[allow(unused)]
 pub fn config(package_name: &str) -> config::Config {
-    #[cfg(feature = "test")]
+    #[cfg(feature = "test_utils")]
     let config = test_config();
 
-    #[cfg(not(feature = "test"))]
+    #[cfg(not(feature = "test_utils"))]
     let config = {
         dotenvy::dotenv().ok();
 
@@ -25,7 +25,7 @@ pub fn config(package_name: &str) -> config::Config {
 }
 
 /// Read environment variables for tests that can be used across packages
-#[cfg(feature = "test")]
+#[cfg(feature = "test_utils")]
 fn test_config() -> config::Config {
     use crate::{issuance::TEST_ISSUER_CONFIG, metadata::TEST_METADATA};
     use std::env;

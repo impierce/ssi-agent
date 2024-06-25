@@ -18,12 +18,12 @@ identity_document = { version = "1.3" }
 identity_storage = { version = "1.3" }
 is_empty = "0.2"
 jsonwebtoken.workspace = true
-once_cell = "1.19"
 # TODO: replace all identity_* with identity_iota?
 # identity_iota = { version = "1.3" }
 oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true
+once_cell = { version = "1.19", optional = true }
 rand = "0.8"
 serde.workspace = true
 serde_json.workspace = true
@@ -36,4 +36,4 @@ url.workspace = true
 
 [features]
 local_development = []
-test = []
+test_utils = ["once_cell"]

@@ -27,12 +27,12 @@ tracing-subscriber.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-agent_event_publisher_http = { path = "../agent_event_publisher_http", features = ["test"] }
-agent_issuance = { path = "../agent_issuance", features = ["test"] }
+agent_event_publisher_http = { path = "../agent_event_publisher_http", features = ["test_utils"] }
+agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
 agent_secret_manager = { path = "../agent_secret_manager" }
-agent_shared = { path = "../agent_shared", features = ["test"] }
+agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
-agent_verification = { path = "../agent_verification", features = ["test"] }
+agent_verification = { path = "../agent_verification", features = ["test_utils"] }
 
 futures.workspace = true
 jsonwebtoken.workspace = true
