@@ -1,96 +1,11 @@
 {
 	"info": {
-		"_postman_id": "c5e81d8c-8ce6-4dc5-a37f-a1bbbdbbee26",
+		"_postman_id": "3b1e6396-3bf7-43aa-bc3b-21056fb21dfa",
 		"name": "ssi-agent",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "24972330"
 	},
 	"item": [
-		{
-			"name": "Configurations",
-			"item": [
-				{
-					"name": "openbadgesv3_credential_configurations",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"credentialConfigurationId\":\"openbadge_credential\",\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\n            \"VerifiableCredential\",\n            \"OpenBadgeCredential\"\n        ]\n    },\n    \"display\": [{\n        \"name\": \"Identity Credential\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"url\": \"https://impierce.com/images/logo-blue.png\",\n            \"alt_text\": \"UniCore Logo\"\n        }\n    }]\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{HOST}}/v0/configurations/credential_configurations",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"v0",
-								"configurations",
-								"credential_configurations"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "w3c_vc_credential_configurations",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"credentialConfigurationId\":\"w3c_vc_credential\",\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\n            \"VerifiableCredential\"\n        ]\n    },\n    \"display\": [{\n        \"name\": \"Identity Credential\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"url\": \"https://impierce.com/images/logo-blue.png\",\n            \"alt_text\": \"UniCore Logo\"\n        }\n    }]\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{HOST}}/v0/configurations/credential_configurations",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"v0",
-								"configurations",
-								"credential_configurations"
-							]
-						}
-					},
-					"response": []
-				}
-			]
-		},
 		{
 			"name": "Issuance",
 			"item": [
