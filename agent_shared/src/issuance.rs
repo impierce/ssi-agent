@@ -15,12 +15,14 @@ pub struct ServerConfig {
     pub credential_configurations: Vec<CredentialConfiguration>,
 }
 
+#[cfg(feature = "test")]
 pub static TEST_ISSUER_CONFIG: std::sync::Mutex<Option<serde_yaml::Value>> = std::sync::Mutex::new(None);
 
+#[cfg(feature = "test")]
 pub fn set_issuer_configuration() {
     // Set the test configuration.
     TEST_ISSUER_CONFIG.lock().unwrap().replace(
-        serde_yaml::from_str(&format!(
+        serde_yaml::from_str(
             r#"
                 server_config:
                   credential_configurations:
@@ -33,8 +35,8 @@ pub fn set_issuer_configuration() {
                         - name: Badge
                           logo:
                             url: https://example.com/logo.png
-            "#
-        ))
+            "#,
+        )
         .unwrap(),
     );
 }

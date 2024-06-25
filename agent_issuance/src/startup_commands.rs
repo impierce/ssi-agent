@@ -34,10 +34,13 @@ pub fn load_server_metadata(base_url: url::Url, metadata: &Metadata) -> ServerCo
 }
 
 pub fn create_credentials_supported() -> ServerConfigCommand {
-    let server_config =
-        config!("server_config", ServerConfig).expect("Failed due to missing `issuance-config.yml` file");
+    let server_config = config!("server_config", ServerConfig)
+        .expect("Failed due to missing `server_config` in `issuance-config.yml` file");
 
-    let credential_configuration = server_config.credential_configurations.get(0).clone().unwrap();
+    let credential_configuration = server_config
+        .credential_configurations
+        .first()
+        .expect("Failed due to empty `credential_configurations` array in `issuance-config.yml` file");
 
     ServerConfigCommand::AddCredentialConfiguration {
         credential_configuration_id: credential_configuration.credential_configuration_id.clone(),

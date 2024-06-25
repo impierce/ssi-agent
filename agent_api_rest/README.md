@@ -40,7 +40,8 @@ Now there is a new Credential Configuration, we can create our first Credential.
   [Credential Offer that we will receive later](#retrieving-the-URL-encoded-credential-offer)
 - `credentialConfigurationId`: **REQUIRED** 
 - `credential`: **REQUIRED** An object containing the data that will be included in the Credential. This data should
-  adhere to the Credential Definition that was defined in the Credential Configuration.
+  adhere to the Credential Definition that was defined in the Credential Configuration. See the [Issuance
+  Configuration](../agent_issuance/README.md) for more information about how the Credential Configuration is defined.
 
 ```json
 {
