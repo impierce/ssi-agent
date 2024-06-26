@@ -5,11 +5,12 @@ use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::{
     config,
     domain_linkage::create_did_configuration_resource,
+    linked_verifiable_presentation::create_linked_verifiable_presentation_resource,
     metadata::{load_metadata, Metadata},
 };
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
-use axum::{routing::get, Json};
+use axum::{http, response::IntoResponse, routing::get, Json};
 use identity_document::service::{Service, ServiceEndpoint};
 use std::sync::Arc;
 use tokio::{fs, io};
@@ -95,6 +96,7 @@ async fn main() -> io::Result<()> {
     } else {
         None
     };
+
     // Domain Linkage
     let did_configuration_resource = if config!("domain_linkage_enabled", bool).unwrap_or(false) {
         Some(
@@ -111,6 +113,27 @@ async fn main() -> io::Result<()> {
     } else {
         None
     };
+
+    // Linked Verifiable Presentation
+    let linked_verifiable_presentation_resource =
+        if config!("linked_verifiable_presentation_enabled", bool).unwrap_or(false) {
+            Some(
+                create_linked_verifiable_presentation_resource(
+                    url.clone(),
+                    config!("linked_verifiable_credential", String)
+                        .expect("`AGENT_CONFIG_LINKED_VERIFIABLE_CREDENTIAL` is not set")
+                        .into(),
+                    did_document
+                        .clone()
+                        .expect("No DID document found to create a Linked Verifiable Presentation Resource for"),
+                    secret_manager().await,
+                )
+                .await
+                .expect("Failed to create DID Configuration Resource"),
+            )
+        } else {
+            None
+        };
 
     if let Some(mut did_document) = did_document {
         if let Some(did_configuration_resource) = did_configuration_resource {
@@ -136,6 +159,45 @@ async fn main() -> io::Result<()> {
             info!("Serving DID Configuration (Domain Linkage) at `{path}`");
             app = app.route(path, get(Json(did_configuration_resource)));
         }
+
+        if let Some(linked_verifiable_presentation_resource) = linked_verifiable_presentation_resource {
+            // Create a new service and add it to the DID document.
+
+            // FIX THISS
+            let path = "/linked-verifiable-presentation.jwt";
+
+            let service = Service::builder(Default::default())
+                .id(format!("{}#service-2", did_document.id()).parse().unwrap())
+                .type_("LinkedVerifiablePresentation")
+                .service_endpoint(
+                    serde_json::from_value::<ServiceEndpoint>(serde_json::json!(
+                        {
+                            "origins": [format!("{}{path}", url.origin().ascii_serialization())]
+                        }
+                    ))
+                    .unwrap(),
+                )
+                .build()
+                .expect("Failed to create Linked Verifiable Presentation Resource");
+            did_document
+                .insert_service(service)
+                .expect("Service already exists in DID Document");
+
+            let linked_verifiable_presentation = linked_verifiable_presentation_resource.as_str().to_string();
+
+            info!("Serving Linked Verifiable Presentation at `{path}`");
+            app = app.route(
+                path,
+                get(|| async {
+                    (
+                        [(http::header::CONTENT_TYPE, "application/jwt")],
+                        linked_verifiable_presentation,
+                    )
+                        .into_response()
+                }),
+            );
+        }
+
         let path = "/.well-known/did.json";
         info!("Serving `did:web` document at `{path}`");
         app = app.route(path, get(Json(did_document)));
