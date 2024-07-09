@@ -1,5 +1,4 @@
 mod issuance;
-mod metrics;
 mod verification;
 
 use agent_issuance::state::IssuanceState;
@@ -22,7 +21,6 @@ use issuance::credential_issuer::{
 };
 use issuance::credentials::{credentials, get_credentials};
 use issuance::offers::offers;
-use metrics::health;
 use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
 use verification::{
@@ -74,8 +72,6 @@ pub fn app(state: ApplicationState) -> Router {
         // SIOPv2
         .route(&path("/request/:request_id"), get(request))
         .route(&path("/redirect"), post(redirect))
-        // Monitoring
-        .route(&path("/health"), get(health))
         // Trace layer
         .layer(
             TraceLayer::new_for_http()

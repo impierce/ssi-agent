@@ -9,7 +9,7 @@ use agent_shared::{
 };
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
-use axum::{routing::get, Json};
+use axum::{http::StatusCode, routing::get, Json};
 use identity_document::service::{Service, ServiceEndpoint};
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
@@ -141,7 +141,34 @@ async fn main() {
         app = app.route(path, get(Json(did_document)));
     }
 
+    // Health check
+    // TODO: reconsider naming this endpoint to `/healthz` or `/livez` according to the Kubernetes conventions.
+    // Note: the /health endpoint is added here instead of `agent_api_rest`, because some health checks need to run functions inaccessible in `agent_api_rest`.
+    app = app.route("/health", get(health_check));
+
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await.unwrap();
     info!("listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.unwrap();
+}
+
+/// Performs a few low-cost sanity checks to detect possible problems (such as misconfiguration) early.
+pub async fn health_check() -> axum::http::StatusCode {
+    // Are configured keys accessible?
+    let _ = secret_manager().await;
+
+    // Is the event store healthy?
+    match agent_shared::config!("event_store", String).unwrap().as_str() {
+        "postgres" => {
+            // TODO: implement
+            // let pool = postgres::default_postgress_pool(&config!("db_connection_string", String).unwrap()).await;
+        }
+        _ => {
+            // TODO: implement
+            // Is there enough memory left to store events?
+        }
+    }
+
+    // TODO: return StatusCode::SERVICE_UNAVAILABLE if any of the checks fail
+
+    StatusCode::OK
 }
