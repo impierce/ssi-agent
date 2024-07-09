@@ -26,4 +26,3 @@ display:
       # This value will also be used in the SIOPv2/OID4VP `client_metadata`'s `logo_uri` property.
       uri: https://impierce.com/images/logo-blue.png
       alt_text: UniCore Logo
- 
