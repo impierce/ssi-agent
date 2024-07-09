@@ -12,12 +12,11 @@ FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
-
 RUN cargo build --release --bin agent_application
 
 FROM debian:bookworm-slim AS runtime
-COPY --from=builder /app/target/release/agent_application /usr/local/bin/
 WORKDIR /app
+COPY --from=builder /app/target/release/agent_application /usr/local/bin/
 
 COPY ../../agent_application/config.yml agent_application/config.yml
 COPY ../../agent_secret_manager/tests/res/selv.stronghold res/stronghold
