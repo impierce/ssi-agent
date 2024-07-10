@@ -8,6 +8,8 @@ use serde_with::skip_serializing_none;
 use tracing::info;
 use url::Url;
 
+use crate::config::config_2;
+
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Logo {
@@ -57,6 +59,8 @@ pub fn load_metadata() -> Metadata {
     };
     let mut config: serde_yaml::Value = crate::config::config("AGENT_APPLICATION").try_deserialize().unwrap();
 
+    info!("config: {:?}", config);
+
     let supported_algorithms: serde_yaml::Value = vec!["EdDSA".to_string()].into();
     if config["signing_algorithms_supported"] != supported_algorithms {
         unimplemented!(
@@ -66,6 +70,8 @@ pub fn load_metadata() -> Metadata {
     }
 
     config.apply_merge().unwrap();
+
+    info!("config: {:?}", config);
 
     let metadata =
         serde_yaml::from_value::<Metadata>(config).expect("Invalid metadata in `agent_application/config.yml` file");

@@ -3,20 +3,28 @@ log_format: "json"
 event_store: "postgres"
 db_connection_string: "postgresql://demo_user:demo_pass@localhost:5432/demo"
 url: "https://ssi-agent.example.org"
+# base_path: "unicore"
 cors_enabled: false
 external_server_response_timeout_ms: 500
 
+did_methods:
+  did_jwk:
+    enabled: true
+    # preferred: true
+  did_key:
+    enabled: true
+  did_iota_rms:
+    enabled: true
+  did_web:
+    enabled: true
+    preferred: true
+
 # List of Subject Syntax Types (DID Methods) supported by UniCore. The first item in the list is the default Syntax Type,
 # meaning UniCore will use its identifier belonging to this type by default.
-subject_syntax_types_supported:
-  - did:jwk
-  - did:key
-  - did:iota:rms
-
-did_method_web_enabled: false # TODO: should be implicitly enabled when it's listed in "subject_syntax_types_supported"
-
-# TODO: unused, but let's define this explicitly
-preferred_did_method: did:key
+# subject_syntax_types_supported:
+#   - did:jwk
+#   - did:key
+#   - did:iota:rms
 
 domain_linkage_enabled: false
 

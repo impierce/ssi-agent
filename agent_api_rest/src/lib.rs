@@ -2,7 +2,7 @@ mod issuance;
 mod verification;
 
 use agent_issuance::state::IssuanceState;
-use agent_shared::{config, ConfigError};
+use agent_shared::{config, config::config_2, ConfigError};
 use agent_verification::state::VerificationState;
 use axum::{
     body::Bytes,
@@ -99,23 +99,26 @@ pub fn app(state: ApplicationState) -> Router {
 }
 
 fn get_base_path() -> Result<String, ConfigError> {
-    config!("base_path", String).map(|mut base_path| {
-        if base_path.starts_with('/') {
-            base_path.remove(0);
-        }
+    config_2()
+        .base_path
+        .ok_or_else(|| ConfigError::NotFound("No configuration for `base_path` found".to_string()))
+        .map(|mut base_path| {
+            if base_path.starts_with('/') {
+                base_path.remove(0);
+            }
 
-        if base_path.ends_with('/') {
-            base_path.pop();
-        }
+            if base_path.ends_with('/') {
+                base_path.pop();
+            }
 
-        if base_path.is_empty() {
-            panic!("AGENT_APPLICATION_BASE_PATH can't be empty, remove or set path");
-        }
+            if base_path.is_empty() {
+                panic!("AGENT_APPLICATION_BASE_PATH can't be empty, remove or set path");
+            }
 
-        tracing::info!("Base path: {:?}", base_path);
+            tracing::info!("Base path: {:?}", base_path);
 
-        base_path
-    })
+            base_path
+        })
 }
 
 #[cfg(test)]

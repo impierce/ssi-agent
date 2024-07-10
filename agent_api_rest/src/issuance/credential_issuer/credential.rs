@@ -11,6 +11,7 @@ use agent_issuance::{
 };
 use agent_shared::{
     config,
+    config::config_2,
     handlers::{command_handler, query_handler},
 };
 use axum::{
@@ -24,7 +25,7 @@ use serde_json::json;
 use tokio::time::sleep;
 use tracing::{error, info};
 
-const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u128 = 1000;
+const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
 const POLLING_INTERVAL_MS: u64 = 100;
 
 #[axum_macros::debug_handler]
@@ -64,9 +65,11 @@ pub(crate) async fn credential(
         StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
-    let timeout = config!("external_server_response_timeout_ms", String)
-        .ok()
-        .and_then(|external_server_response_timeout_ms| external_server_response_timeout_ms.parse().ok())
+    let timeout = config_2()
+        .external_server_response_timeout_ms
+        // let timeout = config!("external_server_response_timeout_ms", String)
+        // .ok()
+        // .and_then(|external_server_response_timeout_ms| external_server_response_timeout_ms.parse().ok())
         .unwrap_or(DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS);
     let start_time = Instant::now();
 
@@ -76,7 +79,7 @@ pub(crate) async fn credential(
         match query_handler(&offer_id, &state.query.offer).await {
             // When the Offer does not include the credential id's yet, wait for the external server to provide them.
             Ok(Some(OfferView { credential_ids, .. })) if credential_ids.is_empty() => {
-                if start_time.elapsed().as_millis() <= timeout {
+                if start_time.elapsed().as_millis() <= timeout.into() {
                     sleep(Duration::from_millis(POLLING_INTERVAL_MS)).await;
                 } else {
                     error!("timeout failure");
@@ -181,7 +184,7 @@ mod tests {
             &self,
             app: Arc<Mutex<Option<Router>>>,
             is_self_signed: bool,
-            delay: u128,
+            delay: u64,
         );
     }
 
@@ -193,7 +196,7 @@ mod tests {
             &self,
             app: Arc<Mutex<Option<Router>>>,
             is_self_signed: bool,
-            delay: u128,
+            delay: u64,
         ) {
             Mock::given(method("POST"))
                 .and(path("/ssi-events-subscriber"))
@@ -275,7 +278,7 @@ mod tests {
     async fn test_credential_endpoint(
         #[case] with_external_server: bool,
         #[case] is_self_signed: bool,
-        #[case] delay: u128,
+        #[case] delay: u64,
     ) {
         set_metadata_configuration("did:key");
 

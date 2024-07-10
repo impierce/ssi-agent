@@ -1,4 +1,52 @@
+use config::ConfigError;
+use serde::Deserialize;
+use std::{collections::HashMap, sync::Mutex};
 use tracing::info;
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ApplicationConfiguration {
+    pub log_format: String,
+    pub url: String,
+    pub base_path: Option<String>,
+    pub did_methods: HashMap<String, DidMethodOptions>,
+    pub external_server_response_timeout_ms: Option<u64>,
+}
+
+// pub enum DidMethod {
+//     #[serde(rename = "did:jwk")]
+//     Jwk,
+//     Key,
+//     Web,
+//     IotaRms,
+// }
+
+#[derive(Debug, Deserialize, Default, Clone)]
+pub struct DidMethodOptions {
+    pub enabled: bool,
+    pub preferred: Option<bool>,
+}
+
+static CONFIG: Mutex<Option<ApplicationConfiguration>> = Mutex::new(None);
+
+impl ApplicationConfiguration {
+    pub fn new() -> Result<Self, ConfigError> {
+        info!("Loading application configuration ...");
+        let config = config::Config::builder()
+            .add_source(config::File::with_name("agent_application/example-config.yaml"))
+            .add_source(config::Environment::with_prefix("AGENT").separator("__"))
+            .build()?;
+        config.try_deserialize()
+    }
+}
+
+/// Loads the configuration or returns it, if it has already been loaded.
+pub fn config_2() -> ApplicationConfiguration {
+    CONFIG
+        .lock()
+        .unwrap()
+        .get_or_insert_with(|| ApplicationConfiguration::new().unwrap())
+        .clone()
+}
 
 /// Read environment variables
 #[allow(unused)]

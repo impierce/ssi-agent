@@ -1,5 +1,6 @@
 use crate::subject::Subject;
 use agent_shared::config;
+use agent_shared::config::config_2;
 use anyhow::Result;
 use did_manager::SecretManager;
 
@@ -10,9 +11,15 @@ pub struct SecretManagerServices {
 
 impl SecretManagerServices {
     pub fn new(subject: Option<Subject>) -> Self {
-        let default_did_method = config!("subject_syntax_types_supported", Vec<String>)
-            .ok()
-            .and_then(|subject_syntax_types_supported| subject_syntax_types_supported.first().cloned())
+        let default_did_method: String = config_2()
+            .did_methods
+            .iter()
+            .filter(|(_, v)| v.preferred.unwrap_or(false))
+            .map(|(k, _)| k.clone())
+            .collect::<Vec<String>>()
+            // TODO: should fail when there's more than one result
+            .first()
+            .cloned()
             .unwrap_or("did:key".to_string());
         Self {
             subject,

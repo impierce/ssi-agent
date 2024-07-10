@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use agent_shared::config;
+use agent_shared::config::config_2;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use jsonwebtoken::Algorithm;
@@ -58,8 +59,14 @@ impl Aggregate for ServerConfig {
             AddCredentialConfiguration {
                 credential_configuration,
             } => {
-                let cryptographic_binding_methods_supported =
-                    config!("subject_syntax_types_supported", Vec<String>).unwrap_or_default();
+                let cryptographic_binding_methods_supported = config_2()
+                    .did_methods
+                    .iter()
+                    .filter(|(_, v)| v.enabled)
+                    .map(|(k, _)| k.clone())
+                    // TODO: find less hacky solution, possibly: enum + serde rename
+                    .map(|did_method| did_method.replace("_", ":"))
+                    .collect();
 
                 let credential_signing_alg_values_supported =
                     config!("signing_algorithms_supported", Vec<String>).unwrap_or_default();

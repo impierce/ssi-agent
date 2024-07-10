@@ -5,6 +5,7 @@ use oid4vc_manager::RelyingPartyManager;
 use oid4vp::ClaimFormatProperty;
 use serde_json::json;
 use std::{collections::HashMap, sync::Arc};
+use tracing::info;
 
 /// Verification services. This struct is used to generate authorization requests and validate authorization responses.
 pub struct VerificationServices {
@@ -16,11 +17,12 @@ pub struct VerificationServices {
 
 impl VerificationServices {
     pub fn new(verifier: Arc<dyn Subject>, metadata: &Metadata) -> Self {
-        let default_did_method = metadata
-            .subject_syntax_types_supported
-            .first()
-            .expect("`subject_syntax_types_supported` must contain at least one element.")
-            .to_string();
+        // let default_did_method = metadata
+        //     .subject_syntax_types_supported
+        //     .first()
+        //     .expect("`subject_syntax_types_supported` must contain at least one element.")
+        //     .to_string();
+        let default_did_method = "did:key".to_string();
 
         let client_name = metadata.display.first().as_ref().map(|display| display.name.clone());
 

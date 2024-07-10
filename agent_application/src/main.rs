@@ -4,6 +4,7 @@ use agent_issuance::{startup_commands::startup_commands, state::initialize};
 use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::{
     config,
+    config::{config_2, DidMethodOptions},
     domain_linkage::create_did_configuration_resource,
     metadata::{load_metadata, Metadata},
 };
@@ -57,7 +58,9 @@ async fn main() -> io::Result<()> {
         ),
     };
 
-    let url = config!("url", String).expect("AGENT_CONFIG_URL is not set");
+    // let url = config!("url", String).expect("AGENT_CONFIG_URL is not set");
+    let url = config_2().url;
+    info!("{:?}", config_2());
     // TODO: Temporary solution. In the future we need to read these kinds of values from a config file.
     std::env::set_var("AGENT_VERIFICATION_URL", &url);
 
@@ -76,7 +79,12 @@ async fn main() -> io::Result<()> {
     }
 
     // did:web
-    let enable_did_web = config!("did_method_web_enabled", bool).unwrap_or(false);
+    // let enable_did_web = config!("did_method_web_enabled", bool).unwrap_or(false);
+    let enable_did_web = config_2()
+        .did_methods
+        .get("did_web")
+        .unwrap_or(&DidMethodOptions::default())
+        .enabled;
 
     let did_document = if enable_did_web {
         let subject = Subject {
