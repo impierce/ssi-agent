@@ -55,6 +55,7 @@ pub fn load_metadata() -> Metadata {
             Err(_) => serde_yaml::Value::Null,
         }
     };
+    let mut config: serde_yaml::Value = crate::config::config("AGENT_APPLICATION").try_deserialize().unwrap();
 
     let supported_algorithms: serde_yaml::Value = vec!["EdDSA".to_string()].into();
     if config["signing_algorithms_supported"] != supported_algorithms {

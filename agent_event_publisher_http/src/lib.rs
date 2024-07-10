@@ -46,8 +46,35 @@ impl EventPublisherHttp {
                 Err(_) => serde_yaml::Value::Null,
             }
         };
+        let config = agent_shared::config::config("AGENT_EVENT_PUBLISHER_HTTP");
 
-        config.apply_merge()?;
+        let event_publishers = config.get_table("event_publisher").unwrap_or_default();
+        let event_publisher_http = event_publishers
+            .get("http")
+            .unwrap()
+            .clone()
+            .into_table()
+            .unwrap_or_default();
+
+        info!("event_publisher_http: {:?}", event_publisher_http);
+
+        let config = if event_publisher_http
+            .get("enabled")
+            .unwrap()
+            .clone()
+            .into_bool()
+            .unwrap_or_default()
+        {
+            let publishers: serde_yaml::Value = event_publisher_http
+                .get("publishers")
+                .unwrap()
+                .clone()
+                .try_deserialize()
+                .unwrap();
+            publishers
+        } else {
+            serde_yaml::Value::Null
+        };
 
         serde_yaml::from_value(config)
             .map_err(Into::into)

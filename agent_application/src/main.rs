@@ -70,7 +70,7 @@ async fn main() -> io::Result<()> {
     let mut app = app((issuance_state, verification_state));
 
     // CORS
-    if config!("enable_cors", bool).unwrap_or(false) {
+    if config!("cors_enabled", bool).unwrap_or(false) {
         info!("CORS (permissive) enabled for all routes");
         app = app.layer(CorsLayer::permissive());
     }

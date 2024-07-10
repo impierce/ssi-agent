@@ -11,15 +11,16 @@ pub fn config(package_name: &str) -> config::Config {
         dotenvy::dotenv().ok();
 
         config::Config::builder()
-            .add_source(config::Environment::with_prefix(package_name))
-            .add_source(config::Environment::with_prefix("AGENT_CONFIG"))
-            .add_source(config::File::with_name("agent_application/config.yml"))
-            .add_source(config::File::with_name("agent_issuance/issuance-config.yml"))
+            // .add_source(config::Environment::with_prefix(package_name))
+            // TODO: read config.{run_mode}.yml from env "RUN_MODE"
+            .add_source(config::File::with_name("agent_application/example-config.yaml"))
+            .add_source(config::Environment::with_prefix("AGENT"))
             .build()
             .unwrap()
     };
 
-    info!("{:?}", config);
+    // TODO: this should ideally only printed once on startup or when the config changed
+    // info!("{:#?}", config.clone().try_deserialize::<serde_yaml::Value>().unwrap());
 
     config
 }

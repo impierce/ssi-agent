@@ -7,17 +7,17 @@ A configuration file is used to configure UniCore. An example can be found in [e
 
 ## Common
 
-| Name                                  | Description                                         | Default value | Accepted values                                                    |
-| ------------------------------------- | --------------------------------------------------- | ------------- | ------------------------------------------------------------------ |
-| `LOG_FORMAT`                          | The format of the log output.                       | `json`        | `json`, `text`                                                     |
-| `EVENT_STORE`                         | The type of event store to use.                     | -             | `in-memory`, `postgres`                                            |
-| `EVENT_STORE_DB_CONNECTION_STRING`    | The connection string for the event store database. | -             | `postgresql://<user>:<pass>@<host>` (only required for `postgres`) |
-| `URL`                                 | The URL of the service itself.                      | -             | `https://my-domain.example.org`                                    |
-| `ENABLE_CORS`                         | Enable CORS (permissive, allow all).                | `false`       | boolean                                                            |
-| `DID_METHOD_WEB_ENABLED`              | Create and host a `did:web` document.               | `false`       | boolean                                                            |
-| `DOMAIN_LINKAGE_ENABLED`              | Enable domain linkage (only works with `did:web`).  | `false`       | boolean                                                            |
-| `EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS` | The timeout for external server responses.          | `1000`        | integer                                                            |
-| `DEFAULT_DID_METHOD`                  | The default DID method to use.                      | `jwk`         | `jwk`, `key`, `web`                                                |
+| Name                                  | Description                                                               | Default value | Accepted values                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------- | ------------- | ------------------------------------------------------------------ |
+| `LOG_FORMAT`                          | The format of the log output.                                             | `json`        | `json`, `text`                                                     |
+| `EVENT_STORE`                         | The type of event store to use.                                           | -             | `in-memory`, `postgres`                                            |
+| `EVENT_STORE_DB_CONNECTION_STRING`    | The connection string for the event store database.                       | -             | `postgresql://<user>:<pass>@<host>` (only required for `postgres`) |
+| `URL`                                 | The URL of the service itself.                                            | -             | `https://my-domain.example.org`                                    |
+| `CORS_ENABLED`                        | Enable CORS (permissive, allow all). Only required for web-based wallets. | `false`       | boolean                                                            |
+| `DID_METHOD_WEB_ENABLED`              | Create and host a `did:web` document.                                     | `false`       | boolean                                                            |
+| `DOMAIN_LINKAGE_ENABLED`              | Enable domain linkage (only works with `did:web`).                        | `false`       | boolean                                                            |
+| `EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS` | The timeout for external server responses.                                | `1000`        | integer                                                            |
+| `PREFERRED_DID_METHOD`                | The default DID method to use.                                            | `jwk`         | `jwk`, `key`, `web`                                                |
 
 ## Stronghold
 
