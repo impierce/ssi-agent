@@ -13,6 +13,7 @@ cqrs-es.workspace = true
 postgres-es = "0.4.10"
 
 async-trait = "0.1"
+serde.workspace = true
 serde_json.workspace = true
 sqlx = { version = "0.7", features = [
     "postgres",

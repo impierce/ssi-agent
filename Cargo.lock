@@ -243,6 +243,7 @@ dependencies = [
  "async-trait",
  "cqrs-es",
  "postgres-es",
+ "serde",
  "serde_json",
  "sqlx",
  "tokio",

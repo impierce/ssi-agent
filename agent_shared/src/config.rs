@@ -5,11 +5,40 @@ use tracing::info;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ApplicationConfiguration {
-    pub log_format: String,
+    pub log_format: LogFormat,
+    pub event_store: EventStoreConfig,
     pub url: String,
     pub base_path: Option<String>,
     pub did_methods: HashMap<String, DidMethodOptions>,
     pub external_server_response_timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum LogFormat {
+    #[default]
+    Json,
+    Text,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct EventStoreConfig {
+    #[serde(rename = "type")]
+    pub type_: EventStoreType,
+    pub connection_string: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum EventStoreType {
+    InMemory,
+    // Postgres(EventStorePostgresConfig), // <== "config-rs" panicks with "unreachable code"
+    Postgres,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct EventStorePostgresConfig {
+    pub connection_string: String,
 }
 
 // pub enum DidMethod {
@@ -41,11 +70,15 @@ impl ApplicationConfiguration {
 
 /// Loads the configuration or returns it, if it has already been loaded.
 pub fn config_2() -> ApplicationConfiguration {
-    CONFIG
-        .lock()
-        .unwrap()
-        .get_or_insert_with(|| ApplicationConfiguration::new().unwrap())
-        .clone()
+    info!("config_2()");
+    // CONFIG
+    //     .lock()
+    //     .unwrap()
+    //     .get_or_insert_with(|| ApplicationConfiguration::new().unwrap())
+    //     .clone()
+    let config = ApplicationConfiguration::new().unwrap();
+    info!("{:#?}", config);
+    config
 }
 
 /// Read environment variables

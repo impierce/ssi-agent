@@ -4,7 +4,7 @@ use agent_issuance::{startup_commands::startup_commands, state::initialize};
 use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::{
     config,
-    config::{config_2, DidMethodOptions},
+    config::{config_2, DidMethodOptions, LogFormat},
     domain_linkage::create_did_configuration_resource,
     metadata::{load_metadata, Metadata},
 };
@@ -26,11 +26,13 @@ async fn main() -> io::Result<()> {
         // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
         .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
 
-    match config!("log_format", String) {
-        Ok(log_format) if log_format == "json" => {
-            tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init()
-        }
-        _ => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
+    match config_2().log_format {
+        LogFormat::Json => tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init(),
+        LogFormat::Text => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
+        // Ok(log_format) if log_format == "json" => {
+        //     tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init()
+        // }
+        // _ => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
     }
 
     let verification_services = Arc::new(VerificationServices::new(
@@ -47,12 +49,19 @@ async fn main() -> io::Result<()> {
     let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
-    let (issuance_state, verification_state) = match agent_shared::config!("event_store", String).unwrap().as_str() {
-        "postgres" => (
-            postgres::issuance_state(issuance_event_publishers).await,
-            postgres::verification_state(verification_services, verification_event_publishers).await,
-        ),
-        _ => (
+    // let (issuance_state, verification_state) = match agent_shared::config!("event_store", String).unwrap().as_str() {
+    let (issuance_state, verification_state) = match agent_shared::config::config_2().event_store.type_ {
+        agent_shared::config::EventStoreType::Postgres => {
+            let connection_string = config_2().event_store.connection_string.expect(
+                "Missing config parameter `event_store.connection_string` or `AGENT__EVENT_STORE__CONNECTION_STRING`",
+            );
+            (
+                postgres::issuance_state(issuance_event_publishers, &connection_string).await,
+                postgres::verification_state(verification_services, verification_event_publishers, &connection_string)
+                    .await,
+            )
+        }
+        agent_shared::config::EventStoreType::InMemory => (
             in_memory::issuance_state(issuance_event_publishers).await,
             in_memory::verification_state(verification_services, verification_event_publishers).await,
         ),
