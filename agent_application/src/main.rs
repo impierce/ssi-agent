@@ -49,7 +49,6 @@ async fn main() -> io::Result<()> {
     let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
-    // let (issuance_state, verification_state) = match agent_shared::config!("event_store", String).unwrap().as_str() {
     let (issuance_state, verification_state) = match agent_shared::config::config_2().event_store.type_ {
         agent_shared::config::EventStoreType::Postgres => {
             let connection_string = config_2().event_store.connection_string.expect(
@@ -67,11 +66,9 @@ async fn main() -> io::Result<()> {
         ),
     };
 
-    // let url = config!("url", String).expect("AGENT_CONFIG_URL is not set");
-    let url = config_2().url;
     info!("{:?}", config_2());
-    // TODO: Temporary solution. In the future we need to read these kinds of values from a config file.
-    std::env::set_var("AGENT_VERIFICATION_URL", &url);
+
+    let url = config_2().url;
 
     info!("Application url: {:?}", url);
 
@@ -82,13 +79,12 @@ async fn main() -> io::Result<()> {
     let mut app = app((issuance_state, verification_state));
 
     // CORS
-    if config!("cors_enabled", bool).unwrap_or(false) {
+    if config_2().cors_enabled.unwrap_or(false) {
         info!("CORS (permissive) enabled for all routes");
         app = app.layer(CorsLayer::permissive());
     }
 
     // did:web
-    // let enable_did_web = config!("did_method_web_enabled", bool).unwrap_or(false);
     let enable_did_web = config_2()
         .did_methods
         .get("did_web")
@@ -113,7 +109,7 @@ async fn main() -> io::Result<()> {
         None
     };
     // Domain Linkage
-    let did_configuration_resource = if config!("domain_linkage_enabled", bool).unwrap_or(false) {
+    let did_configuration_resource = if config_2().domain_linkage_enabled {
         Some(
             create_did_configuration_resource(
                 url.clone(),

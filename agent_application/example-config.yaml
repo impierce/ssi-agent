@@ -3,9 +3,9 @@ log_format: "json"
 event_store:
   type: "postgres"
   # connection_string: "" <== Should be injected through the env variable `AGENT__EVENT_STORE__CONNECTION_STRING`
-url: "https://ssi-agent.example.org"
-# base_path: "unicore"
-cors_enabled: false
+# url: "https://ssi-agent.example.org"
+# base_path: "unicore" <== Runs all endpoints with a base path such as `https://ssi-agent.example.org/unicore`
+# cors_enabled: false <== Only applicable for browser-based wallets that require CORS
 external_server_response_timeout_ms: 500
 
 did_methods:

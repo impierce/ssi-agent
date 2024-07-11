@@ -9,8 +9,10 @@ pub struct ApplicationConfiguration {
     pub event_store: EventStoreConfig,
     pub url: String,
     pub base_path: Option<String>,
+    pub cors_enabled: Option<bool>,
     pub did_methods: HashMap<String, DidMethodOptions>,
     pub external_server_response_timeout_ms: Option<u64>,
+    pub domain_linkage_enabled: bool,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
