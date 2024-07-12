@@ -1,5 +1,6 @@
 use agent_secret_manager::services::SecretManagerServices;
 use agent_shared::config;
+use agent_shared::config::config_2;
 use agent_shared::metadata::Display;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
@@ -89,17 +90,12 @@ impl Aggregate for Credential {
                         None => unreachable!("The display.name parameter is not set"),
                     };
 
-                    let issuer: Profile = match config!("url", String).ok().and_then(|url| {
-                        ProfileBuilder::default()
-                            .id(url)
-                            .type_("Profile")
-                            .name(name)
-                            .try_into()
-                            .ok()
-                    }) {
-                        Some(issuer) => issuer,
-                        None => unreachable!("The `AGENT_CONFIG_URL` environment variable is not set."),
-                    };
+                    let issuer: Profile = ProfileBuilder::default()
+                        .id(config_2().url)
+                        .type_("Profile")
+                        .name(name)
+                        .try_into()
+                        .expect("Could not build issuer profile");
 
                     let mut credential_types: Vec<String> = type_.clone();
 

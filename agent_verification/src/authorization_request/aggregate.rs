@@ -4,6 +4,7 @@ use crate::{
     services::VerificationServices,
 };
 use agent_shared::config;
+use agent_shared::config::config_2;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use jsonwebtoken::Algorithm;
@@ -51,7 +52,7 @@ impl Aggregate for AuthorizationRequest {
                     .await
                     .unwrap();
 
-                let url = config!("url", String).unwrap();
+                let url = config_2().url;
                 let request_uri = format!("{url}/request/{state}").parse().unwrap();
                 let redirect_uri = format!("{url}/redirect").parse::<url::Url>().unwrap();
 

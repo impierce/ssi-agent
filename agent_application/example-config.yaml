@@ -3,7 +3,7 @@ log_format: "json"
 event_store:
   type: "postgres"
   # connection_string: "" <== Should be injected through the env variable `AGENT__EVENT_STORE__CONNECTION_STRING`
-# url: "https://ssi-agent.example.org"
+url: "https://ssi-agent.example.org"
 # base_path: "unicore" <== Runs all endpoints with a base path such as `https://ssi-agent.example.org/unicore`
 # cors_enabled: false <== Only applicable for browser-based wallets that require CORS
 external_server_response_timeout_ms: 500
@@ -67,22 +67,24 @@ display:
       alt_text: UniCore Logo
 
 # agent_issuance/issuance-config.yml
-server_config:
-  credential_configurations:
-    - credential_configuration_id: w3c_vc_credential
-      format: jwt_vc_json
-      credential_definition:
-        type:
-          - VerifiableCredential
-      display:
-        - name: Verifiable Credential
-          locale: en
-          logo:
-            url: https://impierce.com/images/logo-blue.png
-            alt_text: UniCore Logo
+credential_configurations:
+  - credential_configuration_id: w3c_vc_credential
+    format: jwt_vc_json
+    credential_definition:
+      type:
+        - VerifiableCredential
+    display:
+      - name: Verifiable Credential
+        locale: en
+        logo:
+          url: https://impierce.com/images/logo-blue.png
+          alt_text: UniCore Logo
+
 # Key configuration (temporary)
-# stronghold_path: "/tmp/local.stronghold"
-# stronghold_password: "secure_password"
-# issuer_key_id: "ed25519-0"
-# issuer_did: "did:iota:rms:0x0000000000000000000000000000000000000000000000000000000000000000"
-# issuer_fragment: "key-0"
+secret_manager:
+  stronghold_path: "/tmp/local.stronghold"
+  # stronghold_password: "" <== Should be injected through the env variable `AGENT__SECRET_MANAGER__STRONGHOLD_PASSWORD`
+  # stronghold_password_file: ""
+  # issuer_key_id: "ed25519-0"
+  # issuer_did: "did:iota:rms:0x0000000000000000000000000000000000000000000000000000000000000000"
+  # issuer_fragment: "key-0"
