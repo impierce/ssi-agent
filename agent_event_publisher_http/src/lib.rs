@@ -1,6 +1,11 @@
+use std::collections::HashMap;
+
 use agent_issuance::{
-    credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
+    credential::aggregate::Credential,
+    offer::{aggregate::Offer, event},
+    server_config::aggregate::ServerConfig,
 };
+use agent_shared::config::{config_2, Event};
 use agent_store::{
     AuthorizationRequestEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, EventPublisher,
     OfferEventPublisher, ServerConfigEventPublisher,
@@ -29,58 +34,140 @@ pub struct EventPublisherHttp {
     pub authorization_request: Option<AggregateEventPublisherHttp<AuthorizationRequest>>,
 }
 
+// We need this to map events to aggregates
+#[derive(PartialEq)]
+enum DomainAggregate {
+    ServerConfig,
+    Credential,
+    Offer,
+    Connection,
+    AuthorizationRequest,
+}
+
+// We need this to map events to aggregates
+// #[derive(Eq, PartialEq, Hash)]
+// enum Event {
+//     // credential
+//     UnsignedCredentialCreated,
+//     SignedCredentialCreated,
+//     CredentialSigned,
+//     // offer
+//     CredentialOfferCreated,
+//     CredentialAdded,
+//     FormUrlEncodedCredentialOfferCreated,
+//     TokenResponseCreated,
+//     CredentialRequestVerified,
+//     CredentialResponseCreated,
+// }
+
 impl EventPublisherHttp {
     pub fn load() -> anyhow::Result<Self> {
-        #[cfg(feature = "test_utils")]
-        let mut config = TEST_EVENT_PUBLISHER_HTTP_CONFIG
-            .lock()
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .clone();
-        #[cfg(not(feature = "test_utils"))]
-        let mut config: serde_yaml::Value = {
-            match std::fs::File::open("agent_event_publisher_http/config.yml") {
-                Ok(config_file) => serde_yaml::from_reader(config_file)?,
-                // If the config file does not exist, return an empty config.
-                Err(_) => serde_yaml::Value::Null,
-            }
-        };
-        let config = agent_shared::config::config("AGENT_EVENT_PUBLISHER_HTTP");
+        // #[cfg(feature = "test_utils")]
+        // let mut config = TEST_EVENT_PUBLISHER_HTTP_CONFIG
+        //     .lock()
+        //     .unwrap()
+        //     .as_ref()
+        //     .unwrap()
+        //     .clone();
+        // #[cfg(not(feature = "test_utils"))]
+        // let mut config: serde_yaml::Value = {
+        //     match std::fs::File::open("agent_event_publisher_http/config.yml") {
+        //         Ok(config_file) => serde_yaml::from_reader(config_file)?,
+        //         // If the config file does not exist, return an empty config.
+        //         Err(_) => serde_yaml::Value::Null,
+        //     }
+        // };
+        // let config = agent_shared::config::config("AGENT_EVENT_PUBLISHER_HTTP");
 
-        let event_publishers = config.get_table("event_publisher").unwrap_or_default();
-        let event_publisher_http = event_publishers
-            .get("http")
-            .unwrap()
-            .clone()
-            .into_table()
-            .unwrap_or_default();
+        let event_publishers = config_2().event_publishers.unwrap();
+        let event_publisher_http = event_publishers.http.unwrap();
+
+        // let event_publishers = config.get_table("event_publishers").unwrap_or_default();
+        // let event_publisher_http = event_publishers
+        //     .get("http")
+        //     .unwrap()
+        //     .clone()
+        //     .into_table()
+        //     .unwrap_or_default();
 
         info!("event_publisher_http: {:?}", event_publisher_http);
 
-        let config = if event_publisher_http
-            .get("enabled")
-            .unwrap()
-            .clone()
-            .into_bool()
-            .unwrap_or_default()
-        {
-            let publishers: serde_yaml::Value = event_publisher_http
-                .get("publishers")
-                .unwrap()
-                .clone()
-                .try_deserialize()
-                .unwrap();
-            publishers
-        } else {
-            serde_yaml::Value::Null
+        if event_publisher_http.enabled {
+            // event_publisher_http.publishers
+        }
+
+        // TODO: map events to aggregates
+        // let mapping = HashMap::<Event, DomainAggregate>::new();
+        let mapping: HashMap<Event, DomainAggregate> = HashMap::from([
+            // credential
+            (Event::UnsignedCredentialCreated, DomainAggregate::Credential),
+            (Event::SignedCredentialCreated, DomainAggregate::Credential),
+            (Event::CredentialSigned, DomainAggregate::Credential),
+            // offer
+            (Event::CredentialOfferCreated, DomainAggregate::Offer),
+            // connection
+            (Event::SIOPv2AuthorizationResponseVerified, DomainAggregate::Connection),
+        ]);
+
+        let credential_events: Vec<String> = event_publisher_http
+            .events
+            .iter()
+            .filter(|e| mapping.get(e).unwrap() == &DomainAggregate::Credential)
+            .map(|e| serde_json::to_string(e).unwrap())
+            .map(|e| e.trim_matches('"').to_string()) // TODO: properly serialize to String
+            .collect();
+        info!("credential_events: {:?}", credential_events);
+
+        let offer_events: Vec<String> = event_publisher_http
+            .events
+            .iter()
+            .filter(|e| mapping.get(e).unwrap() == &DomainAggregate::Offer)
+            .map(|e| serde_json::to_string(e).unwrap())
+            .map(|e| e.trim_matches('"').to_string()) // TODO: properly serialize to String
+            .collect();
+        info!("offer_events: {:?}", offer_events);
+
+        let event_publisher: EventPublisherHttp = EventPublisherHttp {
+            server_config: None,
+            credential: Some(AggregateEventPublisherHttp::new(
+                event_publisher_http.target_url.clone(),
+                credential_events,
+            )),
+            offer: Some(AggregateEventPublisherHttp::new(
+                event_publisher_http.target_url.clone(),
+                offer_events,
+            )),
+            connection: None,
+            authorization_request: None,
         };
 
-        serde_yaml::from_value(config)
-            .map_err(Into::into)
-            .inspect(|event_publisher| {
-                info!("Loaded HTTP event publisher: {:?}", event_publisher);
-            })
+        info!("Loaded HTTP event publisher: {:?}", event_publisher);
+
+        Ok(event_publisher)
+
+        // let config = if event_publisher_http
+        //     .get("enabled")
+        //     .unwrap()
+        //     .clone()
+        //     .into_bool()
+        //     .unwrap_or_default()
+        // {
+        //     let publishers: serde_yaml::Value = event_publisher_http
+        //         .get("publishers")
+        //         .unwrap()
+        //         .clone()
+        //         .try_deserialize()
+        //         .unwrap();
+        //     publishers
+        // } else {
+        //     serde_yaml::Value::Null
+        // };
+
+        // serde_yaml::from_value(config)
+        //     .map_err(Into::into)
+        //     .inspect(|event_publisher| {
+        //         info!("Loaded HTTP event publisher: {:?}", event_publisher);
+        //     })
     }
 }
 

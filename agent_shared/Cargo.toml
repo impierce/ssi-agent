@@ -23,7 +23,7 @@ jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true
-once_cell = { version = "1.19", optional = true }
+once_cell = { version = "1.19" }
 rand = "0.8"
 serde.workspace = true
 serde_json.workspace = true
@@ -36,4 +36,4 @@ url.workspace = true
 
 [features]
 local_development = []
-test_utils = ["once_cell"]
+test_utils = []

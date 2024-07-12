@@ -1,9 +1,10 @@
 use config::ConfigError;
-use serde::Deserialize;
-use std::{collections::HashMap, sync::Mutex};
-use tracing::info;
+use once_cell::sync::OnceCell;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use tracing::{debug, info};
 
-use crate::issuance::CredentialConfiguration;
+use crate::{issuance::CredentialConfiguration, metadata::Display};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ApplicationConfiguration {
@@ -18,6 +19,8 @@ pub struct ApplicationConfiguration {
     pub secret_manager: SecretManagerConfig,
     pub credential_configurations: Vec<CredentialConfiguration>,
     pub signing_algorithms_supported: HashMap<jsonwebtoken::Algorithm, ToggleOptions>,
+    pub display: Vec<Display>,
+    pub event_publishers: Option<EventPublishers>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -39,7 +42,7 @@ pub struct EventStoreConfig {
 #[serde(rename_all = "snake_case")]
 pub enum EventStoreType {
     InMemory,
-    // Postgres(EventStorePostgresConfig), // <== "config-rs" panicks with "unreachable code"
+    // Postgres(EventStorePostgresConfig), // <== TODO: "config-rs" panicks with "unreachable code", other solution?
     Postgres,
 }
 
@@ -57,6 +60,44 @@ pub struct SecretManagerConfig {
     pub issuer_fragment: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct EventPublishers {
+    pub http: Option<EventPublisherHttp>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct EventPublisherHttp {
+    pub enabled: bool,
+    pub target_url: String,
+    pub events: Vec<Event>,
+}
+
+/// All events that can be published.
+#[derive(Debug, Serialize, Deserialize, Clone, Hash, Eq, PartialEq)]
+pub enum Event {
+    // credential
+    UnsignedCredentialCreated,
+    SignedCredentialCreated,
+    CredentialSigned,
+    // offer
+    CredentialOfferCreated,
+    CredentialAdded,
+    FormUrlEncodedCredentialOfferCreated,
+    TokenResponseCreated,
+    CredentialRequestVerified,
+    CredentialResponseCreated,
+    // server_config
+    ServerMetadataLoaded,
+    CredentialConfigurationAdded,
+    // authorization_request
+    AuthorizationRequestCreated,
+    FormUrlEncodedAuthorizationRequestCreated,
+    AuthorizationRequestObjectSigned,
+    // connection
+    SIOPv2AuthorizationResponseVerified,
+    OID4VPAuthorizationResponseVerified,
+}
+
 // pub enum DidMethod {
 //     #[serde(rename = "did:jwk")]
 //     Jwk,
@@ -72,7 +113,7 @@ pub struct ToggleOptions {
     pub preferred: Option<bool>,
 }
 
-static CONFIG: Mutex<Option<ApplicationConfiguration>> = Mutex::new(None);
+static CONFIG: OnceCell<ApplicationConfiguration> = OnceCell::new();
 
 impl ApplicationConfiguration {
     pub fn new() -> Result<Self, ConfigError> {
@@ -87,17 +128,11 @@ impl ApplicationConfiguration {
     }
 }
 
-/// Loads the configuration or returns it, if it has already been loaded.
+/// Returns the application configuration or loads it, if it hasn't been loaded already.
 pub fn config_2() -> ApplicationConfiguration {
-    info!("config_2()");
-    // CONFIG
-    //     .lock()
-    //     .unwrap()
-    //     .get_or_insert_with(|| ApplicationConfiguration::new().unwrap())
-    //     .clone()
-    let config = ApplicationConfiguration::new().unwrap();
-    info!("{:#?}", config);
-    config
+    // info!("config_2()");
+    CONFIG.get_or_init(|| ApplicationConfiguration::new().unwrap()).clone()
+    // TODO: or return -> &'static ApplicationConfiguration, so we don't need to clone on every call
 }
 
 /// Read environment variables

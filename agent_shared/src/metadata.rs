@@ -1,10 +1,9 @@
-use std::collections::HashMap;
-
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vp::ClaimFormatDesignation;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
+use std::{collections::HashMap, str::FromStr};
 use tracing::info;
 use url::Url;
 
@@ -46,37 +45,66 @@ pub struct Metadata {
 #[cfg(feature = "test_utils")]
 pub static TEST_METADATA: std::sync::Mutex<Option<serde_yaml::Value>> = std::sync::Mutex::new(None);
 
+// impl Metadata {
+//     pub fn new() -> Result<Self, ConfigError> {
+//         info!("Loading application metadata ...");
+//         let config = config::Config::builder()
+//             .add_source(config::File::with_name("agent_application/example-config.yaml"))
+//             .add_source(config::Environment::with_prefix("AGENT").separator("__"))
+//             .build()?;
+//         config.try_deserialize()
+//     }
+// }
+
 pub fn load_metadata() -> Metadata {
-    #[cfg(feature = "test_utils")]
-    let mut config = TEST_METADATA.lock().unwrap().as_ref().unwrap().clone();
-    #[cfg(not(feature = "test_utils"))]
-    let mut config: serde_yaml::Value = {
-        match std::fs::File::open("agent_application/config.yml") {
-            Ok(config_file) => serde_yaml::from_reader(config_file).unwrap(),
-            // If the config file does not exist, return an empty config.
-            Err(_) => serde_yaml::Value::Null,
-        }
-    };
-    let mut config: serde_yaml::Value = crate::config::config("AGENT_APPLICATION").try_deserialize().unwrap();
+    // #[cfg(feature = "test_utils")]
+    // let mut config = TEST_METADATA.lock().unwrap().as_ref().unwrap().clone();
+    // #[cfg(not(feature = "test_utils"))]
+    // let mut config: serde_yaml::Value = {
+    //     match std::fs::File::open("agent_application/config.yml") {
+    //         Ok(config_file) => serde_yaml::from_reader(config_file).unwrap(),
+    //         // If the config file does not exist, return an empty config.
+    //         Err(_) => serde_yaml::Value::Null,
+    //     }
+    // };
+    // let mut config: serde_yaml::Value = crate::config::config("AGENT_APPLICATION").try_deserialize().unwrap();
 
-    info!("config: {:?}", config);
+    // info!("config: {:?}", config);
+    let mut metadata = Metadata::default();
+    // metadata.subject_syntax_types_supported = config_2().did_methods.keys().into_iter().map(|k| k.clone()).collect();
 
-    let supported_algorithms: serde_yaml::Value = vec!["EdDSA".to_string()].into();
-    if config["signing_algorithms_supported"] != supported_algorithms {
-        unimplemented!(
-            "\n{}\nOnly the `EdDSA` signing algorithm is supported",
-            serde_yaml::to_string(&config["signing_algorithms_supported"]).unwrap()
-        )
-    }
+    // let supported_algorithms: serde_yaml::Value = vec!["EdDSA".to_string()].into();
+    // if config["signing_algorithms_supported"] != supported_algorithms {
+    //     unimplemented!(
+    //         "\n{}\nOnly the `EdDSA` signing algorithm is supported",
+    //         serde_yaml::to_string(&config["signing_algorithms_supported"]).unwrap()
+    //     )
+    // }
 
-    config.apply_merge().unwrap();
+    metadata.subject_syntax_types_supported = config_2()
+        .did_methods
+        .into_iter()
+        .filter(|(_, v)| v.enabled)
+        .map(|(k, _)| SubjectSyntaxType::from_str(&k.replace("_", ":")).unwrap())
+        .collect();
 
-    info!("config: {:?}", config);
+    metadata.signing_algorithms_supported = config_2()
+        .signing_algorithms_supported
+        .iter()
+        .filter(|(_, v)| v.enabled)
+        .map(|(k, _)| k.clone())
+        .collect();
 
-    let metadata =
-        serde_yaml::from_value::<Metadata>(config).expect("Invalid metadata in `agent_application/config.yml` file");
+    metadata.id_token_signing_alg_values_supported = metadata.signing_algorithms_supported.clone();
+    metadata.request_object_signing_alg_values_supported = metadata.signing_algorithms_supported.clone();
+
+    // TODO: vp_formats <= can they be implied or do we need to make them configurable?
+
+    metadata.display = config_2().display.clone();
 
     info!("Loaded metadata: {:?}", metadata);
+
+    info!("{:?}", serde_json::to_string(&metadata).unwrap());
 
     metadata
 }

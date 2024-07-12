@@ -36,16 +36,24 @@ signing_algorithms_supported:
 # Configure here to which events will be dispatched to a specific `target_url`. In the example below, the
 # `EventPublisherHttp` will listen for the `SIOPv2AuthorizationResponseVerified` event which is part of the `connection`
 # aggregate. The events will be dispatched to the `https://my-domain.example.org/event-subscriber` endpoint.
-event_publisher:
+event_publishers:
   http:
     enabled: false
-    target_url: &target_url "https://my-domain.example.org/event-subscriber"
-    publishers:
-      connection:
-        {
-          target_url: *target_url,
-          target_events: [SIOPv2AuthorizationResponseVerified],
-        }
+    target_url: "https://my-domain.example.org/event-subscriber"
+    events:
+      [
+        SIOPv2AuthorizationResponseVerified,
+        CredentialSigned,
+        CredentialOfferCreated,
+      ]
+    # publishers:
+    #   - "connection"
+    #   - "foobar"
+    # connection:
+    #   {
+    #     target_url: *target_url,
+    #     target_events: [SIOPv2AuthorizationResponseVerified],
+    #   }
 
 # These display parameters are interpreted by identity wallets.
 display:

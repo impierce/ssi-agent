@@ -19,8 +19,6 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let metadata: Metadata = load_metadata();
-
     let tracing_subscriber = tracing_subscriber::registry()
         // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
         .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
@@ -33,6 +31,8 @@ async fn main() -> io::Result<()> {
         // }
         // _ => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
     }
+
+    let metadata: Metadata = load_metadata();
 
     let verification_services = Arc::new(VerificationServices::new(
         Arc::new(Subject {
