@@ -1,11 +1,10 @@
-use agent_shared::metadata::Metadata;
+use agent_shared::{config::config_2, metadata::Metadata};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{client_metadata::ClientMetadataResource, Subject};
 use oid4vc_manager::RelyingPartyManager;
 use oid4vp::ClaimFormatProperty;
 use serde_json::json;
 use std::{collections::HashMap, sync::Arc};
-use tracing::info;
 
 /// Verification services. This struct is used to generate authorization requests and validate authorization responses.
 pub struct VerificationServices {
@@ -17,12 +16,17 @@ pub struct VerificationServices {
 
 impl VerificationServices {
     pub fn new(verifier: Arc<dyn Subject>, metadata: &Metadata) -> Self {
-        // let default_did_method = metadata
-        //     .subject_syntax_types_supported
-        //     .first()
-        //     .expect("`subject_syntax_types_supported` must contain at least one element.")
-        //     .to_string();
-        let default_did_method = "did:key".to_string();
+        let default_did_method = config_2()
+            .did_methods
+            .iter()
+            .filter(|(_, v)| v.preferred.unwrap_or(false))
+            .map(|(k, _)| k.clone())
+            .collect::<Vec<String>>()
+            // TODO: throw error if more than one preferred DID method is found
+            .first()
+            .unwrap()
+            .to_owned()
+            .replace("_", ":");
 
         let client_name = metadata.display.first().as_ref().map(|display| display.name.clone());
 
