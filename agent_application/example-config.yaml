@@ -11,21 +11,13 @@ external_server_response_timeout_ms: 500
 did_methods:
   did_jwk:
     enabled: true
-    # preferred: true
+    preferred: true
   did_key:
     enabled: true
   did_iota_rms:
     enabled: true
   did_web:
     enabled: true
-    preferred: true
-
-# List of Subject Syntax Types (DID Methods) supported by UniCore. The first item in the list is the default Syntax Type,
-# meaning UniCore will use its identifier belonging to this type by default.
-# subject_syntax_types_supported:
-#   - did:jwk
-#   - did:key
-#   - did:iota:rms
 
 domain_linkage_enabled: false
 
@@ -39,18 +31,6 @@ signing_algorithms_supported:
 #     enabled: true
 #   jwt_vp_json:
 #     enabled: true
-
-# List of supported signing algorithms for ID Tokens, Request Objects, and Verifiable Credentials. As of now, UniCore
-# only supports EdDSA.
-# signing_algorithms_supported: &signing_algorithms_supported
-#   - EdDSA
-# id_token_signing_alg_values_supported: *signing_algorithms_supported
-# request_object_signing_alg_values_supported: *signing_algorithms_supported
-# vp_formats:
-#   jwt_vc_json:
-#     alg: *signing_algorithms_supported
-#   jwt_vp_json:
-#     alg: *signing_algorithms_supported
 
 # agent_event_publisher_http
 # Configure here to which events will be dispatched to a specific `target_url`. In the example below, the

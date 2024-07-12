@@ -76,6 +76,8 @@ static CONFIG: Mutex<Option<ApplicationConfiguration>> = Mutex::new(None);
 
 impl ApplicationConfiguration {
     pub fn new() -> Result<Self, ConfigError> {
+        dotenvy::dotenv().ok();
+        info!("Environment variables loaded.");
         info!("Loading application configuration ...");
         let config = config::Config::builder()
             .add_source(config::File::with_name("agent_application/example-config.yaml"))
