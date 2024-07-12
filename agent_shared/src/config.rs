@@ -13,6 +13,7 @@ pub struct ApplicationConfiguration {
     pub did_methods: HashMap<String, DidMethodOptions>,
     pub external_server_response_timeout_ms: Option<u64>,
     pub domain_linkage_enabled: bool,
+    pub secret_manager: SecretManagerConfig,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -41,6 +42,15 @@ pub enum EventStoreType {
 #[derive(Debug, Deserialize, Clone)]
 pub struct EventStorePostgresConfig {
     pub connection_string: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct SecretManagerConfig {
+    pub stronghold_path: String,
+    pub stronghold_password: String,
+    pub issuer_key_id: Option<String>,
+    pub issuer_did: Option<String>,
+    pub issuer_fragment: Option<String>,
 }
 
 // pub enum DidMethod {

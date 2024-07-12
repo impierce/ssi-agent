@@ -28,16 +28,18 @@ impl SecretManagerServices {
     }
 
     pub async fn init(&mut self) -> Result<(), std::io::Error> {
-        let snapshot_path = config!("stronghold_path", String).unwrap();
-        let password = config!("stronghold_password", String).unwrap();
-        let key_id = config!("issuer_key_id", String).unwrap();
-        let issuer_did = config!("issuer_did", String);
-        let issuer_fragment = config!("issuer_fragment", String);
+        let snapshot_path = config_2().secret_manager.stronghold_path;
+        let password = config_2().secret_manager.stronghold_password;
+        let key_id = config_2()
+            .secret_manager
+            .issuer_key_id
+            .expect("Missing configuration: secret_manager.issuer_key_id");
+        let issuer_did = config_2().secret_manager.issuer_did;
+        let issuer_fragment = config_2().secret_manager.issuer_fragment;
 
-        let secret_manager =
-            SecretManager::load(snapshot_path, password, key_id, issuer_did.ok(), issuer_fragment.ok())
-                .await
-                .unwrap();
+        let secret_manager = SecretManager::load(snapshot_path, password, key_id, issuer_did, issuer_fragment)
+            .await
+            .unwrap();
 
         self.subject.replace(Subject { secret_manager });
 
