@@ -1,5 +1,4 @@
 use crate::subject::Subject;
-use agent_shared::config;
 use agent_shared::config::config_2;
 use anyhow::Result;
 use did_manager::SecretManager;

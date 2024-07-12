@@ -3,6 +3,8 @@ use serde::Deserialize;
 use std::{collections::HashMap, sync::Mutex};
 use tracing::info;
 
+use crate::issuance::CredentialConfiguration;
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct ApplicationConfiguration {
     pub log_format: LogFormat,
@@ -14,6 +16,7 @@ pub struct ApplicationConfiguration {
     pub external_server_response_timeout_ms: Option<u64>,
     pub domain_linkage_enabled: bool,
     pub secret_manager: SecretManagerConfig,
+    pub credential_configurations: Vec<CredentialConfiguration>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]

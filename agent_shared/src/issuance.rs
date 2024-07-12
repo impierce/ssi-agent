@@ -10,11 +10,6 @@ pub struct CredentialConfiguration {
     pub display: Vec<serde_json::Value>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
-pub struct ServerConfig {
-    pub credential_configurations: Vec<CredentialConfiguration>,
-}
-
 #[cfg(feature = "test_utils")]
 use once_cell::sync::Lazy;
 
