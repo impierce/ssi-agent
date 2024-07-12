@@ -12,11 +12,12 @@ pub struct ApplicationConfiguration {
     pub url: String,
     pub base_path: Option<String>,
     pub cors_enabled: Option<bool>,
-    pub did_methods: HashMap<String, DidMethodOptions>,
+    pub did_methods: HashMap<String, ToggleOptions>,
     pub external_server_response_timeout_ms: Option<u64>,
     pub domain_linkage_enabled: bool,
     pub secret_manager: SecretManagerConfig,
     pub credential_configurations: Vec<CredentialConfiguration>,
+    pub signing_algorithms_supported: HashMap<jsonwebtoken::Algorithm, ToggleOptions>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -64,8 +65,9 @@ pub struct SecretManagerConfig {
 //     IotaRms,
 // }
 
+/// Generic options that add an "enabled" field and a "preferred" field (optional) to a configuration.
 #[derive(Debug, Deserialize, Default, Clone)]
-pub struct DidMethodOptions {
+pub struct ToggleOptions {
     pub enabled: bool,
     pub preferred: Option<bool>,
 }

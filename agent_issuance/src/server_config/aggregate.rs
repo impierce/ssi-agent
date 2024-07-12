@@ -1,6 +1,3 @@
-use std::collections::HashMap;
-
-use agent_shared::config;
 use agent_shared::config::config_2;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
@@ -12,6 +9,7 @@ use oid4vci::credential_issuer::{
 use oid4vci::proof::KeyProofMetadata;
 use oid4vci::ProofType;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tracing::info;
 
 use crate::server_config::command::ServerConfigCommand;
@@ -68,21 +66,30 @@ impl Aggregate for ServerConfig {
                     .map(|did_method| did_method.replace("_", ":"))
                     .collect();
 
-                let credential_signing_alg_values_supported =
-                    config!("signing_algorithms_supported", Vec<String>).unwrap_or_default();
+                let signing_algorithms_supported: Vec<Algorithm> = config_2()
+                    .signing_algorithms_supported
+                    .iter()
+                    .filter(|(_, options)| options.enabled)
+                    .map(|(alg, _)| alg.clone())
+                    .collect();
 
                 let proof_types_supported = HashMap::from_iter([(
                     ProofType::Jwt,
                     KeyProofMetadata {
-                        proof_signing_alg_values_supported: config!("signing_algorithms_supported", Vec<Algorithm>)
-                            .unwrap_or_default(),
+                        proof_signing_alg_values_supported: signing_algorithms_supported.clone(),
                     },
                 )]);
 
                 let credential_configuration_object = CredentialConfigurationsSupportedObject {
                     credential_format: credential_configuration.credential_format_with_parameters,
                     cryptographic_binding_methods_supported,
-                    credential_signing_alg_values_supported,
+                    credential_signing_alg_values_supported: signing_algorithms_supported
+                        .into_iter()
+                        .map(|algorithm| match algorithm {
+                            jsonwebtoken::Algorithm::EdDSA => "EdDSA".to_string(),
+                            _ => unimplemented!("Unsupported algorithm: {:?}", algorithm),
+                        })
+                        .collect(),
                     proof_types_supported,
                     display: credential_configuration.display,
                     ..Default::default()

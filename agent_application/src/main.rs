@@ -3,8 +3,7 @@ use agent_event_publisher_http::EventPublisherHttp;
 use agent_issuance::{startup_commands::startup_commands, state::initialize};
 use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::{
-    config,
-    config::{config_2, DidMethodOptions, LogFormat},
+    config::{config_2, LogFormat, ToggleOptions},
     domain_linkage::create_did_configuration_resource,
     metadata::{load_metadata, Metadata},
 };
@@ -88,7 +87,7 @@ async fn main() -> io::Result<()> {
     let enable_did_web = config_2()
         .did_methods
         .get("did_web")
-        .unwrap_or(&DidMethodOptions::default())
+        .unwrap_or(&ToggleOptions::default())
         .enabled;
 
     let did_document = if enable_did_web {
