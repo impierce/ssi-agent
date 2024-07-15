@@ -13,12 +13,11 @@ Example `config.yaml`:
 ```yaml
 target_url: &target_url "https://my-domain.example.org/ssi-event-subscriber"
 
-connection: {
-  target_url: *target_url,
-  target_events: [
-    SIOPv2AuthorizationResponseVerified
-  ]
-}
+connection:
+  {
+    target_url: *target_url,
+    target_events: [SIOPv2AuthorizationResponseVerified],
+  }
 ```
 
 ### Available events
@@ -35,7 +34,7 @@ CredentialSigned
 
 ```
 CredentialOfferCreated
-CredentialAdded
+CredentialsAdded
 FormUrlEncodedCredentialOfferCreated
 TokenResponseCreated
 CredentialRequestVerified

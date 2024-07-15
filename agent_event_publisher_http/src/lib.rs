@@ -1,11 +1,7 @@
-use std::collections::HashMap;
-
 use agent_issuance::{
-    credential::aggregate::Credential,
-    offer::{aggregate::Offer, event},
-    server_config::aggregate::ServerConfig,
+    credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
-use agent_shared::config::{config_2, Event};
+use agent_shared::config::config_2;
 use agent_store::{
     AuthorizationRequestEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, EventPublisher,
     OfferEventPublisher, ServerConfigEventPublisher,
@@ -34,32 +30,6 @@ pub struct EventPublisherHttp {
     pub authorization_request: Option<AggregateEventPublisherHttp<AuthorizationRequest>>,
 }
 
-// We need this to map events to aggregates
-#[derive(PartialEq)]
-enum DomainAggregate {
-    ServerConfig,
-    Credential,
-    Offer,
-    Connection,
-    AuthorizationRequest,
-}
-
-// We need this to map events to aggregates
-// #[derive(Eq, PartialEq, Hash)]
-// enum Event {
-//     // credential
-//     UnsignedCredentialCreated,
-//     SignedCredentialCreated,
-//     CredentialSigned,
-//     // offer
-//     CredentialOfferCreated,
-//     CredentialAdded,
-//     FormUrlEncodedCredentialOfferCreated,
-//     TokenResponseCreated,
-//     CredentialRequestVerified,
-//     CredentialResponseCreated,
-// }
-
 impl EventPublisherHttp {
     pub fn load() -> anyhow::Result<Self> {
         // #[cfg(feature = "test_utils")]
@@ -79,8 +49,7 @@ impl EventPublisherHttp {
         // };
         // let config = agent_shared::config::config("AGENT_EVENT_PUBLISHER_HTTP");
 
-        let event_publishers = config_2().event_publishers.unwrap();
-        let event_publisher_http = event_publishers.http.unwrap();
+        let event_publisher_http = config_2().event_publishers.unwrap().http.unwrap();
 
         // let event_publishers = config.get_table("event_publishers").unwrap_or_default();
         // let event_publisher_http = event_publishers
@@ -98,34 +67,25 @@ impl EventPublisherHttp {
 
         // TODO: map events to aggregates
         // let mapping = HashMap::<Event, DomainAggregate>::new();
-        let mapping: HashMap<Event, DomainAggregate> = HashMap::from([
-            // credential
-            (Event::UnsignedCredentialCreated, DomainAggregate::Credential),
-            (Event::SignedCredentialCreated, DomainAggregate::Credential),
-            (Event::CredentialSigned, DomainAggregate::Credential),
-            // offer
-            (Event::CredentialOfferCreated, DomainAggregate::Offer),
-            // connection
-            (Event::SIOPv2AuthorizationResponseVerified, DomainAggregate::Connection),
-        ]);
+        // let mapping: HashMap<Event, DomainAggregate> = HashMap::from([
+        //     // credential
+        //     (Event::UnsignedCredentialCreated, DomainAggregate::Credential),
+        //     (Event::SignedCredentialCreated, DomainAggregate::Credential),
+        //     (Event::CredentialSigned, DomainAggregate::Credential),
+        //     // offer
+        //     (Event::CredentialOfferCreated, DomainAggregate::Offer),
+        //     // connection
+        //     (Event::SIOPv2AuthorizationResponseVerified, DomainAggregate::Connection),
+        // ]);
 
         let credential_events: Vec<String> = event_publisher_http
             .events
+            .credential
+            .unwrap_or(vec![])
             .iter()
-            .filter(|e| mapping.get(e).unwrap() == &DomainAggregate::Credential)
-            .map(|e| serde_json::to_string(e).unwrap())
-            .map(|e| e.trim_matches('"').to_string()) // TODO: properly serialize to String
+            .map(|e| e.to_string())
             .collect();
         info!("credential_events: {:?}", credential_events);
-
-        let offer_events: Vec<String> = event_publisher_http
-            .events
-            .iter()
-            .filter(|e| mapping.get(e).unwrap() == &DomainAggregate::Offer)
-            .map(|e| serde_json::to_string(e).unwrap())
-            .map(|e| e.trim_matches('"').to_string()) // TODO: properly serialize to String
-            .collect();
-        info!("offer_events: {:?}", offer_events);
 
         let event_publisher: EventPublisherHttp = EventPublisherHttp {
             server_config: None,
@@ -133,10 +93,7 @@ impl EventPublisherHttp {
                 event_publisher_http.target_url.clone(),
                 credential_events,
             )),
-            offer: Some(AggregateEventPublisherHttp::new(
-                event_publisher_http.target_url.clone(),
-                offer_events,
-            )),
+            offer: None,
             connection: None,
             authorization_request: None,
         };

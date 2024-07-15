@@ -159,7 +159,7 @@ pub mod tests {
         tests::{BASE_URL, CREDENTIAL_CONFIGURATION_ID, OFFER_ID},
     };
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
-    use agent_shared::metadata::{load_metadata, set_metadata_configuration};
+    use agent_shared::metadata::set_metadata_configuration;
     use agent_store::in_memory;
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
@@ -257,7 +257,7 @@ pub mod tests {
 
         let issuance_state = in_memory::issuance_state(Default::default()).await;
         let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
-        initialize(&issuance_state, startup_commands(BASE_URL.clone(), &load_metadata())).await;
+        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
         let mut app = app((issuance_state, verification_state));
 

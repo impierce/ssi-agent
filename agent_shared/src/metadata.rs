@@ -45,17 +45,6 @@ pub struct Metadata {
 #[cfg(feature = "test_utils")]
 pub static TEST_METADATA: std::sync::Mutex<Option<serde_yaml::Value>> = std::sync::Mutex::new(None);
 
-// impl Metadata {
-//     pub fn new() -> Result<Self, ConfigError> {
-//         info!("Loading application metadata ...");
-//         let config = config::Config::builder()
-//             .add_source(config::File::with_name("agent_application/example-config.yaml"))
-//             .add_source(config::Environment::with_prefix("AGENT").separator("__"))
-//             .build()?;
-//         config.try_deserialize()
-//     }
-// }
-
 pub fn load_metadata() -> Metadata {
     // #[cfg(feature = "test_utils")]
     // let mut config = TEST_METADATA.lock().unwrap().as_ref().unwrap().clone();

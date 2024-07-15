@@ -80,15 +80,12 @@ impl Aggregate for Credential {
                     #[cfg(not(feature = "test_utils"))]
                     let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
-                    let name = match config!("display", Vec<Display>)
-                        .ok()
-                        .as_ref()
-                        .and_then(|displays| displays.first())
-                        .map(|display| display.name.clone())
-                    {
-                        Some(name) => name,
-                        None => unreachable!("The display.name parameter is not set"),
-                    };
+                    let name = config_2()
+                        .display
+                        .first()
+                        .expect("Configuration `display.name` missing")
+                        .name
+                        .clone();
 
                     let issuer: Profile = ProfileBuilder::default()
                         .id(config_2().url)

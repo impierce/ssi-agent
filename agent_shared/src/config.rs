@@ -1,4 +1,5 @@
 use config::ConfigError;
+use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -21,6 +22,7 @@ pub struct ApplicationConfiguration {
     pub signing_algorithms_supported: HashMap<jsonwebtoken::Algorithm, ToggleOptions>,
     pub display: Vec<Display>,
     pub event_publishers: Option<EventPublishers>,
+    pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -69,33 +71,52 @@ pub struct EventPublishers {
 pub struct EventPublisherHttp {
     pub enabled: bool,
     pub target_url: String,
-    pub events: Vec<Event>,
+    pub events: Events,
 }
 
-/// All events that can be published.
-#[derive(Debug, Serialize, Deserialize, Clone, Hash, Eq, PartialEq)]
-pub enum Event {
-    // credential
+#[derive(Debug, Deserialize, Clone)]
+pub struct Events {
+    pub server_config: Option<Vec<ServerConfigEvent>>,
+    pub credential: Option<Vec<CredentialEvent>>,
+    pub offer: Option<Vec<OfferEvent>>,
+    pub connection: Option<Vec<ConnectionEvent>>,
+    pub authorization_request: Option<Vec<AuthorizationRequestEvent>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum ServerConfigEvent {
+    ServerMetadataInitialized,
+    CredentialConfigurationAdded,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum CredentialEvent {
     UnsignedCredentialCreated,
     SignedCredentialCreated,
     CredentialSigned,
-    // offer
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum OfferEvent {
     CredentialOfferCreated,
-    CredentialAdded,
+    CredentialsAdded,
     FormUrlEncodedCredentialOfferCreated,
     TokenResponseCreated,
     CredentialRequestVerified,
     CredentialResponseCreated,
-    // server_config
-    ServerMetadataLoaded,
-    CredentialConfigurationAdded,
-    // authorization_request
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum ConnectionEvent {
+    SIOPv2AuthorizationResponseVerified,
+    OID4VPAuthorizationResponseVerified,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum AuthorizationRequestEvent {
     AuthorizationRequestCreated,
     FormUrlEncodedAuthorizationRequestCreated,
     AuthorizationRequestObjectSigned,
-    // connection
-    SIOPv2AuthorizationResponseVerified,
-    OID4VPAuthorizationResponseVerified,
 }
 
 // pub enum DidMethod {
@@ -133,6 +154,25 @@ pub fn config_2() -> ApplicationConfiguration {
     // info!("config_2()");
     CONFIG.get_or_init(|| ApplicationConfiguration::new().unwrap()).clone()
     // TODO: or return -> &'static ApplicationConfiguration, so we don't need to clone on every call
+}
+
+pub fn did_methods_enabled() -> Vec<String> {
+    config_2()
+        .did_methods
+        .iter()
+        .filter(|(_, v)| v.enabled)
+        .map(|(k, _)| k.clone().replace("_", ":"))
+        .collect()
+}
+
+pub fn did_method_preferred() -> String {
+    config_2()
+        .did_methods
+        .iter()
+        .filter(|(_, v)| v.enabled)
+        .filter(|(_, v)| v.preferred.unwrap_or(false))
+        .map(|(k, _)| k.clone().replace("_", ":"))
+        .collect()
 }
 
 /// Read environment variables

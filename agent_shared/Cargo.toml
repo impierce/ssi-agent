@@ -29,6 +29,7 @@ serde.workspace = true
 serde_json.workspace = true
 serde_with = "3.0"
 serde_yaml.workspace = true
+strum = { version = "0.26", features = ["derive"] }
 thiserror.workspace = true
 time = { version = "0.3" }
 tracing.workspace = true

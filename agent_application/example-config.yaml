@@ -26,11 +26,11 @@ signing_algorithms_supported:
     enabled: true
 
 # TODO: required to be stated explicitly?
-# vp_formats:
-#   jwt_vc_json:
-#     enabled: true
-#   jwt_vp_json:
-#     enabled: true
+vp_formats:
+  jwt_vc_json:
+    enabled: true
+  jwt_vp_json:
+    enabled: true
 
 # agent_event_publisher_http
 # Configure here to which events will be dispatched to a specific `target_url`. In the example below, the
@@ -41,19 +41,8 @@ event_publishers:
     enabled: false
     target_url: "https://my-domain.example.org/event-subscriber"
     events:
-      [
-        SIOPv2AuthorizationResponseVerified,
-        CredentialSigned,
-        CredentialOfferCreated,
-      ]
-    # publishers:
-    #   - "connection"
-    #   - "foobar"
-    # connection:
-    #   {
-    #     target_url: *target_url,
-    #     target_events: [SIOPv2AuthorizationResponseVerified],
-    #   }
+      server_config: []
+      credential: [UnsignedCredentialCreated, CredentialSigned]
 
 # These display parameters are interpreted by identity wallets.
 display:

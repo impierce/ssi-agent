@@ -5,7 +5,6 @@ use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::{
     config::{config_2, LogFormat, ToggleOptions},
     domain_linkage::create_did_configuration_resource,
-    metadata::{load_metadata, Metadata},
 };
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
@@ -32,14 +31,9 @@ async fn main() -> io::Result<()> {
         // _ => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
     }
 
-    let metadata: Metadata = load_metadata();
-
-    let verification_services = Arc::new(VerificationServices::new(
-        Arc::new(Subject {
-            secret_manager: secret_manager().await,
-        }),
-        &metadata,
-    ));
+    let verification_services = Arc::new(VerificationServices::new(Arc::new(Subject {
+        secret_manager: secret_manager().await,
+    })));
 
     // TODO: Currently `issuance_event_publishers` and `verification_event_publishers` are exactly the same, which is
     // weird. We need some sort of layer between `agent_application` and `agent_store` that will provide a cleaner way
@@ -73,7 +67,7 @@ async fn main() -> io::Result<()> {
 
     let url = url::Url::parse(&url).unwrap();
 
-    initialize(&issuance_state, startup_commands(url.clone(), &metadata)).await;
+    initialize(&issuance_state, startup_commands(url.clone())).await;
 
     let mut app = app((issuance_state, verification_state));
 

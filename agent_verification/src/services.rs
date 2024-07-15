@@ -1,10 +1,10 @@
-use agent_shared::{config::config_2, metadata::Metadata};
+use agent_shared::config::{config_2, did_methods_enabled};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{client_metadata::ClientMetadataResource, Subject};
 use oid4vc_manager::RelyingPartyManager;
 use oid4vp::ClaimFormatProperty;
 use serde_json::json;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 /// Verification services. This struct is used to generate authorization requests and validate authorization responses.
 pub struct VerificationServices {
@@ -15,7 +15,7 @@ pub struct VerificationServices {
 }
 
 impl VerificationServices {
-    pub fn new(verifier: Arc<dyn Subject>, metadata: &Metadata) -> Self {
+    pub fn new(verifier: Arc<dyn Subject>) -> Self {
         let default_did_method = config_2()
             .did_methods
             .iter()
@@ -28,25 +28,35 @@ impl VerificationServices {
             .to_owned()
             .replace("_", ":");
 
-        let client_name = metadata.display.first().as_ref().map(|display| display.name.clone());
+        let client_name = config_2().display.first().as_ref().map(|display| display.name.clone());
 
-        let logo_uri = metadata
+        let logo_uri = config_2()
             .display
             .first()
             .and_then(|display| display.logo.as_ref().and_then(|logo| logo.url.clone()));
 
-        let id_token_signed_response_alg = metadata.signing_algorithms_supported.first().cloned();
+        let signing_algorithms_supported: Vec<Algorithm> = config_2()
+            .signing_algorithms_supported
+            .iter()
+            .filter(|(_, opts)| opts.enabled)
+            .map(|(alg, _)| *alg)
+            .collect();
+
+        // let id_token_signed_response_alg = signing_algorithms_supported.first().cloned();
 
         let siopv2_client_metadata = ClientMetadataResource::ClientMetadata {
             client_name: client_name.clone(),
             logo_uri: logo_uri.clone(),
             extension: siopv2::authorization_request::ClientMetadataParameters {
-                subject_syntax_types_supported: metadata.subject_syntax_types_supported.clone(),
-                id_token_signed_response_alg,
+                subject_syntax_types_supported: did_methods_enabled()
+                    .iter()
+                    .map(|method| oid4vc_core::SubjectSyntaxType::from_str(method).unwrap())
+                    .collect(),
+                id_token_signed_response_alg: signing_algorithms_supported.first().cloned(),
             },
             other: HashMap::from_iter([(
                 "id_token_signing_alg_values_supported".to_string(),
-                json!(metadata.id_token_signing_alg_values_supported),
+                json!(signing_algorithms_supported),
             )]),
         };
 
@@ -54,42 +64,49 @@ impl VerificationServices {
             client_name,
             logo_uri,
             extension: oid4vp::authorization_request::ClientMetadataParameters {
-                vp_formats: metadata
+                vp_formats: config_2()
                     .vp_formats
                     .iter()
-                    .map(|(k, v)| {
+                    .filter(|(_, opts)| opts.enabled)
+                    .map(|(c, _)| {
                         (
-                            k.clone(),
-                            ClaimFormatProperty::Alg(
-                                v.get("alg")
-                                    .map(|value| {
-                                        value
-                                            .as_sequence()
-                                            .unwrap()
-                                            .iter()
-                                            .map(|value| value.as_str().unwrap().parse().unwrap())
-                                            .collect::<Vec<Algorithm>>()
-                                    })
-                                    .unwrap(),
-                            ),
+                            c.clone(),
+                            ClaimFormatProperty::Alg(signing_algorithms_supported.clone()),
                         )
                     })
                     .collect(),
+                // vp_formats: metadata
+                //     .vp_formats
+                //     .iter()
+                //     .map(|(k, v)| {
+                //         (
+                //             k.clone(),
+                //             ClaimFormatProperty::Alg(
+                //                 v.get("alg")
+                //                     .map(|value| {
+                //                         value
+                //                             .as_sequence()
+                //                             .unwrap()
+                //                             .iter()
+                //                             .map(|value| value.as_str().unwrap().parse().unwrap())
+                //                             .collect::<Vec<Algorithm>>()
+                //                     })
+                //                     .unwrap(),
+                //             ),
+                //         )
+                //     })
+                //     .collect(),
             },
             other: HashMap::from_iter([(
                 "subject_syntax_types_supported".to_string(),
-                json!(metadata.subject_syntax_types_supported),
+                json!(did_methods_enabled()),
             )]),
         };
 
         Self {
             verifier: verifier.clone(),
-            relying_party: RelyingPartyManager::new(
-                verifier,
-                default_did_method,
-                metadata.signing_algorithms_supported.clone(),
-            )
-            .unwrap(),
+            relying_party: RelyingPartyManager::new(verifier, default_did_method, signing_algorithms_supported)
+                .unwrap(),
             siopv2_client_metadata,
             oid4vp_client_metadata,
         }
@@ -100,18 +117,16 @@ impl VerificationServices {
 pub mod test_utils {
     use agent_secret_manager::secret_manager;
     use agent_secret_manager::subject::Subject;
-    use agent_shared::metadata::load_metadata;
 
     use super::*;
 
     pub fn test_verification_services() -> Arc<VerificationServices> {
-        Arc::new(VerificationServices::new(
-            Arc::new(futures::executor::block_on(async {
+        Arc::new(VerificationServices::new(Arc::new(futures::executor::block_on(
+            async {
                 Subject {
                     secret_manager: secret_manager().await,
                 }
-            })),
-            &load_metadata(),
-        ))
+            },
+        ))))
     }
 }

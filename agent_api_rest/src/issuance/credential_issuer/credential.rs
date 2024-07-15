@@ -142,7 +142,7 @@ pub(crate) async fn credential(
 
 #[cfg(test)]
 mod tests {
-    use agent_shared::metadata::{load_metadata, set_metadata_configuration};
+    use agent_shared::metadata::set_metadata_configuration;
     use std::sync::Arc;
 
     use crate::{
@@ -312,7 +312,7 @@ mod tests {
         let issuance_state = in_memory::issuance_state(issuance_event_publishers).await;
         let verification_state =
             in_memory::verification_state(test_verification_services(), verification_event_publishers).await;
-        initialize(&issuance_state, startup_commands(BASE_URL.clone(), &load_metadata())).await;
+        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
         let mut app = app((issuance_state, verification_state));
 
