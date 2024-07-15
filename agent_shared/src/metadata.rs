@@ -7,7 +7,7 @@ use std::{collections::HashMap, str::FromStr};
 use tracing::info;
 use url::Url;
 
-use crate::config::config_2;
+use crate::config::config;
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -70,14 +70,14 @@ pub fn load_metadata() -> Metadata {
     //     )
     // }
 
-    metadata.subject_syntax_types_supported = config_2()
+    metadata.subject_syntax_types_supported = config()
         .did_methods
         .into_iter()
         .filter(|(_, v)| v.enabled)
         .map(|(k, _)| SubjectSyntaxType::from_str(&k.replace("_", ":")).unwrap())
         .collect();
 
-    metadata.signing_algorithms_supported = config_2()
+    metadata.signing_algorithms_supported = config()
         .signing_algorithms_supported
         .iter()
         .filter(|(_, v)| v.enabled)
@@ -89,7 +89,7 @@ pub fn load_metadata() -> Metadata {
 
     // TODO: vp_formats <= can they be implied or do we need to make them configurable?
 
-    metadata.display = config_2().display.clone();
+    metadata.display = config().display.clone();
 
     info!("Loaded metadata: {:?}", metadata);
 

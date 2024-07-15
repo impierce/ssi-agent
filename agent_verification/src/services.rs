@@ -1,4 +1,4 @@
-use agent_shared::config::{config_2, did_methods_enabled};
+use agent_shared::config::{config, did_methods_enabled};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{client_metadata::ClientMetadataResource, Subject};
 use oid4vc_manager::RelyingPartyManager;
@@ -16,7 +16,7 @@ pub struct VerificationServices {
 
 impl VerificationServices {
     pub fn new(verifier: Arc<dyn Subject>) -> Self {
-        let default_did_method = config_2()
+        let default_did_method = config()
             .did_methods
             .iter()
             .filter(|(_, v)| v.preferred.unwrap_or(false))
@@ -28,14 +28,14 @@ impl VerificationServices {
             .to_owned()
             .replace("_", ":");
 
-        let client_name = config_2().display.first().as_ref().map(|display| display.name.clone());
+        let client_name = config().display.first().as_ref().map(|display| display.name.clone());
 
-        let logo_uri = config_2()
+        let logo_uri = config()
             .display
             .first()
             .and_then(|display| display.logo.as_ref().and_then(|logo| logo.url.clone()));
 
-        let signing_algorithms_supported: Vec<Algorithm> = config_2()
+        let signing_algorithms_supported: Vec<Algorithm> = config()
             .signing_algorithms_supported
             .iter()
             .filter(|(_, opts)| opts.enabled)
@@ -64,7 +64,7 @@ impl VerificationServices {
             client_name,
             logo_uri,
             extension: oid4vp::authorization_request::ClientMetadataParameters {
-                vp_formats: config_2()
+                vp_formats: config()
                     .vp_formats
                     .iter()
                     .filter(|(_, opts)| opts.enabled)

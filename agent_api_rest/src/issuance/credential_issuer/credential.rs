@@ -11,7 +11,7 @@ use agent_issuance::{
 };
 use agent_shared::{
     config,
-    config::config_2,
+    config::config,
     handlers::{command_handler, query_handler},
 };
 use axum::{
@@ -65,7 +65,7 @@ pub(crate) async fn credential(
         StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
-    let timeout = config_2()
+    let timeout = config()
         .external_server_response_timeout_ms
         .unwrap_or(DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS);
     let start_time = Instant::now();

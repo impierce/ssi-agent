@@ -1,7 +1,7 @@
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
-use agent_shared::config::config_2;
+use agent_shared::config::config;
 use agent_store::{
     AuthorizationRequestEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, EventPublisher,
     OfferEventPublisher, ServerConfigEventPublisher,
@@ -49,7 +49,7 @@ impl EventPublisherHttp {
         // };
         // let config = agent_shared::config::config("AGENT_EVENT_PUBLISHER_HTTP");
 
-        let event_publisher_http = config_2().event_publishers.unwrap().http.unwrap();
+        let event_publisher_http = config().event_publishers.unwrap().http.unwrap();
 
         // let event_publishers = config.get_table("event_publishers").unwrap_or_default();
         // let event_publisher_http = event_publishers

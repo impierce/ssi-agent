@@ -2,7 +2,7 @@ mod issuance;
 mod verification;
 
 use agent_issuance::state::IssuanceState;
-use agent_shared::{config, config::config_2, ConfigError};
+use agent_shared::{config, config::config, ConfigError};
 use agent_verification::state::VerificationState;
 use axum::{
     body::Bytes,
@@ -99,7 +99,7 @@ pub fn app(state: ApplicationState) -> Router {
 }
 
 fn get_base_path() -> Result<String, ConfigError> {
-    config_2()
+    config()
         .base_path
         .ok_or_else(|| ConfigError::NotFound("No configuration for `base_path` found".to_string()))
         .map(|mut base_path| {

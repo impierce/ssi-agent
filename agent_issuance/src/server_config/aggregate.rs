@@ -1,4 +1,4 @@
-use agent_shared::config::config_2;
+use agent_shared::config::config;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use jsonwebtoken::Algorithm;
@@ -57,7 +57,7 @@ impl Aggregate for ServerConfig {
             AddCredentialConfiguration {
                 credential_configuration,
             } => {
-                let cryptographic_binding_methods_supported = config_2()
+                let cryptographic_binding_methods_supported = config()
                     .did_methods
                     .iter()
                     .filter(|(_, v)| v.enabled)
@@ -66,7 +66,7 @@ impl Aggregate for ServerConfig {
                     .map(|did_method| did_method.replace("_", ":"))
                     .collect();
 
-                let signing_algorithms_supported: Vec<Algorithm> = config_2()
+                let signing_algorithms_supported: Vec<Algorithm> = config()
                     .signing_algorithms_supported
                     .iter()
                     .filter(|(_, options)| options.enabled)

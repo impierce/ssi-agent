@@ -1,5 +1,5 @@
 use crate::subject::Subject;
-use agent_shared::config::config_2;
+use agent_shared::config::config;
 use anyhow::Result;
 use did_manager::SecretManager;
 
@@ -10,7 +10,7 @@ pub struct SecretManagerServices {
 
 impl SecretManagerServices {
     pub fn new(subject: Option<Subject>) -> Self {
-        let default_did_method: String = config_2()
+        let default_did_method: String = config()
             .did_methods
             .iter()
             .filter(|(_, v)| v.preferred.unwrap_or(false))
@@ -27,14 +27,14 @@ impl SecretManagerServices {
     }
 
     pub async fn init(&mut self) -> Result<(), std::io::Error> {
-        let snapshot_path = config_2().secret_manager.stronghold_path;
-        let password = config_2().secret_manager.stronghold_password;
-        let key_id = config_2()
+        let snapshot_path = config().secret_manager.stronghold_path;
+        let password = config().secret_manager.stronghold_password;
+        let key_id = config()
             .secret_manager
             .issuer_key_id
             .expect("Missing configuration: secret_manager.issuer_key_id");
-        let issuer_did = config_2().secret_manager.issuer_did;
-        let issuer_fragment = config_2().secret_manager.issuer_fragment;
+        let issuer_did = config().secret_manager.issuer_did;
+        let issuer_fragment = config().secret_manager.issuer_fragment;
 
         let secret_manager = SecretManager::load(snapshot_path, password, key_id, issuer_did, issuer_fragment)
             .await

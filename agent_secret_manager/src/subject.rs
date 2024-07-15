@@ -1,4 +1,4 @@
-use agent_shared::config::config_2;
+use agent_shared::config::config;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager::{DidMethod, Resolver, SecretManager};
@@ -109,5 +109,5 @@ impl oid4vc_core::Subject for Subject {
 }
 
 fn origin() -> url::Origin {
-    config_2().url.parse::<url::Url>().unwrap().origin()
+    config().url.parse::<url::Url>().unwrap().origin()
 }

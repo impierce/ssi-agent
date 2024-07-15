@@ -3,7 +3,7 @@ use agent_event_publisher_http::EventPublisherHttp;
 use agent_issuance::{startup_commands::startup_commands, state::initialize};
 use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::{
-    config::{config_2, LogFormat, ToggleOptions},
+    config::{config, LogFormat, ToggleOptions},
     domain_linkage::create_did_configuration_resource,
 };
 use agent_store::{in_memory, postgres, EventPublisher};
@@ -22,7 +22,7 @@ async fn main() -> io::Result<()> {
         // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
         .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
 
-    match config_2().log_format {
+    match config().log_format {
         LogFormat::Json => tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init(),
         LogFormat::Text => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
         // Ok(log_format) if log_format == "json" => {
@@ -42,9 +42,9 @@ async fn main() -> io::Result<()> {
     let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
-    let (issuance_state, verification_state) = match agent_shared::config::config_2().event_store.type_ {
+    let (issuance_state, verification_state) = match agent_shared::config::config().event_store.type_ {
         agent_shared::config::EventStoreType::Postgres => {
-            let connection_string = config_2().event_store.connection_string.expect(
+            let connection_string = config().event_store.connection_string.expect(
                 "Missing config parameter `event_store.connection_string` or `AGENT__EVENT_STORE__CONNECTION_STRING`",
             );
             (
@@ -59,9 +59,9 @@ async fn main() -> io::Result<()> {
         ),
     };
 
-    info!("{:?}", config_2());
+    info!("{:?}", config());
 
-    let url = config_2().url;
+    let url = config().url;
 
     info!("Application url: {:?}", url);
 
@@ -72,13 +72,13 @@ async fn main() -> io::Result<()> {
     let mut app = app((issuance_state, verification_state));
 
     // CORS
-    if config_2().cors_enabled.unwrap_or(false) {
+    if config().cors_enabled.unwrap_or(false) {
         info!("CORS (permissive) enabled for all routes");
         app = app.layer(CorsLayer::permissive());
     }
 
     // did:web
-    let enable_did_web = config_2()
+    let enable_did_web = config()
         .did_methods
         .get("did_web")
         .unwrap_or(&ToggleOptions::default())
@@ -102,7 +102,7 @@ async fn main() -> io::Result<()> {
         None
     };
     // Domain Linkage
-    let did_configuration_resource = if config_2().domain_linkage_enabled {
+    let did_configuration_resource = if config().domain_linkage_enabled {
         Some(
             create_did_configuration_resource(
                 url.clone(),

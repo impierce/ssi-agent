@@ -1,4 +1,4 @@
-use agent_shared::config::config_2;
+use agent_shared::config::config;
 use agent_shared::url_utils::UrlAppendHelpers;
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
@@ -12,7 +12,7 @@ pub fn startup_commands(host: url::Url) -> Vec<ServerConfigCommand> {
 }
 
 pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
-    let display = config_2().display.first().map(|display| {
+    let display = config().display.first().map(|display| {
         let display = serde_json::to_value(display).unwrap();
         vec![display]
     });
@@ -33,7 +33,7 @@ pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
 }
 
 pub fn create_credentials_supported() -> ServerConfigCommand {
-    let credential_configuration = config_2()
+    let credential_configuration = config()
         .credential_configurations
         .first()
         .expect("No credential_configurations found")

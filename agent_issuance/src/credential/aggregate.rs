@@ -1,6 +1,6 @@
 use agent_secret_manager::services::SecretManagerServices;
 use agent_shared::config;
-use agent_shared::config::config_2;
+use agent_shared::config::config;
 use agent_shared::metadata::Display;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
@@ -80,7 +80,7 @@ impl Aggregate for Credential {
                     #[cfg(not(feature = "test_utils"))]
                     let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
-                    let name = config_2()
+                    let name = config()
                         .display
                         .first()
                         .expect("Configuration `display.name` missing")
@@ -88,7 +88,7 @@ impl Aggregate for Credential {
                         .clone();
 
                     let issuer: Profile = ProfileBuilder::default()
-                        .id(config_2().url)
+                        .id(config().url)
                         .type_("Profile")
                         .name(name)
                         .try_into()

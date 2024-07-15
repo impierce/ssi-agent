@@ -150,14 +150,13 @@ impl ApplicationConfiguration {
 }
 
 /// Returns the application configuration or loads it, if it hasn't been loaded already.
-pub fn config_2() -> ApplicationConfiguration {
-    // info!("config_2()");
+pub fn config() -> ApplicationConfiguration {
     CONFIG.get_or_init(|| ApplicationConfiguration::new().unwrap()).clone()
     // TODO: or return -> &'static ApplicationConfiguration, so we don't need to clone on every call
 }
 
 pub fn did_methods_enabled() -> Vec<String> {
-    config_2()
+    config()
         .did_methods
         .iter()
         .filter(|(_, v)| v.enabled)
@@ -166,7 +165,7 @@ pub fn did_methods_enabled() -> Vec<String> {
 }
 
 pub fn did_method_preferred() -> String {
-    config_2()
+    config()
         .did_methods
         .iter()
         .filter(|(_, v)| v.enabled)
