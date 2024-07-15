@@ -12,14 +12,6 @@ pub use ::config::ConfigError;
 use rand::Rng;
 pub use url_utils::UrlAppendHelpers;
 
-/// Macro to read configuration using the package name as prefix.
-#[macro_export]
-macro_rules! config {
-    ($string:expr, $type:ty) => {
-        agent_shared::config::config(std::env!("CARGO_PKG_NAME")).get::<$type>($string)
-    };
-}
-
 pub fn generate_random_string() -> String {
     let mut rng = rand::thread_rng();
 
