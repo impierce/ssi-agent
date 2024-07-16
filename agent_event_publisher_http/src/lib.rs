@@ -61,8 +61,15 @@ impl EventPublisherHttp {
 
         info!("event_publisher_http: {:?}", event_publisher_http);
 
-        if event_publisher_http.enabled {
-            // event_publisher_http.publishers
+        // If it's not enabled, return an empty event publisher.
+        if !event_publisher_http.enabled {
+            return Ok(EventPublisherHttp {
+                server_config: None,
+                credential: None,
+                offer: None,
+                connection: None,
+                authorization_request: None,
+            });
         }
 
         // TODO: map events to aggregates

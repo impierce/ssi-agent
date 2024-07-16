@@ -155,6 +155,7 @@ pub fn config() -> ApplicationConfiguration {
     // TODO: or return -> &'static ApplicationConfiguration, so we don't need to clone on every call
 }
 
+// TODO: should fail when none is enabled
 pub fn did_methods_enabled() -> Vec<String> {
     config()
         .did_methods
@@ -164,6 +165,7 @@ pub fn did_methods_enabled() -> Vec<String> {
         .collect()
 }
 
+// TODO: should fail when there's more than one result
 pub fn did_method_preferred() -> String {
     config()
         .did_methods
@@ -171,5 +173,8 @@ pub fn did_method_preferred() -> String {
         .filter(|(_, v)| v.enabled)
         .filter(|(_, v)| v.preferred.unwrap_or(false))
         .map(|(k, _)| k.clone().replace("_", ":"))
-        .collect()
+        .collect::<Vec<String>>()
+        .first()
+        .cloned()
+        .expect("Please set a DID method as `preferred` in the configuration")
 }

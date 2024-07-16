@@ -51,7 +51,7 @@ display:
     locale: en
     logo:
       # This value will also be used in the SIOPv2/OID4VP `client_metadata`'s `logo_uri` property.
-      uri: https://impierce.com/images/logo-blue.png
+      uri: "https://impierce.com/images/favicon/apple-touch-icon.png"
       alt_text: UniCore Logo
 
 # agent_issuance/issuance-config.yml
