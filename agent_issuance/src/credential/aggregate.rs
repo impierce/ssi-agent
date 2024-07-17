@@ -264,7 +264,6 @@ pub mod credential_tests {
 
     use super::*;
 
-    use agent_shared::metadata::set_metadata_configuration;
     use lazy_static::lazy_static;
     use oid4vci::proof::KeyProofMetadata;
     use oid4vci::ProofType;
@@ -296,8 +295,6 @@ pub mod credential_tests {
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
         #[case] unsigned_credential: serde_json::Value,
     ) {
-        set_metadata_configuration("did:key");
-
         CredentialTestFramework::with(CredentialServices)
             .given_no_previous_events()
             .when(CredentialCommand::CreateUnsignedCredential {

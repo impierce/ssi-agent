@@ -63,7 +63,6 @@ pub mod tests {
     };
     use agent_event_publisher_http::{EventPublisherHttp, TEST_EVENT_PUBLISHER_HTTP_CONFIG};
     use agent_secret_manager::{secret_manager, subject::Subject};
-    use agent_shared::metadata::set_metadata_configuration;
     use agent_store::{in_memory, EventPublisher};
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
@@ -142,8 +141,6 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
     async fn test_redirect_endpoint() {
-        set_metadata_configuration("did:key");
-
         let mock_server = MockServer::start().await;
 
         Mock::given(method("POST"))

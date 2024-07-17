@@ -141,7 +141,6 @@ pub(crate) async fn credential(
 
 #[cfg(test)]
 mod tests {
-    use agent_shared::metadata::set_metadata_configuration;
     use std::sync::Arc;
 
     use crate::{
@@ -276,12 +275,15 @@ mod tests {
         #[case] is_self_signed: bool,
         #[case] delay: u64,
     ) {
-        set_metadata_configuration("did:key");
-
         let (external_server, issuance_event_publishers, verification_event_publishers) = if with_external_server {
             let external_server = MockServer::start().await;
 
             let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
+
+            // std::env::set_var("TEST_AGENT__EVENT_PUBLISHERS__HTTP__TARGET_URL", target_url.clone());
+            // std::env::set_var("TEST_AGENT__DID_METHODS__DID_JWK__PREFERRED", "false".to_string());
+            // std::env::set_var("TEST_AGENT__DID_METHODS__DID_KEY__PREFERRED", "true".to_string());
+            // reload_config();
 
             TEST_EVENT_PUBLISHER_HTTP_CONFIG.lock().unwrap().replace(
                 serde_yaml::from_str(&format!(

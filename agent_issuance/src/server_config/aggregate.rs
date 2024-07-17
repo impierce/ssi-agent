@@ -140,7 +140,6 @@ pub mod server_config_tests {
     use super::*;
 
     use agent_shared::issuance::CredentialConfiguration;
-    use agent_shared::metadata::set_metadata_configuration;
     use lazy_static::lazy_static;
     use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
     use oid4vci::credential_format_profiles::{w3c_verifiable_credentials, CredentialFormats, Parameters};
@@ -169,8 +168,6 @@ pub mod server_config_tests {
     }
     #[test]
     fn test_create_credentials_supported() {
-        set_metadata_configuration("did:key");
-
         ServerConfigTestFramework::with(ServerConfigServices)
             .given(vec![ServerConfigEvent::ServerMetadataInitialized {
                 authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),

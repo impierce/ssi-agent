@@ -54,7 +54,6 @@ display:
       uri: "https://impierce.com/images/favicon/apple-touch-icon.png"
       alt_text: UniCore Logo
 
-# agent_issuance/issuance-config.yml
 credential_configurations:
   - credential_configuration_id: w3c_vc_credential
     format: jwt_vc_json
