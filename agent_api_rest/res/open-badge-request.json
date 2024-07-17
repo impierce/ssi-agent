@@ -1,8 +1,8 @@
 {
   "offerId": "c86289fa-b105-4ec3-9326-a02436788f11",
+  "credentialConfigurationId": "w3c_vc_credential",
   "credential": {
     "credentialSubject": {
-      "id": "",
       "type": ["AchievementSubject"],
       "achievement": {
         "id": "https://example.com/achievements/21st-century-skills/teamwork",
