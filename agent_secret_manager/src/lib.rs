@@ -17,9 +17,11 @@ pub async fn secret_manager() -> SecretManager {
 
     match (snapshot_path, password, key_id, issuer_did, issuer_fragment) {
         (snapshot_path, password, Some(key_id), issuer_did, issuer_fragment) => {
-            SecretManager::load(snapshot_path, password, key_id, issuer_did, issuer_fragment).await.unwrap()
+            SecretManager::load(snapshot_path, password, key_id, issuer_did, issuer_fragment)
+                .await
+                .unwrap()
         }
         (snapshot_path, password, None, _, _) => SecretManager::generate(snapshot_path, password).await.unwrap(),
-        _ => panic!("Unable to load or generate `SecretManager`. Please make sure to set both `AGENT__SECRET_MANAGER__STRONGHOLD_PATH` and `AGENT__SECRET_MANAGER__STRONGHOLD_PASSWORD` environment variables."),
+        // _ => panic!("Unable to load or generate `SecretManager`. Please make sure to set both `AGENT__SECRET_MANAGER__STRONGHOLD_PATH` and `AGENT__SECRET_MANAGER__STRONGHOLD_PASSWORD` environment variables."),
     }
 }

@@ -3,11 +3,11 @@ use oid4vc_core::SubjectSyntaxType;
 use oid4vp::ClaimFormatDesignation;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
-use std::{collections::HashMap, str::FromStr};
-use tracing::info;
+use std::collections::HashMap;
+// use tracing::info;
 use url::Url;
 
-use crate::config::config;
+// use crate::config::config;
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -45,58 +45,38 @@ pub struct Metadata {
 #[cfg(feature = "test_utils")]
 pub static TEST_METADATA: std::sync::Mutex<Option<serde_yaml::Value>> = std::sync::Mutex::new(None);
 
-pub fn load_metadata() -> Metadata {
-    // #[cfg(feature = "test_utils")]
-    // let mut config = TEST_METADATA.lock().unwrap().as_ref().unwrap().clone();
-    // #[cfg(not(feature = "test_utils"))]
-    // let mut config: serde_yaml::Value = {
-    //     match std::fs::File::open("agent_application/config.yml") {
-    //         Ok(config_file) => serde_yaml::from_reader(config_file).unwrap(),
-    //         // If the config file does not exist, return an empty config.
-    //         Err(_) => serde_yaml::Value::Null,
-    //     }
-    // };
-    // let mut config: serde_yaml::Value = crate::config::config("AGENT_APPLICATION").try_deserialize().unwrap();
+// fn load_metadata() -> Metadata {
+//     let mut metadata = Metadata::default();
 
-    // info!("config: {:?}", config);
-    let mut metadata = Metadata::default();
-    // metadata.subject_syntax_types_supported = config_2().did_methods.keys().into_iter().map(|k| k.clone()).collect();
+//     metadata.subject_syntax_types_supported = config()
+//         .did_methods
+//         .into_iter()
+//         .filter(|(_, v)| v.enabled)
+//         .map(|(k, _)| SubjectSyntaxType::from_str(&k.replace('_', ":")).unwrap())
+//         .collect();
 
-    // let supported_algorithms: serde_yaml::Value = vec!["EdDSA".to_string()].into();
-    // if config["signing_algorithms_supported"] != supported_algorithms {
-    //     unimplemented!(
-    //         "\n{}\nOnly the `EdDSA` signing algorithm is supported",
-    //         serde_yaml::to_string(&config["signing_algorithms_supported"]).unwrap()
-    //     )
-    // }
+//     metadata.signing_algorithms_supported = config()
+//         .signing_algorithms_supported
+//         .iter()
+//         .filter(|(_, v)| v.enabled)
+//         .map(|(k, _)| k.clone())
+//         .collect();
 
-    metadata.subject_syntax_types_supported = config()
-        .did_methods
-        .into_iter()
-        .filter(|(_, v)| v.enabled)
-        .map(|(k, _)| SubjectSyntaxType::from_str(&k.replace("_", ":")).unwrap())
-        .collect();
+//     metadata
+//         .id_token_signing_alg_values_supported
+//         .clone_from(&metadata.signing_algorithms_supported);
+//     metadata
+//         .request_object_signing_alg_values_supported
+//         .clone_from(&metadata.signing_algorithms_supported);
 
-    metadata.signing_algorithms_supported = config()
-        .signing_algorithms_supported
-        .iter()
-        .filter(|(_, v)| v.enabled)
-        .map(|(k, _)| k.clone())
-        .collect();
+//     metadata.display.clone_from(&config().display);
 
-    metadata.id_token_signing_alg_values_supported = metadata.signing_algorithms_supported.clone();
-    metadata.request_object_signing_alg_values_supported = metadata.signing_algorithms_supported.clone();
+//     info!("Loaded metadata: {:?}", metadata);
 
-    // TODO: vp_formats <= can they be implied or do we need to make them configurable?
+//     info!("{:?}", serde_json::to_string(&metadata).unwrap());
 
-    metadata.display = config().display.clone();
-
-    info!("Loaded metadata: {:?}", metadata);
-
-    info!("{:?}", serde_json::to_string(&metadata).unwrap());
-
-    metadata
-}
+//     metadata
+// }
 
 #[cfg(feature = "test_utils")]
 pub fn set_metadata_configuration(default_did_method: &str) {

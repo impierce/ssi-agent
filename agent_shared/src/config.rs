@@ -161,7 +161,7 @@ pub fn did_methods_enabled() -> Vec<String> {
         .did_methods
         .iter()
         .filter(|(_, v)| v.enabled)
-        .map(|(k, _)| k.clone().replace("_", ":"))
+        .map(|(k, _)| k.clone().replace('_', ":"))
         .collect()
 }
 
@@ -172,7 +172,7 @@ pub fn did_method_preferred() -> String {
         .iter()
         .filter(|(_, v)| v.enabled)
         .filter(|(_, v)| v.preferred.unwrap_or(false))
-        .map(|(k, _)| k.clone().replace("_", ":"))
+        .map(|(k, _)| k.clone().replace('_', ":"))
         .collect::<Vec<String>>()
         .first()
         .cloned()

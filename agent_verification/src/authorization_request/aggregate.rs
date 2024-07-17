@@ -3,7 +3,6 @@ use crate::{
     generic_oid4vc::{GenericAuthorizationRequest, OID4VPAuthorizationRequest, SIOPv2AuthorizationRequest},
     services::VerificationServices,
 };
-use agent_shared::config;
 use agent_shared::config::config;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;

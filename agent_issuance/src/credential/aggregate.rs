@@ -1,7 +1,5 @@
 use agent_secret_manager::services::SecretManagerServices;
-use agent_shared::config;
 use agent_shared::config::config;
-use agent_shared::metadata::Display;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;

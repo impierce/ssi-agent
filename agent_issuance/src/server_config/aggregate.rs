@@ -63,14 +63,14 @@ impl Aggregate for ServerConfig {
                     .filter(|(_, v)| v.enabled)
                     .map(|(k, _)| k.clone())
                     // TODO: find less hacky solution, possibly: enum + serde rename
-                    .map(|did_method| did_method.replace("_", ":"))
+                    .map(|did_method| did_method.replace('_', ":"))
                     .collect();
 
                 let signing_algorithms_supported: Vec<Algorithm> = config()
                     .signing_algorithms_supported
                     .iter()
                     .filter(|(_, options)| options.enabled)
-                    .map(|(alg, _)| alg.clone())
+                    .map(|(alg, _)| *alg)
                     .collect();
 
                 let proof_types_supported = HashMap::from_iter([(

@@ -10,7 +10,6 @@ use agent_issuance::{
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
 use agent_shared::{
-    config,
     config::config,
     handlers::{command_handler, query_handler},
 };
@@ -234,7 +233,7 @@ mod tests {
                                     }
                                 };
 
-                                std::thread::sleep(Duration::from_millis(delay.try_into().unwrap()));
+                                std::thread::sleep(Duration::from_millis(delay));
 
                                 // Sends the `CredentialsRequest` to the `credentials` endpoint.
                                 app_clone

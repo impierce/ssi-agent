@@ -1,4 +1,4 @@
-use agent_shared::config::{config, did_methods_enabled};
+use agent_shared::config::{config, did_method_preferred, did_methods_enabled};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{client_metadata::ClientMetadataResource, Subject};
 use oid4vc_manager::RelyingPartyManager;
@@ -16,18 +16,6 @@ pub struct VerificationServices {
 
 impl VerificationServices {
     pub fn new(verifier: Arc<dyn Subject>) -> Self {
-        let default_did_method = config()
-            .did_methods
-            .iter()
-            .filter(|(_, v)| v.preferred.unwrap_or(false))
-            .map(|(k, _)| k.clone())
-            .collect::<Vec<String>>()
-            // TODO: throw error if more than one preferred DID method is found
-            .first()
-            .unwrap()
-            .to_owned()
-            .replace("_", ":");
-
         let client_name = config().display.first().as_ref().map(|display| display.name.clone());
 
         let logo_uri = config()
@@ -103,10 +91,16 @@ impl VerificationServices {
             )]),
         };
 
+        let default_subject_syntax_type = did_method_preferred();
+
         Self {
             verifier: verifier.clone(),
-            relying_party: RelyingPartyManager::new(verifier, default_did_method, signing_algorithms_supported)
-                .unwrap(),
+            relying_party: RelyingPartyManager::new(
+                verifier,
+                default_subject_syntax_type,
+                signing_algorithms_supported,
+            )
+            .unwrap(),
             siopv2_client_metadata,
             oid4vp_client_metadata,
         }

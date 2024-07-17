@@ -88,7 +88,7 @@ impl EventPublisherHttp {
         let credential_events: Vec<String> = event_publisher_http
             .events
             .credential
-            .unwrap_or(vec![])
+            .unwrap_or_default()
             .iter()
             .map(|e| e.to_string())
             .collect();

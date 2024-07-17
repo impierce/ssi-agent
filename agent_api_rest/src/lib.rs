@@ -2,7 +2,7 @@ mod issuance;
 mod verification;
 
 use agent_issuance::state::IssuanceState;
-use agent_shared::{config, config::config, ConfigError};
+use agent_shared::{config::config, ConfigError};
 use agent_verification::state::VerificationState;
 use axum::{
     body::Bytes,
