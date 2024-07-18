@@ -1,4 +1,4 @@
-use agent_shared::config::{config, did_method_preferred, did_methods_enabled};
+use agent_shared::config::{config, get_all_enabled_did_methods, get_preferred_did_method};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{client_metadata::ClientMetadataResource, Subject};
 use oid4vc_manager::RelyingPartyManager;
@@ -36,7 +36,7 @@ impl VerificationServices {
             client_name: client_name.clone(),
             logo_uri: logo_uri.clone(),
             extension: siopv2::authorization_request::ClientMetadataParameters {
-                subject_syntax_types_supported: did_methods_enabled()
+                subject_syntax_types_supported: get_all_enabled_did_methods()
                     .iter()
                     .map(|method| oid4vc_core::SubjectSyntaxType::from_str(method).unwrap())
                     .collect(),
@@ -87,11 +87,11 @@ impl VerificationServices {
             },
             other: HashMap::from_iter([(
                 "subject_syntax_types_supported".to_string(),
-                json!(did_methods_enabled()),
+                json!(get_all_enabled_did_methods()),
             )]),
         };
 
-        let default_subject_syntax_type = did_method_preferred();
+        let default_subject_syntax_type = get_preferred_did_method();
 
         Self {
             verifier: verifier.clone(),

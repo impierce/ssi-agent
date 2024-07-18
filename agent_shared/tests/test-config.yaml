@@ -43,7 +43,7 @@ display:
       alt_text: UniCore Logo
 
 credential_configurations:
-  - credential_configuration_id: w3c_vc_credential
+  - credential_configuration_id: badge
     format: jwt_vc_json
     credential_definition:
       type:
@@ -56,8 +56,8 @@ credential_configurations:
           alt_text: UniCore Logo
 
 secret_manager:
-  stronghold_path: "../agent_secret_manager/tests/res/test.stronghold"
-  stronghold_password: "secure_password"
-  issuer_key_id: "9O66nzWqYYy1LmmiOudOlh2SMIaUWoTS"
+  stronghold_path: "../agent_secret_manager/tests/res/selv.stronghold"
+  stronghold_password: "VNvRtH4tKyWwvJDpL6Vuc2aoLiKAecGQ"
+  issuer_key_id: "UVDxWhG2rB39FkaR7I27mHeUNrGtUgcr"
   issuer_did: "did:iota:rms:0x42ad588322e58b3c07aa39e4948d021ee17ecb5747915e9e1f35f028d7ecaf90"
   issuer_fragment: "bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"

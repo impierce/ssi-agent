@@ -1,5 +1,5 @@
 use crate::subject::Subject;
-use agent_shared::config::{config, did_method_preferred};
+use agent_shared::config::{config, get_preferred_did_method};
 use anyhow::Result;
 use did_manager::SecretManager;
 
@@ -10,7 +10,7 @@ pub struct SecretManagerServices {
 
 impl SecretManagerServices {
     pub fn new(subject: Option<Subject>) -> Self {
-        let default_did_method = did_method_preferred();
+        let default_did_method = get_preferred_did_method();
         Self {
             subject,
             default_did_method,

@@ -162,6 +162,8 @@ pub mod tests {
 
     use agent_secret_manager::secret_manager;
     use agent_secret_manager::subject::Subject;
+    use agent_shared::config::DidMethod;
+    use agent_shared::config::CONFIG;
     use agent_shared::metadata::set_metadata_configuration;
     use cqrs_es::test::TestFramework;
     use lazy_static::lazy_static;
@@ -180,9 +182,16 @@ pub mod tests {
     #[rstest]
     #[serial_test::serial]
     async fn test_create_authorization_request(
-        #[values("did:key", "did:jwk", "did:iota:rms")] verifier_did_method: &str,
+        #[values(DidMethod::Key, DidMethod::Jwk, DidMethod::IotaRms)] verifier_did_method: DidMethod,
     ) {
-        set_metadata_configuration(verifier_did_method);
+        // set_metadata_configuration(verifier_did_method);
+        CONFIG
+            .lock()
+            .unwrap()
+            .did_methods
+            .get_mut(&verifier_did_method)
+            .unwrap()
+            .preferred = Some(true);
 
         let verification_services = test_verification_services();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
