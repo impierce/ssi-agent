@@ -2,7 +2,11 @@ use config::ConfigError;
 use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Mutex};
+use serde_with::SerializeDisplay;
+use std::{
+    collections::HashMap,
+    sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard},
+};
 use tracing::info;
 
 use crate::{issuance::CredentialConfiguration, metadata::Display};
@@ -14,7 +18,7 @@ pub struct ApplicationConfiguration {
     pub url: String,
     pub base_path: Option<String>,
     pub cors_enabled: Option<bool>,
-    pub did_methods: HashMap<DidMethod, ToggleOptions>,
+    pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
     pub external_server_response_timeout_ms: Option<u64>,
     pub domain_linkage_enabled: bool,
     pub secret_manager: SecretManagerConfig,
@@ -23,6 +27,48 @@ pub struct ApplicationConfiguration {
     pub display: Vec<Display>,
     pub event_publishers: Option<EventPublishers>,
     pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
+}
+
+impl ApplicationConfiguration {
+    pub fn set_preferred_did_method(&mut self, preferred_did_method: SupportedDidMethod) {
+        // Set the current preferred did_method to false if available.
+        if let Some((_, options)) = self.did_methods.iter_mut().find(|(_, v)| v.preferred == Some(true)) {
+            options.preferred = Some(false);
+        }
+
+        // Set the current preferred did_method to true if available.
+        self.did_methods
+            .entry(preferred_did_method)
+            .or_insert_with(|| ToggleOptions {
+                enabled: true,
+                preferred: Some(true),
+            })
+            .preferred = Some(true);
+    }
+
+    pub fn enable_event_publisher_http(&mut self) {
+        if let Some(event_publishers) = &mut self.event_publishers {
+            if let Some(http) = &mut event_publishers.http {
+                http.enabled = true;
+            }
+        }
+    }
+
+    pub fn set_event_publisher_http_target_url(&mut self, target_url: String) {
+        if let Some(event_publishers) = &mut self.event_publishers {
+            if let Some(http) = &mut event_publishers.http {
+                http.target_url = target_url;
+            }
+        }
+    }
+
+    pub fn set_event_publisher_http_target_events(&mut self, events: Events) {
+        if let Some(event_publishers) = &mut self.event_publishers {
+            if let Some(http) = &mut event_publishers.http {
+                http.events = events;
+            }
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -44,7 +90,7 @@ pub struct EventStoreConfig {
 #[serde(rename_all = "snake_case")]
 pub enum EventStoreType {
     InMemory,
-    // Postgres(EventStorePostgresConfig), // <== TODO: "config-rs" panicks with "unreachable code", other solution?
+    // Postgres(EventStorePostgresConfig), // <== TODO: "config-rs" panics with "unreachable code", other solution?
     Postgres,
 }
 
@@ -74,7 +120,7 @@ pub struct EventPublisherHttp {
     pub events: Events,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct Events {
     pub server_config: Option<Vec<ServerConfigEvent>>,
     pub credential: Option<Vec<CredentialEvent>>,
@@ -120,15 +166,33 @@ pub enum AuthorizationRequestEvent {
 }
 
 /// All DID methods supported by UniCore
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
-pub enum DidMethod {
-    #[serde(rename = "did:jwk", alias = "did_jwk")]
+/// ```
+/// use agent_shared::config::SupportedDidMethod;
+/// use serde_json::json;
+///
+/// let supported_did_method: SupportedDidMethod = serde_json::from_value(json!("did_jwk")).unwrap();
+/// assert_eq!(supported_did_method, SupportedDidMethod::Jwk);
+/// assert_eq!(supported_did_method.to_string(), "did:jwk");
+/// ```
+#[derive(Debug, Deserialize, Clone, Eq, PartialEq, Hash, strum::EnumString, strum::Display, SerializeDisplay)]
+pub enum SupportedDidMethod {
+    #[serde(alias = "did_jwk", rename = "did_jwk")]
+    #[strum(serialize = "did:jwk")]
     Jwk,
-    #[serde(rename = "did:key")]
+    #[serde(alias = "did_key", rename = "did_key")]
+    #[strum(serialize = "did:key")]
     Key,
-    #[serde(rename = "did:web")]
+    #[serde(alias = "did_web", rename = "did_web")]
+    #[strum(serialize = "did:web")]
     Web,
-    #[serde(rename = "did:iota:rms")]
+    #[serde(alias = "did_iota", rename = "did_iota")]
+    #[strum(serialize = "did:iota")]
+    Iota,
+    #[serde(alias = "did_iota_smr", rename = "did_iota_smr")]
+    #[strum(serialize = "did:iota:smr")]
+    IotaSmr,
+    #[serde(alias = "did_iota_rms", rename = "did_iota_rms")]
+    #[strum(serialize = "did:iota:rms")]
     IotaRms,
 }
 
@@ -141,8 +205,8 @@ pub struct ToggleOptions {
 
 // pub static CONFIG: OnceCell<ApplicationConfiguration> = OnceCell::new();
 
-pub static CONFIG: Lazy<Mutex<ApplicationConfiguration>> =
-    Lazy::new(|| Mutex::new(ApplicationConfiguration::new().unwrap()));
+pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> =
+    Lazy::new(|| RwLock::new(ApplicationConfiguration::new().unwrap()));
 
 impl ApplicationConfiguration {
     pub fn new() -> Result<Self, ConfigError> {
@@ -170,10 +234,14 @@ impl ApplicationConfiguration {
 }
 
 /// Returns the application configuration or loads it, if it hasn't been loaded already.
-pub fn config() -> ApplicationConfiguration {
+pub fn config<'a>() -> RwLockReadGuard<'a, ApplicationConfiguration> {
     // CONFIG.get_or_init(|| ApplicationConfiguration::new().unwrap()).clone()
-    CONFIG.lock().unwrap().clone()
+    CONFIG.read().unwrap()
     // TODO: or return -> &'static ApplicationConfiguration, so we don't need to clone on every call
+}
+
+pub fn set_config<'a>() -> RwLockWriteGuard<'a, ApplicationConfiguration> {
+    CONFIG.write().unwrap()
 }
 
 /// Reloads the config. Useful for testing after overwriting a env variable.
@@ -183,7 +251,7 @@ pub fn reload_config() {
 }
 
 // TODO: should fail when none is enabled
-pub fn get_all_enabled_did_methods() -> Vec<DidMethod> {
+pub fn get_all_enabled_did_methods() -> Vec<SupportedDidMethod> {
     config()
         .did_methods
         .iter()
@@ -193,17 +261,15 @@ pub fn get_all_enabled_did_methods() -> Vec<DidMethod> {
 }
 
 // TODO: should fail when there's more than one result
-pub fn get_preferred_did_method() -> DidMethod {
+pub fn get_preferred_did_method() -> SupportedDidMethod {
     config()
         .did_methods
         .iter()
         .filter(|(_, v)| v.enabled)
         .filter(|(_, v)| v.preferred.unwrap_or(false))
         .map(|(k, _)| k.clone())
-        .collect::<Vec<DidMethod>>()
+        .collect::<Vec<SupportedDidMethod>>()
         .first()
         .cloned()
         .expect("Please set a DID method as `preferred` in the configuration")
 }
-
-pub fn set_preferred_did_method() {}

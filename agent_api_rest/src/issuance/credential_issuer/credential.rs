@@ -42,6 +42,8 @@ pub(crate) async fn credential(
         _ => return StatusCode::UNAUTHORIZED.into_response(),
     };
 
+    info!("test1");
+
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
     let (credential_issuer_metadata, authorization_server_metadata) =
         match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
@@ -52,6 +54,8 @@ pub(crate) async fn credential(
             _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         };
 
+    info!("test2");
+
     let command = OfferCommand::VerifyCredentialRequest {
         offer_id: offer_id.clone(),
         credential_issuer_metadata,
@@ -59,15 +63,22 @@ pub(crate) async fn credential(
         credential_request,
     };
 
+    info!("test3");
+
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
     if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
         StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
+    info!("test4");
+
     let timeout = config()
         .external_server_response_timeout_ms
         .unwrap_or(DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS);
     let start_time = Instant::now();
+
+    info!("time out: {}", timeout);
+    info!("test5");
 
     // TODO: replace this polling solution with a call to the `TxChannelRegistry` as described here: https://github.com/impierce/ssi-agent/issues/75
     // Use the `offer_id` to get the `credential_ids` and `subject_id` from the `OfferView`.
@@ -92,6 +103,8 @@ pub(crate) async fn credential(
             }
         }
     };
+
+    info!("test6");
 
     // Use the `credential_ids` and `subject_id` to sign all the credentials.
     let mut signed_credentials = vec![];
@@ -119,15 +132,21 @@ pub(crate) async fn credential(
         signed_credentials.push(signed_credential);
     }
 
+    info!("test7");
+
     let command = OfferCommand::CreateCredentialResponse {
         offer_id: offer_id.clone(),
         signed_credentials,
     };
 
+    info!("test8");
+
     // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
     if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
         StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
+
+    info!("test9");
 
     // Use the `offer_id` to get the `credential_response` from the `OfferView`.
     match query_handler(&offer_id, &state.query.offer).await {
@@ -156,6 +175,7 @@ mod tests {
     use crate::API_VERSION;
     use agent_event_publisher_http::{EventPublisherHttp, TEST_EVENT_PUBLISHER_HTTP_CONFIG};
     use agent_issuance::{offer::event::OfferEvent, startup_commands::startup_commands, state::initialize};
+    use agent_shared::config::{set_config, Events};
     use agent_store::{in_memory, EventPublisher};
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
@@ -193,6 +213,7 @@ mod tests {
             is_self_signed: bool,
             delay: u64,
         ) {
+            println!("HEEERRREE1");
             Mock::given(method("POST"))
                 .and(path("/ssi-events-subscriber"))
                 .and(
@@ -201,8 +222,12 @@ mod tests {
                         OfferEvent::CredentialRequestVerified { offer_id, subject_id } => {
                             let app_clone = app.clone();
 
-                            futures::executor::block_on(async {
+                            let temp = futures::executor::block_on(async {
+                                println!("testA");
+
                                 let app_clone = app_clone.lock().await.take().unwrap();
+
+                                println!("testB");
 
                                 // This assertion is a representation of the 'outside' backend server retrieving the
                                 // data that corresponds to the `offer_id`.
@@ -232,7 +257,11 @@ mod tests {
                                     }
                                 };
 
+                                println!("testC");
+
                                 std::thread::sleep(Duration::from_millis(delay));
+
+                                println!("testD");
 
                                 // Sends the `CredentialsRequest` to the `credentials` endpoint.
                                 app_clone
@@ -249,6 +278,8 @@ mod tests {
                                     .await
                             })
                             .unwrap();
+
+                            println!("{}", temp.status());
 
                             true
                         }
@@ -285,21 +316,12 @@ mod tests {
             // std::env::set_var("TEST_AGENT__DID_METHODS__DID_KEY__PREFERRED", "true".to_string());
             // reload_config();
 
-            TEST_EVENT_PUBLISHER_HTTP_CONFIG.lock().unwrap().replace(
-                serde_yaml::from_str(&format!(
-                    r#"
-                        target_url: &target_url {target_url}
-    
-                        offer: {{
-                            target_url: *target_url,
-                            target_events: [
-                                CredentialRequestVerified
-                            ]
-                        }}
-                    "#,
-                ))
-                .unwrap(),
-            );
+            set_config().enable_event_publisher_http();
+            set_config().set_event_publisher_http_target_url(target_url.clone());
+            set_config().set_event_publisher_http_target_events(Events {
+                offer: Some(vec![agent_shared::config::OfferEvent::CredentialRequestVerified]),
+                ..Default::default()
+            });
 
             (
                 Some(external_server),
@@ -309,6 +331,17 @@ mod tests {
         } else {
             (None, Default::default(), Default::default())
         };
+
+        println!("issuance_event_publishers: {:#?}", EventPublisherHttp::load().unwrap());
+
+        println!("CONFIG: {:#?}", config());
+        println!(
+            "with_external_server: {:#?}, external_server: {}",
+            with_external_server,
+            external_server.is_some()
+        );
+        println!("is_self_signed: {:#?}", is_self_signed);
+        println!("delay: {:#?}", delay);
 
         let issuance_state = in_memory::issuance_state(issuance_event_publishers).await;
         let verification_state =

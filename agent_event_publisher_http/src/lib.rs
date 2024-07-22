@@ -49,7 +49,7 @@ impl EventPublisherHttp {
         // };
         // let config = agent_shared::config::config("AGENT_EVENT_PUBLISHER_HTTP");
 
-        let event_publisher_http = config().event_publishers.unwrap().http.unwrap();
+        let event_publisher_http = config().event_publishers.clone().unwrap().http.unwrap();
 
         // let event_publishers = config.get_table("event_publishers").unwrap_or_default();
         // let event_publisher_http = event_publishers
@@ -59,7 +59,7 @@ impl EventPublisherHttp {
         //     .into_table()
         //     .unwrap_or_default();
 
-        info!("event_publisher_http: {:?}", event_publisher_http);
+        println!("event_publisher_http: {:?}", event_publisher_http);
 
         // If it's not enabled, return an empty event publisher.
         if !event_publisher_http.enabled {
@@ -87,20 +87,20 @@ impl EventPublisherHttp {
 
         let credential_events: Vec<String> = event_publisher_http
             .events
-            .credential
+            .offer
             .unwrap_or_default()
             .iter()
             .map(|e| e.to_string())
             .collect();
-        info!("credential_events: {:?}", credential_events);
+        println!("credential_events: {:?}", credential_events);
 
         let event_publisher: EventPublisherHttp = EventPublisherHttp {
             server_config: None,
-            credential: Some(AggregateEventPublisherHttp::new(
+            credential: None,
+            offer: Some(AggregateEventPublisherHttp::new(
                 event_publisher_http.target_url.clone(),
                 credential_events,
             )),
-            offer: None,
             connection: None,
             authorization_request: None,
         };
@@ -234,6 +234,7 @@ mod tests {
     use super::*;
 
     use agent_issuance::offer::event::OfferEvent;
+    use agent_shared::config::{set_config, Events};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -250,21 +251,14 @@ mod tests {
         let target_url = format!("{}/ssi-events-subscriber", &mock_server.uri());
 
         // Set the test configuration.
-        TEST_EVENT_PUBLISHER_HTTP_CONFIG.lock().unwrap().replace(
-            serde_yaml::from_str(&format!(
-                r#"
-                    target_url: &target_url {target_url}
-
-                    offer: {{
-                        target_url: *target_url,
-                        target_events: [
-                            FormUrlEncodedCredentialOfferCreated
-                        ]
-                    }}
-                "#
-            ))
-            .unwrap(),
-        );
+        set_config().enable_event_publisher_http();
+        set_config().set_event_publisher_http_target_url(target_url.clone());
+        set_config().set_event_publisher_http_target_events(Events {
+            offer: Some(vec![
+                agent_shared::config::OfferEvent::FormUrlEncodedCredentialOfferCreated,
+            ]),
+            ..Default::default()
+        });
 
         let publisher = EventPublisherHttp::load().unwrap();
 

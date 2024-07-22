@@ -51,7 +51,7 @@ impl Aggregate for AuthorizationRequest {
                     .await
                     .unwrap();
 
-                let url = config().url;
+                let url = &config().url;
                 let request_uri = format!("{url}/request/{state}").parse().unwrap();
                 let redirect_uri = format!("{url}/redirect").parse::<url::Url>().unwrap();
 
@@ -162,9 +162,8 @@ pub mod tests {
 
     use agent_secret_manager::secret_manager;
     use agent_secret_manager::subject::Subject;
-    use agent_shared::config::DidMethod;
-    use agent_shared::config::CONFIG;
-    use agent_shared::metadata::set_metadata_configuration;
+    use agent_shared::config::set_config;
+    use agent_shared::config::SupportedDidMethod;
     use cqrs_es::test::TestFramework;
     use lazy_static::lazy_static;
     use oid4vc_core::Subject as _;
@@ -182,16 +181,10 @@ pub mod tests {
     #[rstest]
     #[serial_test::serial]
     async fn test_create_authorization_request(
-        #[values(DidMethod::Key, DidMethod::Jwk, DidMethod::IotaRms)] verifier_did_method: DidMethod,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
+        verifier_did_method: SupportedDidMethod,
     ) {
-        // set_metadata_configuration(verifier_did_method);
-        CONFIG
-            .lock()
-            .unwrap()
-            .did_methods
-            .get_mut(&verifier_did_method)
-            .unwrap()
-            .preferred = Some(true);
+        set_config().set_preferred_did_method(verifier_did_method.clone());
 
         let verification_services = test_verification_services();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
@@ -209,7 +202,7 @@ pub mod tests {
                     authorization_request: Box::new(
                         authorization_request(
                             "id_token",
-                            verifier_did_method,
+                            &verifier_did_method.to_string(),
                             siopv2_client_metadata,
                             oid4vp_client_metadata,
                         )
@@ -217,7 +210,9 @@ pub mod tests {
                     ),
                 },
                 AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
-                    form_url_encoded_authorization_request: form_url_encoded_authorization_request(verifier_did_method),
+                    form_url_encoded_authorization_request: form_url_encoded_authorization_request(
+                        &verifier_did_method.to_string(),
+                    ),
                 },
             ]);
     }
@@ -225,9 +220,10 @@ pub mod tests {
     #[rstest]
     #[serial_test::serial]
     async fn test_sign_authorization_request_object(
-        #[values("did:key", "did:jwk", "did:iota:rms")] verifier_did_method: &str,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
+        verifier_did_method: SupportedDidMethod,
     ) {
-        set_metadata_configuration(verifier_did_method);
+        set_config().set_preferred_did_method(verifier_did_method.clone());
 
         let verification_services = test_verification_services();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
@@ -239,7 +235,7 @@ pub mod tests {
                     authorization_request: Box::new(
                         authorization_request(
                             "id_token",
-                            verifier_did_method,
+                            &verifier_did_method.to_string(),
                             siopv2_client_metadata,
                             oid4vp_client_metadata,
                         )
@@ -247,12 +243,16 @@ pub mod tests {
                     ),
                 },
                 AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
-                    form_url_encoded_authorization_request: form_url_encoded_authorization_request(verifier_did_method),
+                    form_url_encoded_authorization_request: form_url_encoded_authorization_request(
+                        &verifier_did_method.to_string(),
+                    ),
                 },
             ])
             .when(AuthorizationRequestCommand::SignAuthorizationRequestObject)
             .then_expect_events(vec![AuthorizationRequestEvent::AuthorizationRequestObjectSigned {
-                signed_authorization_request_object: signed_authorization_request_object(verifier_did_method),
+                signed_authorization_request_object: signed_authorization_request_object(
+                    &verifier_did_method.to_string(),
+                ),
             }]);
     }
 

@@ -101,6 +101,7 @@ pub fn app(state: ApplicationState) -> Router {
 fn get_base_path() -> Result<String, ConfigError> {
     config()
         .base_path
+        .clone()
         .ok_or_else(|| ConfigError::NotFound("No configuration for `base_path` found".to_string()))
         .map(|mut base_path| {
             if base_path.starts_with('/') {

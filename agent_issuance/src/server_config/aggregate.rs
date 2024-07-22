@@ -60,10 +60,7 @@ impl Aggregate for ServerConfig {
                 let cryptographic_binding_methods_supported = config()
                     .did_methods
                     .iter()
-                    .filter(|(_, v)| v.enabled)
-                    .map(|(k, _)| k.clone())
-                    // TODO: find less hacky solution, possibly: enum + serde rename
-                    .map(|did_method| did_method.replace('_', ":"))
+                    .filter_map(|(did_method, options)| options.enabled.then(|| did_method.to_string()))
                     .collect();
 
                 let signing_algorithms_supported: Vec<Algorithm> = config()

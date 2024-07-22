@@ -3,7 +3,7 @@ use agent_event_publisher_http::EventPublisherHttp;
 use agent_issuance::{startup_commands::startup_commands, state::initialize};
 use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::{
-    config::{config, LogFormat, ToggleOptions},
+    config::{config, LogFormat, SupportedDidMethod, ToggleOptions},
     domain_linkage::create_did_configuration_resource,
 };
 use agent_store::{in_memory, postgres, EventPublisher};
@@ -44,7 +44,7 @@ async fn main() -> io::Result<()> {
 
     let (issuance_state, verification_state) = match agent_shared::config::config().event_store.type_ {
         agent_shared::config::EventStoreType::Postgres => {
-            let connection_string = config().event_store.connection_string.expect(
+            let connection_string = config().event_store.connection_string.clone().expect(
                 "Missing config parameter `event_store.connection_string` or `AGENT__EVENT_STORE__CONNECTION_STRING`",
             );
             (
@@ -61,11 +61,11 @@ async fn main() -> io::Result<()> {
 
     info!("{:?}", config());
 
-    let url = config().url;
+    let url = &config().url;
 
     info!("Application url: {:?}", url);
 
-    let url = url::Url::parse(&url).unwrap();
+    let url = url::Url::parse(url).unwrap();
 
     initialize(&issuance_state, startup_commands(url.clone())).await;
 
@@ -80,7 +80,7 @@ async fn main() -> io::Result<()> {
     // did:web
     let enable_did_web = config()
         .did_methods
-        .get("did_web")
+        .get(&SupportedDidMethod::Web)
         .unwrap_or(&ToggleOptions::default())
         .enabled;
 

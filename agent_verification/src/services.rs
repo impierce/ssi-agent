@@ -38,7 +38,7 @@ impl VerificationServices {
             extension: siopv2::authorization_request::ClientMetadataParameters {
                 subject_syntax_types_supported: get_all_enabled_did_methods()
                     .iter()
-                    .map(|method| oid4vc_core::SubjectSyntaxType::from_str(method).unwrap())
+                    .map(|method| oid4vc_core::SubjectSyntaxType::from_str(&method.to_string()).unwrap())
                     .collect(),
                 id_token_signed_response_alg: signing_algorithms_supported.first().cloned(),
             },
@@ -97,7 +97,7 @@ impl VerificationServices {
             verifier: verifier.clone(),
             relying_party: RelyingPartyManager::new(
                 verifier,
-                default_subject_syntax_type,
+                default_subject_syntax_type.to_string(),
                 signing_algorithms_supported,
             )
             .unwrap(),

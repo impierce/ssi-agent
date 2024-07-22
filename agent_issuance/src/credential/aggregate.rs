@@ -86,7 +86,7 @@ impl Aggregate for Credential {
                         .clone();
 
                     let issuer: Profile = ProfileBuilder::default()
-                        .id(config().url)
+                        .id(config().url.clone())
                         .type_("Profile")
                         .name(name)
                         .try_into()
@@ -184,7 +184,10 @@ impl Aggregate for Credential {
                     services.init().await.unwrap();
                     (Arc::new(services.subject.unwrap()), services.default_did_method.clone())
                 };
-                let issuer_did = issuer.identifier(&default_did_method, Algorithm::EdDSA).await.unwrap();
+                let issuer_did = issuer
+                    .identifier(&default_did_method.to_string(), Algorithm::EdDSA)
+                    .await
+                    .unwrap();
                 let signed_credential = {
                     let mut credential = self.data.as_ref().ok_or(MissingCredentialDataError)?.clone();
 
@@ -224,7 +227,7 @@ impl Aggregate for Credential {
                             .verifiable_credential(credential.raw)
                             .build()
                             .ok(),
-                        &default_did_method
+                        &default_did_method.to_string()
                     )
                     .await
                     .ok())

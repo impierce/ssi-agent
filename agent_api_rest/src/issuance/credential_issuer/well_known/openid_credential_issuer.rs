@@ -29,7 +29,7 @@ mod tests {
 
     use super::*;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
-    use agent_shared::UrlAppendHelpers;
+    use agent_shared::{config::config, UrlAppendHelpers};
     use agent_store::in_memory;
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
@@ -90,12 +90,7 @@ mod tests {
                                 .into(),
                         }),
                         scope: None,
-                        cryptographic_binding_methods_supported: vec![
-                            "did:key".to_string(),
-                            "did:key".to_string(),
-                            "did:iota:rms".to_string(),
-                            "did:jwk".to_string(),
-                        ],
+                        cryptographic_binding_methods_supported: vec!["did:jwk".to_string(), "did:key".to_string(),],
                         credential_signing_alg_values_supported: vec!["EdDSA".to_string()],
                         proof_types_supported: HashMap::from_iter([(
                             ProofType::Jwt,
@@ -104,10 +99,12 @@ mod tests {
                             },
                         )]),
                         display: vec![json!({
-                           "name": "Badge",
-                           "logo": {
-                                "url": "https://example.com/logo.png",
-                           }
+                            "name": "Verifiable Credential",
+                            "locale": "en",
+                            "logo": {
+                                "url": "https://impierce.com/images/logo-blue.png",
+                                "alt_text": "UniCore Logo"
+                            }
                         })],
                     }
                 )]
@@ -117,7 +114,7 @@ mod tests {
                     "name": "UniCore",
                     "locale": "en",
                     "logo": {
-                        "url": "https://impierce.com/images/logo-blue.png",
+                        "url": "https://impierce.com/images/favicon/apple-touch-icon.png",
                         "alt_text": "UniCore Logo"
                     }
                 })]),
