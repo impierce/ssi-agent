@@ -160,7 +160,7 @@ impl ApplicationConfiguration {
                 .build()?
         } else {
             config::Config::builder()
-                .add_source(config::File::with_name("agent_application/example-config.yaml"))
+                .add_source(config::File::with_name("agent_application/config.yaml"))
                 .add_source(config::Environment::with_prefix("AGENT").separator("__"))
                 .build()?
         };
