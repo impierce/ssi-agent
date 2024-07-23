@@ -4,6 +4,7 @@ name: ssi-agent
 
 services:
   cqrs-postgres-db:
+    container_name: cqrs-postgres-db
     image: postgres
     restart: always
     ports:
@@ -36,7 +37,7 @@ services:
     environment:
       AGENT__LOG_FORMAT: text
       AGENT__EVENT_STORE__TYPE: postgres
-      AGENT__EVENT_STORE__CONNECTION_STRING: postgresql://demo_user:demo_pass@localhost:5432/demo
+      AGENT__EVENT_STORE__CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo
       AGENT__URL: http://192.168.1.234:3033
 
       AGENT__SECRET_MANAGER__STRONGHOLD_PATH: "/app/res/stronghold"
