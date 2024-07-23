@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{skip_serializing_none, SerializeDisplay};
 use std::{
     collections::HashMap,
-    sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
+    sync::{RwLock, RwLockReadGuard},
 };
 use tracing::info;
 use url::Url;
@@ -271,7 +271,7 @@ pub fn config<'a>() -> RwLockReadGuard<'a, ApplicationConfiguration> {
 
 /// Returns Write Guard for the application configuration that can be used to update the configuration during runtime.
 #[cfg(feature = "test_utils")]
-pub fn set_config<'a>() -> RwLockWriteGuard<'a, ApplicationConfiguration> {
+pub fn set_config<'a>() -> std::sync::RwLockWriteGuard<'a, ApplicationConfiguration> {
     CONFIG.write().unwrap()
 }
 
