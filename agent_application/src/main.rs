@@ -33,6 +33,9 @@ async fn main() -> io::Result<()> {
         // _ => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
     }
 
+    info!("Configuration loaded.");
+    info!("Configuration: {:#?}", config());
+
     let verification_services = Arc::new(VerificationServices::new(Arc::new(Subject {
         secret_manager: secret_manager().await,
     })));
@@ -49,6 +52,7 @@ async fn main() -> io::Result<()> {
             let connection_string = config().event_store.connection_string.clone().expect(
                 "Missing config parameter `event_store.connection_string` or `AGENT__EVENT_STORE__CONNECTION_STRING`",
             );
+            info!("Connecting to Postgres: {}", connection_string);
             (
                 postgres::issuance_state(issuance_event_publishers, &connection_string).await,
                 postgres::verification_state(verification_services, verification_event_publishers, &connection_string)
