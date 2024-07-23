@@ -1,0 +1,25 @@
+{
+  "name": "ssi-agent",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/impierce/ssi-agent.git"
+  },
+  "author": "",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/impierce/ssi-agent/issues"
+  },
+  "homepage": "https://impierce.com",
+  "devDependencies": {
+    "@commitlint/cli": "^19.3.0",
+    "@commitlint/config-angular": "^19.3.0",
+    "semantic-release": "^24.0.0"
+  },
+  "type": "module"
+}

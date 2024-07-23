@@ -1,5 +1,10 @@
 # SSI Agent
 
+[![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
+[![License](https://img.shields.io/github/license/impierce/ssi-agent.svg)](https://github.com/impierce/ssi-agent/blob/HEAD/LICENSE)
+
+---
+
 ## API specification
 
 [Follow these instructions](./agent_api_rest/README.md) to inspect the REST API.
