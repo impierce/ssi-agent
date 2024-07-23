@@ -1,4 +1,5 @@
 use config::ConfigError;
+use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
 use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -9,8 +10,6 @@ use std::{
 };
 use tracing::info;
 use url::Url;
-
-use crate::issuance::CredentialConfiguration;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ApplicationConfiguration {
@@ -107,6 +106,15 @@ pub struct SecretManagerConfig {
     pub issuer_key_id: Option<String>,
     pub issuer_did: Option<String>,
     pub issuer_fragment: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct CredentialConfiguration {
+    pub credential_configuration_id: String,
+    #[serde(flatten)]
+    pub credential_format_with_parameters: CredentialFormats<WithParameters>,
+    #[serde(default)]
+    pub display: Vec<serde_json::Value>,
 }
 
 #[skip_serializing_none]
@@ -228,8 +236,6 @@ pub struct ToggleOptions {
     pub preferred: Option<bool>,
 }
 
-// pub static CONFIG: OnceCell<ApplicationConfiguration> = OnceCell::new();
-
 pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> =
     Lazy::new(|| RwLock::new(ApplicationConfiguration::new().unwrap()));
 
@@ -260,19 +266,13 @@ impl ApplicationConfiguration {
 
 /// Returns the application configuration or loads it, if it hasn't been loaded already.
 pub fn config<'a>() -> RwLockReadGuard<'a, ApplicationConfiguration> {
-    // CONFIG.get_or_init(|| ApplicationConfiguration::new().unwrap()).clone()
     CONFIG.read().unwrap()
-    // TODO: or return -> &'static ApplicationConfiguration, so we don't need to clone on every call
 }
 
+/// Returns Write Guard for the application configuration that can be used to update the configuration during runtime.
+#[cfg(feature = "test_utils")]
 pub fn set_config<'a>() -> RwLockWriteGuard<'a, ApplicationConfiguration> {
     CONFIG.write().unwrap()
-}
-
-/// Reloads the config. Useful for testing after overwriting a env variable.
-pub fn reload_config() {
-    // CONFIG.set(ApplicationConfiguration::new().unwrap()).unwrap();
-    // CONFIG.lock().unwrap().clone()
 }
 
 // TODO: should fail when none is enabled

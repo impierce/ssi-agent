@@ -18,7 +18,7 @@ Browse to http://localhost:9090
 
 ### CORS
 
-If you want to access UniCore's API from a browser, you can set the `AGENT_APPLICATION_CORS_ENABLED` environment variable to `true`. This will enable a permissive CORS policy (allow all).
+If you want to access UniCore's API from a browser, you can set the `AGENT__CORS_ENABLED` environment variable to `true`. This will enable a permissive CORS policy (allow all).
 
 ## Usage
 Below we describe a typical usage of the REST API for UniCore. 

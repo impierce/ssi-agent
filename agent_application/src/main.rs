@@ -27,14 +27,7 @@ async fn main() -> io::Result<()> {
     match config().log_format {
         LogFormat::Json => tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init(),
         LogFormat::Text => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
-        // Ok(log_format) if log_format == "json" => {
-        //     tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init()
-        // }
-        // _ => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
     }
-
-    info!("Configuration loaded.");
-    info!("Configuration: {:#?}", config());
 
     let verification_services = Arc::new(VerificationServices::new(Arc::new(Subject {
         secret_manager: secret_manager().await,
