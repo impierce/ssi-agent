@@ -173,7 +173,7 @@ mod tests {
     use super::*;
     use crate::issuance::credentials::tests::credentials;
     use crate::API_VERSION;
-    use agent_event_publisher_http::{EventPublisherHttp, TEST_EVENT_PUBLISHER_HTTP_CONFIG};
+    use agent_event_publisher_http::EventPublisherHttp;
     use agent_issuance::{offer::event::OfferEvent, startup_commands::startup_commands, state::initialize};
     use agent_shared::config::{set_config, Events};
     use agent_store::{in_memory, EventPublisher};
@@ -319,7 +319,7 @@ mod tests {
             set_config().enable_event_publisher_http();
             set_config().set_event_publisher_http_target_url(target_url.clone());
             set_config().set_event_publisher_http_target_events(Events {
-                offer: Some(vec![agent_shared::config::OfferEvent::CredentialRequestVerified]),
+                offer: vec![agent_shared::config::OfferEvent::CredentialRequestVerified],
                 ..Default::default()
             });
 

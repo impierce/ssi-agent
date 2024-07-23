@@ -2,14 +2,15 @@ use config::ConfigError;
 use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use serde_with::SerializeDisplay;
+use serde_with::{skip_serializing_none, SerializeDisplay};
 use std::{
     collections::HashMap,
-    sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard},
+    sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 use tracing::info;
+use url::Url;
 
-use crate::{issuance::CredentialConfiguration, metadata::Display};
+use crate::issuance::CredentialConfiguration;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ApplicationConfiguration {
@@ -108,6 +109,23 @@ pub struct SecretManagerConfig {
     pub issuer_fragment: Option<String>,
 }
 
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Logo {
+    // TODO: remove this alias and change field to `uri`.
+    #[serde(alias = "uri")]
+    pub url: Option<Url>,
+    pub alt_text: Option<String>,
+}
+
+#[skip_serializing_none]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Display {
+    pub name: String,
+    pub locale: Option<String>,
+    pub logo: Option<Logo>,
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct EventPublishers {
     pub http: Option<EventPublisherHttp>,
@@ -122,11 +140,16 @@ pub struct EventPublisherHttp {
 
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct Events {
-    pub server_config: Option<Vec<ServerConfigEvent>>,
-    pub credential: Option<Vec<CredentialEvent>>,
-    pub offer: Option<Vec<OfferEvent>>,
-    pub connection: Option<Vec<ConnectionEvent>>,
-    pub authorization_request: Option<Vec<AuthorizationRequestEvent>>,
+    #[serde(default)]
+    pub server_config: Vec<ServerConfigEvent>,
+    #[serde(default)]
+    pub credential: Vec<CredentialEvent>,
+    #[serde(default)]
+    pub offer: Vec<OfferEvent>,
+    #[serde(default)]
+    pub connection: Vec<ConnectionEvent>,
+    #[serde(default)]
+    pub authorization_request: Vec<AuthorizationRequestEvent>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -174,7 +197,9 @@ pub enum AuthorizationRequestEvent {
 /// assert_eq!(supported_did_method, SupportedDidMethod::Jwk);
 /// assert_eq!(supported_did_method.to_string(), "did:jwk");
 /// ```
-#[derive(Debug, Deserialize, Clone, Eq, PartialEq, Hash, strum::EnumString, strum::Display, SerializeDisplay)]
+#[derive(
+    Debug, Deserialize, Clone, Eq, PartialEq, Hash, strum::EnumString, strum::Display, SerializeDisplay, Ord, PartialOrd,
+)]
 pub enum SupportedDidMethod {
     #[serde(alias = "did_jwk", rename = "did_jwk")]
     #[strum(serialize = "did:jwk")]
@@ -252,12 +277,16 @@ pub fn reload_config() {
 
 // TODO: should fail when none is enabled
 pub fn get_all_enabled_did_methods() -> Vec<SupportedDidMethod> {
-    config()
+    let mut did_methods: Vec<_> = config()
         .did_methods
         .iter()
         .filter(|(_, v)| v.enabled)
         .map(|(k, _)| k.clone())
-        .collect()
+        .collect();
+
+    did_methods.sort();
+
+    did_methods
 }
 
 // TODO: should fail when there's more than one result

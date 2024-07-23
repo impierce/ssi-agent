@@ -1,3 +1,5 @@
+#![allow(clippy::await_holding_lock)]
+
 use agent_api_rest::app;
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_issuance::{startup_commands::startup_commands, state::initialize};

@@ -57,11 +57,14 @@ impl Aggregate for ServerConfig {
             AddCredentialConfiguration {
                 credential_configuration,
             } => {
-                let cryptographic_binding_methods_supported = config()
+                let mut cryptographic_binding_methods_supported: Vec<_> = config()
                     .did_methods
                     .iter()
-                    .filter_map(|(did_method, options)| options.enabled.then(|| did_method.to_string()))
+                    .filter(|&(_, options)| options.enabled)
+                    .map(|(did_method, _)| did_method.to_string())
                     .collect();
+
+                cryptographic_binding_methods_supported.sort();
 
                 let signing_algorithms_supported: Vec<Algorithm> = config()
                     .signing_algorithms_supported
@@ -198,10 +201,9 @@ pub mod server_config_tests {
                 serde_json::from_value(json!({
                     "format": "jwt_vc_json",
                     "cryptographic_binding_methods_supported": [
-                        "did:key",
-                        "did:key",
                         "did:iota:rms",
                         "did:jwk",
+                        "did:key",
                     ],
                     "credential_signing_alg_values_supported": [
                         "EdDSA"

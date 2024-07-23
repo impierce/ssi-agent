@@ -13,9 +13,6 @@ use serde::Deserialize;
 use serde_with::skip_serializing_none;
 use tracing::info;
 
-#[cfg(feature = "test_utils")]
-pub static TEST_EVENT_PUBLISHER_HTTP_CONFIG: std::sync::Mutex<Option<serde_yaml::Value>> = std::sync::Mutex::new(None);
-
 /// A struct that contains all the event publishers for the different aggregates.
 #[skip_serializing_none]
 #[derive(Debug, Deserialize)]
@@ -85,24 +82,72 @@ impl EventPublisherHttp {
         //     (Event::SIOPv2AuthorizationResponseVerified, DomainAggregate::Connection),
         // ]);
 
-        let credential_events: Vec<String> = event_publisher_http
-            .events
-            .offer
-            .unwrap_or_default()
-            .iter()
-            .map(|e| e.to_string())
-            .collect();
-        println!("credential_events: {:?}", credential_events);
+        let server_config = (!event_publisher_http.events.server_config.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<ServerConfig>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http
+                    .events
+                    .server_config
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let credential = (!event_publisher_http.events.offer.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Credential>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http
+                    .events
+                    .offer
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let offer = (!event_publisher_http.events.offer.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Offer>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http
+                    .events
+                    .offer
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let connection = (!event_publisher_http.events.connection.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Connection>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http
+                    .events
+                    .connection
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let authorization_request = (!event_publisher_http.events.authorization_request.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<AuthorizationRequest>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http
+                    .events
+                    .authorization_request
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
 
         let event_publisher: EventPublisherHttp = EventPublisherHttp {
-            server_config: None,
-            credential: None,
-            offer: Some(AggregateEventPublisherHttp::new(
-                event_publisher_http.target_url.clone(),
-                credential_events,
-            )),
-            connection: None,
-            authorization_request: None,
+            server_config,
+            credential,
+            offer,
+            connection,
+            authorization_request,
         };
 
         info!("Loaded HTTP event publisher: {:?}", event_publisher);
@@ -254,9 +299,7 @@ mod tests {
         set_config().enable_event_publisher_http();
         set_config().set_event_publisher_http_target_url(target_url.clone());
         set_config().set_event_publisher_http_target_events(Events {
-            offer: Some(vec![
-                agent_shared::config::OfferEvent::FormUrlEncodedCredentialOfferCreated,
-            ]),
+            offer: vec![agent_shared::config::OfferEvent::FormUrlEncodedCredentialOfferCreated],
             ..Default::default()
         });
 
