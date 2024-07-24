@@ -41,17 +41,10 @@ async fn main() -> io::Result<()> {
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
     let (issuance_state, verification_state) = match agent_shared::config::config().event_store.type_ {
-        agent_shared::config::EventStoreType::Postgres => {
-            let connection_string = config().event_store.connection_string.clone().expect(
-                "Missing config parameter `event_store.connection_string` or `AGENT__EVENT_STORE__CONNECTION_STRING`",
-            );
-            info!("Connecting to Postgres: {}", connection_string);
-            (
-                postgres::issuance_state(issuance_event_publishers, &connection_string).await,
-                postgres::verification_state(verification_services, verification_event_publishers, &connection_string)
-                    .await,
-            )
-        }
+        agent_shared::config::EventStoreType::Postgres => (
+            postgres::issuance_state(issuance_event_publishers).await,
+            postgres::verification_state(verification_services, verification_event_publishers).await,
+        ),
         agent_shared::config::EventStoreType::InMemory => (
             in_memory::issuance_state(issuance_event_publishers).await,
             in_memory::verification_state(verification_services, verification_event_publishers).await,
