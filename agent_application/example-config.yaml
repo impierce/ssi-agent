@@ -2,7 +2,7 @@
 log_format: "json"
 event_store:
   type: "postgres"
-  # connection_string: "" <== Should be injected through the env variable `AGENT__EVENT_STORE__CONNECTION_STRING`
+  # connection_string: "" <== Should be injected through the env variable `UNICORE__EVENT_STORE__CONNECTION_STRING`
 url: "https://ssi-agent.example.org"
 # base_path: "unicore" <== Runs all endpoints with a base path such as `https://ssi-agent.example.org/unicore`
 # cors_enabled: false <== Only applicable for browser-based wallets that require CORS
@@ -70,7 +70,7 @@ credential_configurations:
 # Key configuration (temporary)
 secret_manager:
   stronghold_path: "/tmp/local.stronghold"
-  # stronghold_password: "" <== Should be injected through the env variable `AGENT__SECRET_MANAGER__STRONGHOLD_PASSWORD`
+  # stronghold_password: "" <== Should be injected through the env variable `UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD`
   # stronghold_password_file: ""
   # issuer_key_id: "ed25519-0"
   # issuer_did: "did:iota:rms:0x0000000000000000000000000000000000000000000000000000000000000000"

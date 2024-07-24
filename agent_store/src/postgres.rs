@@ -68,10 +68,9 @@ where
 }
 
 pub async fn issuance_state(event_publishers: Vec<Box<dyn EventPublisher>>) -> IssuanceState {
-    let connection_string =
-        config().event_store.connection_string.clone().expect(
-            "Missing config parameter `event_store.connection_string` or `AGENT__EVENT_STORE__CONNECTION_STRING`",
-        );
+    let connection_string = config().event_store.connection_string.clone().expect(
+        "Missing config parameter `event_store.connection_string` or `UNICORE__EVENT_STORE__CONNECTION_STRING`",
+    );
     let pool = default_postgress_pool(&connection_string).await;
 
     // Initialize the postgres repositories.
@@ -132,10 +131,9 @@ pub async fn verification_state(
     verification_services: Arc<VerificationServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> VerificationState {
-    let connection_string =
-        config().event_store.connection_string.clone().expect(
-            "Missing config parameter `event_store.connection_string` or `AGENT__EVENT_STORE__CONNECTION_STRING`",
-        );
+    let connection_string = config().event_store.connection_string.clone().expect(
+        "Missing config parameter `event_store.connection_string` or `UNICORE__EVENT_STORE__CONNECTION_STRING`",
+    );
     let pool = default_postgress_pool(&connection_string).await;
 
     // Initialize the postgres repositories.

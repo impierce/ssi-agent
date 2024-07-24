@@ -113,7 +113,7 @@ fn get_base_path() -> Result<String, ConfigError> {
             }
 
             if base_path.is_empty() {
-                panic!("AGENT__BASE_PATH can't be empty, remove or set path");
+                panic!("UNICORE__BASE_PATH can't be empty, remove or set path");
             }
 
             tracing::info!("Base path: {:?}", base_path);
@@ -184,7 +184,7 @@ mod tests {
     async fn test_base_path_routes() {
         let issuance_state = in_memory::issuance_state(Default::default()).await;
         let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
-        std::env::set_var("AGENT_APPLICATION_BASE_PATH", "unicore");
+        std::env::set_var("UNICORE__BASE_PATH", "unicore");
         let router = app((issuance_state, verification_state));
 
         let _ = router.route("/auth/token", post(handler));
