@@ -30,8 +30,6 @@ impl VerificationServices {
             .map(|(alg, _)| *alg)
             .collect();
 
-        // let id_token_signed_response_alg = signing_algorithms_supported.first().cloned();
-
         let siopv2_client_metadata = ClientMetadataResource::ClientMetadata {
             client_name: client_name.clone(),
             logo_uri: logo_uri.clone(),
@@ -63,27 +61,6 @@ impl VerificationServices {
                         )
                     })
                     .collect(),
-                // vp_formats: metadata
-                //     .vp_formats
-                //     .iter()
-                //     .map(|(k, v)| {
-                //         (
-                //             k.clone(),
-                //             ClaimFormatProperty::Alg(
-                //                 v.get("alg")
-                //                     .map(|value| {
-                //                         value
-                //                             .as_sequence()
-                //                             .unwrap()
-                //                             .iter()
-                //                             .map(|value| value.as_str().unwrap().parse().unwrap())
-                //                             .collect::<Vec<Algorithm>>()
-                //                     })
-                //                     .unwrap(),
-                //             ),
-                //         )
-                //     })
-                //     .collect(),
             },
             other: HashMap::from_iter([(
                 "subject_syntax_types_supported".to_string(),

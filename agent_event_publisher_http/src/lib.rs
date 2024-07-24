@@ -29,34 +29,7 @@ pub struct EventPublisherHttp {
 
 impl EventPublisherHttp {
     pub fn load() -> anyhow::Result<Self> {
-        // #[cfg(feature = "test_utils")]
-        // let mut config = TEST_EVENT_PUBLISHER_HTTP_CONFIG
-        //     .lock()
-        //     .unwrap()
-        //     .as_ref()
-        //     .unwrap()
-        //     .clone();
-        // #[cfg(not(feature = "test_utils"))]
-        // let mut config: serde_yaml::Value = {
-        //     match std::fs::File::open("agent_event_publisher_http/config.yml") {
-        //         Ok(config_file) => serde_yaml::from_reader(config_file)?,
-        //         // If the config file does not exist, return an empty config.
-        //         Err(_) => serde_yaml::Value::Null,
-        //     }
-        // };
-        // let config = agent_shared::config::config("AGENT_EVENT_PUBLISHER_HTTP");
-
         let event_publisher_http = config().event_publishers.clone().unwrap().http.unwrap();
-
-        // let event_publishers = config.get_table("event_publishers").unwrap_or_default();
-        // let event_publisher_http = event_publishers
-        //     .get("http")
-        //     .unwrap()
-        //     .clone()
-        //     .into_table()
-        //     .unwrap_or_default();
-
-        println!("event_publisher_http: {:?}", event_publisher_http);
 
         // If it's not enabled, return an empty event publisher.
         if !event_publisher_http.enabled {
@@ -68,19 +41,6 @@ impl EventPublisherHttp {
                 authorization_request: None,
             });
         }
-
-        // TODO: map events to aggregates
-        // let mapping = HashMap::<Event, DomainAggregate>::new();
-        // let mapping: HashMap<Event, DomainAggregate> = HashMap::from([
-        //     // credential
-        //     (Event::UnsignedCredentialCreated, DomainAggregate::Credential),
-        //     (Event::SignedCredentialCreated, DomainAggregate::Credential),
-        //     (Event::CredentialSigned, DomainAggregate::Credential),
-        //     // offer
-        //     (Event::CredentialOfferCreated, DomainAggregate::Offer),
-        //     // connection
-        //     (Event::SIOPv2AuthorizationResponseVerified, DomainAggregate::Connection),
-        // ]);
 
         let server_config = (!event_publisher_http.events.server_config.is_empty()).then(|| {
             AggregateEventPublisherHttp::<ServerConfig>::new(
@@ -153,30 +113,6 @@ impl EventPublisherHttp {
         info!("Loaded HTTP event publisher: {:?}", event_publisher);
 
         Ok(event_publisher)
-
-        // let config = if event_publisher_http
-        //     .get("enabled")
-        //     .unwrap()
-        //     .clone()
-        //     .into_bool()
-        //     .unwrap_or_default()
-        // {
-        //     let publishers: serde_yaml::Value = event_publisher_http
-        //         .get("publishers")
-        //         .unwrap()
-        //         .clone()
-        //         .try_deserialize()
-        //         .unwrap();
-        //     publishers
-        // } else {
-        //     serde_yaml::Value::Null
-        // };
-
-        // serde_yaml::from_value(config)
-        //     .map_err(Into::into)
-        //     .inspect(|event_publisher| {
-        //         info!("Loaded HTTP event publisher: {:?}", event_publisher);
-        //     })
     }
 }
 

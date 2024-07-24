@@ -1,4 +1,4 @@
-use agent_shared::issuance::CredentialConfiguration;
+use agent_shared::config::CredentialConfiguration;
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };

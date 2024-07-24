@@ -42,9 +42,11 @@ services:
 
       AGENT__SECRET_MANAGER__STRONGHOLD_PATH: "/app/res/stronghold"
       AGENT__SECRET_MANAGER__STRONGHOLD_PASSWORD: "secure_password"
-      AGENT__SECRET_MANAGER__ISSUER_KEY_ID: "9O66nzWqYYy1LmmiOudOlh2SMIaUWoTS"
-      AGENT__SECRET_MANAGER__ISSUER_DID: "did:iota:rms:0x42ad588322e58b3c07aa39e4948d021ee17ecb5747915e9e1f35f028d7ecaf90"
-      AGENT__SECRET_MANAGER__ISSUER_FRAGMENT: "bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"
+
+      # Uncomment the following lines to use the DID method `did:iota:rms`
+      # AGENT__SECRET_MANAGER__ISSUER_KEY_ID: "9O66nzWqYYy1LmmiOudOlh2SMIaUWoTS"
+      # AGENT__SECRET_MANAGER__ISSUER_DID: "did:iota:rms:0x42ad588322e58b3c07aa39e4948d021ee17ecb5747915e9e1f35f028d7ecaf90"
+      # AGENT__SECRET_MANAGER__ISSUER_FRAGMENT: "bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"
     volumes:
       - ../../agent_application/example-config.yaml:/app/agent_application/example-config.yaml
       - ../../agent_secret_manager/tests/res/test.stronghold:/app/res/stronghold

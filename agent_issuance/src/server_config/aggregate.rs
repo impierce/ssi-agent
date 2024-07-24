@@ -139,7 +139,7 @@ pub mod server_config_tests {
 
     use super::*;
 
-    use agent_shared::issuance::CredentialConfiguration;
+    use agent_shared::config::CredentialConfiguration;
     use lazy_static::lazy_static;
     use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
     use oid4vci::credential_format_profiles::{w3c_verifiable_credentials, CredentialFormats, Parameters};
