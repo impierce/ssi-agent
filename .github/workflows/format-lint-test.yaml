@@ -21,12 +21,5 @@ jobs:
       - name: Lint
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Check PR title
-        env:
-          # Security: We mitigate script injections by using an intermediate environment variable
-          # https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
-          TITLE: ${{ github.event.pull_request.title }}
-        run: echo $TITLE | npx commitlint
-
       - name: Test
         run: cargo test --workspace
