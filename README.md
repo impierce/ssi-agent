@@ -3,6 +3,10 @@
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
 [![License](https://img.shields.io/github/license/impierce/ssi-agent.svg)](https://github.com/impierce/ssi-agent/blob/HEAD/LICENSE)
 
+<!-- This is a playful reference to the "Twelve-Factor App" conventions that we try to follow. -->
+
+[![twelve-factor-app](https://img.shields.io/badge/factors-twelve-blue)](https://12factor.net)
+
 ---
 
 ## API specification
