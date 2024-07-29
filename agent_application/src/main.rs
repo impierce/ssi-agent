@@ -7,13 +7,13 @@ use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::{
     config::{config, LogFormat, SupportedDidMethod, ToggleOptions},
     domain_linkage::create_did_configuration_resource,
+    from_jsonwebtoken_algorithm_to_jwsalgorithm,
 };
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use axum::{routing::get, Json};
 use identity_document::service::{Service, ServiceEndpoint};
-use identity_iota::verification::jws::JwsAlgorithm;
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
 use tokio::{fs, io};
 use tower_http::cors::CorsLayer;
 use tracing::info;
@@ -87,13 +87,9 @@ async fn main() -> io::Result<()> {
                 .produce_document(
                     did_manager::DidMethod::Web,
                     Some(did_manager::MethodSpecificParameters::Web { origin: url.origin() }),
-                    JwsAlgorithm::from_str(
-                        &serde_json::json!(agent_shared::config::get_preferred_signing_algorithm())
-                            .as_str()
-                            .unwrap()
-                            .to_string(),
-                    )
-                    .unwrap(),
+                    from_jsonwebtoken_algorithm_to_jwsalgorithm(
+                        &agent_shared::config::get_preferred_signing_algorithm(),
+                    ),
                 )
                 .await
                 .unwrap(),

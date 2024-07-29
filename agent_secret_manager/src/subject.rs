@@ -1,4 +1,4 @@
-use agent_shared::config::config;
+use agent_shared::{config::config, from_jsonwebtoken_algorithm_to_jwsalgorithm};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager::{DidMethod, Resolver, SecretManager};
@@ -62,13 +62,9 @@ impl Sign for Subject {
                 .produce_document(
                     method,
                     Some(did_manager::MethodSpecificParameters::Web { origin: origin() }),
-                    JwsAlgorithm::from_str(
-                        &serde_json::json!(agent_shared::config::get_preferred_signing_algorithm())
-                            .as_str()
-                            .unwrap()
-                            .to_string(),
-                    )
-                    .unwrap(),
+                    from_jsonwebtoken_algorithm_to_jwsalgorithm(
+                        &agent_shared::config::get_preferred_signing_algorithm(),
+                    ),
                 )
                 .await
                 .ok()
@@ -82,13 +78,7 @@ impl Sign for Subject {
             .produce_document(
                 method,
                 None,
-                JwsAlgorithm::from_str(
-                    &serde_json::json!(agent_shared::config::get_preferred_signing_algorithm())
-                        .as_str()
-                        .unwrap()
-                        .to_string(),
-                )
-                .unwrap(),
+                from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
             )
             .await
             .ok()
@@ -101,13 +91,7 @@ impl Sign for Subject {
             .secret_manager
             .sign(
                 message.as_bytes(),
-                JwsAlgorithm::from_str(
-                    &serde_json::json!(agent_shared::config::get_preferred_signing_algorithm())
-                        .as_str()
-                        .unwrap()
-                        .to_string(),
-                )
-                .unwrap(),
+                from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
             )
             .await?)
     }
@@ -128,13 +112,9 @@ impl oid4vc_core::Subject for Subject {
                 .produce_document(
                     method,
                     Some(did_manager::MethodSpecificParameters::Web { origin: origin() }),
-                    JwsAlgorithm::from_str(
-                        &serde_json::json!(agent_shared::config::get_preferred_signing_algorithm())
-                            .as_str()
-                            .unwrap()
-                            .to_string(),
-                    )
-                    .unwrap(),
+                    from_jsonwebtoken_algorithm_to_jwsalgorithm(
+                        &agent_shared::config::get_preferred_signing_algorithm(),
+                    ),
                 )
                 .await
                 .map(|document| document.id().to_string())?);
@@ -145,13 +125,7 @@ impl oid4vc_core::Subject for Subject {
             .produce_document(
                 method,
                 None,
-                JwsAlgorithm::from_str(
-                    &serde_json::json!(agent_shared::config::get_preferred_signing_algorithm())
-                        .as_str()
-                        .unwrap()
-                        .to_string(),
-                )
-                .unwrap(),
+                from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
             )
             .await
             .map(|document| document.id().to_string())?)
