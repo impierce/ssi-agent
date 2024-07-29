@@ -8,7 +8,7 @@ use std::{
     collections::HashMap,
     sync::{RwLock, RwLockReadGuard},
 };
-use tracing::info;
+use tracing::{debug, info};
 use url::Url;
 
 #[derive(Debug, Deserialize, Clone)]
@@ -59,6 +59,8 @@ pub struct EventStorePostgresConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct SecretManagerConfig {
+    #[serde(default)]
+    pub generate_stronghold: bool,
     pub stronghold_path: String,
     pub stronghold_password: String,
     pub issuer_eddsa_key_id: Option<String>,
@@ -201,6 +203,8 @@ pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> =
 impl ApplicationConfiguration {
     pub fn new() -> Result<Self, ConfigError> {
         dotenvy::dotenv().ok();
+        // TODO: these cannot be logged because `tracing_subscriber` is not initialized yet at this point since it does
+        // not know the log format yet.
         info!("Environment variables loaded.");
         info!("Loading application configuration ...");
 
@@ -219,7 +223,13 @@ impl ApplicationConfiguration {
                 .build()?
         };
 
-        config.try_deserialize()
+        config.try_deserialize().inspect(|config: &ApplicationConfiguration| {
+            // TODO: this won't be logged either because `tracing_subscriber` is not initialized yet at this point. To
+            // fix this we can consider obtaining the `log_format` from the config file prior to loading the complete
+            // configuration.
+            info!("Configuration loaded successfully");
+            debug!("{:#?}", config);
+        })
     }
 
     pub fn set_preferred_did_method(&mut self, preferred_did_method: SupportedDidMethod) {
