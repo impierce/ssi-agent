@@ -227,6 +227,7 @@ dependencies = [
  "serde_json",
  "serde_with 3.8.1",
  "serde_yaml",
+ "strum 0.26.3",
  "thiserror",
  "time",
  "tracing",
@@ -3225,7 +3226,7 @@ dependencies = [
  "multibase 0.9.1",
  "serde",
  "serde_json",
- "strum",
+ "strum 0.25.0",
  "thiserror",
  "time",
  "url",
@@ -3252,7 +3253,7 @@ dependencies = [
  "serde-aux",
  "serde_json",
  "serde_repr",
- "strum",
+ "strum 0.25.0",
  "thiserror",
  "url",
 ]
@@ -3267,7 +3268,7 @@ dependencies = [
  "form_urlencoded",
  "identity_core",
  "serde",
- "strum",
+ "strum 0.25.0",
  "thiserror",
 ]
 
@@ -3283,7 +3284,7 @@ dependencies = [
  "identity_verification",
  "indexmap 2.2.6",
  "serde",
- "strum",
+ "strum 0.25.0",
  "thiserror",
 ]
 
@@ -3323,7 +3324,7 @@ dependencies = [
  "prefix-hex",
  "ref-cast",
  "serde",
- "strum",
+ "strum 0.25.0",
  "thiserror",
 ]
 
@@ -3358,7 +3359,7 @@ dependencies = [
  "identity_document",
  "identity_iota_core",
  "serde",
- "strum",
+ "strum 0.25.0",
  "thiserror",
 ]
 
@@ -3414,7 +3415,7 @@ dependencies = [
  "identity_jose",
  "serde",
  "serde_json",
- "strum",
+ "strum 0.25.0",
  "thiserror",
 ]
 
@@ -7255,7 +7256,16 @@ version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "290d54ea6f91c969195bdbcd7442c8c2a2ba87da8bf60a7ee86a235d4bc1e125"
 dependencies = [
- "strum_macros",
+ "strum_macros 0.25.3",
+]
+
+[[package]]
+name = "strum"
+version = "0.26.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
+dependencies = [
+ "strum_macros 0.26.4",
 ]
 
 [[package]]
@@ -7265,6 +7275,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23dc1fa9ac9c169a78ba62f0b841814b7abae11bdd047b9c58f893439e309ea0"
 dependencies = [
  "heck 0.4.1",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.67",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.26.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+dependencies = [
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
  "rustversion",

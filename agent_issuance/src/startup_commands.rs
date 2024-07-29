@@ -1,16 +1,18 @@
-use crate::server_config::command::ServerConfigCommand;
-use agent_shared::{config, issuance::ServerConfig, metadata::Metadata, url_utils::UrlAppendHelpers};
+use agent_shared::config::config;
+use agent_shared::url_utils::UrlAppendHelpers;
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
 
+use crate::server_config::command::ServerConfigCommand;
+
 /// Returns the startup commands for the application.
-pub fn startup_commands(host: url::Url, metadata: &Metadata) -> Vec<ServerConfigCommand> {
-    vec![load_server_metadata(host, metadata), create_credentials_supported()]
+pub fn startup_commands(host: url::Url) -> Vec<ServerConfigCommand> {
+    vec![load_server_metadata(host), create_credentials_supported()]
 }
 
-pub fn load_server_metadata(base_url: url::Url, metadata: &Metadata) -> ServerConfigCommand {
-    let display = metadata.display.first().map(|display| {
+pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
+    let display = config().display.first().map(|display| {
         let display = serde_json::to_value(display).unwrap();
         vec![display]
     });
@@ -31,13 +33,10 @@ pub fn load_server_metadata(base_url: url::Url, metadata: &Metadata) -> ServerCo
 }
 
 pub fn create_credentials_supported() -> ServerConfigCommand {
-    let server_config = config!("server_config", ServerConfig)
-        .expect("Failed due to missing `server_config` in `issuance-config.yml` file");
-
-    let credential_configuration = server_config
+    let credential_configuration = config()
         .credential_configurations
         .first()
-        .expect("Failed due to empty `credential_configurations` array in `issuance-config.yml` file")
+        .expect("No credential_configurations found")
         .clone();
 
     ServerConfigCommand::AddCredentialConfiguration {

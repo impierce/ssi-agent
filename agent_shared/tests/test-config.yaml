@@ -1,0 +1,63 @@
+log_format: "text"
+event_store:
+  type: "in_memory"
+url: "https://my-domain.example.org"
+
+did_methods:
+  did_jwk:
+    enabled: true
+    # preferred: true
+  did_key:
+    enabled: true
+    preferred: true
+  did_iota_rms:
+    enabled: true
+  did_web:
+    enabled: false
+
+domain_linkage_enabled: false
+
+signing_algorithms_supported:
+  eddsa:
+    enabled: true
+
+vp_formats:
+  jwt_vc_json:
+    enabled: true
+  jwt_vp_json:
+    enabled: true
+
+event_publishers:
+  http:
+    enabled: false
+    target_url: "http://localhost"
+    events:
+      server_config: []
+      credential: [UnsignedCredentialCreated, CredentialSigned]
+
+display:
+  - name: UniCore
+    locale: en
+    logo:
+      uri: "https://impierce.com/images/favicon/apple-touch-icon.png"
+      alt_text: UniCore Logo
+
+credential_configurations:
+  - credential_configuration_id: badge
+    format: jwt_vc_json
+    credential_definition:
+      type:
+        - VerifiableCredential
+    display:
+      - name: Verifiable Credential
+        locale: en
+        logo:
+          url: https://impierce.com/images/logo-blue.png
+          alt_text: UniCore Logo
+
+secret_manager:
+  stronghold_path: "../agent_secret_manager/tests/res/selv.stronghold"
+  stronghold_password: "VNvRtH4tKyWwvJDpL6Vuc2aoLiKAecGQ"
+  issuer_key_id: "UVDxWhG2rB39FkaR7I27mHeUNrGtUgcr"
+  issuer_did: "did:iota:rms:0x42ad588322e58b3c07aa39e4948d021ee17ecb5747915e9e1f35f028d7ecaf90"
+  issuer_fragment: "bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"

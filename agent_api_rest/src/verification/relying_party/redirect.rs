@@ -61,9 +61,9 @@ pub mod tests {
         app,
         verification::{authorization_requests::tests::authorization_requests, relying_party::request::tests::request},
     };
-    use agent_event_publisher_http::{EventPublisherHttp, TEST_EVENT_PUBLISHER_HTTP_CONFIG};
+    use agent_event_publisher_http::EventPublisherHttp;
     use agent_secret_manager::{secret_manager, subject::Subject};
-    use agent_shared::metadata::set_metadata_configuration;
+    use agent_shared::config::{set_config, Events};
     use agent_store::{in_memory, EventPublisher};
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
@@ -142,8 +142,6 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
     async fn test_redirect_endpoint() {
-        set_metadata_configuration("did:key");
-
         let mock_server = MockServer::start().await;
 
         Mock::given(method("POST"))
@@ -154,21 +152,12 @@ pub mod tests {
 
         let target_url = format!("{}/ssi-events-subscriber", &mock_server.uri());
 
-        TEST_EVENT_PUBLISHER_HTTP_CONFIG.lock().unwrap().replace(
-            serde_yaml::from_str(&format!(
-                r#"
-                    target_url: &target_url {target_url}
-
-                    connection: {{
-                        target_url: *target_url,
-                        target_events: [
-                            SIOPv2AuthorizationResponseVerified
-                        ]
-                    }}
-                "#,
-            ))
-            .unwrap(),
-        );
+        set_config().enable_event_publisher_http();
+        set_config().set_event_publisher_http_target_url(target_url.clone());
+        set_config().set_event_publisher_http_target_events(Events {
+            connection: vec![agent_shared::config::ConnectionEvent::SIOPv2AuthorizationResponseVerified],
+            ..Default::default()
+        });
 
         let event_publishers = vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>];
 

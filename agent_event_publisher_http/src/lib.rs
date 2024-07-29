@@ -1,6 +1,7 @@
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
+use agent_shared::config::config;
 use agent_store::{
     AuthorizationRequestEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, EventPublisher,
     OfferEventPublisher, ServerConfigEventPublisher,
@@ -11,9 +12,6 @@ use cqrs_es::{Aggregate, DomainEvent, EventEnvelope, Query};
 use serde::Deserialize;
 use serde_with::skip_serializing_none;
 use tracing::info;
-
-#[cfg(feature = "test_utils")]
-pub static TEST_EVENT_PUBLISHER_HTTP_CONFIG: std::sync::Mutex<Option<serde_yaml::Value>> = std::sync::Mutex::new(None);
 
 /// A struct that contains all the event publishers for the different aggregates.
 #[skip_serializing_none]
@@ -31,29 +29,90 @@ pub struct EventPublisherHttp {
 
 impl EventPublisherHttp {
     pub fn load() -> anyhow::Result<Self> {
-        #[cfg(feature = "test_utils")]
-        let mut config = TEST_EVENT_PUBLISHER_HTTP_CONFIG
-            .lock()
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .clone();
-        #[cfg(not(feature = "test_utils"))]
-        let mut config: serde_yaml::Value = {
-            match std::fs::File::open("agent_event_publisher_http/config.yml") {
-                Ok(config_file) => serde_yaml::from_reader(config_file)?,
-                // If the config file does not exist, return an empty config.
-                Err(_) => serde_yaml::Value::Null,
-            }
+        let event_publisher_http = config().event_publishers.clone().unwrap().http.unwrap();
+
+        // If it's not enabled, return an empty event publisher.
+        if !event_publisher_http.enabled {
+            return Ok(EventPublisherHttp {
+                server_config: None,
+                credential: None,
+                offer: None,
+                connection: None,
+                authorization_request: None,
+            });
+        }
+
+        let server_config = (!event_publisher_http.events.server_config.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<ServerConfig>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http
+                    .events
+                    .server_config
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let credential = (!event_publisher_http.events.offer.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Credential>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http
+                    .events
+                    .offer
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let offer = (!event_publisher_http.events.offer.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Offer>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http
+                    .events
+                    .offer
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let connection = (!event_publisher_http.events.connection.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Connection>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http
+                    .events
+                    .connection
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let authorization_request = (!event_publisher_http.events.authorization_request.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<AuthorizationRequest>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http
+                    .events
+                    .authorization_request
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let event_publisher: EventPublisherHttp = EventPublisherHttp {
+            server_config,
+            credential,
+            offer,
+            connection,
+            authorization_request,
         };
 
-        config.apply_merge()?;
+        info!("Loaded HTTP event publisher: {:?}", event_publisher);
 
-        serde_yaml::from_value(config)
-            .map_err(Into::into)
-            .inspect(|event_publisher| {
-                info!("Loaded HTTP event publisher: {:?}", event_publisher);
-            })
+        Ok(event_publisher)
     }
 }
 
@@ -156,6 +215,7 @@ mod tests {
     use super::*;
 
     use agent_issuance::offer::event::OfferEvent;
+    use agent_shared::config::{set_config, Events};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -172,21 +232,12 @@ mod tests {
         let target_url = format!("{}/ssi-events-subscriber", &mock_server.uri());
 
         // Set the test configuration.
-        TEST_EVENT_PUBLISHER_HTTP_CONFIG.lock().unwrap().replace(
-            serde_yaml::from_str(&format!(
-                r#"
-                    target_url: &target_url {target_url}
-
-                    offer: {{
-                        target_url: *target_url,
-                        target_events: [
-                            FormUrlEncodedCredentialOfferCreated
-                        ]
-                    }}
-                "#
-            ))
-            .unwrap(),
-        );
+        set_config().enable_event_publisher_http();
+        set_config().set_event_publisher_http_target_url(target_url.clone());
+        set_config().set_event_publisher_http_target_events(Events {
+            offer: vec![agent_shared::config::OfferEvent::FormUrlEncodedCredentialOfferCreated],
+            ..Default::default()
+        });
 
         let publisher = EventPublisherHttp::load().unwrap();
 

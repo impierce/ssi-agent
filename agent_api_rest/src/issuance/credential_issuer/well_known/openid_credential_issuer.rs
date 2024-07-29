@@ -29,10 +29,7 @@ mod tests {
 
     use super::*;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
-    use agent_shared::{
-        metadata::{load_metadata, set_metadata_configuration},
-        UrlAppendHelpers,
-    };
+    use agent_shared::UrlAppendHelpers;
     use agent_store::in_memory;
     use agent_verification::services::test_utils::test_verification_services;
     use axum::{
@@ -94,10 +91,9 @@ mod tests {
                         }),
                         scope: None,
                         cryptographic_binding_methods_supported: vec![
-                            "did:key".to_string(),
-                            "did:key".to_string(),
                             "did:iota:rms".to_string(),
                             "did:jwk".to_string(),
+                            "did:key".to_string()
                         ],
                         credential_signing_alg_values_supported: vec!["EdDSA".to_string()],
                         proof_types_supported: HashMap::from_iter([(
@@ -107,10 +103,12 @@ mod tests {
                             },
                         )]),
                         display: vec![json!({
-                           "name": "Badge",
-                           "logo": {
-                                "url": "https://example.com/logo.png",
-                           }
+                            "name": "Verifiable Credential",
+                            "locale": "en",
+                            "logo": {
+                                "url": "https://impierce.com/images/logo-blue.png",
+                                "alt_text": "UniCore Logo"
+                            }
                         })],
                     }
                 )]
@@ -120,7 +118,7 @@ mod tests {
                     "name": "UniCore",
                     "locale": "en",
                     "logo": {
-                        "url": "https://impierce.com/images/logo-blue.png",
+                        "url": "https://impierce.com/images/favicon/apple-touch-icon.png",
                         "alt_text": "UniCore Logo"
                     }
                 })]),
@@ -133,11 +131,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_openid_credential_issuer_endpoint() {
-        set_metadata_configuration("did:key");
-
         let issuance_state = in_memory::issuance_state(Default::default()).await;
         let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
-        initialize(&issuance_state, startup_commands(BASE_URL.clone(), &load_metadata())).await;
+        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
         let mut app = app((issuance_state, verification_state));
 

@@ -100,11 +100,12 @@ pub mod tests {
 
     use agent_secret_manager::secret_manager;
     use agent_secret_manager::subject::Subject;
-    use agent_shared::metadata::set_metadata_configuration;
+    use agent_shared::config::SupportedDidMethod;
     use cqrs_es::test::TestFramework;
     use identity_credential::credential::Jwt;
     use identity_credential::presentation::Presentation;
 
+    use agent_shared::config::set_config;
     use jsonwebtoken::Algorithm;
     use oid4vc_manager::managers::presentation::create_presentation_submission;
     use oid4vc_manager::ProviderManager;
@@ -128,10 +129,12 @@ pub mod tests {
         // "id_token" represents the `SIOPv2` flow, and "vp_token" represents the `OID4VP` flow.
         #[values("id_token", "vp_token")] response_type: &str,
         // TODO: add `did:web`, check for other tests as well. Probably should be moved to E2E test.
-        #[values("did:key", "did:jwk", "did:iota:rms")] verifier_did_method: &str,
-        #[values("did:key", "did:jwk", "did:iota:rms")] provider_did_method: &str,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
+        verifier_did_method: SupportedDidMethod,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
+        provider_did_method: SupportedDidMethod,
     ) {
-        set_metadata_configuration(verifier_did_method);
+        set_config().set_preferred_did_method(verifier_did_method.clone());
 
         let verification_services = test_verification_services();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
@@ -139,13 +142,14 @@ pub mod tests {
 
         let authorization_request = authorization_request(
             response_type,
-            verifier_did_method,
+            &verifier_did_method.to_string(),
             siopv2_client_metadata,
             oid4vp_client_metadata,
         )
         .await;
 
-        let authorization_response = authorization_response(provider_did_method, &authorization_request).await;
+        let authorization_response =
+            authorization_response(&provider_did_method.to_string(), &authorization_request).await;
         let token = authorization_response.token();
 
         ConnectionTestFramework::with(verification_services)

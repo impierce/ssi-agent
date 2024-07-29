@@ -1,6 +1,5 @@
 use agent_secret_manager::services::SecretManagerServices;
-use agent_shared::config;
-use agent_shared::metadata::Display;
+use agent_shared::config::config;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;
@@ -79,27 +78,19 @@ impl Aggregate for Credential {
                     #[cfg(not(feature = "test_utils"))]
                     let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
-                    let name = match config!("display", Vec<Display>)
-                        .ok()
-                        .as_ref()
-                        .and_then(|displays| displays.first())
-                        .map(|display| display.name.clone())
-                    {
-                        Some(name) => name,
-                        None => unreachable!("The display.name parameter is not set"),
-                    };
+                    let name = config()
+                        .display
+                        .first()
+                        .expect("Configuration `display.name` missing")
+                        .name
+                        .clone();
 
-                    let issuer: Profile = match config!("url", String).ok().and_then(|url| {
-                        ProfileBuilder::default()
-                            .id(url)
-                            .type_("Profile")
-                            .name(name)
-                            .try_into()
-                            .ok()
-                    }) {
-                        Some(issuer) => issuer,
-                        None => unreachable!("The `AGENT_CONFIG_URL` environment variable is not set."),
-                    };
+                    let issuer: Profile = ProfileBuilder::default()
+                        .id(config().url.clone())
+                        .type_("Profile")
+                        .name(name)
+                        .try_into()
+                        .expect("Could not build issuer profile");
 
                     let mut credential_types: Vec<String> = type_.clone();
 
@@ -193,7 +184,10 @@ impl Aggregate for Credential {
                     services.init().await.unwrap();
                     (Arc::new(services.subject.unwrap()), services.default_did_method.clone())
                 };
-                let issuer_did = issuer.identifier(&default_did_method, Algorithm::EdDSA).await.unwrap();
+                let issuer_did = issuer
+                    .identifier(&default_did_method.to_string(), Algorithm::EdDSA)
+                    .await
+                    .unwrap();
                 let signed_credential = {
                     let mut credential = self.data.as_ref().ok_or(MissingCredentialDataError)?.clone();
 
@@ -233,7 +227,7 @@ impl Aggregate for Credential {
                             .verifiable_credential(credential.raw)
                             .build()
                             .ok(),
-                        &default_did_method
+                        &default_did_method.to_string()
                     )
                     .await
                     .ok())
@@ -273,7 +267,6 @@ pub mod credential_tests {
 
     use super::*;
 
-    use agent_shared::metadata::set_metadata_configuration;
     use lazy_static::lazy_static;
     use oid4vci::proof::KeyProofMetadata;
     use oid4vci::ProofType;
@@ -305,8 +298,6 @@ pub mod credential_tests {
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
         #[case] unsigned_credential: serde_json::Value,
     ) {
-        set_metadata_configuration("did:key");
-
         CredentialTestFramework::with(CredentialServices)
             .given_no_previous_events()
             .when(CredentialCommand::CreateUnsignedCredential {

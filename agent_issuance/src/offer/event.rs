@@ -37,7 +37,7 @@ impl DomainEvent for OfferEvent {
 
         let event_type: &str = match self {
             CredentialOfferCreated { .. } => "CredentialOfferCreated",
-            CredentialsAdded { .. } => "CredentialAdded",
+            CredentialsAdded { .. } => "CredentialsAdded",
             FormUrlEncodedCredentialOfferCreated { .. } => "FormUrlEncodedCredentialOfferCreated",
             TokenResponseCreated { .. } => "TokenResponseCreated",
             CredentialRequestVerified { .. } => "CredentialRequestVerified",
