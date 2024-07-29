@@ -2,14 +2,10 @@ use agent_shared::{config::config, from_jsonwebtoken_algorithm_to_jwsalgorithm};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager::{DidMethod, Resolver, SecretManager};
-use identity_iota::{
-    did::DID,
-    document::DIDUrlQuery,
-    verification::{jwk::JwkParams, jws::JwsAlgorithm},
-};
+use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
 
 /// Reponsible for signing and verifying data.
 pub struct Subject {
