@@ -1,6 +1,8 @@
 pub mod verifiable_credential_jwt;
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use identity_iota::verification::jws::JwsAlgorithm;
+use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::SharedError;
@@ -18,7 +20,7 @@ use verifiable_credential_jwt::VerifiableCredentialJwt;
 pub async fn create_did_configuration_resource(
     url: url::Url,
     did_document: CoreDocument,
-    secret_manager: SecretManager,
+    secret_manager: &SecretManager,
 ) -> Result<DomainLinkageConfiguration, SharedError> {
     let url = if cfg!(feature = "local_development") {
         url::Url::parse("http://local.example.org:8080").unwrap()
@@ -97,7 +99,18 @@ pub async fn create_did_configuration_resource(
             ]
             .join(".");
 
-            let proof_value = secret_manager.sign(message.as_bytes()).await.unwrap();
+            let proof_value = secret_manager
+                .sign(
+                    message.as_bytes(),
+                    JwsAlgorithm::from_str(
+                        serde_json::json!(crate::config::get_preferred_signing_algorithm())
+                            .as_str()
+                            .unwrap(),
+                    )
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
             let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
             let message = [message, signature].join(".");
 

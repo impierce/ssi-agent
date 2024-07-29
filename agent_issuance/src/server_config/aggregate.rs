@@ -87,6 +87,7 @@ impl Aggregate for ServerConfig {
                         .into_iter()
                         .map(|algorithm| match algorithm {
                             jsonwebtoken::Algorithm::EdDSA => "EdDSA".to_string(),
+                            jsonwebtoken::Algorithm::ES256 => "ES256".to_string(),
                             _ => unimplemented!("Unsupported algorithm: {:?}", algorithm),
                         })
                         .collect(),

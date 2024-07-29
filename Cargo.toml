@@ -17,7 +17,7 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
-did_manager = { git = "https://git@github.com/impierce/did-manager.git", rev = "b9e5594" }
+did_manager = { git = "https://git@github.com/impierce/did-manager.git", rev = "2bda2b8" }
 siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "12fed14" }
 oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "12fed14" }
 oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "12fed14" }
@@ -35,6 +35,7 @@ identity_credential = { version = "1.3", default-features = false, features = [
     "presentation",
     "domain-linkage"
 ] }
+identity_iota = { version = "1.3" }
 jsonwebtoken = "9.3"
 lazy_static = "1.4"
 rstest = "0.19"

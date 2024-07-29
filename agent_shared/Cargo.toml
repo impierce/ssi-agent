@@ -19,7 +19,7 @@ identity_storage = { version = "1.3" }
 is_empty = "0.2"
 jsonwebtoken.workspace = true
 # TODO: replace all identity_* with identity_iota?
-# identity_iota = { version = "1.3" }
+identity_iota.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true

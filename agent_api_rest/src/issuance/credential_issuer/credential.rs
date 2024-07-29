@@ -155,6 +155,7 @@ mod tests {
     use crate::issuance::credentials::tests::credentials;
     use crate::API_VERSION;
     use agent_event_publisher_http::EventPublisherHttp;
+    use agent_issuance::services::test_utils::test_issuance_services;
     use agent_issuance::{offer::event::OfferEvent, startup_commands::startup_commands, state::initialize};
     use agent_shared::config::{set_config, Events};
     use agent_store::{in_memory, EventPublisher};
@@ -297,7 +298,7 @@ mod tests {
             (None, Default::default(), Default::default())
         };
 
-        let issuance_state = in_memory::issuance_state(issuance_event_publishers).await;
+        let issuance_state = in_memory::issuance_state(test_issuance_services(), issuance_event_publishers).await;
         let verification_state =
             in_memory::verification_state(test_verification_services(), verification_event_publishers).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;

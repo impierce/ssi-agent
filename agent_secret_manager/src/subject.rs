@@ -2,10 +2,14 @@ use agent_shared::config::config;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager::{DidMethod, Resolver, SecretManager};
-use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
+use identity_iota::{
+    did::DID,
+    document::DIDUrlQuery,
+    verification::{jwk::JwkParams, jws::JwsAlgorithm},
+};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 /// Reponsible for signing and verifying data.
 pub struct Subject {
@@ -58,6 +62,13 @@ impl Sign for Subject {
                 .produce_document(
                     method,
                     Some(did_manager::MethodSpecificParameters::Web { origin: origin() }),
+                    JwsAlgorithm::from_str(
+                        &serde_json::json!(agent_shared::config::get_preferred_signing_algorithm())
+                            .as_str()
+                            .unwrap()
+                            .to_string(),
+                    )
+                    .unwrap(),
                 )
                 .await
                 .ok()
@@ -68,7 +79,17 @@ impl Sign for Subject {
         // TODO: refactor: https://github.com/impierce/ssi-agent/pull/31#discussion_r1634590990
 
         self.secret_manager
-            .produce_document(method, None)
+            .produce_document(
+                method,
+                None,
+                JwsAlgorithm::from_str(
+                    &serde_json::json!(agent_shared::config::get_preferred_signing_algorithm())
+                        .as_str()
+                        .unwrap()
+                        .to_string(),
+                )
+                .unwrap(),
+            )
             .await
             .ok()
             .and_then(|document| document.verification_method().first().cloned())
@@ -76,7 +97,19 @@ impl Sign for Subject {
     }
 
     async fn sign(&self, message: &str, _subject_syntax_type: &str, _algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
-        Ok(self.secret_manager.sign(message.as_bytes()).await?)
+        Ok(self
+            .secret_manager
+            .sign(
+                message.as_bytes(),
+                JwsAlgorithm::from_str(
+                    &serde_json::json!(agent_shared::config::get_preferred_signing_algorithm())
+                        .as_str()
+                        .unwrap()
+                        .to_string(),
+                )
+                .unwrap(),
+            )
+            .await?)
     }
 
     fn external_signer(&self) -> Option<Arc<dyn ExternalSign>> {
@@ -95,6 +128,13 @@ impl oid4vc_core::Subject for Subject {
                 .produce_document(
                     method,
                     Some(did_manager::MethodSpecificParameters::Web { origin: origin() }),
+                    JwsAlgorithm::from_str(
+                        &serde_json::json!(agent_shared::config::get_preferred_signing_algorithm())
+                            .as_str()
+                            .unwrap()
+                            .to_string(),
+                    )
+                    .unwrap(),
                 )
                 .await
                 .map(|document| document.id().to_string())?);
@@ -102,7 +142,17 @@ impl oid4vc_core::Subject for Subject {
 
         Ok(self
             .secret_manager
-            .produce_document(method, None)
+            .produce_document(
+                method,
+                None,
+                JwsAlgorithm::from_str(
+                    &serde_json::json!(agent_shared::config::get_preferred_signing_algorithm())
+                        .as_str()
+                        .unwrap()
+                        .to_string(),
+                )
+                .unwrap(),
+            )
             .await
             .map(|document| document.id().to_string())?)
     }

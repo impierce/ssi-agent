@@ -3,37 +3,46 @@ use agent_shared::config::{config, get_preferred_did_method, SecretManagerConfig
 use anyhow::Result;
 use did_manager::SecretManager;
 
-pub struct SecretManagerServices {
-    pub subject: Option<Subject>,
-    pub default_did_method: SupportedDidMethod,
-}
+// pub struct SecretManagerServices {
+//     pub subject: Option<Subject>,
+//     pub default_did_method: SupportedDidMethod,
+// }
 
-impl SecretManagerServices {
-    pub fn new(subject: Option<Subject>) -> Self {
-        let default_did_method = get_preferred_did_method();
-        Self {
-            subject,
-            default_did_method,
-        }
-    }
+// impl SecretManagerServices {
+//     pub fn new(subject: Option<Subject>) -> Self {
+//         let default_did_method = get_preferred_did_method();
+//         Self {
+//             subject,
+//             default_did_method,
+//         }
+//     }
 
-    pub async fn init(&mut self) -> Result<(), std::io::Error> {
-        let SecretManagerConfig {
-            stronghold_path: snapshot_path,
-            stronghold_password: password,
-            issuer_key_id,
-            issuer_did,
-            issuer_fragment,
-        } = config().secret_manager.clone();
+//     pub async fn init(&mut self) -> Result<(), std::io::Error> {
+//         let SecretManagerConfig {
+//             stronghold_path: snapshot_path,
+//             stronghold_password: password,
+//             issuer_eddsa_key_id,
+//             issuer_es256_key_id,
+//             issuer_did,
+//             issuer_fragment,
+//         } = config().secret_manager.clone();
 
-        let key_id = issuer_key_id.expect("Missing configuration: secret_manager.issuer_key_id");
+//         // let key_id = issuer_key_id.expect("Missing configuration: secret_manager.issuer_key_id");
 
-        let secret_manager = SecretManager::load(snapshot_path, password, key_id, issuer_did, issuer_fragment)
-            .await
-            .unwrap();
+//         let secret_manager = SecretManager::load(
+//             snapshot_path,
+//             password,
+//             issuer_eddsa_key_id,
+//             issuer_es256_key_id,
+//             None,
+//             issuer_did,
+//             issuer_fragment,
+//         )
+//         .await
+//         .unwrap();
 
-        self.subject.replace(Subject { secret_manager });
+//         self.subject.replace(Subject { secret_manager });
 
-        Ok(())
-    }
-}
+//         Ok(())
+//     }
+// }

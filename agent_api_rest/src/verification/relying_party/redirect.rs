@@ -62,6 +62,7 @@ pub mod tests {
         verification::{authorization_requests::tests::authorization_requests, relying_party::request::tests::request},
     };
     use agent_event_publisher_http::EventPublisherHttp;
+    use agent_issuance::services::test_utils::test_issuance_services;
     use agent_secret_manager::{secret_manager, subject::Subject};
     use agent_shared::config::{set_config, Events};
     use agent_store::{in_memory, EventPublisher};
@@ -161,7 +162,7 @@ pub mod tests {
 
         let event_publishers = vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>];
 
-        let issuance_state = in_memory::issuance_state(Default::default()).await;
+        let issuance_state = in_memory::issuance_state(test_issuance_services(), Default::default()).await;
         let verification_state = in_memory::verification_state(test_verification_services(), event_publishers).await;
 
         let mut app = app((issuance_state, verification_state));

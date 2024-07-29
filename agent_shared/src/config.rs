@@ -29,49 +29,6 @@ pub struct ApplicationConfiguration {
     pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
 }
 
-impl ApplicationConfiguration {
-    pub fn set_preferred_did_method(&mut self, preferred_did_method: SupportedDidMethod) {
-        // Set the current preferred did_method to false if available.
-        if let Some((_, options)) = self.did_methods.iter_mut().find(|(_, v)| v.preferred == Some(true)) {
-            options.preferred = Some(false);
-        }
-
-        // Set the current preferred did_method to true if available.
-        self.did_methods
-            .entry(preferred_did_method)
-            .or_insert_with(|| ToggleOptions {
-                enabled: true,
-                preferred: Some(true),
-            })
-            .preferred = Some(true);
-    }
-
-    // TODO: make generic: set_enabled(enabled: bool)
-    pub fn enable_event_publisher_http(&mut self) {
-        if let Some(event_publishers) = &mut self.event_publishers {
-            if let Some(http) = &mut event_publishers.http {
-                http.enabled = true;
-            }
-        }
-    }
-
-    pub fn set_event_publisher_http_target_url(&mut self, target_url: String) {
-        if let Some(event_publishers) = &mut self.event_publishers {
-            if let Some(http) = &mut event_publishers.http {
-                http.target_url = target_url;
-            }
-        }
-    }
-
-    pub fn set_event_publisher_http_target_events(&mut self, events: Events) {
-        if let Some(event_publishers) = &mut self.event_publishers {
-            if let Some(http) = &mut event_publishers.http {
-                http.events = events;
-            }
-        }
-    }
-}
-
 #[derive(Debug, Deserialize, Clone, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum LogFormat {
@@ -104,7 +61,8 @@ pub struct EventStorePostgresConfig {
 pub struct SecretManagerConfig {
     pub stronghold_path: String,
     pub stronghold_password: String,
-    pub issuer_key_id: Option<String>,
+    pub issuer_eddsa_key_id: Option<String>,
+    pub issuer_es256_key_id: Option<String>,
     pub issuer_did: Option<String>,
     pub issuer_fragment: Option<String>,
 }
@@ -263,6 +221,47 @@ impl ApplicationConfiguration {
 
         config.try_deserialize()
     }
+
+    pub fn set_preferred_did_method(&mut self, preferred_did_method: SupportedDidMethod) {
+        // Set the current preferred did_method to false if available.
+        if let Some((_, options)) = self.did_methods.iter_mut().find(|(_, v)| v.preferred == Some(true)) {
+            options.preferred = Some(false);
+        }
+
+        // Set the current preferred did_method to true if available.
+        self.did_methods
+            .entry(preferred_did_method)
+            .or_insert_with(|| ToggleOptions {
+                enabled: true,
+                preferred: Some(true),
+            })
+            .preferred = Some(true);
+    }
+
+    // TODO: make generic: set_enabled(enabled: bool)
+    pub fn enable_event_publisher_http(&mut self) {
+        if let Some(event_publishers) = &mut self.event_publishers {
+            if let Some(http) = &mut event_publishers.http {
+                http.enabled = true;
+            }
+        }
+    }
+
+    pub fn set_event_publisher_http_target_url(&mut self, target_url: String) {
+        if let Some(event_publishers) = &mut self.event_publishers {
+            if let Some(http) = &mut event_publishers.http {
+                http.target_url = target_url;
+            }
+        }
+    }
+
+    pub fn set_event_publisher_http_target_events(&mut self, events: Events) {
+        if let Some(event_publishers) = &mut self.event_publishers {
+            if let Some(http) = &mut event_publishers.http {
+                http.events = events;
+            }
+        }
+    }
 }
 
 /// Returns the application configuration or loads it, if it hasn't been loaded already.
@@ -302,4 +301,17 @@ pub fn get_preferred_did_method() -> SupportedDidMethod {
         .first()
         .cloned()
         .expect("Please set a DID method as `preferred` in the configuration")
+}
+
+pub fn get_preferred_signing_algorithm() -> jsonwebtoken::Algorithm {
+    config()
+        .signing_algorithms_supported
+        .iter()
+        .filter(|(_, v)| v.enabled)
+        .filter(|(_, v)| v.preferred.unwrap_or(false))
+        .map(|(k, _)| *k)
+        .collect::<Vec<jsonwebtoken::Algorithm>>()
+        .first()
+        .cloned()
+        .expect("Please set a signing algorithm as `preferred` in the configuration")
 }
