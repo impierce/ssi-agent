@@ -1,10 +1,6 @@
 use agent_shared::config::{config, SecretManagerConfig};
 use did_manager::SecretManager;
 
-pub mod aggregate;
-pub mod commands;
-pub mod events;
-pub mod services;
 pub mod subject;
 
 // TODO: find better solution for this
