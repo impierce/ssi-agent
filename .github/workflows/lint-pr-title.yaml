@@ -1,0 +1,26 @@
+name: Lint PR title
+
+on:
+  pull_request:
+    branches: ["dev"]
+    # https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
+    # types: [opened, synchronize, reopened, edited]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+
+      - run: npm ci
+
+      - run: echo $TITLE | npx commitlint
+        env:
+          # Security: we mitigate script injections by using an intermediate environment variable
+          # https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
+          TITLE: ${{ github.event.pull_request.title }}

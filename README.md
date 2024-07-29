@@ -1,5 +1,15 @@
 # SSI Agent
 
+[![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
+[![GitHub License](https://img.shields.io/github/license/impierce/ssi-agent)](https://github.com/impierce/ssi-agent/blob/HEAD/LICENSE)
+[![Docker Pulls](https://img.shields.io/docker/pulls/impiercetechnologies/ssi-agent)](https://hub.docker.com/r/impiercetechnologies/ssi-agent)
+
+<!-- This is a playful reference to the "Twelve-Factor App" conventions that we try to follow. -->
+
+[![twelve-factor-app](https://img.shields.io/badge/factors-twelve-blue)](https://12factor.net)
+
+---
+
 ## API specification
 
 [Follow these instructions](./agent_api_rest/README.md) to inspect the REST API.
