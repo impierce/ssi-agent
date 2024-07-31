@@ -29,21 +29,31 @@ impl Verify for Subject {
             .unwrap();
 
         // Try decode from `MethodData` directly, else use public JWK params.
-        verification_method
-            .data()
-            .try_decode()
-            .or_else(|_| {
-                verification_method
-                    .data()
-                    .public_key_jwk()
-                    .and_then(|public_key_jwk| match public_key_jwk.params() {
-                        JwkParams::Okp(okp_params) => Some(okp_params.x.as_bytes().to_vec()),
-                        JwkParams::Ec(ec_params) => Some(ec_params.x.as_bytes().to_vec()),
-                        _ => None,
-                    })
-                    .ok_or(anyhow::anyhow!("Failed to decode public key for DID URL: {}", did_url))
-            })
-            .and_then(|encoded_public_key| URL_SAFE_NO_PAD.decode(encoded_public_key).map_err(Into::into))
+        verification_method.data().try_decode().or_else(|_| {
+            verification_method
+                .data()
+                .public_key_jwk()
+                .and_then(|public_key_jwk| match public_key_jwk.params() {
+                    JwkParams::Okp(okp_params) => URL_SAFE_NO_PAD.decode(&okp_params.x).ok(),
+                    JwkParams::Ec(ec_params) => {
+                        let x_bytes = URL_SAFE_NO_PAD.decode(&ec_params.x).ok()?;
+                        let y_bytes = URL_SAFE_NO_PAD.decode(&ec_params.y).ok()?;
+
+                        let encoded_point = p256::EncodedPoint::from_affine_coordinates(
+                            p256::FieldBytes::from_slice(&x_bytes),
+                            p256::FieldBytes::from_slice(&y_bytes),
+                            false, // false for uncompressed point
+                        );
+
+                        let verifying_key = p256::ecdsa::VerifyingKey::from_encoded_point(&encoded_point)
+                            .expect("Failed to create verifying key from encoded point");
+
+                        Some(verifying_key.to_encoded_point(false).as_bytes().to_vec())
+                    }
+                    _ => None,
+                })
+                .ok_or(anyhow::anyhow!("Failed to decode public key for DID URL: {}", did_url))
+        })
     }
 }
 
@@ -61,6 +71,7 @@ impl Sign for Subject {
                     from_jsonwebtoken_algorithm_to_jwsalgorithm(
                         &agent_shared::config::get_preferred_signing_algorithm(),
                     ),
+                    // from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
                 )
                 .await
                 .ok()
@@ -75,6 +86,7 @@ impl Sign for Subject {
                 method,
                 None,
                 from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
+                // from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
             )
             .await
             .ok()
@@ -88,6 +100,7 @@ impl Sign for Subject {
             .sign(
                 message.as_bytes(),
                 from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
+                // from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
             )
             .await?)
     }
@@ -122,6 +135,7 @@ impl oid4vc_core::Subject for Subject {
                 method,
                 None,
                 from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
+                // from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
             )
             .await
             .map(|document| document.id().to_string())?)
