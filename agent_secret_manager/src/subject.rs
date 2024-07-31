@@ -71,7 +71,6 @@ impl Sign for Subject {
                     from_jsonwebtoken_algorithm_to_jwsalgorithm(
                         &agent_shared::config::get_preferred_signing_algorithm(),
                     ),
-                    // from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
                 )
                 .await
                 .ok()
@@ -86,7 +85,6 @@ impl Sign for Subject {
                 method,
                 None,
                 from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
-                // from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
             )
             .await
             .ok()
@@ -100,7 +98,6 @@ impl Sign for Subject {
             .sign(
                 message.as_bytes(),
                 from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
-                // from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
             )
             .await?)
     }
@@ -135,7 +132,6 @@ impl oid4vc_core::Subject for Subject {
                 method,
                 None,
                 from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
-                // from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
             )
             .await
             .map(|document| document.id().to_string())?)
