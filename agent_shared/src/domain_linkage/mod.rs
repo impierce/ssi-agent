@@ -1,11 +1,10 @@
 pub mod verifiable_credential_jwt;
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use identity_iota::verification::jws::JwsAlgorithm;
-use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::SharedError;
+use crate::from_jsonwebtoken_algorithm_to_jwsalgorithm;
 use did_manager::SecretManager;
 use identity_core::common::{Duration, Timestamp};
 use identity_credential::credential::{Credential, Jwt};
@@ -102,12 +101,7 @@ pub async fn create_did_configuration_resource(
             let proof_value = secret_manager
                 .sign(
                     message.as_bytes(),
-                    JwsAlgorithm::from_str(
-                        serde_json::json!(crate::config::get_preferred_signing_algorithm())
-                            .as_str()
-                            .unwrap(),
-                    )
-                    .unwrap(),
+                    from_jsonwebtoken_algorithm_to_jwsalgorithm(&crate::config::get_preferred_signing_algorithm()),
                 )
                 .await
                 .unwrap();
