@@ -6,7 +6,6 @@ use agent_issuance::{
             pre_authorized_code::{PreAuthorizedCodeQuery, PreAuthorizedCodeView},
         },
     },
-    server_config::services::ServerConfigServices,
     services::IssuanceServices,
     state::{CommandHandlers, IssuanceState, ViewRepositories},
     SimpleLoggingQuery,
@@ -139,7 +138,7 @@ pub async fn issuance_state(
         command: CommandHandlers {
             server_config: Arc::new(
                 server_config_event_publishers.into_iter().fold(
-                    AggregateHandler::new(ServerConfigServices)
+                    AggregateHandler::new(())
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(server_config.clone())),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),

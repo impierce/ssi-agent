@@ -191,6 +191,7 @@ dependencies = [
  "cqrs-es",
  "did_manager",
  "futures",
+ "identity_iota",
  "jsonwebtoken",
  "log",
  "oid4vc-core",
