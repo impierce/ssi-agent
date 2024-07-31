@@ -3,7 +3,7 @@ log_format: "json"
 event_store:
   type: "postgres"
   # connection_string: "" <== Should be injected through the env variable `UNICORE__EVENT_STORE__CONNECTION_STRING`
-url: "http://10.48.72.1:3033"
+url: "https://ssi-agent.example.org"
 # base_path: "unicore" <== Runs all endpoints with a base path such as `https://ssi-agent.example.org/unicore`
 # cors_enabled: false <== Only applicable for browser-based wallets that require CORS
 external_server_response_timeout_ms: 500
@@ -22,9 +22,9 @@ did_methods:
 domain_linkage_enabled: false
 
 signing_algorithms_supported:
-  es256:
-    enabled: true
+  eddsa:
     preferred: true
+    enabled: true
 
 # TODO: required to be stated explicitly?
 vp_formats:
@@ -52,7 +52,7 @@ display:
     locale: en
     logo:
       # This value will also be used in the SIOPv2/OID4VP `client_metadata`'s `logo_uri` property.
-      uri: "https://impierce.com/images/favicon/apple-touch-icon.png"
+      uri: "https://www.impierce.com/external/impierce-icon.png"
       alt_text: UniCore Logo
 
 credential_configurations:
@@ -65,14 +65,14 @@ credential_configurations:
       - name: Verifiable Credential
         locale: en
         logo:
-          url: https://impierce.com/images/logo-blue.png
+          url: https://www.impierce.com/external/impierce-logo.png
           alt_text: UniCore Logo
 
 # Key configuration (temporary)
 secret_manager:
   # Set this to `true` in order to generate a new stronghold file if it does not exist yet.
   generate_stronghold: true
-  # stronghold_path: "/tmp/local.stronghold"
+  stronghold_path: "/tmp/local.stronghold"
   # stronghold_password: "" <== Should be injected through the env variable `UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD`
   # stronghold_password_file: ""
   # issuer_eddsa_key_id: "ed25519-0"

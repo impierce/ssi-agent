@@ -1,4 +1,3 @@
-// use agent_secret_manager::services::SecretManagerServices;
 use agent_shared::config::{config, get_preferred_did_method};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;

@@ -19,8 +19,8 @@ domain_linkage_enabled: false
 
 signing_algorithms_supported:
   eddsa:
-    enabled: true
     preferred: true
+    enabled: true
 
 vp_formats:
   jwt_vc_json:

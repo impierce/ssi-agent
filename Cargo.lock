@@ -113,7 +113,6 @@ dependencies = [
  "axum 0.7.5",
  "did_manager",
  "identity_document",
- "identity_iota",
  "serde_json",
  "tokio",
  "tower-http 0.5.2",
