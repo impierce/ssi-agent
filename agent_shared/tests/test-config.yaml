@@ -19,6 +19,7 @@ domain_linkage_enabled: false
 
 signing_algorithms_supported:
   eddsa:
+    preferred: true
     enabled: true
 
 vp_formats:
