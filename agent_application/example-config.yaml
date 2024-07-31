@@ -52,7 +52,7 @@ display:
     locale: en
     logo:
       # This value will also be used in the SIOPv2/OID4VP `client_metadata`'s `logo_uri` property.
-      uri: "https://impierce.com/images/favicon/apple-touch-icon.png"
+      uri: "https://www.impierce.com/external/impierce-icon.png"
       alt_text: UniCore Logo
 
 credential_configurations:
@@ -65,7 +65,7 @@ credential_configurations:
       - name: Verifiable Credential
         locale: en
         logo:
-          url: https://impierce.com/images/logo-blue.png
+          url: https://www.impierce.com/external/impierce-logo.png
           alt_text: UniCore Logo
 
 # Key configuration (temporary)
