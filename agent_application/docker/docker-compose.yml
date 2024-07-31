@@ -48,7 +48,7 @@ services:
       # UNICORE__SECRET_MANAGER__ISSUER_DID: "did:iota:rms:0x42ad588322e58b3c07aa39e4948d021ee17ecb5747915e9e1f35f028d7ecaf90"
       # UNICORE__SECRET_MANAGER__ISSUER_FRAGMENT: "bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"
     volumes:
-      - ../../agent_application/example.config.yaml:/app/agent_application/config.yaml
+      - ../../agent_application/config.yaml:/app/agent_application/config.yaml
       # - ../../agent_secret_manager/tests/res/test.stronghold:/app/res/stronghold
       - ../../agent_verification/presentation_definitions:/app/agent_verification/presentation_definitions
       # TODO: Remove this. This is a workaround that ensures that the `agent_verification/presentation_definitions`
