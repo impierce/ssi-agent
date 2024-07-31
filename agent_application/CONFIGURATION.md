@@ -1,6 +1,6 @@
 # Configuration
 
-A configuration file is used to configure UniCore. An example can be found in [example-config.yaml](example-config.yaml). Values can also be set through the environment, preferably used to inject sensitive values or environment-specific values.
+A configuration file is used to configure UniCore. It is expected to be present in `agent_application/config.yaml`. An example can be found in [example-config.yaml](example-config.yaml). Values can also be set through the environment, preferably used to inject sensitive values or environment-specific values.
 
 > [!NOTE]
 > Environment variables override values specified in the configuration file.
