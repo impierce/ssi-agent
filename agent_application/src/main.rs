@@ -2,11 +2,12 @@
 
 use agent_api_rest::app;
 use agent_event_publisher_http::EventPublisherHttp;
-use agent_issuance::{startup_commands::startup_commands, state::initialize};
+use agent_issuance::{services::IssuanceServices, startup_commands::startup_commands, state::initialize};
 use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::{
     config::{config, LogFormat, SupportedDidMethod, ToggleOptions},
     domain_linkage::create_did_configuration_resource,
+    from_jsonwebtoken_algorithm_to_jwsalgorithm,
 };
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
@@ -29,9 +30,12 @@ async fn main() -> io::Result<()> {
         LogFormat::Text => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
     }
 
-    let verification_services = Arc::new(VerificationServices::new(Arc::new(Subject {
+    let subject = Arc::new(Subject {
         secret_manager: secret_manager().await,
-    })));
+    });
+
+    let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
+    let verification_services = Arc::new(VerificationServices::new(subject.clone()));
 
     // TODO: Currently `issuance_event_publishers` and `verification_event_publishers` are exactly the same, which is
     // weird. We need some sort of layer between `agent_application` and `agent_store` that will provide a cleaner way
@@ -42,11 +46,11 @@ async fn main() -> io::Result<()> {
 
     let (issuance_state, verification_state) = match agent_shared::config::config().event_store.type_ {
         agent_shared::config::EventStoreType::Postgres => (
-            postgres::issuance_state(issuance_event_publishers).await,
+            postgres::issuance_state(issuance_services, issuance_event_publishers).await,
             postgres::verification_state(verification_services, verification_event_publishers).await,
         ),
         agent_shared::config::EventStoreType::InMemory => (
-            in_memory::issuance_state(issuance_event_publishers).await,
+            in_memory::issuance_state(issuance_services, issuance_event_publishers).await,
             in_memory::verification_state(verification_services, verification_event_publishers).await,
         ),
     };
@@ -77,15 +81,15 @@ async fn main() -> io::Result<()> {
         .enabled;
 
     let did_document = if enable_did_web {
-        let subject = Subject {
-            secret_manager: secret_manager().await,
-        };
         Some(
             subject
                 .secret_manager
                 .produce_document(
                     did_manager::DidMethod::Web,
                     Some(did_manager::MethodSpecificParameters::Web { origin: url.origin() }),
+                    from_jsonwebtoken_algorithm_to_jwsalgorithm(
+                        &agent_shared::config::get_preferred_signing_algorithm(),
+                    ),
                 )
                 .await
                 .unwrap(),
@@ -101,7 +105,7 @@ async fn main() -> io::Result<()> {
                 did_document
                     .clone()
                     .expect("No DID document found to create a DID Configuration Resource for"),
-                secret_manager().await,
+                &subject.secret_manager,
             )
             .await
             .expect("Failed to create DID Configuration Resource"),

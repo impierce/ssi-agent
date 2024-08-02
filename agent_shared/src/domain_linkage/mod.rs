@@ -4,6 +4,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::SharedError;
+use crate::from_jsonwebtoken_algorithm_to_jwsalgorithm;
 use did_manager::SecretManager;
 use identity_core::common::{Duration, Timestamp};
 use identity_credential::credential::{Credential, Jwt};
@@ -18,7 +19,7 @@ use verifiable_credential_jwt::VerifiableCredentialJwt;
 pub async fn create_did_configuration_resource(
     url: url::Url,
     did_document: CoreDocument,
-    secret_manager: SecretManager,
+    secret_manager: &SecretManager,
 ) -> Result<DomainLinkageConfiguration, SharedError> {
     let url = if cfg!(feature = "local_development") {
         url::Url::parse("http://local.example.org:8080").unwrap()
@@ -97,7 +98,13 @@ pub async fn create_did_configuration_resource(
             ]
             .join(".");
 
-            let proof_value = secret_manager.sign(message.as_bytes()).await.unwrap();
+            let proof_value = secret_manager
+                .sign(
+                    message.as_bytes(),
+                    from_jsonwebtoken_algorithm_to_jwsalgorithm(&crate::config::get_preferred_signing_algorithm()),
+                )
+                .await
+                .unwrap();
             let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
             let message = [message, signature].join(".");
 

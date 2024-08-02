@@ -1,4 +1,4 @@
-use agent_shared::config::config;
+use agent_shared::{config::config, from_jsonwebtoken_algorithm_to_jwsalgorithm};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager::{DidMethod, Resolver, SecretManager};
@@ -58,6 +58,9 @@ impl Sign for Subject {
                 .produce_document(
                     method,
                     Some(did_manager::MethodSpecificParameters::Web { origin: origin() }),
+                    from_jsonwebtoken_algorithm_to_jwsalgorithm(
+                        &agent_shared::config::get_preferred_signing_algorithm(),
+                    ),
                 )
                 .await
                 .ok()
@@ -68,7 +71,11 @@ impl Sign for Subject {
         // TODO: refactor: https://github.com/impierce/ssi-agent/pull/31#discussion_r1634590990
 
         self.secret_manager
-            .produce_document(method, None)
+            .produce_document(
+                method,
+                None,
+                from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
+            )
             .await
             .ok()
             .and_then(|document| document.verification_method().first().cloned())
@@ -76,7 +83,13 @@ impl Sign for Subject {
     }
 
     async fn sign(&self, message: &str, _subject_syntax_type: &str, _algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
-        Ok(self.secret_manager.sign(message.as_bytes()).await?)
+        Ok(self
+            .secret_manager
+            .sign(
+                message.as_bytes(),
+                from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
+            )
+            .await?)
     }
 
     fn external_signer(&self) -> Option<Arc<dyn ExternalSign>> {
@@ -95,6 +108,9 @@ impl oid4vc_core::Subject for Subject {
                 .produce_document(
                     method,
                     Some(did_manager::MethodSpecificParameters::Web { origin: origin() }),
+                    from_jsonwebtoken_algorithm_to_jwsalgorithm(
+                        &agent_shared::config::get_preferred_signing_algorithm(),
+                    ),
                 )
                 .await
                 .map(|document| document.id().to_string())?);
@@ -102,7 +118,11 @@ impl oid4vc_core::Subject for Subject {
 
         Ok(self
             .secret_manager
-            .produce_document(method, None)
+            .produce_document(
+                method,
+                None,
+                from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
+            )
             .await
             .map(|document| document.id().to_string())?)
     }

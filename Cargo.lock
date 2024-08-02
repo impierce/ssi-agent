@@ -215,6 +215,7 @@ dependencies = [
  "identity_credential",
  "identity_did",
  "identity_document",
+ "identity_iota",
  "identity_storage",
  "is_empty",
  "jsonwebtoken",
@@ -1363,7 +1364,7 @@ checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=b9e5594#b9e5594c05f52c197ce6a84d285ab97d1305179b"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=2bda2b8#2bda2b8682f08cedafe72cd136b64bbe4510d812"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -1929,8 +1930,9 @@ dependencies = [
 [[package]]
 name = "did_iota"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=b9e5594#b9e5594c05f52c197ce6a84d285ab97d1305179b"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=2bda2b8#2bda2b8682f08cedafe72cd136b64bbe4510d812"
 dependencies = [
+ "bls12_381_plus 0.8.15",
  "identity_iota",
  "identity_stronghold",
  "iota-sdk",
@@ -1942,7 +1944,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=b9e5594#b9e5594c05f52c197ce6a84d285ab97d1305179b"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=2bda2b8#2bda2b8682f08cedafe72cd136b64bbe4510d812"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -1959,9 +1961,8 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=b9e5594#b9e5594c05f52c197ce6a84d285ab97d1305179b"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=2bda2b8#2bda2b8682f08cedafe72cd136b64bbe4510d812"
 dependencies = [
- "did-key",
  "did-method-key",
  "identity_iota",
  "identity_stronghold",
@@ -1978,7 +1979,7 @@ dependencies = [
 [[package]]
 name = "did_manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=b9e5594#b9e5594c05f52c197ce6a84d285ab97d1305179b"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=2bda2b8#2bda2b8682f08cedafe72cd136b64bbe4510d812"
 dependencies = [
  "consumer",
  "producer",
@@ -2006,7 +2007,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=b9e5594#b9e5594c05f52c197ce6a84d285ab97d1305179b"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=2bda2b8#2bda2b8682f08cedafe72cd136b64bbe4510d812"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -2260,6 +2261,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5e6043086bf7973472e0c7dff2142ea0b680d30e18d9cc40f267efbf222bd47"
 dependencies = [
  "base16ct 0.2.0",
+ "base64ct",
  "crypto-bigint 0.5.5",
  "digest 0.10.7",
  "ff 0.13.0",
@@ -2269,6 +2271,7 @@ dependencies = [
  "pkcs8 0.10.2",
  "rand_core 0.6.4",
  "sec1 0.7.3",
+ "serde_json",
  "serdect",
  "subtle",
  "zeroize",
@@ -3402,6 +3405,25 @@ dependencies = [
  "rand 0.8.5",
  "tokio",
  "zeroize",
+]
+
+[[package]]
+name = "identity_stronghold_ext"
+version = "0.1.0"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=2bda2b8#2bda2b8682f08cedafe72cd136b64bbe4510d812"
+dependencies = [
+ "async-trait",
+ "elliptic-curve 0.13.8",
+ "identity_storage",
+ "identity_verification",
+ "iota-sdk",
+ "iota_stronghold",
+ "k256",
+ "log",
+ "p256 0.13.2",
+ "serde_json",
+ "stronghold_ext",
+ "tokio",
 ]
 
 [[package]]
@@ -5355,14 +5377,16 @@ dependencies = [
 [[package]]
 name = "producer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=b9e5594#b9e5594c05f52c197ce6a84d285ab97d1305179b"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=2bda2b8#2bda2b8682f08cedafe72cd136b64bbe4510d812"
 dependencies = [
  "did_iota",
  "did_jwk",
  "did_key",
  "did_web",
  "identity_iota",
+ "identity_storage",
  "identity_stronghold",
+ "identity_stronghold_ext",
  "iota-sdk",
  "iota_stronghold",
  "log",
@@ -6514,14 +6538,17 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=b9e5594#b9e5594c05f52c197ce6a84d285ab97d1305179b"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=2bda2b8#2bda2b8682f08cedafe72cd136b64bbe4510d812"
 dependencies = [
  "identity_iota",
+ "identity_storage",
  "identity_stronghold",
+ "identity_stronghold_ext",
  "iota-sdk",
  "iota_stronghold",
  "log",
  "rand 0.8.5",
+ "serde_json",
  "thiserror",
 ]
 
@@ -7228,6 +7255,24 @@ dependencies = [
  "paste",
  "serde",
  "stronghold-runtime",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
+name = "stronghold_ext"
+version = "0.1.0"
+source = "git+https://github.com/tensor-programming/stronghold_ext.git#f51123bd502a943b3f719a954cabaa2be973b707"
+dependencies = [
+ "ecdsa 0.16.9",
+ "iota_stronghold",
+ "k256",
+ "p256 0.13.2",
+ "rand 0.8.5",
+ "serde",
+ "sha2 0.10.8",
+ "stronghold-utils",
+ "stronghold_engine",
  "thiserror",
  "zeroize",
 ]

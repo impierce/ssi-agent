@@ -1,5 +1,4 @@
-use agent_secret_manager::services::SecretManagerServices;
-use agent_shared::config::config;
+use agent_shared::config::{config, get_preferred_did_method};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;
@@ -8,7 +7,7 @@ use identity_credential::credential::{
     Credential as W3CVerifiableCredential, CredentialBuilder as W3CVerifiableCredentialBuilder, Issuer,
 };
 use jsonwebtoken::{Algorithm, Header};
-use oid4vc_core::{jwt, Subject as _};
+use oid4vc_core::jwt;
 use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::{
     CredentialDefinition, JwtVcJson, JwtVcJsonParameters,
 };
@@ -27,7 +26,7 @@ use types_ob_v3::prelude::{
 use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError::{self};
 use crate::credential::event::CredentialEvent;
-use crate::credential::services::CredentialServices;
+use crate::services::IssuanceServices;
 
 use super::entity::Data;
 
@@ -44,17 +43,13 @@ impl Aggregate for Credential {
     type Command = CredentialCommand;
     type Event = CredentialEvent;
     type Error = CredentialError;
-    type Services = CredentialServices;
+    type Services = Arc<IssuanceServices>;
 
     fn aggregate_type() -> String {
         "credential".to_string()
     }
 
-    async fn handle(
-        &self,
-        command: Self::Command,
-        _services: &Self::Services,
-    ) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
         use CredentialCommand::*;
         use CredentialError::*;
         use CredentialEvent::*;
@@ -179,12 +174,11 @@ impl Aggregate for Credential {
                 if self.signed.is_some() && !overwrite {
                     return Ok(vec![]);
                 }
-                let (issuer, default_did_method) = {
-                    let mut services = SecretManagerServices::new(None);
-                    services.init().await.unwrap();
-                    (Arc::new(services.subject.unwrap()), services.default_did_method.clone())
-                };
-                let issuer_did = issuer
+
+                let default_did_method = get_preferred_did_method();
+
+                let issuer_did = services
+                    .issuer
                     .identifier(&default_did_method.to_string(), Algorithm::EdDSA)
                     .await
                     .unwrap();
@@ -216,7 +210,7 @@ impl Aggregate for Credential {
                         .as_secs() as i64;
 
                     json!(jwt::encode(
-                        issuer.clone(),
+                        services.issuer.clone(),
                         Header::new(Algorithm::EdDSA),
                         VerifiableCredentialJwt::builder()
                             .sub(subject_id)
@@ -278,6 +272,7 @@ pub mod credential_tests {
     use crate::credential::aggregate::Credential;
     use crate::credential::event::CredentialEvent;
     use crate::offer::aggregate::tests::SUBJECT_KEY_DID;
+    use crate::services::test_utils::test_issuance_services;
 
     type CredentialTestFramework = TestFramework<Credential>;
 
@@ -298,7 +293,7 @@ pub mod credential_tests {
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
         #[case] unsigned_credential: serde_json::Value,
     ) {
-        CredentialTestFramework::with(CredentialServices)
+        CredentialTestFramework::with(test_issuance_services())
             .given_no_previous_events()
             .when(CredentialCommand::CreateUnsignedCredential {
                 data: Data {
@@ -331,7 +326,7 @@ pub mod credential_tests {
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
         #[case] verifiable_credential_jwt: String,
     ) {
-        CredentialTestFramework::with(CredentialServices)
+        CredentialTestFramework::with(test_issuance_services())
             .given(vec![CredentialEvent::UnsignedCredentialCreated {
                 data: Data {
                     raw: unsigned_credential,
