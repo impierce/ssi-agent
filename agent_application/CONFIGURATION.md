@@ -5,6 +5,9 @@ A configuration file is used to configure UniCore. It is expected to be present 
 > [!NOTE]
 > Environment variables override values specified in the configuration file.
 
+> [!IMPORTANT]
+> All values need to be prefixed with the `UNICORE__` value to prevent conflicts with existing variables.
+
 ## Common
 
 | Name                                  | Description                                                               | Default value | Accepted values                                                    |
