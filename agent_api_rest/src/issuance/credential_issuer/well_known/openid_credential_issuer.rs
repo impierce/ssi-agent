@@ -108,7 +108,7 @@ mod tests {
                             "name": "Verifiable Credential",
                             "locale": "en",
                             "logo": {
-                                "url": "https://impierce.com/images/logo-blue.png",
+                                "uri": "https://impierce.com/images/logo-blue.png",
                                 "alt_text": "UniCore Logo"
                             }
                         })],
@@ -120,7 +120,7 @@ mod tests {
                     "name": "UniCore",
                     "locale": "en",
                     "logo": {
-                        "url": "https://impierce.com/images/favicon/apple-touch-icon.png",
+                        "uri": "https://impierce.com/images/favicon/apple-touch-icon.png",
                         "alt_text": "UniCore Logo"
                     }
                 })]),

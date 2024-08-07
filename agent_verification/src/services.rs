@@ -21,7 +21,7 @@ impl VerificationServices {
         let logo_uri = config()
             .display
             .first()
-            .and_then(|display| display.logo.as_ref().and_then(|logo| logo.url.clone()));
+            .and_then(|display| display.logo.as_ref().and_then(|logo| logo.uri.clone()));
 
         let signing_algorithms_supported: Vec<Algorithm> = config()
             .signing_algorithms_supported
