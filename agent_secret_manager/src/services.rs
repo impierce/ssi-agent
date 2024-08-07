@@ -28,7 +28,13 @@ impl SecretManagerServices {
 
         let key_id = issuer_key_id.expect("Missing configuration: secret_manager.issuer_key_id");
 
-        let secret_manager = SecretManager::load(snapshot_path, password, key_id, issuer_did, issuer_fragment)
+        let secret_manager = SecretManager::builder()
+            .snapshot_path(&snapshot_path)
+            .password(&password)
+            .with_ed25519_key(&key_id)
+            .with_did(&issuer_did.expect("Missing configuration: secret_manager.issuer_did"))
+            .with_fragment(&issuer_fragment.expect("Missing configuration: secret_manager.issuer_fragment"))
+            .build()
             .await
             .unwrap();
 

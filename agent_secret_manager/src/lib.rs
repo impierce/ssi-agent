@@ -1,5 +1,5 @@
 use agent_shared::config::{config, SecretManagerConfig};
-use did_manager::SecretManager;
+use did_manager::{InMemoryCache, SecretManager};
 
 pub mod aggregate;
 pub mod commands;
@@ -17,12 +17,23 @@ pub async fn secret_manager() -> SecretManager {
         issuer_fragment,
     } = config().secret_manager.clone();
 
-    match (snapshot_path, password, key_id, issuer_did, issuer_fragment) {
-        (snapshot_path, password, Some(key_id), issuer_did, issuer_fragment) => {
-            SecretManager::load(snapshot_path, password, key_id, issuer_did, issuer_fragment)
-                .await
-                .unwrap()
-        }
-        (snapshot_path, password, None, _, _) => SecretManager::generate(snapshot_path, password).await.unwrap(),
+    if let Some(key_id) = key_id {
+        SecretManager::builder()
+            .snapshot_path(&snapshot_path)
+            .password(&password)
+            .with_ed25519_key(&key_id)
+            .with_did(&issuer_did.expect("`issuer_did` missing"))
+            .with_fragment(&issuer_fragment.expect("`issuer_fragment` missing"))
+            .with_cache(InMemoryCache::builder().ttl(60_000).build())
+            .build()
+            .await
+            .unwrap()
+    } else {
+        SecretManager::builder()
+            .snapshot_path(&snapshot_path)
+            .password(&password)
+            .build()
+            .await
+            .unwrap()
     }
 }

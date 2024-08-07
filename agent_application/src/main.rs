@@ -86,7 +86,7 @@ async fn main() -> io::Result<()> {
                 .produce_document(
                     did_manager::DidMethod::Web,
                     Some(did_manager::MethodSpecificParameters::Web { origin: url.origin() }),
-                    identity_iota::verification::jws::JwsAlgorithm::EdDSA,
+                    identity_verification::jws::JwsAlgorithm::EdDSA,
                 )
                 .await
                 .unwrap(),
