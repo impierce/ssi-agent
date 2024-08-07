@@ -8,7 +8,7 @@ A configuration file is used to configure UniCore. It is expected to be present 
 > [!IMPORTANT]
 > All environment variables need to be prefixed with `UNICORE__` to prevent conflicts with existing variables.
 
-## Common
+## General
 
 | Name                                                    | Description                                                       | Default value | Accepted values                          |
 | ------------------------------------------------------- | ----------------------------------------------------------------- | ------------- | ---------------------------------------- |
@@ -27,7 +27,7 @@ A configuration file is used to configure UniCore. It is expected to be present 
 <!-- TODO: VP_FORMATS -->
 <!-- TODO: EVENT_PUBLISHERS: even configured through env vars? -->
 
-## Stronghold
+## Secret Management
 
 | Name                                           | Description                            | Default value | Accepted values               |
 | ---------------------------------------------- | -------------------------------------- | ------------- | ----------------------------- |
