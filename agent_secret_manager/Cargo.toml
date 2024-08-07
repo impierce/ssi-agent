@@ -26,3 +26,5 @@ url.workspace = true
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 
 futures.workspace = true
+lazy_static.workspace = true
+ring = "0.17.8"
