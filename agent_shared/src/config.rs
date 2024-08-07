@@ -270,6 +270,10 @@ impl ApplicationConfiguration {
             }
         }
     }
+
+    pub fn set_secret_manager_config(&mut self, config: SecretManagerConfig) {
+        self.secret_manager = config;
+    }
 }
 
 /// Returns the application configuration or loads it, if it hasn't been loaded already.

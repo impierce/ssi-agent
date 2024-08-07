@@ -1,4 +1,4 @@
-use agent_shared::config::{config, get_preferred_did_method};
+use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;
@@ -6,7 +6,7 @@ use identity_core::convert::FromJson;
 use identity_credential::credential::{
     Credential as W3CVerifiableCredential, CredentialBuilder as W3CVerifiableCredentialBuilder, Issuer,
 };
-use jsonwebtoken::{Algorithm, Header};
+use jsonwebtoken::Header;
 use oid4vc_core::jwt;
 use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::{
     CredentialDefinition, JwtVcJson, JwtVcJsonParameters,
@@ -179,7 +179,7 @@ impl Aggregate for Credential {
 
                 let issuer_did = services
                     .issuer
-                    .identifier(&default_did_method.to_string(), Algorithm::EdDSA)
+                    .identifier(&default_did_method.to_string(), get_preferred_signing_algorithm())
                     .await
                     .unwrap();
                 let signed_credential = {
@@ -211,7 +211,7 @@ impl Aggregate for Credential {
 
                     json!(jwt::encode(
                         services.issuer.clone(),
-                        Header::new(Algorithm::EdDSA),
+                        Header::new(get_preferred_signing_algorithm()),
                         VerifiableCredentialJwt::builder()
                             .sub(subject_id)
                             .iss(issuer_did)
@@ -261,6 +261,7 @@ pub mod credential_tests {
 
     use super::*;
 
+    use jsonwebtoken::Algorithm;
     use lazy_static::lazy_static;
     use oid4vci::proof::KeyProofMetadata;
     use oid4vci::ProofType;

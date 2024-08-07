@@ -3,10 +3,9 @@ use crate::{
     generic_oid4vc::{GenericAuthorizationRequest, OID4VPAuthorizationRequest, SIOPv2AuthorizationRequest},
     services::VerificationServices,
 };
-use agent_shared::config::config;
+use agent_shared::config::{config, get_preferred_signing_algorithm};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use jsonwebtoken::Algorithm;
 use oid4vc_core::{authorization_request::ByReference, scope::Scope};
 use oid4vp::authorization_request::ClientIdScheme;
 use serde::{Deserialize, Serialize};
@@ -47,7 +46,7 @@ impl Aggregate for AuthorizationRequest {
                 let default_subject_syntax_type = services.relying_party.default_subject_syntax_type().to_string();
                 let verifier = &services.verifier;
                 let verifier_did = verifier
-                    .identifier(&default_subject_syntax_type, Algorithm::EdDSA)
+                    .identifier(&default_subject_syntax_type, get_preferred_signing_algorithm())
                     .await
                     .unwrap();
 
@@ -165,6 +164,7 @@ pub mod tests {
     use agent_shared::config::set_config;
     use agent_shared::config::SupportedDidMethod;
     use cqrs_es::test::TestFramework;
+    use jsonwebtoken::Algorithm;
     use lazy_static::lazy_static;
     use oid4vc_core::Subject as _;
     use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
