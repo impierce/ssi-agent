@@ -1,3 +1,22 @@
+### 07-08-2024
+- Renamed the display `url` property in the `credential_configurations` in the Configuration to `uri`, e.g.:
+```yaml
+# agent_application/config.yaml
+credential_configurations:
+  - credential_configuration_id: w3c_vc_credential
+    format: jwt_vc_json
+    credential_definition:
+      type:
+        - VerifiableCredential
+    display:
+      - name: Verifiable Credential
+        locale: en
+        logo:
+          # The property below has been renamed from `url` to `uri`
+          uri: https://www.impierce.com/external/impierce-logo.png
+          alt_text: UniCore Logo
+```
+
 ### 29-07-2024
 - Renamed env variable prefix from `AGENT` to `UNICORE`.
 - Refactored the environment variables separators from `_` to `__` to support nested configuration values. As an example, `AGENT_LOG_FORMAT` now becomes `UNICORE__LOG_FORMAT`.

@@ -65,7 +65,7 @@ credential_configurations:
       - name: Verifiable Credential
         locale: en
         logo:
-          url: https://www.impierce.com/external/impierce-logo.png
+          uri: https://www.impierce.com/external/impierce-logo.png
           alt_text: UniCore Logo
 
 # Key configuration (temporary)

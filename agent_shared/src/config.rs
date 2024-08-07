@@ -81,9 +81,7 @@ pub struct CredentialConfiguration {
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Logo {
-    // TODO: remove this alias and change field to `uri`.
-    #[serde(alias = "uri")]
-    pub url: Option<Url>,
+    pub uri: Option<Url>,
     pub alt_text: Option<String>,
 }
 
