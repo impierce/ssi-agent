@@ -97,7 +97,10 @@ pub async fn create_did_configuration_resource(
             ]
             .join(".");
 
-            let proof_value = secret_manager.sign(message.as_bytes()).await.unwrap();
+            let proof_value = secret_manager
+                .sign(message.as_bytes(), identity_verification::jws::JwsAlgorithm::EdDSA)
+                .await
+                .unwrap();
             let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
             let message = [message, signature].join(".");
 

@@ -58,6 +58,7 @@ impl Sign for Subject {
                 .produce_document(
                     method,
                     Some(did_manager::MethodSpecificParameters::Web { origin: origin() }),
+                    identity_iota::verification::jws::JwsAlgorithm::EdDSA,
                 )
                 .await
                 .ok()
@@ -68,7 +69,7 @@ impl Sign for Subject {
         // TODO: refactor: https://github.com/impierce/ssi-agent/pull/31#discussion_r1634590990
 
         self.secret_manager
-            .produce_document(method, None)
+            .produce_document(method, None, identity_iota::verification::jws::JwsAlgorithm::EdDSA)
             .await
             .ok()
             .and_then(|document| document.verification_method().first().cloned())
@@ -76,7 +77,13 @@ impl Sign for Subject {
     }
 
     async fn sign(&self, message: &str, _subject_syntax_type: &str, _algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
-        Ok(self.secret_manager.sign(message.as_bytes()).await?)
+        Ok(self
+            .secret_manager
+            .sign(
+                message.as_bytes(),
+                identity_iota::verification::jws::JwsAlgorithm::EdDSA,
+            )
+            .await?)
     }
 
     fn external_signer(&self) -> Option<Arc<dyn ExternalSign>> {
@@ -95,6 +102,7 @@ impl oid4vc_core::Subject for Subject {
                 .produce_document(
                     method,
                     Some(did_manager::MethodSpecificParameters::Web { origin: origin() }),
+                    identity_iota::verification::jws::JwsAlgorithm::EdDSA,
                 )
                 .await
                 .map(|document| document.id().to_string())?);
@@ -102,7 +110,7 @@ impl oid4vc_core::Subject for Subject {
 
         Ok(self
             .secret_manager
-            .produce_document(method, None)
+            .produce_document(method, None, identity_iota::verification::jws::JwsAlgorithm::EdDSA)
             .await
             .map(|document| document.id().to_string())?)
     }

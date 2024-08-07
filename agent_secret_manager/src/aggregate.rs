@@ -42,7 +42,11 @@ impl Aggregate for AgentSecretManager {
                     .as_ref()
                     .unwrap()
                     .secret_manager
-                    .produce_document(method.clone(), None)
+                    .produce_document(
+                        method.clone(),
+                        None,
+                        identity_iota::verification::jws::JwsAlgorithm::EdDSA,
+                    )
                     .await;
 
                 if result.is_ok() {
