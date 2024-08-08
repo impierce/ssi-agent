@@ -13,12 +13,12 @@ A configuration file is used to configure UniCore. It is expected to be present 
 | Name                                                    | Description                                                       | Default value | Accepted values                          |
 | ------------------------------------------------------- | ----------------------------------------------------------------- | ------------- | ---------------------------------------- |
 | `UNICORE__LOG_FORMAT`                                   | The format of the log output.                                     | `json`        | `json`, `text`                           |
-| `UNICORE__EVENT_STORE`                                  | The type of event store to use.                                   | -             | `in_memory`, `postgres`                  |
+| `UNICORE__EVENT_STORE__TYPE`                            | The type of event store to use.                                   | -             | `in_memory`, `postgres`                  |
 | `UNICORE__EVENT_STORE__CONNECTION_STRING`               | The connection string for the event store database.               | -             | `postgresql://<user>:<pass>@<host>/<db>` |
 | `UNICORE__URL`                                          | The base URL UniCore runs on.                                     | -             | `https://my-domain.example.org`          |
 | `UNICORE__BASE_PATH`                                    | A base path can be set if needed.                                 | -             | string                                   |
 | `UNICORE__CORS_ENABLED`                                 | Enable CORS (permissive). Only required for browser-based access. | `false`       | boolean                                  |
-| `UNICORE__DID_METHODS__DID_WEB__ENABLED`                | Create and host a `did:web` DID document.                         | -             | boolean                                  |
+| `UNICORE__DID_METHODS__DID_WEB__ENABLED`                | Create and host a `did:web` DID document.                         | `false`       | boolean                                  |
 | `UNICORE__SIGNING_ALGORITHMS_SUPPORTED__EDDSA__ENABLED` | Toggles the algorithm allowed for cryptographic operations.       | `true`        | boolean                                  |
 | `UNICORE__DOMAIN_LINKAGE_ENABLED`                       | Enable domain linkage (only works with `did:web`).                | -             | boolean                                  |
 | `UNICORE__EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS`          | The timeout for external server responses (in milliseconds).      | `1000`        | integer                                  |
