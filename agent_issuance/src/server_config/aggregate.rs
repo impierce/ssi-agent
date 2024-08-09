@@ -15,7 +15,6 @@ use tracing::info;
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::error::ServerConfigError;
 use crate::server_config::event::ServerConfigEvent;
-use crate::server_config::services::ServerConfigServices;
 
 /// An aggregate that holds the configuration of the server.
 #[derive(Clone, Default, Deserialize, Serialize, Debug)]
@@ -29,7 +28,7 @@ impl Aggregate for ServerConfig {
     type Command = ServerConfigCommand;
     type Event = ServerConfigEvent;
     type Error = ServerConfigError;
-    type Services = ServerConfigServices;
+    type Services = ();
 
     fn aggregate_type() -> String {
         "server_config".to_string()
@@ -87,6 +86,7 @@ impl Aggregate for ServerConfig {
                         .into_iter()
                         .map(|algorithm| match algorithm {
                             jsonwebtoken::Algorithm::EdDSA => "EdDSA".to_string(),
+                            jsonwebtoken::Algorithm::ES256 => "ES256".to_string(),
                             _ => unimplemented!("Unsupported algorithm: {:?}", algorithm),
                         })
                         .collect(),
@@ -155,7 +155,7 @@ pub mod server_config_tests {
 
     #[test]
     fn test_load_server_metadata() {
-        ServerConfigTestFramework::with(ServerConfigServices)
+        ServerConfigTestFramework::with(())
             .given_no_previous_events()
             .when(ServerConfigCommand::InitializeServerMetadata {
                 authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
@@ -168,7 +168,7 @@ pub mod server_config_tests {
     }
     #[test]
     fn test_create_credentials_supported() {
-        ServerConfigTestFramework::with(ServerConfigServices)
+        ServerConfigTestFramework::with(())
             .given(vec![ServerConfigEvent::ServerMetadataInitialized {
                 authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
                 credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),

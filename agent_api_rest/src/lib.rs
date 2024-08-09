@@ -126,6 +126,7 @@ fn get_base_path() -> Result<String, ConfigError> {
 mod tests {
     use std::collections::HashMap;
 
+    use agent_issuance::services::test_utils::test_issuance_services;
     use agent_store::in_memory;
     use agent_verification::services::test_utils::test_verification_services;
     use axum::routing::post;
@@ -182,7 +183,7 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn test_base_path_routes() {
-        let issuance_state = in_memory::issuance_state(Default::default()).await;
+        let issuance_state = in_memory::issuance_state(test_issuance_services(), Default::default()).await;
         let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
         std::env::set_var("UNICORE__BASE_PATH", "unicore");
         let router = app((issuance_state, verification_state));
