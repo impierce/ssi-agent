@@ -2,6 +2,7 @@
 name: Build and push Docker image
 
 on:
+  # TODO: `workflow_dispatch` should be removed once manual docker builds from branches are not needed anymore
   workflow_dispatch:
   push:
     branches: ["dev"]
