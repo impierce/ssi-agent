@@ -23,8 +23,8 @@ domain_linkage_enabled: false
 
 signing_algorithms_supported:
   eddsa:
-    preferred: true
     enabled: true
+    preferred: true
 
 # TODO: required to be stated explicitly?
 vp_formats:
@@ -68,10 +68,12 @@ credential_configurations:
           uri: https://www.impierce.com/external/impierce-logo.png
           alt_text: UniCore Logo
 
+did_document_cache:
+  enabled: false
+  ttl: 5000
+
 # Key configuration (temporary)
 secret_manager:
-  # Set this to `true` in order to generate a new stronghold file if it does not exist yet.
-  generate_stronghold: true
   stronghold_path: "/tmp/local.stronghold"
   # stronghold_password: "" <== Should be injected through the env variable `UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD`
   # stronghold_password_file: ""
