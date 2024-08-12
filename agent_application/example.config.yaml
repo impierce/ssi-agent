@@ -25,6 +25,8 @@ signing_algorithms_supported:
   eddsa:
     enabled: true
     preferred: true
+  es256:
+    enabled: true
 
 # TODO: required to be stated explicitly?
 vp_formats:
