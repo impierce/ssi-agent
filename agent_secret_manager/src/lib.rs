@@ -42,11 +42,7 @@ pub async fn secret_manager() -> SecretManager {
                 ));
     }
 
-    info!("bp1");
-
     if let Some(did_document_cache) = config().did_document_cache.clone() {
-        info!("bp2");
-
         if did_document_cache.enabled {
             let mut cache_builder = InMemoryCache::builder();
 
