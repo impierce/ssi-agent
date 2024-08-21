@@ -27,6 +27,17 @@ use tracing::{error, info};
 const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
 const POLLING_INTERVAL_MS: u64 = 100;
 
+/// Credential endpoint
+///
+/// Do something with credentials
+#[utoipa::path(
+    get,
+    path = "/credential",
+    tag = "credential",
+    responses(
+        (status = 200, description = "List all credentials successfully", body = [CredentialRequest])
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<IssuanceState>,

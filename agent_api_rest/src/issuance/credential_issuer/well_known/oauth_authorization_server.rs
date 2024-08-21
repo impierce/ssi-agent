@@ -9,6 +9,17 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
+/// List all Todo items
+///
+/// List all Todo items from in-memory storage.
+#[utoipa::path(
+    get,
+    path = "/oauth-authorization-server",
+    tag = "todo",
+    responses(
+        (status = 200, description = "List all todos successfully", body = [Todo])
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn oauth_authorization_server(State(state): State<IssuanceState>) -> Response {
     match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {

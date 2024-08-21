@@ -23,6 +23,8 @@ use issuance::credentials::{credentials, get_credentials};
 use issuance::offers::offers;
 use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
+use utoipa::OpenApi;
+use utoipa_scalar::{Scalar, Servable};
 use verification::{
     authorization_requests::{authorization_requests, get_authorization_requests},
     relying_party::{redirect::redirect, request::request},
@@ -42,6 +44,8 @@ pub fn app(state: ApplicationState) -> Router {
             suffix.to_string()
         }
     };
+
+    Router::new().merge(Scalar::with_url("/scalar", ApiDoc::openapi()));
 
     Router::new()
         .nest(
@@ -122,6 +126,26 @@ fn get_base_path() -> Result<String, ConfigError> {
         })
 }
 
+// #[derive(OpenApi)]
+// #[openapi(modifiers(), nest((path = "/v0/todos", api = WellKnownApi)), tags((name = "well-known")))]
+// struct ApiDoc;
+
+#[derive(utoipa::OpenApi)]
+#[openapi(
+        // modifiers(),
+        nest(
+            (path = "/.well-known", api = crate::issuance::credential_issuer::well_known::WellKnownApi),
+            (path = "/v0/credential", api = crate::issuance::credential_issuer::CredentialApi),
+        ),
+        // paths(
+        //     crate::issuance::credential_issuer::CredentialApi
+        // ),
+        tags(
+            (name = "todo", description = "Todo items management API")
+        )
+    )]
+pub struct ApiDoc;
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -135,8 +159,9 @@ mod tests {
         credential_issuer_metadata::CredentialIssuerMetadata,
     };
     use serde_json::json;
+    use utoipa::OpenApi;
 
-    use crate::app;
+    use crate::{app, ApiDoc};
 
     pub const CREDENTIAL_CONFIGURATION_ID: &str = "badge";
     pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
@@ -179,6 +204,12 @@ mod tests {
     }
 
     async fn handler() {}
+
+    #[tokio::test]
+    async fn openapi() {
+        let yaml = serde_yaml::to_string(&ApiDoc::openapi()).unwrap();
+        println!("{}", yaml);
+    }
 
     #[tokio::test]
     #[should_panic]
