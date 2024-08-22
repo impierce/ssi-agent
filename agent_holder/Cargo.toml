@@ -1,0 +1,45 @@
+[package]
+name = "agent_holder"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+agent_shared = { path = "../agent_shared" }
+agent_secret_manager = { path = "../agent_secret_manager" }
+
+async-trait.workspace = true
+axum.workspace = true
+cqrs-es.workspace = true
+chrono = "0.4"
+types-ob-v3 = { git = "https://github.com/impierce/digital-credential-data-models.git", rev = "9f16c27" }
+derivative = "2.2"
+futures.workspace = true
+identity_core = "1.3"
+identity_credential.workspace = true
+jsonschema = "0.17"
+jsonwebtoken.workspace = true
+oid4vci.workspace = true
+oid4vc-core.workspace = true
+oid4vc-manager.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+# [dev-dependencies]
+# agent_issuance = { path = ".", features = ["test_utils"] }
+# agent_shared = { path = "../agent_shared", features = ["test_utils"] }
+
+# did_manager.workspace = true
+# lazy_static.workspace = true
+# serial_test = "3.0"
+# tokio.workspace = true
+# tracing-test.workspace = true
+# async-std = { version = "1.5", features = ["attributes", "tokio1"] }
+# rstest.workspace = true
+
+[features]
+test_utils = []
