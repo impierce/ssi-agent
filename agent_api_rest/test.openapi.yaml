@@ -1,0 +1,151 @@
+openapi: 3.1.0
+info:
+  title: agent_api_rest
+  description: ''
+  license:
+    name: ''
+  version: 0.1.0
+paths:
+  /.well-known/oauth-authorization-server:
+    get:
+      tags:
+      - Well-Known
+      summary: Authorization Server Metadata
+      description: Returns the Authorization Server Metadata.
+      operationId: oauth_authorization_server
+      responses:
+        '200':
+          description: Successfully returns the Authorization Server Metadata
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuthorizationServerMetadata'
+  /.well-known/openid-credential-issuer:
+    get:
+      tags:
+      - Well-Known
+      summary: Credential Issuer Metadata
+      description: Returns the Credential Issuer Metadata.
+      operationId: openid_credential_issuer
+      responses:
+        '200':
+          description: Successfully returns the Credential Issuer Metadata
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CredentialIssuerMetadata'
+  /v0/authorization_requests:
+    post:
+      tags:
+      - Verification
+      summary: Create an authorization request
+      description: Foobar
+      operationId: authorization_requests
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationRequestsEndpointRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+  /v0/authorization_requests/{id}:
+    get:
+      tags:
+      - Verification
+      summary: Get an authorization request
+      description: Foobar
+      operationId: get_authorization_requests
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: ''
+  /v0/credentials:
+    post:
+      tags:
+      - Credentials
+      summary: Create a new credential
+      description: Create a new credential for the given payload.
+      operationId: credentials
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialsEndpointRequest'
+        required: true
+      responses:
+        '200':
+          description: Successfully created a new credential.
+  /v0/credentials/{id}:
+    get:
+      tags:
+      - Credentials
+      summary: Retrieve a credential
+      description: Return a credential for a given ID.
+      operationId: get_credentials
+      parameters:
+      - name: id
+        in: path
+        description: Unique identitfier of the Credential
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Credential found
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CredentialView'
+  /v0/offers:
+    post:
+      tags:
+      - Offers
+      summary: Create a new offer
+      description: Create a new credential offer for the given ID.
+      operationId: offers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OffersEndpointRequest'
+        required: true
+      responses:
+        '200':
+          description: Successfully created a new credential offer.
+components:
+  schemas:
+    CredentialsEndpointRequest:
+      type: object
+      required:
+      - offerId
+      - credential
+      - credentialConfigurationId
+      properties:
+        credential: {}
+        credentialConfigurationId:
+          type: string
+        isSigned:
+          type: boolean
+        offerId:
+          type: string
+tags:
+- name: openid4vci
+  description: All operations revolved around the OpenID4VCI standard.
+  externalDocs:
+    url: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html
+    description: OpenID for Verifiable Credential Issuance
+- name: Well-Known
+  description: Well-known endpoints provide metadata about the server.

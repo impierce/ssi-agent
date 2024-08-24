@@ -9,15 +9,15 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-/// List all Todo items
+/// Authorization Server Metadata
 ///
-/// List all Todo items from in-memory storage.
+/// Returns the Authorization Server Metadata.
 #[utoipa::path(
     get,
     path = "/oauth-authorization-server",
-    tag = "todo",
+    tag = "Well-Known",
     responses(
-        (status = 200, description = "List all todos successfully", body = [Todo])
+        (status = 200, description = "Successfully returns the Authorization Server Metadata", body = [AuthorizationServerMetadata])
     )
 )]
 #[axum_macros::debug_handler]

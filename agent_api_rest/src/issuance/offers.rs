@@ -13,13 +13,26 @@ use hyper::header;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::info;
+use utoipa::ToSchema;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OffersEndpointRequest {
     pub offer_id: String,
 }
 
+/// Create a new offer
+///
+/// Create a new credential offer for the given ID.
+#[utoipa::path(
+    post,
+    path = "/offers",
+    request_body = OffersEndpointRequest,
+    tag = "Offers",
+    responses(
+        (status = 200, description = "Successfully created a new credential offer.")
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Json<Value>) -> Response {
     info!("Request Body: {}", payload);

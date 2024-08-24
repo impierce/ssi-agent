@@ -16,7 +16,22 @@ use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMeta
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::info;
+use utoipa::ToSchema;
 
+/// Retrieve a credential
+///
+/// Return a credential for a given ID.
+#[utoipa::path(
+    get,
+    path = "/credentials/{id}",
+    tag = "Credentials",
+    responses(
+        (status = 200, description = "Credential found", body = [CredentialView])
+    ),
+    params(
+        ("id" = u64, Path, description = "Unique identitfier of the Credential"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn get_credentials(State(state): State<IssuanceState>, Path(credential_id): Path<String>) -> Response {
     // Get the credential if it exists.
@@ -30,7 +45,7 @@ pub(crate) async fn get_credentials(State(state): State<IssuanceState>, Path(cre
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialsEndpointRequest {
     pub offer_id: String,
@@ -40,6 +55,18 @@ pub struct CredentialsEndpointRequest {
     pub credential_configuration_id: String,
 }
 
+/// Create a new credential
+///
+/// Create a new credential for the given payload.
+#[utoipa::path(
+    post,
+    path = "/credentials",
+    request_body = CredentialsEndpointRequest,
+    tag = "Credentials",
+    responses(
+        (status = 200, description = "Successfully created a new credential.")
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
     State(state): State<IssuanceState>,

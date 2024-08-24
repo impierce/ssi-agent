@@ -1,4 +1,4 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: SSI Agent - REST API
   description: A lightweight REST API for the SSI Agent
@@ -12,7 +12,7 @@ paths:
   /v0/configurations/credential_configurations:
     post:
       tags:
-      - Configurations
+        - Configurations
       summary: Create a new Credential Configuration
       # description: n/a
       requestBody:
@@ -36,7 +36,7 @@ paths:
                         type: string
                         example: VerifiableCredential
                       example:
-                      - VerifiableCredential
+                        - VerifiableCredential
                 display:
                   type: array
                   items:
@@ -58,11 +58,11 @@ paths:
                         type: string
                         example: Identity Credential
                   example:
-                  - locale: en
-                    logo:
-                      alt_text: UniCore Logo
-                      url: https://impierce.com/images/logo-blue.png
-                    name: Identity Credential
+                    - locale: en
+                      logo:
+                        alt_text: UniCore Logo
+                        url: https://impierce.com/images/logo-blue.png
+                      name: Identity Credential
               required:
                 - credentialConfigurationId
                 - format
@@ -74,14 +74,14 @@ paths:
                   credentialConfigurationId: openbadge_credential
                   credential_definition:
                     type:
-                    - VerifiableCredential
-                    - OpenBadgeCredential
+                      - VerifiableCredential
+                      - OpenBadgeCredential
                   display:
-                  - locale: en
-                    logo:
-                      alt_text: UniCore Logo
-                      url: https://impierce.com/images/logo-blue.png
-                    name: Identity Credential
+                    - locale: en
+                      logo:
+                        alt_text: UniCore Logo
+                        url: https://impierce.com/images/logo-blue.png
+                      name: Identity Credential
                   format: jwt_vc_json
               w3c_vc_credential_configurations:
                 summary: W3C VC Data Model
@@ -89,16 +89,16 @@ paths:
                   credentialConfigurationId: w3c_vc_credential
                   credential_definition:
                     type:
-                    - VerifiableCredential
+                      - VerifiableCredential
                   display:
-                  - locale: en
-                    logo:
-                      alt_text: UniCore Logo
-                      url: https://impierce.com/images/logo-blue.png
-                    name: Identity Credential
+                    - locale: en
+                      logo:
+                        alt_text: UniCore Logo
+                        url: https://impierce.com/images/logo-blue.png
+                      name: Identity Credential
                   format: jwt_vc_json
       responses:
-        '200':
+        "200":
           description: A Credential Configuration has been successfully added to the Credential Issuer Metadata
 
   /v0/credentials:
@@ -152,9 +152,9 @@ paths:
                         name: Teamwork
                         type: Achievement
                       type:
-                      - AchievementSubject
+                        - AchievementSubject
                   credentialConfigurationId: openbadge_credential
-                  offerId: '001'
+                  offerId: "001"
               w3c-vc-dm:
                 summary: W3C VC Data Model
                 value:
@@ -164,7 +164,7 @@ paths:
                       first_name: Ferris
                       last_name: Crabman
                   credentialConfigurationId: w3c_vc_credential
-                  offerId: '001'
+                  offerId: "001"
       responses:
         "201":
           description: An Open Badge 3.0 has successfully been created for the provided credentialSubject
@@ -183,12 +183,12 @@ paths:
                   summary: Open Badges 3.0
                   value:
                     "@context":
-                    - https://www.w3.org/2018/credentials/v1
-                    - https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json
+                      - https://www.w3.org/2018/credentials/v1
+                      - https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json
                     id: http://example.com/credentials/3527
                     type:
-                    - VerifiableCredential
-                    - OpenBadgeCredential
+                      - VerifiableCredential
+                      - OpenBadgeCredential
                     name: Identity Credential
                     credentialSubject:
                       type:
@@ -197,30 +197,32 @@ paths:
                         id: https://example.com/achievements/21st-century-skills/teamwork
                         type: Achievement
                         criteria:
-                          narrative: Team members are nominated for this badge by their peers and recognized
+                          narrative:
+                            Team members are nominated for this badge by their peers and recognized
                             upon review by Example Corp management.
-                        description: This badge recognizes the development of the capacity to collaborate
+                        description:
+                          This badge recognizes the development of the capacity to collaborate
                           within a group environment.
                         name: Teamwork
                     issuer:
                       id: http://192.168.1.127:3033
                       type: Profile
                       name: UniCore
-                    issuanceDate: '2024-06-21T12:34:54Z'
+                    issuanceDate: "2024-06-21T12:34:54Z"
                 w3c-vc-dm:
                   summary: W3C VC Data Model
                   value:
                     "@context": https://www.w3.org/2018/credentials/v1
                     type:
-                    - VerifiableCredential
+                      - VerifiableCredential
                     credentialSubject:
-                      dob: '1982-01-01'
+                      dob: "1982-01-01"
                       first_name: Ferris
                       last_name: Crabman
                     issuer:
                       id: http://192.168.1.127:3033/
                       name: UniCore
-                    issuanceDate: '2024-06-21T12:43:20Z'
+                    issuanceDate: "2024-06-21T12:43:20Z"
 
   /v0/credentials/{credential_id}:
     get:
@@ -337,15 +339,15 @@ paths:
                   presentation_definition:
                     id: Verifiable Presentation request for sign-on
                     input_descriptors:
-                    - id: Request for Verifiable Credential
-                      constraints:
-                        fields:
-                        - path:
-                          - "$.vc.type"
-                          filter:
-                            type: array
-                            contains:
-                              const: OpenBadgeCredential
+                      - id: Request for Verifiable Credential
+                        constraints:
+                          fields:
+                            - path:
+                                - "$.vc.type"
+                              filter:
+                                type: array
+                                contains:
+                                  const: OpenBadgeCredential
               oid4vp-w3c-vc-dm:
                 summary: OID4VP W3C VC Data Model
                 value:
@@ -353,15 +355,15 @@ paths:
                   presentation_definition:
                     id: Verifiable Presentation request for sign-on
                     input_descriptors:
-                    - id: Request for Verifiable Credential
-                      constraints:
-                        fields:
-                        - path:
-                          - "$.vc.type"
-                          filter:
-                            type: array
-                            contains:
-                              const: VerifiableCredential
+                      - id: Request for Verifiable Credential
+                        constraints:
+                          fields:
+                            - path:
+                                - "$.vc.type"
+                              filter:
+                                type: array
+                                contains:
+                                  const: VerifiableCredential
       responses:
         "201":
           description: An Authorization Request has successfully been created
@@ -413,3 +415,54 @@ paths:
       summary: Standard OAuth 2.0 redirection endpoint
       tags:
         - (proxied)
+
+  /v0/identity/offer:
+    post:
+      summary: Receive offers from third-parties
+      tags:
+        - Identity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+            examples:
+              receive-0:
+                summary: Example invitation
+                externalValue: "requests/payload.json"
+
+  /v0/identity/offers:
+    get:
+      summary: List all current offers
+      tags:
+        - Identity
+  /v0/identity/offer/{offerId}/accept:
+    post:
+      summary: Accept an offer. UniCore will then make a request and accept the offer.
+      tags:
+        - Identity
+      parameters:
+        - in: path
+          name: offerId
+          schema:
+            type: integer
+          required: true
+          # description: Numeric ID of the user to get
+  /v0/identity/offer/{offerId}/decline:
+    post:
+      summary: Refuses an offer. UniCore will not make a request.
+      tags:
+        - Identity
+      parameters:
+        - in: path
+          name: offerId
+          schema:
+            type: integer
+          required: true
+          # description: Numeric ID of the user to get
+
+tags:
+  - name: Creation
+    description: Creating credentials
+    externalDocs:
+      url: https://docs.impierce.com/issuance

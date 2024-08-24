@@ -25,10 +25,13 @@ use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
 use utoipa::OpenApi;
 use utoipa_scalar::{Scalar, Servable};
+use utoipa_swagger_ui::SwaggerUi;
 use verification::{
     authorization_requests::{authorization_requests, get_authorization_requests},
     relying_party::{redirect::redirect, request::request},
 };
+
+use crate::issuance::openapi::{IssuanceApi, VerificationApi, WellKnownApi};
 
 pub const API_VERSION: &str = "/v0";
 
@@ -45,9 +48,9 @@ pub fn app(state: ApplicationState) -> Router {
         }
     };
 
-    Router::new().merge(Scalar::with_url("/scalar", ApiDoc::openapi()));
-
     Router::new()
+        .merge(Scalar::with_url("/scalar", ApiDoc::openapi()))
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .nest(
             &path(API_VERSION),
             Router::new()
@@ -134,14 +137,17 @@ fn get_base_path() -> Result<String, ConfigError> {
 #[openapi(
         // modifiers(),
         nest(
-            (path = "/.well-known", api = crate::issuance::credential_issuer::well_known::WellKnownApi),
-            (path = "/v0/credential", api = crate::issuance::credential_issuer::CredentialApi),
+            (path = "/.well-known", api = WellKnownApi),
+            (path = "/v0", api = IssuanceApi),
+            (path = "/v0", api = VerificationApi)
         ),
         // paths(
         //     crate::issuance::credential_issuer::CredentialApi
         // ),
         tags(
-            (name = "todo", description = "Todo items management API")
+            // (name = "todo", description = "Todo items management API"),
+            (name = "openid4vci", description = "All operations revolved around the OpenID4VCI standard.", external_docs(url = "https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html", description = "OpenID for Verifiable Credential Issuance")),
+            (name = "Well-Known", description = "Well-known endpoints provide metadata about the server."),
         )
     )]
 pub struct ApiDoc;
@@ -209,6 +215,7 @@ mod tests {
     async fn openapi() {
         let yaml = serde_yaml::to_string(&ApiDoc::openapi()).unwrap();
         println!("{}", yaml);
+        std::fs::write("test.openapi.yaml", yaml).unwrap();
     }
 
     #[tokio::test]
