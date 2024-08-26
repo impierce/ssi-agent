@@ -2,6 +2,7 @@
 
 use agent_api_rest::app;
 use agent_event_publisher_http::EventPublisherHttp;
+use agent_holder::services::HolderServices;
 use agent_issuance::{services::IssuanceServices, startup_commands::startup_commands, state::initialize};
 use agent_secret_manager::{secret_manager, subject::Subject};
 use agent_shared::{
@@ -35,22 +36,26 @@ async fn main() -> io::Result<()> {
     });
 
     let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
+    let holder_services = Arc::new(HolderServices::new(subject.clone()));
     let verification_services = Arc::new(VerificationServices::new(subject.clone()));
 
-    // TODO: Currently `issuance_event_publishers` and `verification_event_publishers` are exactly the same, which is
-    // weird. We need some sort of layer between `agent_application` and `agent_store` that will provide a cleaner way
-    // of initializing the event publishers and sending them over to `agent_store`.
+    // TODO: Currently `issuance_event_publishers`, `holder_event_publishers` and `verification_event_publishers` are
+    // exactly the same, which is weird. We need some sort of layer between `agent_application` and `agent_store` that
+    // will provide a cleaner way of initializing the event publishers and sending them over to `agent_store`.
     let issuance_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
+    let holder_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
     let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
-    let (issuance_state, verification_state) = match agent_shared::config::config().event_store.type_ {
+    let (issuance_state, holder_state, verification_state) = match agent_shared::config::config().event_store.type_ {
         agent_shared::config::EventStoreType::Postgres => (
             postgres::issuance_state(issuance_services, issuance_event_publishers).await,
+            postgres::holder_state(holder_services, holder_event_publishers).await,
             postgres::verification_state(verification_services, verification_event_publishers).await,
         ),
         agent_shared::config::EventStoreType::InMemory => (
             in_memory::issuance_state(issuance_services, issuance_event_publishers).await,
+            in_memory::holder_state(holder_services, holder_event_publishers).await,
             in_memory::verification_state(verification_services, verification_event_publishers).await,
         ),
     };
@@ -65,7 +70,7 @@ async fn main() -> io::Result<()> {
 
     initialize(&issuance_state, startup_commands(url.clone())).await;
 
-    let mut app = app((issuance_state, verification_state));
+    let mut app = app((issuance_state, holder_state, verification_state));
 
     // CORS
     if config().cors_enabled.unwrap_or(false) {

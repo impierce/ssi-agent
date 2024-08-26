@@ -1,3 +1,4 @@
+use agent_holder::{services::HolderServices, state::HolderState};
 use agent_issuance::{
     offer::queries::{access_token::AccessTokenQuery, pre_authorized_code::PreAuthorizedCodeQuery},
     services::IssuanceServices,
@@ -123,6 +124,46 @@ pub async fn issuance_state(
             pre_authorized_code,
             access_token,
         },
+    }
+}
+
+pub async fn holder_state(
+    holder_services: Arc<HolderServices>,
+    event_publishers: Vec<Box<dyn EventPublisher>>,
+) -> HolderState {
+    let connection_string = config().event_store.connection_string.clone().expect(
+        "Missing config parameter `event_store.connection_string` or `UNICORE__EVENT_STORE__CONNECTION_STRING`",
+    );
+    let pool = default_postgress_pool(&connection_string).await;
+
+    // Initialize the in-memory repositories.
+    let credential: Arc<PostgresViewRepository<_, _>> =
+        Arc::new(PostgresViewRepository::new("holder_credential", pool.clone()));
+    let offer = Arc::new(PostgresViewRepository::new("received_offer", pool.clone()));
+
+    // Partition the event_publishers into the different aggregates.
+    let (_, credential_event_publishers, offer_event_publishers, _, _) = partition_event_publishers(event_publishers);
+
+    HolderState {
+        command: agent_holder::state::CommandHandlers {
+            credential: Arc::new(
+                vec![].into_iter().fold(
+                    AggregateHandler::new(pool.clone(), holder_services.clone())
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(credential.clone())),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
+                ),
+            ),
+            offer: Arc::new(
+                vec![].into_iter().fold(
+                    AggregateHandler::new(pool, holder_services.clone())
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(offer.clone())),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
+                ),
+            ),
+        },
+        query: agent_holder::state::ViewRepositories { credential, offer },
     }
 }
 

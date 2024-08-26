@@ -63,6 +63,7 @@ name = "agent_api_rest"
 version = "0.1.0"
 dependencies = [
  "agent_event_publisher_http",
+ "agent_holder",
  "agent_issuance",
  "agent_secret_manager",
  "agent_shared",
@@ -105,6 +106,7 @@ version = "0.1.0"
 dependencies = [
  "agent_api_rest",
  "agent_event_publisher_http",
+ "agent_holder",
  "agent_issuance",
  "agent_secret_manager",
  "agent_shared",
@@ -270,6 +272,7 @@ dependencies = [
 name = "agent_store"
 version = "0.1.0"
 dependencies = [
+ "agent_holder",
  "agent_issuance",
  "agent_shared",
  "agent_verification",

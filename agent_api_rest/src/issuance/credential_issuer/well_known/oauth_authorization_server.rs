@@ -26,6 +26,7 @@ mod tests {
     use crate::{app, tests::BASE_URL};
 
     use super::*;
+    use agent_holder::services::test_utils::test_holder_services;
     use agent_issuance::{
         services::test_utils::test_issuance_services, startup_commands::startup_commands, state::initialize,
     };
@@ -73,10 +74,11 @@ mod tests {
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
         let issuance_state = in_memory::issuance_state(test_issuance_services(), Default::default()).await;
+        let holder_state = in_memory::holder_state(test_holder_services(), Default::default()).await;
         let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
-        let mut app = app((issuance_state, verification_state));
+        let mut app = app((issuance_state, holder_state, verification_state));
 
         let _authorization_server_metadata = oauth_authorization_server(&mut app).await;
     }

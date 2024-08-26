@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+agent_holder = { path = "../agent_holder" }
 agent_issuance = { path = "../agent_issuance" }
 agent_shared = { path = "../agent_shared" }
 agent_verification = { path = "../agent_verification" }
@@ -28,6 +29,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 agent_event_publisher_http = { path = "../agent_event_publisher_http", features = ["test_utils"] }
+agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
 agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
