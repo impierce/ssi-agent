@@ -15,9 +15,9 @@ pub struct VerificationState {
     pub query: Queries,
 }
 
-impl<I> FromRef<(I, VerificationState)> for VerificationState {
-    fn from_ref(application_state: &(I, VerificationState)) -> VerificationState {
-        application_state.1.clone()
+impl<I, H> FromRef<(I, H, VerificationState)> for VerificationState {
+    fn from_ref(application_state: &(I, H, VerificationState)) -> VerificationState {
+        application_state.2.clone()
     }
 }
 
