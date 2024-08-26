@@ -2,11 +2,13 @@
 
 A configuration file is used to configure UniCore. It is expected to be present in `agent_application/config.yaml`. An example can be found in [example-config.yaml](example-config.yaml). Values can also be set through the environment, preferably used to inject sensitive values or environment-specific values.
 
-> [!NOTE]
-> Environment variables **override** values specified in the configuration file.
+:::info
+Environment variables **override** values specified in the configuration file.
+:::
 
-> [!IMPORTANT]
-> All environment variables need to be prefixed with `UNICORE__` to prevent conflicts with existing variables.
+:::note
+All environment variables need to be prefixed with `UNICORE__` to prevent conflicts with other unrelated variables.
+:::
 
 ## General
 
@@ -39,7 +41,8 @@ A configuration file is used to configure UniCore. It is expected to be present 
 
 ## Look and Feel
 
-> [!NOTE]
-> Setting display values is currently not supported through environment variables. Please refer to `config.yaml`.
+:::info
+Setting display values is currently not supported through environment variables. Please refer to `config.yaml`.
+:::
 
 <!-- TODO: DISPLAY_0_NAME: even configured through env vars? -->
