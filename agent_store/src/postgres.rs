@@ -85,7 +85,7 @@ pub async fn issuance_state(
     let access_token_query = AccessTokenQuery::new(access_token.clone());
 
     // Partition the event_publishers into the different aggregates.
-    let (server_config_event_publishers, credential_event_publishers, offer_event_publishers, _, _) =
+    let (server_config_event_publishers, credential_event_publishers, offer_event_publishers, _, _, _, _) =
         partition_event_publishers(event_publishers);
 
     IssuanceState {
@@ -142,12 +142,13 @@ pub async fn holder_state(
     let offer = Arc::new(PostgresViewRepository::new("received_offer", pool.clone()));
 
     // Partition the event_publishers into the different aggregates.
-    let (_, credential_event_publishers, offer_event_publishers, _, _) = partition_event_publishers(event_publishers);
+    let (_, _, _, credential_event_publishers, offer_event_publishers, _, _) =
+        partition_event_publishers(event_publishers);
 
     HolderState {
         command: agent_holder::state::CommandHandlers {
             credential: Arc::new(
-                vec![].into_iter().fold(
+                credential_event_publishers.into_iter().fold(
                     AggregateHandler::new(pool.clone(), holder_services.clone())
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(credential.clone())),
@@ -155,7 +156,7 @@ pub async fn holder_state(
                 ),
             ),
             offer: Arc::new(
-                vec![].into_iter().fold(
+                offer_event_publishers.into_iter().fold(
                     AggregateHandler::new(pool, holder_services.clone())
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(offer.clone())),
@@ -181,7 +182,7 @@ pub async fn verification_state(
     let connection = Arc::new(PostgresViewRepository::new("connection", pool.clone()));
 
     // Partition the event_publishers into the different aggregates.
-    let (_, _, _, authorization_request_event_publishers, connection_event_publishers) =
+    let (_, _, _, _, _, authorization_request_event_publishers, connection_event_publishers) =
         partition_event_publishers(event_publishers);
 
     VerificationState {

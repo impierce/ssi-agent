@@ -114,6 +114,10 @@ pub struct Events {
     #[serde(default)]
     pub offer: Vec<OfferEvent>,
     #[serde(default)]
+    pub holder_credential: Vec<HolderCredentialEvent>,
+    #[serde(default)]
+    pub received_offer: Vec<ReceivedOfferEvent>,
+    #[serde(default)]
     pub connection: Vec<ConnectionEvent>,
     #[serde(default)]
     pub authorization_request: Vec<AuthorizationRequestEvent>,
@@ -140,6 +144,16 @@ pub enum OfferEvent {
     TokenResponseCreated,
     CredentialRequestVerified,
     CredentialResponseCreated,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum HolderCredentialEvent {
+    // FIX THIS
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum ReceivedOfferEvent {
+    // FIX THIS
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
