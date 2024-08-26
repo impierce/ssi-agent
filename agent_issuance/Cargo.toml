@@ -22,6 +22,7 @@ jsonwebtoken.workspace = true
 oid4vci.workspace = true
 oid4vc-core.workspace = true
 oid4vc-manager.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

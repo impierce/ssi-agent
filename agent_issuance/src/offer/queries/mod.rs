@@ -6,7 +6,9 @@ use cqrs_es::{
     persist::{PersistenceError, ViewContext, ViewRepository},
     EventEnvelope, Query, View,
 };
-use oid4vci::{credential_response::CredentialResponse, token_response::TokenResponse};
+use oid4vci::{
+    credential_offer::CredentialOffer, credential_response::CredentialResponse, token_response::TokenResponse,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::offer::aggregate::Offer;
@@ -28,6 +30,7 @@ where
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct OfferView {
+    pub credential_offer: Option<CredentialOffer>,
     pub subject_id: Option<String>,
     pub credential_ids: Vec<String>,
     pub pre_authorized_code: String,
@@ -62,6 +65,7 @@ impl View<Offer> for OfferView {
             } => self
                 .form_url_encoded_credential_offer
                 .clone_from(form_url_encoded_credential_offer),
+            CredentialOfferSent { .. } => {}
             CredentialRequestVerified { subject_id, .. } => {
                 self.subject_id.replace(subject_id.clone());
             }
