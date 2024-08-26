@@ -1,3 +1,5 @@
+pub mod send;
+
 use agent_issuance::{
     offer::{command::OfferCommand, queries::OfferView},
     server_config::queries::ServerConfigView,
@@ -28,6 +30,15 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
         return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
     };
 
+    // Get the `CredentialIssuerMetadata` from the `ServerConfigView`.
+    let credential_issuer_metadata = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
+        Ok(Some(ServerConfigView {
+            credential_issuer_metadata: Some(credential_issuer_metadata),
+            ..
+        })) => credential_issuer_metadata,
+        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
     // Create an offer if it does not exist yet.
     match query_handler(&offer_id, &state.query.offer).await {
         Ok(Some(_)) => {}
@@ -37,6 +48,7 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
                 &state.command.offer,
                 OfferCommand::CreateCredentialOffer {
                     offer_id: offer_id.clone(),
+                    credential_issuer_metadata,
                 },
             )
             .await
@@ -47,18 +59,8 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
         }
     };
 
-    // Get the `CredentialIssuerMetadata` from the `ServerConfigView`.
-    let credential_issuer_metadata = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
-        Ok(Some(ServerConfigView {
-            credential_issuer_metadata: Some(credential_issuer_metadata),
-            ..
-        })) => credential_issuer_metadata,
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
-
     let command = OfferCommand::CreateFormUrlEncodedCredentialOffer {
         offer_id: offer_id.clone(),
-        credential_issuer_metadata,
     };
 
     if command_handler(&offer_id, &state.command.offer, command).await.is_err() {

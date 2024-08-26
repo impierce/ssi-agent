@@ -14,15 +14,18 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use issuance::credential_issuer::{
-    credential::credential,
-    token::token,
-    well_known::{
-        oauth_authorization_server::oauth_authorization_server, openid_credential_issuer::openid_credential_issuer,
-    },
-};
 use issuance::credentials::{credentials, get_credentials};
 use issuance::offers::offers;
+use issuance::{
+    credential_issuer::{
+        credential::credential,
+        token::token,
+        well_known::{
+            oauth_authorization_server::oauth_authorization_server, openid_credential_issuer::openid_credential_issuer,
+        },
+    },
+    offers::send::send,
+};
 use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
 use verification::{
@@ -45,15 +48,17 @@ pub fn app(state: ApplicationState) -> Router {
         }
     };
 
+    // TODO: refactor routes into a nice and consistant folder structure.
     Router::new()
         .nest(
             &path(API_VERSION),
             Router::new()
-                // Agent Issuance Preparations
+                // Agent Issuance
                 .route("/credentials", post(credentials))
                 .route("/credentials/:credential_id", get(get_credentials))
                 .route("/offers", post(offers))
-                // Agent Verification Preparations
+                .route("/offers/send", post(send))
+                // Agent Verification
                 .route("/authorization_requests", post(authorization_requests))
                 .route(
                     "/authorization_requests/:authorization_request_id",

@@ -128,6 +128,7 @@ name = "agent_event_publisher_http"
 version = "0.1.0"
 dependencies = [
  "agent_event_publisher_http",
+ "agent_holder",
  "agent_issuance",
  "agent_shared",
  "agent_store",
@@ -197,6 +198,7 @@ dependencies = [
  "oid4vc-core",
  "oid4vc-manager",
  "oid4vci",
+ "reqwest 0.12.5",
  "rstest",
  "serde",
  "serde_json",

@@ -106,6 +106,15 @@ pub(crate) async fn credentials(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
+    // Get the `CredentialIssuerMetadata` from the `ServerConfigView`.
+    let credential_issuer_metadata = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
+        Ok(Some(ServerConfigView {
+            credential_issuer_metadata: Some(credential_issuer_metadata),
+            ..
+        })) => credential_issuer_metadata,
+        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
     // Create an offer if it does not exist yet.
     match query_handler(&offer_id, &state.query.offer).await {
         Ok(Some(_)) => {}
@@ -115,6 +124,7 @@ pub(crate) async fn credentials(
                 &state.command.offer,
                 OfferCommand::CreateCredentialOffer {
                     offer_id: offer_id.clone(),
+                    credential_issuer_metadata,
                 },
             )
             .await
