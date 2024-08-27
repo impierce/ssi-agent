@@ -74,6 +74,15 @@ CREATE TABLE holder_credential
     PRIMARY KEY (view_id)
 );
 
+
+CREATE TABLE all_credentials
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
 CREATE TABLE authorization_request
 (
     view_id           text                        NOT NULL,

@@ -59,6 +59,7 @@ pub fn app(state: ApplicationState) -> Router {
                 .route("/offers", post(offers))
                 .route("/offers/send", post(send))
                 // Agent Holder
+                .route("/holder/credentials", get(holder::holder::credentials::credentials))
                 .route("/holder/offers", get(holder::holder::offers::offers))
                 .route(
                     "/holder/offers/:offer_id/accept",

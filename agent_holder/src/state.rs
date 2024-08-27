@@ -3,6 +3,7 @@ use cqrs_es::persist::ViewRepository;
 use std::sync::Arc;
 
 use crate::credential::aggregate::Credential;
+use crate::credential::queries::all_credentials::AllCredentialsView;
 use crate::credential::queries::CredentialView;
 use crate::offer::aggregate::Offer;
 use crate::offer::queries::all_offers::AllOffersView;
@@ -33,17 +34,20 @@ pub struct CommandHandlers {
 /// `Aggregate` types must be the same.
 type Queries = ViewRepositories<
     dyn ViewRepository<CredentialView, Credential>,
+    dyn ViewRepository<AllCredentialsView, Credential>,
     dyn ViewRepository<OfferView, Offer>,
     dyn ViewRepository<AllOffersView, Offer>,
 >;
 
-pub struct ViewRepositories<C, O1, O2>
+pub struct ViewRepositories<C1, C2, O1, O2>
 where
-    C: ViewRepository<CredentialView, Credential> + ?Sized,
+    C1: ViewRepository<CredentialView, Credential> + ?Sized,
+    C2: ViewRepository<AllCredentialsView, Credential> + ?Sized,
     O1: ViewRepository<OfferView, Offer> + ?Sized,
     O2: ViewRepository<AllOffersView, Offer> + ?Sized,
 {
-    pub credential: Arc<C>,
+    pub credential: Arc<C1>,
+    pub all_credentials: Arc<C2>,
     pub offer: Arc<O1>,
     pub all_offers: Arc<O2>,
 }
@@ -52,6 +56,7 @@ impl Clone for Queries {
     fn clone(&self) -> Self {
         ViewRepositories {
             credential: self.credential.clone(),
+            all_credentials: self.all_credentials.clone(),
             offer: self.offer.clone(),
             all_offers: self.all_offers.clone(),
         }
