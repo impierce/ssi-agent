@@ -227,7 +227,10 @@ impl Aggregate for Offer {
             TokenResponseReceived { token_response, .. } => {
                 self.token_response.replace(token_response);
             }
-            CredentialResponseReceived { credentials, .. } => {
+            CredentialResponseReceived {
+                status, credentials, ..
+            } => {
+                self.status = status;
                 self.credentials = credentials;
             }
             CredentialOfferAccepted { status, .. } => {

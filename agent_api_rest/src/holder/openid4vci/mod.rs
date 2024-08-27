@@ -10,8 +10,6 @@ use oid4vci::credential_offer::CredentialOffer;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::holder::TEMP_OFFER_ID;
-
 #[derive(Deserialize, Serialize)]
 pub struct Oid4vciOfferEndpointRequest {
     #[serde(flatten)]
@@ -26,8 +24,7 @@ pub(crate) async fn offers(State(state): State<HolderState>, Json(payload): Json
         return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
     };
 
-    let offer_id = TEMP_OFFER_ID.to_string();
-    // let offer_id = uuid::Uuid::new_v4().to_string();
+    let offer_id = uuid::Uuid::new_v4().to_string();
 
     let command = OfferCommand::ReceiveCredentialOffer {
         offer_id: offer_id.clone(),

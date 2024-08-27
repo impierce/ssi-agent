@@ -5,6 +5,7 @@ use std::sync::Arc;
 use crate::credential::aggregate::Credential;
 use crate::credential::queries::CredentialView;
 use crate::offer::aggregate::Offer;
+use crate::offer::queries::all_offers::AllOffersView;
 use crate::offer::queries::OfferView;
 use axum::extract::FromRef;
 
@@ -30,15 +31,21 @@ pub struct CommandHandlers {
 /// This type is used to define the queries that are used to query the view repositories. We make use of `dyn` here, so
 /// that any type of repository that implements the `ViewRepository` trait can be used, but the corresponding `View` and
 /// `Aggregate` types must be the same.
-type Queries = ViewRepositories<dyn ViewRepository<CredentialView, Credential>, dyn ViewRepository<OfferView, Offer>>;
+type Queries = ViewRepositories<
+    dyn ViewRepository<CredentialView, Credential>,
+    dyn ViewRepository<OfferView, Offer>,
+    dyn ViewRepository<AllOffersView, Offer>,
+>;
 
-pub struct ViewRepositories<C, O>
+pub struct ViewRepositories<C, O1, O2>
 where
     C: ViewRepository<CredentialView, Credential> + ?Sized,
-    O: ViewRepository<OfferView, Offer> + ?Sized,
+    O1: ViewRepository<OfferView, Offer> + ?Sized,
+    O2: ViewRepository<AllOffersView, Offer> + ?Sized,
 {
     pub credential: Arc<C>,
-    pub offer: Arc<O>,
+    pub offer: Arc<O1>,
+    pub all_offers: Arc<O2>,
 }
 
 impl Clone for Queries {
@@ -46,6 +53,7 @@ impl Clone for Queries {
         ViewRepositories {
             credential: self.credential.clone(),
             offer: self.offer.clone(),
+            all_offers: self.all_offers.clone(),
         }
     }
 }

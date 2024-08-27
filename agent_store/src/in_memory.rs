@@ -1,4 +1,4 @@
-use agent_holder::{services::HolderServices, state::HolderState};
+use agent_holder::{offer::queries::all_offers::AllOffersQuery, services::HolderServices, state::HolderState};
 use agent_issuance::{
     offer::{
         aggregate::Offer,
@@ -181,6 +181,10 @@ pub async fn holder_state(
     // Initialize the in-memory repositories.
     let credential = Arc::new(MemRepository::default());
     let offer = Arc::new(MemRepository::default());
+    let all_offers = Arc::new(MemRepository::default());
+
+    // Create custom-queries for the offer aggregate.
+    let all_offers_query = AllOffersQuery::new(all_offers.clone());
 
     // Partition the event_publishers into the different aggregates.
     let (_, _, _, credential_event_publishers, offer_event_publishers, _, _) =
@@ -200,12 +204,17 @@ pub async fn holder_state(
                 offer_event_publishers.into_iter().fold(
                     AggregateHandler::new(holder_services.clone())
                         .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(offer.clone())),
+                        .append_query(generic_query(offer.clone()))
+                        .append_query(all_offers_query),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
         },
-        query: agent_holder::state::ViewRepositories { credential, offer },
+        query: agent_holder::state::ViewRepositories {
+            credential,
+            offer,
+            all_offers,
+        },
     }
 }
 

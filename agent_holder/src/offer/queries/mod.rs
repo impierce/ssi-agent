@@ -1,5 +1,4 @@
-// pub mod access_token;
-// pub mod pre_authorized_code;
+pub mod all_offers;
 
 use std::collections::HashMap;
 
@@ -17,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::offer::aggregate::Offer;
 
-use super::{aggregate::Status, event::OfferEvent};
+use super::aggregate::Status;
 
 /// A custom query trait for the Offer aggregate. This trait is used to define custom queries for the Offer aggregate
 /// that do not make use of `GenericQuery`.
