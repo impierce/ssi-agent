@@ -9,7 +9,6 @@ agent_shared = { path = "../agent_shared" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 
 async-trait.workspace = true
-axum.workspace = true
 cqrs-es.workspace = true
 chrono = "0.4"
 types-ob-v3 = { git = "https://github.com/impierce/digital-credential-data-models.git", rev = "9f16c27" }
@@ -29,17 +28,22 @@ tracing.workspace = true
 url.workspace = true
 uuid.workspace = true
 
-# [dev-dependencies]
-# agent_issuance = { path = ".", features = ["test_utils"] }
-# agent_shared = { path = "../agent_shared", features = ["test_utils"] }
+[dev-dependencies]
+agent_api_rest = { path = "../agent_api_rest" }
+agent_holder = { path = ".", features = ["test_utils"] }
+agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
+agent_shared = { path = "../agent_shared", features = ["test_utils"] }
+agent_store = { path = "../agent_store" }
+agent_verification = { path = "../agent_verification", features = ["test_utils"] }
 
-# did_manager.workspace = true
-# lazy_static.workspace = true
-# serial_test = "3.0"
-# tokio.workspace = true
-# tracing-test.workspace = true
-# async-std = { version = "1.5", features = ["attributes", "tokio1"] }
-# rstest.workspace = true
+# axum-test = "15.6"
+did_manager.workspace = true
+lazy_static.workspace = true
+serial_test = "3.0"
+tokio.workspace = true
+tracing-test.workspace = true
+async-std = { version = "1.5", features = ["attributes", "tokio1"] }
+rstest.workspace = true
 
 [features]
 test_utils = []

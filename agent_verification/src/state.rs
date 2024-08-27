@@ -7,18 +7,10 @@ use crate::authorization_request::queries::AuthorizationRequestView;
 use crate::connection::aggregate::Connection;
 use crate::connection::queries::ConnectionView;
 
-use axum::extract::FromRef;
-
 #[derive(Clone)]
 pub struct VerificationState {
     pub command: CommandHandlers,
     pub query: Queries,
-}
-
-impl<I, H> FromRef<(I, H, VerificationState)> for VerificationState {
-    fn from_ref(application_state: &(I, H, VerificationState)) -> VerificationState {
-        application_state.2.clone()
-    }
 }
 
 /// The command handlers are used to execute commands on the aggregates.

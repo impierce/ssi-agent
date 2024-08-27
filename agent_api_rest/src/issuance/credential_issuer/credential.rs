@@ -144,7 +144,6 @@ mod tests {
     use std::sync::Arc;
 
     use crate::{
-        app,
         issuance::{
             credential_issuer::token::tests::token, credentials::CredentialsEndpointRequest, offers::tests::offers,
         },
@@ -153,14 +152,13 @@ mod tests {
 
     use super::*;
     use crate::issuance::credentials::tests::credentials;
+    use crate::issuance::router;
     use crate::API_VERSION;
     use agent_event_publisher_http::EventPublisherHttp;
-    use agent_holder::services::test_utils::test_holder_services;
     use agent_issuance::services::test_utils::test_issuance_services;
     use agent_issuance::{offer::event::OfferEvent, startup_commands::startup_commands, state::initialize};
     use agent_shared::config::{set_config, Events};
     use agent_store::{in_memory, EventPublisher};
-    use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -278,36 +276,30 @@ mod tests {
         #[case] is_self_signed: bool,
         #[case] delay: u64,
     ) {
-        let (external_server, issuance_event_publishers, holder_event_publishers, verification_event_publishers) =
-            if with_external_server {
-                let external_server = MockServer::start().await;
+        let (external_server, issuance_event_publishers) = if with_external_server {
+            let external_server = MockServer::start().await;
 
-                let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
+            let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
 
-                set_config().enable_event_publisher_http();
-                set_config().set_event_publisher_http_target_url(target_url.clone());
-                set_config().set_event_publisher_http_target_events(Events {
-                    offer: vec![agent_shared::config::OfferEvent::CredentialRequestVerified],
-                    ..Default::default()
-                });
+            set_config().enable_event_publisher_http();
+            set_config().set_event_publisher_http_target_url(target_url.clone());
+            set_config().set_event_publisher_http_target_events(Events {
+                offer: vec![agent_shared::config::OfferEvent::CredentialRequestVerified],
+                ..Default::default()
+            });
 
-                (
-                    Some(external_server),
-                    vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>],
-                    vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>],
-                    vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>],
-                )
-            } else {
-                (None, Default::default(), Default::default(), Default::default())
-            };
+            (
+                Some(external_server),
+                vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>],
+            )
+        } else {
+            (None, Default::default())
+        };
 
         let issuance_state = in_memory::issuance_state(test_issuance_services(), issuance_event_publishers).await;
-        let holder_state = in_memory::holder_state(test_holder_services(), holder_event_publishers).await;
-        let verification_state =
-            in_memory::verification_state(test_verification_services(), verification_event_publishers).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
-        let mut app = app((issuance_state, holder_state, verification_state));
+        let mut app = router(issuance_state);
 
         if let Some(external_server) = &external_server {
             external_server

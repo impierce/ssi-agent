@@ -1,6 +1,6 @@
 #![allow(clippy::await_holding_lock)]
 
-use agent_api_rest::app;
+use agent_api_rest::{app, ApplicationState};
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_holder::services::HolderServices;
 use agent_issuance::{services::IssuanceServices, startup_commands::startup_commands, state::initialize};
@@ -70,7 +70,11 @@ async fn main() -> io::Result<()> {
 
     initialize(&issuance_state, startup_commands(url.clone())).await;
 
-    let mut app = app((issuance_state, holder_state, verification_state));
+    let mut app = app(ApplicationState {
+        issuance_state: Some(issuance_state),
+        holder_state: Some(holder_state),
+        verification_state: Some(verification_state),
+    });
 
     // CORS
     if config().cors_enabled.unwrap_or(false) {

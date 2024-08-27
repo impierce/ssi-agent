@@ -13,18 +13,11 @@ use crate::offer::queries::OfferView;
 use crate::server_config::aggregate::ServerConfig;
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::queries::ServerConfigView;
-use axum::extract::FromRef;
 
 #[derive(Clone)]
 pub struct IssuanceState {
     pub command: CommandHandlers,
     pub query: Queries,
-}
-
-impl<H, V> FromRef<(IssuanceState, H, V)> for IssuanceState {
-    fn from_ref(application_state: &(IssuanceState, H, V)) -> IssuanceState {
-        application_state.0.clone()
-    }
 }
 
 /// The command handlers are used to execute commands on the aggregates.

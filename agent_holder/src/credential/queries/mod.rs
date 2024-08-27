@@ -2,7 +2,7 @@ pub mod all_credentials;
 
 use super::event::CredentialEvent;
 use crate::credential::aggregate::Credential;
-use axum::async_trait;
+use async_trait::async_trait;
 use cqrs_es::{
     persist::{PersistenceError, ViewContext, ViewRepository},
     EventEnvelope, Query, View,

@@ -8,18 +8,11 @@ use crate::credential::queries::CredentialView;
 use crate::offer::aggregate::Offer;
 use crate::offer::queries::all_offers::AllOffersView;
 use crate::offer::queries::OfferView;
-use axum::extract::FromRef;
 
 #[derive(Clone)]
 pub struct HolderState {
     pub command: CommandHandlers,
     pub query: Queries,
-}
-
-impl<I, V> FromRef<(I, HolderState, V)> for HolderState {
-    fn from_ref(application_state: &(I, HolderState, V)) -> HolderState {
-        application_state.1.clone()
-    }
 }
 
 /// The command handlers are used to execute commands on the aggregates.

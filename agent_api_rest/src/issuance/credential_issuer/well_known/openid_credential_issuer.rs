@@ -25,16 +25,14 @@ pub(crate) async fn openid_credential_issuer(State(state): State<IssuanceState>)
 mod tests {
     use std::collections::HashMap;
 
-    use crate::{app, tests::BASE_URL};
+    use crate::{issuance::router, tests::BASE_URL};
 
     use super::*;
-    use agent_holder::services::test_utils::test_holder_services;
     use agent_issuance::{
         services::test_utils::test_issuance_services, startup_commands::startup_commands, state::initialize,
     };
     use agent_shared::UrlAppendHelpers;
     use agent_store::in_memory;
-    use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -135,11 +133,9 @@ mod tests {
     #[tokio::test]
     async fn test_openid_credential_issuer_endpoint() {
         let issuance_state = in_memory::issuance_state(test_issuance_services(), Default::default()).await;
-        let holder_state = in_memory::holder_state(test_holder_services(), Default::default()).await;
-        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
-        let mut app = app((issuance_state, holder_state, verification_state));
+        let mut app = router(issuance_state);
 
         let _credential_issuer_metadata = openid_credential_issuer(&mut app).await;
     }
