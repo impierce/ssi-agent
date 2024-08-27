@@ -58,6 +58,16 @@ pub fn app(state: ApplicationState) -> Router {
                 .route("/credentials/:credential_id", get(get_credentials))
                 .route("/offers", post(offers))
                 .route("/offers/send", post(send))
+                // Agent Holder
+                .route("/holder/offers", get(holder::holder::offers::offers))
+                .route(
+                    "/holder/offers/:offer_id/accept",
+                    post(holder::holder::offers::accept::accept),
+                )
+                .route(
+                    "/holder/offers/:offer_id/reject",
+                    post(holder::holder::offers::reject::reject),
+                )
                 // Agent Verification
                 .route("/authorization_requests", post(authorization_requests))
                 .route(
@@ -76,6 +86,7 @@ pub fn app(state: ApplicationState) -> Router {
         )
         .route(&path("/auth/token"), post(token))
         .route(&path("/openid4vci/credential"), post(credential))
+        .route(&path("/openid4vci/offers"), get(holder::openid4vci::offers))
         // SIOPv2
         .route(&path("/request/:request_id"), get(request))
         .route(&path("/redirect"), post(redirect))
