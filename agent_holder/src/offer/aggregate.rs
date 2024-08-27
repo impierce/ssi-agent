@@ -19,11 +19,24 @@ use crate::offer::error::OfferError::{self, *};
 use crate::offer::event::OfferEvent;
 use crate::services::HolderServices;
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub enum Status {
+    #[default]
+    Pending,
+    Accepted,
+    Received,
+    Rejected,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Offer {
     pub credential_offer: Option<CredentialOfferParameters>,
+    pub status: Status,
     pub credential_configurations: Option<HashMap<String, CredentialConfigurationsSupportedObject>>,
     pub token_response: Option<TokenResponse>,
+    // TODO: These should not be part of this Aggregate. Instead, an Event Subscriber should be listening to the
+    // `CredentialResponseReceived` event and then trigger the `CredentialCommand::AddCredential` command. We can do
+    // this once we have a mechanism implemented that can both listen to events as well as trigger commands.
     pub credentials: Vec<serde_json::Value>,
     // pub subject_id: Option<String>,
     // pub credential_ids: Vec<String>,
@@ -90,7 +103,10 @@ impl Aggregate for Offer {
                     credential_configurations,
                 }])
             }
-            AcceptCredentialOffer { offer_id } => Ok(vec![CredentialOfferAccepted { offer_id }]),
+            AcceptCredentialOffer { offer_id } => Ok(vec![CredentialOfferAccepted {
+                offer_id,
+                status: Status::Accepted,
+            }]),
             SendTokenRequest { offer_id } => {
                 let wallet = &services.wallet;
 
@@ -181,9 +197,16 @@ impl Aggregate for Offer {
 
                 info!("credentials: {:?}", credentials);
 
-                Ok(vec![CredentialResponseReceived { offer_id, credentials }])
+                Ok(vec![CredentialResponseReceived {
+                    offer_id,
+                    status: Status::Received,
+                    credentials,
+                }])
             }
-            RejectCredentialOffer { offer_id } => todo!(),
+            RejectCredentialOffer { offer_id } => Ok(vec![CredentialOfferRejected {
+                offer_id,
+                status: Status::Rejected,
+            }]),
         }
     }
 
@@ -193,8 +216,13 @@ impl Aggregate for Offer {
         info!("Applying event: {:?}", event);
 
         match event {
-            CredentialOfferReceived { credential_offer, .. } => {
+            CredentialOfferReceived {
+                credential_offer,
+                credential_configurations,
+                ..
+            } => {
                 self.credential_offer.replace(credential_offer);
+                self.credential_configurations.replace(credential_configurations);
             }
             TokenResponseReceived { token_response, .. } => {
                 self.token_response.replace(token_response);
@@ -202,8 +230,12 @@ impl Aggregate for Offer {
             CredentialResponseReceived { credentials, .. } => {
                 self.credentials = credentials;
             }
-            CredentialOfferAccepted { .. } => {}
-            CredentialOfferRejected { .. } => {}
+            CredentialOfferAccepted { status, .. } => {
+                self.status = status;
+            }
+            CredentialOfferRejected { status, .. } => {
+                self.status = status;
+            }
         }
     }
 }

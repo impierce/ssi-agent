@@ -7,6 +7,8 @@ use oid4vci::{
 };
 use serde::{Deserialize, Serialize};
 
+use super::aggregate::Status;
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum OfferEvent {
     CredentialOfferReceived {
@@ -16,6 +18,7 @@ pub enum OfferEvent {
     },
     CredentialOfferAccepted {
         offer_id: String,
+        status: Status,
     },
     TokenResponseReceived {
         offer_id: String,
@@ -23,10 +26,12 @@ pub enum OfferEvent {
     },
     CredentialResponseReceived {
         offer_id: String,
+        status: Status,
         credentials: Vec<serde_json::Value>,
     },
     CredentialOfferRejected {
         offer_id: String,
+        status: Status,
     },
 }
 

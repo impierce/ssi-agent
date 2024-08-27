@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::offer::aggregate::Offer;
 
-use super::event::OfferEvent;
+use super::{aggregate::Status, event::OfferEvent};
 
 /// A custom query trait for the Offer aggregate. This trait is used to define custom queries for the Offer aggregate
 /// that do not make use of `GenericQuery`.
@@ -35,6 +35,7 @@ where
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct OfferView {
     pub credential_offer: Option<CredentialOfferParameters>,
+    pub status: Status,
     pub credential_configurations: Option<HashMap<String, CredentialConfigurationsSupportedObject>>,
     pub token_response: Option<TokenResponse>,
     pub credentials: Vec<serde_json::Value>,
