@@ -96,7 +96,6 @@ impl Aggregate for Offer {
 
                 let response = client
                     .get(target_url.clone())
-                    .header("Content-Type", "application/x-www-form-urlencoded")
                     .json(self.credential_offer.as_ref().unwrap())
                     .send()
                     .await
