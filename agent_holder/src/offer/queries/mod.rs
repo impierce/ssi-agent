@@ -54,14 +54,21 @@ impl View<Offer> for OfferView {
                 self.credential_configurations
                     .replace(credential_configurations.clone());
             }
-            CredentialOfferAccepted { .. } => {}
+            CredentialOfferAccepted { status, .. } => {
+                self.status.clone_from(status);
+            }
             TokenResponseReceived { token_response, .. } => {
                 self.token_response.replace(token_response.clone());
             }
-            CredentialResponseReceived { credentials, .. } => {
-                self.credentials.extend(credentials.clone());
+            CredentialResponseReceived {
+                status, credentials, ..
+            } => {
+                self.status.clone_from(status);
+                self.credentials.clone_from(credentials);
             }
-            CredentialOfferRejected { .. } => todo!(),
+            CredentialOfferRejected { status, .. } => {
+                self.status.clone_from(status);
+            }
         }
     }
 }
