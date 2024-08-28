@@ -1369,7 +1369,7 @@ checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=fe0602f#fe0602ff953fcc6e0f3a438393573d3059410b98"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -1935,7 +1935,7 @@ dependencies = [
 [[package]]
 name = "did_iota"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=fe0602f#fe0602ff953fcc6e0f3a438393573d3059410b98"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
  "bls12_381_plus 0.8.15",
  "identity_iota",
@@ -1949,7 +1949,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=fe0602f#fe0602ff953fcc6e0f3a438393573d3059410b98"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -1966,7 +1966,7 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=fe0602f#fe0602ff953fcc6e0f3a438393573d3059410b98"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
  "did-method-key",
  "identity_iota",
@@ -1984,7 +1984,7 @@ dependencies = [
 [[package]]
 name = "did_manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=fe0602f#fe0602ff953fcc6e0f3a438393573d3059410b98"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
  "consumer",
  "producer",
@@ -2012,7 +2012,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=fe0602f#fe0602ff953fcc6e0f3a438393573d3059410b98"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -3415,7 +3415,7 @@ dependencies = [
 [[package]]
 name = "identity_stronghold_ext"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=fe0602f#fe0602ff953fcc6e0f3a438393573d3059410b98"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
  "async-trait",
  "elliptic-curve 0.13.8",
@@ -5382,7 +5382,7 @@ dependencies = [
 [[package]]
 name = "producer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=fe0602f#fe0602ff953fcc6e0f3a438393573d3059410b98"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -6543,7 +6543,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=fe0602f#fe0602ff953fcc6e0f3a438393573d3059410b98"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
  "identity_iota",
  "identity_storage",
@@ -7267,7 +7267,7 @@ dependencies = [
 [[package]]
 name = "stronghold_ext"
 version = "0.1.0"
-source = "git+https://github.com/tensor-programming/stronghold_ext.git#f51123bd502a943b3f719a954cabaa2be973b707"
+source = "git+https://github.com/impierce/stronghold_ext.git#cad0e5ac4d9011a38c88303b668e790e2f2f3a5e"
 dependencies = [
  "ecdsa 0.16.9",
  "iota_stronghold",
