@@ -178,7 +178,7 @@ pub mod tests {
         let provider_manager = ProviderManager::new(
             Arc::new(futures::executor::block_on(async {
                 Subject {
-                    secret_manager: secret_manager().await,
+                    secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
                 }
             })),
             vec![did_method],

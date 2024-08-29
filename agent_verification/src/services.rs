@@ -95,7 +95,7 @@ pub mod test_utils {
         Arc::new(VerificationServices::new(Arc::new(futures::executor::block_on(
             async {
                 Subject {
-                    secret_manager: secret_manager().await,
+                    secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
                 }
             },
         ))))
