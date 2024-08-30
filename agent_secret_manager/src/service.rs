@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+/// Conventience trait for Services like `IssuanceServices`, `HolderServices`, and `VerifierServices`.
 pub trait Service {
     fn new(subject: Arc<dyn oid4vc_core::Subject>) -> Self;
 

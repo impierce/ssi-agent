@@ -2,5 +2,6 @@
 
 This aggregate is defined by:
 
-- credential data
-- a format (such as: _Open Badge 3.0_)
+- credential_id
+- offer_id
+- credential

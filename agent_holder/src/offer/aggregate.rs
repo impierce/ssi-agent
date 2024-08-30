@@ -48,6 +48,7 @@ impl Aggregate for Offer {
 
     async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
         use OfferCommand::*;
+        use OfferError::*;
         use OfferEvent::*;
 
         info!("Handling command: {:?}", command);
@@ -92,6 +93,11 @@ impl Aggregate for Offer {
                 }])
             }
             AcceptCredentialOffer { offer_id } => {
+                // TODO: should we 'do nothing' or log a `warn!` message instead of returning an error?
+                if self.status != Status::Pending {
+                    return Err(CredentialOfferStatusNotPendingError);
+                }
+
                 let wallet = &services.wallet;
 
                 let credential_issuer_url = self.credential_offer.as_ref().unwrap().credential_issuer.clone();
@@ -135,6 +141,10 @@ impl Aggregate for Offer {
                 ])
             }
             SendCredentialRequest { offer_id } => {
+                if self.status != Status::Accepted {
+                    return Err(CredentialOfferStatusNotAcceptedError);
+                }
+
                 let wallet = &services.wallet;
 
                 let credential_issuer_url = self.credential_offer.as_ref().unwrap().credential_issuer.clone();
@@ -193,10 +203,17 @@ impl Aggregate for Offer {
                     credentials,
                 }])
             }
-            RejectCredentialOffer { offer_id } => Ok(vec![CredentialOfferRejected {
-                offer_id,
-                status: Status::Rejected,
-            }]),
+            RejectCredentialOffer { offer_id } => {
+                // TODO: should we 'do nothing' or log a `warn!` message instead of returning an error?
+                if self.status != Status::Pending {
+                    return Err(CredentialOfferStatusNotPendingError);
+                }
+
+                Ok(vec![CredentialOfferRejected {
+                    offer_id,
+                    status: Status::Rejected,
+                }])
+            }
         }
     }
 

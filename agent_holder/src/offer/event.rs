@@ -1,13 +1,11 @@
-use std::collections::HashMap;
-
+use super::aggregate::Status;
 use cqrs_es::DomainEvent;
 use oid4vci::{
     credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject,
     credential_offer::CredentialOfferParameters, token_response::TokenResponse,
 };
 use serde::{Deserialize, Serialize};
-
-use super::aggregate::Status;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum OfferEvent {

@@ -1,3 +1,8 @@
+use super::entity::Data;
+use crate::credential::command::CredentialCommand;
+use crate::credential::error::CredentialError::{self};
+use crate::credential::event::CredentialEvent;
+use crate::services::IssuanceServices;
 use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
@@ -22,13 +27,6 @@ use types_ob_v3::prelude::{
     AchievementCredential, AchievementCredentialBuilder, AchievementCredentialType, AchievementSubject, Profile,
     ProfileBuilder,
 };
-
-use crate::credential::command::CredentialCommand;
-use crate::credential::error::CredentialError::{self};
-use crate::credential::event::CredentialEvent;
-use crate::services::IssuanceServices;
-
-use super::entity::Data;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
 #[derivative(PartialEq)]

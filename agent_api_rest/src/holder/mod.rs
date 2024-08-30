@@ -3,15 +3,14 @@
 pub mod holder;
 pub mod openid4vci;
 
-use agent_holder::state::HolderState;
-use axum::routing::get;
-use axum::{routing::post, Router};
-
 use crate::holder::holder::{
     credentials::credentials,
     offers::{accept::accept, reject::reject, *},
 };
 use crate::API_VERSION;
+use agent_holder::state::HolderState;
+use axum::routing::get;
+use axum::{routing::post, Router};
 
 pub fn router(holder_state: HolderState) -> Router {
     Router::new()

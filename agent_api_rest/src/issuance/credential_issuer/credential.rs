@@ -156,6 +156,7 @@ mod tests {
     };
     use agent_event_publisher_http::EventPublisherHttp;
     use agent_issuance::{offer::event::OfferEvent, startup_commands::startup_commands, state::initialize};
+    use agent_secret_manager::service::Service;
     use agent_shared::config::{set_config, Events};
     use agent_store::{in_memory, EventPublisher};
     use axum::{
@@ -276,8 +277,6 @@ mod tests {
         #[case] is_self_signed: bool,
         #[case] delay: u64,
     ) {
-        use agent_secret_manager::service::Service;
-
         let (external_server, issuance_event_publishers) = if with_external_server {
             let external_server = MockServer::start().await;
 

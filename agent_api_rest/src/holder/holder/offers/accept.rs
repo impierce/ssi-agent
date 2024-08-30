@@ -17,22 +17,28 @@ pub(crate) async fn accept(State(state): State<HolderState>, Path(offer_id): Pat
     // Requests and Responses.
     // Furthermore, the to be implemented Application Layer should be kept very thin as well. See: https://github.com/impierce/ssi-agent/issues/114
 
-    let command = OfferCommand::AcceptCredentialOffer {
-        offer_id: offer_id.clone(),
-    };
+    // Accept the Credential Offer if it exists
+    match query_handler(&offer_id, &state.query.offer).await {
+        Ok(Some(OfferView { .. })) => {
+            let command = OfferCommand::AcceptCredentialOffer {
+                offer_id: offer_id.clone(),
+            };
 
-    // Add the Credential Offer to the state.
-    if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
-        // TODO: add better Error responses. This needs to be done properly in all endpoints once
-        // https://github.com/impierce/openid4vc/issues/78 is fixed.
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
+                // TODO: add better Error responses. This needs to be done properly in all endpoints once
+                // https://github.com/impierce/openid4vc/issues/78 is fixed.
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        }
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 
     let command = OfferCommand::SendCredentialRequest {
         offer_id: offer_id.clone(),
     };
 
-    // Add the Credential Offer to the state.
+    // Send the Credential Request
     if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
         // TODO: add better Error responses. This needs to be done properly in all endpoints once
         // https://github.com/impierce/openid4vc/issues/78 is fixed.

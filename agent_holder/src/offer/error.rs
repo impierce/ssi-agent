@@ -2,12 +2,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum OfferError {
-    #[error("Credential is missing")]
-    MissingCredentialError,
-    #[error("Missing `Proof` in Credential Request")]
-    MissingProofError,
-    #[error("Invalid `Proof` in Credential Request")]
-    InvalidProofError(String),
-    #[error("Missing `iss` claim in `Proof`")]
-    MissingProofIssuerError,
+    #[error("The Credential Offer has already been accepted and cannot be rejected anymore")]
+    CredentialOfferStatusNotPendingError,
+    #[error("The Credential Offer has not been accepted yet")]
+    CredentialOfferStatusNotAcceptedError,
 }
