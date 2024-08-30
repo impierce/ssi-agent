@@ -215,9 +215,9 @@ pub enum SupportedDidMethod {
     IotaRms,
 }
 
-impl Into<SubjectSyntaxType> for SupportedDidMethod {
-    fn into(self) -> SubjectSyntaxType {
-        SubjectSyntaxType::try_from(self.to_string().as_str()).expect("convertion into `SubjectSyntaxType` failed")
+impl From<SupportedDidMethod> for SubjectSyntaxType {
+    fn from(val: SupportedDidMethod) -> Self {
+        SubjectSyntaxType::try_from(val.to_string().as_str()).expect("convertion into `SubjectSyntaxType` failed")
     }
 }
 
