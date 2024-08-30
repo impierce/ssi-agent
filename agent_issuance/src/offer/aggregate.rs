@@ -93,23 +93,24 @@ impl Aggregate for Offer {
             }]),
             CreateFormUrlEncodedCredentialOffer { offer_id } => Ok(vec![FormUrlEncodedCredentialOfferCreated {
                 offer_id,
-                form_url_encoded_credential_offer: self.credential_offer.as_ref().unwrap().to_string(),
+                form_url_encoded_credential_offer: self
+                    .credential_offer
+                    .as_ref()
+                    .ok_or(MissingCredentialOfferError)?
+                    .to_string(),
             }]),
             SendCredentialOffer { offer_id, target_url } => {
+                // TODO: add to `service`?
                 let client = reqwest::Client::new();
 
-                let response = client
+                client
                     .get(target_url.clone())
-                    .json(self.credential_offer.as_ref().unwrap())
+                    .json(self.credential_offer.as_ref().ok_or(MissingCredentialOfferError)?)
                     .send()
                     .await
-                    .unwrap();
+                    .map_err(|e| SendCredentialOfferError(e.to_string()))?;
 
-                if response.status().is_success() {
-                    Ok(vec![CredentialOfferSent { offer_id, target_url }])
-                } else {
-                    todo!()
-                }
+                Ok(vec![CredentialOfferSent { offer_id, target_url }])
             }
             CreateTokenResponse {
                 offer_id,
