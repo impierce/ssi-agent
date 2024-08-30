@@ -4,13 +4,11 @@ use crate::credential::event::CredentialEvent;
 use crate::services::HolderServices;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
-#[derivative(PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Credential {
     pub credential_id: Option<String>,
     pub offer_id: Option<String>,
