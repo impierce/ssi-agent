@@ -1,5 +1,6 @@
 pub mod holder;
 pub mod issuance;
+pub mod openapi;
 pub mod verification;
 
 use agent_holder::state::HolderState;
@@ -17,7 +18,7 @@ use verification::{
     relying_party::{redirect::redirect, request::request},
 };
 
-use crate::issuance::openapi::{IssuanceApi, VerificationApi, WellKnownApi};
+use crate::openapi::{HolderApi, IssuanceApi, VerificationApi, WellKnownApi};
 
 pub const API_VERSION: &str = "/v0";
 
@@ -104,14 +105,19 @@ fn get_base_path() -> Result<String, ConfigError> {
         nest(
             (path = "/.well-known", api = WellKnownApi),
             (path = "/v0", api = IssuanceApi),
-            (path = "/v0", api = VerificationApi)
+            (path = "/v0", api = VerificationApi),
+            (path = "/v0", api = HolderApi)
+        ),
+        paths(
+            crate::holder::openid4vci::offers,
+            crate::issuance::credential_issuer::credential::credential,
         ),
         // paths(
         //     crate::issuance::credential_issuer::CredentialApi
         // ),
         tags(
             // (name = "todo", description = "Todo items management API"),
-            (name = "openid4vci", description = "All operations revolved around the OpenID4VCI standard.", external_docs(url = "https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html", description = "OpenID for Verifiable Credential Issuance")),
+            (name = "OpenID4VCI", description = "All operations revolved around the OpenID4VCI standard.", external_docs(url = "https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html", description = "OpenID for Verifiable Credential Issuance")),
             (name = "Well-Known", description = "Well-known endpoints provide metadata about the server."),
         )
     )]
