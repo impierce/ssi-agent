@@ -65,7 +65,7 @@ impl Aggregate for Offer {
                         .wallet
                         .get_credential_offer(credential_offer_uri)
                         .await
-                        .unwrap(),
+                        .map_err(|_| CredentialOfferByReferenceRetrievalError)?,
                     CredentialOffer::CredentialOffer(credential_offer) => *credential_offer,
                 };
 
@@ -76,7 +76,7 @@ impl Aggregate for Offer {
                 let credential_issuer_metadata = wallet
                     .get_credential_issuer_metadata(credential_issuer_url.clone())
                     .await
-                    .unwrap();
+                    .map_err(|_| CredentialIssuerMetadataRetrievalError)?;
 
                 let credential_configurations: HashMap<String, CredentialConfigurationsSupportedObject> =
                     credential_issuer_metadata
@@ -100,32 +100,40 @@ impl Aggregate for Offer {
 
                 let wallet = &services.wallet;
 
-                let credential_issuer_url = self.credential_offer.as_ref().unwrap().credential_issuer.clone();
+                let credential_offer = self.credential_offer.as_ref().ok_or(MissingCredentialOfferError)?;
+
+                let credential_issuer_url = credential_offer.credential_issuer.clone();
 
                 // Get the authorization server metadata.
                 let authorization_server_metadata = wallet
                     .get_authorization_server_metadata(credential_issuer_url.clone())
                     .await
-                    .unwrap();
+                    .map_err(|_| AuthorizationServerMetadataRetrievalError)?;
 
                 // Create a token request with grant_type `pre_authorized_code`.
-                let token_request = match self.credential_offer.as_ref().unwrap().grants.clone() {
+                let token_request = match credential_offer.grants.clone() {
                     Some(Grants {
-                        pre_authorized_code, ..
+                        pre_authorized_code: Some(pre_authorized_code),
+                        ..
                     }) => TokenRequest::PreAuthorizedCode {
-                        pre_authorized_code: pre_authorized_code.unwrap().pre_authorized_code,
+                        pre_authorized_code: pre_authorized_code.pre_authorized_code,
                         tx_code: None,
                     },
-                    None => unreachable!(),
+                    _ => return Err(MissingPreAuthorizedCodeError),
                 };
 
                 info!("token_request: {:?}", token_request);
 
                 // Get an access token.
                 let token_response = wallet
-                    .get_access_token(authorization_server_metadata.token_endpoint.unwrap(), token_request)
+                    .get_access_token(
+                        authorization_server_metadata
+                            .token_endpoint
+                            .ok_or(MissingTokenEndpointError)?,
+                        token_request,
+                    )
                     .await
-                    .unwrap();
+                    .map_err(|_| TokenResponseError)?;
 
                 info!("token_response: {:?}", token_response);
 
@@ -147,51 +155,52 @@ impl Aggregate for Offer {
 
                 let wallet = &services.wallet;
 
-                let credential_issuer_url = self.credential_offer.as_ref().unwrap().credential_issuer.clone();
+                let credential_offer = self.credential_offer.as_ref().ok_or(MissingCredentialOfferError)?;
+
+                let credential_issuer_url = credential_offer.credential_issuer.clone();
 
                 // Get an access token.
-                let token_response = self.token_response.as_ref().unwrap().clone();
+                let token_response = self.token_response.as_ref().ok_or(MissingTokenResponseError)?.clone();
 
-                let credential_configuration_ids = self
-                    .credential_offer
-                    .as_ref()
-                    .unwrap()
-                    .credential_configuration_ids
-                    .clone();
+                let credential_configuration_ids = credential_offer.credential_configuration_ids.clone();
 
                 // Get the credential issuer metadata.
                 let credential_issuer_metadata = wallet
                     .get_credential_issuer_metadata(credential_issuer_url.clone())
                     .await
-                    .unwrap();
+                    .map_err(|_| CredentialIssuerMetadataRetrievalError)?;
+
+                let credential_configurations = self
+                    .credential_configurations
+                    .as_ref()
+                    .ok_or(MissingCredentialConfigurationsError)?;
 
                 let credentials: Vec<serde_json::Value> = match credential_configuration_ids.len() {
                     0 => vec![],
                     1 => {
-                        let credential_configuration_id = credential_configuration_ids[0].clone();
+                        let credential_configuration_id = &credential_configuration_ids[0];
 
-                        let credential_configuration = self
-                            .credential_configurations
-                            .as_ref()
-                            .unwrap()
-                            .get(&credential_configuration_id)
-                            .unwrap();
+                        let credential_configuration = credential_configurations
+                            .get(credential_configuration_id)
+                            .ok_or(MissingCredentialConfigurationError)?;
 
                         // Get the credential.
                         let credential_response = wallet
                             .get_credential(credential_issuer_metadata, &token_response, credential_configuration)
                             .await
-                            .unwrap();
+                            .map_err(|_| CredentialResponseError)?;
 
                         let credential = match credential_response.credential {
                             CredentialResponseType::Immediate { credential, .. } => credential,
-                            _ => panic!("Credential was not a jwt_vc_json."),
+                            CredentialResponseType::Deferred { .. } => {
+                                return Err(UnsupportedDeferredCredentialResponseError)
+                            }
                         };
 
                         vec![credential]
                     }
                     _batch => {
-                        todo!()
+                        return Err(BatchCredentialRequestError);
                     }
                 };
 
