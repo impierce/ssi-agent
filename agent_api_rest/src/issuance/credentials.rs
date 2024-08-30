@@ -133,6 +133,15 @@ pub(crate) async fn credentials(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
+    // Get the `CredentialIssuerMetadata` from the `ServerConfigView`.
+    let credential_issuer_metadata = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
+        Ok(Some(ServerConfigView {
+            credential_issuer_metadata: Some(credential_issuer_metadata),
+            ..
+        })) => Box::new(credential_issuer_metadata),
+        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
     // Create an offer if it does not exist yet.
     match query_handler(&offer_id, &state.query.offer).await {
         Ok(Some(_)) => {}
@@ -142,6 +151,7 @@ pub(crate) async fn credentials(
                 &state.command.offer,
                 OfferCommand::CreateCredentialOffer {
                     offer_id: offer_id.clone(),
+                    credential_issuer_metadata,
                 },
             )
             .await
@@ -180,15 +190,12 @@ pub(crate) async fn credentials(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::issuance::router;
+    use crate::tests::{BASE_URL, CREDENTIAL_CONFIGURATION_ID, OFFER_ID};
     use crate::API_VERSION;
-    use crate::{
-        app,
-        tests::{BASE_URL, CREDENTIAL_CONFIGURATION_ID, OFFER_ID},
-    };
-    use agent_issuance::services::test_utils::test_issuance_services;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use agent_secret_manager::service::Service;
     use agent_store::in_memory;
-    use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -196,7 +203,7 @@ pub mod tests {
     };
     use lazy_static::lazy_static;
     use serde_json::json;
-    use tower::Service;
+    use tower::Service as _;
 
     lazy_static! {
         pub static ref CREDENTIAL_SUBJECT: serde_json::Value = json!({
@@ -280,12 +287,10 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_credentials_endpoint() {
-        let issuance_state = in_memory::issuance_state(test_issuance_services(), Default::default()).await;
-        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
-        let mut app = app((issuance_state, verification_state));
-
+        let mut app = router(issuance_state);
         credentials(&mut app).await;
     }
 }

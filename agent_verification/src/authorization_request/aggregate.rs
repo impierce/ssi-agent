@@ -160,6 +160,7 @@ pub mod tests {
     use std::str::FromStr;
 
     use agent_secret_manager::secret_manager;
+    use agent_secret_manager::service::Service as _;
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::set_config;
     use agent_shared::config::SupportedDidMethod;
@@ -171,8 +172,6 @@ pub mod tests {
     use oid4vp::PresentationDefinition;
     use rstest::rstest;
     use serde_json::json;
-
-    use crate::services::test_utils::test_verification_services;
 
     use super::*;
 
@@ -186,7 +185,7 @@ pub mod tests {
     ) {
         set_config().set_preferred_did_method(verifier_did_method.clone());
 
-        let verification_services = test_verification_services();
+        let verification_services = VerificationServices::default();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
         let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
 
@@ -225,7 +224,7 @@ pub mod tests {
     ) {
         set_config().set_preferred_did_method(verifier_did_method.clone());
 
-        let verification_services = test_verification_services();
+        let verification_services = VerificationServices::default();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
         let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
 
@@ -349,7 +348,7 @@ pub mod tests {
     lazy_static! {
         pub static ref VERIFIER: Subject = futures::executor::block_on(async {
             Subject {
-                secret_manager: secret_manager().await,
+                secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
             }
         });
         pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();

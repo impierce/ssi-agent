@@ -1,4 +1,6 @@
 use config::ConfigError;
+use identity_iota::did::CoreDID;
+use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
 use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::Lazy;
@@ -8,6 +10,7 @@ use std::{
     collections::HashMap,
     sync::{RwLock, RwLockReadGuard},
 };
+use strum::VariantArray;
 use tracing::{debug, info};
 use url::Url;
 
@@ -22,6 +25,7 @@ pub struct ApplicationConfiguration {
     pub external_server_response_timeout_ms: Option<u64>,
     pub domain_linkage_enabled: bool,
     pub secret_manager: SecretManagerConfig,
+    pub did_document_cache: Option<InMemoryCacheConfig>,
     pub credential_configurations: Vec<CredentialConfiguration>,
     pub signing_algorithms_supported: HashMap<jsonwebtoken::Algorithm, ToggleOptions>,
     pub display: Vec<Display>,
@@ -59,14 +63,19 @@ pub struct EventStorePostgresConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct SecretManagerConfig {
-    #[serde(default)]
-    pub generate_stronghold: bool,
     pub stronghold_path: String,
     pub stronghold_password: String,
     pub issuer_eddsa_key_id: Option<String>,
     pub issuer_es256_key_id: Option<String>,
     pub issuer_did: Option<String>,
     pub issuer_fragment: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct InMemoryCacheConfig {
+    pub enabled: bool,
+    pub include: Option<Vec<CoreDID>>,
+    pub ttl: Option<u64>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -114,6 +123,10 @@ pub struct Events {
     #[serde(default)]
     pub offer: Vec<OfferEvent>,
     #[serde(default)]
+    pub holder_credential: Vec<HolderCredentialEvent>,
+    #[serde(default)]
+    pub received_offer: Vec<ReceivedOfferEvent>,
+    #[serde(default)]
     pub connection: Vec<ConnectionEvent>,
     #[serde(default)]
     pub authorization_request: Vec<AuthorizationRequestEvent>,
@@ -143,6 +156,20 @@ pub enum OfferEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum HolderCredentialEvent {
+    CredentialAdded,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum ReceivedOfferEvent {
+    CredentialOfferReceived,
+    CredentialOfferAccepted,
+    TokenResponseReceived,
+    CredentialResponseReceived,
+    CredentialOfferRejected,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum ConnectionEvent {
     SIOPv2AuthorizationResponseVerified,
     OID4VPAuthorizationResponseVerified,
@@ -165,7 +192,18 @@ pub enum AuthorizationRequestEvent {
 /// assert_eq!(supported_did_method.to_string(), "did:jwk");
 /// ```
 #[derive(
-    Debug, Deserialize, Clone, Eq, PartialEq, Hash, strum::EnumString, strum::Display, SerializeDisplay, Ord, PartialOrd,
+    Debug,
+    Deserialize,
+    Clone,
+    Eq,
+    PartialEq,
+    Hash,
+    strum::EnumString,
+    strum::Display,
+    SerializeDisplay,
+    Ord,
+    PartialOrd,
+    VariantArray,
 )]
 pub enum SupportedDidMethod {
     #[serde(alias = "did_jwk", rename = "did_jwk")]
@@ -186,6 +224,12 @@ pub enum SupportedDidMethod {
     #[serde(alias = "did_iota_rms", rename = "did_iota_rms")]
     #[strum(serialize = "did:iota:rms")]
     IotaRms,
+}
+
+impl From<SupportedDidMethod> for SubjectSyntaxType {
+    fn from(val: SupportedDidMethod) -> Self {
+        SubjectSyntaxType::try_from(val.to_string().as_str()).expect("convertion into `SubjectSyntaxType` failed")
+    }
 }
 
 /// Generic options that add an "enabled" field and a "preferred" field (optional) to a configuration.
@@ -326,4 +370,16 @@ pub fn get_preferred_signing_algorithm() -> jsonwebtoken::Algorithm {
         .first()
         .cloned()
         .expect("Please set a signing algorithm as `preferred` in the configuration")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_supported_did_methods_can_be_converted_into_subject_syntax_type() {
+        for variant in SupportedDidMethod::VARIANTS {
+            let _subject_syntax_type: SubjectSyntaxType = variant.clone().into();
+        }
+    }
 }

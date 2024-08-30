@@ -16,6 +16,7 @@ identity_credential.workspace = true
 identity_did = { version = "1.3" }
 identity_document = { version = "1.3" }
 identity_storage = { version = "1.3" }
+identity_verification.workspace = true
 is_empty = "0.2"
 jsonwebtoken.workspace = true
 # TODO: replace all identity_* with identity_iota?
@@ -23,7 +24,7 @@ identity_iota.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true
-once_cell = { version = "1.19" }
+once_cell.workspace = true
 rand = "0.8"
 serde.workspace = true
 serde_json.workspace = true

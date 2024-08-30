@@ -1,9 +1,10 @@
 #![allow(clippy::await_holding_lock)]
 
-use agent_api_rest::app;
+use agent_api_rest::{app, ApplicationState};
 use agent_event_publisher_http::EventPublisherHttp;
+use agent_holder::services::HolderServices;
 use agent_issuance::{services::IssuanceServices, startup_commands::startup_commands, state::initialize};
-use agent_secret_manager::{secret_manager, subject::Subject};
+use agent_secret_manager::{secret_manager, service::Service as _, subject::Subject};
 use agent_shared::{
     config::{config, LogFormat, SupportedDidMethod, ToggleOptions},
     domain_linkage::create_did_configuration_resource,
@@ -31,26 +32,30 @@ async fn main() -> io::Result<()> {
     }
 
     let subject = Arc::new(Subject {
-        secret_manager: secret_manager().await,
+        secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
     });
 
     let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
+    let holder_services = Arc::new(HolderServices::new(subject.clone()));
     let verification_services = Arc::new(VerificationServices::new(subject.clone()));
 
-    // TODO: Currently `issuance_event_publishers` and `verification_event_publishers` are exactly the same, which is
-    // weird. We need some sort of layer between `agent_application` and `agent_store` that will provide a cleaner way
-    // of initializing the event publishers and sending them over to `agent_store`.
+    // TODO: Currently `issuance_event_publishers`, `holder_event_publishers` and `verification_event_publishers` are
+    // exactly the same, which is weird. We need some sort of layer between `agent_application` and `agent_store` that
+    // will provide a cleaner way of initializing the event publishers and sending them over to `agent_store`.
     let issuance_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
+    let holder_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
     let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
-    let (issuance_state, verification_state) = match agent_shared::config::config().event_store.type_ {
+    let (issuance_state, holder_state, verification_state) = match agent_shared::config::config().event_store.type_ {
         agent_shared::config::EventStoreType::Postgres => (
             postgres::issuance_state(issuance_services, issuance_event_publishers).await,
+            postgres::holder_state(holder_services, holder_event_publishers).await,
             postgres::verification_state(verification_services, verification_event_publishers).await,
         ),
         agent_shared::config::EventStoreType::InMemory => (
             in_memory::issuance_state(issuance_services, issuance_event_publishers).await,
+            in_memory::holder_state(holder_services, holder_event_publishers).await,
             in_memory::verification_state(verification_services, verification_event_publishers).await,
         ),
     };
@@ -65,7 +70,11 @@ async fn main() -> io::Result<()> {
 
     initialize(&issuance_state, startup_commands(url.clone())).await;
 
-    let mut app = app((issuance_state, verification_state));
+    let mut app = app(ApplicationState {
+        issuance_state: Some(issuance_state),
+        holder_state: Some(holder_state),
+        verification_state: Some(verification_state),
+    });
 
     // CORS
     if config().cors_enabled.unwrap_or(false) {
@@ -81,9 +90,10 @@ async fn main() -> io::Result<()> {
         .enabled;
 
     let did_document = if enable_did_web {
+        let mut secret_manager = subject.secret_manager.lock().await;
+
         Some(
-            subject
-                .secret_manager
+            secret_manager
                 .produce_document(
                     did_manager::DidMethod::Web,
                     Some(did_manager::MethodSpecificParameters::Web { origin: url.origin() }),
@@ -99,13 +109,15 @@ async fn main() -> io::Result<()> {
     };
     // Domain Linkage
     let did_configuration_resource = if config().domain_linkage_enabled {
+        let secret_manager = subject.secret_manager.lock().await;
+
         Some(
             create_did_configuration_resource(
                 url.clone(),
                 did_document
                     .clone()
                     .expect("No DID document found to create a DID Configuration Resource for"),
-                &subject.secret_manager,
+                &secret_manager,
             )
             .await
             .expect("Failed to create DID Configuration Resource"),

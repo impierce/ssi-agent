@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+agent_holder = { path = "../agent_holder" }
 agent_issuance = { path = "../agent_issuance" }
 agent_shared = { path = "../agent_shared" }
 agent_verification = { path = "../agent_verification" }
@@ -24,6 +25,7 @@ tokio.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+url.workspace = true
 uuid.workspace = true
 # utoipa = { version = "=5.0.0-alpha.1", features = ["axum_extras", "yaml"] }
 # utoipa-scalar = { version = "=0.2.0-alpha.0", features = ["axum"] }
@@ -42,11 +44,10 @@ utoipa-swagger-ui = { git = "https://github.com/juhaku/utoipa.git", rev = "f2a71
 ] }
 
 [dev-dependencies]
-agent_event_publisher_http = { path = "../agent_event_publisher_http", features = [
-    "test_utils",
-] }
+agent_event_publisher_http = { path = "../agent_event_publisher_http", features = ["test_utils"] }
+agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
-agent_secret_manager = { path = "../agent_secret_manager" }
+agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification", features = [
@@ -56,14 +57,13 @@ agent_verification = { path = "../agent_verification", features = [
 futures.workspace = true
 jsonwebtoken.workspace = true
 lazy_static.workspace = true
-mime = { version = "0.3" }
+mime.workspace = true
 oid4vc-core.workspace = true
 oid4vc-manager.workspace = true
 rstest.workspace = true
 serde_urlencoded = "0.7"
 serde_yaml.workspace = true
 serial_test = "3.0"
-tower = { version = "0.4" }
+tower.workspace = true
 tracing-test.workspace = true
-url.workspace = true
 wiremock.workspace = true

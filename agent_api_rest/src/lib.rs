@@ -1,26 +1,12 @@
-mod issuance;
-mod verification;
+pub mod holder;
+pub mod issuance;
+pub mod verification;
 
+use agent_holder::state::HolderState;
 use agent_issuance::state::IssuanceState;
 use agent_shared::{config::config, ConfigError};
 use agent_verification::state::VerificationState;
-use axum::{
-    body::Bytes,
-    extract::MatchedPath,
-    http::Request,
-    response::Response,
-    routing::{get, post},
-    Router,
-};
-use issuance::credential_issuer::{
-    credential::credential,
-    token::token,
-    well_known::{
-        oauth_authorization_server::oauth_authorization_server, openid_credential_issuer::openid_credential_issuer,
-    },
-};
-use issuance::credentials::{credentials, get_credentials};
-use issuance::offers::offers;
+use axum::{body::Bytes, extract::MatchedPath, http::Request, response::Response, Router};
 use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
 use utoipa::OpenApi;
@@ -35,50 +21,30 @@ use crate::issuance::openapi::{IssuanceApi, VerificationApi, WellKnownApi};
 
 pub const API_VERSION: &str = "/v0";
 
-pub type ApplicationState = (IssuanceState, VerificationState);
+#[derive(Default)]
+pub struct ApplicationState {
+    pub issuance_state: Option<IssuanceState>,
+    pub holder_state: Option<HolderState>,
+    pub verification_state: Option<VerificationState>,
+}
 
-pub fn app(state: ApplicationState) -> Router {
-    let base_path = get_base_path();
-
-    let path = |suffix: &str| -> String {
-        if let Ok(base_path) = &base_path {
-            format!("/{}{}", base_path, suffix)
-        } else {
-            suffix.to_string()
-        }
-    };
-
+pub fn app(
+    ApplicationState {
+        issuance_state,
+        holder_state,
+        verification_state,
+    }: ApplicationState,
+) -> Router {
     Router::new()
         .merge(Scalar::with_url("/scalar", ApiDoc::openapi()))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .nest(
-            &path(API_VERSION),
+            &get_base_path().unwrap_or_default(),
             Router::new()
-                // Agent Issuance Preparations
-                .route("/credentials", post(credentials))
-                .route("/credentials/:credential_id", get(get_credentials))
-                .route("/offers", post(offers))
-                // Agent Verification Preparations
-                .route("/authorization_requests", post(authorization_requests))
-                .route(
-                    "/authorization_requests/:authorization_request_id",
-                    get(get_authorization_requests),
-                ),
+                .merge(issuance_state.map(issuance::router).unwrap_or_default())
+                .merge(holder_state.map(holder::router).unwrap_or_default())
+                .merge(verification_state.map(verification::router).unwrap_or_default()),
         )
-        // OpenID4VCI Pre-Authorized Code Flow
-        .route(
-            &path("/.well-known/oauth-authorization-server"),
-            get(oauth_authorization_server),
-        )
-        .route(
-            &path("/.well-known/openid-credential-issuer"),
-            get(openid_credential_issuer),
-        )
-        .route(&path("/auth/token"), post(token))
-        .route(&path("/openid4vci/credential"), post(credential))
-        // SIOPv2
-        .route(&path("/request/:request_id"), get(request))
-        .route(&path("/redirect"), post(redirect))
         // Trace layer
         .layer(
             TraceLayer::new_for_http()
@@ -102,7 +68,6 @@ pub fn app(state: ApplicationState) -> Router {
                     tracing::info!("Response Body: {}", std::str::from_utf8(chunk).unwrap());
                 }),
         )
-        .with_state(state)
 }
 
 fn get_base_path() -> Result<String, ConfigError> {
@@ -125,7 +90,7 @@ fn get_base_path() -> Result<String, ConfigError> {
 
             tracing::info!("Base path: {:?}", base_path);
 
-            base_path
+            format!("/{}", base_path)
         })
 }
 
@@ -154,11 +119,9 @@ pub struct ApiDoc;
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
-    use agent_issuance::services::test_utils::test_issuance_services;
+    use super::*;
+    use agent_secret_manager::service::Service;
     use agent_store::in_memory;
-    use agent_verification::services::test_utils::test_verification_services;
     use axum::routing::post;
     use oid4vci::credential_issuer::{
         credential_configurations_supported::CredentialConfigurationsSupportedObject,
@@ -168,6 +131,7 @@ mod tests {
     use utoipa::OpenApi;
 
     use crate::{app, ApiDoc};
+    use std::collections::HashMap;
 
     pub const CREDENTIAL_CONFIGURATION_ID: &str = "badge";
     pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
@@ -221,10 +185,12 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn test_base_path_routes() {
-        let issuance_state = in_memory::issuance_state(test_issuance_services(), Default::default()).await;
-        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         std::env::set_var("UNICORE__BASE_PATH", "unicore");
-        let router = app((issuance_state, verification_state));
+        let router = app(ApplicationState {
+            issuance_state: Some(issuance_state),
+            ..Default::default()
+        });
 
         let _ = router.route("/auth/token", post(handler));
     }

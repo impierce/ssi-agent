@@ -1,3 +1,5 @@
+pub mod send;
+
 use agent_issuance::{
     offer::{command::OfferCommand, queries::OfferView},
     server_config::queries::ServerConfigView,
@@ -41,6 +43,15 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
         return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
     };
 
+    // Get the `CredentialIssuerMetadata` from the `ServerConfigView`.
+    let credential_issuer_metadata = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
+        Ok(Some(ServerConfigView {
+            credential_issuer_metadata: Some(credential_issuer_metadata),
+            ..
+        })) => Box::new(credential_issuer_metadata),
+        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
     // Create an offer if it does not exist yet.
     match query_handler(&offer_id, &state.query.offer).await {
         Ok(Some(_)) => {}
@@ -50,6 +61,7 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
                 &state.command.offer,
                 OfferCommand::CreateCredentialOffer {
                     offer_id: offer_id.clone(),
+                    credential_issuer_metadata,
                 },
             )
             .await
@@ -60,18 +72,8 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
         }
     };
 
-    // Get the `CredentialIssuerMetadata` from the `ServerConfigView`.
-    let credential_issuer_metadata = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
-        Ok(Some(ServerConfigView {
-            credential_issuer_metadata: Some(credential_issuer_metadata),
-            ..
-        })) => credential_issuer_metadata,
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
-
     let command = OfferCommand::CreateFormUrlEncodedCredentialOffer {
         offer_id: offer_id.clone(),
-        credential_issuer_metadata,
     };
 
     if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
@@ -94,21 +96,15 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
 
 #[cfg(test)]
 pub mod tests {
-    use std::str::FromStr;
-
-    use crate::{
-        app,
-        issuance::credentials::tests::credentials,
-        tests::{BASE_URL, OFFER_ID},
-    };
-
     use super::*;
     use crate::API_VERSION;
-    use agent_issuance::{
-        services::test_utils::test_issuance_services, startup_commands::startup_commands, state::initialize,
+    use crate::{
+        issuance::{credentials::tests::credentials, router},
+        tests::{BASE_URL, OFFER_ID},
     };
+    use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use agent_secret_manager::service::Service;
     use agent_store::in_memory;
-    use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -116,7 +112,8 @@ pub mod tests {
     };
     use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants, PreAuthorizedCode};
     use serde_json::json;
-    use tower::Service;
+    use std::str::FromStr;
+    use tower::Service as _;
 
     pub async fn offers(app: &mut Router) -> String {
         let response = app
@@ -169,13 +166,10 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_offers_endpoint() {
-        let issuance_state = in_memory::issuance_state(test_issuance_services(), Default::default()).await;
-
-        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
-
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
-        let mut app = app((issuance_state, verification_state));
+        let mut app = router(issuance_state);
 
         credentials(&mut app).await;
         let _pre_authorized_code = offers(&mut app).await;
