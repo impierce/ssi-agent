@@ -1,11 +1,15 @@
 use cqrs_es::DomainEvent;
-use oid4vci::{credential_response::CredentialResponse, token_response::TokenResponse};
+use oid4vci::{
+    credential_offer::CredentialOffer, credential_response::CredentialResponse, token_response::TokenResponse,
+};
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum OfferEvent {
     CredentialOfferCreated {
         offer_id: String,
+        credential_offer: CredentialOffer,
         pre_authorized_code: String,
         access_token: String,
     },
@@ -16,6 +20,10 @@ pub enum OfferEvent {
     FormUrlEncodedCredentialOfferCreated {
         offer_id: String,
         form_url_encoded_credential_offer: String,
+    },
+    CredentialOfferSent {
+        offer_id: String,
+        target_url: Url,
     },
     TokenResponseCreated {
         offer_id: String,
@@ -39,6 +47,7 @@ impl DomainEvent for OfferEvent {
             CredentialOfferCreated { .. } => "CredentialOfferCreated",
             CredentialsAdded { .. } => "CredentialsAdded",
             FormUrlEncodedCredentialOfferCreated { .. } => "FormUrlEncodedCredentialOfferCreated",
+            CredentialOfferSent { .. } => "CredentialOfferSent",
             TokenResponseCreated { .. } => "TokenResponseCreated",
             CredentialRequestVerified { .. } => "CredentialRequestVerified",
             CredentialResponseCreated { .. } => "CredentialResponseCreated",

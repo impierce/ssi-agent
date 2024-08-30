@@ -33,16 +33,15 @@ pub(crate) async fn request(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::{app, verification::authorization_requests::tests::authorization_requests};
-    use agent_issuance::services::test_utils::test_issuance_services;
+    use crate::verification::{authorization_requests::tests::authorization_requests, router};
+    use agent_secret_manager::service::Service;
     use agent_store::in_memory;
-    use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
         http::{self, Request},
         Router,
     };
-    use tower::Service;
+    use tower::Service as _;
 
     pub async fn request(app: &mut Router, state: String) {
         let response = app
@@ -70,9 +69,9 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_request_endpoint() {
-        let issuance_state = in_memory::issuance_state(test_issuance_services(), Default::default()).await;
-        let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
-        let mut app = app((issuance_state, verification_state));
+        let verification_state = in_memory::verification_state(Service::default(), Default::default()).await;
+
+        let mut app = router(verification_state);
 
         let form_url_encoded_authorization_request = authorization_requests(&mut app, false).await;
 

@@ -1,33 +1,17 @@
 pub mod access_token;
 pub mod pre_authorized_code;
 
-use async_trait::async_trait;
-use cqrs_es::{
-    persist::{PersistenceError, ViewContext, ViewRepository},
-    EventEnvelope, Query, View,
-};
-use oid4vci::{credential_response::CredentialResponse, token_response::TokenResponse};
-use serde::{Deserialize, Serialize};
-
-use crate::offer::aggregate::Offer;
-
 use super::event::OfferEvent;
-
-/// A custom query trait for the Offer aggregate. This trait is used to define custom queries for the Offer aggregate
-/// that do not make use of `GenericQuery`.
-#[async_trait]
-pub trait CustomQuery<R, V>: Query<Offer>
-where
-    R: ViewRepository<V, Offer>,
-    V: View<Offer>,
-{
-    async fn load_mut(&self, view_id: String) -> Result<(V, ViewContext), PersistenceError>;
-
-    async fn apply_events(&self, view_id: &str, events: &[EventEnvelope<Offer>]) -> Result<(), PersistenceError>;
-}
+use crate::offer::aggregate::Offer;
+use cqrs_es::{persist::ViewRepository, EventEnvelope, View};
+use oid4vci::{
+    credential_offer::CredentialOffer, credential_response::CredentialResponse, token_response::TokenResponse,
+};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct OfferView {
+    pub credential_offer: Option<CredentialOffer>,
     pub subject_id: Option<String>,
     pub credential_ids: Vec<String>,
     pub pre_authorized_code: String,
@@ -62,6 +46,7 @@ impl View<Offer> for OfferView {
             } => self
                 .form_url_encoded_credential_offer
                 .clone_from(form_url_encoded_credential_offer),
+            CredentialOfferSent { .. } => {}
             CredentialRequestVerified { subject_id, .. } => {
                 self.subject_id.replace(subject_id.clone());
             }

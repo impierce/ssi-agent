@@ -70,6 +70,13 @@
 								"type": "text/javascript",
 								"packages": {}
 							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [],
+								"type": "text/javascript"
+							}
 						}
 					],
 					"request": {
@@ -136,6 +143,13 @@
 								"type": "text/javascript",
 								"packages": {}
 							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [],
+								"type": "text/javascript"
+							}
 						}
 					],
 					"request": {
@@ -158,6 +172,34 @@
 							"path": [
 								"v0",
 								"offers"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "offers_send",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"offerId\": \"{{OFFER_ID}}\",\n    \"targetUrl\": \"{{HOST}}/openid4vci/offers\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/offers/send",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"offers",
+								"send"
 							]
 						}
 					},
@@ -579,6 +621,118 @@
 					"response": []
 				}
 			]
+		},
+		{
+			"name": "Holder",
+			"item": [
+				{
+					"name": "offers",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (jsonData && typeof jsonData === 'object') {",
+									"    const receivedOfferId = Object.keys(jsonData)[0];",
+									"",
+									"    if (receivedOfferId) {",
+									"        pm.collectionVariables.set(\"RECEIVED_OFFER_ID\", receivedOfferId);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/holder/offers",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"holder",
+								"offers"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "credentials",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/holder/credentials",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"holder",
+								"credentials"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "offers_accept",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/holder/offers/{{RECEIVED_OFFER_ID}}/accept",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"holder",
+								"offers",
+								"{{RECEIVED_OFFER_ID}}",
+								"accept"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "offers_reject",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/holder/offers/{{RECEIVED_OFFER_ID}}/reject",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"holder",
+								"offers",
+								"{{RECEIVED_OFFER_ID}}",
+								"reject"
+							]
+						}
+					},
+					"response": []
+				}
+			]
 		}
 	],
 	"event": [
@@ -639,6 +793,11 @@
 		},
 		{
 			"key": "REQUEST_URI",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "RECEIVED_OFFER_ID",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		}

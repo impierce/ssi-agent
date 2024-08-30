@@ -24,7 +24,7 @@ identity_iota.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true
-once_cell = { version = "1.19" }
+once_cell.workspace = true
 rand = "0.8"
 serde.workspace = true
 serde_json.workspace = true
