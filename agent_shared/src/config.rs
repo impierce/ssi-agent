@@ -1,4 +1,5 @@
 use config::ConfigError;
+use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
 use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::Lazy;
@@ -8,6 +9,7 @@ use std::{
     collections::HashMap,
     sync::{RwLock, RwLockReadGuard},
 };
+use strum::VariantArray;
 use tracing::{debug, info};
 use url::Url;
 
@@ -179,7 +181,18 @@ pub enum AuthorizationRequestEvent {
 /// assert_eq!(supported_did_method.to_string(), "did:jwk");
 /// ```
 #[derive(
-    Debug, Deserialize, Clone, Eq, PartialEq, Hash, strum::EnumString, strum::Display, SerializeDisplay, Ord, PartialOrd,
+    Debug,
+    Deserialize,
+    Clone,
+    Eq,
+    PartialEq,
+    Hash,
+    strum::EnumString,
+    strum::Display,
+    SerializeDisplay,
+    Ord,
+    PartialOrd,
+    VariantArray,
 )]
 pub enum SupportedDidMethod {
     #[serde(alias = "did_jwk", rename = "did_jwk")]
@@ -200,6 +213,12 @@ pub enum SupportedDidMethod {
     #[serde(alias = "did_iota_rms", rename = "did_iota_rms")]
     #[strum(serialize = "did:iota:rms")]
     IotaRms,
+}
+
+impl Into<SubjectSyntaxType> for SupportedDidMethod {
+    fn into(self) -> SubjectSyntaxType {
+        SubjectSyntaxType::try_from(self.to_string().as_str()).expect("convertion into `SubjectSyntaxType` failed")
+    }
 }
 
 /// Generic options that add an "enabled" field and a "preferred" field (optional) to a configuration.
@@ -340,4 +359,16 @@ pub fn get_preferred_signing_algorithm() -> jsonwebtoken::Algorithm {
         .first()
         .cloned()
         .expect("Please set a signing algorithm as `preferred` in the configuration")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_supported_did_methods_can_be_converted_into_subject_syntax_type() {
+        for variant in SupportedDidMethod::VARIANTS {
+            let _subject_syntax_type: SubjectSyntaxType = variant.clone().into();
+        }
+    }
 }

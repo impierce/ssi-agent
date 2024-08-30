@@ -3,7 +3,7 @@ use agent_shared::config::{config, get_all_enabled_did_methods, get_preferred_di
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{Subject, SubjectSyntaxType};
 use oid4vci::Wallet;
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
 
 /// Holder services. This struct is used to sign credentials and validate credential requests.
 pub struct HolderServices {
@@ -32,17 +32,16 @@ impl Service for HolderServices {
             }
         });
 
-        let supported_subject_syntax_types = enabled_did_methods
-            .into_iter()
-            .map(|method| SubjectSyntaxType::from_str(&method.to_string()).unwrap())
-            .collect();
+        let supported_subject_syntax_types: Vec<SubjectSyntaxType> =
+            enabled_did_methods.into_iter().map(Into::into).collect();
 
         let wallet = Wallet::new(
             holder.clone(),
             supported_subject_syntax_types,
             signing_algorithms_supported,
         )
-        .unwrap();
+        // TODO: make `Wallet::new` return `Wallet` instead of `Result<Self, _>`
+        .expect("Failed to create wallet");
 
         Self { holder, wallet }
     }
