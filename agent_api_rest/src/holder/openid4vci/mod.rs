@@ -16,6 +16,17 @@ pub struct Oid4vciOfferEndpointRequest {
     pub credential_offer: CredentialOffer,
 }
 
+/// Get an offer
+///
+/// Retrieve offer if it exists.
+#[utoipa::path(
+    get,
+    path = "/openid4vci/offers",
+    tag = "OpenID4VCI",
+    responses(
+        (status = 200, description = "Successfully retrieved offer."),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(State(state): State<HolderState>, Json(payload): Json<serde_json::Value>) -> Response {
     info!("Request Body: {}", payload);

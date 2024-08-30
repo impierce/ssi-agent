@@ -1,7 +1,6 @@
 pub mod credential_issuer;
 pub mod credentials;
 pub mod offers;
-pub mod openapi;
 
 use agent_issuance::state::IssuanceState;
 use axum::routing::get;

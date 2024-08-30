@@ -38,6 +38,38 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CredentialIssuerMetadata'
+  /openid4vci/credential:
+    post:
+      tags:
+      - OpenID4VCI
+      summary: Fetch credentials
+      description: A wallet uses this endpoint as part of an issuance flow to fetch the credentials from.
+      operationId: credential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialRequest'
+        required: true
+      responses:
+        '200':
+          description: List all credentials successfully
+  /openid4vci/offers:
+    get:
+      tags:
+      - OpenID4VCI
+      summary: Get an offer
+      description: Retrieve offer if it exists.
+      operationId: offers
+      requestBody:
+        description: ''
+        content:
+          application/json:
+            schema: {}
+        required: true
+      responses:
+        '200':
+          description: Successfully retrieved offer.
   /v0/authorization_requests:
     post:
       tags:
@@ -109,6 +141,58 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CredentialView'
+  /v0/holder/credentials:
+    get:
+      tags:
+      - Holder
+      summary: Get all credentials
+      description: Retrieve all credentials that UniCore currently holds.
+      operationId: credentials
+      responses:
+        '200':
+          description: Successfully retrieved all credentials.
+  /v0/holder/offers:
+    get:
+      tags:
+      - Holder
+      summary: Get all offers
+      description: Retrieve all pending credential offers.
+      operationId: offers
+      responses:
+        '200':
+          description: Successfully retrieved all pending offers.
+  /v0/holder/offers/{offer_id}/accept:
+    post:
+      tags:
+      - Holder
+      summary: Accept an offer
+      description: Accepts a pending credential offer.
+      operationId: accept
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successfully accepted a pending offer.
+  /v0/holder/offers/{offer_id}/reject:
+    post:
+      tags:
+      - Holder
+      summary: Reject an offer
+      description: Reject a pending credential offer.
+      operationId: reject
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successfully rejected a pending offer.
   /v0/offers:
     post:
       tags:
@@ -142,7 +226,7 @@ components:
         offerId:
           type: string
 tags:
-- name: openid4vci
+- name: OpenID4VCI
   description: All operations revolved around the OpenID4VCI standard.
   externalDocs:
     url: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html

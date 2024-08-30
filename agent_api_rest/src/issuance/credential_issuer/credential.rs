@@ -32,11 +32,11 @@ const POLLING_INTERVAL_MS: u64 = 100;
 /// A wallet uses this endpoint as part of an issuance flow to fetch the credentials from.
 #[utoipa::path(
     post,
-    path = "/authorization_requests",
+    path = "/openid4vci/credential",
     // TODO: doesn't work since (external) `CredentialRequest` doesn't implement `ToSchema`?
     // See: https://github.com/juhaku/utoipa?tab=readme-ov-file#how-to-implement-toschema-for-external-type
     request_body = CredentialRequest,
-    tag = "openid4vci",
+    tag = "OpenID4VCI",
     responses(
         (status = 200, description = "List all credentials successfully")
     )
