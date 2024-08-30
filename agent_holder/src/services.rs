@@ -1,3 +1,4 @@
+use agent_secret_manager::service::Service;
 use agent_shared::config::{config, get_all_enabled_did_methods, get_preferred_did_method};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{Subject, SubjectSyntaxType};
@@ -10,8 +11,8 @@ pub struct HolderServices {
     pub wallet: Wallet,
 }
 
-impl HolderServices {
-    pub fn new(holder: Arc<dyn Subject>) -> Self {
+impl Service for HolderServices {
+    fn new(holder: Arc<dyn Subject>) -> Self {
         let signing_algorithms_supported: Vec<Algorithm> = config()
             .signing_algorithms_supported
             .iter()
@@ -44,21 +45,5 @@ impl HolderServices {
         .unwrap();
 
         Self { holder, wallet }
-    }
-}
-
-#[cfg(feature = "test_utils")]
-pub mod test_utils {
-    use agent_secret_manager::secret_manager;
-    use agent_secret_manager::subject::Subject;
-
-    use super::*;
-
-    pub fn test_holder_services() -> Arc<HolderServices> {
-        Arc::new(HolderServices::new(Arc::new(futures::executor::block_on(async {
-            Subject {
-                secret_manager: secret_manager().await,
-            }
-        }))))
     }
 }

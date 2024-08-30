@@ -14,7 +14,7 @@ use url::Url;
 pub enum OfferCommand {
     CreateCredentialOffer {
         offer_id: String,
-        credential_issuer_metadata: CredentialIssuerMetadata,
+        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
     },
     AddCredentials {
         offer_id: String,
@@ -36,7 +36,7 @@ pub enum OfferCommand {
     },
     VerifyCredentialRequest {
         offer_id: String,
-        credential_issuer_metadata: CredentialIssuerMetadata,
+        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_request: CredentialRequest,
     },

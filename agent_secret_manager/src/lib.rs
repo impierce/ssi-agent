@@ -2,6 +2,7 @@ use agent_shared::config::{config, SecretManagerConfig};
 use did_manager::SecretManager;
 use log::info;
 
+pub mod service;
 pub mod subject;
 
 // TODO: find better solution for this

@@ -9,8 +9,7 @@ use cqrs_es::{
 };
 use oid4vci::{
     credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject,
-    credential_offer::CredentialOfferParameters, credential_response::CredentialResponse,
-    token_response::TokenResponse,
+    credential_offer::CredentialOfferParameters, token_response::TokenResponse,
 };
 use serde::{Deserialize, Serialize};
 
@@ -50,7 +49,7 @@ impl View<Offer> for OfferView {
                 credential_configurations,
                 ..
             } => {
-                self.credential_offer.replace(credential_offer.clone());
+                self.credential_offer.replace(*credential_offer.clone());
                 self.credential_configurations
                     .replace(credential_configurations.clone());
             }

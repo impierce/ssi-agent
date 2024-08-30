@@ -61,10 +61,9 @@ pub mod tests {
         authorization_requests::tests::authorization_requests, relying_party::request::tests::request, router,
     };
     use agent_event_publisher_http::EventPublisherHttp;
-    use agent_secret_manager::{secret_manager, subject::Subject};
+    use agent_secret_manager::{secret_manager, service::Service, subject::Subject};
     use agent_shared::config::{set_config, Events};
     use agent_store::{in_memory, EventPublisher};
-    use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -79,7 +78,7 @@ pub mod tests {
     };
     use oid4vc_manager::ProviderManager;
     use siopv2::{authorization_request::ClientMetadataParameters, siopv2::SIOPv2};
-    use tower::Service;
+    use tower::Service as _;
     use wiremock::{
         matchers::{method, path},
         Mock, MockServer, ResponseTemplate,
@@ -160,7 +159,7 @@ pub mod tests {
 
         let event_publishers = vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>];
 
-        let verification_state = in_memory::verification_state(test_verification_services(), event_publishers).await;
+        let verification_state = in_memory::verification_state(Service::default(), event_publishers).await;
 
         let mut app = router(verification_state);
 

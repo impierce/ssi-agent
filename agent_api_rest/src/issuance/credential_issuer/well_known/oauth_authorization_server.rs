@@ -23,12 +23,10 @@ pub(crate) async fn oauth_authorization_server(State(state): State<IssuanceState
 
 #[cfg(test)]
 mod tests {
-    use crate::{issuance::router, tests::BASE_URL};
-
     use super::*;
-    use agent_issuance::{
-        services::test_utils::test_issuance_services, startup_commands::startup_commands, state::initialize,
-    };
+    use crate::{issuance::router, tests::BASE_URL};
+    use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use agent_secret_manager::service::Service;
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -36,7 +34,7 @@ mod tests {
         Router,
     };
     use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
-    use tower::Service;
+    use tower::Service as _;
 
     pub async fn oauth_authorization_server(app: &mut Router) -> AuthorizationServerMetadata {
         let response = app
@@ -71,7 +69,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
-        let issuance_state = in_memory::issuance_state(test_issuance_services(), Default::default()).await;
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
         let mut app = router(issuance_state);

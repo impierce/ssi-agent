@@ -28,22 +28,30 @@ tracing.workspace = true
 url.workspace = true
 uuid.workspace = true
 
+# `test_utils` dependencies
+rstest = { workspace = true, optional = true }
+
 [dev-dependencies]
 agent_api_rest = { path = "../agent_api_rest" }
 agent_holder = { path = ".", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
+agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
-agent_verification = { path = "../agent_verification", features = ["test_utils"] }
+# agent_verification = { path = "../agent_verification", features = ["test_utils"] }
 
-# axum-test = "15.6"
+axum.workspace = true
 did_manager.workspace = true
 lazy_static.workspace = true
+mime.workspace = true
+names = { version = "0.14", default-features = false }
+reqwest.workspace = true
+rand = "0.8"
 serial_test = "3.0"
 tokio.workspace = true
+tower.workspace = true
 tracing-test.workspace = true
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
-rstest.workspace = true
 
 [features]
-test_utils = []
+test_utils = ["dep:rstest"]

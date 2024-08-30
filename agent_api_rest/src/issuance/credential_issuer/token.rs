@@ -60,15 +60,13 @@ pub(crate) async fn token(
 
 #[cfg(test)]
 pub mod tests {
+    use super::*;
     use crate::{
         issuance::{credentials::tests::credentials, offers::tests::offers, router},
         tests::BASE_URL,
     };
-
-    use super::*;
-    use agent_issuance::{
-        services::test_utils::test_issuance_services, startup_commands::startup_commands, state::initialize,
-    };
+    use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use agent_secret_manager::service::Service;
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -76,7 +74,7 @@ pub mod tests {
         Router,
     };
     use oid4vci::token_response::TokenResponse;
-    use tower::Service;
+    use tower::Service as _;
 
     pub async fn token(app: &mut Router, pre_authorized_code: String) -> String {
         let response = app
@@ -110,7 +108,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_token_endpoint() {
-        let issuance_state = in_memory::issuance_state(test_issuance_services(), Default::default()).await;
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
         let mut app = router(issuance_state);

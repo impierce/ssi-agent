@@ -13,7 +13,7 @@ use super::aggregate::Status;
 pub enum OfferEvent {
     CredentialOfferReceived {
         offer_id: String,
-        credential_offer: CredentialOfferParameters,
+        credential_offer: Box<CredentialOfferParameters>,
         credential_configurations: HashMap<String, CredentialConfigurationsSupportedObject>,
     },
     CredentialOfferAccepted {

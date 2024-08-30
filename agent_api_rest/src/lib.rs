@@ -1,6 +1,6 @@
-mod holder;
-mod issuance;
-mod verification;
+pub mod holder;
+pub mod issuance;
+pub mod verification;
 
 use agent_holder::state::HolderState;
 use agent_issuance::state::IssuanceState;
@@ -95,10 +95,8 @@ fn get_base_path() -> Result<String, ConfigError> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use super::*;
-    use agent_issuance::services::test_utils::test_issuance_services;
+    use agent_secret_manager::service::Service;
     use agent_store::in_memory;
     use axum::routing::post;
     use oid4vci::credential_issuer::{
@@ -106,6 +104,7 @@ mod tests {
         credential_issuer_metadata::CredentialIssuerMetadata,
     };
     use serde_json::json;
+    use std::collections::HashMap;
 
     pub const CREDENTIAL_CONFIGURATION_ID: &str = "badge";
     pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
@@ -152,7 +151,7 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn test_base_path_routes() {
-        let issuance_state = in_memory::issuance_state(test_issuance_services(), Default::default()).await;
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         std::env::set_var("UNICORE__BASE_PATH", "unicore");
         let router = app(ApplicationState {
             issuance_state: Some(issuance_state),

@@ -87,7 +87,7 @@ impl View<Offer> for AllOffersView {
             // Get the entry for the aggregate_id
             .entry(event.aggregate_id.clone())
             // or insert a new one if it doesn't exist
-            .or_insert_with(Default::default)
+            .or_default()
             // update the view with the event
             .update(event);
     }

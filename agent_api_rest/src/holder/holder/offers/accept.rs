@@ -28,17 +28,6 @@ pub(crate) async fn accept(State(state): State<HolderState>, Path(offer_id): Pat
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    let command = OfferCommand::SendTokenRequest {
-        offer_id: offer_id.clone(),
-    };
-
-    // Add the Credential Offer to the state.
-    if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
-        // TODO: add better Error responses. This needs to be done properly in all endpoints once
-        // https://github.com/impierce/openid4vc/issues/78 is fixed.
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-
     let command = OfferCommand::SendCredentialRequest {
         offer_id: offer_id.clone(),
     };

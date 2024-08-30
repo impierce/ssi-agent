@@ -48,7 +48,10 @@ pub(crate) async fn credential(
             Ok(Some(ServerConfigView {
                 credential_issuer_metadata: Some(credential_issuer_metadata),
                 authorization_server_metadata,
-            })) => (credential_issuer_metadata, Box::new(authorization_server_metadata)),
+            })) => (
+                Box::new(credential_issuer_metadata),
+                Box::new(authorization_server_metadata),
+            ),
             _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         };
 
@@ -141,21 +144,17 @@ pub(crate) async fn credential(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
+    use super::*;
+    use crate::issuance::credentials::tests::credentials;
+    use crate::issuance::router;
+    use crate::API_VERSION;
     use crate::{
         issuance::{
             credential_issuer::token::tests::token, credentials::CredentialsEndpointRequest, offers::tests::offers,
         },
         tests::{BASE_URL, CREDENTIAL_CONFIGURATION_ID, OFFER_ID},
     };
-
-    use super::*;
-    use crate::issuance::credentials::tests::credentials;
-    use crate::issuance::router;
-    use crate::API_VERSION;
     use agent_event_publisher_http::EventPublisherHttp;
-    use agent_issuance::services::test_utils::test_issuance_services;
     use agent_issuance::{offer::event::OfferEvent, startup_commands::startup_commands, state::initialize};
     use agent_shared::config::{set_config, Events};
     use agent_store::{in_memory, EventPublisher};
@@ -166,6 +165,7 @@ mod tests {
     };
     use rstest::rstest;
     use serde_json::{json, Value};
+    use std::sync::Arc;
     use tokio::sync::Mutex;
     use tower::ServiceExt;
     use wiremock::{
@@ -276,6 +276,8 @@ mod tests {
         #[case] is_self_signed: bool,
         #[case] delay: u64,
     ) {
+        use agent_secret_manager::service::Service;
+
         let (external_server, issuance_event_publishers) = if with_external_server {
             let external_server = MockServer::start().await;
 
@@ -296,7 +298,7 @@ mod tests {
             (None, Default::default())
         };
 
-        let issuance_state = in_memory::issuance_state(test_issuance_services(), issuance_event_publishers).await;
+        let issuance_state = in_memory::issuance_state(Service::default(), issuance_event_publishers).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
         let mut app = router(issuance_state);

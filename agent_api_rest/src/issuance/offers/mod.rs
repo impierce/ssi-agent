@@ -35,7 +35,7 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
         Ok(Some(ServerConfigView {
             credential_issuer_metadata: Some(credential_issuer_metadata),
             ..
-        })) => credential_issuer_metadata,
+        })) => Box::new(credential_issuer_metadata),
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
@@ -83,18 +83,14 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
 
 #[cfg(test)]
 pub mod tests {
-    use std::str::FromStr;
-
+    use super::*;
+    use crate::API_VERSION;
     use crate::{
         issuance::{credentials::tests::credentials, router},
         tests::{BASE_URL, OFFER_ID},
     };
-
-    use super::*;
-    use crate::API_VERSION;
-    use agent_issuance::{
-        services::test_utils::test_issuance_services, startup_commands::startup_commands, state::initialize,
-    };
+    use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use agent_secret_manager::service::Service;
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -103,7 +99,8 @@ pub mod tests {
     };
     use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants, PreAuthorizedCode};
     use serde_json::json;
-    use tower::Service;
+    use std::str::FromStr;
+    use tower::Service as _;
 
     pub async fn offers(app: &mut Router) -> String {
         let response = app
@@ -156,7 +153,7 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_offers_endpoint() {
-        let issuance_state = in_memory::issuance_state(test_issuance_services(), Default::default()).await;
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
         let mut app = router(issuance_state);

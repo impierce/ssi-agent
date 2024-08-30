@@ -4,7 +4,7 @@ use agent_api_rest::{app, ApplicationState};
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_holder::services::HolderServices;
 use agent_issuance::{services::IssuanceServices, startup_commands::startup_commands, state::initialize};
-use agent_secret_manager::{secret_manager, subject::Subject};
+use agent_secret_manager::{secret_manager, service::Service as _, subject::Subject};
 use agent_shared::{
     config::{config, LogFormat, SupportedDidMethod, ToggleOptions},
     domain_linkage::create_did_configuration_resource,

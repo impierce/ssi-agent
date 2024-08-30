@@ -111,7 +111,7 @@ pub(crate) async fn credentials(
         Ok(Some(ServerConfigView {
             credential_issuer_metadata: Some(credential_issuer_metadata),
             ..
-        })) => credential_issuer_metadata,
+        })) => Box::new(credential_issuer_metadata),
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
@@ -166,8 +166,8 @@ pub mod tests {
     use crate::issuance::router;
     use crate::tests::{BASE_URL, CREDENTIAL_CONFIGURATION_ID, OFFER_ID};
     use crate::API_VERSION;
-    use agent_issuance::services::test_utils::test_issuance_services;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use agent_secret_manager::service::Service;
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -176,7 +176,7 @@ pub mod tests {
     };
     use lazy_static::lazy_static;
     use serde_json::json;
-    use tower::Service;
+    use tower::Service as _;
 
     lazy_static! {
         pub static ref CREDENTIAL_SUBJECT: serde_json::Value = json!({
@@ -260,7 +260,7 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_credentials_endpoint() {
-        let issuance_state = in_memory::issuance_state(test_issuance_services(), Default::default()).await;
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
         let mut app = router(issuance_state);

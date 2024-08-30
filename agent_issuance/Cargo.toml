@@ -25,21 +25,29 @@ reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+once_cell = { workspace = true, optional = true }
 tracing.workspace = true
 url.workspace = true
 uuid.workspace = true
 
+# `test_utils` dependencies
+lazy_static = { workspace = true, optional = true }
+rstest = { workspace = true, optional = true }
+
 [dev-dependencies]
+agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_issuance = { path = ".", features = ["test_utils"] }
+agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 
 did_manager.workspace = true
-lazy_static.workspace = true
 serial_test = "3.0"
-tokio.workspace = true
 tracing-test.workspace = true
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
-rstest.workspace = true
 
 [features]
-test_utils = []
+test_utils = [
+    "dep:lazy_static",
+    "dep:rstest",
+    "dep:once_cell"
+]

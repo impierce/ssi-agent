@@ -11,9 +11,6 @@ pub enum OfferCommand {
     AcceptCredentialOffer {
         offer_id: String,
     },
-    SendTokenRequest {
-        offer_id: String,
-    },
     SendCredentialRequest {
         offer_id: String,
     },

@@ -157,9 +157,9 @@ dependencies = [
  "agent_secret_manager",
  "agent_shared",
  "agent_store",
- "agent_verification",
  "async-std",
  "async-trait",
+ "axum 0.7.5",
  "chrono",
  "cqrs-es",
  "derivative",
@@ -170,15 +170,20 @@ dependencies = [
  "jsonschema",
  "jsonwebtoken",
  "lazy_static",
+ "mime",
+ "names",
  "oid4vc-core",
  "oid4vc-manager",
  "oid4vci",
+ "rand 0.8.5",
+ "reqwest 0.12.5",
  "rstest",
  "serde",
  "serde_json",
  "serial_test",
  "thiserror",
  "tokio",
+ "tower",
  "tracing",
  "tracing-test",
  "types-ob-v3",
@@ -190,6 +195,7 @@ dependencies = [
 name = "agent_issuance"
 version = "0.1.0"
 dependencies = [
+ "agent_holder",
  "agent_issuance",
  "agent_secret_manager",
  "agent_shared",
@@ -208,13 +214,13 @@ dependencies = [
  "oid4vc-core",
  "oid4vc-manager",
  "oid4vci",
+ "once_cell",
  "reqwest 0.12.5",
  "rstest",
  "serde",
  "serde_json",
  "serial_test",
  "thiserror",
- "tokio",
  "tracing",
  "tracing-test",
  "types-ob-v3",
@@ -4541,6 +4547,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "names"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7bddcd3bf5144b6392de80e04c347cd7fab2508f6df16a85fc496ecd5cec39bc"
+dependencies = [
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "nix"
 version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5956,9 +5971,9 @@ dependencies = [
 
 [[package]]
 name = "rstest"
-version = "0.19.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d5316d2a1479eeef1ea21e7f9ddc67c191d497abc8fc3ba2467857abbb68330"
+checksum = "7b423f0e62bdd61734b67cd21ff50871dfaeb9cc74f869dcd6af974fbcb19936"
 dependencies = [
  "futures",
  "futures-timer",
@@ -5968,12 +5983,13 @@ dependencies = [
 
 [[package]]
 name = "rstest_macros"
-version = "0.19.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04a9df72cc1f67020b0d63ad9bfe4a323e459ea7eb68e03bd9824db49f9a4c25"
+checksum = "c5e1711e7d14f74b12a58411c542185ef7fb7f2e7f8ee6e2940a883628522b42"
 dependencies = [
  "cfg-if",
  "glob",
+ "proc-macro-crate 3.1.0",
  "proc-macro2",
  "quote",
  "regex",
