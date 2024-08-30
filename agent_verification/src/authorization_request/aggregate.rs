@@ -348,7 +348,7 @@ pub mod tests {
     lazy_static! {
         pub static ref VERIFIER: Subject = futures::executor::block_on(async {
             Subject {
-                secret_manager: secret_manager().await,
+                secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
             }
         });
         pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();

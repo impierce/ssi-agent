@@ -32,7 +32,7 @@ async fn main() -> io::Result<()> {
     }
 
     let subject = Arc::new(Subject {
-        secret_manager: secret_manager().await,
+        secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
     });
 
     let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
@@ -90,9 +90,10 @@ async fn main() -> io::Result<()> {
         .enabled;
 
     let did_document = if enable_did_web {
+        let mut secret_manager = subject.secret_manager.lock().await;
+
         Some(
-            subject
-                .secret_manager
+            secret_manager
                 .produce_document(
                     did_manager::DidMethod::Web,
                     Some(did_manager::MethodSpecificParameters::Web { origin: url.origin() }),
@@ -108,13 +109,15 @@ async fn main() -> io::Result<()> {
     };
     // Domain Linkage
     let did_configuration_resource = if config().domain_linkage_enabled {
+        let secret_manager = subject.secret_manager.lock().await;
+
         Some(
             create_did_configuration_resource(
                 url.clone(),
                 did_document
                     .clone()
                     .expect("No DID document found to create a DID Configuration Resource for"),
-                &subject.secret_manager,
+                &secret_manager,
             )
             .await
             .expect("Failed to create DID Configuration Resource"),

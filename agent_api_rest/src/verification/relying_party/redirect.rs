@@ -108,7 +108,7 @@ pub mod tests {
 
         let provider_manager = ProviderManager::new(
             Arc::new(Subject {
-                secret_manager: secret_manager().await,
+                secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
             }),
             vec!["did:key"],
             vec![Algorithm::EdDSA],

@@ -6,10 +6,11 @@ use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParam
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// Reponsible for signing and verifying data.
 pub struct Subject {
-    pub secret_manager: SecretManager,
+    pub secret_manager: Arc<Mutex<SecretManager>>,
 }
 
 #[async_trait]
@@ -62,9 +63,9 @@ impl Sign for Subject {
     async fn key_id(&self, subject_syntax_type: &str, _algorithm: Algorithm) -> Option<String> {
         let method: DidMethod = serde_json::from_str(&format!("{subject_syntax_type:?}")).ok()?;
 
+        let mut secret_manager = self.secret_manager.lock().await;
         if method == DidMethod::Web {
-            return self
-                .secret_manager
+            return secret_manager
                 .produce_document(
                     method,
                     Some(did_manager::MethodSpecificParameters::Web { origin: origin() }),
@@ -80,7 +81,7 @@ impl Sign for Subject {
 
         // TODO: refactor: https://github.com/impierce/ssi-agent/pull/31#discussion_r1634590990
 
-        self.secret_manager
+        secret_manager
             .produce_document(
                 method,
                 None,
@@ -93,8 +94,9 @@ impl Sign for Subject {
     }
 
     async fn sign(&self, message: &str, _subject_syntax_type: &str, _algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
-        Ok(self
-            .secret_manager
+        let secret_manager = self.secret_manager.lock().await;
+
+        Ok(secret_manager
             .sign(
                 message.as_bytes(),
                 from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
@@ -112,9 +114,10 @@ impl oid4vc_core::Subject for Subject {
     async fn identifier(&self, subject_syntax_type: &str, _algorithm: Algorithm) -> anyhow::Result<String> {
         let method: DidMethod = serde_json::from_str(&format!("{subject_syntax_type:?}"))?;
 
+        let mut secret_manager = self.secret_manager.lock().await;
+
         if method == DidMethod::Web {
-            return Ok(self
-                .secret_manager
+            return Ok(secret_manager
                 .produce_document(
                     method,
                     Some(did_manager::MethodSpecificParameters::Web { origin: origin() }),
@@ -126,8 +129,7 @@ impl oid4vc_core::Subject for Subject {
                 .map(|document| document.id().to_string())?);
         }
 
-        Ok(self
-            .secret_manager
+        Ok(secret_manager
             .produce_document(
                 method,
                 None,
@@ -153,13 +155,12 @@ mod tests {
 
     lazy_static::lazy_static! {
         static ref SECRET_MANAGER_CONFIG: SecretManagerConfig = SecretManagerConfig {
-            generate_stronghold: false,
             stronghold_path: "../agent_secret_manager/tests/res/all_slots.stronghold".to_string(),
             stronghold_password: "sup3rSecr3t".to_string(),
             issuer_eddsa_key_id: Some("ed25519-0".to_string()),
             issuer_es256_key_id: Some("es256-0".to_string()),
-            issuer_did: None,
-            issuer_fragment: None,
+            issuer_did: Some("did:foo:bar".to_string()),
+            issuer_fragment: Some("0".to_string()),
         };
     }
 
@@ -168,7 +169,7 @@ mod tests {
         set_config().set_secret_manager_config(SECRET_MANAGER_CONFIG.clone());
 
         let subject = Arc::new(Subject {
-            secret_manager: crate::secret_manager().await,
+            secret_manager: Arc::new(Mutex::new(crate::secret_manager().await)),
         });
 
         let mut split = ES256_SIGNED_JWT.rsplitn(2, '.');
@@ -190,7 +191,7 @@ mod tests {
         set_config().set_secret_manager_config(SECRET_MANAGER_CONFIG.clone());
 
         let subject = Arc::new(Subject {
-            secret_manager: crate::secret_manager().await,
+            secret_manager: Arc::new(Mutex::new(crate::secret_manager().await)),
         });
 
         let mut split = EDDSA_SIGNED_JWT.rsplitn(2, '.');
