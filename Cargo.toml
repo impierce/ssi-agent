@@ -36,6 +36,7 @@ identity_credential = { version = "1.3", default-features = false, features = [
     "domain-linkage",
 ] }
 identity_iota = { version = "1.3" }
+identity_verification = { version = "1.3", default-features = false }
 jsonwebtoken = "9.3"
 lazy_static = "1.4"
 rstest = "0.19"
