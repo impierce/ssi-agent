@@ -16,6 +16,7 @@ agent_verification = { path = "../agent_verification" }
 axum.workspace = true
 did_manager.workspace = true
 identity_document = { version = "1.3" }
+identity_verification.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tower-http.workspace = true
