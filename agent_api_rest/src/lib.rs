@@ -10,7 +10,7 @@ use agent_verification::state::VerificationState;
 use axum::{body::Bytes, extract::MatchedPath, http::Request, response::Response, Router};
 use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
-use utoipa::OpenApi;
+use utoipa::{openapi::ServerBuilder, OpenApi};
 use utoipa_scalar::{Scalar, Servable};
 use utoipa_swagger_ui::SwaggerUi;
 use verification::{
@@ -37,8 +37,8 @@ pub fn app(
     }: ApplicationState,
 ) -> Router {
     Router::new()
-        .merge(Scalar::with_url("/scalar", ApiDoc::openapi()))
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+        .merge(Scalar::with_url("/scalar", patch_generated_openapi(ApiDoc::openapi())))
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", patch_generated_openapi(ApiDoc::openapi())))
         .nest(
             &get_base_path().unwrap_or_default(),
             Router::new()
@@ -123,6 +123,15 @@ fn get_base_path() -> Result<String, ConfigError> {
     )]
 pub struct ApiDoc;
 
+pub fn patch_generated_openapi(mut openapi: utoipa::openapi::OpenApi) -> utoipa::openapi::OpenApi {
+    openapi.info.title = "UniCore HTTP API".into();
+    openapi.servers = vec![ServerBuilder::new()
+        .url("https://arty-aragorn.agent-dev.impierce.com")
+        .build()]
+    .into();
+    openapi
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -183,9 +192,10 @@ mod tests {
 
     #[tokio::test]
     async fn openapi() {
-        let yaml = serde_yaml::to_string(&ApiDoc::openapi()).unwrap();
-        println!("{}", yaml);
-        std::fs::write("test.openapi.yaml", yaml).unwrap();
+        let yaml_value = patch_generated_openapi(ApiDoc::openapi());
+        let yaml_string = serde_yaml::to_string(&yaml_value).unwrap();
+        println!("{}", yaml_string);
+        std::fs::write("test.openapi.yaml", yaml_string).unwrap();
     }
 
     #[tokio::test]

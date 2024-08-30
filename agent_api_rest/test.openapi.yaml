@@ -1,10 +1,12 @@
 openapi: 3.1.0
 info:
-  title: agent_api_rest
+  title: UniCore HTTP API
   description: ''
   license:
     name: ''
   version: 0.1.0
+servers:
+- url: https://arty-aragorn.agent-dev.impierce.com
 paths:
   /.well-known/oauth-authorization-server:
     get:
