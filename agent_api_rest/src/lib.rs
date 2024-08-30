@@ -19,26 +19,16 @@ pub struct ApplicationState {
     pub verification_state: Option<VerificationState>,
 }
 
-pub fn app(state: ApplicationState) -> Router {
-    let ApplicationState {
+pub fn app(
+    ApplicationState {
         issuance_state,
         holder_state,
         verification_state,
-    } = state;
-
-    let base_path = get_base_path();
-
-    let path = |suffix: &str| -> String {
-        if let Ok(base_path) = &base_path {
-            format!("/{}{}", base_path, suffix)
-        } else {
-            suffix.to_string()
-        }
-    };
-
+    }: ApplicationState,
+) -> Router {
     Router::new()
         .nest(
-            &path(Default::default()),
+            &get_base_path().unwrap_or_default(),
             Router::new()
                 .merge(issuance_state.map(issuance::router).unwrap_or_default())
                 .merge(holder_state.map(holder::router).unwrap_or_default())
@@ -89,7 +79,7 @@ fn get_base_path() -> Result<String, ConfigError> {
 
             tracing::info!("Base path: {:?}", base_path);
 
-            base_path
+            format!("/{}", base_path)
         })
 }
 
