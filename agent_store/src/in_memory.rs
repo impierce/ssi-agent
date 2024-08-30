@@ -1,7 +1,5 @@
-use agent_holder::{
-    credential::queries::all_credentials::AllCredentialsQuery, offer::queries::all_offers::AllOffersQuery,
-    services::HolderServices, state::HolderState,
-};
+use crate::{partition_event_publishers, EventPublisher};
+use agent_holder::{services::HolderServices, state::HolderState};
 use agent_issuance::{
     offer::{
         aggregate::Offer,
@@ -14,7 +12,7 @@ use agent_issuance::{
     state::{IssuanceState, ViewRepositories},
     SimpleLoggingQuery,
 };
-use agent_shared::{application_state::Command, generic_query::generic_query};
+use agent_shared::{application_state::Command, custom_queries::ListAllQuery, generic_query::generic_query};
 use agent_verification::{services::VerificationServices, state::VerificationState};
 use async_trait::async_trait;
 use cqrs_es::{
@@ -24,8 +22,6 @@ use cqrs_es::{
 };
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
-
-use crate::{partition_event_publishers, EventPublisher};
 
 #[derive(Default)]
 struct MemRepository<V: View<A>, A: Aggregate> {
@@ -188,8 +184,8 @@ pub async fn holder_state(
     let all_offers = Arc::new(MemRepository::default());
 
     // Create custom-queries for the offer aggregate.
-    let all_credentials_query = AllCredentialsQuery::new(all_credentials.clone());
-    let all_offers_query = AllOffersQuery::new(all_offers.clone());
+    let all_credentials_query = ListAllQuery::new(all_credentials.clone(), "all_credentials");
+    let all_offers_query = ListAllQuery::new(all_offers.clone(), "all_offers");
 
     // Partition the event_publishers into the different aggregates.
     let (_, _, _, credential_event_publishers, offer_event_publishers, _, _) =

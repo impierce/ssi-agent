@@ -1,22 +1,20 @@
-use agent_holder::{
-    credential::queries::all_credentials::AllCredentialsQuery, offer::queries::all_offers::AllOffersQuery,
-    services::HolderServices, state::HolderState,
-};
+use crate::{partition_event_publishers, EventPublisher};
+use agent_holder::{services::HolderServices, state::HolderState};
 use agent_issuance::{
     offer::queries::{access_token::AccessTokenQuery, pre_authorized_code::PreAuthorizedCodeQuery},
     services::IssuanceServices,
     state::{CommandHandlers, IssuanceState, ViewRepositories},
     SimpleLoggingQuery,
 };
-use agent_shared::{application_state::Command, config::config, generic_query::generic_query};
+use agent_shared::{
+    application_state::Command, config::config, custom_queries::ListAllQuery, generic_query::generic_query,
+};
 use agent_verification::{services::VerificationServices, state::VerificationState};
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, Query};
 use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
 use sqlx::{Pool, Postgres};
 use std::{collections::HashMap, sync::Arc};
-
-use crate::{partition_event_publishers, EventPublisher};
 
 struct AggregateHandler<A>
 where
@@ -148,8 +146,8 @@ pub async fn holder_state(
     let all_offers = Arc::new(PostgresViewRepository::new("all_offers", pool.clone()));
 
     // Create custom-queries for the offer aggregate.
-    let all_credentials_query = AllCredentialsQuery::new(all_credentials.clone());
-    let all_offers_query = AllOffersQuery::new(all_offers.clone());
+    let all_credentials_query = ListAllQuery::new(all_credentials.clone(), "all_credentials");
+    let all_offers_query = ListAllQuery::new(all_offers.clone(), "all_offers");
 
     // Partition the event_publishers into the different aggregates.
     let (_, _, _, credential_event_publishers, offer_event_publishers, _, _) =
