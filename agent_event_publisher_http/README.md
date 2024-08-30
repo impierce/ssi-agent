@@ -103,7 +103,7 @@ To integrate just-in-time data request events into your workflow, adhere to the 
 2. The above configuration makes sure that whenever a Wallet sends a Credential Request, the HTTP Event Publisher will
   dispatch the `CredentialRequestVerified` event to the specified URL once it successfully verified the Credential
   Request, e.g:
-  ```json
+  ```http
   POST /event-subscriber HTTP/1.1
   Host: https://your-server.org
   Content-Type: application/json
@@ -117,7 +117,7 @@ To integrate just-in-time data request events into your workflow, adhere to the 
   ```
 3. Now your system can apply its own logic and create and sign a Credential based on the data received from the Event.
    The signed Credential can then be submitted to UniCore's `/v0/credentials` endpoint, e.g:
-  ```json
+  ```http
   POST /v0/credentials HTTP/1.1
   Host: https://unicore-server.org
   Content-Type: application/json
