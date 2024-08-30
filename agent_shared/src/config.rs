@@ -150,12 +150,16 @@ pub enum OfferEvent {
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum HolderCredentialEvent {
-    // FIX THIS
+    CredentialAdded,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum ReceivedOfferEvent {
-    // FIX THIS
+    CredentialOfferReceived,
+    CredentialOfferAccepted,
+    TokenResponseReceived,
+    CredentialResponseReceived,
+    CredentialOfferRejected,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
