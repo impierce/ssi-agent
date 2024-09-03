@@ -125,6 +125,9 @@ pub struct ApiDoc;
 
 pub fn patch_generated_openapi(mut openapi: utoipa::openapi::OpenApi) -> utoipa::openapi::OpenApi {
     openapi.info.title = "UniCore HTTP API".into();
+    openapi.info.description = Some("Full HTTP API reference for the UniCore SSI Agent".to_string());
+    // openapi.info.version = "1.0.0-alpha.1".into(); // can this be determined or does it need to be removed from the openapi.yaml?
+    openapi.info.version = "".into();
     openapi.servers = vec![ServerBuilder::new()
         .url("https://arty-aragorn.agent-dev.impierce.com")
         .build()]
