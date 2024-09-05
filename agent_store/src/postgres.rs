@@ -1,14 +1,10 @@
 use agent_issuance::{
-    credential::services::CredentialServices,
-    offer::{
-        queries::{access_token::AccessTokenQuery, pre_authorized_code::PreAuthorizedCodeQuery},
-        services::OfferServices,
-    },
-    server_config::services::ServerConfigServices,
+    offer::queries::{access_token::AccessTokenQuery, pre_authorized_code::PreAuthorizedCodeQuery},
+    services::IssuanceServices,
     state::{CommandHandlers, IssuanceState, ViewRepositories},
     SimpleLoggingQuery,
 };
-use agent_shared::{application_state::Command, config, generic_query::generic_query};
+use agent_shared::{application_state::Command, config::config, generic_query::generic_query};
 use agent_verification::{services::VerificationServices, state::VerificationState};
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, Query};
@@ -67,8 +63,14 @@ where
     }
 }
 
-pub async fn issuance_state(event_publishers: Vec<Box<dyn EventPublisher>>) -> IssuanceState {
-    let pool = default_postgress_pool(&config!("db_connection_string", String).unwrap()).await;
+pub async fn issuance_state(
+    issuance_services: Arc<IssuanceServices>,
+    event_publishers: Vec<Box<dyn EventPublisher>>,
+) -> IssuanceState {
+    let connection_string = config().event_store.connection_string.clone().expect(
+        "Missing config parameter `event_store.connection_string` or `UNICORE__EVENT_STORE__CONNECTION_STRING`",
+    );
+    let pool = default_postgress_pool(&connection_string).await;
 
     // Initialize the postgres repositories.
     let server_config = Arc::new(PostgresViewRepository::new("server_config", pool.clone()));
@@ -89,7 +91,7 @@ pub async fn issuance_state(event_publishers: Vec<Box<dyn EventPublisher>>) -> I
         command: CommandHandlers {
             server_config: Arc::new(
                 server_config_event_publishers.into_iter().fold(
-                    AggregateHandler::new(pool.clone(), ServerConfigServices)
+                    AggregateHandler::new(pool.clone(), ())
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(server_config.clone())),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
@@ -97,7 +99,7 @@ pub async fn issuance_state(event_publishers: Vec<Box<dyn EventPublisher>>) -> I
             ),
             credential: Arc::new(
                 credential_event_publishers.into_iter().fold(
-                    AggregateHandler::new(pool.clone(), CredentialServices)
+                    AggregateHandler::new(pool.clone(), issuance_services.clone())
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(credential.clone())),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
@@ -105,7 +107,7 @@ pub async fn issuance_state(event_publishers: Vec<Box<dyn EventPublisher>>) -> I
             ),
             offer: Arc::new(
                 offer_event_publishers.into_iter().fold(
-                    AggregateHandler::new(pool.clone(), OfferServices)
+                    AggregateHandler::new(pool.clone(), issuance_services)
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(offer.clone()))
                         .append_query(pre_authorized_code_query)
@@ -128,7 +130,10 @@ pub async fn verification_state(
     verification_services: Arc<VerificationServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> VerificationState {
-    let pool = default_postgress_pool(&config!("db_connection_string", String).unwrap()).await;
+    let connection_string = config().event_store.connection_string.clone().expect(
+        "Missing config parameter `event_store.connection_string` or `UNICORE__EVENT_STORE__CONNECTION_STRING`",
+    );
+    let pool = default_postgress_pool(&connection_string).await;
 
     // Initialize the postgres repositories.
     let authorization_request = Arc::new(PostgresViewRepository::new("authorization_request", pool.clone()));

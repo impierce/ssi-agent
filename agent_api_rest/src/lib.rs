@@ -2,7 +2,7 @@ mod issuance;
 mod verification;
 
 use agent_issuance::state::IssuanceState;
-use agent_shared::{config, ConfigError};
+use agent_shared::{config::config, ConfigError};
 use agent_verification::state::VerificationState;
 use axum::{
     body::Bytes,
@@ -99,29 +99,34 @@ pub fn app(state: ApplicationState) -> Router {
 }
 
 fn get_base_path() -> Result<String, ConfigError> {
-    config!("base_path", String).map(|mut base_path| {
-        if base_path.starts_with('/') {
-            base_path.remove(0);
-        }
+    config()
+        .base_path
+        .clone()
+        .ok_or_else(|| ConfigError::NotFound("No configuration for `base_path` found".to_string()))
+        .map(|mut base_path| {
+            if base_path.starts_with('/') {
+                base_path.remove(0);
+            }
 
-        if base_path.ends_with('/') {
-            base_path.pop();
-        }
+            if base_path.ends_with('/') {
+                base_path.pop();
+            }
 
-        if base_path.is_empty() {
-            panic!("AGENT_APPLICATION_BASE_PATH can't be empty, remove or set path");
-        }
+            if base_path.is_empty() {
+                panic!("UNICORE__BASE_PATH can't be empty, remove or set path");
+            }
 
-        tracing::info!("Base path: {:?}", base_path);
+            tracing::info!("Base path: {:?}", base_path);
 
-        base_path
-    })
+            base_path
+        })
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
+    use agent_issuance::services::test_utils::test_issuance_services;
     use agent_store::in_memory;
     use agent_verification::services::test_utils::test_verification_services;
     use axum::routing::post;
@@ -178,9 +183,9 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn test_base_path_routes() {
-        let issuance_state = in_memory::issuance_state(Default::default()).await;
+        let issuance_state = in_memory::issuance_state(test_issuance_services(), Default::default()).await;
         let verification_state = in_memory::verification_state(test_verification_services(), Default::default()).await;
-        std::env::set_var("AGENT_APPLICATION_BASE_PATH", "unicore");
+        std::env::set_var("UNICORE__BASE_PATH", "unicore");
         let router = app((issuance_state, verification_state));
 
         let _ = router.route("/auth/token", post(handler));

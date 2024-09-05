@@ -8,6 +8,10 @@
 
 Build and run the **SSI Agent** in a local Docker environment following [these steps](./agent_application/docker/README.md).
 
+## Configuration
+
+All configuration options are documented [here](./agent_application/CONFIGURATION.md).
+
 ## Breaking changes
 
 From time to time breaking changes can occur. Please make sure you read the [CHANGELOG](./CHANGELOG.md) before updating.

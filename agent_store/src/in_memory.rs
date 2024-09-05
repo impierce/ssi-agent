@@ -1,14 +1,12 @@
 use agent_issuance::{
-    credential::services::CredentialServices,
     offer::{
         aggregate::Offer,
         queries::{
             access_token::{AccessTokenQuery, AccessTokenView},
             pre_authorized_code::{PreAuthorizedCodeQuery, PreAuthorizedCodeView},
         },
-        services::OfferServices,
     },
-    server_config::services::ServerConfigServices,
+    services::IssuanceServices,
     state::{CommandHandlers, IssuanceState, ViewRepositories},
     SimpleLoggingQuery,
 };
@@ -117,7 +115,10 @@ where
     }
 }
 
-pub async fn issuance_state(event_publishers: Vec<Box<dyn EventPublisher>>) -> IssuanceState {
+pub async fn issuance_state(
+    issuance_services: Arc<IssuanceServices>,
+    event_publishers: Vec<Box<dyn EventPublisher>>,
+) -> IssuanceState {
     // Initialize the in-memory repositories.
     let server_config = Arc::new(MemRepository::default());
     let credential = Arc::new(MemRepository::default());
@@ -137,7 +138,7 @@ pub async fn issuance_state(event_publishers: Vec<Box<dyn EventPublisher>>) -> I
         command: CommandHandlers {
             server_config: Arc::new(
                 server_config_event_publishers.into_iter().fold(
-                    AggregateHandler::new(ServerConfigServices)
+                    AggregateHandler::new(())
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(server_config.clone())),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
@@ -145,7 +146,7 @@ pub async fn issuance_state(event_publishers: Vec<Box<dyn EventPublisher>>) -> I
             ),
             credential: Arc::new(
                 credential_event_publishers.into_iter().fold(
-                    AggregateHandler::new(CredentialServices)
+                    AggregateHandler::new(issuance_services.clone())
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(credential.clone())),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
@@ -153,7 +154,7 @@ pub async fn issuance_state(event_publishers: Vec<Box<dyn EventPublisher>>) -> I
             ),
             offer: Arc::new(
                 offer_event_publishers.into_iter().fold(
-                    AggregateHandler::new(OfferServices)
+                    AggregateHandler::new(issuance_services)
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(offer.clone()))
                         .append_query(pre_authorized_code_query)

@@ -113,6 +113,7 @@ dependencies = [
  "axum 0.7.5",
  "did_manager",
  "identity_document",
+ "identity_verification",
  "serde_json",
  "tokio",
  "tower-http 0.5.2",
@@ -193,8 +194,11 @@ dependencies = [
  "futures",
  "identity_iota",
  "jsonwebtoken",
+ "lazy_static",
  "log",
  "oid4vc-core",
+ "p256 0.13.2",
+ "ring",
  "serde",
  "serde_json",
  "tokio",
@@ -215,7 +219,9 @@ dependencies = [
  "identity_credential",
  "identity_did",
  "identity_document",
+ "identity_iota",
  "identity_storage",
+ "identity_verification",
  "is_empty",
  "jsonwebtoken",
  "oid4vc-core",
@@ -227,6 +233,7 @@ dependencies = [
  "serde_json",
  "serde_with 3.8.1",
  "serde_yaml",
+ "strum 0.26.3",
  "thiserror",
  "time",
  "tracing",
@@ -1362,7 +1369,7 @@ checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=b9e5594#b9e5594c05f52c197ce6a84d285ab97d1305179b"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -1928,8 +1935,9 @@ dependencies = [
 [[package]]
 name = "did_iota"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=b9e5594#b9e5594c05f52c197ce6a84d285ab97d1305179b"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
+ "bls12_381_plus 0.8.15",
  "identity_iota",
  "identity_stronghold",
  "iota-sdk",
@@ -1941,7 +1949,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=b9e5594#b9e5594c05f52c197ce6a84d285ab97d1305179b"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -1958,9 +1966,8 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=b9e5594#b9e5594c05f52c197ce6a84d285ab97d1305179b"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
- "did-key",
  "did-method-key",
  "identity_iota",
  "identity_stronghold",
@@ -1977,7 +1984,7 @@ dependencies = [
 [[package]]
 name = "did_manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=b9e5594#b9e5594c05f52c197ce6a84d285ab97d1305179b"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
  "consumer",
  "producer",
@@ -2005,7 +2012,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=b9e5594#b9e5594c05f52c197ce6a84d285ab97d1305179b"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -2259,6 +2266,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5e6043086bf7973472e0c7dff2142ea0b680d30e18d9cc40f267efbf222bd47"
 dependencies = [
  "base16ct 0.2.0",
+ "base64ct",
  "crypto-bigint 0.5.5",
  "digest 0.10.7",
  "ff 0.13.0",
@@ -2268,6 +2276,7 @@ dependencies = [
  "pkcs8 0.10.2",
  "rand_core 0.6.4",
  "sec1 0.7.3",
+ "serde_json",
  "serdect",
  "subtle",
  "zeroize",
@@ -3225,7 +3234,7 @@ dependencies = [
  "multibase 0.9.1",
  "serde",
  "serde_json",
- "strum",
+ "strum 0.25.0",
  "thiserror",
  "time",
  "url",
@@ -3252,7 +3261,7 @@ dependencies = [
  "serde-aux",
  "serde_json",
  "serde_repr",
- "strum",
+ "strum 0.25.0",
  "thiserror",
  "url",
 ]
@@ -3267,7 +3276,7 @@ dependencies = [
  "form_urlencoded",
  "identity_core",
  "serde",
- "strum",
+ "strum 0.25.0",
  "thiserror",
 ]
 
@@ -3283,7 +3292,7 @@ dependencies = [
  "identity_verification",
  "indexmap 2.2.6",
  "serde",
- "strum",
+ "strum 0.25.0",
  "thiserror",
 ]
 
@@ -3323,7 +3332,7 @@ dependencies = [
  "prefix-hex",
  "ref-cast",
  "serde",
- "strum",
+ "strum 0.25.0",
  "thiserror",
 ]
 
@@ -3358,7 +3367,7 @@ dependencies = [
  "identity_document",
  "identity_iota_core",
  "serde",
- "strum",
+ "strum 0.25.0",
  "thiserror",
 ]
 
@@ -3404,6 +3413,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "identity_stronghold_ext"
+version = "0.1.0"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+dependencies = [
+ "async-trait",
+ "elliptic-curve 0.13.8",
+ "identity_storage",
+ "identity_verification",
+ "iota-sdk",
+ "iota_stronghold",
+ "k256",
+ "log",
+ "p256 0.13.2",
+ "serde_json",
+ "stronghold_ext",
+ "tokio",
+]
+
+[[package]]
 name = "identity_verification"
 version = "1.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3414,7 +3442,7 @@ dependencies = [
  "identity_jose",
  "serde",
  "serde_json",
- "strum",
+ "strum 0.25.0",
  "thiserror",
 ]
 
@@ -5354,14 +5382,16 @@ dependencies = [
 [[package]]
 name = "producer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=b9e5594#b9e5594c05f52c197ce6a84d285ab97d1305179b"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
  "did_iota",
  "did_jwk",
  "did_key",
  "did_web",
  "identity_iota",
+ "identity_storage",
  "identity_stronghold",
+ "identity_stronghold_ext",
  "iota-sdk",
  "iota_stronghold",
  "log",
@@ -6513,14 +6543,17 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=b9e5594#b9e5594c05f52c197ce6a84d285ab97d1305179b"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
 dependencies = [
  "identity_iota",
+ "identity_storage",
  "identity_stronghold",
+ "identity_stronghold_ext",
  "iota-sdk",
  "iota_stronghold",
  "log",
  "rand 0.8.5",
+ "serde_json",
  "thiserror",
 ]
 
@@ -7232,6 +7265,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "stronghold_ext"
+version = "0.1.0"
+source = "git+https://github.com/impierce/stronghold_ext.git#cad0e5ac4d9011a38c88303b668e790e2f2f3a5e"
+dependencies = [
+ "ecdsa 0.16.9",
+ "iota_stronghold",
+ "k256",
+ "p256 0.13.2",
+ "rand 0.8.5",
+ "serde",
+ "sha2 0.10.8",
+ "stronghold-utils",
+ "stronghold_engine",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
 name = "strsim"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7255,7 +7306,16 @@ version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "290d54ea6f91c969195bdbcd7442c8c2a2ba87da8bf60a7ee86a235d4bc1e125"
 dependencies = [
- "strum_macros",
+ "strum_macros 0.25.3",
+]
+
+[[package]]
+name = "strum"
+version = "0.26.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
+dependencies = [
+ "strum_macros 0.26.4",
 ]
 
 [[package]]
@@ -7265,6 +7325,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23dc1fa9ac9c169a78ba62f0b841814b7abae11bdd047b9c58f893439e309ea0"
 dependencies = [
  "heck 0.4.1",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.67",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.26.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+dependencies = [
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
  "rustversion",
