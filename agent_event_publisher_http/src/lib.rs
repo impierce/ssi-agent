@@ -4,7 +4,7 @@ use agent_issuance::{
 use agent_shared::config::config;
 use agent_store::{
     AuthorizationRequestEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, EventPublisher,
-    OfferEventPublisher, ServerConfigEventPublisher,
+    HolderCredentialEventPublisher, OfferEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
 };
 use agent_verification::{authorization_request::aggregate::AuthorizationRequest, connection::aggregate::Connection};
 use async_trait::async_trait;
@@ -15,12 +15,16 @@ use tracing::info;
 
 /// A struct that contains all the event publishers for the different aggregates.
 #[skip_serializing_none]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 pub struct EventPublisherHttp {
     // Issuance
     pub server_config: Option<AggregateEventPublisherHttp<ServerConfig>>,
     pub credential: Option<AggregateEventPublisherHttp<Credential>>,
     pub offer: Option<AggregateEventPublisherHttp<Offer>>,
+
+    // Holder
+    pub holder_credential: Option<AggregateEventPublisherHttp<agent_holder::credential::aggregate::Credential>>,
+    pub received_offer: Option<AggregateEventPublisherHttp<agent_holder::offer::aggregate::Offer>>,
 
     // Verification
     pub connection: Option<AggregateEventPublisherHttp<Connection>>,
@@ -33,13 +37,7 @@ impl EventPublisherHttp {
 
         // If it's not enabled, return an empty event publisher.
         if !event_publisher_http.enabled {
-            return Ok(EventPublisherHttp {
-                server_config: None,
-                credential: None,
-                offer: None,
-                connection: None,
-                authorization_request: None,
-            });
+            return Ok(EventPublisherHttp::default());
         }
 
         let server_config = (!event_publisher_http.events.server_config.is_empty()).then(|| {
@@ -54,12 +52,12 @@ impl EventPublisherHttp {
             )
         });
 
-        let credential = (!event_publisher_http.events.offer.is_empty()).then(|| {
+        let credential = (!event_publisher_http.events.credential.is_empty()).then(|| {
             AggregateEventPublisherHttp::<Credential>::new(
                 event_publisher_http.target_url.clone(),
                 event_publisher_http
                     .events
-                    .offer
+                    .credential
                     .iter()
                     .map(ToString::to_string)
                     .collect(),
@@ -72,6 +70,30 @@ impl EventPublisherHttp {
                 event_publisher_http
                     .events
                     .offer
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let holder_credential = (!event_publisher_http.events.holder_credential.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<agent_holder::credential::aggregate::Credential>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http
+                    .events
+                    .holder_credential
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let received_offer = (!event_publisher_http.events.received_offer.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<agent_holder::offer::aggregate::Offer>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http
+                    .events
+                    .received_offer
                     .iter()
                     .map(ToString::to_string)
                     .collect(),
@@ -106,6 +128,8 @@ impl EventPublisherHttp {
             server_config,
             credential,
             offer,
+            holder_credential,
+            received_offer,
             connection,
             authorization_request,
         };
@@ -133,6 +157,18 @@ impl EventPublisher for EventPublisherHttp {
         self.offer
             .take()
             .map(|publisher| Box::new(publisher) as OfferEventPublisher)
+    }
+
+    fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher> {
+        self.holder_credential
+            .take()
+            .map(|publisher| Box::new(publisher) as HolderCredentialEventPublisher)
+    }
+
+    fn received_offer(&mut self) -> Option<ReceivedOfferEventPublisher> {
+        self.received_offer
+            .take()
+            .map(|publisher| Box::new(publisher) as ReceivedOfferEventPublisher)
     }
 
     fn connection(&mut self) -> Option<ConnectionEventPublisher> {

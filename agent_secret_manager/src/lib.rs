@@ -2,6 +2,7 @@ use agent_shared::config::{config, get_all_enabled_did_methods, SecretManagerCon
 use did_manager::{InMemoryCache, SecretManager};
 use log::info;
 
+pub mod service;
 pub mod subject;
 
 // TODO: find better solution for this

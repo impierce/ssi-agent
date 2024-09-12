@@ -1,3 +1,5 @@
+use crate::{partition_event_publishers, EventPublisher};
+use agent_holder::{services::HolderServices, state::HolderState};
 use agent_issuance::{
     offer::{
         aggregate::Offer,
@@ -7,10 +9,10 @@ use agent_issuance::{
         },
     },
     services::IssuanceServices,
-    state::{CommandHandlers, IssuanceState, ViewRepositories},
+    state::{IssuanceState, ViewRepositories},
     SimpleLoggingQuery,
 };
-use agent_shared::{application_state::Command, generic_query::generic_query};
+use agent_shared::{application_state::Command, custom_queries::ListAllQuery, generic_query::generic_query};
 use agent_verification::{services::VerificationServices, state::VerificationState};
 use async_trait::async_trait;
 use cqrs_es::{
@@ -20,8 +22,6 @@ use cqrs_es::{
 };
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
-
-use crate::{partition_event_publishers, EventPublisher};
 
 #[derive(Default)]
 struct MemRepository<V: View<A>, A: Aggregate> {
@@ -131,11 +131,11 @@ pub async fn issuance_state(
     let access_token_query = AccessTokenQuery::new(access_token.clone());
 
     // Partition the event_publishers into the different aggregates.
-    let (server_config_event_publishers, credential_event_publishers, offer_event_publishers, _, _) =
+    let (server_config_event_publishers, credential_event_publishers, offer_event_publishers, _, _, _, _) =
         partition_event_publishers(event_publishers);
 
     IssuanceState {
-        command: CommandHandlers {
+        command: agent_issuance::state::CommandHandlers {
             server_config: Arc::new(
                 server_config_event_publishers.into_iter().fold(
                     AggregateHandler::new(())
@@ -173,6 +173,54 @@ pub async fn issuance_state(
     }
 }
 
+pub async fn holder_state(
+    holder_services: Arc<HolderServices>,
+    event_publishers: Vec<Box<dyn EventPublisher>>,
+) -> HolderState {
+    // Initialize the in-memory repositories.
+    let credential = Arc::new(MemRepository::default());
+    let offer = Arc::new(MemRepository::default());
+    let all_credentials = Arc::new(MemRepository::default());
+    let all_offers = Arc::new(MemRepository::default());
+
+    // Create custom-queries for the offer aggregate.
+    let all_credentials_query = ListAllQuery::new(all_credentials.clone(), "all_credentials");
+    let all_offers_query = ListAllQuery::new(all_offers.clone(), "all_offers");
+
+    // Partition the event_publishers into the different aggregates.
+    let (_, _, _, credential_event_publishers, offer_event_publishers, _, _) =
+        partition_event_publishers(event_publishers);
+
+    HolderState {
+        command: agent_holder::state::CommandHandlers {
+            credential: Arc::new(
+                credential_event_publishers.into_iter().fold(
+                    AggregateHandler::new(holder_services.clone())
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(credential.clone()))
+                        .append_query(all_credentials_query),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
+                ),
+            ),
+            offer: Arc::new(
+                offer_event_publishers.into_iter().fold(
+                    AggregateHandler::new(holder_services.clone())
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(offer.clone()))
+                        .append_query(all_offers_query),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
+                ),
+            ),
+        },
+        query: agent_holder::state::ViewRepositories {
+            credential,
+            all_credentials,
+            offer,
+            all_offers,
+        },
+    }
+}
+
 pub async fn verification_state(
     verification_services: Arc<VerificationServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
@@ -182,7 +230,7 @@ pub async fn verification_state(
     let connection = Arc::new(MemRepository::default());
 
     // Partition the event_publishers into the different aggregates.
-    let (_, _, _, authorization_request_event_publishers, connection_event_publishers) =
+    let (_, _, _, _, _, authorization_request_event_publishers, connection_event_publishers) =
         partition_event_publishers(event_publishers);
 
     VerificationState {

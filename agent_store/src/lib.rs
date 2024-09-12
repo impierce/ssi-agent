@@ -10,6 +10,8 @@ pub mod postgres;
 pub type ServerConfigEventPublisher = Box<dyn Query<ServerConfig>>;
 pub type CredentialEventPublisher = Box<dyn Query<Credential>>;
 pub type OfferEventPublisher = Box<dyn Query<Offer>>;
+pub type HolderCredentialEventPublisher = Box<dyn Query<agent_holder::credential::aggregate::Credential>>;
+pub type ReceivedOfferEventPublisher = Box<dyn Query<agent_holder::offer::aggregate::Offer>>;
 pub type AuthorizationRequestEventPublisher = Box<dyn Query<AuthorizationRequest>>;
 pub type ConnectionEventPublisher = Box<dyn Query<Connection>>;
 
@@ -18,6 +20,8 @@ pub type Partitions = (
     Vec<ServerConfigEventPublisher>,
     Vec<CredentialEventPublisher>,
     Vec<OfferEventPublisher>,
+    Vec<HolderCredentialEventPublisher>,
+    Vec<ReceivedOfferEventPublisher>,
     Vec<AuthorizationRequestEventPublisher>,
     Vec<ConnectionEventPublisher>,
 );
@@ -37,6 +41,13 @@ pub trait EventPublisher {
         None
     }
 
+    fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher> {
+        None
+    }
+    fn received_offer(&mut self) -> Option<ReceivedOfferEventPublisher> {
+        None
+    }
+
     fn connection(&mut self) -> Option<ConnectionEventPublisher> {
         None
     }
@@ -47,7 +58,7 @@ pub trait EventPublisher {
 
 pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPublisher>>) -> Partitions {
     event_publishers.into_iter().fold(
-        (vec![], vec![], vec![], vec![], vec![]),
+        (vec![], vec![], vec![], vec![], vec![], vec![], vec![]),
         |mut partitions, mut event_publisher| {
             if let Some(server_config) = event_publisher.server_config() {
                 partitions.0.push(server_config);
@@ -59,11 +70,18 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
                 partitions.2.push(offer);
             }
 
+            if let Some(credential) = event_publisher.holder_credential() {
+                partitions.3.push(credential);
+            }
+            if let Some(offer) = event_publisher.received_offer() {
+                partitions.4.push(offer);
+            }
+
             if let Some(authorization_request) = event_publisher.authorization_request() {
-                partitions.3.push(authorization_request);
+                partitions.5.push(authorization_request);
             }
             if let Some(connection) = event_publisher.connection() {
-                partitions.4.push(connection);
+                partitions.6.push(connection);
             }
             partitions
         },
@@ -126,6 +144,8 @@ mod test {
             server_config_event_publishers,
             credential_event_publishers,
             offer_event_publishers,
+            holder_credential_event_publishers,
+            received_offer_event_publishers,
             authorization_request_event_publishers,
             connection_event_publishers,
         ) = partition_event_publishers(event_publishers);
@@ -133,6 +153,8 @@ mod test {
         assert_eq!(server_config_event_publishers.len(), 1);
         assert_eq!(credential_event_publishers.len(), 0);
         assert_eq!(offer_event_publishers.len(), 0);
+        assert_eq!(holder_credential_event_publishers.len(), 0);
+        assert_eq!(received_offer_event_publishers.len(), 0);
         assert_eq!(authorization_request_event_publishers.len(), 0);
         assert_eq!(connection_event_publishers.len(), 2);
     }
