@@ -193,7 +193,7 @@ impl Aggregate for Offer {
 
                         let credential = match credential_response.credential {
                             CredentialResponseType::Immediate { credential, .. } => {
-                                Jwt::from(credential.as_str().unwrap().to_string())
+                                Jwt::from(credential.as_str().ok_or(UnsupportedCredentialFormatError)?.to_string())
                             }
                             CredentialResponseType::Deferred { .. } => {
                                 return Err(UnsupportedDeferredCredentialResponseError)
