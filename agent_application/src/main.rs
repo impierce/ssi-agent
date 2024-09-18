@@ -11,7 +11,6 @@ use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use std::sync::Arc;
 use tokio::{fs, io};
-use tower_http::cors::CorsLayer;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -69,18 +68,12 @@ async fn main() -> io::Result<()> {
     agent_identity::state::initialize(&identity_state).await;
     agent_issuance::state::initialize(&issuance_state, startup_commands(url.clone())).await;
 
-    let mut app = app(ApplicationState {
+    let app = app(ApplicationState {
         identity_state: Some(identity_state),
         issuance_state: Some(issuance_state),
         holder_state: Some(holder_state),
         verification_state: Some(verification_state),
     });
-
-    // CORS
-    if config().cors_enabled.unwrap_or(false) {
-        info!("CORS (permissive) enabled for all routes");
-        app = app.layer(CorsLayer::permissive());
-    }
 
     // This is used to indicate that the server accepts requests.
     // In a docker container this file can be searched to see if its ready.

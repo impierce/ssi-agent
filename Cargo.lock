@@ -117,15 +117,9 @@ dependencies = [
  "agent_store",
  "agent_verification",
  "axum 0.7.5",
- "did_manager",
- "identity_credential",
- "identity_verification",
- "serde_json",
  "tokio",
- "tower-http 0.5.2",
  "tracing",
  "tracing-subscriber",
- "url",
 ]
 
 [[package]]
