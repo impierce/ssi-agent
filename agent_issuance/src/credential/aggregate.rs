@@ -473,7 +473,7 @@ pub mod test_utils {
           "id": "http://example.com/credentials/3527",
           "type": ["VerifiableCredential", "OpenBadgeCredential"],
           "issuer": {
-            "id": "https://my-domain.example.org",
+            "id": "https://my-domain.example.org/",
             "type": "Profile",
             "name": "UniCore"
           },

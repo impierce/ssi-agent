@@ -16,10 +16,7 @@ did_manager.workspace = true
 identity_credential.workspace = true
 identity_core = "1.3"
 identity_document = { version = "1.3" }
-identity_verification.workspace = true
 jsonwebtoken.workspace = true
-oid4vci.workspace = true
-oid4vc-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
