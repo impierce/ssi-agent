@@ -193,19 +193,31 @@ impl Aggregate for Credential {
 
                     // Insert the rest of the fields
                     for (key, value) in credential_subject {
-                        new_credential_subject.insert(key, value);
+                        if key != "id" {
+                            new_credential_subject.insert(key, value);
+                        }
                     }
+
+                    info!("Credential subject: {:?}", new_credential_subject);
 
                     // Replace the original credentialSubject with the new map
                     credential.raw["credentialSubject"] = serde_json::Value::Object(new_credential_subject);
 
+                    info!("Credential: {:?}", credential);
+
                     #[cfg(feature = "test_utils")]
                     let iat = 0;
                     #[cfg(not(feature = "test_utils"))]
-                    let iat = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
+                    let iat = credential.raw["issuanceDate"]
+                        .as_str()
                         .unwrap()
-                        .as_secs() as i64;
+                        .parse::<chrono::DateTime<chrono::Utc>>()
+                        .unwrap()
+                        .timestamp();
+                    // let iat = std::time::SystemTime::now()
+                    //     .duration_since(std::time::UNIX_EPOCH)
+                    //     .unwrap()
+                    //     .as_secs() as i64;
 
                     json!(jwt::encode(
                         services.issuer.clone(),

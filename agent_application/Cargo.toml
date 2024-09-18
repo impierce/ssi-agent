@@ -8,6 +8,7 @@ rust-version.workspace = true
 agent_api_rest = { path = "../agent_api_rest" }
 agent_event_publisher_http = { path = "../agent_event_publisher_http" }
 agent_holder = { path = "../agent_holder" }
+agent_identity = { path = "../agent_identity" }
 agent_issuance = { path = "../agent_issuance" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
@@ -16,7 +17,7 @@ agent_verification = { path = "../agent_verification" }
 
 axum.workspace = true
 did_manager.workspace = true
-identity_document = { version = "1.3" }
+identity_credential.workspace = true
 identity_verification.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

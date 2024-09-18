@@ -1,11 +1,9 @@
 pub mod application_state;
 pub mod config;
 pub mod custom_queries;
-pub mod domain_linkage;
 pub mod error;
 pub mod generic_query;
 pub mod handlers;
-pub mod linked_verifiable_presentation;
 pub mod url_utils;
 
 pub use ::config::ConfigError;

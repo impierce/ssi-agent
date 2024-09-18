@@ -11,6 +11,7 @@ use crate::API_VERSION;
 use agent_holder::state::HolderState;
 use axum::routing::get;
 use axum::{routing::post, Router};
+use holder::presentations::{get_presentations, post_presentations, presentation_signed::presentation_signed};
 
 pub fn router(holder_state: HolderState) -> Router {
     Router::new()
@@ -18,6 +19,11 @@ pub fn router(holder_state: HolderState) -> Router {
             API_VERSION,
             Router::new()
                 .route("/holder/credentials", get(credentials))
+                .route("/holder/presentations", get(get_presentations).post(post_presentations))
+                .route(
+                    "/holder/presentations/:presentation_id/signed",
+                    get(presentation_signed),
+                )
                 .route("/holder/offers", get(offers))
                 .route("/holder/offers/:offer_id/accept", post(accept))
                 .route("/holder/offers/:offer_id/reject", post(reject)),

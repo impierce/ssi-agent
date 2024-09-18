@@ -9,7 +9,10 @@ agent_shared = { path = "../agent_shared" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 
 async-trait.workspace = true
+base64.workspace = true
 cqrs-es.workspace = true
+identity_credential.workspace = true
+identity_verification.workspace = true
 jsonwebtoken.workspace = true
 oid4vci.workspace = true
 oid4vc-core.workspace = true

@@ -18,7 +18,7 @@ use url::Url;
 pub struct ApplicationConfiguration {
     pub log_format: LogFormat,
     pub event_store: EventStoreConfig,
-    pub url: String,
+    pub url: Url,
     pub base_path: Option<String>,
     pub cors_enabled: Option<bool>,
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,

@@ -64,6 +64,7 @@ version = "0.1.0"
 dependencies = [
  "agent_event_publisher_http",
  "agent_holder",
+ "agent_identity",
  "agent_issuance",
  "agent_secret_manager",
  "agent_shared",
@@ -72,9 +73,11 @@ dependencies = [
  "axum 0.7.5",
  "axum-auth 0.7.0",
  "axum-macros",
+ "did_manager",
  "futures",
  "http-api-problem",
  "hyper 1.4.1",
+ "identity_credential",
  "jsonwebtoken",
  "lazy_static",
  "mime",
@@ -107,6 +110,7 @@ dependencies = [
  "agent_api_rest",
  "agent_event_publisher_http",
  "agent_holder",
+ "agent_identity",
  "agent_issuance",
  "agent_secret_manager",
  "agent_shared",
@@ -114,7 +118,7 @@ dependencies = [
  "agent_verification",
  "axum 0.7.5",
  "did_manager",
- "identity_document",
+ "identity_credential",
  "identity_verification",
  "serde_json",
  "tokio",
@@ -161,8 +165,11 @@ dependencies = [
  "async-std",
  "async-trait",
  "axum 0.7.5",
+ "base64 0.22.1",
  "cqrs-es",
  "did_manager",
+ "identity_credential",
+ "identity_verification",
  "jsonwebtoken",
  "lazy_static",
  "mime",
@@ -180,6 +187,30 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-test",
+]
+
+[[package]]
+name = "agent_identity"
+version = "0.1.0"
+dependencies = [
+ "agent_secret_manager",
+ "agent_shared",
+ "async-trait",
+ "base64 0.22.1",
+ "cqrs-es",
+ "derivative",
+ "did_manager",
+ "identity_core",
+ "identity_credential",
+ "identity_document",
+ "identity_verification",
+ "jsonwebtoken",
+ "oid4vc-core",
+ "oid4vci",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -284,6 +315,7 @@ name = "agent_store"
 version = "0.1.0"
 dependencies = [
  "agent_holder",
+ "agent_identity",
  "agent_issuance",
  "agent_shared",
  "agent_verification",
@@ -1408,7 +1440,7 @@ checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -1974,7 +2006,7 @@ dependencies = [
 [[package]]
 name = "did_iota"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "bls12_381_plus 0.8.15",
  "identity_iota",
@@ -1988,7 +2020,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -2005,7 +2037,7 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "did-method-key",
  "identity_iota",
@@ -2023,7 +2055,7 @@ dependencies = [
 [[package]]
 name = "did_manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "consumer",
  "producer",
@@ -2051,7 +2083,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -2070,7 +2102,7 @@ dependencies = [
 [[package]]
 name = "dif-presentation-exchange"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=23facd4#23facd4946e4b2e54ef87f42746c68ad952ae205"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=12fed14#12fed1411ff3c0e1797090f386e44694f7a279b8"
 dependencies = [
  "getset",
  "jsonpath_lib",
@@ -2849,7 +2881,7 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "http 0.2.12",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "slab",
  "tokio",
  "tokio-util",
@@ -2868,7 +2900,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http 1.1.0",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "slab",
  "tokio",
  "tokio-util",
@@ -3292,7 +3324,7 @@ dependencies = [
  "identity_did",
  "identity_document",
  "identity_verification",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "itertools 0.11.0",
  "once_cell",
  "roaring",
@@ -3329,7 +3361,7 @@ dependencies = [
  "identity_core",
  "identity_did",
  "identity_verification",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "serde",
  "strum 0.25.0",
  "thiserror",
@@ -3454,7 +3486,7 @@ dependencies = [
 [[package]]
 name = "identity_stronghold_ext"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "async-trait",
  "elliptic-curve 0.13.8",
@@ -3537,9 +3569,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.2.6"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "168fb715dda47215e360912c096649d23d58bf392ac62f73919e831745e40f26"
+checksum = "68b900aa2f7301e21c36462b170ee99994de34dff39a4a6a528e80e7376d07e5"
 dependencies = [
  "equivalent",
  "hashbrown 0.14.5",
@@ -3952,7 +3984,7 @@ checksum = "179551c27c512c948af1edaf4bd7e1d1486d223f8ec4fd41cd760f7645fd4197"
 dependencies = [
  "cargo-license",
  "data-encoding",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "json-unflattening",
  "serde",
  "serde_json",
@@ -4727,7 +4759,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=23facd4#23facd4946e4b2e54ef87f42746c68ad952ae205"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=12fed14#12fed1411ff3c0e1797090f386e44694f7a279b8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4751,7 +4783,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=23facd4#23facd4946e4b2e54ef87f42746c68ad952ae205"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=12fed14#12fed1411ff3c0e1797090f386e44694f7a279b8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4783,7 +4815,7 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=23facd4#23facd4946e4b2e54ef87f42746c68ad952ae205"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=12fed14#12fed1411ff3c0e1797090f386e44694f7a279b8"
 dependencies = [
  "anyhow",
  "derivative",
@@ -4806,7 +4838,7 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=23facd4#23facd4946e4b2e54ef87f42746c68ad952ae205"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=12fed14#12fed1411ff3c0e1797090f386e44694f7a279b8"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5431,7 +5463,7 @@ dependencies = [
 [[package]]
 name = "producer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -6372,7 +6404,7 @@ version = "1.0.117"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "455182ea6142b14f93f4bc5320a2b31c1f266b66a4a5c858b013302a5d8cbfc3"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "itoa",
  "ryu",
  "serde",
@@ -6456,7 +6488,7 @@ dependencies = [
  "chrono",
  "hex",
  "indexmap 1.9.3",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "serde",
  "serde_derive",
  "serde_json",
@@ -6494,7 +6526,7 @@ version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "itoa",
  "ryu",
  "serde",
@@ -6593,7 +6625,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "identity_iota",
  "identity_storage",
@@ -6669,7 +6701,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=23facd4#23facd4946e4b2e54ef87f42746c68ad952ae205"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=12fed14#12fed1411ff3c0e1797090f386e44694f7a279b8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6827,7 +6859,7 @@ dependencies = [
  "futures-util",
  "hashlink",
  "hex",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "log",
  "memchr",
  "once_cell",
@@ -7703,7 +7735,7 @@ version = "0.19.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "toml_datetime",
  "winnow 0.5.40",
 ]
@@ -7714,7 +7746,7 @@ version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8534fd7f78b5405e860340ad6575217ce99f38d4d5c8f2442cb5ecb50090e1"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "toml_datetime",
  "winnow 0.5.40",
 ]
@@ -7725,7 +7757,7 @@ version = "0.22.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f21c7aaf97f1bd9ca9d4f9e73b0a6c74bd5afef56f2bc931943a6e1c37e04e38"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "serde",
  "serde_spanned",
  "toml_datetime",
@@ -8687,7 +8719,7 @@ dependencies = [
  "crossbeam-utils",
  "displaydoc",
  "flate2",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "memchr",
  "thiserror",
  "zopfli",

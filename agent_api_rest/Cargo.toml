@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 agent_holder = { path = "../agent_holder" }
+agent_identity = { path = "../agent_identity" }
 agent_issuance = { path = "../agent_issuance" }
 agent_shared = { path = "../agent_shared" }
 agent_verification = { path = "../agent_verification" }
@@ -13,8 +14,10 @@ agent_verification = { path = "../agent_verification" }
 axum.workspace = true
 axum-auth = "0.7"
 axum-macros = "0.4"
+did_manager.workspace = true
 http-api-problem = "0.57"
 hyper = { version = "1.2" }
+identity_credential.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true
@@ -31,6 +34,7 @@ uuid.workspace = true
 [dev-dependencies]
 agent_event_publisher_http = { path = "../agent_event_publisher_http", features = ["test_utils"] }
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
+agent_identity = { path = "../agent_identity", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
 agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }

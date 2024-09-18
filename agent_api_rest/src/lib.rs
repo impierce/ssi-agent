@@ -1,8 +1,10 @@
 pub mod holder;
+pub mod identity;
 pub mod issuance;
 pub mod verification;
 
 use agent_holder::state::HolderState;
+use agent_identity::state::IdentityState;
 use agent_issuance::state::IssuanceState;
 use agent_shared::{config::config, ConfigError};
 use agent_verification::state::VerificationState;
@@ -14,6 +16,7 @@ pub const API_VERSION: &str = "/v0";
 
 #[derive(Default)]
 pub struct ApplicationState {
+    pub identity_state: Option<IdentityState>,
     pub issuance_state: Option<IssuanceState>,
     pub holder_state: Option<HolderState>,
     pub verification_state: Option<VerificationState>,
@@ -21,6 +24,7 @@ pub struct ApplicationState {
 
 pub fn app(
     ApplicationState {
+        identity_state,
         issuance_state,
         holder_state,
         verification_state,
@@ -30,6 +34,7 @@ pub fn app(
         .nest(
             &get_base_path().unwrap_or_default(),
             Router::new()
+                .merge(identity_state.map(identity::router).unwrap_or_default())
                 .merge(issuance_state.map(issuance::router).unwrap_or_default())
                 .merge(holder_state.map(holder::router).unwrap_or_default())
                 .merge(verification_state.map(verification::router).unwrap_or_default()),
