@@ -13,10 +13,7 @@ use crate::API_VERSION;
 
 pub fn router(identity_state: IdentityState) -> Router {
     Router::new()
-        .nest(
-            API_VERSION,
-            Router::new().route("/services/linked-vp/:presentation_id", post(linked_vp)),
-        )
+        .nest(API_VERSION, Router::new().route("/services/linked-vp", post(linked_vp)))
         .route("/.well-known/did.json", get(did))
         .route("/.well-known/did-configuration.json", get(did_configuration))
         .with_state(identity_state)
