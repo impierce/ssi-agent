@@ -4,6 +4,7 @@ use crate::credential::event::CredentialEvent;
 use crate::services::HolderServices;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
+use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
@@ -12,7 +13,7 @@ use tracing::info;
 pub struct Credential {
     pub credential_id: Option<String>,
     pub offer_id: Option<String>,
-    pub credential: Option<serde_json::Value>,
+    pub signed: Option<Jwt>,
 }
 
 #[async_trait]
@@ -62,7 +63,7 @@ impl Aggregate for Credential {
             } => {
                 self.credential_id = Some(credential_id);
                 self.offer_id = Some(offer_id);
-                self.credential = Some(credential);
+                self.signed = Some(credential);
             }
         }
     }
@@ -79,7 +80,6 @@ pub mod credential_tests {
     use agent_secret_manager::service::Service;
     use cqrs_es::test::TestFramework;
     use rstest::rstest;
-    use serde_json::json;
 
     type CredentialTestFramework = TestFramework<Credential>;
 
@@ -91,12 +91,12 @@ pub mod credential_tests {
             .when(CredentialCommand::AddCredential {
                 credential_id: credential_id.clone(),
                 offer_id: offer_id.clone(),
-                credential: json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT),
+                credential: Jwt::from(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string()),
             })
             .then_expect_events(vec![CredentialEvent::CredentialAdded {
                 credential_id,
                 offer_id,
-                credential: json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT),
+                credential: Jwt::from(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string()),
             }])
     }
 }

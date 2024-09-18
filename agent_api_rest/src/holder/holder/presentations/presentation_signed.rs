@@ -13,7 +13,7 @@ pub(crate) async fn presentation_signed(
 ) -> Response {
     match query_handler(&presentation_id, &state.query.presentation).await {
         Ok(Some(Presentation {
-            signed_presentation: Some(signed_presentation),
+            signed: Some(signed_presentation),
             ..
         })) => (
             StatusCode::OK,

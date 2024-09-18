@@ -15,7 +15,7 @@ impl View<Presentation> for Presentation {
                 signed_presentation,
             } => {
                 self.presentation_id.clone_from(presentation_id);
-                self.signed_presentation.replace(signed_presentation.clone());
+                self.signed.replace(signed_presentation.clone());
             }
         }
     }

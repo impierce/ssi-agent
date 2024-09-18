@@ -15,7 +15,7 @@ pub struct Presentation {
     // FIX THISS
     pub presentation_id: String,
     // pub credential_ids: Vec<String>,
-    pub signed_presentation: Option<Jwt>,
+    pub signed: Option<Jwt>,
 }
 
 #[async_trait]
@@ -110,7 +110,7 @@ impl Aggregate for Presentation {
                 signed_presentation,
             } => {
                 self.presentation_id = presentation_id;
-                self.signed_presentation.replace(signed_presentation);
+                self.signed.replace(signed_presentation);
             }
         }
     }
