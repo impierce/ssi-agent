@@ -10,8 +10,6 @@ use hyper::StatusCode;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn did(State(state): State<IdentityState>) -> Response {
-    // TODO: check if enabled
-    // Get the DID Document if it exists.
     match query_handler(&DidMethod::Web.to_string(), &state.query.document).await {
         Ok(Some(DocumentView {
             document: Some(document),

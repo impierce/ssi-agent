@@ -55,13 +55,13 @@ pub const DOMAIN_LINKAGE_SERVICE_ID: &str = "linked-domain-service";
 pub async fn initialize(state: &IdentityState) {
     info!("Initializing ...");
 
-    // did:web
     let enable_did_web = config()
         .did_methods
         .get(&SupportedDidMethod::Web)
         .unwrap_or(&ToggleOptions::default())
         .enabled;
 
+    // If the did:web method is enabled, create a document
     if enable_did_web {
         let did_method = DidMethod::Web;
         let command = DocumentCommand::CreateDocument {
@@ -75,6 +75,8 @@ pub async fn initialize(state: &IdentityState) {
             warn!("Failed to create document");
         }
 
+        // If domain linkage is enabled, create the domain linkage service and add it to the document.
+        // TODO: Support this for other (non-deterministic) DID methods.
         if config().domain_linkage_enabled {
             let command = ServiceCommand::CreateDomainLinkageService {
                 service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
@@ -87,14 +89,20 @@ pub async fn initialize(state: &IdentityState) {
                 warn!("Failed to create domain linkage service");
             }
 
-            let service = query_handler(&DOMAIN_LINKAGE_SERVICE_ID, &state.query.service)
-                .await
-                .unwrap()
-                .unwrap()
-                .service
-                .unwrap();
+            let linked_domains_service = match query_handler(&DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
+                Ok(Some(Service {
+                    service: Some(linked_domains_service),
+                    ..
+                })) => linked_domains_service,
+                _ => {
+                    warn!("Failed to retrieve linked domains service");
+                    return;
+                }
+            };
 
-            let command = DocumentCommand::AddService { service };
+            let command = DocumentCommand::AddService {
+                service: linked_domains_service,
+            };
 
             if command_handler(&did_method.to_string(), &state.command.document, command)
                 .await
