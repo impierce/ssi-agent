@@ -40,13 +40,13 @@ pub(crate) async fn post_presentations(State(state): State<HolderState>, Json(pa
 
     let mut credentials = vec![];
 
+    // Get all the credentials.
     for credential_id in credential_ids {
         match query_handler(&credential_id, &state.query.credential).await {
             Ok(Some(CredentialView {
-                credential: Some(credential),
+                signed: Some(credential),
                 ..
             })) => {
-                let credential = Jwt::from(credential.as_str().unwrap().to_string());
                 credentials.push(credential);
             }
             Ok(None) => return StatusCode::NOT_FOUND.into_response(),
@@ -61,13 +61,16 @@ pub(crate) async fn post_presentations(State(state): State<HolderState>, Json(pa
         signed_credentials: credentials,
     };
 
-    command_handler(&presentation_id, &state.command.presentation, command)
+    // Create the presentation.
+    if command_handler(&presentation_id, &state.command.presentation, command)
         .await
-        .unwrap();
+        .is_err()
+    {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
 
     match query_handler(&presentation_id, &state.query.presentation).await {
         Ok(Some(presentation_view)) => (StatusCode::OK, Json(presentation_view)).into_response(),
-        Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
