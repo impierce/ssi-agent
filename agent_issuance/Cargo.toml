@@ -49,6 +49,6 @@ async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 [features]
 test_utils = [
     "dep:lazy_static",
+    "dep:once_cell",
     "dep:rstest",
-    "dep:once_cell"
 ]
