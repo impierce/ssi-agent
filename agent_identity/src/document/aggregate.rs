@@ -51,21 +51,21 @@ impl Aggregate for Document {
                     .produce_document(
                         did_method,
                         method_specific_parameters,
-                        // TODO: This way the Document can only support on single algorithm. We need to support multiple algorithms.
+                        // TODO: This way the Document can only support on single algorithm. We need to make sure that
+                        // Documents can support multiple algorithms.
                         from_jsonwebtoken_algorithm_to_jwsalgorithm(&get_preferred_signing_algorithm()),
                     )
                     .await
-                    // FIX THISS
-                    .unwrap();
+                    .map_err(|err| ProduceDocumentError(err.to_string()))?;
 
                 Ok(vec![DocumentCreated { document }])
             }
             AddService { service } => {
-                // FIX THIS
-                let mut document = self.document.clone().unwrap();
+                let mut document = self.document.clone().ok_or(MissingDocumentError)?;
 
-                // FIX THIS
-                document.insert_service(service).unwrap();
+                document
+                    .insert_service(service)
+                    .map_err(|err| AddServiceError(err.to_string()))?;
 
                 Ok(vec![ServiceAdded { document }])
             }
@@ -85,5 +85,122 @@ impl Aggregate for Document {
                 self.document.replace(document);
             }
         }
+    }
+}
+
+#[cfg(test)]
+pub mod document_tests {
+    use super::test_utils::*;
+    use super::*;
+    use cqrs_es::test::TestFramework;
+    use identity_document::service::Service;
+    use rstest::rstest;
+
+    type DocumentTestFramework = TestFramework<Document>;
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_document(did_method: DidMethod, #[future(awt)] document: CoreDocument) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given_no_previous_events()
+            .when(DocumentCommand::CreateDocument { did_method })
+            .then_expect_events(vec![DocumentEvent::DocumentCreated { document }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_add_service(
+        #[future(awt)] document: CoreDocument,
+        domain_linkage_service: Service,
+        #[future(awt)] document_with_domain_linkage_service: CoreDocument,
+    ) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![DocumentEvent::DocumentCreated { document }])
+            .when(DocumentCommand::AddService {
+                service: domain_linkage_service,
+            })
+            .then_expect_events(vec![DocumentEvent::ServiceAdded {
+                document: document_with_domain_linkage_service,
+            }])
+    }
+}
+
+#[cfg(feature = "test_utils")]
+pub mod test_utils {
+    use agent_secret_manager::secret_manager;
+    use agent_shared::{
+        config::{config, get_preferred_signing_algorithm},
+        from_jsonwebtoken_algorithm_to_jwsalgorithm,
+    };
+    use did_manager::{DidMethod, MethodSpecificParameters};
+    use identity_core::convert::FromJson;
+    use identity_document::{
+        document::CoreDocument,
+        service::{Service, ServiceEndpoint},
+    };
+    use rstest::*;
+    use serde_json::json;
+
+    #[fixture]
+    pub fn did_method() -> DidMethod {
+        DidMethod::Web
+    }
+
+    #[fixture]
+    pub async fn document(did_method: DidMethod) -> CoreDocument {
+        let mut secret_manager = secret_manager().await;
+
+        let method_specific_parameters = matches!(did_method, DidMethod::Web).then(|| MethodSpecificParameters::Web {
+            origin: config().url.origin(),
+        });
+
+        secret_manager
+            .produce_document(
+                did_method,
+                method_specific_parameters,
+                from_jsonwebtoken_algorithm_to_jwsalgorithm(&get_preferred_signing_algorithm()),
+            )
+            .await
+            .unwrap()
+    }
+
+    #[fixture]
+    pub fn domain_linkage_service() -> Service {
+        Service::builder(Default::default())
+            .id(format!("did:test:123#linked_domain-service").parse().unwrap())
+            .type_("LinkedDomains")
+            .service_endpoint(
+                ServiceEndpoint::from_json_value(json!({
+                    "origins": [config().url],
+                }))
+                .unwrap(),
+            )
+            .build()
+            .unwrap()
+    }
+
+    #[fixture]
+    pub async fn document_with_domain_linkage_service(
+        did_method: DidMethod,
+        domain_linkage_service: Service,
+    ) -> CoreDocument {
+        let mut secret_manager = secret_manager().await;
+
+        let method_specific_parameters = matches!(did_method, DidMethod::Web).then(|| MethodSpecificParameters::Web {
+            origin: config().url.origin(),
+        });
+
+        let mut document = secret_manager
+            .produce_document(
+                did_method,
+                method_specific_parameters,
+                from_jsonwebtoken_algorithm_to_jwsalgorithm(&get_preferred_signing_algorithm()),
+            )
+            .await
+            .unwrap();
+
+        document.insert_service(domain_linkage_service).unwrap();
+
+        document
     }
 }

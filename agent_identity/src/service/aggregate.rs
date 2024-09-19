@@ -1,7 +1,7 @@
 use super::{command::ServiceCommand, error::ServiceError, event::ServiceEvent};
 use crate::services::IdentityServices;
 use agent_shared::{
-    config::{config, get_preferred_signing_algorithm},
+    config::{config, get_preferred_did_method, get_preferred_signing_algorithm},
     from_jsonwebtoken_algorithm_to_jwsalgorithm,
 };
 use async_trait::async_trait;
@@ -18,6 +18,7 @@ use identity_credential::{
 };
 use identity_document::service::{Service as DocumentService, ServiceEndpoint};
 use jsonwebtoken::Header;
+use oid4vc_core::authentication::subject::Subject as _;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
@@ -55,31 +56,24 @@ impl Aggregate for Service {
 
         match command {
             CreateDomainLinkageService { service_id } => {
-                let mut secret_manager = services.subject.secret_manager.lock().await;
+                let subject = &services.subject;
 
                 let origin = config().url.origin();
-                let method_specific_parameters = MethodSpecificParameters::Web { origin: origin.clone() };
 
-                // TODO: implement for all non-deterministic methods and not just DID WEB
-                let document = secret_manager
-                    .produce_document(
-                        DidMethod::Web,
-                        Some(method_specific_parameters),
-                        // TODO: This way the Document can only support on single algorithm. We need to support multiple algorithms.
-                        from_jsonwebtoken_algorithm_to_jwsalgorithm(&get_preferred_signing_algorithm()),
+                let subject_did = subject
+                    .identifier(
+                        &get_preferred_did_method().to_string(),
+                        get_preferred_signing_algorithm(),
                     )
                     .await
-                    // FIX THISS
                     .unwrap();
-
-                let subject_did = document.id();
 
                 let origin = identity_core::common::Url::parse(origin.ascii_serialization()).unwrap();
                 let domain_linkage_credential = DomainLinkageCredentialBuilder::new()
-                    .issuer(subject_did.clone())
+                    .issuer(subject_did.parse().unwrap())
                     .origin(origin.clone())
                     .issuance_date(Timestamp::now_utc())
-                    // Expires after a year.
+                    // TODO: make this configurable
                     .expiration_date(Timestamp::now_utc().checked_add(Duration::days(365)).unwrap())
                     .build()
                     // FIX THISS
@@ -91,7 +85,7 @@ impl Aggregate for Service {
                 // Compose JWT
                 let header = Header {
                     alg: get_preferred_signing_algorithm(),
-                    typ: Some("JWT".to_string()),
+                    typ: None,
                     // TODO: make dynamic
                     kid: Some(format!("{subject_did}#key-0")),
                     ..Default::default()
@@ -102,6 +96,8 @@ impl Aggregate for Service {
                     URL_SAFE_NO_PAD.encode(domain_linkage_credential.as_bytes()),
                 ]
                 .join(".");
+
+                let secret_manager = subject.secret_manager.lock().await;
 
                 let proof_value = secret_manager
                     .sign(
@@ -196,5 +192,91 @@ impl Aggregate for Service {
                 self.service.replace(service);
             }
         }
+    }
+}
+
+#[cfg(test)]
+pub mod service_tests {
+    use identity_document::service::Service as DocumentService;
+
+    use super::test_utils::*;
+    use super::*;
+    use cqrs_es::test::TestFramework;
+    use rstest::rstest;
+
+    type ServiceTestFramework = TestFramework<Service>;
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_domain_linkage_service(
+        domain_linkage_service_id: String,
+        domain_linkage_service: DocumentService,
+        domain_linkage_resource: ServiceResource,
+    ) {
+        ServiceTestFramework::with(IdentityServices::default())
+            .given_no_previous_events()
+            .when(ServiceCommand::CreateDomainLinkageService {
+                service_id: domain_linkage_service_id.clone(),
+            })
+            .then_expect_events(vec![ServiceEvent::DomainLinkageServiceCreated {
+                service_id: domain_linkage_service_id,
+                service: domain_linkage_service,
+                resource: domain_linkage_resource,
+            }])
+    }
+
+    // #[rstest]
+    // #[serial_test::serial]
+    // async fn test_add_service(
+    //     #[future(awt)] document: CoreDocument,
+    //     domain_linkage_service: Service,
+    //     #[future(awt)] document_with_domain_linkage_service: CoreDocument,
+    // ) {
+    //     DocumentTestFramework::with(IdentityServices::default())
+    //         .given(vec![DocumentEvent::DocumentCreated { document }])
+    //         .when(DocumentCommand::AddService {
+    //             service: domain_linkage_service,
+    //         })
+    //         .then_expect_events(vec![DocumentEvent::ServiceAdded {
+    //             document: document_with_domain_linkage_service,
+    //         }])
+    // }
+}
+
+#[cfg(feature = "test_utils")]
+pub mod test_utils {
+    use super::*;
+    use crate::state::DOMAIN_LINKAGE_SERVICE_ID;
+    use agent_shared::config::config;
+    use identity_core::convert::FromJson;
+    use identity_document::service::{Service, ServiceEndpoint};
+    use rstest::*;
+    use serde_json::json;
+
+    #[fixture]
+    pub fn domain_linkage_service_id() -> String {
+        DOMAIN_LINKAGE_SERVICE_ID.to_string()
+    }
+
+    #[fixture]
+    pub fn domain_linkage_service() -> DocumentService {
+        Service::builder(Default::default())
+            .id(format!("did:test:123#linked_domain-service").parse().unwrap())
+            .type_("LinkedDomains")
+            .service_endpoint(
+                ServiceEndpoint::from_json_value(json!({
+                    "origins": [config().url],
+                }))
+                .unwrap(),
+            )
+            .build()
+            .unwrap()
+    }
+
+    #[fixture]
+    pub fn domain_linkage_resource() -> ServiceResource {
+        let domain_linkage_configuration = DomainLinkageConfiguration::new(vec![Jwt::from("message".to_string())]);
+
+        ServiceResource::DomainLinkage(domain_linkage_configuration)
     }
 }

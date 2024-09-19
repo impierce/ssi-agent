@@ -89,7 +89,7 @@ pub async fn initialize(state: &IdentityState) {
                 warn!("Failed to create domain linkage service");
             }
 
-            let linked_domains_service = match query_handler(&DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
+            let linked_domains_service = match query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
                 Ok(Some(Service {
                     service: Some(linked_domains_service),
                     ..

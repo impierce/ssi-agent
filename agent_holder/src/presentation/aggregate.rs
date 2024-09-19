@@ -12,9 +12,7 @@ use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Presentation {
-    // FIX THISS
     pub presentation_id: String,
-    // pub credential_ids: Vec<String>,
     pub signed: Option<Jwt>,
 }
 
