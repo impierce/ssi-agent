@@ -196,7 +196,7 @@ mod tests {
         let yaml_value = patch_generated_openapi(ApiDoc::openapi());
         let yaml_string = serde_yaml::to_string(&yaml_value).unwrap();
         println!("{}", yaml_string);
-        std::fs::write("generated.openapi.yaml", yaml_string).unwrap();
+        std::fs::write("openapi.yaml", yaml_string).unwrap();
     }
 
     #[tokio::test]
