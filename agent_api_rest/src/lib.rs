@@ -12,11 +12,6 @@ use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
 use utoipa::{openapi::ServerBuilder, OpenApi};
 use utoipa_scalar::{Scalar, Servable};
-use utoipa_swagger_ui::SwaggerUi;
-use verification::{
-    authorization_requests::{authorization_requests, get_authorization_requests},
-    relying_party::{redirect::redirect, request::request},
-};
 
 use crate::openapi::{HolderApi, IssuanceApi, VerificationApi, WellKnownApi};
 
@@ -37,14 +32,17 @@ pub fn app(
     }: ApplicationState,
 ) -> Router {
     Router::new()
-        .merge(Scalar::with_url("/scalar", patch_generated_openapi(ApiDoc::openapi())))
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", patch_generated_openapi(ApiDoc::openapi())))
         .nest(
             &get_base_path().unwrap_or_default(),
             Router::new()
                 .merge(issuance_state.map(issuance::router).unwrap_or_default())
                 .merge(holder_state.map(holder::router).unwrap_or_default())
-                .merge(verification_state.map(verification::router).unwrap_or_default()),
+                .merge(verification_state.map(verification::router).unwrap_or_default())
+                // API Docs
+                .merge(Scalar::with_url(
+                    format!("{}/api-reference", API_VERSION),
+                    patch_generated_openapi(ApiDoc::openapi()),
+                )),
         )
         // Trace layer
         .layer(
@@ -194,7 +192,7 @@ mod tests {
     async fn handler() {}
 
     #[tokio::test]
-    async fn openapi() {
+    async fn generate_openapi_file() {
         let yaml_value = patch_generated_openapi(ApiDoc::openapi());
         let yaml_string = serde_yaml::to_string(&yaml_value).unwrap();
         println!("{}", yaml_string);
