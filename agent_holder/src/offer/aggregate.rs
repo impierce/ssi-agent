@@ -12,7 +12,7 @@ use oid4vci::token_response::TokenResponse;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum Status {
@@ -93,9 +93,12 @@ impl Aggregate for Offer {
                 }])
             }
             AcceptCredentialOffer { offer_id } => {
-                // TODO: should we 'do nothing' or log a `warn!` message instead of returning an error?
+                // TODO: reconsider business logic: can an offer be accepted multiple times? if not, should an error be thrown to the user?
                 if self.status != Status::Pending {
-                    return Err(CredentialOfferStatusNotPendingError);
+                    warn!(
+                        "Accepting Offer with ID: {offer_id} while its current status is: {:?}",
+                        self.status
+                    );
                 }
 
                 let wallet = &services.wallet;
