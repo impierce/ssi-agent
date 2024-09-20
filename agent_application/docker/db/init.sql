@@ -74,7 +74,6 @@ CREATE TABLE holder_credential
     PRIMARY KEY (view_id)
 );
 
-
 CREATE TABLE all_credentials
 (
     view_id           text                        NOT NULL,
