@@ -1,3 +1,4 @@
+use agent_secret_manager::service::Service;
 use agent_shared::config::{config, get_all_enabled_did_methods, get_preferred_did_method};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{client_metadata::ClientMetadataResource, Subject};
@@ -14,8 +15,8 @@ pub struct VerificationServices {
     pub oid4vp_client_metadata: ClientMetadataResource<oid4vp::authorization_request::ClientMetadataParameters>,
 }
 
-impl VerificationServices {
-    pub fn new(verifier: Arc<dyn Subject>) -> Self {
+impl Service for VerificationServices {
+    fn new(verifier: Arc<dyn Subject>) -> Self {
         let client_name = config().display.first().as_ref().map(|display| display.name.clone());
 
         let logo_uri = config()
@@ -81,23 +82,5 @@ impl VerificationServices {
             siopv2_client_metadata,
             oid4vp_client_metadata,
         }
-    }
-}
-
-#[cfg(feature = "test_utils")]
-pub mod test_utils {
-    use agent_secret_manager::secret_manager;
-    use agent_secret_manager::subject::Subject;
-
-    use super::*;
-
-    pub fn test_verification_services() -> Arc<VerificationServices> {
-        Arc::new(VerificationServices::new(Arc::new(futures::executor::block_on(
-            async {
-                Subject {
-                    secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
-                }
-            },
-        ))))
     }
 }

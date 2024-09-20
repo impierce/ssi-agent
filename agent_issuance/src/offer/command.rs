@@ -7,23 +7,28 @@ use oid4vci::{
     token_request::TokenRequest,
 };
 use serde::Deserialize;
+use url::Url;
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum OfferCommand {
     CreateCredentialOffer {
         offer_id: String,
+        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
     },
     AddCredentials {
         offer_id: String,
         credential_ids: Vec<String>,
+    },
+    SendCredentialOffer {
+        offer_id: String,
+        target_url: Url,
     },
 
     // OpenID4VCI Pre-Authorized Code Flow
     // TODO: add option for credential_offer_uri (by reference)
     CreateFormUrlEncodedCredentialOffer {
         offer_id: String,
-        credential_issuer_metadata: CredentialIssuerMetadata,
     },
     CreateTokenResponse {
         offer_id: String,
@@ -31,7 +36,7 @@ pub enum OfferCommand {
     },
     VerifyCredentialRequest {
         offer_id: String,
-        credential_issuer_metadata: CredentialIssuerMetadata,
+        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_request: CredentialRequest,
     },

@@ -124,7 +124,7 @@ impl Aggregate for ServerConfig {
                 credential_issuer_metadata,
             } => {
                 self.authorization_server_metadata = *authorization_server_metadata;
-                self.credential_issuer_metadata = credential_issuer_metadata;
+                self.credential_issuer_metadata = *credential_issuer_metadata;
             }
             CredentialConfigurationAdded {
                 credential_configurations,
@@ -135,110 +135,112 @@ impl Aggregate for ServerConfig {
 
 #[cfg(test)]
 pub mod server_config_tests {
-    use std::collections::HashMap;
-
+    use super::test_utils::*;
     use super::*;
-
-    use agent_shared::config::CredentialConfiguration;
-    use lazy_static::lazy_static;
-    use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
-    use oid4vci::credential_format_profiles::{w3c_verifiable_credentials, CredentialFormats, Parameters};
-    use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
-    use serde_json::json;
-
-    use cqrs_es::test::TestFramework;
-
     use crate::server_config::aggregate::ServerConfig;
     use crate::server_config::event::ServerConfigEvent;
+    use agent_shared::config::CredentialConfiguration;
+    use cqrs_es::test::TestFramework;
+    use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
+    use oid4vci::credential_format_profiles::{w3c_verifiable_credentials, CredentialFormats, Parameters};
+    use rstest::*;
+    use serde_json::json;
 
     type ServerConfigTestFramework = TestFramework<ServerConfig>;
 
-    #[test]
-    fn test_load_server_metadata() {
+    #[rstest]
+    fn test_load_server_metadata(
+        authorization_server_metadata: Box<AuthorizationServerMetadata>,
+        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
+    ) {
         ServerConfigTestFramework::with(())
             .given_no_previous_events()
             .when(ServerConfigCommand::InitializeServerMetadata {
-                authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
-                credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
+                authorization_server_metadata: authorization_server_metadata.clone(),
+                credential_issuer_metadata: credential_issuer_metadata.clone(),
             })
             .then_expect_events(vec![ServerConfigEvent::ServerMetadataInitialized {
-                authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
-                credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
+                authorization_server_metadata,
+                credential_issuer_metadata,
             }]);
     }
-    #[test]
-    fn test_create_credentials_supported() {
+    #[rstest]
+    fn test_create_credentials_supported(
+        authorization_server_metadata: Box<AuthorizationServerMetadata>,
+        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
+    ) {
         ServerConfigTestFramework::with(())
             .given(vec![ServerConfigEvent::ServerMetadataInitialized {
-                authorization_server_metadata: AUTHORIZATION_SERVER_METADATA.clone(),
-                credential_issuer_metadata: CREDENTIAL_ISSUER_METADATA.clone(),
+                authorization_server_metadata,
+                credential_issuer_metadata: credential_issuer_metadata.clone(),
             }])
             .when(ServerConfigCommand::AddCredentialConfiguration {
                 credential_configuration: CredentialConfiguration {
-                    credential_configuration_id: "0".to_string(),
+                    credential_configuration_id: "badge".to_string(),
                     credential_format_with_parameters: CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
                         parameters: w3c_verifiable_credentials::jwt_vc_json::JwtVcJsonParameters {
                             credential_definition: w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition {
-                                type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
+                                type_: vec!["VerifiableCredential".to_string()],
                                 credential_subject: Default::default(),
                             },
                             order: None,
                         },
                     }),
-                    display: vec![],
+                    display: vec![json!({
+                        "name": "Verifiable Credential",
+                        "locale": "en",
+                        "logo": {
+                            "uri": "https://impierce.com/images/logo-blue.png",
+                            "alt_text": "UniCore Logo"
+                        }
+                    })],
                 },
             })
             .then_expect_events(vec![ServerConfigEvent::CredentialConfigurationAdded {
-                credential_configurations: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
+                credential_configurations: credential_issuer_metadata.credential_configurations_supported,
             }]);
     }
+}
 
-    lazy_static! {
-        static ref BASE_URL: url::Url = "https://example.com/".parse().unwrap();
-        static ref CREDENTIAL_CONFIGURATIONS_SUPPORTED: HashMap<String, CredentialConfigurationsSupportedObject> =
-            vec![(
-                "0".to_string(),
-                serde_json::from_value(json!({
-                    "format": "jwt_vc_json",
-                    "cryptographic_binding_methods_supported": [
-                        "did:iota:rms",
-                        "did:jwk",
-                        "did:key",
-                    ],
-                    "credential_signing_alg_values_supported": [
-                        "EdDSA"
-                    ],
-                    "proof_types_supported": {
-                        "jwt": {
-                            "proof_signing_alg_values_supported": [
-                                "EdDSA"
-                            ]
-                        }
-                    },
-                    "credential_definition":{
-                        "type": [
-                            "VerifiableCredential",
-                            "OpenBadgeCredential"
-                        ]
-                    }
-                }
-                ))
-                .unwrap()
-            )]
-            .into_iter()
-            .collect();
-        pub static ref AUTHORIZATION_SERVER_METADATA: Box<AuthorizationServerMetadata> =
-            Box::new(AuthorizationServerMetadata {
-                issuer: BASE_URL.clone(),
-                token_endpoint: Some(BASE_URL.join("token").unwrap()),
-                ..Default::default()
-            });
-        pub static ref CREDENTIAL_ISSUER_METADATA: CredentialIssuerMetadata = CredentialIssuerMetadata {
-            credential_issuer: BASE_URL.clone(),
-            credential_endpoint: BASE_URL.join("credential").unwrap(),
-            batch_credential_endpoint: Some(BASE_URL.join("batch_credential").unwrap()),
-            credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
+#[cfg(feature = "test_utils")]
+pub mod test_utils {
+    use super::*;
+    use crate::credential::aggregate::test_utils::W3C_VC_CREDENTIAL_CONFIGURATION;
+    use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
+    use rstest::*;
+    use url::Url;
+
+    #[fixture]
+    #[once]
+    pub fn static_issuer_url() -> url::Url {
+        "https://example.com/".parse().unwrap()
+    }
+
+    #[fixture]
+    pub fn credential_configurations_supported() -> HashMap<String, CredentialConfigurationsSupportedObject> {
+        HashMap::from_iter(vec![("badge".to_string(), W3C_VC_CREDENTIAL_CONFIGURATION.clone())])
+    }
+
+    #[fixture]
+    pub fn authorization_server_metadata(static_issuer_url: &Url) -> Box<AuthorizationServerMetadata> {
+        Box::new(AuthorizationServerMetadata {
+            issuer: static_issuer_url.clone(),
+            token_endpoint: Some(static_issuer_url.join("token").unwrap()),
             ..Default::default()
-        };
+        })
+    }
+
+    #[fixture]
+    pub fn credential_issuer_metadata(
+        static_issuer_url: &Url,
+        credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
+    ) -> Box<CredentialIssuerMetadata> {
+        Box::new(CredentialIssuerMetadata {
+            credential_issuer: static_issuer_url.clone(),
+            credential_endpoint: static_issuer_url.join("credential").unwrap(),
+            batch_credential_endpoint: Some(static_issuer_url.join("batch_credential").unwrap()),
+            credential_configurations_supported,
+            ..Default::default()
+        })
     }
 }

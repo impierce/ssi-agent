@@ -12,6 +12,7 @@ async-trait = "0.1"
 base64.workspace = true
 cqrs-es = "0.4.2"
 did_manager.workspace = true
+futures.workspace = true
 identity_iota.workspace = true
 jsonwebtoken = "9.3"
 log = "0.4"
@@ -28,3 +29,6 @@ agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 futures.workspace = true
 lazy_static.workspace = true
 ring = "0.17.8"
+
+[features]
+test_utils = []
