@@ -228,7 +228,7 @@ pub enum SupportedDidMethod {
 
 impl From<SupportedDidMethod> for SubjectSyntaxType {
     fn from(val: SupportedDidMethod) -> Self {
-        SubjectSyntaxType::try_from(val.to_string().as_str()).expect("convertion into `SubjectSyntaxType` failed")
+        SubjectSyntaxType::try_from(val.to_string().as_str()).expect("conversion into `SubjectSyntaxType` failed")
     }
 }
 
