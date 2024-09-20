@@ -7,13 +7,20 @@ Breaking changes may occur before the API reaches a stable version.
 
 The current version of the REST API is `v0`.
 
-### OpenAPI specification (Swagger UI)
+### OpenAPI specification
+
+> [!NOTE]
+> UniCore uses [Scalar](https://scalar.com) to make its OpenAPI specification interactive. It is served under `/<BASE_PATH>/<API_VERSION>/api-reference` (for example: `/v0/api-reference`). The `openapi.yaml` file can be downloaded there as well. The latest version of the `openapi.yaml` file is also deployed as part of the documentation at https://docs.impierce.com/unicore/api-reference.
+
+#### Swagger UI
+
+You can also run a local Swagger UI container to inspect the OpenAPI specification.
 
 ```bash
 docker run --rm -p 9090:8080 -e SWAGGER_JSON=/tmp/openapi.yaml -v $(pwd):/tmp swaggerapi/swagger-ui
 ```
 
-Browse to http://localhost:9090
+Browse to http://localhost:9090.
 
 ### CORS
 
