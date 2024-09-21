@@ -20,15 +20,15 @@ use serde_json::Value;
 use tracing::info;
 use utoipa::ToSchema;
 
-/// Get an authorization request
+/// Get an Authorization Request
 ///
-/// Foobar
+/// Retrieve an existing Authorization Request.
 #[utoipa::path(
     get,
     path = "/authorization_requests/{id}",
     tag = "Verification",
     responses(
-        (status = 200, description = "")
+        (status = 200, description = "Successfully returns an existing Authorization Request.", body = [GenericAuthorizationRequest])
     )
 )]
 #[axum_macros::debug_handler]
@@ -62,16 +62,16 @@ pub enum PresentationDefinitionResource {
     PresentationDefinition(PresentationDefinition),
 }
 
-/// Create an authorization request
+/// Create a new Authorization Request
 ///
-/// Foobar
+/// UniCore will ask a holder for certain information based on the Presentation Definition specified.
 #[utoipa::path(
     post,
     path = "/authorization_requests",
     request_body = AuthorizationRequestsEndpointRequest,
     tag = "Verification",
     responses(
-        (status = 200, description = "")
+        (status = 201, description = "Authorization Request successfully created."),
     )
 )]
 #[axum_macros::debug_handler]

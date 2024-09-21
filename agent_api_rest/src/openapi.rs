@@ -1,7 +1,6 @@
 use utoipa::OpenApi;
 
 use crate::holder::holder;
-use crate::issuance::credential_issuer::well_known::{oauth_authorization_server, openid_credential_issuer};
 use crate::issuance::credentials::{self, CredentialsEndpointRequest};
 use crate::issuance::offers;
 use crate::verification::authorization_requests;
@@ -29,10 +28,3 @@ pub(crate) struct VerificationApi;
     holder::offers::reject::reject
 ))]
 pub(crate) struct HolderApi;
-
-#[derive(OpenApi)]
-#[openapi(
-        paths(oauth_authorization_server::oauth_authorization_server, openid_credential_issuer::openid_credential_issuer),
-        // components(schemas(Todo, TodoError))
-)]
-pub(crate) struct WellKnownApi;

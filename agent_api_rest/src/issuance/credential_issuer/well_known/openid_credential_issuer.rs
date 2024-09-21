@@ -11,11 +11,12 @@ use axum::{
 
 /// Credential Issuer Metadata
 ///
-/// Returns the Credential Issuer Metadata.
+/// Standard OpenID Connect discovery endpoint for issuer metadata.
 #[utoipa::path(
     get,
-    path = "/openid-credential-issuer",
-    tag = "Well-Known",
+    path = "/.well-known/openid-credential-issuer",
+    tag = "Well-known",
+    tags = ["(public)"],
     responses(
         (status = 200, description = "Successfully returns the Credential Issuer Metadata", body = [CredentialIssuerMetadata])
     )

@@ -16,15 +16,16 @@ pub struct Oid4vciOfferEndpointRequest {
     pub credential_offer: CredentialOffer,
 }
 
-/// Get an offer
+/// Credential Offer Endpoint
 ///
-/// Retrieve offer if it exists.
+/// Standard OpenID4VCI endpoint that allows the issuer to pass information to the wallet.
 #[utoipa::path(
     get,
     path = "/openid4vci/offers",
-    tag = "OpenID4VCI",
+    tag = "Holder",
+    tags = ["(public)"],
     responses(
-        (status = 200, description = "Successfully retrieved offer."),
+        (status = 200, description = "Successfully received offer metadata."),
     )
 )]
 #[axum_macros::debug_handler]

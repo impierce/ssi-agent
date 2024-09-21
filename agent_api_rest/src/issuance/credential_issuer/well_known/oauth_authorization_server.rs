@@ -11,11 +11,12 @@ use axum::{
 
 /// Authorization Server Metadata
 ///
-/// Returns the Authorization Server Metadata.
+/// Standard OpenID Connect discovery endpoint for authorization metadata.
 #[utoipa::path(
     get,
-    path = "/oauth-authorization-server",
-    tag = "Well-Known",
+    path = "/.well-known/oauth-authorization-server",
+    tag = "Well-known",
+    tags = ["(public)"],
     responses(
         (status = 200, description = "Successfully returns the Authorization Server Metadata", body = [AuthorizationServerMetadata])
     )

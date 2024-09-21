@@ -13,7 +13,7 @@ use tracing::{info_span, Span};
 use utoipa::{openapi::ServerBuilder, OpenApi};
 use utoipa_scalar::{Scalar, Servable};
 
-use crate::openapi::{HolderApi, IssuanceApi, VerificationApi, WellKnownApi};
+use crate::openapi::{HolderApi, IssuanceApi, VerificationApi};
 
 pub const API_VERSION: &str = "/v0";
 
@@ -93,30 +93,30 @@ fn get_base_path() -> Result<String, ConfigError> {
         })
 }
 
-// #[derive(OpenApi)]
-// #[openapi(modifiers(), nest((path = "/v0/todos", api = WellKnownApi)), tags((name = "well-known")))]
-// struct ApiDoc;
-
 #[derive(utoipa::OpenApi)]
 #[openapi(
         // modifiers(),
+        paths(
+            // Standard endpoints as defined in the protocol specifications.
+            // OAuth 2.0
+            crate::verification::relying_party::redirect::redirect,
+            crate::verification::relying_party::request::request,
+            crate::issuance::credential_issuer::token::token,
+            // OpenID4VCI
+            crate::holder::openid4vci::offers,
+            crate::issuance::credential_issuer::credential::credential,
+            // .well-known
+            crate::issuance::credential_issuer::well_known::oauth_authorization_server::oauth_authorization_server,
+            crate::issuance::credential_issuer::well_known::openid_credential_issuer::openid_credential_issuer,
+        ),
         nest(
-            (path = "/.well-known", api = WellKnownApi),
             (path = "/v0", api = IssuanceApi),
             (path = "/v0", api = VerificationApi),
             (path = "/v0", api = HolderApi)
         ),
-        paths(
-            crate::holder::openid4vci::offers,
-            crate::issuance::credential_issuer::credential::credential,
-        ),
-        // paths(
-        //     crate::issuance::credential_issuer::CredentialApi
-        // ),
         tags(
-            // (name = "todo", description = "Todo items management API"),
-            (name = "OpenID4VCI", description = "All operations revolved around the OpenID4VCI standard.", external_docs(url = "https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html", description = "OpenID for Verifiable Credential Issuance")),
-            (name = "Well-Known", description = "Well-known endpoints provide metadata about the server."),
+            (name = "(public)", description = "A collection of endpoints that should be publicly accessible without authentication. They are used to resolve metadata or allow communication with wallets."),
+            (name = "Well-known", description = "Well-known endpoints provide metadata about the server.")
         )
     )]
 pub struct ApiDoc;
@@ -124,10 +124,11 @@ pub struct ApiDoc;
 pub fn patch_generated_openapi(mut openapi: utoipa::openapi::OpenApi) -> utoipa::openapi::OpenApi {
     openapi.info.title = "UniCore HTTP API".into();
     openapi.info.description = Some("Full HTTP API reference for the UniCore SSI Agent".to_string());
-    // openapi.info.version = "1.0.0-alpha.1".into(); // can this be determined or does it need to be removed from the openapi.yaml?
+    // openapi.info.version = "1.0.0-alpha.1".into(); // can UniCore even be aware of its current version or does it need to be removed from the openapi.yaml?
     openapi.info.version = "".into();
     openapi.servers = vec![ServerBuilder::new()
         .url("https://arty-aragorn.agent-dev.impierce.com")
+        .description(Some("UniCore development server hosted by Impierce Technologies"))
         .build()]
     .into();
     openapi
