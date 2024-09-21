@@ -10,7 +10,7 @@ use serde_json::json;
 
 /// Get all credentials
 ///
-/// Retrieve all credentials that UniCore currently holds.
+/// Retrieve all credentials that this UniCore instance currently holds.
 #[utoipa::path(
     get,
     path = "/holder/credentials",

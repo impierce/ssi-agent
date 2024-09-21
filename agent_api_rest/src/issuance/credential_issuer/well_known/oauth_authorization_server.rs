@@ -15,7 +15,7 @@ use axum::{
 #[utoipa::path(
     get,
     path = "/.well-known/oauth-authorization-server",
-    tag = "Well-known",
+    tag = "(.well-known)",
     tags = ["(public)"],
     responses(
         (status = 200, description = "Successfully returns the Authorization Server Metadata", body = [AuthorizationServerMetadata])

@@ -12,7 +12,7 @@ paths:
   /.well-known/oauth-authorization-server:
     get:
       tags:
-      - Well-known
+      - (.well-known)
       - (public)
       summary: Authorization Server Metadata
       description: Standard OpenID Connect discovery endpoint for authorization metadata.
@@ -29,7 +29,7 @@ paths:
   /.well-known/openid-credential-issuer:
     get:
       tags:
-      - Well-known
+      - (.well-known)
       - (public)
       summary: Credential Issuer Metadata
       description: Standard OpenID Connect discovery endpoint for issuer metadata.
@@ -218,7 +218,7 @@ paths:
       tags:
       - Holder
       summary: Get all credentials
-      description: Retrieve all credentials that UniCore currently holds.
+      description: Retrieve all credentials that this UniCore instance currently holds.
       operationId: credentials
       responses:
         '200':
@@ -300,5 +300,10 @@ components:
 tags:
 - name: (public)
   description: A collection of endpoints that should be publicly accessible without authentication. They are used to resolve metadata or allow communication with wallets.
-- name: Well-known
+- name: (.well-known)
   description: Well-known endpoints provide metadata about the server.
+- name: Issuance
+  description: Issue credentials to holders that will store them in their wallets.
+  externalDocs:
+    url: https://docs.impierce.com
+    description: Official Documentation

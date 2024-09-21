@@ -116,7 +116,8 @@ fn get_base_path() -> Result<String, ConfigError> {
         ),
         tags(
             (name = "(public)", description = "A collection of endpoints that should be publicly accessible without authentication. They are used to resolve metadata or allow communication with wallets."),
-            (name = "Well-known", description = "Well-known endpoints provide metadata about the server.")
+            (name = "(.well-known)", description = "Well-known endpoints provide metadata about the server."),
+            (name = "Issuance", description = "Issue credentials to holders that will store them in their wallets.", external_docs(description="Official Documentation", url="https://docs.impierce.com")),
         )
     )]
 pub struct ApiDoc;
