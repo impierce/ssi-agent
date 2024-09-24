@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::info;
 
+use serde_json::json;
+
 #[axum_macros::debug_handler]
 pub(crate) async fn get_credentials(State(state): State<IssuanceState>, Path(credential_id): Path<String>) -> Response {
     // Get the credential if it exists.
@@ -159,6 +161,16 @@ pub(crate) async fn credentials(
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
+
+#[axum_macros::debug_handler]
+pub(crate) async fn all_credentials(State(state): State<IssuanceState>) -> Response {
+    match query_handler("all_credentials", &state.query.all_credentials).await {
+        Ok(Some(all_credentials_view)) => (StatusCode::OK, Json(all_credentials_view)).into_response(),
+        Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
 
 #[cfg(test)]
 pub mod tests {
