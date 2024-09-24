@@ -166,7 +166,9 @@ pub async fn issuance_state(
         query: ViewRepositories {
             server_config,
             credential,
+            all_credentials,
             offer,
+            all_offers,
             pre_authorized_code,
             access_token,
         },
@@ -178,14 +180,14 @@ pub async fn holder_state(
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> HolderState {
     // Initialize the in-memory repositories.
-    let credential = Arc::new(MemRepository::default());
-    let offer = Arc::new(MemRepository::default());
-    let all_credentials = Arc::new(MemRepository::default());
-    let all_offers = Arc::new(MemRepository::default());
+    let holder_credential = Arc::new(MemRepository::default());
+    let received_offer = Arc::new(MemRepository::default());
+    let all_holder_credentials = Arc::new(MemRepository::default());
+    let all_received_offers = Arc::new(MemRepository::default());
 
     // Create custom-queries for the offer aggregate.
-    let all_credentials_query = ListAllQuery::new(all_credentials.clone(), "all_credentials");
-    let all_offers_query = ListAllQuery::new(all_offers.clone(), "all_offers");
+    let all_holder_credentials_query = ListAllQuery::new(all_holder_credentials.clone(), "all_holder_credentials");
+    let all_received_offers_query = ListAllQuery::new(all_received_offers.clone(), "all_received_offers");
 
     // Partition the event_publishers into the different aggregates.
     let (_, _, _, credential_event_publishers, offer_event_publishers, _, _) =
@@ -197,8 +199,8 @@ pub async fn holder_state(
                 credential_event_publishers.into_iter().fold(
                     AggregateHandler::new(holder_services.clone())
                         .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(credential.clone()))
-                        .append_query(all_credentials_query),
+                        .append_query(generic_query(holder_credential.clone()))
+                        .append_query(all_holder_credentials_query),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
@@ -206,17 +208,17 @@ pub async fn holder_state(
                 offer_event_publishers.into_iter().fold(
                     AggregateHandler::new(holder_services.clone())
                         .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(offer.clone()))
-                        .append_query(all_offers_query),
+                        .append_query(generic_query(received_offer.clone()))
+                        .append_query(all_received_offers_query),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
         },
         query: agent_holder::state::ViewRepositories {
-            credential,
-            all_credentials,
-            offer,
-            all_offers,
+            credential: holder_credential,
+            all_credentials: all_holder_credentials,
+            offer: received_offer,
+            all_offers: all_received_offers,
         },
     }
 }
