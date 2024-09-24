@@ -121,14 +121,19 @@ pub async fn issuance_state(
 ) -> IssuanceState {
     // Initialize the in-memory repositories.
     let server_config = Arc::new(MemRepository::default());
-    let credential = Arc::new(MemRepository::default());
-    let offer = Arc::new(MemRepository::default());
     let pre_authorized_code = Arc::new(MemRepository::<PreAuthorizedCodeView, Offer>::new());
     let access_token = Arc::new(MemRepository::<AccessTokenView, Offer>::new());
+    let credential = Arc::new(MemRepository::default());
+    let offer = Arc::new(MemRepository::default());
+    let all_credentials = Arc::new(MemRepository::default());
+    let all_offers = Arc::new(MemRepository::default());
 
     // Create custom-queries for the offer aggregate.
     let pre_authorized_code_query = PreAuthorizedCodeQuery::new(pre_authorized_code.clone());
     let access_token_query = AccessTokenQuery::new(access_token.clone());
+
+    let all_credentials_query = ListAllQuery::new(all_credentials.clone(), "all_credentials");
+    let all_offers_query = ListAllQuery::new(all_offers.clone(), "all_offers");
 
     // Partition the event_publishers into the different aggregates.
     let (server_config_event_publishers, credential_event_publishers, offer_event_publishers, _, _, _, _) =
@@ -148,7 +153,8 @@ pub async fn issuance_state(
                 credential_event_publishers.into_iter().fold(
                     AggregateHandler::new(issuance_services.clone())
                         .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(credential.clone())),
+                        .append_query(generic_query(credential.clone()))
+                        .append_query(all_credentials_query),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
@@ -157,6 +163,7 @@ pub async fn issuance_state(
                     AggregateHandler::new(issuance_services)
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(offer.clone()))
+                        .append_query(all_offers_query)
                         .append_query(pre_authorized_code_query)
                         .append_query(access_token_query),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
@@ -165,12 +172,12 @@ pub async fn issuance_state(
         },
         query: ViewRepositories {
             server_config,
+            pre_authorized_code,
+            access_token,
             credential,
             all_credentials,
             offer,
             all_offers,
-            pre_authorized_code,
-            access_token,
         },
     }
 }

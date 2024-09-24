@@ -151,13 +151,13 @@ pub async fn holder_state(
     let holder_credential: Arc<PostgresViewRepository<_, _>> =
         Arc::new(PostgresViewRepository::new("holder_credential", pool.clone()));
     let all_holder_credentials: Arc<PostgresViewRepository<_, _>> =
-        Arc::new(PostgresViewRepository::new("all_credentials", pool.clone()));
+        Arc::new(PostgresViewRepository::new("all_holder_credentials", pool.clone()));
     let received_offer = Arc::new(PostgresViewRepository::new("received_offer", pool.clone()));
-    let all_received_offers = Arc::new(PostgresViewRepository::new("all_offers", pool.clone()));
+    let all_received_offers = Arc::new(PostgresViewRepository::new("all_received_offers", pool.clone()));
 
     // Create custom-queries for the offer aggregate.
-    let all_holder_credentials_query = ListAllQuery::new(all_holder_credentials.clone(), "all_credentials");
-    let all_received_offers_query = ListAllQuery::new(all_received_offers.clone(), "all_offers");
+    let all_holder_credentials_query = ListAllQuery::new(all_holder_credentials.clone(), "all_holder_credentials");
+    let all_received_offers_query = ListAllQuery::new(all_received_offers.clone(), "all_received_offers");
 
     // Partition the event_publishers into the different aggregates.
     let (_, _, _, credential_event_publishers, offer_event_publishers, _, _) =
