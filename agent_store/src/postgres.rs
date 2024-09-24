@@ -79,8 +79,8 @@ pub async fn issuance_state(
     let pre_authorized_code = Arc::new(PostgresViewRepository::new("pre_authorized_code", pool.clone()));
     let access_token = Arc::new(PostgresViewRepository::new("access_token", pool.clone()));
     let credential = Arc::new(PostgresViewRepository::new("credential", pool.clone()));
-    let offer = Arc::new(PostgresViewRepository::new("offer", pool.clone()));
     let all_credentials = Arc::new(PostgresViewRepository::new("all_credentials", pool.clone()));
+    let offer = Arc::new(PostgresViewRepository::new("offer", pool.clone()));
     let all_offers = Arc::new(PostgresViewRepository::new("all_offers", pool.clone()));
 
     // Create custom-queries for the offer aggregate.
@@ -109,7 +109,8 @@ pub async fn issuance_state(
                 credential_event_publishers.into_iter().fold(
                     AggregateHandler::new(pool.clone(), issuance_services.clone())
                         .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(credential.clone())),
+                        .append_query(generic_query(credential.clone()))
+                        .append_query(all_credentials_query),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
@@ -118,6 +119,7 @@ pub async fn issuance_state(
                     AggregateHandler::new(pool.clone(), issuance_services)
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(offer.clone()))
+                        .append_query(all_offers_query)
                         .append_query(pre_authorized_code_query)
                         .append_query(access_token_query),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
@@ -126,12 +128,12 @@ pub async fn issuance_state(
         },
         query: ViewRepositories {
             server_config,
+            pre_authorized_code,
+            access_token,
             credential,
             all_credentials,
             offer,
             all_offers,
-            pre_authorized_code,
-            access_token,
         },
     }
 }
@@ -183,10 +185,10 @@ pub async fn holder_state(
             ),
         },
         query: agent_holder::state::ViewRepositories {
-            credential: holder_credential,
-            all_credentials: all_holder_credentials,
-            offer: received_offer,
-            all_offers: all_received_offers,
+            holder_credential,
+            all_holder_credentials,
+            received_offer,
+            all_received_offers,
         },
     }
 }

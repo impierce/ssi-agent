@@ -1,6 +1,6 @@
 use agent_holder::{
     credential::command::CredentialCommand,
-    offer::{command::OfferCommand, queries::OfferView},
+    offer::{command::OfferCommand, queries::ReceivedOfferView},
     state::HolderState,
 };
 use agent_shared::handlers::{command_handler, query_handler};
@@ -18,8 +18,8 @@ pub(crate) async fn accept(State(state): State<HolderState>, Path(offer_id): Pat
     // Furthermore, the Application Layer (not implemented yet) should be kept very thin as well. See: https://github.com/impierce/ssi-agent/issues/114
 
     // Accept the Credential Offer if it exists
-    match query_handler(&offer_id, &state.query.offer).await {
-        Ok(Some(OfferView { .. })) => {
+    match query_handler(&offer_id, &state.query.received_offer).await {
+        Ok(Some(ReceivedOfferView { .. })) => {
             let command = OfferCommand::AcceptCredentialOffer {
                 offer_id: offer_id.clone(),
             };
@@ -45,8 +45,8 @@ pub(crate) async fn accept(State(state): State<HolderState>, Path(offer_id): Pat
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    let credentials = match query_handler(&offer_id, &state.query.offer).await {
-        Ok(Some(OfferView { credentials, .. })) => credentials,
+    let credentials = match query_handler(&offer_id, &state.query.received_offer).await {
+        Ok(Some(ReceivedOfferView { credentials, .. })) => credentials,
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 

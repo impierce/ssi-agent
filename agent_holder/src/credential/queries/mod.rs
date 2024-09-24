@@ -6,13 +6,13 @@ use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct CredentialView {
+pub struct HolderCredentialView {
     pub credential_id: Option<String>,
     pub offer_id: Option<String>,
     pub credential: Option<serde_json::Value>,
 }
 
-impl View<Credential> for CredentialView {
+impl View<Credential> for HolderCredentialView {
     fn update(&mut self, event: &EventEnvelope<Credential>) {
         use CredentialEvent::*;
 

@@ -215,10 +215,10 @@ pub async fn holder_state(
             ),
         },
         query: agent_holder::state::ViewRepositories {
-            credential: holder_credential,
-            all_credentials: all_holder_credentials,
-            offer: received_offer,
-            all_offers: all_received_offers,
+            holder_credential,
+            all_holder_credentials,
+            received_offer,
+            all_received_offers,
         },
     }
 }
