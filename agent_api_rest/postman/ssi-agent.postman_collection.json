@@ -1,9 +1,9 @@
 {
 	"info": {
-		"_postman_id": "3b1e6396-3bf7-43aa-bc3b-21056fb21dfa",
+		"_postman_id": "6fd9c208-ee8c-4e20-ab0a-346e2c92ba1a",
 		"name": "ssi-agent",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "24972330"
+		"_exporter_id": "37402219"
 	},
 	"item": [
 		{
@@ -26,6 +26,16 @@
 								"type": "text/javascript",
 								"packages": {}
 							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
 						}
 					],
 					"request": {
@@ -33,7 +43,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"openbadge_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"type\": [ \"AchievementSubject\" ],\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    }\n}",
+							"raw": "{\n       \"offerId\": {{OFFER_ID}},\n       \"credentialConfigurationId\": \"openbadge_credential\",\n       \"credential\":{\n           \"credentialSubject\":{\n               \"type\":[\"AchievementSubject\"],\n               \"achievement\": {\n                       \"id\": \"https://demo.edubadges.nl/public/assertions/DAO4oUapQ_eJr9VwMz6jIQ\",\n                       \"type\": \"Achievement\",\n                       \"criteria\":{\"narrative\": \"testtesttesttesttesttesttest\"},\n                       \"description\": \"testtesttesttesttesttesttesttest\",\n                       \"name\": \"Geschiedenis van de Oudheid\",\n                       \"image\":{\n                           \"id\": \"https://api-demo.edubadges.nl/media/uploads/badges/issuer_badgeclass_3e51ca72-ee9b-493b-b787-fd89f2df3189.png\",\n                           \"type\": \"Image\"\n                       }\n                   }\n               }\n           }\n       }",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -74,8 +84,11 @@
 						{
 							"listen": "prerequest",
 							"script": {
-								"exec": [],
-								"type": "text/javascript"
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
 							}
 						}
 					],
@@ -85,6 +98,114 @@
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/credentials",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"credentials"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "all_credentials",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const location = pm.response.headers.get(\"LOCATION\");",
+									"",
+									"if(location){",
+									"    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/credentials",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"credentials"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "temp_thuiswinkel_credential",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const location = pm.response.headers.get(\"LOCATION\");",
+									"",
+									"if(location){",
+									"    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": \"https://ecommerce.impierce.com/\",\n            \"image\": \"https://www.thuiswinkel.org/Images/logo-thuiswinkel_waarborg.svg\",\n            \"name\": \"Impierce Bar\",\n            \"certificaat\": {\n                \"type\": \"ThuiswinkelWaarborg\",\n                \"certificeringsDatum\": \"2024-06-26\",\n                \"geldigheidsPeriode\": \"1 jaar\",\n                \"garanties\": [\n                    \"Het bedrijf is echt en bereikbaar.\",\n                    \"Voldoet aan de Thuiswinkel Algemene Voorwaarden.\",\n                    \"14 dagen bedenktijd.\",\n                    \"Veilige betaalmethoden.\",\n                    \"Duidelijke product/servicebeschrijvingen.\",\n                    \"Transparant bestelproces.\",\n                    \"Duidelijke prijzen.\",\n                    \"Veilige betaalomgeving.\",\n                    \"Veilige omgang met persoonlijke gegevens.\",\n                    \"Effectieve klachtenafhandeling en onafhankelijke geschillenbemiddeling.\"\n                ]\n            }\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -120,6 +241,65 @@
 				},
 				{
 					"name": "offers",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const credential_offer = responseBody;",
+									"",
+									"const decodedString = decodeURIComponent(credential_offer);",
+									"",
+									"// Split the string on the first '=' character and take the second item",
+									"const [, secondItem] = decodedString.split('=', 2);",
+									"",
+									"var jsonObject = JSON.parse(secondItem);",
+									"const pre_authorized_code = jsonObject.grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']['pre-authorized_code'];",
+									"",
+									"if(pre_authorized_code){",
+									"    pm.collectionVariables.set(\"PRE_AUTHORIZED_CODE\",pre_authorized_code)",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"offerId\": \"{{OFFER_ID}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/offers",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"offers"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "all_offers",
 					"event": [
 						{
 							"listen": "test",
@@ -649,8 +829,11 @@
 						{
 							"listen": "prerequest",
 							"script": {
-								"exec": [],
-								"type": "text/javascript"
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
 							}
 						}
 					],
@@ -666,25 +849,6 @@
 								"v0",
 								"holder",
 								"offers"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "credentials",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/v0/holder/credentials",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"v0",
-								"holder",
-								"credentials"
 							]
 						}
 					},
@@ -727,6 +891,105 @@
 								"offers",
 								"{{RECEIVED_OFFER_ID}}",
 								"reject"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "credentials",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/holder/credentials",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"holder",
+								"credentials"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "presentations",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/holder/presentations",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"holder",
+								"presentations"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "presentations",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"credentialIds\": [\"credential_id\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/holder/presentations",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"holder",
+								"presentations"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Identity",
+			"item": [
+				{
+					"name": "services/linked-vp",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"presentationId\": \"presentation_id\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/services/linked-vp",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"services",
+								"linked-vp"
 							]
 						}
 					},
