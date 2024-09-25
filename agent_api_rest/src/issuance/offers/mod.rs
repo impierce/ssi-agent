@@ -13,9 +13,9 @@ use axum::{
 };
 use hyper::header;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use serde_json::Value;
 use tracing::info;
-use serde_json::json;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -81,7 +81,6 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
-
 
 #[axum_macros::debug_handler]
 pub(crate) async fn all_offers(State(state): State<IssuanceState>) -> Response {

@@ -171,7 +171,6 @@ pub(crate) async fn all_credentials(State(state): State<IssuanceState>) -> Respo
     }
 }
 
-
 #[cfg(test)]
 pub mod tests {
     use super::*;

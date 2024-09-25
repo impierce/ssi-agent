@@ -5,11 +5,11 @@ use std::sync::Arc;
 use tracing::{info, warn};
 
 use crate::credential::aggregate::Credential;
-use crate::credential::queries::CredentialView;
 use crate::credential::queries::all_credentials::AllCredentialsView;
+use crate::credential::queries::CredentialView;
 use crate::offer::aggregate::Offer;
-use crate::offer::queries::all_offers::AllOffersView;
 use crate::offer::queries::access_token::AccessTokenView;
+use crate::offer::queries::all_offers::AllOffersView;
 use crate::offer::queries::pre_authorized_code::PreAuthorizedCodeView;
 use crate::offer::queries::OfferView;
 use crate::server_config::aggregate::ServerConfig;
@@ -71,7 +71,7 @@ impl Clone for Queries {
             credential: self.credential.clone(),
             all_credentials: self.all_credentials.clone(),
             offer: self.offer.clone(),
-            all_offers: self.all_offers.clone()
+            all_offers: self.all_offers.clone(),
         }
     }
 }
