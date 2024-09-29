@@ -25,11 +25,11 @@ use utoipa::ToSchema;
     get,
     path = "/credentials/{id}",
     tag = "Credentials",
+    params(
+        ("id" = String, Path, description = "Unique identifier of the Credential"),
+    ),
     responses(
         (status = 200, description = "Credential found", body = [CredentialView])
-    ),
-    params(
-        ("id" = u64, Path, description = "Unique identitfier of the Credential"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -57,15 +57,27 @@ pub struct CredentialsEndpointRequest {
 
 /// Create a new credential
 ///
-/// Create a new credential for the given payload.
+/// Create a new credential for a given subject.
 #[utoipa::path(
     post,
     path = "/credentials",
-    request_body = CredentialsEndpointRequest,
-    tag = "Credentials",
+    request_body(content = CredentialsEndpointRequest,
+        examples(
+            ("w3c-vc" = (summary = "W3C v1.1", description = "s0me descr1pti0n", value = json!({"offerId": 123, "credentialConfigurationId": "w3c_vc_credential", "credential": {"credentialSubject": {"first_name": "Ferris", "last_name": "Rustacean"}}}))),
+            ("openbadges" = (summary = "Open Badges 3.0", description = "s0me descr1pti0n", external_value = "res/open-badge-request.json"))
+        )
+    ),
+    tag = "Issuance",
     responses(
-        (status = 200, description = "Successfully created a new credential.")
-    )
+        (status = 201, description = "Successfully created a new credential.", body = CredentialView,
+            headers(("Location" = String, description = "URL of the created resource")),
+            examples(
+                ("w3c-vc-1-1" = (summary = "W3C VC Data Model v1.1", description = "A credential following the W3C Verifiable Credentials Data Model v1.1", value = json!({"offerId": "0001"}))),
+                ("openbadges-3-0" = (summary = "Open Badges 3.0", description = "An badge following the Open Badges Specification 3.0", value = json!({"foo": "bar"})))
+            )
+        ),
+        (status = 400, description = "Invalid payload.")
+    ),
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(

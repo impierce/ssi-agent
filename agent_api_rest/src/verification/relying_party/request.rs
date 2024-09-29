@@ -19,7 +19,7 @@ use hyper::header;
     path = "/request/{id}",
     tags = ["(public)"],
     responses(
-        // (status = 200, description = ""),
+        (status = 200, description = ""),
     )
 )]
 #[axum_macros::debug_handler]

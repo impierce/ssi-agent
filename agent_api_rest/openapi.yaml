@@ -6,7 +6,7 @@ info:
     name: ''
   version: ''
 servers:
-- url: https://arty-aragorn.agent-dev.impierce.com
+- url: https://playground.agent-dev.impierce.com
   description: UniCore development server hosted by Impierce Technologies
 paths:
   /.well-known/oauth-authorization-server:
@@ -114,7 +114,9 @@ paths:
             schema:
               $ref: '#/components/schemas/GenericAuthorizationResponse'
         required: true
-      responses: {}
+      responses:
+        '200':
+          description: ''
   /request/{id}:
     get:
       tags:
@@ -133,7 +135,9 @@ paths:
         required: true
         schema:
           type: string
-      responses: {}
+      responses:
+        '200':
+          description: ''
   /v0/authorization_requests:
     post:
       tags:
@@ -160,6 +164,7 @@ paths:
       parameters:
       - name: id
         in: path
+        description: The ID of the Authorization Request to retrieve.
         required: true
         schema:
           type: string
@@ -175,19 +180,56 @@ paths:
   /v0/credentials:
     post:
       tags:
-      - Credentials
+      - Issuance
       summary: Create a new credential
-      description: Create a new credential for the given payload.
+      description: Create a new credential for a given subject.
       operationId: credentials
       requestBody:
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/CredentialsEndpointRequest'
+            examples:
+              openbadges:
+                summary: Open Badges 3.0
+                description: s0me descr1pti0n
+                externalValue: res/open-badge-request.json
+              w3c-vc:
+                summary: W3C v1.1
+                description: s0me descr1pti0n
+                value:
+                  offerId: 123
+                  credentialConfigurationId: w3c_vc_credential
+                  credential:
+                    credentialSubject:
+                      first_name: Ferris
+                      last_name: Rustacean
         required: true
       responses:
-        '200':
+        '201':
           description: Successfully created a new credential.
+          headers:
+            Location:
+              schema:
+                type: string
+              description: URL of the created resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialView'
+              examples:
+                openbadges-3-0:
+                  summary: Open Badges 3.0
+                  description: An badge following the Open Badges Specification 3.0
+                  value:
+                    foo: bar
+                w3c-vc-1-1:
+                  summary: W3C VC Data Model v1.1
+                  description: A credential following the W3C Verifiable Credentials Data Model v1.1
+                  value:
+                    offerId: '0001'
+        '400':
+          description: Invalid payload.
   /v0/credentials/{id}:
     get:
       tags:
@@ -198,12 +240,10 @@ paths:
       parameters:
       - name: id
         in: path
-        description: Unique identitfier of the Credential
+        description: Unique identifier of the Credential
         required: true
         schema:
-          type: integer
-          format: int64
-          minimum: 0
+          type: string
       responses:
         '200':
           description: Credential found
@@ -268,9 +308,9 @@ paths:
   /v0/offers:
     post:
       tags:
-      - Offers
-      summary: Create a new offer
-      description: Create a new credential offer for the given ID.
+      - Issuance
+      summary: Create a new credential offer
+      description: Create a new offer for one or more credentials.
       operationId: offers
       requestBody:
         content:
@@ -280,7 +320,12 @@ paths:
         required: true
       responses:
         '200':
-          description: Successfully created a new credential offer.
+          description: Successfully created a new credential offer. Response value is standard-compliant and can be used by identity wallet.
+          content:
+            application/x-www-form-urlencoded:
+              schema:
+                type: string
+              example: openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fcredential-issuer.example.com%2F%22%2C%22credentials%22%3A%5B%7B%22format%22%3A%22ldp_vc%22%2C%22credential_definition%22%3A%7B%22%40context%22%3A%5B%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fv1%22%2C%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fexamples%2Fv1%22%5D%2C%22type%22%3A%5B%22VerifiableCredential%22%2C%22UniversityDegreeCredential%22%5D%7D%7D%5D%7D
 components:
   schemas:
     CredentialsEndpointRequest:
@@ -306,4 +351,7 @@ tags:
   description: Issue credentials to holders that will store them in their wallets.
   externalDocs:
     url: https://docs.impierce.com
-    description: Official Documentation
+    description: Issuance API Documentation
+externalDocs:
+  url: https://docs.impierce.com
+  description: Official Documentation

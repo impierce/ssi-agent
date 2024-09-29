@@ -18,7 +18,7 @@ use axum::{
     path = "/redirect",
     tags = ["(public)"],
     responses(
-        // (status = 200, description = ""),
+        (status = 200, description = ""),
     )
 )]
 #[axum_macros::debug_handler]

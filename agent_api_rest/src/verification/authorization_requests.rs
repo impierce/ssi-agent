@@ -27,6 +27,9 @@ use utoipa::ToSchema;
     get,
     path = "/authorization_requests/{id}",
     tag = "Verification",
+    params(
+        ("id" = String, Path, description = "The ID of the Authorization Request to retrieve.")
+    ),
     responses(
         (status = 200, description = "Successfully returns an existing Authorization Request.", body = [GenericAuthorizationRequest])
     )
