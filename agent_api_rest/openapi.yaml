@@ -9,6 +9,40 @@ servers:
 - url: https://playground.agent-dev.impierce.com
   description: UniCore development server hosted by Impierce Technologies
 paths:
+  /.well-known/did-configuration.json:
+    get:
+      tags:
+      - (.well-known)
+      - (public)
+      summary: DID Configuration Resource for Domain Linkage
+      description: Standard .well-known endpoint for DID Configuration Resources.
+      operationId: did_configuration_json
+      responses:
+        '200':
+          description: DID Configuration Resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainLinkageConfiguration'
+        '404':
+          description: Domain Linkage inactive.
+  /.well-known/did.json:
+    get:
+      tags:
+      - (.well-known)
+      - (public)
+      summary: DID Document for `did:web` method
+      description: Standard .well-known endpoint for self-hosted DID Document.
+      operationId: did_json
+      responses:
+        '200':
+          description: DID Document for `did:web` method
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoreDocument'
+        '404':
+          description: DID method `did:web` inactive.
   /.well-known/oauth-authorization-server:
     get:
       tags:
@@ -89,7 +123,10 @@ paths:
       - Holder
       - (public)
       summary: Credential Offer Endpoint
-      description: Standard OpenID4VCI endpoint that allows the issuer to pass information to the wallet.
+      description: |-
+        Standard OpenID4VCI endpoint that allows the Issuer to pass information about the credential offer to the Holder's wallet.
+
+        [Specification](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-offer-endpoint)
       operationId: offers
       requestBody:
         description: ''
@@ -233,9 +270,9 @@ paths:
   /v0/credentials/{id}:
     get:
       tags:
-      - Credentials
+      - Issuance
       summary: Retrieve a credential
-      description: Return a credential for a given ID.
+      description: Retrieves an existing credential by its ID.
       operationId: get_credentials
       parameters:
       - name: id
@@ -244,6 +281,7 @@ paths:
         required: true
         schema:
           type: string
+        example: '0001'
       responses:
         '200':
           description: Credential found
@@ -278,7 +316,7 @@ paths:
       tags:
       - Holder
       summary: Accept an offer
-      description: Accepts a pending credential offer.
+      description: Accept a pending credential offer. UniCore will then make a request to the Issuer to receive the offer.
       operationId: accept
       parameters:
       - name: offer_id
@@ -294,7 +332,7 @@ paths:
       tags:
       - Holder
       summary: Reject an offer
-      description: Reject a pending credential offer.
+      description: Reject a pending credential offer. UniCore will not make any further requests to the Issuer.
       operationId: reject
       parameters:
       - name: offer_id
@@ -326,6 +364,22 @@ paths:
               schema:
                 type: string
               example: openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fcredential-issuer.example.com%2F%22%2C%22credentials%22%3A%5B%7B%22format%22%3A%22ldp_vc%22%2C%22credential_definition%22%3A%7B%22%40context%22%3A%5B%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fv1%22%2C%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fexamples%2Fv1%22%5D%2C%22type%22%3A%5B%22VerifiableCredential%22%2C%22UniversityDegreeCredential%22%5D%7D%7D%5D%7D
+  /v0/offers/send:
+    post:
+      tags:
+      - Issuance
+      summary: Send offer to Holder
+      description: Sends a prepared credential offer to a Holder's [Credential Offer Endpoint](#tag/holder/GET/openid4vci/offers) via a `GET` request.
+      operationId: send
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendOfferEndpointRequest'
+        required: true
+      responses:
+        '200':
+          description: Successfully sent credential offer to Holder.
 components:
   schemas:
     CredentialsEndpointRequest:

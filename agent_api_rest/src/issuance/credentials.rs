@@ -20,13 +20,13 @@ use utoipa::ToSchema;
 
 /// Retrieve a credential
 ///
-/// Return a credential for a given ID.
+/// Retrieves an existing credential by its ID.
 #[utoipa::path(
     get,
     path = "/credentials/{id}",
-    tag = "Credentials",
+    tag = "Issuance",
     params(
-        ("id" = String, Path, description = "Unique identifier of the Credential"),
+        ("id" = String, Path, description = "Unique identifier of the Credential", example = "0001"),
     ),
     responses(
         (status = 200, description = "Credential found", body = [CredentialView])

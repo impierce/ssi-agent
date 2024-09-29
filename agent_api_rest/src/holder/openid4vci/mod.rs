@@ -18,7 +18,9 @@ pub struct Oid4vciOfferEndpointRequest {
 
 /// Credential Offer Endpoint
 ///
-/// Standard OpenID4VCI endpoint that allows the issuer to pass information to the wallet.
+/// Standard OpenID4VCI endpoint that allows the Issuer to pass information about the credential offer to the Holder's wallet.
+///
+/// [Specification](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-offer-endpoint)
 #[utoipa::path(
     get,
     path = "/openid4vci/offers",

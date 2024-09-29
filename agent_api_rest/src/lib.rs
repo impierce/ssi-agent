@@ -13,7 +13,7 @@ use tracing::{info_span, Span};
 use utoipa::{openapi::ServerBuilder, OpenApi};
 use utoipa_scalar::{Scalar, Servable};
 
-use crate::openapi::{HolderApi, IssuanceApi, VerificationApi};
+use crate::openapi::{did_configuration, did_web, HolderApi, IssuanceApi, VerificationApi};
 
 pub const API_VERSION: &str = "/v0";
 
@@ -134,6 +134,11 @@ pub fn patch_generated_openapi(mut openapi: utoipa::openapi::OpenApi) -> utoipa:
         .description(Some("UniCore development server hosted by Impierce Technologies"))
         .build()]
     .into();
+    // Append endpoints defined outside of `agent_api_rest`.
+    openapi.paths.add_path("/.well-known/did.json", did_web());
+    openapi
+        .paths
+        .add_path("/.well-known/did-configuration.json", did_configuration());
     openapi
 }
 

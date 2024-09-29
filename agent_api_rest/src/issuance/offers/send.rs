@@ -17,6 +17,18 @@ pub struct SendOfferEndpointRequest {
     pub target_url: Url,
 }
 
+/// Send offer to Holder
+///
+/// Sends a prepared credential offer to a Holder's [Credential Offer Endpoint](#tag/holder/GET/openid4vci/offers) via a `GET` request.
+#[utoipa::path(
+    post,
+    path = "/offers/send",
+    request_body = SendOfferEndpointRequest,
+    tag = "Issuance",
+    responses(
+        (status = 200, description = "Successfully sent credential offer to Holder."),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn send(State(state): State<IssuanceState>, Json(payload): Json<serde_json::Value>) -> Response {
     info!("Request Body: {}", payload);
