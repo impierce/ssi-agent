@@ -35,43 +35,43 @@ pub struct CommandHandlers {
 /// `Aggregate` types must be the same.
 type Queries = ViewRepositories<
     dyn ViewRepository<ServerConfigView, ServerConfig>,
-    dyn ViewRepository<PreAuthorizedCodeView, Offer>,
-    dyn ViewRepository<AccessTokenView, Offer>,
     dyn ViewRepository<CredentialView, Credential>,
     dyn ViewRepository<AllCredentialsView, Credential>,
     dyn ViewRepository<OfferView, Offer>,
     dyn ViewRepository<AllOffersView, Offer>,
+    dyn ViewRepository<PreAuthorizedCodeView, Offer>,
+    dyn ViewRepository<AccessTokenView, Offer>,
 >;
 
-pub struct ViewRepositories<SC, PC, AT, C, C2, O, O2>
+pub struct ViewRepositories<SC, C, C1, O, O1, O2, O3>
 where
     SC: ViewRepository<ServerConfigView, ServerConfig> + ?Sized,
-    PC: ViewRepository<PreAuthorizedCodeView, Offer> + ?Sized,
-    AT: ViewRepository<AccessTokenView, Offer> + ?Sized,
     C: ViewRepository<CredentialView, Credential> + ?Sized,
-    C2: ViewRepository<AllCredentialsView, Credential> + ?Sized,
+    C1: ViewRepository<AllCredentialsView, Credential> + ?Sized,
     O: ViewRepository<OfferView, Offer> + ?Sized,
-    O2: ViewRepository<AllOffersView, Offer> + ?Sized,
+    O1: ViewRepository<AllOffersView, Offer> + ?Sized,
+    O2: ViewRepository<PreAuthorizedCodeView, Offer> + ?Sized,
+    O3: ViewRepository<AccessTokenView, Offer> + ?Sized,
 {
     pub server_config: Arc<SC>,
-    pub pre_authorized_code: Arc<PC>,
-    pub access_token: Arc<AT>,
     pub credential: Arc<C>,
-    pub all_credentials: Arc<C2>,
+    pub all_credentials: Arc<C1>,
     pub offer: Arc<O>,
-    pub all_offers: Arc<O2>,
+    pub all_offers: Arc<O1>,
+    pub pre_authorized_code: Arc<O2>,
+    pub access_token: Arc<O3>,
 }
 
 impl Clone for Queries {
     fn clone(&self) -> Self {
         ViewRepositories {
             server_config: self.server_config.clone(),
-            pre_authorized_code: self.pre_authorized_code.clone(),
-            access_token: self.access_token.clone(),
             credential: self.credential.clone(),
             all_credentials: self.all_credentials.clone(),
             offer: self.offer.clone(),
             all_offers: self.all_offers.clone(),
+            pre_authorized_code: self.pre_authorized_code.clone(),
+            access_token: self.access_token.clone(),
         }
     }
 }
