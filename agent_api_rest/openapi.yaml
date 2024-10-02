@@ -1,13 +1,68 @@
 openapi: 3.1.0
 info:
   title: UniCore HTTP API
-  description: Full HTTP API reference for the UniCore SSI Agent
+  description: |
+    ![Banner](https://images.placeholders.dev/?width=1280&height=720)
+
+    Full HTTP API reference for the UniCore SSI Agent.
+
+    ## Overview
+
+    ### Management endpoints
+
+    ### Standardized endpoints
+
+    Some endpoints that UniCore offers follow a specification (such as the [OpenID4VC](https://openid.net/sg/openid4vc/specifications) protocol family). These endpoints have the **`(standardized)`** tag.
+
+    ### Public endpoints
+
+    Some endpoints should always be publicly accessible to allow identity wallets to interact with UniCore and follow standard protocol flows. These endpoints have the **`(public)`** tag.
+
+    > [!NOTE]
+    > Endpoints that should not sit behind some form of authentication are grouped under the `(public)` tag.
+
+    ```json
+    {
+      "foo": "bar"
+    }
+    ```
+
+    ## Authentication & Authorization
+
+    UniCore does not have any user management or authentication built-in (yet). It does not know of any roles or scopes. It is expected that the application which calls UniCore only performs calls which have been checked in the consumer business logic. If you want to deploy UniCore publicly, you should restrict access to the API by running it behind a reverse proxy or some API gateway. In most cases, only the endpoints behind `/v0` need to be protected, but all other endpoints should stay publicly accessible.
+
+    ### Example reverse proxy configuration
+
+    Here is an example Nginx configuration that restricts access to the `/v0` endpoints by checking for a valid API key in the headers:
+
+    <details>
+      <summary>nginx.conf</summary>
+
+    ```
+    http {
+        server {
+            listen 8080;
+            gzip on;
+
+            location /v0 {
+                if ($http_x_api_key != "A041FE585C6F45CF841D20D47D329FA5") {
+                    return 403;
+                }
+
+                proxy_pass http://127.0.0.1:3033/v0;
+            }
+
+            location / {
+                proxy_pass http://127.0.0.1:3033;
+            }
+        }
+    }
+    ```
+
+    </details>
   license:
     name: ''
   version: ''
-servers:
-- url: https://playground.agent-dev.impierce.com
-  description: UniCore development server hosted by Impierce Technologies
 paths:
   /.well-known/did-configuration.json:
     get:
@@ -129,10 +184,10 @@ paths:
         [Specification](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-offer-endpoint)
       operationId: offers
       requestBody:
-        description: ''
         content:
           application/json:
-            schema: {}
+            schema:
+              $ref: '#/components/schemas/Oid4vciOfferEndpointRequest'
         required: true
       responses:
         '200':
@@ -235,7 +290,7 @@ paths:
                 summary: W3C v1.1
                 description: s0me descr1pti0n
                 value:
-                  offerId: 123
+                  offerId: '123'
                   credentialConfigurationId: w3c_vc_credential
                   credential:
                     credentialSubject:
@@ -369,19 +424,41 @@ paths:
       tags:
       - Issuance
       summary: Send offer to Holder
-      description: Sends a prepared credential offer to a Holder's [Credential Offer Endpoint](#tag/holder/GET/openid4vci/offers) via a `GET` request.
+      description: |-
+        Manually send a prepared credential offer to a Holder's [Credential Offer Endpoint](#tag/holder/GET/openid4vci/offers) via a `GET` request.
+        This is **not** required if the wallet initiates the flow (usually an end-user mobile wallet), but rather when the Holder that has no prior knowledge of the offer (most often another cloud-based wallet, such as another UniCore instance).
       operationId: send
       requestBody:
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/SendOfferEndpointRequest'
+            example:
+              offerId: '0001'
+              targetUrl: https://wallet.example.com/openid4vci/offers
         required: true
       responses:
         '200':
           description: Successfully sent credential offer to Holder.
+        '400':
+          description: Invalid payload.
 components:
   schemas:
+    AuthorizationRequestsEndpointRequest:
+      allOf:
+      - allOf:
+        - type: 'null'
+        - $ref: '#/components/schemas/PresentationDefinitionResource'
+      - type: object
+        required:
+        - nonce
+        properties:
+          nonce:
+            type: string
+          state:
+            type:
+            - string
+            - 'null'
     CredentialsEndpointRequest:
       type: object
       required:
@@ -396,6 +473,27 @@ components:
           type: boolean
         offerId:
           type: string
+    OffersEndpointRequest:
+      type: object
+      required:
+      - offerId
+      properties:
+        offerId:
+          type: string
+    Oid4vciOfferEndpointRequest:
+      allOf:
+      - $ref: '#/components/schemas/CredentialOffer'
+      - type: object
+    SendOfferEndpointRequest:
+      type: object
+      required:
+      - offerId
+      - targetUrl
+      properties:
+        offerId:
+          type: string
+        targetUrl:
+          $ref: '#/components/schemas/Url'
 tags:
 - name: (public)
   description: A collection of endpoints that should be publicly accessible without authentication. They are used to resolve metadata or allow communication with wallets.

@@ -10,7 +10,7 @@ use agent_verification::state::VerificationState;
 use axum::{body::Bytes, extract::MatchedPath, http::Request, response::Response, Router};
 use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
-use utoipa::{openapi::ServerBuilder, OpenApi};
+use utoipa::OpenApi;
 use utoipa_scalar::{Scalar, Servable};
 
 use crate::openapi::{did_configuration, did_web, HolderApi, IssuanceApi, VerificationApi};
@@ -125,15 +125,15 @@ pub struct ApiDoc;
 
 pub fn patch_generated_openapi(mut openapi: utoipa::openapi::OpenApi) -> utoipa::openapi::OpenApi {
     openapi.info.title = "UniCore HTTP API".into();
-    openapi.info.description = Some("Full HTTP API reference for the UniCore SSI Agent".to_string());
+    openapi.info.description = Some(include_str!("../docs/openapi-description.md").into());
     // openapi.info.version = "1.0.0-alpha.1".into(); // can UniCore even be aware of its current version or does it need to be removed from the openapi.yaml?
     openapi.info.version = "".into();
-    // TODO: deploy
-    openapi.servers = vec![ServerBuilder::new()
-        .url("https://playground.agent-dev.impierce.com")
-        .description(Some("UniCore development server hosted by Impierce Technologies"))
-        .build()]
-    .into();
+    // TODO: required to use `UNICORE__URL` as the "self" server?
+    // openapi.servers = vec![ServerBuilder::new()
+    //     .url("https://playground.agent-dev.impierce.com")
+    //     .description(Some("UniCore development server hosted by Impierce Technologies"))
+    //     .build()]
+    // .into();
     // Append endpoints defined outside of `agent_api_rest`.
     openapi.paths.add_path("/.well-known/did.json", did_web());
     openapi

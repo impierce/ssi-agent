@@ -9,8 +9,9 @@ use hyper::StatusCode;
 use oid4vci::credential_offer::CredentialOffer;
 use serde::{Deserialize, Serialize};
 use tracing::info;
+use utoipa::ToSchema;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
 pub struct Oid4vciOfferEndpointRequest {
     #[serde(flatten)]
     pub credential_offer: CredentialOffer,
@@ -24,6 +25,7 @@ pub struct Oid4vciOfferEndpointRequest {
 #[utoipa::path(
     get,
     path = "/openid4vci/offers",
+    request_body = Oid4vciOfferEndpointRequest,
     tag = "Holder",
     tags = ["(public)"],
     responses(

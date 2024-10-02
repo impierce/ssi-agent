@@ -63,7 +63,7 @@ pub struct CredentialsEndpointRequest {
     path = "/credentials",
     request_body(content = CredentialsEndpointRequest,
         examples(
-            ("w3c-vc" = (summary = "W3C v1.1", description = "s0me descr1pti0n", value = json!({"offerId": 123, "credentialConfigurationId": "w3c_vc_credential", "credential": {"credentialSubject": {"first_name": "Ferris", "last_name": "Rustacean"}}}))),
+            ("w3c-vc" = (summary = "W3C v1.1", description = "s0me descr1pti0n", value = json!({"offerId": "123", "credentialConfigurationId": "w3c_vc_credential", "credential": {"credentialSubject": {"first_name": "Ferris", "last_name": "Rustacean"}}}))),
             ("openbadges" = (summary = "Open Badges 3.0", description = "s0me descr1pti0n", external_value = "res/open-badge-request.json"))
         )
     ),

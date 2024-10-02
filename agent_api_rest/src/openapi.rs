@@ -1,9 +1,10 @@
-use utoipa::openapi::path::OperationBuilder;
-use utoipa::openapi::{Content, HttpMethod, PathItem, Ref, Response, ResponseBuilder, ResponsesBuilder};
+use utoipa::openapi::{
+    path::OperationBuilder, Content, HttpMethod, PathItem, Ref, Response, ResponseBuilder, ResponsesBuilder,
+};
 use utoipa::OpenApi;
 
-use crate::holder::holder;
-use crate::issuance::credentials::{self, CredentialsEndpointRequest};
+use crate::holder::{holder, openid4vci};
+use crate::issuance::credentials;
 use crate::issuance::offers;
 use crate::verification::authorization_requests;
 
@@ -15,24 +16,34 @@ use crate::verification::authorization_requests;
         offers::offers,
         offers::send::send
     ),
-    components(schemas(CredentialsEndpointRequest))
+    components(schemas(
+        credentials::CredentialsEndpointRequest,
+        offers::OffersEndpointRequest,
+        offers::send::SendOfferEndpointRequest
+    ))
 )]
 pub(crate) struct IssuanceApi;
 
 #[derive(OpenApi)]
-#[openapi(paths(
-    authorization_requests::authorization_requests,
-    authorization_requests::get_authorization_requests
-))]
+#[openapi(
+    paths(
+        authorization_requests::authorization_requests,
+        authorization_requests::get_authorization_requests
+    ),
+    components(schemas(authorization_requests::AuthorizationRequestsEndpointRequest))
+)]
 pub(crate) struct VerificationApi;
 
 #[derive(OpenApi)]
-#[openapi(paths(
-    holder::credentials::credentials,
-    holder::offers::offers,
-    holder::offers::accept::accept,
-    holder::offers::reject::reject
-))]
+#[openapi(
+    paths(
+        holder::credentials::credentials,
+        holder::offers::offers,
+        holder::offers::accept::accept,
+        holder::offers::reject::reject
+    ),
+    components(schemas(openid4vci::Oid4vciOfferEndpointRequest))
+)]
 pub(crate) struct HolderApi;
 
 pub(crate) fn did_web() -> PathItem {
@@ -69,6 +80,11 @@ pub(crate) fn did_configuration() -> PathItem {
                             .content(
                                 "application/json",
                                 Content::new(Ref::from_schema_name("DomainLinkageConfiguration")),
+                                // Content::new(
+                                //     ObjectBuilder::new()
+                                //         .schema_type(SchemaType::Type(schema::Type::Object))
+                                //         .format(Some(schema::SchemaFormat::KnownFormat(schema::KnownFormat::Int64))),
+                                // ),
                             ),
                     )
                     .response("404", Response::new("Domain Linkage inactive.")),

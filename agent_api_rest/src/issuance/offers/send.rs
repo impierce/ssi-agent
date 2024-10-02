@@ -9,8 +9,9 @@ use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use url::Url;
+use utoipa::ToSchema;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SendOfferEndpointRequest {
     pub offer_id: String,
@@ -19,14 +20,16 @@ pub struct SendOfferEndpointRequest {
 
 /// Send offer to Holder
 ///
-/// Sends a prepared credential offer to a Holder's [Credential Offer Endpoint](#tag/holder/GET/openid4vci/offers) via a `GET` request.
+/// Manually send a prepared credential offer to a Holder's [Credential Offer Endpoint](#tag/holder/GET/openid4vci/offers) via a `GET` request.
+/// This is **not** required if the wallet initiates the flow (usually an end-user mobile wallet), but rather when the Holder that has no prior knowledge of the offer (most often another cloud-based wallet, such as another UniCore instance).
 #[utoipa::path(
     post,
     path = "/offers/send",
-    request_body = SendOfferEndpointRequest,
+    request_body(content = SendOfferEndpointRequest, example = json!({"offerId": "0001", "targetUrl": "https://wallet.example.com/openid4vci/offers"})),
     tag = "Issuance",
     responses(
         (status = 200, description = "Successfully sent credential offer to Holder."),
+        (status = 400, description = "Invalid payload."),
     )
 )]
 #[axum_macros::debug_handler]
