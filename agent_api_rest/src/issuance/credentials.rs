@@ -16,7 +16,22 @@ use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMeta
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::info;
+use utoipa::ToSchema;
 
+/// Retrieve a credential
+///
+/// Retrieves an existing credential by its ID.
+#[utoipa::path(
+    get,
+    path = "/credentials/{id}",
+    tag = "Issuance",
+    params(
+        ("id" = String, Path, description = "Unique identifier of the Credential", example = "0001"),
+    ),
+    responses(
+        (status = 200, description = "Credential found", body = [CredentialView])
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn get_credentials(State(state): State<IssuanceState>, Path(credential_id): Path<String>) -> Response {
     // Get the credential if it exists.
@@ -30,7 +45,7 @@ pub(crate) async fn get_credentials(State(state): State<IssuanceState>, Path(cre
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialsEndpointRequest {
     pub offer_id: String,
@@ -40,6 +55,30 @@ pub struct CredentialsEndpointRequest {
     pub credential_configuration_id: String,
 }
 
+/// Create a new credential
+///
+/// Create a new credential for a given subject.
+#[utoipa::path(
+    post,
+    path = "/credentials",
+    request_body(content = CredentialsEndpointRequest,
+        examples(
+            ("w3c-vc" = (summary = "W3C v1.1", description = "s0me descr1pti0n", value = json!({"offerId": "123", "credentialConfigurationId": "w3c_vc_credential", "credential": {"credentialSubject": {"first_name": "Ferris", "last_name": "Rustacean"}}}))),
+            ("openbadges" = (summary = "Open Badges 3.0", description = "s0me descr1pti0n", external_value = "res/open-badge-request.json"))
+        )
+    ),
+    tag = "Issuance",
+    responses(
+        (status = 201, description = "Successfully created a new credential.", body = CredentialView,
+            headers(("Location" = String, description = "URL of the created resource")),
+            examples(
+                ("w3c-vc-1-1" = (summary = "W3C VC Data Model v1.1", description = "A credential following the W3C Verifiable Credentials Data Model v1.1", value = json!({"offerId": "0001"}))),
+                ("openbadges-3-0" = (summary = "Open Badges 3.0", description = "An badge following the Open Badges Specification 3.0", value = json!({"foo": "bar"})))
+            )
+        ),
+        (status = 400, description = "Invalid payload.")
+    ),
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
     State(state): State<IssuanceState>,

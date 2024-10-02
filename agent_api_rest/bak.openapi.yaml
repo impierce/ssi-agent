@@ -1,0 +1,468 @@
+openapi: 3.1.0
+info:
+  title: SSI Agent - REST API
+  description: A lightweight REST API for the SSI Agent
+  version: 0.1.0
+
+servers:
+  - url: http://localhost:3033
+    description: Development
+
+paths:
+  /v0/configurations/credential_configurations:
+    post:
+      tags:
+        - Configurations
+      summary: Create a new Credential Configuration
+      # description: n/a
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                credentialConfigurationId:
+                  type: string
+                  example: w3c_vc_credential
+                format:
+                  type: string
+                  example: jwt_vc_json
+                credential_definition:
+                  type: object
+                  properties:
+                    type:
+                      type: array
+                      items:
+                        type: string
+                        example: VerifiableCredential
+                      example:
+                        - VerifiableCredential
+                display:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      locale:
+                        type: string
+                        example: en
+                      logo:
+                        type: object
+                        properties:
+                          alt_text:
+                            type: string
+                            example: UniCore Logo
+                          url:
+                            type: string
+                            example: https://impierce.com/images/logo-blue.png
+                      name:
+                        type: string
+                        example: Identity Credential
+                  example:
+                    - locale: en
+                      logo:
+                        alt_text: UniCore Logo
+                        url: https://impierce.com/images/logo-blue.png
+                      name: Identity Credential
+              required:
+                - credentialConfigurationId
+                - format
+                - credential_definition
+            examples:
+              openbadgesv3_credential_configurations:
+                summary: Open Badges 3.0
+                value:
+                  credentialConfigurationId: openbadge_credential
+                  credential_definition:
+                    type:
+                      - VerifiableCredential
+                      - OpenBadgeCredential
+                  display:
+                    - locale: en
+                      logo:
+                        alt_text: UniCore Logo
+                        url: https://impierce.com/images/logo-blue.png
+                      name: Identity Credential
+                  format: jwt_vc_json
+              w3c_vc_credential_configurations:
+                summary: W3C VC Data Model
+                value:
+                  credentialConfigurationId: w3c_vc_credential
+                  credential_definition:
+                    type:
+                      - VerifiableCredential
+                  display:
+                    - locale: en
+                      logo:
+                        alt_text: UniCore Logo
+                        url: https://impierce.com/images/logo-blue.png
+                      name: Identity Credential
+                  format: jwt_vc_json
+      responses:
+        "200":
+          description: A Credential Configuration has been successfully added to the Credential Issuer Metadata
+
+  /v0/credentials:
+    post:
+      summary: Create a new Credential for a given Subject
+      # description: n/a
+      tags:
+        - Creation
+      requestBody:
+        # description: n/a
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                # $meta:
+                #   type: object
+                #   properties:
+                #     credentialTemplate:
+                #       type: string
+                #       description: The template to be used to create the credential
+                offerId:
+                  type: string
+                credentialConfigurationId:
+                  type: string
+                credential:
+                  oneOf:
+                    - type: object
+                      properties:
+                        credentialSubject:
+                          type: object
+                    - type: string
+                isSigned:
+                  type: boolean
+              required:
+                - offerId
+                - credentialConfigurationId
+                - credential
+            examples:
+              open-badges-3:
+                summary: Open Badges 3.0
+                value:
+                  credential:
+                    credentialSubject:
+                      achievement:
+                        criteria:
+                          narrative: Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.
+                        description: This badge recognizes the development of the capacity to collaborate within a group environment.
+                        id: https://example.com/achievements/21st-century-skills/teamwork
+                        name: Teamwork
+                        type: Achievement
+                      type:
+                        - AchievementSubject
+                  credentialConfigurationId: openbadge_credential
+                  offerId: "001"
+              w3c-vc-dm:
+                summary: W3C VC Data Model
+                value:
+                  credential:
+                    credentialSubject:
+                      dob: 1982-01-01
+                      first_name: Ferris
+                      last_name: Crabman
+                  credentialConfigurationId: w3c_vc_credential
+                  offerId: "001"
+      responses:
+        "201":
+          description: An Open Badge 3.0 has successfully been created for the provided credentialSubject
+          headers:
+            Location:
+              schema:
+                type: string
+                example: "/v0/credentials/c0c97176-44c3-4f22-ab11-6bb782e29cb9"
+              description: URL of the created resource
+          content:
+            application/json:
+              schema:
+                type: object
+              examples:
+                open-badges-3:
+                  summary: Open Badges 3.0
+                  value:
+                    "@context":
+                      - https://www.w3.org/2018/credentials/v1
+                      - https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json
+                    id: http://example.com/credentials/3527
+                    type:
+                      - VerifiableCredential
+                      - OpenBadgeCredential
+                    name: Identity Credential
+                    credentialSubject:
+                      type:
+                        - AchievementSubject
+                      achievement:
+                        id: https://example.com/achievements/21st-century-skills/teamwork
+                        type: Achievement
+                        criteria:
+                          narrative:
+                            Team members are nominated for this badge by their peers and recognized
+                            upon review by Example Corp management.
+                        description:
+                          This badge recognizes the development of the capacity to collaborate
+                          within a group environment.
+                        name: Teamwork
+                    issuer:
+                      id: http://192.168.1.127:3033
+                      type: Profile
+                      name: UniCore
+                    issuanceDate: "2024-06-21T12:34:54Z"
+                w3c-vc-dm:
+                  summary: W3C VC Data Model
+                  value:
+                    "@context": https://www.w3.org/2018/credentials/v1
+                    type:
+                      - VerifiableCredential
+                    credentialSubject:
+                      dob: "1982-01-01"
+                      first_name: Ferris
+                      last_name: Crabman
+                    issuer:
+                      id: http://192.168.1.127:3033/
+                      name: UniCore
+                    issuanceDate: "2024-06-21T12:43:20Z"
+
+  /v0/credentials/{credential_id}:
+    get:
+      summary: Get the Credential with the given Credential ID
+      tags:
+        - Retrieval
+      # description: n/a
+      parameters:
+        - in: path
+          name: credential_id
+          required: true
+          schema:
+            type: string
+            minimum: 1
+          description: The Credential ID
+      responses:
+        "200":
+          description: A Credential with the given Credential ID has been successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+              examples:
+                open-badges-3:
+                  summary: Open Badges 3.0
+                  externalValue: res/open-badge-response.json
+
+  /v0/offers:
+    post:
+      summary: Create a new Offer for one or more Credentials
+      tags:
+        - Distribution
+      requestBody:
+        description: The id of the Subject
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                offerId:
+                  type: string
+                preAuthorizedCode:
+                  type: string
+              required:
+                - offerId
+            example:
+              offerId: "c86289fa-b105-4ec3-9326-a02436788f11"
+      responses:
+        "200":
+          description: Offer created successfully. Response value should be displayed to the user in the form of a QR code.
+          content:
+            application/x-www-form-urlencoded:
+              schema:
+                type: string
+                example: openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fcredential-issuer.example.com%2F%22%2C%22credentials%22%3A%5B%7B%22format%22%3A%22ldp_vc%22%2C%22credential_definition%22%3A%7B%22%40context%22%3A%5B%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fv1%22%2C%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fexamples%2Fv1%22%5D%2C%22type%22%3A%5B%22VerifiableCredential%22%2C%22UniversityDegreeCredential%22%5D%7D%7D%5D%7D
+
+  # (proxied)
+  /.well-known/oauth-authorization-server:
+    get:
+      summary: Standard OpenID Connect discovery endpoint for authorization metadata
+      description: Standard OpenID Connect discovery endpoint for authorization metadata
+      tags:
+        - (proxied)
+  /.well-known/openid-credential-issuer:
+    get:
+      summary: Standard OpenID Connect discovery endpoint for issuer metadata
+      tags:
+        - (proxied)
+  /auth/token:
+    post:
+      summary: Standard OAuth 2.0 endpoint for fetching a token
+      tags:
+        - (proxied)
+  /openid4vci/credential:
+    post:
+      summary: Standard OpenID Connect endpoint for redeeming a token for a credential
+      tags:
+        - (proxied)
+
+  /v0/authorization_requests:
+    post:
+      summary: Create a new Authorization Request
+      # description: n/a
+      tags:
+        - Creation
+      requestBody:
+        # description: n/a
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nonce:
+                  type: string
+                  example: "0d520cbe176ab9e1f7888c70888020d84a69672a4baabd3ce1c6aaad8f6420c0"
+                state:
+                  type: string
+                  example: "84266fdbd31d4c2c6d0665f7e8380fa3"
+                presentation_definition:
+                  type: object
+              required:
+                - nonce
+            examples:
+              siopv2:
+                summary: SIOPv2 Authorization Request
+                value:
+                  nonce: this is a nonce
+              oid4vp-open-badges-3:
+                summary: OID4VP Open Badges 3.0
+                value:
+                  nonce: this is a nonce
+                  presentation_definition:
+                    id: Verifiable Presentation request for sign-on
+                    input_descriptors:
+                      - id: Request for Verifiable Credential
+                        constraints:
+                          fields:
+                            - path:
+                                - "$.vc.type"
+                              filter:
+                                type: array
+                                contains:
+                                  const: OpenBadgeCredential
+              oid4vp-w3c-vc-dm:
+                summary: OID4VP W3C VC Data Model
+                value:
+                  nonce: this is a nonce
+                  presentation_definition:
+                    id: Verifiable Presentation request for sign-on
+                    input_descriptors:
+                      - id: Request for Verifiable Credential
+                        constraints:
+                          fields:
+                            - path:
+                                - "$.vc.type"
+                              filter:
+                                type: array
+                                contains:
+                                  const: VerifiableCredential
+      responses:
+        "201":
+          description: An Authorization Request has successfully been created
+          headers:
+            Location:
+              schema:
+                type: string
+                example: "/request/43482b98aa2e071231082fc29db7a59f342a643b0c590f71083af3c7ae83f3c3"
+              description: URL of the created resource
+          content:
+            application/x-www-form-urlencoded:
+              schema:
+                type: string
+                example: "openid://?client_id=did%3Ajwk%3AeyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ&request_uri=http%3A%2F%2F192.168.1.127%3A3033%2Frequest%2F0fc2af709c435975ab5ebbc6dd2d5508c7f4a1cc3a59145a73a39e532bcbfdc7"
+  /v0/authorization_requests/{authorization_requests_id}:
+    get:
+      summary: Get the Authorization Request with the given Authorization Request ID
+      tags:
+        - Retrieval
+      # description: n/a
+      parameters:
+        - in: path
+          name: authorization_requests_id
+          required: true
+          schema:
+            type: string
+            minimum: 1
+          description: The Authorization Request ID
+      responses:
+        "200":
+          description: An Authorization Request with the given Authorization Request ID has been successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+              examples:
+                open-badges-3:
+                  summary: SIOPv2 Authorization Request
+                  externalValue: res/siopv2-authorization-request.json
+
+  # (proxied)
+  /request/{state}:
+    get:
+      summary: Standard request endpoint for fetching the Authorization Request object
+      tags:
+        - (proxied)
+  /redirect:
+    post:
+      summary: Standard OAuth 2.0 redirection endpoint
+      tags:
+        - (proxied)
+
+  /v0/identity/offer:
+    post:
+      summary: Receive offers from third-parties
+      tags:
+        - Identity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+            examples:
+              receive-0:
+                summary: Example invitation
+                externalValue: "requests/payload.json"
+
+  /v0/identity/offers:
+    get:
+      summary: List all current offers
+      tags:
+        - Identity
+  /v0/identity/offer/{offerId}/accept:
+    post:
+      summary: Accept an offer. UniCore will then make a request and accept the offer.
+      tags:
+        - Identity
+      parameters:
+        - in: path
+          name: offerId
+          schema:
+            type: integer
+          required: true
+          # description: Numeric ID of the user to get
+  /v0/identity/offer/{offerId}/decline:
+    post:
+      summary: Refuses an offer. UniCore will not make a request.
+      tags:
+        - Identity
+      parameters:
+        - in: path
+          name: offerId
+          schema:
+            type: integer
+          required: true
+          # description: Numeric ID of the user to get
+
+tags:
+  - name: Creation
+    description: Creating credentials
+    externalDocs:
+      url: https://docs.impierce.com/issuance

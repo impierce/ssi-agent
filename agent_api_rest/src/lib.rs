@@ -1,5 +1,6 @@
 pub mod holder;
 pub mod issuance;
+pub mod openapi;
 pub mod verification;
 
 use agent_holder::state::HolderState;
@@ -9,6 +10,10 @@ use agent_verification::state::VerificationState;
 use axum::{body::Bytes, extract::MatchedPath, http::Request, response::Response, Router};
 use tower_http::trace::TraceLayer;
 use tracing::{info_span, Span};
+use utoipa::OpenApi;
+use utoipa_scalar::{Scalar, Servable};
+
+use crate::openapi::{did_configuration, did_web, HolderApi, IssuanceApi, VerificationApi};
 
 pub const API_VERSION: &str = "/v0";
 
@@ -32,7 +37,12 @@ pub fn app(
             Router::new()
                 .merge(issuance_state.map(issuance::router).unwrap_or_default())
                 .merge(holder_state.map(holder::router).unwrap_or_default())
-                .merge(verification_state.map(verification::router).unwrap_or_default()),
+                .merge(verification_state.map(verification::router).unwrap_or_default())
+                // API Docs
+                .merge(Scalar::with_url(
+                    format!("{}/api-reference", API_VERSION),
+                    patch_generated_openapi(ApiDoc::openapi()),
+                )),
         )
         // Trace layer
         .layer(
@@ -83,6 +93,55 @@ fn get_base_path() -> Result<String, ConfigError> {
         })
 }
 
+#[derive(utoipa::OpenApi)]
+#[openapi(
+        // modifiers(),
+        paths(
+            // Standard endpoints as defined in the protocol specifications.
+            // OAuth 2.0
+            crate::verification::relying_party::redirect::redirect,
+            crate::verification::relying_party::request::request,
+            crate::issuance::credential_issuer::token::token,
+            // OpenID4VCI
+            crate::holder::openid4vci::offers,
+            crate::issuance::credential_issuer::credential::credential,
+            // .well-known
+            crate::issuance::credential_issuer::well_known::oauth_authorization_server::oauth_authorization_server,
+            crate::issuance::credential_issuer::well_known::openid_credential_issuer::openid_credential_issuer,
+        ),
+        nest(
+            (path = "/v0", api = IssuanceApi),
+            (path = "/v0", api = VerificationApi),
+            (path = "/v0", api = HolderApi)
+        ),
+        tags(
+            (name = "(public)", description = "A collection of endpoints that should be publicly accessible without authentication. They are used to resolve metadata or allow communication with wallets."),
+            (name = "(.well-known)", description = "Well-known endpoints provide metadata about the server."),
+            (name = "Issuance", description = "Issue credentials to holders that will store them in their wallets.", external_docs(description="Issuance API Documentation", url="https://docs.impierce.com")),
+        ),
+        external_docs(description="Official Documentation", url="https://docs.impierce.com"),
+    )]
+pub struct ApiDoc;
+
+pub fn patch_generated_openapi(mut openapi: utoipa::openapi::OpenApi) -> utoipa::openapi::OpenApi {
+    openapi.info.title = "UniCore HTTP API".into();
+    openapi.info.description = Some(include_str!("../docs/openapi-description.md").into());
+    // openapi.info.version = "1.0.0-alpha.1".into(); // can UniCore even be aware of its current version or does it need to be removed from the openapi.yaml?
+    openapi.info.version = "".into();
+    // TODO: required to use `UNICORE__URL` as the "self" server?
+    // openapi.servers = vec![ServerBuilder::new()
+    //     .url("https://playground.agent-dev.impierce.com")
+    //     .description(Some("UniCore development server hosted by Impierce Technologies"))
+    //     .build()]
+    // .into();
+    // Append endpoints defined outside of `agent_api_rest`.
+    openapi.paths.add_path("/.well-known/did.json", did_web());
+    openapi
+        .paths
+        .add_path("/.well-known/did-configuration.json", did_configuration());
+    openapi
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -94,6 +153,9 @@ mod tests {
         credential_issuer_metadata::CredentialIssuerMetadata,
     };
     use serde_json::json;
+    use utoipa::OpenApi;
+
+    use crate::{app, ApiDoc};
     use std::collections::HashMap;
 
     pub const CREDENTIAL_CONFIGURATION_ID: &str = "badge";
@@ -137,6 +199,14 @@ mod tests {
     }
 
     async fn handler() {}
+
+    #[tokio::test]
+    async fn generate_openapi_file() {
+        let yaml_value = patch_generated_openapi(ApiDoc::openapi());
+        let yaml_string = serde_yaml::to_string(&yaml_value).unwrap();
+        println!("{}", yaml_string);
+        std::fs::write("openapi.yaml", yaml_string).unwrap();
+    }
 
     #[tokio::test]
     #[should_panic]

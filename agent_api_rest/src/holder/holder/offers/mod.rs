@@ -11,6 +11,17 @@ use axum::{
 use hyper::StatusCode;
 use serde_json::json;
 
+/// Get all offers
+///
+/// Retrieve all pending credential offers.
+#[utoipa::path(
+    get,
+    path = "/holder/offers",
+    tag = "Holder",
+    responses(
+        (status = 200, description = "Successfully retrieved all pending offers."),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(State(state): State<HolderState>) -> Response {
     match query_handler("all_offers", &state.query.all_offers).await {

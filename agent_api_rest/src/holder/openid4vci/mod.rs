@@ -9,13 +9,29 @@ use hyper::StatusCode;
 use oid4vci::credential_offer::CredentialOffer;
 use serde::{Deserialize, Serialize};
 use tracing::info;
+use utoipa::ToSchema;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
 pub struct Oid4vciOfferEndpointRequest {
     #[serde(flatten)]
     pub credential_offer: CredentialOffer,
 }
 
+/// Credential Offer Endpoint
+///
+/// Standard OpenID4VCI endpoint that allows the Issuer to pass information about the credential offer to the Holder's wallet.
+///
+/// [Specification](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-offer-endpoint)
+#[utoipa::path(
+    get,
+    path = "/openid4vci/offers",
+    request_body = Oid4vciOfferEndpointRequest,
+    tag = "Holder",
+    tags = ["(public)"],
+    responses(
+        (status = 200, description = "Successfully received offer metadata."),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(State(state): State<HolderState>, Json(payload): Json<serde_json::Value>) -> Response {
     info!("Request Body: {}", payload);

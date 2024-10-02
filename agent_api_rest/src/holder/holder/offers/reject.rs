@@ -6,6 +6,18 @@ use axum::{
 };
 use hyper::StatusCode;
 
+/// Reject an offer
+///
+/// Reject a pending credential offer. UniCore will not make any further requests to the Issuer.
+#[utoipa::path(
+    post,
+    path = "/holder/offers/{offer_id}/reject",
+    // request_body = ?,
+    tag = "Holder",
+    responses(
+        (status = 200, description = "Successfully rejected a pending offer."),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn reject(State(state): State<HolderState>, Path(offer_id): Path<String>) -> Response {
     let command = OfferCommand::RejectCredentialOffer {

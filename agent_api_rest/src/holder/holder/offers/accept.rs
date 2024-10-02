@@ -10,6 +10,18 @@ use axum::{
 };
 use hyper::StatusCode;
 
+/// Accept an offer
+///
+/// Accept a pending credential offer. UniCore will then make a request to the Issuer to receive the offer.
+#[utoipa::path(
+    post,
+    path = "/holder/offers/{offer_id}/accept",
+    // request_body = ?,
+    tag = "Holder",
+    responses(
+        (status = 200, description = "Successfully accepted a pending offer."),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn accept(State(state): State<HolderState>, Path(offer_id): Path<String>) -> Response {
     // TODO: General note that also applies to other endpoints: currently we are using Application Layer logic in the

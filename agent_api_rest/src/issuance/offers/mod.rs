@@ -15,13 +15,26 @@ use hyper::header;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::info;
+use utoipa::ToSchema;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OffersEndpointRequest {
     pub offer_id: String,
 }
 
+/// Create a new credential offer
+///
+/// Create a new offer for one or more credentials.
+#[utoipa::path(
+    post,
+    path = "/offers",
+    request_body = OffersEndpointRequest,
+    tag = "Issuance",
+    responses(
+        (status = 200, description = "Successfully created a new credential offer. Response value is standard-compliant and can be used by identity wallet.", body = String, content_type = "application/x-www-form-urlencoded", example = json!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fcredential-issuer.example.com%2F%22%2C%22credentials%22%3A%5B%7B%22format%22%3A%22ldp_vc%22%2C%22credential_definition%22%3A%7B%22%40context%22%3A%5B%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fv1%22%2C%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fexamples%2Fv1%22%5D%2C%22type%22%3A%5B%22VerifiableCredential%22%2C%22UniversityDegreeCredential%22%5D%7D%7D%5D%7D"))
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Json<Value>) -> Response {
     info!("Request Body: {}", payload);

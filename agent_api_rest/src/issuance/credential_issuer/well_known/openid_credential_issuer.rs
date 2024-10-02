@@ -9,6 +9,18 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
+/// Credential Issuer Metadata
+///
+/// Standard OpenID Connect discovery endpoint for issuer metadata.
+#[utoipa::path(
+    get,
+    path = "/.well-known/openid-credential-issuer",
+    tag = "(.well-known)",
+    tags = ["(public)"],
+    responses(
+        (status = 200, description = "Successfully returns the Credential Issuer Metadata", body = [CredentialIssuerMetadata])
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn openid_credential_issuer(State(state): State<IssuanceState>) -> Response {
     match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {

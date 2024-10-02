@@ -7,9 +7,21 @@ use axum::{
 };
 use hyper::header;
 
+/// Authorization Request
+///
+/// Standard OAuth 2.0 endpoint.
+///
 /// Instead of directly embedding the Authorization Request into a QR-code or deeplink, the `Relying Party` can embed a
 /// `request_uri` that points to this endpoint from where the Authorization Request Object can be retrieved.
 /// As described here: https://www.rfc-editor.org/rfc/rfc9101.html#name-passing-a-request-object-by-
+#[utoipa::path(
+    get,
+    path = "/request/{id}",
+    tags = ["(public)"],
+    responses(
+        (status = 200, description = ""),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn request(
     State(verification_state): State<VerificationState>,

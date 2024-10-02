@@ -16,6 +16,17 @@ use oid4vci::token_request::TokenRequest;
 use serde_json::json;
 use tracing::info;
 
+/// Token Endpoint
+///
+/// Standard OAuth 2.0 endpoint that returns an access_token after successful authorization.
+#[utoipa::path(
+    post,
+    path = "/auth/token",
+    tags = ["(public)"],
+    responses(
+        (status = 200, description = "Returns an access token."),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn token(
     State(state): State<IssuanceState>,

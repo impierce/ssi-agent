@@ -96,6 +96,8 @@ dependencies = [
  "tracing-subscriber",
  "tracing-test",
  "url",
+ "utoipa",
+ "utoipa-scalar",
  "uuid",
  "wiremock",
 ]
@@ -1408,7 +1410,7 @@ checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -1974,7 +1976,7 @@ dependencies = [
 [[package]]
 name = "did_iota"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "bls12_381_plus 0.8.15",
  "identity_iota",
@@ -1988,7 +1990,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -2005,7 +2007,7 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "did-method-key",
  "identity_iota",
@@ -2023,7 +2025,7 @@ dependencies = [
 [[package]]
 name = "did_manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "consumer",
  "producer",
@@ -2051,7 +2053,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -3454,7 +3456,7 @@ dependencies = [
 [[package]]
 name = "identity_stronghold_ext"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "async-trait",
  "elliptic-curve 0.13.8",
@@ -5431,7 +5433,7 @@ dependencies = [
 [[package]]
 name = "producer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -6593,7 +6595,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.2#6880b7f81b23e6cf1bbdc76d1dea8d2c1f6ef559"
+source = "git+https://git@github.com/impierce/did-manager.git?tag=v1.0.0-beta.3#3ad5e3dba7bc76df8d6cb4a4fd2df2238d88710b"
 dependencies = [
  "identity_iota",
  "identity_storage",
@@ -8106,6 +8108,43 @@ name = "utf8parse"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
+
+[[package]]
+name = "utoipa"
+version = "5.0.0-beta.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86fac56d240b49c629b9083c932ac20a23d926937e67c21ba209f836e2983d4f"
+dependencies = [
+ "indexmap 2.2.6",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "utoipa-gen",
+]
+
+[[package]]
+name = "utoipa-gen"
+version = "5.0.0-beta.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31d88270777931b8133b119c953062bd41665bb8507841f7d433f46d2765e9d4"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "regex",
+ "syn 2.0.67",
+]
+
+[[package]]
+name = "utoipa-scalar"
+version = "0.2.0-beta.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc86065a210b8540e46d15e0844765d1d14eec7fd6221c2b0de8f6edde990648"
+dependencies = [
+ "axum 0.7.5",
+ "serde",
+ "serde_json",
+ "utoipa",
+]
 
 [[package]]
 name = "uuid"

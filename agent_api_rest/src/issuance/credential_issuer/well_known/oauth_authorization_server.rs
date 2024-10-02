@@ -9,6 +9,18 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
+/// Authorization Server Metadata
+///
+/// Standard OpenID Connect discovery endpoint for authorization metadata.
+#[utoipa::path(
+    get,
+    path = "/.well-known/oauth-authorization-server",
+    tag = "(.well-known)",
+    tags = ["(public)"],
+    responses(
+        (status = 200, description = "Successfully returns the Authorization Server Metadata", body = [AuthorizationServerMetadata])
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn oauth_authorization_server(State(state): State<IssuanceState>) -> Response {
     match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {

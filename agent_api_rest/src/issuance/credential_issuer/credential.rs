@@ -27,6 +27,21 @@ use tracing::{error, info};
 const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
 const POLLING_INTERVAL_MS: u64 = 100;
 
+/// Credential Endpoint
+///
+/// Standard OpenID4VCI endpoint for redeeming a token for a credential.
+#[utoipa::path(
+    post,
+    path = "/openid4vci/credential",
+    // TODO: doesn't work since (external) `CredentialRequest` doesn't implement `ToSchema`?
+    // See: https://github.com/juhaku/utoipa?tab=readme-ov-file#how-to-implement-toschema-for-external-type
+    request_body = CredentialRequest,
+    tag = "Issuance",
+    tags = ["(public)"],
+    responses(
+        (status = 200, description = "Successfully returns the credential", body = [CredentialResponse])
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<IssuanceState>,

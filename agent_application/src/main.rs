@@ -15,7 +15,7 @@ use agent_verification::services::VerificationServices;
 use axum::{routing::get, Json};
 use identity_document::service::{Service, ServiceEndpoint};
 use std::sync::Arc;
-use tokio::{fs, io};
+use tokio::io;
 use tower_http::cors::CorsLayer;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -154,12 +154,6 @@ async fn main() -> io::Result<()> {
         info!("Serving `did:web` document at `{path}`");
         app = app.route(path, get(Json(did_document)));
     }
-
-    // This is used to indicate that the server accepts requests.
-    // In a docker container this file can be searched to see if its ready.
-    // A better solution can be made later (needed for impierce-demo)
-    fs::create_dir_all("/tmp/unicore/").await?;
-    fs::write("/tmp/unicore/accept_requests", []).await?;
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await?;
     info!("listening on {}", listener.local_addr()?);

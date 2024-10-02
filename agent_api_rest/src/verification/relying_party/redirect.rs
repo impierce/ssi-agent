@@ -10,6 +10,17 @@ use axum::{
     Form,
 };
 
+/// Redirect Endpoint
+///
+/// Standard OAuth 2.0 endpoint.
+#[utoipa::path(
+    post,
+    path = "/redirect",
+    tags = ["(public)"],
+    responses(
+        (status = 200, description = ""),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn redirect(
     State(verification_state): State<VerificationState>,

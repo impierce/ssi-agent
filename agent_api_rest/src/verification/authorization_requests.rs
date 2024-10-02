@@ -18,7 +18,22 @@ use oid4vp::PresentationDefinition;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::info;
+use utoipa::ToSchema;
 
+/// Get an Authorization Request
+///
+/// Retrieve an existing Authorization Request.
+#[utoipa::path(
+    get,
+    path = "/authorization_requests/{id}",
+    tag = "Verification",
+    params(
+        ("id" = String, Path, description = "The ID of the Authorization Request to retrieve.")
+    ),
+    responses(
+        (status = 200, description = "Successfully returns an existing Authorization Request.", body = [GenericAuthorizationRequest])
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn get_authorization_requests(
     State(state): State<VerificationState>,
@@ -35,7 +50,7 @@ pub(crate) async fn get_authorization_requests(
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
 pub struct AuthorizationRequestsEndpointRequest {
     pub nonce: String,
     pub state: Option<String>,
@@ -50,6 +65,18 @@ pub enum PresentationDefinitionResource {
     PresentationDefinition(PresentationDefinition),
 }
 
+/// Create a new Authorization Request
+///
+/// UniCore will ask a holder for certain information based on the Presentation Definition specified.
+#[utoipa::path(
+    post,
+    path = "/authorization_requests",
+    request_body = AuthorizationRequestsEndpointRequest,
+    tag = "Verification",
+    responses(
+        (status = 201, description = "Authorization Request successfully created."),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_requests(
     State(verification_state): State<VerificationState>,
