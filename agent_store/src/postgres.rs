@@ -76,10 +76,12 @@ pub async fn issuance_state(
 
     // Initialize the postgres repositories.
     let server_config = Arc::new(PostgresViewRepository::new("server_config", pool.clone()));
-    let credential = Arc::new(PostgresViewRepository::new("credential", pool.clone()));
-    let offer = Arc::new(PostgresViewRepository::new("offer", pool.clone()));
     let pre_authorized_code = Arc::new(PostgresViewRepository::new("pre_authorized_code", pool.clone()));
     let access_token = Arc::new(PostgresViewRepository::new("access_token", pool.clone()));
+    let credential = Arc::new(PostgresViewRepository::new("credential", pool.clone()));
+    let all_credentials = Arc::new(PostgresViewRepository::new("all_credentials", pool.clone()));
+    let offer = Arc::new(PostgresViewRepository::new("offer", pool.clone()));
+    let all_offers = Arc::new(PostgresViewRepository::new("all_offers", pool.clone()));
 
     // Create custom-queries for the offer aggregate.
     let pre_authorized_code_query = PreAuthorizedCodeQuery::new(pre_authorized_code.clone());
@@ -88,6 +90,10 @@ pub async fn issuance_state(
     // Partition the event_publishers into the different aggregates.
     let (server_config_event_publishers, credential_event_publishers, offer_event_publishers, _, _, _, _) =
         partition_event_publishers(event_publishers);
+
+    // Create custom-queries for the offer aggregate.
+    let all_credentials_query = ListAllQuery::new(all_credentials.clone(), "all_credentials");
+    let all_offers_query = ListAllQuery::new(all_offers.clone(), "all_offers");
 
     IssuanceState {
         command: CommandHandlers {
@@ -103,7 +109,8 @@ pub async fn issuance_state(
                 credential_event_publishers.into_iter().fold(
                     AggregateHandler::new(pool.clone(), issuance_services.clone())
                         .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(credential.clone())),
+                        .append_query(generic_query(credential.clone()))
+                        .append_query(all_credentials_query),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
@@ -112,6 +119,7 @@ pub async fn issuance_state(
                     AggregateHandler::new(pool.clone(), issuance_services)
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(offer.clone()))
+                        .append_query(all_offers_query)
                         .append_query(pre_authorized_code_query)
                         .append_query(access_token_query),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
@@ -120,10 +128,12 @@ pub async fn issuance_state(
         },
         query: ViewRepositories {
             server_config,
-            credential,
-            offer,
             pre_authorized_code,
             access_token,
+            credential,
+            all_credentials,
+            offer,
+            all_offers,
         },
     }
 }
@@ -138,16 +148,16 @@ pub async fn holder_state(
     let pool = default_postgress_pool(&connection_string).await;
 
     // Initialize the postgres repositories.
-    let credential: Arc<PostgresViewRepository<_, _>> =
+    let holder_credential: Arc<PostgresViewRepository<_, _>> =
         Arc::new(PostgresViewRepository::new("holder_credential", pool.clone()));
-    let all_credentials: Arc<PostgresViewRepository<_, _>> =
-        Arc::new(PostgresViewRepository::new("all_credentials", pool.clone()));
-    let offer = Arc::new(PostgresViewRepository::new("received_offer", pool.clone()));
-    let all_offers = Arc::new(PostgresViewRepository::new("all_offers", pool.clone()));
+    let all_holder_credentials: Arc<PostgresViewRepository<_, _>> =
+        Arc::new(PostgresViewRepository::new("all_holder_credentials", pool.clone()));
+    let received_offer = Arc::new(PostgresViewRepository::new("received_offer", pool.clone()));
+    let all_received_offers = Arc::new(PostgresViewRepository::new("all_received_offers", pool.clone()));
 
     // Create custom-queries for the offer aggregate.
-    let all_credentials_query = ListAllQuery::new(all_credentials.clone(), "all_credentials");
-    let all_offers_query = ListAllQuery::new(all_offers.clone(), "all_offers");
+    let all_holder_credentials_query = ListAllQuery::new(all_holder_credentials.clone(), "all_holder_credentials");
+    let all_received_offers_query = ListAllQuery::new(all_received_offers.clone(), "all_received_offers");
 
     // Partition the event_publishers into the different aggregates.
     let (_, _, _, credential_event_publishers, offer_event_publishers, _, _) =
@@ -159,8 +169,8 @@ pub async fn holder_state(
                 credential_event_publishers.into_iter().fold(
                     AggregateHandler::new(pool.clone(), holder_services.clone())
                         .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(credential.clone()))
-                        .append_query(all_credentials_query),
+                        .append_query(generic_query(holder_credential.clone()))
+                        .append_query(all_holder_credentials_query),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
@@ -168,17 +178,17 @@ pub async fn holder_state(
                 offer_event_publishers.into_iter().fold(
                     AggregateHandler::new(pool, holder_services.clone())
                         .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(offer.clone()))
-                        .append_query(all_offers_query),
+                        .append_query(generic_query(received_offer.clone()))
+                        .append_query(all_received_offers_query),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
         },
         query: agent_holder::state::ViewRepositories {
-            credential,
-            all_credentials,
-            offer,
-            all_offers,
+            holder_credential,
+            all_holder_credentials,
+            received_offer,
+            all_received_offers,
         },
     }
 }

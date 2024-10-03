@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct OfferView {
+pub struct ReceivedOfferView {
     pub credential_offer: Option<CredentialOfferParameters>,
     pub status: Status,
     pub credential_configurations: Option<HashMap<String, CredentialConfigurationsSupportedObject>>,
@@ -19,7 +19,7 @@ pub struct OfferView {
     pub credentials: Vec<serde_json::Value>,
 }
 
-impl View<Offer> for OfferView {
+impl View<Offer> for ReceivedOfferView {
     fn update(&mut self, event: &EventEnvelope<Offer>) {
         use crate::offer::event::OfferEvent::*;
 

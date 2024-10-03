@@ -1,4 +1,5 @@
 pub mod access_token;
+pub mod all_offers;
 pub mod pre_authorized_code;
 
 use super::event::OfferEvent;

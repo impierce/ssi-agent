@@ -1,16 +1,16 @@
-use super::ReceivedOfferView;
+use super::OfferView;
 use crate::offer::queries::Offer;
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct AllReceivedOffersView {
+pub struct AllOffersView {
     #[serde(flatten)]
-    pub offers: HashMap<String, ReceivedOfferView>,
+    pub offers: HashMap<String, OfferView>,
 }
 
-impl View<Offer> for AllReceivedOffersView {
+impl View<Offer> for AllOffersView {
     fn update(&mut self, event: &EventEnvelope<Offer>) {
         self.offers
             // Get the entry for the aggregate_id
