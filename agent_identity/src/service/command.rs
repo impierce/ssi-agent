@@ -8,6 +8,6 @@ pub enum ServiceCommand {
     },
     CreateLinkedVerifiablePresentationService {
         service_id: String,
-        presentation_id: String,
+        presentation_ids: Vec<String>,
     },
 }

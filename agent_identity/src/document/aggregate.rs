@@ -63,6 +63,8 @@ impl Aggregate for Document {
             AddService { service } => {
                 let mut document = self.document.clone().ok_or(MissingDocumentError)?;
 
+                // Overwrite the service if it already exists.
+                document.remove_service(service.id());
                 document
                     .insert_service(service)
                     .map_err(|err| AddServiceError(err.to_string()))?;
@@ -167,7 +169,7 @@ pub mod test_utils {
     #[fixture]
     pub fn domain_linkage_service() -> Service {
         Service::builder(Default::default())
-            .id(format!("did:test:123#linked_domain-service").parse().unwrap())
+            .id("did:test:123#linked_domain-service".parse().unwrap())
             .type_("LinkedDomains")
             .service_endpoint(
                 ServiceEndpoint::from_json_value(json!({

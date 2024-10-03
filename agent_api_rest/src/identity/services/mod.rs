@@ -18,21 +18,21 @@ use tracing::info;
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LinkedVPEndpointRequest {
-    pub presentation_id: String,
+    pub presentation_ids: Vec<String>,
 }
 
 #[axum_macros::debug_handler]
 pub(crate) async fn linked_vp(State(state): State<IdentityState>, Json(payload): Json<Value>) -> Response {
     info!("Request Body: {}", payload);
 
-    let Ok(LinkedVPEndpointRequest { presentation_id }) = serde_json::from_value(payload) else {
+    let Ok(LinkedVPEndpointRequest { presentation_ids }) = serde_json::from_value(payload) else {
         return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
     };
 
     let service_id = "linked-verifiable-presentation-service".to_string();
     let command = ServiceCommand::CreateLinkedVerifiablePresentationService {
         service_id: service_id.clone(),
-        presentation_id,
+        presentation_ids,
     };
 
     // Create a linked verifiable presentation service.

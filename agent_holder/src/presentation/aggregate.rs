@@ -4,6 +4,7 @@ use agent_shared::config::{get_preferred_did_method, get_preferred_signing_algor
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::Aggregate;
+use identity_core::convert::ToJson;
 use identity_credential::credential::Jwt;
 use jsonwebtoken::{Algorithm, Header};
 use serde::{Deserialize, Serialize};
@@ -46,10 +47,12 @@ impl Aggregate for Presentation {
                         get_preferred_signing_algorithm(),
                     )
                     .await
-                    .unwrap();
+                    .map_err(|err| MissingIdentifierError(err.to_string()))?;
 
                 let mut presentation_builder = identity_credential::presentation::Presentation::builder(
-                    subject_did.parse().unwrap(),
+                    subject_did
+                        .parse::<identity_core::common::Url>()
+                        .map_err(|err| InvalidUrlError(err.to_string()))?,
                     Default::default(),
                 );
                 for signed_credential in signed_credentials {
@@ -57,11 +60,13 @@ impl Aggregate for Presentation {
                 }
 
                 let verifiable_presentation: identity_credential::presentation::Presentation<Jwt> =
-                    presentation_builder.build().unwrap();
+                    presentation_builder
+                        .build()
+                        .map_err(|err| PresentationBuilderError(err.to_string()))?;
 
                 let payload = verifiable_presentation
                     .serialize_jwt(&Default::default())
-                    .expect("FIX THISS");
+                    .map_err(|err| SerializationError(err.to_string()))?;
 
                 // Compose JWT
                 let header = Header {
@@ -72,8 +77,11 @@ impl Aggregate for Presentation {
                 };
 
                 let message = [
-                    URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header).unwrap().as_slice()),
-                    // FIX THISS?
+                    URL_SAFE_NO_PAD.encode(
+                        header
+                            .to_json_vec()
+                            .map_err(|err| SerializationError(err.to_string()))?,
+                    ),
                     URL_SAFE_NO_PAD.encode(payload.as_bytes()),
                 ]
                 .join(".");
@@ -85,7 +93,7 @@ impl Aggregate for Presentation {
                         get_preferred_signing_algorithm(),
                     )
                     .await
-                    .unwrap();
+                    .map_err(|err| SigningError(err.to_string()))?;
                 let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
                 let message = [message, signature].join(".");
 

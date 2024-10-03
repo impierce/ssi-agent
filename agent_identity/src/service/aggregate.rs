@@ -9,13 +9,14 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::Aggregate;
 use did_manager::{DidMethod, MethodSpecificParameters};
 use identity_core::{
-    common::{Duration, Timestamp},
-    convert::FromJson,
+    common::{Duration, OrderedSet, Timestamp},
+    convert::{FromJson, ToJson},
 };
 use identity_credential::{
     credential::Jwt,
     domain_linkage::{DomainLinkageConfiguration, DomainLinkageCredentialBuilder},
 };
+use identity_did::{CoreDID, DIDUrl};
 use identity_document::service::{Service as DocumentService, ServiceEndpoint};
 use jsonwebtoken::Header;
 use oid4vc_core::authentication::subject::Subject as _;
@@ -66,21 +67,28 @@ impl Aggregate for Service {
                         get_preferred_signing_algorithm(),
                     )
                     .await
-                    .unwrap();
+                    .map_err(|err| MissingIdentifierError(err.to_string()))?;
 
-                let origin = identity_core::common::Url::parse(origin.ascii_serialization()).unwrap();
+                let origin = identity_core::common::Url::parse(origin.ascii_serialization())
+                    .map_err(|err| InvalidUrlError(err.to_string()))?;
                 let domain_linkage_credential = DomainLinkageCredentialBuilder::new()
-                    .issuer(subject_did.parse().unwrap())
+                    .issuer(
+                        subject_did
+                            .parse::<CoreDID>()
+                            .map_err(|err| InvalidDidError(err.to_string()))?,
+                    )
                     .origin(origin.clone())
                     .issuance_date(Timestamp::now_utc())
                     // TODO: make this configurable
-                    .expiration_date(Timestamp::now_utc().checked_add(Duration::days(365)).unwrap())
+                    .expiration_date(
+                        Timestamp::now_utc()
+                            .checked_add(Duration::days(365))
+                            .ok_or(InvalidTimestampError)?,
+                    )
                     .build()
-                    // FIX THISS
-                    .unwrap()
+                    .map_err(|err| DomainLinkageCredentialBuilderError(err.to_string()))?
                     .serialize_jwt(Default::default())
-                    // FIX THISS
-                    .unwrap();
+                    .map_err(|err| SerializationError(err.to_string()))?;
 
                 // Compose JWT
                 let header = Header {
@@ -92,7 +100,11 @@ impl Aggregate for Service {
                 };
 
                 let message = [
-                    URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header).unwrap().as_slice()),
+                    URL_SAFE_NO_PAD.encode(
+                        header
+                            .to_json_vec()
+                            .map_err(|err| SerializationError(err.to_string()))?,
+                    ),
                     URL_SAFE_NO_PAD.encode(domain_linkage_credential.as_bytes()),
                 ]
                 .join(".");
@@ -105,7 +117,7 @@ impl Aggregate for Service {
                         from_jsonwebtoken_algorithm_to_jwsalgorithm(&get_preferred_signing_algorithm()),
                     )
                     .await
-                    .unwrap();
+                    .map_err(|err| SigningError(err.to_string()))?;
                 let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
                 let message = [message, signature].join(".");
 
@@ -114,13 +126,15 @@ impl Aggregate for Service {
 
                 // Create a new service and add it to the DID document.
                 let service = DocumentService::builder(Default::default())
-                    .id(format!("{subject_did}#{service_id}").parse().unwrap())
+                    .id(format!("{subject_did}#{service_id}")
+                        .parse::<DIDUrl>()
+                        .map_err(|err| InvalidUrlError(err.to_string()))?)
                     .type_("LinkedDomains")
                     .service_endpoint(
                         ServiceEndpoint::from_json_value(json!({
                             "origins": [origin]
                         }))
-                        .unwrap(),
+                        .map_err(|err| InvalidServiceEndpointError(err.to_string()))?,
                     )
                     .build()
                     .expect("Failed to create DID Configuration Resource");
@@ -133,13 +147,14 @@ impl Aggregate for Service {
             }
             CreateLinkedVerifiablePresentationService {
                 service_id,
-                presentation_id,
+                presentation_ids,
             } => {
                 let mut secret_manager = services.subject.secret_manager.lock().await;
 
                 let origin = config().url.origin();
                 let method_specific_parameters = MethodSpecificParameters::Web { origin: origin.clone() };
-                let origin = identity_core::common::Url::parse(origin.ascii_serialization()).unwrap();
+                let origin = identity_core::common::Url::parse(origin.ascii_serialization())
+                    .map_err(|err| InvalidUrlError(err.to_string()))?;
 
                 // TODO: implement for all non-deterministic methods and not just DID WEB
                 let document = secret_manager
@@ -150,20 +165,26 @@ impl Aggregate for Service {
                         from_jsonwebtoken_algorithm_to_jwsalgorithm(&get_preferred_signing_algorithm()),
                     )
                     .await
-                    // FIX THISS
-                    .unwrap();
+                    .map_err(|err| ProduceDocumentError(err.to_string()))?;
 
                 let subject_did = document.id();
 
                 let service = DocumentService::builder(Default::default())
-                    .id(format!("{subject_did}#{service_id}").parse().unwrap())
+                    .id(format!("{subject_did}#{service_id}")
+                        .parse::<DIDUrl>()
+                        .map_err(|err| InvalidUrlError(err.to_string()))?)
                     .type_("LinkedVerifiablePresentation")
-                    .service_endpoint(ServiceEndpoint::from(
-                        // FIX THIS
-                        format!("{origin}v0/holder/presentations/{presentation_id}/signed")
-                            .parse::<identity_core::common::Url>()
-                            .unwrap(),
-                    ))
+                    .service_endpoint(ServiceEndpoint::from(OrderedSet::from_iter(
+                        presentation_ids
+                            .into_iter()
+                            .map(|presentation_id| {
+                                // TODO: Find a better way to construct the URL
+                                format!("{origin}v0/holder/presentations/{presentation_id}/signed")
+                                    .parse::<identity_core::common::Url>()
+                            })
+                            .collect::<Result<Vec<_>, _>>()
+                            .map_err(|err| InvalidUrlError(err.to_string()))?,
+                    )))
                     .build()
                     .expect("Failed to create Linked Verifiable Presentation Resource");
 
@@ -261,7 +282,7 @@ pub mod test_utils {
     #[fixture]
     pub fn domain_linkage_service() -> DocumentService {
         Service::builder(Default::default())
-            .id(format!("did:test:123#linked_domain-service").parse().unwrap())
+            .id("did:test:123#linked_domain-service".parse().unwrap())
             .type_("LinkedDomains")
             .service_endpoint(
                 ServiceEndpoint::from_json_value(json!({
