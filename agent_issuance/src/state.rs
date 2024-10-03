@@ -5,9 +5,11 @@ use std::sync::Arc;
 use tracing::{info, warn};
 
 use crate::credential::aggregate::Credential;
+use crate::credential::queries::all_credentials::AllCredentialsView;
 use crate::credential::queries::CredentialView;
 use crate::offer::aggregate::Offer;
 use crate::offer::queries::access_token::AccessTokenView;
+use crate::offer::queries::all_offers::AllOffersView;
 use crate::offer::queries::pre_authorized_code::PreAuthorizedCodeView;
 use crate::offer::queries::OfferView;
 use crate::server_config::aggregate::ServerConfig;
@@ -34,24 +36,30 @@ pub struct CommandHandlers {
 type Queries = ViewRepositories<
     dyn ViewRepository<ServerConfigView, ServerConfig>,
     dyn ViewRepository<CredentialView, Credential>,
+    dyn ViewRepository<AllCredentialsView, Credential>,
     dyn ViewRepository<OfferView, Offer>,
+    dyn ViewRepository<AllOffersView, Offer>,
     dyn ViewRepository<PreAuthorizedCodeView, Offer>,
     dyn ViewRepository<AccessTokenView, Offer>,
 >;
 
-pub struct ViewRepositories<SC, C, O, O1, O2>
+pub struct ViewRepositories<SC, C, C1, O, O1, O2, O3>
 where
     SC: ViewRepository<ServerConfigView, ServerConfig> + ?Sized,
     C: ViewRepository<CredentialView, Credential> + ?Sized,
+    C1: ViewRepository<AllCredentialsView, Credential> + ?Sized,
     O: ViewRepository<OfferView, Offer> + ?Sized,
-    O1: ViewRepository<PreAuthorizedCodeView, Offer> + ?Sized,
-    O2: ViewRepository<AccessTokenView, Offer> + ?Sized,
+    O1: ViewRepository<AllOffersView, Offer> + ?Sized,
+    O2: ViewRepository<PreAuthorizedCodeView, Offer> + ?Sized,
+    O3: ViewRepository<AccessTokenView, Offer> + ?Sized,
 {
     pub server_config: Arc<SC>,
     pub credential: Arc<C>,
+    pub all_credentials: Arc<C1>,
     pub offer: Arc<O>,
-    pub pre_authorized_code: Arc<O1>,
-    pub access_token: Arc<O2>,
+    pub all_offers: Arc<O1>,
+    pub pre_authorized_code: Arc<O2>,
+    pub access_token: Arc<O3>,
 }
 
 impl Clone for Queries {
@@ -59,7 +67,9 @@ impl Clone for Queries {
         ViewRepositories {
             server_config: self.server_config.clone(),
             credential: self.credential.clone(),
+            all_credentials: self.all_credentials.clone(),
             offer: self.offer.clone(),
+            all_offers: self.all_offers.clone(),
             pre_authorized_code: self.pre_authorized_code.clone(),
             access_token: self.access_token.clone(),
         }

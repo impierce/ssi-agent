@@ -3,11 +3,11 @@ use cqrs_es::persist::ViewRepository;
 use std::sync::Arc;
 
 use crate::credential::aggregate::Credential;
-use crate::credential::queries::all_credentials::AllCredentialsView;
-use crate::credential::queries::CredentialView;
+use crate::credential::queries::all_credentials::AllHolderCredentialsView;
+use crate::credential::queries::HolderCredentialView;
 use crate::offer::aggregate::Offer;
-use crate::offer::queries::all_offers::AllOffersView;
-use crate::offer::queries::OfferView;
+use crate::offer::queries::all_offers::AllReceivedOffersView;
+use crate::offer::queries::ReceivedOfferView;
 use crate::presentation::aggregate::Presentation;
 use crate::presentation::views::all_presentations::AllPresentationsView;
 use crate::presentation::views::PresentationView;
@@ -30,40 +30,40 @@ pub struct CommandHandlers {
 /// that any type of repository that implements the `ViewRepository` trait can be used, but the corresponding `View` and
 /// `Aggregate` types must be the same.
 type Queries = ViewRepositories<
-    dyn ViewRepository<CredentialView, Credential>,
-    dyn ViewRepository<AllCredentialsView, Credential>,
+    dyn ViewRepository<HolderCredentialView, Credential>,
+    dyn ViewRepository<AllHolderCredentialsView, Credential>,
     dyn ViewRepository<PresentationView, Presentation>,
     dyn ViewRepository<AllPresentationsView, Presentation>,
-    dyn ViewRepository<OfferView, Offer>,
-    dyn ViewRepository<AllOffersView, Offer>,
+    dyn ViewRepository<ReceivedOfferView, Offer>,
+    dyn ViewRepository<AllReceivedOffersView, Offer>,
 >;
 
 pub struct ViewRepositories<C1, C2, P1, P2, O1, O2>
 where
-    C1: ViewRepository<CredentialView, Credential> + ?Sized,
-    C2: ViewRepository<AllCredentialsView, Credential> + ?Sized,
+    C1: ViewRepository<HolderCredentialView, Credential> + ?Sized,
+    C2: ViewRepository<AllHolderCredentialsView, Credential> + ?Sized,
     P1: ViewRepository<PresentationView, Presentation> + ?Sized,
     P2: ViewRepository<AllPresentationsView, Presentation> + ?Sized,
-    O1: ViewRepository<OfferView, Offer> + ?Sized,
-    O2: ViewRepository<AllOffersView, Offer> + ?Sized,
+    O1: ViewRepository<ReceivedOfferView, Offer> + ?Sized,
+    O2: ViewRepository<AllReceivedOffersView, Offer> + ?Sized,
 {
-    pub credential: Arc<C1>,
-    pub all_credentials: Arc<C2>,
+    pub holder_credential: Arc<C1>,
+    pub all_holder_credentials: Arc<C2>,
     pub presentation: Arc<P1>,
     pub all_presentations: Arc<P2>,
-    pub offer: Arc<O1>,
-    pub all_offers: Arc<O2>,
+    pub received_offer: Arc<O1>,
+    pub all_received_offers: Arc<O2>,
 }
 
 impl Clone for Queries {
     fn clone(&self) -> Self {
         ViewRepositories {
-            credential: self.credential.clone(),
-            all_credentials: self.all_credentials.clone(),
+            holder_credential: self.holder_credential.clone(),
+            all_holder_credentials: self.all_holder_credentials.clone(),
             presentation: self.presentation.clone(),
             all_presentations: self.all_presentations.clone(),
-            offer: self.offer.clone(),
-            all_offers: self.all_offers.clone(),
+            received_offer: self.received_offer.clone(),
+            all_received_offers: self.all_received_offers.clone(),
         }
     }
 }

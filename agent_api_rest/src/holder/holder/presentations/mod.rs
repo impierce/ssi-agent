@@ -1,7 +1,7 @@
 pub mod presentation_signed;
 
 use agent_holder::{
-    credential::queries::CredentialView, presentation::command::PresentationCommand, state::HolderState,
+    credential::queries::HolderCredentialView, presentation::command::PresentationCommand, state::HolderState,
 };
 use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
@@ -10,7 +10,6 @@ use axum::{
     Json,
 };
 use hyper::StatusCode;
-use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::info;
@@ -42,8 +41,8 @@ pub(crate) async fn post_presentations(State(state): State<HolderState>, Json(pa
 
     // Get all the credentials.
     for credential_id in credential_ids {
-        match query_handler(&credential_id, &state.query.credential).await {
-            Ok(Some(CredentialView {
+        match query_handler(&credential_id, &state.query.holder_credential).await {
+            Ok(Some(HolderCredentialView {
                 signed: Some(credential),
                 ..
             })) => {

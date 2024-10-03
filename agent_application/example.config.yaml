@@ -15,18 +15,18 @@ did_methods:
   did_key:
     enabled: true
   did_iota_rms:
-    enabled: true
+    enabled: false
   did_web:
-    enabled: true
+    enabled: false
 
 domain_linkage_enabled: false
 
 signing_algorithms_supported:
-  eddsa:
-    enabled: true
-    preferred: true
   es256:
+    preferred: true
     enabled: true
+  eddsa:
+    enabled: false
 
 # TODO: required to be stated explicitly?
 vp_formats:
@@ -64,7 +64,7 @@ credential_configurations:
       type:
         - VerifiableCredential
     display:
-      - name: Verifiable Credential
+      - name: Impierce Credential
         locale: en
         logo:
           uri: https://www.impierce.com/external/impierce-logo.png
@@ -80,6 +80,6 @@ secret_manager:
   # stronghold_password: "" <== Should be injected through the env variable `UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD`
   # stronghold_password_file: ""
   # issuer_eddsa_key_id: "ed25519-0"
-  # issuer_es256_key_id: "es256-0"
+  issuer_es256_key_id: "es256-0"
   # issuer_did: "did:iota:rms:0x0000000000000000000000000000000000000000000000000000000000000000"
   # issuer_fragment: "key-0"

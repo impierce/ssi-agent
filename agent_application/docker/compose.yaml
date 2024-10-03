@@ -26,10 +26,10 @@ services:
     depends_on:
       - cqrs-postgres-db
   ssi-agent:
-    # image: impiercetechnologies/ssi-agent:476360a
-    build:
-      context: ../..
-      dockerfile: ./agent_application/docker/Dockerfile
+    image: impiercetechnologies/ssi-agent:837870c
+    # build:
+    #   context: ../..
+    #   dockerfile: ./agent_application/docker/Dockerfile
     ports:
       - 3033:3033
     environment:
@@ -48,7 +48,7 @@ services:
     volumes:
       - ../../agent_application/config.yaml:/app/agent_application/config.yaml
       # - ../../agent_secret_manager/tests/res/test.stronghold:/app/res/stronghold
-      - ../../agent_verification/presentation_definitions:/app/agent_verification/presentation_definitions
+      # - ../../agent_verification/presentation_definitions:/app/agent_verification/presentation_definitions
       # TODO: Remove this. This is a workaround that ensures that the `agent_verification/presentation_definitions`
       # folder can be accessed by the agent from the `fn authorization_requests` endpoint.
-      - ./tmp:/app/agent_api_rest
+      # - ./tmp:/app/agent_api_rest

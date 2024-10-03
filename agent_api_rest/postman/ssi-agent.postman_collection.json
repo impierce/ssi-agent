@@ -84,11 +84,8 @@
 						{
 							"listen": "prerequest",
 							"script": {
-								"exec": [
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
+								"exec": [],
+								"type": "text/javascript"
 							}
 						}
 					],
@@ -186,6 +183,46 @@
 					"response": []
 				},
 				{
+					"name": "all_credentials",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/credentials",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"credentials"
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "offers",
 					"event": [
 						{
@@ -231,6 +268,46 @@
 								}
 							}
 						},
+						"url": {
+							"raw": "{{HOST}}/v0/offers",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"offers"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "all_offers",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
 						"url": {
 							"raw": "{{HOST}}/v0/offers",
 							"host": [
@@ -716,11 +793,8 @@
 						{
 							"listen": "prerequest",
 							"script": {
-								"exec": [
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
+								"exec": [],
+								"type": "text/javascript"
 							}
 						}
 					],
@@ -736,6 +810,25 @@
 								"v0",
 								"holder",
 								"offers"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "credentials",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/holder/credentials",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"holder",
+								"credentials"
 							]
 						}
 					},

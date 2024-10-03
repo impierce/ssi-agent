@@ -4,9 +4,9 @@ use super::event::CredentialEvent;
 use crate::credential::aggregate::Credential;
 use cqrs_es::{EventEnvelope, View};
 
-pub type CredentialView = Credential;
+pub type HolderCredentialView = Credential;
 
-impl View<Credential> for CredentialView {
+impl View<Credential> for Credential {
     fn update(&mut self, event: &EventEnvelope<Credential>) {
         use CredentialEvent::*;
 

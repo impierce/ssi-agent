@@ -3,7 +3,7 @@ pub mod all_offers;
 use crate::offer::aggregate::Offer;
 use cqrs_es::{EventEnvelope, View};
 
-pub type OfferView = Offer;
+pub type ReceivedOfferView = Offer;
 
 impl View<Offer> for Offer {
     fn update(&mut self, event: &EventEnvelope<Offer>) {

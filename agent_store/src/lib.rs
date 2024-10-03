@@ -98,6 +98,9 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
             if let Some(holder_credential) = event_publisher.holder_credential() {
                 partitions.holder_credential_event_publishers.push(holder_credential);
             }
+            if let Some(presentation) = event_publisher.presentation() {
+                partitions.presentation_event_publishers.push(presentation);
+            }
             if let Some(received_offer) = event_publisher.received_offer() {
                 partitions.received_offer_event_publishers.push(received_offer);
             }
