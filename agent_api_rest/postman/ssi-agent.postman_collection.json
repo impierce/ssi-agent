@@ -163,20 +163,6 @@
 				},
 				{
 					"name": "credentials",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}{{CREDENTIAL_LOCATION}}",
-							"host": [
-								"{{HOST}}{{CREDENTIAL_LOCATION}}"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "all_credentials",
 					"event": [
 						{
 							"listen": "test",
@@ -210,6 +196,20 @@
 							"path": [
 								"v0",
 								"credentials"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "credential",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}{{CREDENTIAL_LOCATION}}",
+							"host": [
+								"{{HOST}}{{CREDENTIAL_LOCATION}}"
 							]
 						}
 					},
@@ -275,7 +275,7 @@
 					"response": []
 				},
 				{
-					"name": "all_offers",
+					"name": "offers",
 					"event": [
 						{
 							"listen": "test",
@@ -309,6 +309,25 @@
 							"path": [
 								"v0",
 								"offers"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "offer",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/offers/{{OFFER_ID}}",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"offers",
+								"{{OFFER_ID}}"
 							]
 						}
 					},
@@ -684,7 +703,7 @@
 					"response": []
 				},
 				{
-					"name": "authorization_requests",
+					"name": "authorization_request",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -812,6 +831,26 @@
 					"response": []
 				},
 				{
+					"name": "offer",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/holder/offers/{{RECEIVED_OFFER_ID}}",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"holder",
+								"offers",
+								"{{RECEIVED_OFFER_ID}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "offers_accept",
 					"request": {
 						"method": "POST",
@@ -893,6 +932,26 @@
 					"response": []
 				},
 				{
+					"name": "credential",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/holder/credentials/{{HOLDER_CREDENTIAL_ID}}",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"holder",
+								"credentials",
+								"{{HOLDER_CREDENTIAL_ID}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "presentations",
 					"event": [
 						{
@@ -926,6 +985,26 @@
 								"v0",
 								"holder",
 								"presentations"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "presentation",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/holder/presentations/{{PRESENTATION_ID}}",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"holder",
+								"presentations",
+								"{{PRESENTATION_ID}}"
 							]
 						}
 					},
