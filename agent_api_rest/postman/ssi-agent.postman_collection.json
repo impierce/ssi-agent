@@ -26,16 +26,6 @@
 								"type": "text/javascript",
 								"packages": {}
 							}
-						},
-						{
-							"listen": "prerequest",
-							"script": {
-								"exec": [
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
 						}
 					],
 					"request": {
@@ -43,7 +33,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n       \"offerId\": {{OFFER_ID}},\n       \"credentialConfigurationId\": \"openbadge_credential\",\n       \"credential\":{\n           \"credentialSubject\":{\n               \"type\":[\"AchievementSubject\"],\n               \"achievement\": {\n                       \"id\": \"https://demo.edubadges.nl/public/assertions/DAO4oUapQ_eJr9VwMz6jIQ\",\n                       \"type\": \"Achievement\",\n                       \"criteria\":{\"narrative\": \"testtesttesttesttesttesttest\"},\n                       \"description\": \"testtesttesttesttesttesttesttest\",\n                       \"name\": \"Geschiedenis van de Oudheid\",\n                       \"image\":{\n                           \"id\": \"https://api-demo.edubadges.nl/media/uploads/badges/issuer_badgeclass_3e51ca72-ee9b-493b-b787-fd89f2df3189.png\",\n                           \"type\": \"Image\"\n                       }\n                   }\n               }\n           }\n       }",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"openbadge_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"type\": [ \"AchievementSubject\" ],\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -84,8 +74,11 @@
 						{
 							"listen": "prerequest",
 							"script": {
-								"exec": [],
-								"type": "text/javascript"
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
 							}
 						}
 					],
@@ -115,7 +108,7 @@
 					"response": []
 				},
 				{
-					"name": "temp_thuiswinkel_credential",
+					"name": "Thuiswinkel Waarborg Credential",
 					"event": [
 						{
 							"listen": "test",
@@ -148,7 +141,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": \"https://ecommerce.impierce.com/\",\n            \"image\": \"https://www.thuiswinkel.org/Images/logo-thuiswinkel_waarborg.svg\",\n            \"name\": \"Impierce Bar\",\n            \"certificaat\": {\n                \"type\": \"ThuiswinkelWaarborg\",\n                \"certificeringsDatum\": \"2024-06-26\",\n                \"geldigheidsPeriode\": \"1 jaar\",\n                \"garanties\": [\n                    \"Het bedrijf is echt en bereikbaar.\",\n                    \"Voldoet aan de Thuiswinkel Algemene Voorwaarden.\",\n                    \"14 dagen bedenktijd.\",\n                    \"Veilige betaalmethoden.\",\n                    \"Duidelijke product/servicebeschrijvingen.\",\n                    \"Transparant bestelproces.\",\n                    \"Duidelijke prijzen.\",\n                    \"Veilige betaalomgeving.\",\n                    \"Veilige omgang met persoonlijke gegevens.\",\n                    \"Effectieve klachtenafhandeling en onafhankelijke geschillenbemiddeling.\"\n                ]\n            }\n        }\n    }\n}",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": \"https://ecommerce.impierce.com/\",\n            \"image\": \"https://www.thuiswinkel.org/Images/logo-thuiswinkel_waarborg.svg\",\n            \"name\": \"VirtualVendors\",\n            \"certificaat\": {\n                \"type\": \"ThuiswinkelWaarborg\",\n                \"certificeringsDatum\": \"2024-06-26\",\n                \"geldigheidsPeriode\": \"1 jaar\",\n                \"garanties\": [\n                    \"Het bedrijf is echt en bereikbaar.\",\n                    \"Voldoet aan de Thuiswinkel Algemene Voorwaarden.\",\n                    \"14 dagen bedenktijd.\",\n                    \"Veilige betaalmethoden.\",\n                    \"Duidelijke product/servicebeschrijvingen.\",\n                    \"Transparant bestelproces.\",\n                    \"Duidelijke prijzen.\",\n                    \"Veilige betaalomgeving.\",\n                    \"Veilige omgang met persoonlijke gegevens.\",\n                    \"Effectieve klachtenafhandeling en onafhankelijke geschillenbemiddeling.\"\n                ]\n            }\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -793,8 +786,11 @@
 						{
 							"listen": "prerequest",
 							"script": {
-								"exec": [],
-								"type": "text/javascript"
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
 							}
 						}
 					],
@@ -810,25 +806,6 @@
 								"v0",
 								"holder",
 								"offers"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "credentials",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/v0/holder/credentials",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"v0",
-								"holder",
-								"credentials"
 							]
 						}
 					},
@@ -878,6 +855,26 @@
 				},
 				{
 					"name": "credentials",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (jsonData && typeof jsonData === 'object') {",
+									"    const holderCredentialId = Object.keys(jsonData)[0];",
+									"",
+									"    if (holderCredentialId) {",
+									"        pm.collectionVariables.set(\"HOLDER_CREDENTIAL_ID\", holderCredentialId);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -897,6 +894,26 @@
 				},
 				{
 					"name": "presentations",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (jsonData && typeof jsonData === 'object') {",
+									"    const presentationId = Object.keys(jsonData)[0];",
+									"",
+									"    if (presentationId) {",
+									"        pm.collectionVariables.set(\"PRESENTATION_ID\", presentationId);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -921,7 +938,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"credentialIds\": [\"credential_id\"]\n}",
+							"raw": "{\n    \"credentialIds\": [\"{{HOLDER_CREDENTIAL_ID}}\"]\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -954,7 +971,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"presentationId\": \"presentation_id\"\n}",
+							"raw": "{\n    \"presentationIds\": [\"{{PRESENTATION_ID}}\"]\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -970,6 +987,24 @@
 								"v0",
 								"services",
 								"linked-vp"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "services",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/services",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"services"
 							]
 						}
 					},
@@ -1041,6 +1076,16 @@
 		},
 		{
 			"key": "RECEIVED_OFFER_ID",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "HOLDER_CREDENTIAL_ID",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "PRESENTATION_ID",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		}
