@@ -20,13 +20,9 @@ use tracing::info;
 use serde_json::json;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn get_credentials(State(state): State<IssuanceState>, Path(credential_id): Path<String>) -> Response {
-    // Get the credential if it exists.
+pub(crate) async fn credential(State(state): State<IssuanceState>, Path(credential_id): Path<String>) -> Response {
     match query_handler(&credential_id, &state.query.credential).await {
-        Ok(Some(CredentialView {
-            data: Some(Data { raw }),
-            ..
-        })) => (StatusCode::OK, Json(raw)).into_response(),
+        Ok(Some(credential_view)) => (StatusCode::OK, Json(credential_view)).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }

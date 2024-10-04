@@ -279,7 +279,12 @@ pub async fn verification_state(
 
     // Initialize the postgres repositories.
     let authorization_request = Arc::new(PostgresViewRepository::new("authorization_request", pool.clone()));
+    let all_authorization_requests = Arc::new(PostgresViewRepository::new("all_authorization_requests", pool.clone()));
     let connection = Arc::new(PostgresViewRepository::new("connection", pool.clone()));
+
+    // Create custom-queries for the offer aggregate.
+    let all_authorization_requests_query =
+        ListAllQuery::new(all_authorization_requests.clone(), "all_authorization_requests");
 
     // Partition the event_publishers into the different aggregates.
     let Partitions {
@@ -294,7 +299,8 @@ pub async fn verification_state(
                 authorization_request_event_publishers.into_iter().fold(
                     AggregateHandler::new(pool.clone(), verification_services.clone())
                         .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(authorization_request.clone())),
+                        .append_query(generic_query(authorization_request.clone()))
+                        .append_query(all_authorization_requests_query),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
@@ -309,6 +315,7 @@ pub async fn verification_state(
         },
         query: agent_verification::state::ViewRepositories {
             authorization_request,
+            all_authorization_requests,
             connection,
         },
     }
