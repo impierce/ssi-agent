@@ -4,7 +4,7 @@ use agent_shared::config::{get_preferred_did_method, get_preferred_signing_algor
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::Aggregate;
-use identity_core::{common::Timestamp, convert::ToJson};
+use identity_core::convert::ToJson;
 use identity_credential::{credential::Jwt, presentation::JwtPresentationOptions};
 use jsonwebtoken::Header;
 use serde::{Deserialize, Serialize};
@@ -60,7 +60,8 @@ impl Aggregate for Presentation {
                 }
 
                 #[cfg(feature = "test_utils")]
-                let options = JwtPresentationOptions::default().issuance_date(Timestamp::from_unix(0).unwrap());
+                let options = JwtPresentationOptions::default()
+                    .issuance_date(identity_core::common::Timestamp::from_unix(0).unwrap());
                 #[cfg(not(feature = "test_utils"))]
                 let options = JwtPresentationOptions::default();
 
