@@ -69,6 +69,22 @@ impl Aggregate for Service {
                     .await
                     .map_err(|err| MissingIdentifierError(err.to_string()))?;
 
+                #[cfg(feature = "test_utils")]
+                let (issuance_date, expiration_date) = {
+                    let issuance_date = test_utils::issuance_date();
+                    let expiration_date = test_utils::expiration_date();
+                    (issuance_date, expiration_date)
+                };
+                #[cfg(not(feature = "test_utils"))]
+                let (issuance_date, expiration_date) = {
+                    let issuance_date = Timestamp::now_utc();
+                    let expiration_date = issuance_date
+                        .checked_add(Duration::days(365))
+                        .ok_or(InvalidTimestampError)?;
+
+                    (issuance_date, expiration_date)
+                };
+
                 let origin = identity_core::common::Url::parse(origin.ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
                 let domain_linkage_credential = DomainLinkageCredentialBuilder::new()
@@ -78,13 +94,8 @@ impl Aggregate for Service {
                             .map_err(|err| InvalidDidError(err.to_string()))?,
                     )
                     .origin(origin.clone())
-                    .issuance_date(Timestamp::now_utc())
-                    // TODO: make this configurable
-                    .expiration_date(
-                        Timestamp::now_utc()
-                            .checked_add(Duration::days(365))
-                            .ok_or(InvalidTimestampError)?,
-                    )
+                    .issuance_date(issuance_date)
+                    .expiration_date(expiration_date)
                     .build()
                     .map_err(|err| DomainLinkageCredentialBuilderError(err.to_string()))?
                     .serialize_jwt(Default::default())
@@ -218,6 +229,7 @@ impl Aggregate for Service {
 
 #[cfg(test)]
 pub mod service_tests {
+    use agent_shared::config::set_config;
     use identity_document::service::Service as DocumentService;
 
     use super::test_utils::*;
@@ -234,6 +246,8 @@ pub mod service_tests {
         domain_linkage_service: DocumentService,
         domain_linkage_resource: ServiceResource,
     ) {
+        set_config().set_preferred_did_method(agent_shared::config::SupportedDidMethod::Web);
+
         ServiceTestFramework::with(IdentityServices::default())
             .given_no_previous_events()
             .when(ServiceCommand::CreateDomainLinkageService {
@@ -246,30 +260,33 @@ pub mod service_tests {
             }])
     }
 
-    // #[rstest]
-    // #[serial_test::serial]
-    // async fn test_add_service(
-    //     #[future(awt)] document: CoreDocument,
-    //     domain_linkage_service: Service,
-    //     #[future(awt)] document_with_domain_linkage_service: CoreDocument,
-    // ) {
-    //     DocumentTestFramework::with(IdentityServices::default())
-    //         .given(vec![DocumentEvent::DocumentCreated { document }])
-    //         .when(DocumentCommand::AddService {
-    //             service: domain_linkage_service,
-    //         })
-    //         .then_expect_events(vec![DocumentEvent::ServiceAdded {
-    //             document: document_with_domain_linkage_service,
-    //         }])
-    // }
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_linked_verifiable_presentation_service(
+        linked_verifiable_presentation_service_id: String,
+        linked_verifiable_presentation_service: DocumentService,
+    ) {
+        set_config().set_preferred_did_method(agent_shared::config::SupportedDidMethod::Web);
+
+        ServiceTestFramework::with(IdentityServices::default())
+            .given_no_previous_events()
+            .when(ServiceCommand::CreateLinkedVerifiablePresentationService {
+                service_id: linked_verifiable_presentation_service_id.clone(),
+                presentation_ids: vec!["presentation-1".to_string()],
+            })
+            .then_expect_events(vec![ServiceEvent::LinkedVerifiablePresentationServiceCreated {
+                service_id: linked_verifiable_presentation_service_id,
+                service: linked_verifiable_presentation_service,
+            }])
+    }
 }
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::*;
-    use crate::state::DOMAIN_LINKAGE_SERVICE_ID;
+    use crate::state::{DOMAIN_LINKAGE_SERVICE_ID, VERIFIABLE_PRESENTATION_SERVICE_ID};
     use agent_shared::config::config;
-    use identity_core::convert::FromJson;
+    use identity_core::{common::Url, convert::FromJson};
     use identity_document::service::{Service, ServiceEndpoint};
     use rstest::*;
     use serde_json::json;
@@ -280,9 +297,16 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn domain_linkage_service() -> DocumentService {
+    pub fn linked_verifiable_presentation_service_id() -> String {
+        VERIFIABLE_PRESENTATION_SERVICE_ID.to_string()
+    }
+
+    #[fixture]
+    pub fn domain_linkage_service(did_web_identifier: String, domain_linkage_service_id: String) -> DocumentService {
         Service::builder(Default::default())
-            .id("did:test:123#linked_domain-service".parse().unwrap())
+            .id(format!("{did_web_identifier}#{domain_linkage_service_id}")
+                .parse()
+                .unwrap())
             .type_("LinkedDomains")
             .service_endpoint(
                 ServiceEndpoint::from_json_value(json!({
@@ -295,9 +319,47 @@ pub mod test_utils {
     }
 
     #[fixture]
+    pub fn linked_verifiable_presentation_service(
+        did_web_identifier: String,
+        linked_verifiable_presentation_service_id: String,
+    ) -> DocumentService {
+        let origin = config().url.origin().ascii_serialization();
+
+        Service::builder(Default::default())
+            .id(
+                format!("{did_web_identifier}#{linked_verifiable_presentation_service_id}")
+                    .parse()
+                    .unwrap(),
+            )
+            .type_("LinkedVerifiablePresentation")
+            .service_endpoint(ServiceEndpoint::from(OrderedSet::from_iter(vec![format!(
+                "{origin}/v0/holder/presentations/presentation-1/signed"
+            )
+            .parse::<Url>()
+            .unwrap()])))
+            .build()
+            .unwrap()
+    }
+
+    #[fixture]
+    pub fn did_web_identifier() -> String {
+        let domain = config().url.domain().unwrap().to_string();
+
+        format!("did:web:{domain}")
+    }
+
+    #[fixture]
     pub fn domain_linkage_resource() -> ServiceResource {
-        let domain_linkage_configuration = DomainLinkageConfiguration::new(vec![Jwt::from("message".to_string())]);
+        let domain_linkage_configuration = DomainLinkageConfiguration::new(vec![Jwt::from("eyJhbGciOiJFZERTQSIsImtpZCI6ImRpZDp3ZWI6bXktZG9tYWluLmV4YW1wbGUub3JnI2tleS0wIn0.eyJleHAiOjMxNTM2MDAwLCJpc3MiOiJkaWQ6d2ViOm15LWRvbWFpbi5leGFtcGxlLm9yZyIsIm5iZiI6MCwic3ViIjoiZGlkOndlYjpteS1kb21haW4uZXhhbXBsZS5vcmciLCJ2YyI6eyJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSIsImh0dHBzOi8vaWRlbnRpdHkuZm91bmRhdGlvbi8ud2VsbC1rbm93bi9kaWQtY29uZmlndXJhdGlvbi92MSJdLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiRG9tYWluTGlua2FnZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsib3JpZ2luIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvIn19fQ.l7dEPioa-No5zBlDCthfXDcffRB7371OnLrrQQgeAdnvHhs5F8XqRtdAWKXB8z3Se00WtGxHrTepLKmH9OWJDQ".to_string())]);
 
         ServiceResource::DomainLinkage(domain_linkage_configuration)
+    }
+
+    pub fn issuance_date() -> Timestamp {
+        Timestamp::from_unix(0).unwrap()
+    }
+
+    pub fn expiration_date() -> Timestamp {
+        issuance_date().checked_add(Duration::days(365)).unwrap()
     }
 }

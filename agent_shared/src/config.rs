@@ -280,14 +280,22 @@ impl ApplicationConfiguration {
             options.preferred = Some(false);
         }
 
-        // Set the current preferred did_method to true if available.
-        self.did_methods
+        // Set the current preferred did_method to true.
+        let entry = self
+            .did_methods
             .entry(preferred_did_method)
             .or_insert_with(|| ToggleOptions {
                 enabled: true,
                 preferred: Some(true),
-            })
-            .preferred = Some(true);
+            });
+        entry.enabled = true;
+        entry.preferred = Some(true);
+    }
+
+    pub fn disable_did_method(&mut self, did_method: SupportedDidMethod) {
+        if let Some(options) = self.did_methods.get_mut(&did_method) {
+            options.enabled = false;
+        }
     }
 
     // TODO: make generic: set_enabled(enabled: bool)

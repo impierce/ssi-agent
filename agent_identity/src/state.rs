@@ -51,6 +51,9 @@ impl Clone for Queries {
 /// The unique identifier for the linked domain service.
 pub const DOMAIN_LINKAGE_SERVICE_ID: &str = "linked-domain-service";
 
+/// The unique identifier for the linked verifiable presentation service.
+pub const VERIFIABLE_PRESENTATION_SERVICE_ID: &str = "linked-verifiable-presentation-service";
+
 /// Initialize the identity state.
 pub async fn initialize(state: &IdentityState) {
     info!("Initializing ...");
