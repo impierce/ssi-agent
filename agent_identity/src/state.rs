@@ -7,6 +7,7 @@ use std::sync::Arc;
 use tracing::{info, warn};
 
 use crate::document::command::DocumentCommand;
+use crate::service::views::all_services::AllServicesView;
 use crate::{
     document::{aggregate::Document, views::DocumentView},
     service::{aggregate::Service, command::ServiceCommand, views::ServiceView},
@@ -28,15 +29,21 @@ pub struct CommandHandlers {
 /// This type is used to define the queries that are used to query the view repositories. We make use of `dyn` here, so
 /// that any type of repository that implements the `ViewRepository` trait can be used, but the corresponding `View` and
 /// `Aggregate` types must be the same.
-type Queries = ViewRepositories<dyn ViewRepository<DocumentView, Document>, dyn ViewRepository<ServiceView, Service>>;
+type Queries = ViewRepositories<
+    dyn ViewRepository<DocumentView, Document>,
+    dyn ViewRepository<ServiceView, Service>,
+    dyn ViewRepository<AllServicesView, Service>,
+>;
 
-pub struct ViewRepositories<D, S>
+pub struct ViewRepositories<D, S1, S2>
 where
     D: ViewRepository<DocumentView, Document> + ?Sized,
-    S: ViewRepository<ServiceView, Service> + ?Sized,
+    S1: ViewRepository<ServiceView, Service> + ?Sized,
+    S2: ViewRepository<AllServicesView, Service> + ?Sized,
 {
     pub document: Arc<D>,
-    pub service: Arc<S>,
+    pub service: Arc<S1>,
+    pub all_services: Arc<S2>,
 }
 
 impl Clone for Queries {
@@ -44,6 +51,7 @@ impl Clone for Queries {
         ViewRepositories {
             document: self.document.clone(),
             service: self.service.clone(),
+            all_services: self.all_services.clone(),
         }
     }
 }

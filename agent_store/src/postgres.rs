@@ -78,6 +78,10 @@ pub async fn identity_state(
     // Initialize the postgres repositories.
     let document = Arc::new(PostgresViewRepository::new("document", pool.clone()));
     let service = Arc::new(PostgresViewRepository::new("service", pool.clone()));
+    let all_services = Arc::new(PostgresViewRepository::new("all_services", pool.clone()));
+
+    // Create custom-queries for the offer aggregate.
+    let all_services_query = ListAllQuery::new(all_services.clone(), "all_services");
 
     // Partition the event_publishers into the different aggregates.
     let Partitions {
@@ -100,12 +104,17 @@ pub async fn identity_state(
                 service_event_publishers.into_iter().fold(
                     AggregateHandler::new(pool.clone(), identity_services)
                         .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(service.clone())),
+                        .append_query(generic_query(service.clone()))
+                        .append_query(all_services_query),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
         },
-        query: agent_identity::state::ViewRepositories { document, service },
+        query: agent_identity::state::ViewRepositories {
+            document,
+            service,
+            all_services,
+        },
     }
 }
 

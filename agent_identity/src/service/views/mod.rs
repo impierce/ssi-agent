@@ -1,3 +1,5 @@
+pub mod all_services;
+
 use super::aggregate::Service;
 use cqrs_es::{EventEnvelope, View};
 
