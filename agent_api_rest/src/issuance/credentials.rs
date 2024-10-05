@@ -198,10 +198,7 @@ pub mod tests {
                 "name": "UniCore"
             },
             "issuanceDate": "2010-01-01T00:00:00Z",
-            "credentialSubject": {
-                "first_name": "Ferris",
-                "last_name": "Rustacean"
-            }
+            "credentialSubject": CREDENTIAL_SUBJECT.clone()
         });
     }
 
@@ -216,10 +213,8 @@ pub mod tests {
                         serde_json::to_vec(&json!({
                             "offerId": OFFER_ID,
                             "credential": {
-                                "credentialSubject": {
-                                "first_name": "Ferris",
-                                "last_name": "Rustacean"
-                            }},
+                                "credentialSubject": CREDENTIAL_SUBJECT.clone()
+                            },
                             "credentialConfigurationId": CREDENTIAL_CONFIGURATION_ID
                         }))
                         .unwrap(),
@@ -261,7 +256,7 @@ pub mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body, CREDENTIAL.clone());
+        assert_eq!(body["data"]["raw"], CREDENTIAL.clone());
     }
 
     #[tokio::test]
