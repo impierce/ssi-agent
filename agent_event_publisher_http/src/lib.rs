@@ -3,8 +3,9 @@ use agent_issuance::{
 };
 use agent_shared::config::config;
 use agent_store::{
-    AuthorizationRequestEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, EventPublisher,
-    HolderCredentialEventPublisher, OfferEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
+    AuthorizationRequestEventPublisher, ConnectionEventPublisher, ConnectionEventPublisher2, CredentialEventPublisher,
+    EventPublisher, HolderCredentialEventPublisher, OfferEventPublisher, ReceivedOfferEventPublisher,
+    ServerConfigEventPublisher,
 };
 use agent_verification::{authorization_request::aggregate::AuthorizationRequest, connection::aggregate::Connection};
 use async_trait::async_trait;
@@ -171,10 +172,10 @@ impl EventPublisher for EventPublisherHttp {
             .map(|publisher| Box::new(publisher) as ReceivedOfferEventPublisher)
     }
 
-    fn connection(&mut self) -> Option<ConnectionEventPublisher> {
+    fn connection(&mut self) -> Option<ConnectionEventPublisher2> {
         self.connection
             .take()
-            .map(|publisher| Box::new(publisher) as ConnectionEventPublisher)
+            .map(|publisher| Box::new(publisher) as ConnectionEventPublisher2)
     }
 
     fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher> {

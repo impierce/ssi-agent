@@ -121,15 +121,19 @@ pub async fn identity_state(
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> IdentityState {
     // Initialize the in-memory repositories.
+    let connection = Arc::new(MemRepository::default());
+    let all_connections = Arc::new(MemRepository::default());
     let document = Arc::new(MemRepository::default());
     let service = Arc::new(MemRepository::default());
     let all_services = Arc::new(MemRepository::default());
 
     // Create custom-queries for the offer aggregate.
+    let all_connections_query = ListAllQuery::new(all_connections.clone(), "all_connections");
     let all_services_query = ListAllQuery::new(all_services.clone(), "all_services");
 
     // Partition the event_publishers into the different aggregates.
     let Partitions {
+        connection_event_publishers,
         document_event_publishers,
         service_event_publishers,
         ..
@@ -137,6 +141,15 @@ pub async fn identity_state(
 
     IdentityState {
         command: agent_identity::state::CommandHandlers {
+            connection: Arc::new(
+                connection_event_publishers.into_iter().fold(
+                    AggregateHandler::new(identity_services.clone())
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(connection.clone()))
+                        .append_query(all_connections_query),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
+                ),
+            ),
             document: Arc::new(
                 document_event_publishers.into_iter().fold(
                     AggregateHandler::new(identity_services.clone())
@@ -156,6 +169,8 @@ pub async fn identity_state(
             ),
         },
         query: agent_identity::state::ViewRepositories {
+            connection,
+            all_connections,
             document,
             service,
             all_services,
@@ -316,7 +331,7 @@ pub async fn verification_state(
     // Partition the event_publishers into the different aggregates.
     let Partitions {
         authorization_request_event_publishers,
-        connection_event_publishers,
+        connection2_event_publishers,
         ..
     } = partition_event_publishers(event_publishers);
 
@@ -332,7 +347,7 @@ pub async fn verification_state(
                 ),
             ),
             connection: Arc::new(
-                connection_event_publishers.into_iter().fold(
+                connection2_event_publishers.into_iter().fold(
                     AggregateHandler::new(verification_services)
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(connection.clone())),

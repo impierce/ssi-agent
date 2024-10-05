@@ -1,4 +1,5 @@
 // Aggregates
+pub mod connection;
 pub mod document;
 pub mod service;
 

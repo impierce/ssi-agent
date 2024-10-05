@@ -6,6 +6,9 @@ use did_manager::DidMethod;
 use std::sync::Arc;
 use tracing::{info, warn};
 
+use crate::connection::aggregate::Connection;
+use crate::connection::views::all_connections::AllConnectionsView;
+use crate::connection::views::ConnectionView;
 use crate::document::command::DocumentCommand;
 use crate::service::views::all_services::AllServicesView;
 use crate::{
@@ -22,6 +25,7 @@ pub struct IdentityState {
 /// The command handlers are used to execute commands on the aggregates.
 #[derive(Clone)]
 pub struct CommandHandlers {
+    pub connection: CommandHandler<Connection>,
     pub document: CommandHandler<Document>,
     pub service: CommandHandler<Service>,
 }
@@ -30,17 +34,23 @@ pub struct CommandHandlers {
 /// that any type of repository that implements the `ViewRepository` trait can be used, but the corresponding `View` and
 /// `Aggregate` types must be the same.
 type Queries = ViewRepositories<
+    dyn ViewRepository<ConnectionView, Connection>,
+    dyn ViewRepository<AllConnectionsView, Connection>,
     dyn ViewRepository<DocumentView, Document>,
     dyn ViewRepository<ServiceView, Service>,
     dyn ViewRepository<AllServicesView, Service>,
 >;
 
-pub struct ViewRepositories<D, S1, S2>
+pub struct ViewRepositories<C1, C2, D, S1, S2>
 where
+    C1: ViewRepository<ConnectionView, Connection> + ?Sized,
+    C2: ViewRepository<AllConnectionsView, Connection> + ?Sized,
     D: ViewRepository<DocumentView, Document> + ?Sized,
     S1: ViewRepository<ServiceView, Service> + ?Sized,
     S2: ViewRepository<AllServicesView, Service> + ?Sized,
 {
+    pub connection: Arc<C1>,
+    pub all_connections: Arc<C2>,
     pub document: Arc<D>,
     pub service: Arc<S1>,
     pub all_services: Arc<S2>,
@@ -49,6 +59,8 @@ where
 impl Clone for Queries {
     fn clone(&self) -> Self {
         ViewRepositories {
+            connection: self.connection.clone(),
+            all_connections: self.all_connections.clone(),
             document: self.document.clone(),
             service: self.service.clone(),
             all_services: self.all_services.clone(),
