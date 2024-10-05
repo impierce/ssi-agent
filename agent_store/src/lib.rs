@@ -2,9 +2,7 @@ use agent_identity::{connection::aggregate::Connection, document::aggregate::Doc
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
-use agent_verification::{
-    authorization_request::aggregate::AuthorizationRequest, connection::aggregate::Connection as Connection2,
-};
+use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use cqrs_es::Query;
 
 pub mod in_memory;
@@ -20,7 +18,6 @@ pub type HolderCredentialEventPublisher = Box<dyn Query<agent_holder::credential
 pub type PresentationEventPublisher = Box<dyn Query<agent_holder::presentation::aggregate::Presentation>>;
 pub type ReceivedOfferEventPublisher = Box<dyn Query<agent_holder::offer::aggregate::Offer>>;
 pub type AuthorizationRequestEventPublisher = Box<dyn Query<AuthorizationRequest>>;
-pub type ConnectionEventPublisher2 = Box<dyn Query<Connection2>>;
 
 /// Contains all the event_publishers for each aggregate.
 #[derive(Default)]
@@ -35,7 +32,6 @@ pub struct Partitions {
     pub presentation_event_publishers: Vec<PresentationEventPublisher>,
     pub received_offer_event_publishers: Vec<ReceivedOfferEventPublisher>,
     pub authorization_request_event_publishers: Vec<AuthorizationRequestEventPublisher>,
-    pub connection2_event_publishers: Vec<ConnectionEventPublisher2>,
 }
 
 /// An outbound event_publisher is a component that listens to events and dispatches them to the appropriate service. For each
@@ -43,6 +39,9 @@ pub struct Partitions {
 /// `Some` with the appropriate query.
 // TODO: move this to a separate crate that will include all the logic for event_publishers, i.e. `agent_event_publisher`.
 pub trait EventPublisher {
+    fn connection(&mut self) -> Option<ConnectionEventPublisher> {
+        None
+    }
     fn document(&mut self) -> Option<DocumentEventPublisher> {
         None
     }
@@ -70,9 +69,6 @@ pub trait EventPublisher {
         None
     }
 
-    fn connection(&mut self) -> Option<ConnectionEventPublisher2> {
-        None
-    }
     fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher> {
         None
     }
@@ -82,6 +78,9 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
     event_publishers
         .into_iter()
         .fold(Partitions::default(), |mut partitions, mut event_publisher| {
+            if let Some(connection) = event_publisher.connection() {
+                partitions.connection_event_publishers.push(connection);
+            }
             if let Some(document) = event_publisher.document() {
                 partitions.document_event_publishers.push(document);
             }
@@ -114,9 +113,6 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
                     .authorization_request_event_publishers
                     .push(authorization_request);
             }
-            if let Some(connection) = event_publisher.connection() {
-                partitions.connection2_event_publishers.push(connection);
-            }
             partitions
         })
 }
@@ -137,11 +133,11 @@ mod test {
         }
     }
 
-    struct TestConnectionEventPublisher2;
+    struct TestConnectionEventPublisher;
 
     #[async_trait]
-    impl Query<Connection2> for TestConnectionEventPublisher2 {
-        async fn dispatch(&self, _aggregate_id: &str, _events: &[EventEnvelope<Connection2>]) {
+    impl Query<Connection> for TestConnectionEventPublisher {
+        async fn dispatch(&self, _aggregate_id: &str, _events: &[EventEnvelope<Connection>]) {
             // Do something
         }
     }
@@ -154,8 +150,8 @@ mod test {
             Some(Box::new(TestServerConfigEventPublisher))
         }
 
-        fn connection(&mut self) -> Option<ConnectionEventPublisher2> {
-            Some(Box::new(TestConnectionEventPublisher2))
+        fn connection(&mut self) -> Option<ConnectionEventPublisher> {
+            Some(Box::new(TestConnectionEventPublisher))
         }
     }
 
@@ -163,8 +159,8 @@ mod test {
 
     // This event_publisher is only interested in connections.
     impl EventPublisher for BarEventPublisher {
-        fn connection(&mut self) -> Option<ConnectionEventPublisher2> {
-            Some(Box::new(TestConnectionEventPublisher2))
+        fn connection(&mut self) -> Option<ConnectionEventPublisher> {
+            Some(Box::new(TestConnectionEventPublisher))
         }
     }
 
@@ -184,10 +180,9 @@ mod test {
             presentation_event_publishers,
             received_offer_event_publishers,
             authorization_request_event_publishers,
-            connection2_event_publishers,
         } = partition_event_publishers(event_publishers);
 
-        assert_eq!(connection_event_publishers.len(), 0);
+        assert_eq!(connection_event_publishers.len(), 2);
         assert_eq!(document_event_publishers.len(), 0);
         assert_eq!(service_event_publishers.len(), 0);
         assert_eq!(server_config_event_publishers.len(), 1);
@@ -197,6 +192,5 @@ mod test {
         assert_eq!(presentation_event_publishers.len(), 0);
         assert_eq!(received_offer_event_publishers.len(), 0);
         assert_eq!(authorization_request_event_publishers.len(), 0);
-        assert_eq!(connection2_event_publishers.len(), 2);
     }
 }

@@ -21,6 +21,14 @@ event_publishers:
 
 ### Available events
 
+#### `connection`
+
+```
+ConnectionAdded
+DomainAdded
+DidAdded
+```
+
 #### `document`
 
 ```
@@ -89,11 +97,6 @@ CredentialOfferRejected
 AuthorizationRequestCreated
 FormUrlEncodedAuthorizationRequestCreated
 AuthorizationRequestObjectSigned
-```
-
-#### `connection`
-
-```
 SIOPv2AuthorizationResponseVerified
 OID4VPAuthorizationResponseVerified
 ```

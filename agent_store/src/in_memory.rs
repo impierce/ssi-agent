@@ -322,7 +322,6 @@ pub async fn verification_state(
     // Initialize the in-memory repositories.
     let authorization_request = Arc::new(MemRepository::default());
     let all_authorization_requests = Arc::new(MemRepository::default());
-    let connection = Arc::new(MemRepository::default());
 
     // Create custom-queries for the offer aggregate.
     let all_authorization_requests_query =
@@ -331,7 +330,6 @@ pub async fn verification_state(
     // Partition the event_publishers into the different aggregates.
     let Partitions {
         authorization_request_event_publishers,
-        connection2_event_publishers,
         ..
     } = partition_event_publishers(event_publishers);
 
@@ -346,19 +344,10 @@ pub async fn verification_state(
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
-            connection: Arc::new(
-                connection2_event_publishers.into_iter().fold(
-                    AggregateHandler::new(verification_services)
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(connection.clone())),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
         },
         query: agent_verification::state::ViewRepositories {
             authorization_request,
             all_authorization_requests,
-            connection,
         },
     }
 }
