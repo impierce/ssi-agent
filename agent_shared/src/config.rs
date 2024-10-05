@@ -117,6 +117,10 @@ pub struct EventPublisherHttp {
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct Events {
     #[serde(default)]
+    pub document: Vec<DocumentEvent>,
+    #[serde(default)]
+    pub service: Vec<ServiceEvent>,
+    #[serde(default)]
     pub server_config: Vec<ServerConfigEvent>,
     #[serde(default)]
     pub credential: Vec<CredentialEvent>,
@@ -130,6 +134,18 @@ pub struct Events {
     pub connection: Vec<ConnectionEvent>,
     #[serde(default)]
     pub authorization_request: Vec<AuthorizationRequestEvent>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum DocumentEvent {
+    DocumentCreated,
+    ServiceAdded,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum ServiceEvent {
+    DomainLinkageServiceCreated,
+    LinkedVerifiablePresentationServiceCreated,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
