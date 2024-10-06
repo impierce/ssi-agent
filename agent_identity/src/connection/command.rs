@@ -11,12 +11,4 @@ pub enum ConnectionCommand {
         dids: Vec<DIDUrl>,
         credential_offer_endpoint: Option<Url>,
     },
-    AddDomain {
-        connection_id: String,
-        domain: Url,
-    },
-    AddDid {
-        connection_id: String,
-        did: DIDUrl,
-    },
 }

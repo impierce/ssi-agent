@@ -22,12 +22,6 @@ impl View<Connection> for Connection {
                 self.dids.clone_from(dids);
                 self.credential_offer_endpoint.clone_from(credential_offer_endpoint);
             }
-            DomainAdded { domain, .. } => {
-                self.domain.replace(domain.clone());
-            }
-            DidAdded { did, .. } => {
-                self.dids.push(did.clone());
-            }
         }
     }
 }

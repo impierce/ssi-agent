@@ -11,14 +11,6 @@ pub enum ConnectionEvent {
         dids: Vec<DIDUrl>,
         credential_offer_endpoint: Option<Url>,
     },
-    DomainAdded {
-        connection_id: String,
-        domain: Url,
-    },
-    DidAdded {
-        connection_id: String,
-        did: DIDUrl,
-    },
 }
 
 impl DomainEvent for ConnectionEvent {
@@ -27,8 +19,6 @@ impl DomainEvent for ConnectionEvent {
 
         let event_type: &str = match self {
             ConnectionAdded { .. } => "ConnectionAdded",
-            DomainAdded { .. } => "DomainAdded",
-            DidAdded { .. } => "DidAdded",
         };
         event_type.to_string()
     }

@@ -40,9 +40,12 @@ impl Aggregate for Connection {
         "connection".to_string()
     }
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(
+        &self,
+        command: Self::Command,
+        _services: &Self::Services,
+    ) -> Result<Vec<Self::Event>, Self::Error> {
         use ConnectionCommand::*;
-        use ConnectionError::*;
         use ConnectionEvent::*;
 
         info!("Handling command: {:?}", command);
@@ -59,8 +62,6 @@ impl Aggregate for Connection {
                 dids,
                 credential_offer_endpoint,
             }]),
-            AddDomain { connection_id, domain } => Ok(vec![DomainAdded { connection_id, domain }]),
-            AddDid { connection_id, did } => Ok(vec![DidAdded { connection_id, did }]),
         }
     }
 
@@ -81,12 +82,6 @@ impl Aggregate for Connection {
                 self.dids = dids;
                 self.credential_offer_endpoint = credential_offer_endpoint;
             }
-            DomainAdded { domain, .. } => {
-                self.domain.replace(domain);
-            }
-            DidAdded { did, .. } => {
-                self.dids.push(did);
-            }
         }
     }
 }
@@ -100,15 +95,54 @@ pub mod document_tests {
 
     type ConnectionTestFramework = TestFramework<Connection>;
 
-    // #[rstest]
-    // #[serial_test::serial]
-    // async fn test_add_connection() {
-    //     ConnectionTestFramework::with(IdentityServices::default())
-    //         .given_no_previous_events()
-    //         .when(ConnectionCommand::AddConnection {})
-    //         .then_expect_events(vec![ConnectionEvent::ConnectionAdded {}])
-    // }
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_add_connection(
+        connection_id: String,
+        domain: Url,
+        dids: Vec<DIDUrl>,
+        credential_offer_endpoint: Url,
+    ) {
+        ConnectionTestFramework::with(IdentityServices::default())
+            .given_no_previous_events()
+            .when(ConnectionCommand::AddConnection {
+                connection_id: connection_id.clone(),
+                domain: Some(domain.clone()),
+                dids: dids.clone(),
+                credential_offer_endpoint: Some(credential_offer_endpoint.clone()),
+            })
+            .then_expect_events(vec![ConnectionEvent::ConnectionAdded {
+                connection_id: connection_id.clone(),
+                domain: Some(domain.clone()),
+                dids: dids.clone(),
+                credential_offer_endpoint: Some(credential_offer_endpoint.clone()),
+            }])
+    }
 }
 
 #[cfg(feature = "test_utils")]
-pub mod test_utils {}
+pub mod test_utils {
+    use identity_core::common::Url;
+    use identity_did::DIDUrl;
+    use rstest::fixture;
+
+    #[fixture]
+    pub fn connection_id() -> String {
+        "connection_id".to_string()
+    }
+
+    #[fixture]
+    pub fn domain() -> Url {
+        "http://example.org".parse().unwrap()
+    }
+
+    #[fixture]
+    pub fn dids() -> Vec<DIDUrl> {
+        vec!["did:example:123".parse().unwrap()]
+    }
+
+    #[fixture]
+    pub fn credential_offer_endpoint() -> Url {
+        "http://example.org/openid4vci/offers".parse().unwrap()
+    }
+}

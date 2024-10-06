@@ -82,7 +82,6 @@ pub async fn identity_state(
     let service = Arc::new(PostgresViewRepository::new("service", pool.clone()));
     let all_services = Arc::new(PostgresViewRepository::new("all_services", pool.clone()));
 
-    // Create custom-queries for the offer aggregate.
     let all_connections_query = ListAllQuery::new(all_connections.clone(), "all_connections");
     let all_services_query = ListAllQuery::new(all_services.clone(), "all_services");
 

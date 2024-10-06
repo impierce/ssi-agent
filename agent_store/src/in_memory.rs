@@ -127,7 +127,6 @@ pub async fn identity_state(
     let service = Arc::new(MemRepository::default());
     let all_services = Arc::new(MemRepository::default());
 
-    // Create custom-queries for the offer aggregate.
     let all_connections_query = ListAllQuery::new(all_connections.clone(), "all_connections");
     let all_services_query = ListAllQuery::new(all_services.clone(), "all_services");
 
