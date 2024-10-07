@@ -1,6 +1,5 @@
-use super::aggregate::Status;
+use super::aggregate::{OfferCredential, Status};
 use cqrs_es::DomainEvent;
-use identity_credential::credential::Jwt;
 use oid4vci::{
     credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject,
     credential_offer::CredentialOfferParameters, token_response::TokenResponse,
@@ -26,7 +25,7 @@ pub enum OfferEvent {
     CredentialResponseReceived {
         offer_id: String,
         status: Status,
-        credentials: Vec<Jwt>,
+        credentials: Vec<OfferCredential>,
     },
     CredentialOfferRejected {
         offer_id: String,

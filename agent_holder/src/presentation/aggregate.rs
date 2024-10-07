@@ -132,6 +132,7 @@ impl Aggregate for Presentation {
 pub mod presentation_tests {
 
     use crate::offer::aggregate::test_utils::signed_credentials;
+    use crate::offer::aggregate::OfferCredential;
 
     use super::test_utils::*;
     use super::*;
@@ -143,12 +144,16 @@ pub mod presentation_tests {
 
     #[rstest]
     #[serial_test::serial]
-    async fn test_create_presentation(presentation_id: String, signed_credentials: Vec<Jwt>, signed_presentation: Jwt) {
+    async fn test_create_presentation(
+        presentation_id: String,
+        signed_credentials: Vec<OfferCredential>,
+        signed_presentation: Jwt,
+    ) {
         PresentationTestFramework::with(Service::default())
             .given_no_previous_events()
             .when(PresentationCommand::CreatePresentation {
                 presentation_id: presentation_id.clone(),
-                signed_credentials,
+                signed_credentials: signed_credentials.into_iter().map(|c| c.credential).collect(),
             })
             .then_expect_events(vec![PresentationEvent::PresentationCreated {
                 presentation_id,

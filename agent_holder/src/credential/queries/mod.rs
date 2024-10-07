@@ -15,10 +15,12 @@ impl View<Credential> for Credential {
                 credential_id,
                 offer_id,
                 credential,
+                data,
             } => {
                 self.credential_id.replace(credential_id.clone());
                 self.offer_id.replace(offer_id.clone());
                 self.signed.replace(credential.clone());
+                self.data.replace(data.clone());
             }
         }
     }

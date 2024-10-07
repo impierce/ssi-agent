@@ -2,12 +2,15 @@ use cqrs_es::DomainEvent;
 use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
 
+use super::aggregate::Data;
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum CredentialEvent {
     CredentialAdded {
         credential_id: String,
         offer_id: String,
         credential: Jwt,
+        data: Data,
     },
 }
 
