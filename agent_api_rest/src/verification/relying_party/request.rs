@@ -1,5 +1,5 @@
 use agent_shared::handlers::query_handler;
-use agent_verification::{authorization_request::queries::AuthorizationRequestView, state::VerificationState};
+use agent_verification::{authorization_request::views::AuthorizationRequestView, state::VerificationState};
 use axum::{
     extract::{Path, State},
     http::StatusCode,

@@ -20,13 +20,9 @@ use tracing::info;
 use serde_json::json;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn get_credentials(State(state): State<IssuanceState>, Path(credential_id): Path<String>) -> Response {
-    // Get the credential if it exists.
+pub(crate) async fn credential(State(state): State<IssuanceState>, Path(credential_id): Path<String>) -> Response {
     match query_handler(&credential_id, &state.query.credential).await {
-        Ok(Some(CredentialView {
-            data: Some(Data { raw }),
-            ..
-        })) => (StatusCode::OK, Json(raw)).into_response(),
+        Ok(Some(credential_view)) => (StatusCode::OK, Json(credential_view)).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
@@ -202,10 +198,7 @@ pub mod tests {
                 "name": "UniCore"
             },
             "issuanceDate": "2010-01-01T00:00:00Z",
-            "credentialSubject": {
-                "first_name": "Ferris",
-                "last_name": "Rustacean"
-            }
+            "credentialSubject": CREDENTIAL_SUBJECT.clone()
         });
     }
 
@@ -220,10 +213,8 @@ pub mod tests {
                         serde_json::to_vec(&json!({
                             "offerId": OFFER_ID,
                             "credential": {
-                                "credentialSubject": {
-                                "first_name": "Ferris",
-                                "last_name": "Rustacean"
-                            }},
+                                "credentialSubject": CREDENTIAL_SUBJECT.clone()
+                            },
                             "credentialConfigurationId": CREDENTIAL_CONFIGURATION_ID
                         }))
                         .unwrap(),
@@ -265,7 +256,7 @@ pub mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body, CREDENTIAL.clone());
+        assert_eq!(body["data"]["raw"], CREDENTIAL.clone());
     }
 
     #[tokio::test]
