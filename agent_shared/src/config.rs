@@ -18,7 +18,7 @@ use url::Url;
 pub struct ApplicationConfiguration {
     pub log_format: LogFormat,
     pub event_store: EventStoreConfig,
-    pub url: String,
+    pub url: Url,
     pub base_path: Option<String>,
     pub cors_enabled: Option<bool>,
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
@@ -117,6 +117,10 @@ pub struct EventPublisherHttp {
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct Events {
     #[serde(default)]
+    pub document: Vec<DocumentEvent>,
+    #[serde(default)]
+    pub service: Vec<ServiceEvent>,
+    #[serde(default)]
     pub server_config: Vec<ServerConfigEvent>,
     #[serde(default)]
     pub credential: Vec<CredentialEvent>,
@@ -130,6 +134,18 @@ pub struct Events {
     pub connection: Vec<ConnectionEvent>,
     #[serde(default)]
     pub authorization_request: Vec<AuthorizationRequestEvent>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum DocumentEvent {
+    DocumentCreated,
+    ServiceAdded,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum ServiceEvent {
+    DomainLinkageServiceCreated,
+    LinkedVerifiablePresentationServiceCreated,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -280,14 +296,22 @@ impl ApplicationConfiguration {
             options.preferred = Some(false);
         }
 
-        // Set the current preferred did_method to true if available.
-        self.did_methods
+        // Set the current preferred did_method to true.
+        let entry = self
+            .did_methods
             .entry(preferred_did_method)
             .or_insert_with(|| ToggleOptions {
                 enabled: true,
                 preferred: Some(true),
-            })
-            .preferred = Some(true);
+            });
+        entry.enabled = true;
+        entry.preferred = Some(true);
+    }
+
+    pub fn disable_did_method(&mut self, did_method: SupportedDidMethod) {
+        if let Some(options) = self.did_methods.get_mut(&did_method) {
+            options.enabled = false;
+        }
     }
 
     // TODO: make generic: set_enabled(enabled: bool)

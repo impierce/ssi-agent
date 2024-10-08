@@ -3,16 +3,24 @@ use crate::credential::error::CredentialError::{self};
 use crate::credential::event::CredentialEvent;
 use crate::services::HolderServices;
 use async_trait::async_trait;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use cqrs_es::Aggregate;
+use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct Data {
+    pub raw: serde_json::Value,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Credential {
     pub credential_id: Option<String>,
     pub offer_id: Option<String>,
-    pub credential: Option<serde_json::Value>,
+    pub signed: Option<Jwt>,
+    pub data: Option<Data>,
 }
 
 #[async_trait]
@@ -32,6 +40,7 @@ impl Aggregate for Credential {
         _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         use CredentialCommand::*;
+        use CredentialError::*;
         use CredentialEvent::*;
 
         info!("Handling command: {:?}", command);
@@ -41,11 +50,19 @@ impl Aggregate for Credential {
                 credential_id,
                 offer_id,
                 credential,
-            } => Ok(vec![CredentialAdded {
-                credential_id,
-                offer_id,
-                credential,
-            }]),
+            } => {
+                let raw = get_unverified_jwt_claims(&serde_json::json!(credential))?
+                    .get("vc")
+                    .cloned()
+                    .ok_or(CredentialDecodingError)?;
+
+                Ok(vec![CredentialAdded {
+                    credential_id,
+                    offer_id,
+                    credential,
+                    data: Data { raw },
+                }])
+            }
         }
     }
 
@@ -59,13 +76,29 @@ impl Aggregate for Credential {
                 credential_id,
                 offer_id,
                 credential,
+                data,
             } => {
                 self.credential_id = Some(credential_id);
                 self.offer_id = Some(offer_id);
-                self.credential = Some(credential);
+                self.signed = Some(credential);
+                self.data = Some(data);
             }
         }
     }
+}
+
+// TODO: actually validate the JWT!
+/// Get the claims from a JWT without performing validation.
+pub fn get_unverified_jwt_claims(jwt: &serde_json::Value) -> Result<serde_json::Value, CredentialError> {
+    jwt.as_str()
+        .and_then(|string| string.splitn(3, '.').collect::<Vec<&str>>().get(1).cloned())
+        .and_then(|payload| {
+            URL_SAFE_NO_PAD
+                .decode(payload)
+                .ok()
+                .and_then(|payload_bytes| serde_json::from_slice::<serde_json::Value>(&payload_bytes).ok())
+        })
+        .ok_or(CredentialError::CredentialDecodingError)
 }
 
 #[cfg(test)]
@@ -79,7 +112,6 @@ pub mod credential_tests {
     use agent_secret_manager::service::Service;
     use cqrs_es::test::TestFramework;
     use rstest::rstest;
-    use serde_json::json;
 
     type CredentialTestFramework = TestFramework<Credential>;
 
@@ -91,12 +123,17 @@ pub mod credential_tests {
             .when(CredentialCommand::AddCredential {
                 credential_id: credential_id.clone(),
                 offer_id: offer_id.clone(),
-                credential: json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT),
+                credential: Jwt::from(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string()),
             })
             .then_expect_events(vec![CredentialEvent::CredentialAdded {
                 credential_id,
                 offer_id,
-                credential: json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT),
+                credential: Jwt::from(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string()),
+                data: Data {
+                    raw: get_unverified_jwt_claims(&serde_json::json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT)).unwrap()
+                        ["vc"]
+                        .clone(),
+                },
             }])
     }
 }

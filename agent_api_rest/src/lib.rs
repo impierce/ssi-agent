@@ -1,19 +1,23 @@
 pub mod holder;
+pub mod identity;
 pub mod issuance;
 pub mod verification;
 
 use agent_holder::state::HolderState;
+use agent_identity::state::IdentityState;
 use agent_issuance::state::IssuanceState;
 use agent_shared::{config::config, ConfigError};
 use agent_verification::state::VerificationState;
 use axum::{body::Bytes, extract::MatchedPath, http::Request, response::Response, Router};
-use tower_http::trace::TraceLayer;
-use tracing::{info_span, Span};
+use std::time::Duration;
+use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tracing::{info, info_span, Span};
 
 pub const API_VERSION: &str = "/v0";
 
 #[derive(Default)]
 pub struct ApplicationState {
+    pub identity_state: Option<IdentityState>,
     pub issuance_state: Option<IssuanceState>,
     pub holder_state: Option<HolderState>,
     pub verification_state: Option<VerificationState>,
@@ -21,15 +25,17 @@ pub struct ApplicationState {
 
 pub fn app(
     ApplicationState {
+        identity_state,
         issuance_state,
         holder_state,
         verification_state,
     }: ApplicationState,
 ) -> Router {
-    Router::new()
+    let app = Router::new()
         .nest(
             &get_base_path().unwrap_or_default(),
             Router::new()
+                .merge(identity_state.map(identity::router).unwrap_or_default())
                 .merge(issuance_state.map(issuance::router).unwrap_or_default())
                 .merge(holder_state.map(holder::router).unwrap_or_default())
                 .merge(verification_state.map(verification::router).unwrap_or_default()),
@@ -46,17 +52,25 @@ pub fn app(
                     )
                 })
                 .on_request(|request: &Request<_>, _span: &Span| {
-                    tracing::info!("Received request");
-                    tracing::info!("Request Headers: {:?}", request.headers());
+                    info!("Received request");
+                    info!("Request Headers: {:?}", request.headers());
                 })
-                .on_response(|response: &Response, _latency: std::time::Duration, _span: &Span| {
-                    tracing::info!("Returning {}", response.status());
-                    tracing::info!("Response Headers: {:?}", response.headers());
+                .on_response(|response: &Response, _latency: Duration, _span: &Span| {
+                    info!("Returning {}", response.status());
+                    info!("Response Headers: {:?}", response.headers());
                 })
-                .on_body_chunk(|chunk: &Bytes, _latency: std::time::Duration, _span: &Span| {
-                    tracing::info!("Response Body: {}", std::str::from_utf8(chunk).unwrap());
+                .on_body_chunk(|chunk: &Bytes, _latency: Duration, _span: &Span| {
+                    info!("Response Body: {}", std::str::from_utf8(chunk).unwrap());
                 }),
-        )
+        );
+
+    // CORS
+    if config().cors_enabled.unwrap_or(false) {
+        info!("CORS (permissive) enabled for all routes");
+        app.layer(CorsLayer::permissive())
+    } else {
+        app
+    }
 }
 
 fn get_base_path() -> Result<String, ConfigError> {
@@ -77,7 +91,7 @@ fn get_base_path() -> Result<String, ConfigError> {
                 panic!("UNICORE__BASE_PATH can't be empty, remove or set path");
             }
 
-            tracing::info!("Base path: {:?}", base_path);
+            info!("Base path: {:?}", base_path);
 
             format!("/{}", base_path)
         })

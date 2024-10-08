@@ -141,7 +141,7 @@ impl oid4vc_core::Subject for Subject {
 }
 
 fn origin() -> url::Origin {
-    config().url.parse::<url::Url>().unwrap().origin()
+    config().url.origin()
 }
 
 #[cfg(test)]

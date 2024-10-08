@@ -1,12 +1,13 @@
 use agent_holder::{
     credential::command::CredentialCommand,
-    offer::{command::OfferCommand, queries::ReceivedOfferView},
+    offer::{aggregate::OfferCredential, command::OfferCommand, queries::ReceivedOfferView},
     state::HolderState,
 };
 use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
+    Json,
 };
 use hyper::StatusCode;
 
@@ -50,9 +51,11 @@ pub(crate) async fn accept(State(state): State<HolderState>, Path(offer_id): Pat
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
-    for credential in credentials {
-        let credential_id = uuid::Uuid::new_v4().to_string();
-
+    for OfferCredential {
+        credential_id,
+        credential,
+    } in credentials
+    {
         let command = CredentialCommand::AddCredential {
             credential_id: credential_id.clone(),
             offer_id: offer_id.clone(),
@@ -68,6 +71,9 @@ pub(crate) async fn accept(State(state): State<HolderState>, Path(offer_id): Pat
         }
     }
 
-    // TODO: What do we return here?
-    StatusCode::OK.into_response()
+    match query_handler(&offer_id, &state.query.received_offer).await {
+        Ok(Some(received_offer_view)) => (StatusCode::OK, Json(received_offer_view)).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
 }

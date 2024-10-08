@@ -1,4 +1,4 @@
-use super::aggregate::Status;
+use super::aggregate::{OfferCredential, Status};
 use cqrs_es::DomainEvent;
 use oid4vci::{
     credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject,
@@ -25,7 +25,7 @@ pub enum OfferEvent {
     CredentialResponseReceived {
         offer_id: String,
         status: Status,
-        credentials: Vec<serde_json::Value>,
+        credentials: Vec<OfferCredential>,
     },
     CredentialOfferRejected {
         offer_id: String,

@@ -21,6 +21,20 @@ event_publishers:
 
 ### Available events
 
+#### `document`
+
+```
+DocumentCreated
+ServiceAdded
+```
+
+#### `service`
+
+```
+DomainLinkageServiceCreated
+LinkedVerifiablePresentationServiceCreated
+```
+
 #### `credential`
 
 ```
@@ -51,6 +65,12 @@ CredentialConfigurationAdded
 
 ```
 CredentialAdded
+```
+
+#### `presentation`
+
+```
+PresentationCreated
 ```
 
 #### `received_offer`

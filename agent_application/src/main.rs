@@ -3,20 +3,14 @@
 use agent_api_rest::{app, ApplicationState};
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_holder::services::HolderServices;
-use agent_issuance::{services::IssuanceServices, startup_commands::startup_commands, state::initialize};
+use agent_identity::services::IdentityServices;
+use agent_issuance::{services::IssuanceServices, startup_commands::startup_commands};
 use agent_secret_manager::{secret_manager, service::Service as _, subject::Subject};
-use agent_shared::{
-    config::{config, LogFormat, SupportedDidMethod, ToggleOptions},
-    domain_linkage::create_did_configuration_resource,
-    from_jsonwebtoken_algorithm_to_jwsalgorithm,
-};
+use agent_shared::config::{config, LogFormat};
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
-use axum::{routing::get, Json};
-use identity_document::service::{Service, ServiceEndpoint};
 use std::sync::Arc;
 use tokio::{fs, io};
-use tower_http::cors::CorsLayer;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -35,6 +29,7 @@ async fn main() -> io::Result<()> {
         secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
     });
 
+    let identity_services = Arc::new(IdentityServices::new(subject.clone()));
     let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
     let holder_services = Arc::new(HolderServices::new(subject.clone()));
     let verification_services = Arc::new(VerificationServices::new(subject.clone()));
@@ -42,118 +37,43 @@ async fn main() -> io::Result<()> {
     // TODO: Currently `issuance_event_publishers`, `holder_event_publishers` and `verification_event_publishers` are
     // exactly the same, which is weird. We need some sort of layer between `agent_application` and `agent_store` that
     // will provide a cleaner way of initializing the event publishers and sending them over to `agent_store`.
+    let identity_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
     let issuance_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
     let holder_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
     let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
-    let (issuance_state, holder_state, verification_state) = match agent_shared::config::config().event_store.type_ {
-        agent_shared::config::EventStoreType::Postgres => (
-            postgres::issuance_state(issuance_services, issuance_event_publishers).await,
-            postgres::holder_state(holder_services, holder_event_publishers).await,
-            postgres::verification_state(verification_services, verification_event_publishers).await,
-        ),
-        agent_shared::config::EventStoreType::InMemory => (
-            in_memory::issuance_state(issuance_services, issuance_event_publishers).await,
-            in_memory::holder_state(holder_services, holder_event_publishers).await,
-            in_memory::verification_state(verification_services, verification_event_publishers).await,
-        ),
-    };
+    let (identity_state, issuance_state, holder_state, verification_state) =
+        match agent_shared::config::config().event_store.type_ {
+            agent_shared::config::EventStoreType::Postgres => (
+                postgres::identity_state(identity_services, identity_event_publishers).await,
+                postgres::issuance_state(issuance_services, issuance_event_publishers).await,
+                postgres::holder_state(holder_services, holder_event_publishers).await,
+                postgres::verification_state(verification_services, verification_event_publishers).await,
+            ),
+            agent_shared::config::EventStoreType::InMemory => (
+                in_memory::identity_state(identity_services, identity_event_publishers).await,
+                in_memory::issuance_state(issuance_services, issuance_event_publishers).await,
+                in_memory::holder_state(holder_services, holder_event_publishers).await,
+                in_memory::verification_state(verification_services, verification_event_publishers).await,
+            ),
+        };
 
     info!("{:?}", config());
 
     let url = &config().url;
 
-    info!("Application url: {:?}", url);
+    info!("Application url: {}", url);
 
-    let url = url::Url::parse(url).unwrap();
+    agent_identity::state::initialize(&identity_state).await;
+    agent_issuance::state::initialize(&issuance_state, startup_commands(url.clone())).await;
 
-    initialize(&issuance_state, startup_commands(url.clone())).await;
-
-    let mut app = app(ApplicationState {
+    let app = app(ApplicationState {
+        identity_state: Some(identity_state),
         issuance_state: Some(issuance_state),
         holder_state: Some(holder_state),
         verification_state: Some(verification_state),
     });
-
-    // CORS
-    if config().cors_enabled.unwrap_or(false) {
-        info!("CORS (permissive) enabled for all routes");
-        app = app.layer(CorsLayer::permissive());
-    }
-
-    // did:web
-    let enable_did_web = config()
-        .did_methods
-        .get(&SupportedDidMethod::Web)
-        .unwrap_or(&ToggleOptions::default())
-        .enabled;
-
-    let did_document = if enable_did_web {
-        let mut secret_manager = subject.secret_manager.lock().await;
-
-        Some(
-            secret_manager
-                .produce_document(
-                    did_manager::DidMethod::Web,
-                    Some(did_manager::MethodSpecificParameters::Web { origin: url.origin() }),
-                    from_jsonwebtoken_algorithm_to_jwsalgorithm(
-                        &agent_shared::config::get_preferred_signing_algorithm(),
-                    ),
-                )
-                .await
-                .unwrap(),
-        )
-    } else {
-        None
-    };
-    // Domain Linkage
-    let did_configuration_resource = if config().domain_linkage_enabled {
-        let secret_manager = subject.secret_manager.lock().await;
-
-        Some(
-            create_did_configuration_resource(
-                url.clone(),
-                did_document
-                    .clone()
-                    .expect("No DID document found to create a DID Configuration Resource for"),
-                &secret_manager,
-            )
-            .await
-            .expect("Failed to create DID Configuration Resource"),
-        )
-    } else {
-        None
-    };
-
-    if let Some(mut did_document) = did_document {
-        if let Some(did_configuration_resource) = did_configuration_resource {
-            // Create a new service and add it to the DID document.
-            let service = Service::builder(Default::default())
-                .id(format!("{}#service-1", did_document.id()).parse().unwrap())
-                .type_("LinkedDomains")
-                .service_endpoint(
-                    serde_json::from_value::<ServiceEndpoint>(serde_json::json!(
-                        {
-                            "origins": [url.origin().ascii_serialization()]
-                        }
-                    ))
-                    .unwrap(),
-                )
-                .build()
-                .expect("Failed to create DID Configuration Resource");
-            did_document
-                .insert_service(service)
-                .expect("Service already exists in DID Document");
-
-            let path = "/.well-known/did-configuration.json";
-            info!("Serving DID Configuration (Domain Linkage) at `{path}`");
-            app = app.route(path, get(Json(did_configuration_resource)));
-        }
-        let path = "/.well-known/did.json";
-        info!("Serving `did:web` document at `{path}`");
-        app = app.route(path, get(Json(did_document)));
-    }
 
     // This is used to indicate that the server accepts requests.
     // In a docker container this file can be searched to see if its ready.
