@@ -1,7 +1,7 @@
 pub mod send;
 
 use agent_issuance::{
-    offer::{command::OfferCommand, queries::OfferView},
+    offer::{command::OfferCommand, views::OfferView},
     server_config::queries::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
