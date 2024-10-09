@@ -85,8 +85,16 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
 #[axum_macros::debug_handler]
 pub(crate) async fn all_offers(State(state): State<IssuanceState>) -> Response {
     match query_handler("all_offers", &state.query.all_offers).await {
-        Ok(Some(all_offers_view)) => (StatusCode::OK, Json(all_offers_view)).into_response(),
-        Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        Ok(Some(all_offers_view)) => {
+            let all_offers = all_offers_view
+                .offers
+                .into_iter()
+                .map(|(_, offer_view)| offer_view)
+                .collect::<Vec<_>>();
+
+            (StatusCode::OK, Json(all_offers)).into_response()
+        }
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

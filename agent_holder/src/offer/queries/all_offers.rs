@@ -7,12 +7,12 @@ use std::collections::HashMap;
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllReceivedOffersView {
     #[serde(flatten)]
-    pub offers: HashMap<String, ReceivedOfferView>,
+    pub received_offers: HashMap<String, ReceivedOfferView>,
 }
 
 impl View<Offer> for AllReceivedOffersView {
     fn update(&mut self, event: &EventEnvelope<Offer>) {
-        self.offers
+        self.received_offers
             // Get the entry for the aggregate_id
             .entry(event.aggregate_id.clone())
             // or insert a new one if it doesn't exist

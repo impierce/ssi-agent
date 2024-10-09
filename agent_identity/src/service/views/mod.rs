@@ -14,12 +14,12 @@ impl View<Service> for Service {
                 service,
                 resource,
             } => {
-                self.id.clone_from(service_id);
+                self.service_id.clone_from(service_id);
                 self.service.replace(service.clone());
                 self.resource.replace(resource.clone());
             }
             LinkedVerifiablePresentationServiceCreated { service_id, service } => {
-                self.id.clone_from(service_id);
+                self.service_id.clone_from(service_id);
                 self.service.replace(service.clone());
             }
         }

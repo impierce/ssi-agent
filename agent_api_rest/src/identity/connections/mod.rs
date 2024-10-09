@@ -11,7 +11,6 @@ use identity_core::common::Url;
 use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashMap;
 use tracing::info;
 
 #[derive(Deserialize, Serialize)]
@@ -91,20 +90,21 @@ pub(crate) async fn get_connections(
 
     match query_handler("all_connections", &state.query.all_connections).await {
         Ok(Some(all_connections_view)) => {
-            let filtered_connections: HashMap<_, _> = all_connections_view
+            let filtered_connections: Vec<_> = all_connections_view
                 .connections
                 .into_iter()
-                .filter(|(_, connection)| {
-                    domain
+                .filter_map(|(_, connection)| {
+                    (domain
                         .as_ref()
                         .map_or(true, |domain| connection.domain.as_ref() == Some(domain))
-                        && did.as_ref().map_or(true, |did| connection.dids.contains(did))
+                        && did.as_ref().map_or(true, |did| connection.dids.contains(did)))
+                    .then_some(connection)
                 })
                 .collect();
 
             (StatusCode::OK, Json(filtered_connections)).into_response()
         }
-        Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

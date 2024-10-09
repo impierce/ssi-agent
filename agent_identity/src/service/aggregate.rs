@@ -32,7 +32,7 @@ pub enum ServiceResource {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Service {
-    pub id: String,
+    pub service_id: String,
     pub service: Option<DocumentService>,
     pub resource: Option<ServiceResource>,
 }
@@ -215,12 +215,12 @@ impl Aggregate for Service {
                 service,
                 resource,
             } => {
-                self.id = service_id;
+                self.service_id = service_id;
                 self.service.replace(service);
                 self.resource.replace(resource);
             }
             LinkedVerifiablePresentationServiceCreated { service_id, service } => {
-                self.id = service_id;
+                self.service_id = service_id;
                 self.service.replace(service);
             }
         }

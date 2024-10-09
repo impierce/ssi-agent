@@ -25,6 +25,7 @@ pub enum Status {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Offer {
+    pub offer_id: String,
     pub credential_offer: Option<CredentialOffer>,
     pub subject_id: Option<String>,
     pub credential_ids: Vec<String>,
@@ -215,23 +216,31 @@ impl Aggregate for Offer {
 
         match event {
             CredentialOfferCreated {
+                offer_id,
                 pre_authorized_code,
                 access_token,
                 credential_offer,
-                ..
             } => {
+                self.offer_id = offer_id;
                 self.pre_authorized_code = pre_authorized_code;
                 self.access_token = access_token;
                 self.credential_offer.replace(credential_offer);
             }
-            CredentialsAdded { credential_ids, .. } => {
+            CredentialsAdded {
+                offer_id,
+                credential_ids,
+            } => {
+                self.offer_id = offer_id;
                 self.credential_ids = credential_ids;
             }
             FormUrlEncodedCredentialOfferCreated {
+                offer_id,
                 form_url_encoded_credential_offer,
-                ..
+                status,
             } => {
+                self.offer_id = offer_id;
                 self.form_url_encoded_credential_offer = form_url_encoded_credential_offer;
+                self.status = status;
             }
             CredentialOfferSent { .. } => {}
             CredentialRequestVerified { subject_id, .. } => {

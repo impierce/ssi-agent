@@ -24,15 +24,15 @@ pub(crate) async fn offers(State(state): State<HolderState>, Json(payload): Json
         return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
     };
 
-    let offer_id = uuid::Uuid::new_v4().to_string();
+    let received_offer_id = uuid::Uuid::new_v4().to_string();
 
     let command = OfferCommand::ReceiveCredentialOffer {
-        offer_id: offer_id.clone(),
+        received_offer_id: received_offer_id.clone(),
         credential_offer,
     };
 
     // Add the Credential Offer to the state.
-    match command_handler(&offer_id, &state.command.offer, command).await {
+    match command_handler(&received_offer_id, &state.command.offer, command).await {
         Ok(_) => StatusCode::OK.into_response(),
         // TODO: add better Error responses. This needs to be done properly in all endpoints once
         // https://github.com/impierce/openid4vc/issues/78 is fixed.

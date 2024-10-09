@@ -11,8 +11,16 @@ use serde_json::json;
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(State(state): State<HolderState>) -> Response {
     match query_handler("all_holder_credentials", &state.query.all_holder_credentials).await {
-        Ok(Some(all_credentials_view)) => (StatusCode::OK, Json(all_credentials_view)).into_response(),
-        Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        Ok(Some(all_credentials_view)) => {
+            let all_credentials = all_credentials_view
+                .credentials
+                .into_iter()
+                .map(|(_, credential_view)| credential_view)
+                .collect::<Vec<_>>();
+
+            (StatusCode::OK, Json(all_credentials)).into_response()
+        }
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
