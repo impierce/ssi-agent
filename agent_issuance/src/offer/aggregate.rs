@@ -15,6 +15,14 @@ use crate::offer::error::OfferError::{self, *};
 use crate::offer::event::OfferEvent;
 use crate::services::IssuanceServices;
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub enum Status {
+    #[default]
+    Created,
+    Pending,
+    Issued,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Offer {
     pub credential_offer: Option<CredentialOffer>,
@@ -25,6 +33,7 @@ pub struct Offer {
     pub token_response: Option<TokenResponse>,
     pub access_token: String,
     pub credential_response: Option<CredentialResponse>,
+    pub status: Status,
 }
 
 #[async_trait]
@@ -98,6 +107,7 @@ impl Aggregate for Offer {
                     .as_ref()
                     .ok_or(MissingCredentialOfferError)?
                     .to_string(),
+                status: Status::Pending,
             }]),
             SendCredentialOffer { offer_id, target_url } => {
                 // TODO: add to `service`?
@@ -110,7 +120,11 @@ impl Aggregate for Offer {
                     .await
                     .map_err(|e| SendCredentialOfferError(e.to_string()))?;
 
-                Ok(vec![CredentialOfferSent { offer_id, target_url }])
+                Ok(vec![CredentialOfferSent {
+                    offer_id,
+                    target_url,
+                    status: Status::Pending,
+                }])
             }
             CreateTokenResponse {
                 offer_id,
@@ -188,6 +202,7 @@ impl Aggregate for Offer {
                 Ok(vec![CredentialResponseCreated {
                     offer_id,
                     credential_response,
+                    status: Status::Issued,
                 }])
             }
         }
@@ -329,6 +344,7 @@ pub mod tests {
             .then_expect_events(vec![OfferEvent::FormUrlEncodedCredentialOfferCreated {
                 offer_id: Default::default(),
                 form_url_encoded_credential_offer,
+                status: Status::Pending,
             }]);
     }
 
@@ -357,6 +373,7 @@ pub mod tests {
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: Default::default(),
                     form_url_encoded_credential_offer,
+                    status: Status::Pending,
                 },
             ])
             .when(OfferCommand::CreateTokenResponse {
@@ -398,6 +415,7 @@ pub mod tests {
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: Default::default(),
                     form_url_encoded_credential_offer,
+                    status: Status::Pending,
                 },
                 OfferEvent::TokenResponseCreated {
                     offer_id: Default::default(),
@@ -442,6 +460,7 @@ pub mod tests {
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: Default::default(),
                     form_url_encoded_credential_offer,
+                    status: Status::Pending,
                 },
                 OfferEvent::TokenResponseCreated {
                     offer_id: Default::default(),
@@ -459,6 +478,7 @@ pub mod tests {
             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
                 offer_id: Default::default(),
                 credential_response,
+                status: Status::Issued,
             }]);
     }
 }

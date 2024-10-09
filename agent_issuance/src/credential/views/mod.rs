@@ -1,19 +1,12 @@
 pub mod all_credentials;
 
-use super::{entity::Data, event::CredentialEvent};
+use super::event::CredentialEvent;
 use crate::credential::aggregate::Credential;
 use cqrs_es::{EventEnvelope, View};
-use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct CredentialView {
-    pub data: Option<Data>,
-    pub credential_configuration: CredentialConfigurationsSupportedObject,
-    pub signed: Option<serde_json::Value>,
-}
+pub type CredentialView = Credential;
 
-impl View<Credential> for CredentialView {
+impl View<Credential> for Credential {
     fn update(&mut self, event: &EventEnvelope<Credential>) {
         match &event.payload {
             CredentialEvent::UnsignedCredentialCreated {
@@ -26,8 +19,12 @@ impl View<Credential> for CredentialView {
             CredentialEvent::SignedCredentialCreated { signed_credential } => {
                 self.signed.replace(signed_credential.clone());
             }
-            CredentialEvent::CredentialSigned { signed_credential } => {
+            CredentialEvent::CredentialSigned {
+                signed_credential,
+                status,
+            } => {
                 self.signed.replace(signed_credential.clone());
+                self.status.clone_from(status);
             }
         }
     }
