@@ -18,6 +18,15 @@ CREATE TABLE connection
     PRIMARY KEY (view_id)
 );
 
+
+CREATE TABLE all_connections
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
 CREATE TABLE document
 (
     view_id           text                        NOT NULL,
