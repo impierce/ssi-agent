@@ -26,6 +26,16 @@
 								"type": "text/javascript",
 								"packages": {}
 							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
 						}
 					],
 					"request": {
@@ -33,7 +43,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"openbadge_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"type\": [ \"AchievementSubject\" ],\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    }\n}",
+							"raw": "{\n       \"offerId\": {{OFFER_ID}},\n       \"credentialConfigurationId\": \"openbadge_credential\",\n       \"credential\":{\n           \"credentialSubject\":{\n               \"type\":[\"AchievementSubject\"],\n               \"achievement\": {\n                       \"id\": \"https://demo.edubadges.nl/public/assertions/DAO4oUapQ_eJr9VwMz6jIQ\",\n                       \"type\": \"Achievement\",\n                       \"criteria\":{\"narrative\": \"testtesttesttesttesttesttest\"},\n                       \"description\": \"testtesttesttesttesttesttesttest\",\n                       \"name\": \"Geschiedenis van de Oudheid\",\n                       \"image\":{\n                           \"id\": \"https://api-demo.edubadges.nl/media/uploads/badges/issuer_badgeclass_3e51ca72-ee9b-493b-b787-fd89f2df3189.png\",\n                           \"type\": \"Image\"\n                       }\n                   }\n               }\n           }\n       }",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -912,6 +922,13 @@
 								"type": "text/javascript",
 								"packages": {}
 							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [],
+								"type": "text/javascript"
+							}
 						}
 					],
 					"request": {
@@ -970,6 +987,13 @@
 								],
 								"type": "text/javascript",
 								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [],
+								"type": "text/javascript"
 							}
 						}
 					],
@@ -1043,6 +1067,265 @@
 		{
 			"name": "Identity",
 			"item": [
+				{
+					"name": "Create a new Connection",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"domain\": \"http://example.org\",\n    \"dids\": [\"did:example:123\"],\n    \"credential_offer_endpoint\": \"{{HOST}}/openid4vci/offers\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/connections",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"connections"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Query all Connections",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (jsonData && typeof jsonData === 'object') {",
+									"    const connectionId = Object.keys(jsonData)[0];",
+									"",
+									"    if (connectionId) {",
+									"        pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/connections",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"connections"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Query Connection by DID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (jsonData && typeof jsonData === 'object') {",
+									"    const connectionId = Object.keys(jsonData)[0];",
+									"",
+									"    if (connectionId) {",
+									"        pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/connections?did=did:example:123",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"connections"
+							],
+							"query": [
+								{
+									"key": "did",
+									"value": "did:example:123"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Query Connection by Domain",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (jsonData && typeof jsonData === 'object') {",
+									"    const connectionId = Object.keys(jsonData)[0];",
+									"",
+									"    if (connectionId) {",
+									"        pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/connections?domain=http://example.org",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"connections"
+							],
+							"query": [
+								{
+									"key": "domain",
+									"value": "http://example.org"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Query Connection by ID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "test",
+									"value": "test-value",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/connections/{{CONNECTION_ID}}",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"connections",
+								"{{CONNECTION_ID}}"
+							]
+						}
+					},
+					"response": []
+				},
 				{
 					"name": "services/linked-vp",
 					"request": {
@@ -1165,6 +1448,11 @@
 		},
 		{
 			"key": "PRESENTATION_ID",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "CONNECTION_ID",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		}
