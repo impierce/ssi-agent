@@ -117,6 +117,8 @@ pub struct EventPublisherHttp {
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct Events {
     #[serde(default)]
+    pub connection: Vec<ConnectionEvent>,
+    #[serde(default)]
     pub document: Vec<DocumentEvent>,
     #[serde(default)]
     pub service: Vec<ServiceEvent>,
@@ -131,9 +133,12 @@ pub struct Events {
     #[serde(default)]
     pub received_offer: Vec<ReceivedOfferEvent>,
     #[serde(default)]
-    pub connection: Vec<ConnectionEvent>,
-    #[serde(default)]
     pub authorization_request: Vec<AuthorizationRequestEvent>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum ConnectionEvent {
+    ConnectionAdded,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -186,16 +191,12 @@ pub enum ReceivedOfferEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum ConnectionEvent {
-    SIOPv2AuthorizationResponseVerified,
-    OID4VPAuthorizationResponseVerified,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum AuthorizationRequestEvent {
     AuthorizationRequestCreated,
     FormUrlEncodedAuthorizationRequestCreated,
     AuthorizationRequestObjectSigned,
+    SIOPv2AuthorizationResponseVerified,
+    OID4VPAuthorizationResponseVerified,
 }
 
 /// All DID methods supported by UniCore

@@ -1,7 +1,8 @@
 use agent_shared::handlers::{command_handler, query_handler};
 use agent_verification::{
-    authorization_request::views::AuthorizationRequestView, connection::command::ConnectionCommand,
-    generic_oid4vc::GenericAuthorizationResponse, state::VerificationState,
+    authorization_request::{command::AuthorizationRequestCommand, views::AuthorizationRequestView},
+    generic_oid4vc::GenericAuthorizationResponse,
+    state::VerificationState,
 };
 use axum::{
     extract::State,
@@ -35,17 +36,19 @@ pub(crate) async fn redirect(
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
-    let connection_id = authorization_request.client_id();
-
-    let command = ConnectionCommand::VerifyAuthorizationResponse {
+    let command = AuthorizationRequestCommand::VerifyAuthorizationResponse {
         authorization_request,
         authorization_response,
     };
 
     // Verify the authorization response.
-    if command_handler(&connection_id, &verification_state.command.connection, command)
-        .await
-        .is_err()
+    if command_handler(
+        &authorization_request_id,
+        &verification_state.command.authorization_request,
+        command,
+    )
+    .await
+    .is_err()
     {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
@@ -153,7 +156,9 @@ pub mod tests {
         set_config().enable_event_publisher_http();
         set_config().set_event_publisher_http_target_url(target_url.clone());
         set_config().set_event_publisher_http_target_events(Events {
-            connection: vec![agent_shared::config::ConnectionEvent::SIOPv2AuthorizationResponseVerified],
+            authorization_request: vec![
+                agent_shared::config::AuthorizationRequestEvent::SIOPv2AuthorizationResponseVerified,
+            ],
             ..Default::default()
         });
 

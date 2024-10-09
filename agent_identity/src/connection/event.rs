@@ -1,10 +1,16 @@
 use cqrs_es::DomainEvent;
+use identity_core::common::Url;
+use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum ConnectionEvent {
-    SIOPv2AuthorizationResponseVerified { id_token: String, state: Option<String> },
-    OID4VPAuthorizationResponseVerified { vp_token: String, state: Option<String> },
+    ConnectionAdded {
+        connection_id: String,
+        domain: Option<Url>,
+        dids: Vec<DIDUrl>,
+        credential_offer_endpoint: Option<Url>,
+    },
 }
 
 impl DomainEvent for ConnectionEvent {
@@ -12,8 +18,7 @@ impl DomainEvent for ConnectionEvent {
         use ConnectionEvent::*;
 
         let event_type: &str = match self {
-            SIOPv2AuthorizationResponseVerified { .. } => "SIOPv2AuthorizationResponseVerified",
-            OID4VPAuthorizationResponseVerified { .. } => "OID4VPAuthorizationResponseVerified",
+            ConnectionAdded { .. } => "ConnectionAdded",
         };
         event_type.to_string()
     }
