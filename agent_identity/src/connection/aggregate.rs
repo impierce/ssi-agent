@@ -10,11 +10,6 @@ use crate::services::IdentityServices;
 
 use super::{command::ConnectionCommand, error::ConnectionError, event::ConnectionEvent};
 
-// #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-// pub struct HolderOptions {
-//     pub credential_offer_endpoint: Option<Url>,
-// }
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Connection {
     pub connection_id: String,
@@ -22,10 +17,11 @@ pub struct Connection {
     pub dids: Vec<DIDUrl>,
     pub first_interacted: Option<Timestamp>,
     pub last_interacted: Option<Timestamp>,
-    // // TBD:
+
+    // TODO: How do we want to make distinction between issuer, holder, and verifier capabilities of the `Connection`?
+    pub credential_offer_endpoint: Option<Url>,
     // pub issuer_options: Option<IssuerOptions>,
     // pub holder_options: Option<HolderOptions>,
-    pub credential_offer_endpoint: Option<Url>,
     // pub verifier_options: Option<VerifierOptions>,
 }
 

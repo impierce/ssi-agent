@@ -25,8 +25,6 @@ event_publishers:
 
 ```
 ConnectionAdded
-DomainAdded
-DidAdded
 ```
 
 #### `document`

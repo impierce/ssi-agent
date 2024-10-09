@@ -137,6 +137,11 @@ pub struct Events {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum ConnectionEvent {
+    ConnectionAdded,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum DocumentEvent {
     DocumentCreated,
     ServiceAdded,
@@ -183,12 +188,6 @@ pub enum ReceivedOfferEvent {
     TokenResponseReceived,
     CredentialResponseReceived,
     CredentialOfferRejected,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum ConnectionEvent {
-    SIOPv2AuthorizationResponseVerified,
-    OID4VPAuthorizationResponseVerified,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
