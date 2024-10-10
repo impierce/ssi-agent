@@ -31,7 +31,7 @@ pub(crate) async fn all_authorization_requests(State(state): State<VerificationS
 
             (StatusCode::OK, Json(all_authorization_requests)).into_response()
         }
-        Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

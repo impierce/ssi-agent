@@ -20,7 +20,7 @@ pub(crate) async fn credentials(State(state): State<HolderState>) -> Response {
 
             (StatusCode::OK, Json(all_credentials)).into_response()
         }
-        Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

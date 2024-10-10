@@ -104,7 +104,7 @@ pub(crate) async fn get_connections(
 
             (StatusCode::OK, Json(filtered_connections)).into_response()
         }
-        Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

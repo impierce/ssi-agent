@@ -23,7 +23,7 @@ pub(crate) async fn offers(State(state): State<HolderState>) -> Response {
 
             (StatusCode::OK, Json(all_received_offers)).into_response()
         }
-        Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

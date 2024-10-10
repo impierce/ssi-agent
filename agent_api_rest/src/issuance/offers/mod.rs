@@ -94,7 +94,7 @@ pub(crate) async fn all_offers(State(state): State<IssuanceState>) -> Response {
 
             (StatusCode::OK, Json(all_offers)).into_response()
         }
-        Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

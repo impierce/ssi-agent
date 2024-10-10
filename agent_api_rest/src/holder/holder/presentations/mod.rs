@@ -26,7 +26,7 @@ pub(crate) async fn get_presentations(State(state): State<HolderState>) -> Respo
 
             (StatusCode::OK, Json(all_presentations)).into_response()
         }
-        Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

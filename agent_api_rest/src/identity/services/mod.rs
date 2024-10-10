@@ -22,7 +22,7 @@ pub(crate) async fn services(State(state): State<IdentityState>) -> Response {
 
             (StatusCode::OK, Json(all_services)).into_response()
         }
-        Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
