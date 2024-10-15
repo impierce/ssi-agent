@@ -34,6 +34,6 @@ pub fn router(holder_state: HolderState) -> Router {
                 .route("/holder/offers/:offer_id/accept", post(accept))
                 .route("/holder/offers/:offer_id/reject", post(reject)),
         )
-        .route("/openid4vci/offers", get(openid4vci::offers))
+        .route("/openid4vci/offers", post(openid4vci::offers))
         .with_state(holder_state)
 }
