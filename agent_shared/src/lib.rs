@@ -5,6 +5,7 @@ pub mod error;
 pub mod generic_query;
 pub mod handlers;
 pub mod url_utils;
+pub mod verifier;
 
 pub use ::config::ConfigError;
 use identity_iota::verification::jws::JwsAlgorithm;
