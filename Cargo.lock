@@ -236,12 +236,14 @@ dependencies = [
  "agent_shared",
  "async-std",
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "cqrs-es",
  "derivative",
  "did_manager",
  "identity_core",
  "identity_credential",
+ "identity_iota",
  "jsonwebtoken",
  "lazy_static",
  "oid4vc-core",
@@ -249,6 +251,7 @@ dependencies = [
  "once_cell",
  "reqwest 0.12.5",
  "rstest",
+ "sd-jwt-payload 0.3.0",
  "serde",
  "serde_json",
  "serial_test",
@@ -276,7 +279,9 @@ dependencies = [
  "oid4vc-core",
  "p256 0.13.2",
  "ring",
+ "sd-jwt-payload 0.3.0",
  "serde_json",
+ "thiserror",
  "tokio",
  "url",
 ]
@@ -333,11 +338,13 @@ dependencies = [
  "anyhow",
  "async-std",
  "async-trait",
+ "base64 0.22.1",
  "cqrs-es",
  "did_manager",
  "futures",
  "identity_core",
  "identity_credential",
+ "identity_iota",
  "jsonwebtoken",
  "lazy_static",
  "oid4vc-core",
@@ -345,6 +352,7 @@ dependencies = [
  "oid4vci",
  "oid4vp",
  "rstest",
+ "sd-jwt-payload 0.3.0",
  "serde",
  "serde_json",
  "serial_test",
@@ -2100,6 +2108,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with 3.8.1",
+ "tracing",
  "url",
 ]
 
@@ -2906,7 +2915,7 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "http 0.2.12",
- "indexmap 2.5.0",
+ "indexmap 2.6.0",
  "slab",
  "tokio",
  "tokio-util",
@@ -2925,7 +2934,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http 1.1.0",
- "indexmap 2.5.0",
+ "indexmap 2.6.0",
  "slab",
  "tokio",
  "tokio-util",
@@ -2969,6 +2978,12 @@ dependencies = [
  "allocator-api2",
  "serde",
 ]
+
+[[package]]
+name = "hashbrown"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e087f84d4f86bf4b218b927129862374b72199ae7d8657835f1e89000eea4fb"
 
 [[package]]
 name = "hashlink"
@@ -3346,8 +3361,9 @@ dependencies = [
  "identity_did",
  "identity_document",
  "identity_verification",
- "indexmap 2.5.0",
+ "indexmap 2.6.0",
  "itertools 0.11.0",
+ "josekit",
  "jsonschema 0.19.1",
  "once_cell",
  "roaring",
@@ -3359,6 +3375,7 @@ dependencies = [
  "serde_repr",
  "strum 0.25.0",
  "thiserror",
+ "tokio",
  "url",
 ]
 
@@ -3383,7 +3400,7 @@ dependencies = [
  "identity_core",
  "identity_did",
  "identity_verification",
- "indexmap 2.5.0",
+ "indexmap 2.6.0",
  "serde",
  "strum 0.25.0",
  "thiserror",
@@ -3574,12 +3591,12 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.5.0"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68b900aa2f7301e21c36462b170ee99994de34dff39a4a6a528e80e7376d07e5"
+checksum = "707907fe3c25f5424cce2cb7e1cbcafee6bdbe735ca90ef77c29e84591e5b9da"
 dependencies = [
  "equivalent",
- "hashbrown 0.14.5",
+ "hashbrown 0.15.0",
  "serde",
 ]
 
@@ -4016,7 +4033,7 @@ checksum = "179551c27c512c948af1edaf4bd7e1d1486d223f8ec4fd41cd760f7645fd4197"
 dependencies = [
  "cargo-license",
  "data-encoding",
- "indexmap 2.5.0",
+ "indexmap 2.6.0",
  "json-unflattening",
  "serde",
  "serde_json",
@@ -6405,10 +6422,10 @@ dependencies = [
 [[package]]
 name = "sd-jwt-payload"
 version = "0.3.0"
-source = "git+https://github.com/iotaledger/sd-jwt-payload.git?branch=feat/sd-jwt-v11#ebc05f660ac90f0ffaf14c347ebbfb4efc669f88"
 dependencies = [
  "anyhow",
  "async-trait",
+ "indexmap 2.6.0",
  "iota-crypto",
  "itertools 0.12.1",
  "josekit",
@@ -6542,7 +6559,7 @@ version = "1.0.128"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ff5456707a1de34e7e37f2a6fd3d3f808c318259cbd01ab6377795054b483d8"
 dependencies = [
- "indexmap 2.5.0",
+ "indexmap 2.6.0",
  "itoa",
  "memchr",
  "ryu",
@@ -6627,7 +6644,7 @@ dependencies = [
  "chrono",
  "hex",
  "indexmap 1.9.3",
- "indexmap 2.5.0",
+ "indexmap 2.6.0",
  "serde",
  "serde_derive",
  "serde_json",
@@ -6665,7 +6682,7 @@ version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
 dependencies = [
- "indexmap 2.5.0",
+ "indexmap 2.6.0",
  "itoa",
  "ryu",
  "serde",
@@ -6996,7 +7013,7 @@ dependencies = [
  "futures-util",
  "hashlink",
  "hex",
- "indexmap 2.5.0",
+ "indexmap 2.6.0",
  "log",
  "memchr",
  "once_cell",
@@ -7872,7 +7889,7 @@ version = "0.19.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
 dependencies = [
- "indexmap 2.5.0",
+ "indexmap 2.6.0",
  "toml_datetime",
  "winnow 0.5.40",
 ]
@@ -7883,7 +7900,7 @@ version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8534fd7f78b5405e860340ad6575217ce99f38d4d5c8f2442cb5ecb50090e1"
 dependencies = [
- "indexmap 2.5.0",
+ "indexmap 2.6.0",
  "toml_datetime",
  "winnow 0.5.40",
 ]
@@ -7894,7 +7911,7 @@ version = "0.22.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f21c7aaf97f1bd9ca9d4f9e73b0a6c74bd5afef56f2bc931943a6e1c37e04e38"
 dependencies = [
- "indexmap 2.5.0",
+ "indexmap 2.6.0",
  "serde",
  "serde_spanned",
  "toml_datetime",
@@ -8883,7 +8900,7 @@ dependencies = [
  "crossbeam-utils",
  "displaydoc",
  "flate2",
- "indexmap 2.5.0",
+ "indexmap 2.6.0",
  "memchr",
  "thiserror",
  "zopfli",

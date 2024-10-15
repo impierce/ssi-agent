@@ -24,6 +24,10 @@ tracing.workspace = true
 url.workspace = true
 tokio.workspace = true
 
+identity_iota.workspace = true
+sd-jwt-payload-rework.workspace = true
+base64.workspace = true
+
 [dev-dependencies]
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_verification = { path = ".", features = ["test_utils"] }

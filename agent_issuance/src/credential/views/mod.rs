@@ -11,10 +11,12 @@ impl View<Credential> for Credential {
         match &event.payload {
             CredentialEvent::UnsignedCredentialCreated {
                 credential_id,
+                format,
                 data,
                 credential_configuration,
             } => {
                 self.credential_id.clone_from(credential_id);
+                self.format.replace(format.clone());
                 self.data.replace(data.clone());
                 self.credential_configuration = credential_configuration.clone();
             }

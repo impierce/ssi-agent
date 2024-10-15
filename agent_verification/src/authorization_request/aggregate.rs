@@ -155,6 +155,10 @@ impl Aggregate for AuthorizationRequest {
                         }])
                     }
                     GenericAuthorizationResponse::OID4VP(oid4vp_authorization_response) => {
+                        panic!(
+                            "Validating OID4VP authorization response: {:#?}",
+                            oid4vp_authorization_response
+                        );
                         let _ = relying_party
                             .validate_response(&oid4vp_authorization_response)
                             .await
