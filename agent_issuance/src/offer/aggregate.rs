@@ -115,7 +115,7 @@ impl Aggregate for Offer {
                 let client = reqwest::Client::new();
 
                 client
-                    .get(target_url.clone())
+                    .post(target_url.clone())
                     .json(self.credential_offer.as_ref().ok_or(MissingCredentialOfferError)?)
                     .send()
                     .await
