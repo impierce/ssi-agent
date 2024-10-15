@@ -1392,6 +1392,38 @@
 				},
 				{
 					"name": "services",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+									"    const firstItem = jsonData[0];",
+									"",
+									"    if (firstItem && typeof firstItem === 'object') {",
+									"        const serviceId = firstItem.service_id;",
+									"",
+									"        if (serviceId) {",
+									"            pm.collectionVariables.set(\"SERVICE_ID\", serviceId);",
+									"        }",
+									"    }",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -1403,6 +1435,44 @@
 							"path": [
 								"v0",
 								"services"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Service by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/services/{{SERVICE_ID}}",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"services",
+								"{{SERVICE_ID}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Linked Verifiable Presentation Service",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/services/linked-verifiable-presentation-service",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"services",
+								"linked-verifiable-presentation-service"
 							]
 						}
 					},
@@ -1491,6 +1561,10 @@
 			"key": "CONNECTION_ID",
 			"value": "INITIAL_VALUE",
 			"type": "string"
+		},
+		{
+			"key": "SERVICE_ID",
+			"value": "INITIAL_VALUE"
 		}
 	]
 }
