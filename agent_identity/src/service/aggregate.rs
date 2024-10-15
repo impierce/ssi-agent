@@ -192,7 +192,7 @@ impl Aggregate for Service {
                             .into_iter()
                             .map(|presentation_id| {
                                 // TODO: Find a better way to construct the URL
-                                format!("{origin}v0/holder/presentations/{presentation_id}/signed")
+                                format!("{origin}linked-verifiable-presentations/{presentation_id}")
                                     .parse::<identity_core::common::Url>()
                             })
                             .collect::<Result<Vec<_>, _>>()
