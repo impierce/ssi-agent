@@ -94,22 +94,21 @@ pub async fn initialize(state: &IdentityState) {
                 ..
             })) => {
                 info!("DID Web Document already exists: {:?}", document);
-                return;
             }
-            _ => {
-                warn!("Failed to retrieve DID Web Document");
+            _document_does_not_exist => {
+                info!("Creating new DID Web Document");
+
+                let command = DocumentCommand::CreateDocument {
+                    did_method: did_method.clone(),
+                };
+
+                if command_handler(&did_method.to_string(), &state.command.document, command)
+                    .await
+                    .is_err()
+                {
+                    warn!("Failed to create document");
+                }
             }
-        }
-
-        let command = DocumentCommand::CreateDocument {
-            did_method: did_method.clone(),
-        };
-
-        if command_handler(&did_method.to_string(), &state.command.document, command)
-            .await
-            .is_err()
-        {
-            warn!("Failed to create document");
         }
 
         // If domain linkage is enabled, create the domain linkage service and add it to the document.
