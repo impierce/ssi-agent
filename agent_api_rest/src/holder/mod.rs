@@ -35,5 +35,9 @@ pub fn router(holder_state: HolderState) -> Router {
                 .route("/holder/offers/:offer_id/reject", post(reject)),
         )
         .route("/openid4vci/offers", post(openid4vci::offers))
+        .route(
+            "/linked-verifiable-presentations/:presentation_id",
+            get(presentation_signed),
+        )
         .with_state(holder_state)
 }

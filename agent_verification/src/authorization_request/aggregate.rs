@@ -172,6 +172,8 @@ impl Aggregate for AuthorizationRequest {
                             Oid4vpParams::Jwt { .. } | _ => return Err(UnsupportedJwtParameterError),
                         };
 
+                        info!("sd_jwt_vc HERE: {}", sd_jwt_vc.to_string());
+
                         let kid = match sd_jwt_vc.claims().cnf.clone().unwrap() {
                             RequiredKeyBinding::Kid(kid) => kid,
                             _ => todo!("FIX THIS"),
