@@ -32,7 +32,8 @@ pub enum ServiceResource {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Service {
-    pub id: String,
+    pub service_id: String,
+    pub presentation_ids: Vec<String>,
     pub service: Option<DocumentService>,
     pub resource: Option<ServiceResource>,
 }
@@ -187,10 +188,11 @@ impl Aggregate for Service {
                     .type_("LinkedVerifiablePresentation")
                     .service_endpoint(ServiceEndpoint::from(OrderedSet::from_iter(
                         presentation_ids
+                            .clone()
                             .into_iter()
                             .map(|presentation_id| {
                                 // TODO: Find a better way to construct the URL
-                                format!("{origin}v0/holder/presentations/{presentation_id}/signed")
+                                format!("{origin}linked-verifiable-presentations/{presentation_id}")
                                     .parse::<identity_core::common::Url>()
                             })
                             .collect::<Result<Vec<_>, _>>()
@@ -199,7 +201,11 @@ impl Aggregate for Service {
                     .build()
                     .expect("Failed to create Linked Verifiable Presentation Resource");
 
-                Ok(vec![LinkedVerifiablePresentationServiceCreated { service_id, service }])
+                Ok(vec![LinkedVerifiablePresentationServiceCreated {
+                    service_id,
+                    presentation_ids,
+                    service,
+                }])
             }
         }
     }
@@ -215,12 +221,17 @@ impl Aggregate for Service {
                 service,
                 resource,
             } => {
-                self.id = service_id;
+                self.service_id = service_id;
                 self.service.replace(service);
                 self.resource.replace(resource);
             }
-            LinkedVerifiablePresentationServiceCreated { service_id, service } => {
-                self.id = service_id;
+            LinkedVerifiablePresentationServiceCreated {
+                service_id,
+                service,
+                presentation_ids,
+            } => {
+                self.service_id = service_id;
+                self.presentation_ids = presentation_ids;
                 self.service.replace(service);
             }
         }
@@ -276,6 +287,7 @@ pub mod service_tests {
             })
             .then_expect_events(vec![ServiceEvent::LinkedVerifiablePresentationServiceCreated {
                 service_id: linked_verifiable_presentation_service_id,
+                presentation_ids: vec!["presentation-1".to_string()],
                 service: linked_verifiable_presentation_service,
             }])
     }
