@@ -11,7 +11,9 @@ agent_shared = { path = "../agent_shared" }
 anyhow = "1.0"
 async-trait.workspace = true
 cqrs-es.workspace = true
+did_manager.workspace = true
 futures.workspace = true
+identity_credential.workspace = true
 jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
 oid4vc-manager.workspace = true
@@ -23,6 +25,10 @@ thiserror.workspace = true
 tracing.workspace = true
 url.workspace = true
 tokio.workspace = true
+
+identity_iota.workspace = true
+sd-jwt-payload-rework.workspace = true
+base64.workspace = true
 
 [dev-dependencies]
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }

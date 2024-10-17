@@ -191,9 +191,13 @@ impl Aggregate for Offer {
                     1 => {
                         let credential_configuration_id = &credential_configuration_ids[0];
 
+                        info!("TEMP: credential_configuration_id: {:?}", credential_configuration_id);
+
                         let credential_configuration = credential_configurations
                             .get(credential_configuration_id)
                             .ok_or(MissingCredentialConfigurationError)?;
+
+                        info!("TEMP: credential_configuration: {:?}", credential_configuration);
 
                         // Get the credential.
                         let credential_response = wallet

@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+base64.workspace = true
 config = { version = "0.14" }
 cqrs-es.workspace = true
 dotenvy = { version = "0.15" }

@@ -25,6 +25,10 @@ thiserror.workspace = true
 tracing.workspace = true
 url.workspace = true
 
+identity_iota.workspace = true
+sd-jwt-payload-rework.workspace = true
+base64.workspace = true
+
 # `test_utils` dependencies
 lazy_static = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }

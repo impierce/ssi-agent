@@ -5,6 +5,7 @@ use did_manager::{DidMethod, Resolver, SecretManager};
 use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
+use sd_jwt_payload_rework::{JsonObject, JwsSigner};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -137,6 +138,34 @@ impl oid4vc_core::Subject for Subject {
             )
             .await
             .map(|document| document.id().to_string())?)
+    }
+}
+
+pub struct SubjectWrapper(pub Arc<dyn oid4vc_core::Subject>);
+
+#[derive(thiserror::Error, Debug)]
+pub enum TempError {}
+
+#[async_trait]
+impl JwsSigner for SubjectWrapper {
+    // FIX THIS
+    type Error = TempError;
+
+    // FIX THIS: jwt::encode?
+    async fn sign(&self, header: &JsonObject, payload: &JsonObject) -> Result<Vec<u8>, Self::Error> {
+        let encoded_header = URL_SAFE_NO_PAD.encode(serde_json::to_vec(header).unwrap());
+        let encoded_payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(payload).unwrap());
+
+        let message = format!("{}.{}", encoded_header, encoded_payload);
+
+        let proof_value = Sign::sign(&*self.0, &message, "FIX THIS", Algorithm::default())
+            .await
+            // FIX THIS
+            .unwrap();
+
+        let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
+        let message = [message, signature].join(".");
+        Ok(message.as_bytes().to_vec())
     }
 }
 
