@@ -114,9 +114,19 @@ impl Aggregate for Offer {
                 // TODO: add to `service`?
                 let client = reqwest::Client::new();
 
+                let form_url_encoded_credential_offer = self
+                    .credential_offer
+                    .as_ref()
+                    .ok_or(MissingCredentialOfferError)?
+                    .to_string();
+
+                let target =
+                    form_url_encoded_credential_offer.replace("openid-credential-offer://", target_url.as_str());
+
+                info!("Sending credential offer to: {}", target);
+
                 client
-                    .post(target_url.clone())
-                    .json(self.credential_offer.as_ref().ok_or(MissingCredentialOfferError)?)
+                    .get(target)
                     .send()
                     .await
                     .map_err(|e| SendCredentialOfferError(e.to_string()))?;
