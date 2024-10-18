@@ -17,8 +17,16 @@ use tracing::info;
 #[axum_macros::debug_handler]
 pub(crate) async fn get_presentations(State(state): State<HolderState>) -> Response {
     match query_handler("all_presentations", &state.query.all_presentations).await {
-        Ok(Some(all_presentations_view)) => (StatusCode::OK, Json(all_presentations_view)).into_response(),
-        Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        Ok(Some(all_presentations_view)) => {
+            let all_presentations = all_presentations_view
+                .presentations
+                .into_iter()
+                .map(|(_, credential_view)| credential_view)
+                .collect::<Vec<_>>();
+
+            (StatusCode::OK, Json(all_presentations)).into_response()
+        }
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

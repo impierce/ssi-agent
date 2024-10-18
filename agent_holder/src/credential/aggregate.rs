@@ -17,8 +17,8 @@ pub struct Data {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Credential {
-    pub credential_id: Option<String>,
-    pub offer_id: Option<String>,
+    pub holder_credential_id: String,
+    pub received_offer_id: Option<String>,
     pub signed: Option<Jwt>,
     pub data: Option<Data>,
 }
@@ -47,8 +47,8 @@ impl Aggregate for Credential {
 
         match command {
             AddCredential {
-                credential_id,
-                offer_id,
+                holder_credential_id,
+                received_offer_id,
                 credential,
             } => {
                 let raw = get_unverified_jwt_claims(&serde_json::json!(credential))?
@@ -57,8 +57,8 @@ impl Aggregate for Credential {
                     .ok_or(CredentialDecodingError)?;
 
                 Ok(vec![CredentialAdded {
-                    credential_id,
-                    offer_id,
+                    holder_credential_id,
+                    received_offer_id,
                     credential,
                     data: Data { raw },
                 }])
@@ -73,13 +73,13 @@ impl Aggregate for Credential {
 
         match event {
             CredentialAdded {
-                credential_id,
-                offer_id,
+                holder_credential_id,
+                received_offer_id,
                 credential,
                 data,
             } => {
-                self.credential_id = Some(credential_id);
-                self.offer_id = Some(offer_id);
+                self.holder_credential_id = holder_credential_id;
+                self.received_offer_id = Some(received_offer_id);
                 self.signed = Some(credential);
                 self.data = Some(data);
             }
@@ -107,7 +107,7 @@ pub mod credential_tests {
     use super::*;
     use crate::credential::aggregate::Credential;
     use crate::credential::event::CredentialEvent;
-    use crate::offer::aggregate::test_utils::offer_id;
+    use crate::offer::aggregate::test_utils::received_offer_id;
     use agent_issuance::credential::aggregate::test_utils::OPENBADGE_VERIFIABLE_CREDENTIAL_JWT;
     use agent_secret_manager::service::Service;
     use cqrs_es::test::TestFramework;
@@ -117,17 +117,17 @@ pub mod credential_tests {
 
     #[rstest]
     #[serial_test::serial]
-    fn test_add_credential(credential_id: String, offer_id: String) {
+    fn test_add_credential(holder_credential_id: String, received_offer_id: String) {
         CredentialTestFramework::with(Service::default())
             .given_no_previous_events()
             .when(CredentialCommand::AddCredential {
-                credential_id: credential_id.clone(),
-                offer_id: offer_id.clone(),
+                holder_credential_id: holder_credential_id.clone(),
+                received_offer_id: received_offer_id.clone(),
                 credential: Jwt::from(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string()),
             })
             .then_expect_events(vec![CredentialEvent::CredentialAdded {
-                credential_id,
-                offer_id,
+                holder_credential_id,
+                received_offer_id,
                 credential: Jwt::from(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string()),
                 data: Data {
                     raw: get_unverified_jwt_claims(&serde_json::json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT)).unwrap()
@@ -144,7 +144,7 @@ pub mod test_utils {
     use rstest::*;
 
     #[fixture]
-    pub fn credential_id() -> String {
+    pub fn holder_credential_id() -> String {
         generate_random_string()
     }
 }
