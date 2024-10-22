@@ -10,25 +10,25 @@ use std::collections::HashMap;
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum OfferEvent {
     CredentialOfferReceived {
-        offer_id: String,
+        received_offer_id: String,
         credential_offer: Box<CredentialOfferParameters>,
         credential_configurations: HashMap<String, CredentialConfigurationsSupportedObject>,
     },
     CredentialOfferAccepted {
-        offer_id: String,
+        received_offer_id: String,
         status: Status,
     },
     TokenResponseReceived {
-        offer_id: String,
+        received_offer_id: String,
         token_response: TokenResponse,
     },
     CredentialResponseReceived {
-        offer_id: String,
+        received_offer_id: String,
         status: Status,
         credentials: Vec<OfferCredential>,
     },
     CredentialOfferRejected {
-        offer_id: String,
+        received_offer_id: String,
         status: Status,
     },
 }

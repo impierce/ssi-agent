@@ -8,13 +8,16 @@ use super::{aggregate::Status, entity::Data};
 pub enum CredentialEvent {
     // TODO: rename to `DataCredentialCreated`?
     UnsignedCredentialCreated {
+        credential_id: String,
         data: Data,
         credential_configuration: CredentialConfigurationsSupportedObject,
     },
     SignedCredentialCreated {
+        credential_id: String,
         signed_credential: serde_json::Value,
     },
     CredentialSigned {
+        credential_id: String,
         signed_credential: serde_json::Value,
         status: Status,
     },

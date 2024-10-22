@@ -87,10 +87,12 @@ pub(crate) async fn credentials(
 
     let command = if is_signed {
         CredentialCommand::CreateSignedCredential {
+            credential_id: credential_id.clone(),
             signed_credential: data,
         }
     } else {
         CredentialCommand::CreateUnsignedCredential {
+            credential_id: credential_id.clone(),
             data: Data { raw: data },
             credential_configuration,
         }
@@ -161,8 +163,16 @@ pub(crate) async fn credentials(
 #[axum_macros::debug_handler]
 pub(crate) async fn all_credentials(State(state): State<IssuanceState>) -> Response {
     match query_handler("all_credentials", &state.query.all_credentials).await {
-        Ok(Some(all_credentials_view)) => (StatusCode::OK, Json(all_credentials_view)).into_response(),
-        Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        Ok(Some(all_credentials_view)) => {
+            let all_credentials = all_credentials_view
+                .credentials
+                .into_iter()
+                .map(|(_, credential_view)| credential_view)
+                .collect::<Vec<_>>();
+
+            (StatusCode::OK, Json(all_credentials)).into_response()
+        }
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

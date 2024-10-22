@@ -23,9 +23,15 @@ use tracing::info;
 pub(crate) async fn all_authorization_requests(State(state): State<VerificationState>) -> Response {
     match query_handler("all_authorization_requests", &state.query.all_authorization_requests).await {
         Ok(Some(all_authorization_requests_view)) => {
-            (StatusCode::OK, Json(all_authorization_requests_view)).into_response()
+            let all_authorization_requests = all_authorization_requests_view
+                .authorization_requests
+                .into_iter()
+                .map(|(_, authorization_request_view)| authorization_request_view)
+                .collect::<Vec<_>>();
+
+            (StatusCode::OK, Json(all_authorization_requests)).into_response()
         }
-        Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
