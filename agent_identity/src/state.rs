@@ -87,6 +87,20 @@ pub async fn initialize(state: &IdentityState) {
     // If the did:web method is enabled, create a document
     if enable_did_web {
         let did_method = DidMethod::Web;
+
+        match query_handler(&did_method.to_string(), &state.query.document).await {
+            Ok(Some(Document {
+                document: Some(document),
+                ..
+            })) => {
+                info!("DID Web Document already exists: {:?}", document);
+                return;
+            }
+            _ => {
+                warn!("Failed to retrieve DID Web Document");
+            }
+        }
+
         let command = DocumentCommand::CreateDocument {
             did_method: did_method.clone(),
         };
