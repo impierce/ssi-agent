@@ -6,11 +6,25 @@ use crate::{
     },
     services::VerificationServices,
 };
-use agent_shared::config::{config, get_preferred_signing_algorithm};
+use agent_shared::{
+    config::{config, get_preferred_signing_algorithm},
+    verifier::Verifier,
+};
 use async_trait::async_trait;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use cqrs_es::Aggregate;
+use did_manager::Resolver;
+use identity_credential::sd_jwt_vc::SdJwtVc;
+use identity_iota::{
+    core::ToJson as _,
+    credential::KeyBindingJWTValidationOptions,
+    did::DID as _,
+    document::DIDUrlQuery,
+    verification::jwk::{Jwk, JwkParams},
+};
 use oid4vc_core::{authorization_request::ByReference, scope::Scope};
-use oid4vp::{authorization_request::ClientIdScheme, Oid4vpParams};
+use oid4vp::{authorization_request::ClientIdScheme, oid4vp_params::OneOrManyVpToken, Oid4vpParams};
+use sd_jwt_payload_rework::{RequiredKeyBinding, Sha256Hasher};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
@@ -21,9 +35,11 @@ pub struct AuthorizationRequest {
     pub form_url_encoded_authorization_request: Option<String>,
     pub signed_authorization_request_object: Option<String>,
     pub id_token: Option<String>,
-    pub vp_token: Option<String>,
+    pub vp_tokens: Option<Vec<String>>,
     pub state: Option<String>,
 }
+
+// fn validate_sd_jwt_vc(sd_jwt_vc: &SdJwtVc) -> String {}
 
 #[async_trait]
 impl Aggregate for AuthorizationRequest {
@@ -155,18 +171,84 @@ impl Aggregate for AuthorizationRequest {
                         }])
                     }
                     GenericAuthorizationResponse::OID4VP(oid4vp_authorization_response) => {
-                        let _ = relying_party
-                            .validate_response(&oid4vp_authorization_response)
-                            .await
-                            .map_err(InvalidOID4VPAuthorizationResponse)?;
-
-                        let vp_token = match oid4vp_authorization_response.extension.oid4vp_parameters {
-                            Oid4vpParams::Params { vp_token, .. } => vp_token,
+                        let mut vp_tokens = match &oid4vp_authorization_response.extension.oid4vp_parameters {
+                            Oid4vpParams::Params {
+                                vp_token: OneOrManyVpToken::One(vp_token),
+                                ..
+                            } => vec![vp_token.clone()],
+                            Oid4vpParams::Params {
+                                vp_token: OneOrManyVpToken::Many(vp_token),
+                                ..
+                            } => vp_token.clone(),
                             Oid4vpParams::Jwt { .. } => return Err(UnsupportedJwtParameterError),
                         };
 
+                        for vp_token in &mut vp_tokens {
+                            if let Ok(sd_jwt_vc) = vp_token.parse::<SdJwtVc>() {
+                                info!("VC SD-JWT: {}", sd_jwt_vc);
+
+                                if let Some(cnf) = &sd_jwt_vc.claims().cnf {
+                                    let jwk = match cnf {
+                                        RequiredKeyBinding::Jwk(jwk) => Jwk::from_params(
+                                            serde_json::from_value::<JwkParams>(serde_json::json!(jwk))
+                                                .map_err(|e| InvalidCnfParameterError(e.to_string()))?,
+                                        ),
+                                        RequiredKeyBinding::Kid(kid) => {
+                                            info!("Cnf `kid` value: {kid}");
+
+                                            let did_url = identity_iota::did::DIDUrl::parse(kid)
+                                                .map_err(|e| InvalidDidUrlError(format!("Invalid DID URL: {}", e)))?;
+
+                                            let resolver = Resolver::new().await;
+
+                                            let document = resolver
+                                                .resolve(did_url.did().as_str())
+                                                .await
+                                                .map_err(|e| UnsupportedDidMethodError(e.to_string()))?;
+
+                                            let verification_method = document
+                                                .resolve_method(
+                                                    DIDUrlQuery::from(&did_url),
+                                                    Some(identity_iota::verification::MethodScope::VerificationMethod),
+                                                )
+                                                .ok_or(MissingVerificationMethodError)?;
+
+                                            verification_method
+                                                .data()
+                                                .public_key_jwk()
+                                                .ok_or(MissingVerificationMethodKeyError)?
+                                                .clone()
+                                        }
+                                        _ => return Err(UnsupportedCnfParameterError),
+                                    };
+
+                                    sd_jwt_vc
+                                        .validate_key_binding(
+                                            &Verifier,
+                                            &jwk,
+                                            &Sha256Hasher::new(),
+                                            &KeyBindingJWTValidationOptions::default(),
+                                        )
+                                        .map_err(|_| InvalidKeyBindingError)?;
+                                }
+                                let disclosed_object = sd_jwt_vc.into_disclosed_object(&Sha256Hasher::new()).unwrap();
+
+                                info!("Disclosed object: {:?}", disclosed_object);
+
+                                *vp_token = URL_SAFE_NO_PAD.encode(
+                                    disclosed_object
+                                        .to_json_vec()
+                                        .map_err(|e| InvalidDisclosedObjectError(e.to_string()))?,
+                                );
+                            } else {
+                                let _ = relying_party
+                                    .validate_response(&oid4vp_authorization_response)
+                                    .await
+                                    .map_err(InvalidOID4VPAuthorizationResponse)?;
+                            }
+                        }
                         Ok(vec![OID4VPAuthorizationResponseVerified {
-                            vp_token,
+                            vp_tokens,
                             state: oid4vp_authorization_response.state,
                         }])
                     }
@@ -200,8 +282,8 @@ impl Aggregate for AuthorizationRequest {
                 self.id_token.replace(id_token);
                 self.state = state;
             }
-            OID4VPAuthorizationResponseVerified { vp_token, state } => {
-                self.vp_token.replace(vp_token);
+            OID4VPAuthorizationResponseVerified { vp_tokens, state } => {
+                self.vp_tokens.replace(vp_tokens);
                 self.state = state;
             }
         }
@@ -228,6 +310,7 @@ pub mod tests {
     use oid4vc_manager::ProviderManager;
     use oid4vci::VerifiableCredentialJwt;
     use oid4vp::oid4vp::AuthorizationResponseInput;
+    use oid4vp::oid4vp::PresentationInputType;
     use oid4vp::PresentationDefinition;
     use rstest::rstest;
     use serde_json::json;
@@ -355,7 +438,7 @@ pub mod tests {
                     state: Some("state".to_string()),
                 },
                 "vp_token" => AuthorizationRequestEvent::OID4VPAuthorizationResponseVerified {
-                    vp_token: token,
+                    vp_tokens: vec![token],
                     state: Some("state".to_string()),
                 },
                 _ => unreachable!("Invalid response type."),
@@ -442,7 +525,9 @@ pub mod tests {
                         .generate_response(
                             oid4vp_authorization_request,
                             AuthorizationResponseInput {
-                                verifiable_presentation,
+                                verifiable_presentation_input: vec![PresentationInputType::Unsigned(
+                                    verifiable_presentation,
+                                )],
                                 presentation_submission,
                             },
                         )
