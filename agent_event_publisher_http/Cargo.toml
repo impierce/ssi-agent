@@ -15,6 +15,7 @@ agent_verification = { path = "../agent_verification" }
 anyhow = "1.0"
 async-trait.workspace = true
 cqrs-es.workspace = true
+http-serde-ext = "1.0"
 rustls = { version = "0.23", default-features = false, features = [
     "logging",
     "std",

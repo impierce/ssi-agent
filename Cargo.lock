@@ -137,6 +137,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "cqrs-es",
+ "http-serde-ext",
  "reqwest 0.12.5",
  "rustls 0.23.10",
  "serde",
@@ -289,6 +290,7 @@ dependencies = [
  "config",
  "cqrs-es",
  "dotenvy",
+ "http-serde-ext",
  "identity_iota",
  "jsonwebtoken",
  "oid4vc-core",
@@ -296,6 +298,7 @@ dependencies = [
  "oid4vp",
  "once_cell",
  "rand 0.8.5",
+ "reqwest 0.12.5",
  "serde",
  "serde_json",
  "serde_with 3.8.1",
@@ -344,6 +347,7 @@ dependencies = [
  "oid4vc-manager",
  "oid4vci",
  "oid4vp",
+ "reqwest 0.12.5",
  "rstest",
  "serde",
  "serde_json",
@@ -3145,6 +3149,16 @@ name = "http-range-header"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "add0ab9360ddbd88cfeb3bd9574a1d85cfdfa14db10b3e21d3700dbc4328758f"
+
+[[package]]
+name = "http-serde-ext"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "665c24b8e7e21688dc74edb228f07c1815bbc7ff3b48a3ee72fa20937fbde095"
+dependencies = [
+ "http 1.1.0",
+ "serde",
+]
 
 [[package]]
 name = "httparse"
