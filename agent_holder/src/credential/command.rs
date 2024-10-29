@@ -6,7 +6,7 @@ use serde::Deserialize;
 pub enum CredentialCommand {
     AddCredential {
         holder_credential_id: String,
-        received_offer_id: String,
+        received_offer_id: Option<String>,
         credential: Jwt,
     },
 }
