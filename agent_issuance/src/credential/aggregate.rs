@@ -247,32 +247,47 @@ impl Aggregate for Credential {
 
                     info!("Credential: {:?}", credential);
 
-                    #[cfg(feature = "test_utils")]
-                    let iat = 0;
-                    #[cfg(not(feature = "test_utils"))]
-                    let iat = credential.raw["issuanceDate"]
+                    let issuance_date = credential.raw["issuanceDate"]
                         .as_str()
                         .unwrap()
                         .parse::<chrono::DateTime<chrono::Utc>>()
-                        .unwrap()
-                        .timestamp();
+                        .unwrap();
+
+                    #[cfg(feature = "test_utils")]
+                    let iat = 0;
+                    #[cfg(not(feature = "test_utils"))]
+                    let iat = issuance_date.timestamp();
                     // let iat = std::time::SystemTime::now()
                     //     .duration_since(std::time::UNIX_EPOCH)
                     //     .unwrap()
                     //     .as_secs() as i64;
 
+                    #[cfg(feature = "test_utils")]
+                    let exp = 0;
+                    #[cfg(not(feature = "test_utils"))]
+                    let exp = iat + 60 * 60 * 24 * 365; // TODO: currently hard-coded to one year from issuance date
+
+                    // let exp = issuance_date + chrono::Duration::days(365);
+                    // let exp: i32 = exp.timestamp();
+
+                    // Add standard claims
+                    let vc_jwt_builder = VerifiableCredentialJwt::builder()
+                        .sub(subject_id)
+                        .iss(issuer_did)
+                        .iat(iat)
+                        .nbf(iat) // TODO: currently iat == nbf
+                        .exp(exp);
+
+                    let vc_jwt_builder = if let Some(id) = id {
+                        vc_jwt_builder.jti(id.to_string())
+                    } else {
+                        vc_jwt_builder
+                    };
+
                     json!(jwt::encode(
                         services.issuer.clone(),
                         Header::new(get_preferred_signing_algorithm()),
-                        VerifiableCredentialJwt::builder()
-                            .sub(subject_id)
-                            .iss(issuer_did)
-                            .iat(iat)
-                            // TODO: find out whether this is a required field.
-                            .exp(9999999999i64)
-                            .verifiable_credential(credential.raw)
-                            .build()
-                            .ok(),
+                        vc_jwt_builder.verifiable_credential(credential.raw).build().ok(),
                         &default_did_method.to_string()
                     )
                     .await
