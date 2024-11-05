@@ -27,6 +27,7 @@ use types_ob_v3::prelude::{
     AchievementCredential, AchievementCredentialBuilder, AchievementCredentialType, AchievementSubject, Profile,
     ProfileBuilder,
 };
+use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum Status {
@@ -148,7 +149,13 @@ impl Aggregate for Credential {
                                     serde_json::from_value::<AchievementSubject>(credential_subject_json.clone())
                                         .map_err(|e| InvalidVerifiableCredentialError(e.to_string()))?;
 
-                                let credential: AchievementCredential = AchievementCredentialBuilder::default()
+                                let id = data
+                                    .raw
+                                    .get("id")
+                                    .and_then(|id| id.as_str())
+                                    .and_then(|id| Url::parse(id).ok());
+
+                                let builder = AchievementCredentialBuilder::default()
                                     .context(vec![
                                         "https://www.w3.org/2018/credentials/v1",
                                         "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json",
@@ -157,14 +164,15 @@ impl Aggregate for Credential {
                                         "VerifiableCredential",
                                         &credential_format,
                                     ]))
-                                    // TODO: Come up with a way to get the credential id.
-                                    .id("http://example.com/credentials/3527")
                                     .name(name)
                                     .issuer(issuer)
                                     .credential_subject(credential_subject)
-                                    .issuance_date(issuance_date)
-                                    .try_into()
-                                    .map_err(InvalidVerifiableCredentialError)?;
+                                    .issuance_date(issuance_date);
+
+                                let builder = if let Some(id) = id { builder.id(id) } else { builder };
+
+                                let credential: AchievementCredential =
+                                    builder.try_into().map_err(InvalidVerifiableCredentialError)?;
 
                                 return Ok(vec![UnsignedCredentialCreated {
                                     credential_id,
@@ -196,6 +204,13 @@ impl Aggregate for Credential {
                     return Ok(vec![]);
                 }
 
+                let id: Option<Url> = self
+                    .data
+                    .as_ref()
+                    .and_then(|data| data.raw.get("id"))
+                    .and_then(|id| id.as_str())
+                    .and_then(|id| Url::parse(id).ok());
+
                 let default_did_method = get_preferred_did_method();
 
                 let issuer_did = services
@@ -205,6 +220,10 @@ impl Aggregate for Credential {
                     .unwrap();
                 let signed_credential = {
                     let mut credential = self.data.as_ref().ok_or(MissingCredentialDataError)?.clone();
+
+                    if let Some(ref id) = id {
+                        credential.raw["id"] = json!(id);
+                    };
 
                     credential.raw["issuer"] = json!(issuer_did);
 
