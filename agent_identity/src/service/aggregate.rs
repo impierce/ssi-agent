@@ -190,7 +190,7 @@ impl Aggregate for Service {
                             .into_iter()
                             .map(|presentation_id| {
                                 // TODO: Find a better way to construct the URL
-                                format!("{origin}v0/holder/presentations/{presentation_id}/signed")
+                                format!("{origin}linked-verifiable-presentations/{presentation_id}")
                                     .parse::<identity_core::common::Url>()
                             })
                             .collect::<Result<Vec<_>, _>>()
@@ -333,7 +333,7 @@ pub mod test_utils {
             )
             .type_("LinkedVerifiablePresentation")
             .service_endpoint(ServiceEndpoint::from(OrderedSet::from_iter(vec![format!(
-                "{origin}/v0/holder/presentations/presentation-1/signed"
+                "{origin}/linked-verifiable-presentations/presentation-1"
             )
             .parse::<Url>()
             .unwrap()])))
