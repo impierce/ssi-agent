@@ -162,7 +162,7 @@
 					"response": []
 				},
 				{
-					"name": "credentials",
+					"name": "All Credentials",
 					"event": [
 						{
 							"listen": "test",
@@ -202,7 +202,7 @@
 					"response": []
 				},
 				{
-					"name": "credential",
+					"name": "Credential by ID",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -315,7 +315,7 @@
 					"response": []
 				},
 				{
-					"name": "offer",
+					"name": "Offer by ID",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -703,7 +703,7 @@
 					"response": []
 				},
 				{
-					"name": "authorization_request",
+					"name": "Authorization Request by ID",
 					"request": {
 						"method": "GET",
 						"header": [],
