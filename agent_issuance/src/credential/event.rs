@@ -9,7 +9,7 @@ pub enum CredentialEvent {
     // TODO: rename to `DataCredentialCreated`?
     UnsignedCredentialCreated {
         data: Data,
-        credential_configuration: CredentialConfigurationsSupportedObject,
+        credential_configuration: Box<CredentialConfigurationsSupportedObject>,
     },
     SignedCredentialCreated {
         signed_credential: serde_json::Value,
