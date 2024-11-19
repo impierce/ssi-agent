@@ -171,3 +171,20 @@ OpenID4VCI Pre-Authorized Code Flow
 30-31: See steps 4-5.
    32: The API returns a `200 OK` response with the credential(s) in the response body.
 ```
+
+## Releases
+
+This project uses [semantic-release](https://semantic-release.gitbook.io) - plain and simple, without noteworthy custom configuration.
+
+### Branches
+
+| Branch name | Description                                                                                                  | Example tag      |
+| ----------- | ------------------------------------------------------------------------------------------------------------ | ---------------- |
+| `main`      | Current stable releases. Default version when pulling the `latest` Docker image.                             | `v1.2.1`         |
+| `next`      | Upcoming major version (containing breaking changes). Can be considered a stable preview of coming features. | `v2.0.8`         |
+| `beta`      | Pre-releases that are fully implemented, but require testing, validation and feedback.                       | `v2.0.8-beta.2`  |
+| `alpha`     | Experimental early-stage testing and development.                                                            | `v2.1.2-alpha.4` |
+
+### Merging strategy
+
+All PRs to any of the branches defined above are squashed to preserve a clean history. Since the PR title is used as the commit message, it is important to follow a conventional commit style in order to allow semantic releases (next version is determined by the commits since the last version). Therefore, the PR title is automatically linted by a GitHub Action.
