@@ -2,12 +2,12 @@ name: Release
 
 on:
   workflow_dispatch:
-  # push:
-  #   branches:
-  #     - main
-  #     - next
-  #     - beta
-  #     - alpha
+  push:
+    branches:
+      - main
+      - next
+      - beta
+      - alpha
 
 permissions:
   contents: read # for checkout
