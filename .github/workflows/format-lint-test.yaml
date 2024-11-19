@@ -1,10 +1,12 @@
 name: Format, Lint, Test
 
 on:
-  push:
-    branches: ["dev"]
   pull_request:
-    branches: ["dev"]
+    branches:
+      - main
+      - next
+      - beta
+      - alpha
 
 jobs:
   build:
@@ -23,3 +25,12 @@ jobs:
 
       - name: Test
         run: cargo test --workspace
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+
+      - name: Release Preview
+        run: npx semantic-release@24 --dry-run
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
