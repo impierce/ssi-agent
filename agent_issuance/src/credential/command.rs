@@ -8,7 +8,7 @@ use super::entity::Data;
 pub enum CredentialCommand {
     CreateUnsignedCredential {
         data: Data,
-        credential_configuration: CredentialConfigurationsSupportedObject,
+        credential_configuration: Box<CredentialConfigurationsSupportedObject>,
     },
     CreateSignedCredential {
         signed_credential: serde_json::Value,

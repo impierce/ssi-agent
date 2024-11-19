@@ -65,29 +65,31 @@ pub(crate) async fn credentials(
 
     let credential_id = uuid::Uuid::new_v4().to_string();
 
-    let credential_configuration = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
-        Ok(Some(ServerConfigView {
-            credential_issuer_metadata:
-                Some(CredentialIssuerMetadata {
-                    credential_configurations_supported,
-                    ..
-                }),
-            ..
-        })) => {
-            if let Some(credential_configuration) =
-                credential_configurations_supported.get(&credential_configuration_id)
-            {
-                credential_configuration.clone()
-            } else {
-                return (
-                    StatusCode::NOT_FOUND,
-                    format!("No Credential Configuration found with id: `{credential_configuration_id}`"),
-                )
-                    .into_response();
+    let credential_configuration = Box::new(
+        match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
+            Ok(Some(ServerConfigView {
+                credential_issuer_metadata:
+                    Some(CredentialIssuerMetadata {
+                        credential_configurations_supported,
+                        ..
+                    }),
+                ..
+            })) => {
+                if let Some(credential_configuration) =
+                    credential_configurations_supported.get(&credential_configuration_id)
+                {
+                    credential_configuration.clone()
+                } else {
+                    return (
+                        StatusCode::NOT_FOUND,
+                        format!("No Credential Configuration found with id: `{credential_configuration_id}`"),
+                    )
+                        .into_response();
+                }
             }
-        }
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
+            _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        },
+    );
 
     let command = if is_signed {
         CredentialCommand::CreateSignedCredential {
