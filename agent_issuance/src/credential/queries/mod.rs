@@ -1,3 +1,5 @@
+pub mod all_credentials;
+
 use super::{entity::Data, event::CredentialEvent};
 use crate::credential::aggregate::Credential;
 use cqrs_es::{EventEnvelope, View};

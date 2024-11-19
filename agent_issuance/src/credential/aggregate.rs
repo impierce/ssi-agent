@@ -1,5 +1,9 @@
-use agent_secret_manager::services::SecretManagerServices;
-use agent_shared::config::config;
+use super::entity::Data;
+use crate::credential::command::CredentialCommand;
+use crate::credential::error::CredentialError::{self};
+use crate::credential::event::CredentialEvent;
+use crate::services::IssuanceServices;
+use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;
@@ -7,8 +11,8 @@ use identity_core::convert::FromJson;
 use identity_credential::credential::{
     Credential as W3CVerifiableCredential, CredentialBuilder as W3CVerifiableCredentialBuilder, Issuer,
 };
-use jsonwebtoken::{Algorithm, Header};
-use oid4vc_core::{jwt, Subject as _};
+use jsonwebtoken::Header;
+use oid4vc_core::jwt;
 use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::{
     CredentialDefinition, JwtVcJson, JwtVcJsonParameters,
 };
@@ -24,13 +28,6 @@ use types_ob_v3::prelude::{
     ProfileBuilder,
 };
 
-use crate::credential::command::CredentialCommand;
-use crate::credential::error::CredentialError::{self};
-use crate::credential::event::CredentialEvent;
-use crate::credential::services::CredentialServices;
-
-use super::entity::Data;
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
 #[derivative(PartialEq)]
 pub struct Credential {
@@ -44,17 +41,13 @@ impl Aggregate for Credential {
     type Command = CredentialCommand;
     type Event = CredentialEvent;
     type Error = CredentialError;
-    type Services = CredentialServices;
+    type Services = Arc<IssuanceServices>;
 
     fn aggregate_type() -> String {
         "credential".to_string()
     }
 
-    async fn handle(
-        &self,
-        command: Self::Command,
-        _services: &Self::Services,
-    ) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
         use CredentialCommand::*;
         use CredentialError::*;
         use CredentialEvent::*;
@@ -179,13 +172,12 @@ impl Aggregate for Credential {
                 if self.signed.is_some() && !overwrite {
                     return Ok(vec![]);
                 }
-                let (issuer, default_did_method) = {
-                    let mut services = SecretManagerServices::new(None);
-                    services.init().await.unwrap();
-                    (Arc::new(services.subject.unwrap()), services.default_did_method.clone())
-                };
-                let issuer_did = issuer
-                    .identifier(&default_did_method.to_string(), Algorithm::EdDSA)
+
+                let default_did_method = get_preferred_did_method();
+
+                let issuer_did = services
+                    .issuer
+                    .identifier(&default_did_method.to_string(), get_preferred_signing_algorithm())
                     .await
                     .unwrap();
                 let signed_credential = {
@@ -216,8 +208,8 @@ impl Aggregate for Credential {
                         .as_secs() as i64;
 
                     json!(jwt::encode(
-                        issuer.clone(),
-                        Header::new(Algorithm::EdDSA),
+                        services.issuer.clone(),
+                        Header::new(get_preferred_signing_algorithm()),
                         VerifiableCredentialJwt::builder()
                             .sub(subject_id)
                             .iss(issuer_did)
@@ -263,13 +255,12 @@ impl Aggregate for Credential {
 
 #[cfg(test)]
 pub mod credential_tests {
-    use std::collections::HashMap;
-
+    use super::test_utils::*;
     use super::*;
 
-    use lazy_static::lazy_static;
-    use oid4vci::proof::KeyProofMetadata;
-    use oid4vci::ProofType;
+    use agent_secret_manager::service::Service;
+    use jsonwebtoken::Algorithm;
+
     use rstest::rstest;
     use serde_json::json;
 
@@ -277,7 +268,7 @@ pub mod credential_tests {
 
     use crate::credential::aggregate::Credential;
     use crate::credential::event::CredentialEvent;
-    use crate::offer::aggregate::tests::SUBJECT_KEY_DID;
+    use crate::offer::aggregate::test_utils::SUBJECT_KEY_DID;
 
     type CredentialTestFramework = TestFramework<Credential>;
 
@@ -298,7 +289,7 @@ pub mod credential_tests {
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
         #[case] unsigned_credential: serde_json::Value,
     ) {
-        CredentialTestFramework::with(CredentialServices)
+        CredentialTestFramework::with(Service::default())
             .given_no_previous_events()
             .when(CredentialCommand::CreateUnsignedCredential {
                 data: Data {
@@ -331,7 +322,7 @@ pub mod credential_tests {
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
         #[case] verifiable_credential_jwt: String,
     ) {
-        CredentialTestFramework::with(CredentialServices)
+        CredentialTestFramework::with(Service::default())
             .given(vec![CredentialEvent::UnsignedCredentialCreated {
                 data: Data {
                     raw: unsigned_credential,
@@ -346,9 +337,29 @@ pub mod credential_tests {
                 signed_credential: json!(verifiable_credential_jwt),
             }])
     }
+}
+
+#[cfg(feature = "test_utils")]
+pub mod test_utils {
+    use super::*;
+    use jsonwebtoken::Algorithm;
+    use lazy_static::lazy_static;
+    use oid4vci::{
+        credential_format_profiles::{
+            w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, CredentialFormats, Parameters,
+        },
+        proof::KeyProofMetadata,
+        ProofType,
+    };
+    use serde_json::json;
+    use std::collections::HashMap;
+
+    pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHA6Ly9leGFtcGxlLmNvbS9jcmVkZW50aWFscy8zNTI3IiwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5hbWUiOiJUZWFtd29yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJ0eXBlIjpbIkFjaGlldmVtZW50U3ViamVjdCJdLCJhY2hpZXZlbWVudCI6eyJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vYWNoaWV2ZW1lbnRzLzIxc3QtY2VudHVyeS1za2lsbHMvdGVhbXdvcmsiLCJ0eXBlIjoiQWNoaWV2ZW1lbnQiLCJjcml0ZXJpYSI6eyJuYXJyYXRpdmUiOiJUZWFtIG1lbWJlcnMgYXJlIG5vbWluYXRlZCBmb3IgdGhpcyBiYWRnZSBieSB0aGVpciBwZWVycyBhbmQgcmVjb2duaXplZCB1cG9uIHJldmlldyBieSBFeGFtcGxlIENvcnAgbWFuYWdlbWVudC4ifSwiZGVzY3JpcHRpb24iOiJUaGlzIGJhZGdlIHJlY29nbml6ZXMgdGhlIGRldmVsb3BtZW50IG9mIHRoZSBjYXBhY2l0eSB0byBjb2xsYWJvcmF0ZSB3aXRoaW4gYSBncm91cCBlbnZpcm9ubWVudC4iLCJuYW1lIjoiVGVhbXdvcmsifX19fQ.SkC7IvpBGB9e98eobnE9qcLjs-yoZup3cieBla3DRTlcRezXEDPv4YRoUgffho9LJ0rkmfFPsPwb-owXMWyPAA";
+
+    pub const W3C_VC_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjoiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIiwiZGVncmVlIjp7InR5cGUiOiJNYXN0ZXJEZWdyZWUiLCJuYW1lIjoiTWFzdGVyIG9mIE9jZWFub2dyYXBoeSJ9fSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiJ9fQ.MUDBbPJfXe0G9sjVTF3RuR6ukRM0d4N57iMGNFcIKMFPIEdig12v-YFB0qfnSghGcQo8hUw3jzxZXTSJATEgBg";
 
     lazy_static! {
-        static ref OPENBADGE_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
+        pub static ref OPENBADGE_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
             CredentialConfigurationsSupportedObject {
                 credential_format: CredentialFormats::JwtVcJson(Parameters {
                     parameters: (
@@ -361,7 +372,6 @@ pub mod credential_tests {
                         .into(),
                 }),
                 cryptographic_binding_methods_supported: vec![
-                    "did:key".to_string(),
                     "did:key".to_string(),
                     "did:iota:rms".to_string(),
                     "did:jwk".to_string(),
@@ -381,7 +391,7 @@ pub mod credential_tests {
                 })],
                 ..Default::default()
             };
-        static ref W3C_VC_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
+        pub static ref W3C_VC_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
             CredentialConfigurationsSupportedObject {
                 credential_format: CredentialFormats::JwtVcJson(Parameters {
                     parameters: (
@@ -394,10 +404,9 @@ pub mod credential_tests {
                         .into(),
                 }),
                 cryptographic_binding_methods_supported: vec![
-                    "did:key".to_string(),
-                    "did:key".to_string(),
                     "did:iota:rms".to_string(),
                     "did:jwk".to_string(),
+                    "did:key".to_string(),
                 ],
                 credential_signing_alg_values_supported: vec!["EdDSA".to_string()],
                 proof_types_supported: HashMap::from_iter(vec![(
@@ -407,14 +416,16 @@ pub mod credential_tests {
                     },
                 )]),
                 display: vec![json!({
-                    "name": "Master Degree",
+                    "locale": "en",
+                    "name": "Verifiable Credential",
                     "logo": {
-                        "url": "https://example.com/logo.png"
+                        "uri": "https://impierce.com/images/logo-blue.png",
+                        "alt_text": "UniCore Logo",
                     }
                 })],
                 ..Default::default()
             };
-        static ref OPENBADGE_CREDENTIAL_SUBJECT: serde_json::Value = json!(
+        pub static ref OPENBADGE_CREDENTIAL_SUBJECT: serde_json::Value = json!(
             {
                 "credentialSubject": {
                     "type": [ "AchievementSubject" ],
@@ -430,7 +441,7 @@ pub mod credential_tests {
                   }
             }
         );
-        static ref W3C_VC_CREDENTIAL_SUBJECT: serde_json::Value = json!(
+        pub static ref W3C_VC_CREDENTIAL_SUBJECT: serde_json::Value = json!(
             {
                 "credentialSubject": {
                     "first_name": "Ferris",
@@ -442,7 +453,7 @@ pub mod credential_tests {
                 }
             }
         );
-        static ref UNSIGNED_OPENBADGE_CREDENTIAL: serde_json::Value = json!({
+        pub static ref UNSIGNED_OPENBADGE_CREDENTIAL: serde_json::Value = json!({
           "@context": [
             "https://www.w3.org/2018/credentials/v1",
             "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
@@ -458,7 +469,7 @@ pub mod credential_tests {
           "name": "Teamwork Badge",
           "credentialSubject": OPENBADGE_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
         });
-        static ref UNSIGNED_W3C_VC_CREDENTIAL: serde_json::Value = json!({
+        pub static ref UNSIGNED_W3C_VC_CREDENTIAL: serde_json::Value = json!({
           "@context": "https://www.w3.org/2018/credentials/v1",
           "type": [ "VerifiableCredential" ],
           "credentialSubject": W3C_VC_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
@@ -469,8 +480,4 @@ pub mod credential_tests {
           "issuanceDate": "2010-01-01T00:00:00Z"
         });
     }
-
-    pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHA6Ly9leGFtcGxlLmNvbS9jcmVkZW50aWFscy8zNTI3IiwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5hbWUiOiJUZWFtd29yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJ0eXBlIjpbIkFjaGlldmVtZW50U3ViamVjdCJdLCJhY2hpZXZlbWVudCI6eyJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vYWNoaWV2ZW1lbnRzLzIxc3QtY2VudHVyeS1za2lsbHMvdGVhbXdvcmsiLCJ0eXBlIjoiQWNoaWV2ZW1lbnQiLCJjcml0ZXJpYSI6eyJuYXJyYXRpdmUiOiJUZWFtIG1lbWJlcnMgYXJlIG5vbWluYXRlZCBmb3IgdGhpcyBiYWRnZSBieSB0aGVpciBwZWVycyBhbmQgcmVjb2duaXplZCB1cG9uIHJldmlldyBieSBFeGFtcGxlIENvcnAgbWFuYWdlbWVudC4ifSwiZGVzY3JpcHRpb24iOiJUaGlzIGJhZGdlIHJlY29nbml6ZXMgdGhlIGRldmVsb3BtZW50IG9mIHRoZSBjYXBhY2l0eSB0byBjb2xsYWJvcmF0ZSB3aXRoaW4gYSBncm91cCBlbnZpcm9ubWVudC4iLCJuYW1lIjoiVGVhbXdvcmsifX19fQ.SkC7IvpBGB9e98eobnE9qcLjs-yoZup3cieBla3DRTlcRezXEDPv4YRoUgffho9LJ0rkmfFPsPwb-owXMWyPAA";
-
-    pub const W3C_VC_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjoiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIiwiZGVncmVlIjp7InR5cGUiOiJNYXN0ZXJEZWdyZWUiLCJuYW1lIjoiTWFzdGVyIG9mIE9jZWFub2dyYXBoeSJ9fSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiJ9fQ.MUDBbPJfXe0G9sjVTF3RuR6ukRM0d4N57iMGNFcIKMFPIEdig12v-YFB0qfnSghGcQo8hUw3jzxZXTSJATEgBg";
 }

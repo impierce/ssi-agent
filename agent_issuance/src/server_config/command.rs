@@ -9,7 +9,7 @@ use serde::Deserialize;
 pub enum ServerConfigCommand {
     InitializeServerMetadata {
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
-        credential_issuer_metadata: CredentialIssuerMetadata,
+        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
     },
     AddCredentialConfiguration {
         credential_configuration: CredentialConfiguration,

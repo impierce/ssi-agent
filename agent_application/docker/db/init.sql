@@ -18,6 +18,14 @@ CREATE TABLE offer
     PRIMARY KEY (view_id)
 );
 
+CREATE TABLE all_offers
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
 CREATE TABLE pre_authorized_code
 (
     view_id           text                        NOT NULL,
@@ -42,7 +50,48 @@ CREATE TABLE credential
     PRIMARY KEY (view_id)
 );
 
+CREATE TABLE all_credentials
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
 CREATE TABLE server_config
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
+CREATE TABLE received_offer
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
+CREATE TABLE all_received_offers
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
+CREATE TABLE holder_credential
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
+
+CREATE TABLE all_holder_credentials
 (
     view_id           text                        NOT NULL,
     version           bigint CHECK (version >= 0) NOT NULL,

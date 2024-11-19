@@ -23,7 +23,7 @@ impl View<ServerConfig> for ServerConfigView {
             } => {
                 self.authorization_server_metadata = *authorization_server_metadata.clone();
                 self.credential_issuer_metadata
-                    .replace(credential_issuer_metadata.clone());
+                    .replace(*credential_issuer_metadata.clone());
             }
             CredentialConfigurationAdded {
                 credential_configurations,

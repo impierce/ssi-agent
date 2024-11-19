@@ -1,4 +1,6 @@
 use config::ConfigError;
+use identity_iota::did::CoreDID;
+use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
 use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::Lazy;
@@ -8,7 +10,8 @@ use std::{
     collections::HashMap,
     sync::{RwLock, RwLockReadGuard},
 };
-use tracing::info;
+use strum::VariantArray;
+use tracing::{debug, info};
 use url::Url;
 
 #[derive(Debug, Deserialize, Clone)]
@@ -22,53 +25,12 @@ pub struct ApplicationConfiguration {
     pub external_server_response_timeout_ms: Option<u64>,
     pub domain_linkage_enabled: bool,
     pub secret_manager: SecretManagerConfig,
+    pub did_document_cache: Option<InMemoryCacheConfig>,
     pub credential_configurations: Vec<CredentialConfiguration>,
     pub signing_algorithms_supported: HashMap<jsonwebtoken::Algorithm, ToggleOptions>,
     pub display: Vec<Display>,
     pub event_publishers: Option<EventPublishers>,
     pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
-}
-
-impl ApplicationConfiguration {
-    pub fn set_preferred_did_method(&mut self, preferred_did_method: SupportedDidMethod) {
-        // Set the current preferred did_method to false if available.
-        if let Some((_, options)) = self.did_methods.iter_mut().find(|(_, v)| v.preferred == Some(true)) {
-            options.preferred = Some(false);
-        }
-
-        // Set the current preferred did_method to true if available.
-        self.did_methods
-            .entry(preferred_did_method)
-            .or_insert_with(|| ToggleOptions {
-                enabled: true,
-                preferred: Some(true),
-            })
-            .preferred = Some(true);
-    }
-
-    pub fn enable_event_publisher_http(&mut self) {
-        if let Some(event_publishers) = &mut self.event_publishers {
-            if let Some(http) = &mut event_publishers.http {
-                http.enabled = true;
-            }
-        }
-    }
-
-    pub fn set_event_publisher_http_target_url(&mut self, target_url: String) {
-        if let Some(event_publishers) = &mut self.event_publishers {
-            if let Some(http) = &mut event_publishers.http {
-                http.target_url = target_url;
-            }
-        }
-    }
-
-    pub fn set_event_publisher_http_target_events(&mut self, events: Events) {
-        if let Some(event_publishers) = &mut self.event_publishers {
-            if let Some(http) = &mut event_publishers.http {
-                http.events = events;
-            }
-        }
-    }
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -103,9 +65,17 @@ pub struct EventStorePostgresConfig {
 pub struct SecretManagerConfig {
     pub stronghold_path: String,
     pub stronghold_password: String,
-    pub issuer_key_id: Option<String>,
+    pub issuer_eddsa_key_id: Option<String>,
+    pub issuer_es256_key_id: Option<String>,
     pub issuer_did: Option<String>,
     pub issuer_fragment: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct InMemoryCacheConfig {
+    pub enabled: bool,
+    pub include: Option<Vec<CoreDID>>,
+    pub ttl: Option<u64>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -120,9 +90,7 @@ pub struct CredentialConfiguration {
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Logo {
-    // TODO: remove this alias and change field to `uri`.
-    #[serde(alias = "uri")]
-    pub url: Option<Url>,
+    pub uri: Option<Url>,
     pub alt_text: Option<String>,
 }
 
@@ -155,6 +123,10 @@ pub struct Events {
     #[serde(default)]
     pub offer: Vec<OfferEvent>,
     #[serde(default)]
+    pub holder_credential: Vec<HolderCredentialEvent>,
+    #[serde(default)]
+    pub received_offer: Vec<ReceivedOfferEvent>,
+    #[serde(default)]
     pub connection: Vec<ConnectionEvent>,
     #[serde(default)]
     pub authorization_request: Vec<AuthorizationRequestEvent>,
@@ -184,6 +156,20 @@ pub enum OfferEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum HolderCredentialEvent {
+    CredentialAdded,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum ReceivedOfferEvent {
+    CredentialOfferReceived,
+    CredentialOfferAccepted,
+    TokenResponseReceived,
+    CredentialResponseReceived,
+    CredentialOfferRejected,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum ConnectionEvent {
     SIOPv2AuthorizationResponseVerified,
     OID4VPAuthorizationResponseVerified,
@@ -206,7 +192,18 @@ pub enum AuthorizationRequestEvent {
 /// assert_eq!(supported_did_method.to_string(), "did:jwk");
 /// ```
 #[derive(
-    Debug, Deserialize, Clone, Eq, PartialEq, Hash, strum::EnumString, strum::Display, SerializeDisplay, Ord, PartialOrd,
+    Debug,
+    Deserialize,
+    Clone,
+    Eq,
+    PartialEq,
+    Hash,
+    strum::EnumString,
+    strum::Display,
+    SerializeDisplay,
+    Ord,
+    PartialOrd,
+    VariantArray,
 )]
 pub enum SupportedDidMethod {
     #[serde(alias = "did_jwk", rename = "did_jwk")]
@@ -229,6 +226,12 @@ pub enum SupportedDidMethod {
     IotaRms,
 }
 
+impl From<SupportedDidMethod> for SubjectSyntaxType {
+    fn from(val: SupportedDidMethod) -> Self {
+        SubjectSyntaxType::try_from(val.to_string().as_str()).expect("conversion into `SubjectSyntaxType` failed")
+    }
+}
+
 /// Generic options that add an "enabled" field and a "preferred" field (optional) to a configuration.
 #[derive(Debug, Deserialize, Default, Clone)]
 pub struct ToggleOptions {
@@ -242,6 +245,8 @@ pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> =
 impl ApplicationConfiguration {
     pub fn new() -> Result<Self, ConfigError> {
         dotenvy::dotenv().ok();
+        // TODO: these cannot be logged because `tracing_subscriber` is not initialized yet at this point since it does
+        // not know the log format yet.
         info!("Environment variables loaded.");
         info!("Loading application configuration ...");
 
@@ -251,16 +256,67 @@ impl ApplicationConfiguration {
             config::Config::builder()
                 .add_source(config::File::with_name("../agent_shared/tests/test-config.yaml"))
                 // TODO: other prefix for tests
-                .add_source(config::Environment::with_prefix("TEST_AGENT").separator("__"))
+                .add_source(config::Environment::with_prefix("TEST_UNICORE").separator("__"))
                 .build()?
         } else {
             config::Config::builder()
-                .add_source(config::File::with_name("agent_application/example-config.yaml"))
-                .add_source(config::Environment::with_prefix("AGENT").separator("__"))
+                .add_source(config::File::with_name("agent_application/config.yaml"))
+                .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
                 .build()?
         };
 
-        config.try_deserialize()
+        config.try_deserialize().inspect(|config: &ApplicationConfiguration| {
+            // TODO: this won't be logged either because `tracing_subscriber` is not initialized yet at this point. To
+            // fix this we can consider obtaining the `log_format` from the config file prior to loading the complete
+            // configuration.
+            info!("Configuration loaded successfully");
+            debug!("{:#?}", config);
+        })
+    }
+
+    pub fn set_preferred_did_method(&mut self, preferred_did_method: SupportedDidMethod) {
+        // Set the current preferred did_method to false if available.
+        if let Some((_, options)) = self.did_methods.iter_mut().find(|(_, v)| v.preferred == Some(true)) {
+            options.preferred = Some(false);
+        }
+
+        // Set the current preferred did_method to true if available.
+        self.did_methods
+            .entry(preferred_did_method)
+            .or_insert_with(|| ToggleOptions {
+                enabled: true,
+                preferred: Some(true),
+            })
+            .preferred = Some(true);
+    }
+
+    // TODO: make generic: set_enabled(enabled: bool)
+    pub fn enable_event_publisher_http(&mut self) {
+        if let Some(event_publishers) = &mut self.event_publishers {
+            if let Some(http) = &mut event_publishers.http {
+                http.enabled = true;
+            }
+        }
+    }
+
+    pub fn set_event_publisher_http_target_url(&mut self, target_url: String) {
+        if let Some(event_publishers) = &mut self.event_publishers {
+            if let Some(http) = &mut event_publishers.http {
+                http.target_url = target_url;
+            }
+        }
+    }
+
+    pub fn set_event_publisher_http_target_events(&mut self, events: Events) {
+        if let Some(event_publishers) = &mut self.event_publishers {
+            if let Some(http) = &mut event_publishers.http {
+                http.events = events;
+            }
+        }
+    }
+
+    pub fn set_secret_manager_config(&mut self, config: SecretManagerConfig) {
+        self.secret_manager = config;
     }
 }
 
@@ -301,4 +357,29 @@ pub fn get_preferred_did_method() -> SupportedDidMethod {
         .first()
         .cloned()
         .expect("Please set a DID method as `preferred` in the configuration")
+}
+
+pub fn get_preferred_signing_algorithm() -> jsonwebtoken::Algorithm {
+    config()
+        .signing_algorithms_supported
+        .iter()
+        .filter(|(_, v)| v.enabled)
+        .filter(|(_, v)| v.preferred.unwrap_or(false))
+        .map(|(k, _)| *k)
+        .collect::<Vec<jsonwebtoken::Algorithm>>()
+        .first()
+        .cloned()
+        .expect("Please set a signing algorithm as `preferred` in the configuration")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_supported_did_methods_can_be_converted_into_subject_syntax_type() {
+        for variant in SupportedDidMethod::VARIANTS {
+            let _subject_syntax_type: SubjectSyntaxType = variant.clone().into();
+        }
+    }
 }

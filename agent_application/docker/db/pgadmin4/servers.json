@@ -3,7 +3,7 @@
     "1": {
       "Name": "Local Development",
       "Group": "Servers",
-      "Host": "ssi-agent-cqrs-postgres-db-1",
+      "Host": "cqrs-postgres-db",
       "Port": 5432,
       "MaintenanceDB": "demo",
       "Username": "demo_user",

@@ -117,7 +117,7 @@ pub mod tests {
         authorization_request, verifier_did, PRESENTATION_DEFINITION,
     };
     use crate::generic_oid4vc::GenericAuthorizationRequest;
-    use crate::services::test_utils::test_verification_services;
+    use agent_secret_manager::service::Service as _;
 
     use super::*;
 
@@ -136,7 +136,7 @@ pub mod tests {
     ) {
         set_config().set_preferred_did_method(verifier_did_method.clone());
 
-        let verification_services = test_verification_services();
+        let verification_services = VerificationServices::default();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
         let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
 
@@ -178,7 +178,7 @@ pub mod tests {
         let provider_manager = ProviderManager::new(
             Arc::new(futures::executor::block_on(async {
                 Subject {
-                    secret_manager: secret_manager().await,
+                    secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
                 }
             })),
             vec![did_method],

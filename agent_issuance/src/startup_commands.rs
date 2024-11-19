@@ -23,12 +23,12 @@ pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
             token_endpoint: Some(base_url.append_path_segment("auth/token")),
             ..Default::default()
         }),
-        credential_issuer_metadata: CredentialIssuerMetadata {
+        credential_issuer_metadata: Box::new(CredentialIssuerMetadata {
             credential_issuer: base_url.clone(),
             credential_endpoint: base_url.append_path_segment("openid4vci/credential"),
             display,
             ..Default::default()
-        },
+        }),
     }
 }
 

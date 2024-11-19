@@ -1,4 +1,5 @@
-use crate::offer::queries::{CustomQuery, Offer, OfferEvent, ViewRepository};
+use crate::offer::queries::{Offer, OfferEvent, ViewRepository};
+use agent_shared::custom_queries::CustomQuery;
 use async_trait::async_trait;
 use cqrs_es::{
     persist::{PersistenceError, ViewContext},
@@ -43,7 +44,7 @@ where
 }
 
 #[async_trait]
-impl<R, V> CustomQuery<R, V> for AccessTokenQuery<R, V>
+impl<R, V> CustomQuery<R, V, Offer> for AccessTokenQuery<R, V>
 where
     R: ViewRepository<V, Offer>,
     V: View<Offer>,

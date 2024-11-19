@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 pub enum ServerConfigEvent {
     ServerMetadataInitialized {
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
-        credential_issuer_metadata: CredentialIssuerMetadata,
+        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
     },
     CredentialConfigurationAdded {
         credential_configurations: HashMap<String, CredentialConfigurationsSupportedObject>,

@@ -2,7 +2,7 @@
 
 ## Build the image
 
-From within the directory `/agent_application` run:
+In case you want to build the image in isolation, you can run the following command from within the directory `/agent_application`:
 
 ```bash
 docker build -f docker/Dockerfile -t ssi-agent ..
@@ -10,57 +10,44 @@ docker build -f docker/Dockerfile -t ssi-agent ..
 
 ## Local development
 
-Inside the folder `/agent_application/docker`:
+For local development, it is recommended to use Docker Compose.
 
-1. Inside `docker-compose.yml` replace the environment value: `AGENT_CONFIG_URL` with your actual local IP address or URL (such as http://192.168.1.234:3033)
-> [!IMPORTANT] 
-> 2. By default, UniCore currently uses a default Stronghold file which is used for storing secrets. Using this default
->    Stronghold is for testing purposes only and should not be used in production. To use your own Stronghold file, you
->    need to mount it in the `docker-compose.yml` file by replacing the default volume. Example:
-> ```yaml
->  volumes:
->    # - ../../agent_secret_manager/tests/res/test.stronghold:/app/res/stronghold # Default Stronghold file
->    - /path/to/stronghold:/app/res/stronghold
->  ```
->    It is recommended to not change the target path `/app/res/stronghold`.
-> 
->   You will also need to set the following environment variables: 
->   - `AGENT_SECRET_MANAGER_STRONGHOLD_PATH`: The path to the Stronghold file. This value must correspond to the path to which
->     the Stronghold is mounted. Set to `/app/res/stronghold` by default. It
->     is recommended to not change this environment variable.
->   - `AGENT_SECRET_MANAGER_STRONGHOLD_PASSWORD`: To set the password
->   - `AGENT_SECRET_MANAGER_ISSUER_KEY_ID`: To set the key id
-3. Optionally it is possible to configure an HTTP Event Publisher that can listen to certain events in `UniCore`
-   and publish them to a `target_url`. More information about the HTTP Event Publisher can be found [here](../../agent_event_publisher_http/README.md).
+1. Set the environment variable `UNICORE__URL` to the following pattern: `http://<your-local-ip>:3033`, so it looks something like `http://192.168.1.100:3033`. You can copy `docker/.env.example` to `docker/.env` and adjust the value there.
+2. A Stronghold secret file is generated inside the container at the path defined in `UNICORE__SECRET_MANAGER__STRONGHOLD_PATH` and destroyed when the container is destroyed.
+   If you have an existing file or you want to reuse a Stronghold file, you can mount it under `volumes:` and set the environment variable `UNICORE__SECRET_MANAGER__STRONGHOLD_PATH` to the path where the Stronghold file is mounted.
+   An example could look like this:
+
+```yaml
+environment:
+  UNICORE__SECRET_MANAGER__STRONGHOLD_PATH: "/app/res/stronghold"
+
+volumes:
+  - ../../agent_secret_manager/tests/res/test.stronghold:/app/res/stronghold
+```
+
+3. _(optional)_ In case you are interested in the events that UniCore produces, you can configure a HTTP Event Publisher that sends
+   certain events to a URL of your choice. More information about the HTTP Event Publisher [can be found here](../../agent_event_publisher_http/README.md).
+
 4. To start the **SSI Agent**, a **Postgres** database along with **pgadmin** (Postgres Admin Interface) simply run:
 
 ```bash
 docker compose up
 ```
 
-5. The REST API will be served at `http://0.0.0.0:3033`
+5. The REST API will be served at the value you set in `UNICORE__URL` (and also at `http://0.0.0.0:3033`).
 
 > [!NOTE]
-> If you don't have rewrite rules enabled on your reverse proxy, you can set the `AGENT_CONFIG_BASE_PATH` to a value such as `ssi-agent`.
+> In case you need a base bath (for example when running behind a reverse proxy), you can set the `UNICORE__BASE_PATH` to a value such as `ssi-agent`.
 
-## Utilizing the IOTA DID Method
+## IOTA DIDs
+
 By default, UniCore uses the JWK DID Method to generate and manage DIDs. However, UniCore also supports the IOTA DID
 Method, which leverages the IOTA Tangle to store your DID document. To enable the IOTA DID Method, set these environment
 variables:
-```yaml
-      AGENT_CONFIG_ISSUER_DID: <your-pre-existing-IOTA-DID>
-      AGENT_CONFIG_ISSUER_FRAGMENT: <your-pre-existing-IOTA-DID-fragment>
-```
 
-and make sure to configure the `agent_application.config.yml` file so that the first item in the
-`subject_syntax_types_supported` sequence is `did:iota:rms`.
-
-UniCore supports any of the IOTA networks (Testnet, Shimmer, Mainnet). For example, if you want to enable the development network for Shimmer, the 
-aforementioned environment variables would look like this:
 ```yaml
-      AGENT_CONFIG_ISSUER_DID: "did:iota:rms:0x42ad588322e58b3c07aa39e4948d021ee17ecb5747915e9e1f35f028d7ecaf90"
-      AGENT_CONFIG_ISSUER_FRAGMENT: "bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"
-      AGENT_CONFIG_DEFAULT_DID_METHOD: "did:iota:rms"
+UNICORE__SECRET_MANAGER__ISSUER_DID: <your-pre-existing-IOTA-DID>
+UNICORE__SECRET_MANAGER__ISSUER_FRAGMENT: <your-pre-existing-IOTA-DID-fragment>
 ```
 
 ## Leveraging Just-in-Time Data Request Events
@@ -76,16 +63,14 @@ UniCore facilitates the utilization of just-in-time data request events for cust
 To integrate just-in-time data request events into your workflow, adhere to the following steps:
 
 1. Configure the HTTP Event Publisher to listen for the `CredentialRequestVerified` event. Refer to the [HTTP Event Publisher documentation](../../agent_event_publisher_http/README.md) for detailed configuration instructions:
+
    ```yaml
    target_url: &target_url "https://my-domain.example.org/ssi-event-subscriber"
 
-   offer: {
-      target_url: *target_url,
-      target_events: [
-         CredentialRequestVerified
-      ]
-   }
+   offer:
+     { target_url: *target_url, target_events: [CredentialRequestVerified] }
    ```
+
 2. Upon initiation of the OpenID4VCI flow by a Wallet, the CredentialRequestVerified event is triggered, containing relevant identifiers.
 3. The HTTP Event Publisher dispatches the event to the external system. Leveraging the provided identifiers, the external system generates and signs the credential, then submits it to UniCore's `/v0/credentials` endpoint. Refer to the [API specification](../../agent_api_rest/README.md)) for additional details on endpoint usage.
 

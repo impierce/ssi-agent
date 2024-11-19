@@ -47,6 +47,22 @@ ServerMetadataLoaded
 CredentialConfigurationAdded
 ```
 
+#### `holder_credential`
+
+```
+CredentialAdded
+```
+
+#### `received_offer`
+
+```
+CredentialOfferReceived
+CredentialOfferAccepted
+TokenResponseReceived
+CredentialResponseReceived
+CredentialOfferRejected
+```
+
 #### `authorization_request`
 
 ```
