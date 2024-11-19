@@ -333,7 +333,7 @@ pub mod test_utils {
             )
             .type_("LinkedVerifiablePresentation")
             .service_endpoint(ServiceEndpoint::from(OrderedSet::from_iter(vec![format!(
-                "{origin}/v0/holder/presentations/presentation-1/signed"
+                "{origin}/linked-verifiable-presentations/presentation-1"
             )
             .parse::<Url>()
             .unwrap()])))
