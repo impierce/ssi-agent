@@ -26,6 +26,8 @@ jobs:
         with:
           node-version: "lts/*"
 
+      - run: npm install -g @commitlint/config-angular
+
       - run: echo $TITLE | npx commitlint
         env:
           # Security: we mitigate script injections by using an intermediate environment variable
