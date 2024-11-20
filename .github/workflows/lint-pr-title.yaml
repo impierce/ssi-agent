@@ -11,7 +11,7 @@ on:
       - beta
       - alpha
     # https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
-    # types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened, edited]
 
 jobs:
   build:
