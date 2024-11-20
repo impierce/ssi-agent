@@ -25,12 +25,3 @@ jobs:
 
       - name: Test
         run: cargo test --workspace
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "lts/*"
-
-      - name: Release Preview
-        run: npx semantic-release@24 --dry-run
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
