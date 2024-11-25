@@ -79,6 +79,7 @@ impl Aggregate for Service {
                 let (issuance_date, expiration_date) = {
                     let issuance_date = Timestamp::now_utc();
                     let expiration_date = issuance_date
+                        // TODO: make this configurable
                         .checked_add(Duration::days(365))
                         .ok_or(InvalidTimestampError)?;
 
