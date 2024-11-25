@@ -28,9 +28,7 @@ pub fn router(holder_state: HolderState) -> Router {
                 .route("/holder/offers/:offer_id/accept", post(accept))
                 .route("/holder/offers/:offer_id/reject", post(reject)),
         )
-        // TODO: move behind UniCore API
-        .route("/openid4vci/offers", post(openid4vci::offers))
-        // TODO: move behind UniCore API
+        // TODO: move these behind some sort of authentication?
         .route("/credential_offer", get(openid4vci::offers_params))
         .route("/", get(openid4vci::offers_params))
         .route(
