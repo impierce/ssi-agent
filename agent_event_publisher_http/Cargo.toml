@@ -22,7 +22,6 @@ rustls = { version = "0.23", default-features = false, features = [
 reqwest.workspace = true
 serde.workspace = true
 serde_with.workspace = true
-serde_yaml.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 

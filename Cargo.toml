@@ -5,6 +5,7 @@ members = [
     "agent_application",
     "agent_event_publisher_http",
     "agent_holder",
+    "agent_identity",
     "agent_issuance",
     "agent_secret_manager",
     "agent_shared",
@@ -18,18 +19,19 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
-did_manager = { git = "https://git@github.com/impierce/did-manager.git", tag = "v1.0.0-beta.2" }
-siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "23facd4" }
-oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "23facd4" }
-oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "23facd4" }
-oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "23facd4" }
-oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "23facd4" }
+did_manager = { git = "https://git@github.com/impierce/did-manager.git", tag = "v1.0.0-beta.3" }
+siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "12fed14" }
+oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "12fed14" }
+oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "12fed14" }
+oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "12fed14" }
+oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "12fed14" }
 
 async-trait = "0.1"
 axum = { version = "0.7", features = ["tracing"] }
 base64 = "0.22"
 cqrs-es = "0.4.2"
 futures = "0.3"
+identity_core = "1.3"
 identity_credential = { version = "1.3", default-features = false, features = [
     "validator",
     "credential",

@@ -1,3 +1,4 @@
+use identity_credential::credential::Jwt;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -6,6 +7,6 @@ pub enum CredentialCommand {
     AddCredential {
         credential_id: String,
         offer_id: String,
-        credential: serde_json::Value,
+        credential: Jwt,
     },
 }

@@ -51,8 +51,8 @@ impl Aggregate for AuthorizationRequest {
                     .unwrap();
 
                 let url = &config().url;
-                let request_uri = format!("{url}/request/{state}").parse().unwrap();
-                let redirect_uri = format!("{url}/redirect").parse::<url::Url>().unwrap();
+                let request_uri = format!("{url}request/{state}").parse().unwrap();
+                let redirect_uri = format!("{url}redirect").parse::<url::Url>().unwrap();
 
                 let authorization_request = Box::new(if let Some(presentation_definition) = presentation_definition {
                     GenericAuthorizationRequest::OID4VP(Box::new(

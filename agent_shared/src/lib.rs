@@ -1,7 +1,6 @@
 pub mod application_state;
 pub mod config;
 pub mod custom_queries;
-pub mod domain_linkage;
 pub mod error;
 pub mod generic_query;
 pub mod handlers;
