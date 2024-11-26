@@ -12,7 +12,7 @@ use hyper::StatusCode;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn did_configuration(State(state): State<IdentityState>) -> Response {
-    // Get the DomainLinkageConfiguration if it exists.
+    // Get the DID Configuration Resource if it exists.
     match query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
         Ok(Some(ServiceView {
             resource: Some(ServiceResource::DomainLinkage(domain_linkage_configuration)),

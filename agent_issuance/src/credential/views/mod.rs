@@ -14,7 +14,7 @@ impl View<Credential> for Credential {
                 credential_configuration,
             } => {
                 self.data.replace(data.clone());
-                self.credential_configuration = credential_configuration.clone();
+                self.credential_configuration = *credential_configuration.clone();
             }
             CredentialEvent::SignedCredentialCreated { signed_credential } => {
                 self.signed.replace(signed_credential.clone());

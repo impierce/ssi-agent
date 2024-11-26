@@ -118,7 +118,7 @@
 					"response": []
 				},
 				{
-					"name": "Thuiswinkel Waarborg Credential",
+					"name": "ACME Corp Credential",
 					"event": [
 						{
 							"listen": "test",
@@ -151,7 +151,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": \"https://ecommerce.impierce.com/\",\n            \"image\": \"https://www.thuiswinkel.org/Images/logo-thuiswinkel_waarborg.svg\",\n            \"name\": \"VirtualVendors\",\n            \"certificaat\": {\n                \"type\": \"ThuiswinkelWaarborg\",\n                \"certificeringsDatum\": \"2024-06-26\",\n                \"geldigheidsPeriode\": \"1 jaar\",\n                \"garanties\": [\n                    \"Het bedrijf is echt en bereikbaar.\",\n                    \"Voldoet aan de Thuiswinkel Algemene Voorwaarden.\",\n                    \"14 dagen bedenktijd.\",\n                    \"Veilige betaalmethoden.\",\n                    \"Duidelijke product/servicebeschrijvingen.\",\n                    \"Transparant bestelproces.\",\n                    \"Duidelijke prijzen.\",\n                    \"Veilige betaalomgeving.\",\n                    \"Veilige omgang met persoonlijke gegevens.\",\n                    \"Effectieve klachtenafhandeling en onafhankelijke geschillenbemiddeling.\"\n                ]\n            }\n        }\n    }\n}",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": \"https://ecommerce.impierce.com/\",\n            \"image\": \"https://static.wikia.nocookie.net/fictionalcompanies/images/c/c2/ACME_Corporation.png\",\n            \"name\": \"VirtualVendors\",\n            \"certificaat\": {\n                \"type\": \"ACMECorpCredential\",\n                \"certificeringsDatum\": \"2024-06-26\",\n                \"geldigheidsPeriode\": \"1 jaar\",\n                \"garanties\": [\n                    \"Het bedrijf is echt en bereikbaar.\",\n                    \"Voldoet aan de Thuiswinkel Algemene Voorwaarden.\",\n                    \"14 dagen bedenktijd.\",\n                    \"Veilige betaalmethoden.\",\n                    \"Duidelijke product/servicebeschrijvingen.\",\n                    \"Transparant bestelproces.\",\n                    \"Duidelijke prijzen.\",\n                    \"Veilige betaalomgeving.\",\n                    \"Veilige omgang met persoonlijke gegevens.\",\n                    \"Effectieve klachtenafhandeling en onafhankelijke geschillenbemiddeling.\"\n                ]\n            }\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -173,6 +173,33 @@
 				},
 				{
 					"name": "credentials",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": \"https://ecommerce.impierce.com/\",\n            \"image\": \"https://www.thuiswinkel.org/Images/logo-thuiswinkel_waarborg.svg\",\n            \"name\": \"VirtualVendors\",\n            \"certificaat\": {\n                \"type\": \"ThuiswinkelWaarborg\",\n                \"certificeringsDatum\": \"2024-06-26\",\n                \"geldigheidsPeriode\": \"1 jaar\",\n                \"garanties\": [\n                    \"Het bedrijf is echt en bereikbaar.\",\n                    \"Voldoet aan de Thuiswinkel Algemene Voorwaarden.\",\n                    \"14 dagen bedenktijd.\",\n                    \"Veilige betaalmethoden.\",\n                    \"Duidelijke product/servicebeschrijvingen.\",\n                    \"Transparant bestelproces.\",\n                    \"Duidelijke prijzen.\",\n                    \"Veilige betaalomgeving.\",\n                    \"Veilige omgang met persoonlijke gegevens.\",\n                    \"Effectieve klachtenafhandeling en onafhankelijke geschillenbemiddeling.\"\n                ]\n            }\n        }\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/credentials",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"credentials"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "All Credentials",
 					"event": [
 						{
 							"listen": "test",
@@ -212,7 +239,7 @@
 					"response": []
 				},
 				{
-					"name": "credential",
+					"name": "Credential by ID",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -285,7 +312,7 @@
 					"response": []
 				},
 				{
-					"name": "offers",
+					"name": "All Offers",
 					"event": [
 						{
 							"listen": "test",
@@ -325,7 +352,7 @@
 					"response": []
 				},
 				{
-					"name": "offer",
+					"name": "Offer by ID",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -344,13 +371,13 @@
 					"response": []
 				},
 				{
-					"name": "offers_send",
+					"name": "Send Offer",
 					"request": {
 						"method": "POST",
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\": \"{{OFFER_ID}}\",\n    \"targetUrl\": \"{{HOST}}/openid4vci/offers\"\n}",
+							"raw": "{\n    \"offerId\": \"{{OFFER_ID}}\",\n    \"targetUrl\": \"{{HOST}}\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -713,7 +740,7 @@
 					"response": []
 				},
 				{
-					"name": "authorization_request",
+					"name": "Authorization Request by ID",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -792,7 +819,7 @@
 			"name": "Holder",
 			"item": [
 				{
-					"name": "offers",
+					"name": "All Received Offers",
 					"event": [
 						{
 							"listen": "test",
@@ -841,7 +868,7 @@
 					"response": []
 				},
 				{
-					"name": "offer",
+					"name": "Received Offer by ID",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -861,7 +888,7 @@
 					"response": []
 				},
 				{
-					"name": "offers_accept",
+					"name": "Accept Received Offer",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -882,7 +909,7 @@
 					"response": []
 				},
 				{
-					"name": "offers_reject",
+					"name": "Reject Received Offer",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -903,7 +930,7 @@
 					"response": []
 				},
 				{
-					"name": "credentials",
+					"name": "All Holder Credentials",
 					"event": [
 						{
 							"listen": "test",
@@ -949,7 +976,7 @@
 					"response": []
 				},
 				{
-					"name": "credential",
+					"name": "Holder Credential by ID",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -969,7 +996,7 @@
 					"response": []
 				},
 				{
-					"name": "presentations",
+					"name": "All Presentations",
 					"event": [
 						{
 							"listen": "test",
@@ -1015,7 +1042,7 @@
 					"response": []
 				},
 				{
-					"name": "presentation",
+					"name": "Presentation by ID",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -1035,7 +1062,7 @@
 					"response": []
 				},
 				{
-					"name": "presentations",
+					"name": "Create new Presentation",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -1327,7 +1354,7 @@
 					"response": []
 				},
 				{
-					"name": "services/linked-vp",
+					"name": "Create new Linked Verifiable Presentation Service",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -1355,7 +1382,39 @@
 					"response": []
 				},
 				{
-					"name": "services",
+					"name": "All Services",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+									"    const firstItem = jsonData[0];",
+									"",
+									"    if (firstItem && typeof firstItem === 'object') {",
+									"        const serviceId = firstItem.service_id;",
+									"",
+									"        if (serviceId) {",
+									"            pm.collectionVariables.set(\"SERVICE_ID\", serviceId);",
+									"        }",
+									"    }",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -1367,6 +1426,44 @@
 							"path": [
 								"v0",
 								"services"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Service by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/services/{{SERVICE_ID}}",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"services",
+								"{{SERVICE_ID}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Linked Verifiable Presentation Service",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/services/linked-verifiable-presentation-service",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"services",
+								"linked-verifiable-presentation-service"
 							]
 						}
 					},
