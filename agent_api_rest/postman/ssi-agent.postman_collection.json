@@ -1096,7 +1096,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"domain\": \"http://example.org\",\n    \"dids\": [\"did:example:123\"],\n    \"credential_offer_endpoint\": \"{{HOST}}/openid4vci/offers\"\n}",
+							"raw": "{\n    \"domain\": \"http://example.org\",\n    \"dids\": [\"did:example:123\"],\n    \"credentialOfferEndpoint\": \"{{HOST}}/openid4vci/offers\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
