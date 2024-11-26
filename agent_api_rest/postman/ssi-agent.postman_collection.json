@@ -162,33 +162,6 @@
 					"response": []
 				},
 				{
-					"name": "credentials",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": \"https://ecommerce.impierce.com/\",\n            \"image\": \"https://www.thuiswinkel.org/Images/logo-thuiswinkel_waarborg.svg\",\n            \"name\": \"VirtualVendors\",\n            \"certificaat\": {\n                \"type\": \"ThuiswinkelWaarborg\",\n                \"certificeringsDatum\": \"2024-06-26\",\n                \"geldigheidsPeriode\": \"1 jaar\",\n                \"garanties\": [\n                    \"Het bedrijf is echt en bereikbaar.\",\n                    \"Voldoet aan de Thuiswinkel Algemene Voorwaarden.\",\n                    \"14 dagen bedenktijd.\",\n                    \"Veilige betaalmethoden.\",\n                    \"Duidelijke product/servicebeschrijvingen.\",\n                    \"Transparant bestelproces.\",\n                    \"Duidelijke prijzen.\",\n                    \"Veilige betaalomgeving.\",\n                    \"Veilige omgang met persoonlijke gegevens.\",\n                    \"Effectieve klachtenafhandeling en onafhankelijke geschillenbemiddeling.\"\n                ]\n            }\n        }\n    }\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{HOST}}/v0/credentials",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"v0",
-								"credentials"
-							]
-						}
-					},
-					"response": []
-				},
-				{
 					"name": "All Credentials",
 					"event": [
 						{
