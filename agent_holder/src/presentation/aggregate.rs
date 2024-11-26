@@ -78,6 +78,7 @@ impl Aggregate for Presentation {
                 let header = Header {
                     alg: get_preferred_signing_algorithm(),
                     typ: Some("JWT".to_string()),
+                    // TODO: make dynamic
                     kid: Some(format!("{subject_did}#key-0")),
                     ..Default::default()
                 };
