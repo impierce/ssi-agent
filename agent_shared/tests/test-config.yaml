@@ -32,6 +32,8 @@ event_publishers:
   http:
     enabled: false
     target_url: "http://localhost"
+    headers:
+      Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
     events:
       server_config: []
       credential: [UnsignedCredentialCreated, CredentialSigned]

@@ -315,10 +315,16 @@ mod tests {
         // Wait for the request to arrive at the mock server endpoint.
         std::thread::sleep(std::time::Duration::from_millis(100));
 
+        let received_requests = mock_server.received_requests().await;
+        let received_request = received_requests.as_ref().unwrap().first().unwrap();
+
         // Assert that the event was dispatched to the target URL.
+        assert_eq!(offer_event, serde_json::from_slice(&received_request.body).unwrap());
+
+        // Assert that the request contained the expected headers.
         assert_eq!(
-            offer_event,
-            serde_json::from_slice(&mock_server.received_requests().await.unwrap().first().unwrap().body).unwrap()
+            "Basic YWxhZGRpbjpvcGVuc2VzYW1l",
+            received_request.headers.get("Authorization").unwrap()
         );
 
         // A new event for the `Offer` aggregate that the publisher is not interested in.
