@@ -264,7 +264,7 @@ impl Aggregate for Credential {
                 credential_configuration,
             } => {
                 self.data.replace(data);
-                self.credential_configuration = credential_configuration;
+                self.credential_configuration = *credential_configuration;
             }
             SignedCredentialCreated { signed_credential } => {
                 self.signed.replace(signed_credential);
@@ -322,13 +322,13 @@ pub mod credential_tests {
                 data: Data {
                     raw: credential_subject,
                 },
-                credential_configuration: credential_configuration.clone(),
+                credential_configuration: Box::new(credential_configuration.clone()),
             })
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
                 data: Data {
                     raw: unsigned_credential,
                 },
-                credential_configuration,
+                credential_configuration: Box::new(credential_configuration),
             }])
     }
 
@@ -354,7 +354,7 @@ pub mod credential_tests {
                 data: Data {
                     raw: unsigned_credential,
                 },
-                credential_configuration,
+                credential_configuration: Box::new(credential_configuration),
             }])
             .when(CredentialCommand::SignCredential {
                 subject_id: SUBJECT_KEY_DID.identifier("did:key", Algorithm::EdDSA).await.unwrap(),
