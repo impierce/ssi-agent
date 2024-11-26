@@ -7,7 +7,7 @@ use agent_issuance::{
 };
 use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
-    extract::{Json, State},
+    extract::{Json, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -87,6 +87,15 @@ pub(crate) async fn all_offers(State(state): State<IssuanceState>) -> Response {
     match query_handler("all_offers", &state.query.all_offers).await {
         Ok(Some(all_offers_view)) => (StatusCode::OK, Json(all_offers_view)).into_response(),
         Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+#[axum_macros::debug_handler]
+pub(crate) async fn offer(State(state): State<IssuanceState>, Path(offer_id): Path<String>) -> Response {
+    match query_handler(&offer_id, &state.query.offer).await {
+        Ok(Some(offer_view)) => (StatusCode::OK, Json(offer_view)).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

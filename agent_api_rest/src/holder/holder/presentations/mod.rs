@@ -5,7 +5,7 @@ use agent_holder::{
 };
 use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
-    extract::State,
+    extract::{Path, State},
     response::{IntoResponse, Response},
     Json,
 };
@@ -19,6 +19,15 @@ pub(crate) async fn get_presentations(State(state): State<HolderState>) -> Respo
     match query_handler("all_presentations", &state.query.all_presentations).await {
         Ok(Some(all_presentations_view)) => (StatusCode::OK, Json(all_presentations_view)).into_response(),
         Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+#[axum_macros::debug_handler]
+pub(crate) async fn presentation(State(state): State<HolderState>, Path(presentation_id): Path<String>) -> Response {
+    match query_handler(&presentation_id, &state.query.presentation).await {
+        Ok(Some(presentation_view)) => (StatusCode::OK, Json(presentation_view)).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

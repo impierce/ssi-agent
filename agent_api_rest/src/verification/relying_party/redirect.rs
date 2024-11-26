@@ -1,6 +1,6 @@
 use agent_shared::handlers::{command_handler, query_handler};
 use agent_verification::{
-    authorization_request::queries::AuthorizationRequestView, connection::command::ConnectionCommand,
+    authorization_request::views::AuthorizationRequestView, connection::command::ConnectionCommand,
     generic_oid4vc::GenericAuthorizationResponse, state::VerificationState,
 };
 use axum::{

@@ -12,11 +12,11 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct AuthorizationRequest {
-    authorization_request: Option<GenericAuthorizationRequest>,
-    form_url_encoded_authorization_request: Option<String>,
-    signed_authorization_request_object: Option<String>,
+    pub authorization_request: Option<GenericAuthorizationRequest>,
+    pub form_url_encoded_authorization_request: Option<String>,
+    pub signed_authorization_request_object: Option<String>,
 }
 
 #[async_trait]

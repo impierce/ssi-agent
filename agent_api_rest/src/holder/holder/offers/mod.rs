@@ -4,7 +4,7 @@ pub mod reject;
 use agent_holder::state::HolderState;
 use agent_shared::handlers::query_handler;
 use axum::{
-    extract::State,
+    extract::{Path, State},
     response::{IntoResponse, Response},
     Json,
 };
@@ -16,6 +16,15 @@ pub(crate) async fn offers(State(state): State<HolderState>) -> Response {
     match query_handler("all_received_offers", &state.query.all_received_offers).await {
         Ok(Some(all_offers_view)) => (StatusCode::OK, Json(all_offers_view)).into_response(),
         Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+#[axum_macros::debug_handler]
+pub(crate) async fn offer(State(state): State<HolderState>, Path(received_offer_id): Path<String>) -> Response {
+    match query_handler(&received_offer_id, &state.query.received_offer).await {
+        Ok(Some(received_offer_view)) => (StatusCode::OK, Json(received_offer_view)).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

@@ -1,7 +1,7 @@
 use agent_holder::state::HolderState;
 use agent_shared::handlers::query_handler;
 use axum::{
-    extract::State,
+    extract::{Path, State},
     response::{IntoResponse, Response},
     Json,
 };
@@ -13,6 +13,15 @@ pub(crate) async fn credentials(State(state): State<HolderState>) -> Response {
     match query_handler("all_holder_credentials", &state.query.all_holder_credentials).await {
         Ok(Some(all_credentials_view)) => (StatusCode::OK, Json(all_credentials_view)).into_response(),
         Ok(None) => (StatusCode::OK, Json(json!({}))).into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+#[axum_macros::debug_handler]
+pub(crate) async fn credential(State(state): State<HolderState>, Path(holder_credential_id): Path<String>) -> Response {
+    match query_handler(&holder_credential_id, &state.query.holder_credential).await {
+        Ok(Some(holder_credential_view)) => (StatusCode::OK, Json(holder_credential_view)).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

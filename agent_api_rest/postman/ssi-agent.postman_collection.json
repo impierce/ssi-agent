@@ -162,21 +162,7 @@
 					"response": []
 				},
 				{
-					"name": "credentials",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}{{CREDENTIAL_LOCATION}}",
-							"host": [
-								"{{HOST}}{{CREDENTIAL_LOCATION}}"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "all_credentials",
+					"name": "All Credentials",
 					"event": [
 						{
 							"listen": "test",
@@ -210,6 +196,20 @@
 							"path": [
 								"v0",
 								"credentials"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Credential by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}{{CREDENTIAL_LOCATION}}",
+							"host": [
+								"{{HOST}}{{CREDENTIAL_LOCATION}}"
 							]
 						}
 					},
@@ -309,6 +309,25 @@
 							"path": [
 								"v0",
 								"offers"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Offer by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/offers/{{OFFER_ID}}",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"offers",
+								"{{OFFER_ID}}"
 							]
 						}
 					},
@@ -684,7 +703,7 @@
 					"response": []
 				},
 				{
-					"name": "authorization_requests",
+					"name": "Authorization Request by ID",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -812,6 +831,26 @@
 					"response": []
 				},
 				{
+					"name": "Received Offer by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/holder/offers/{{RECEIVED_OFFER_ID}}",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"holder",
+								"offers",
+								"{{RECEIVED_OFFER_ID}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "Accept Received Offer",
 					"request": {
 						"method": "POST",
@@ -893,6 +932,26 @@
 					"response": []
 				},
 				{
+					"name": "Holder Credential by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/holder/credentials/{{HOLDER_CREDENTIAL_ID}}",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"holder",
+								"credentials",
+								"{{HOLDER_CREDENTIAL_ID}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "All Presentations",
 					"event": [
 						{
@@ -926,6 +985,26 @@
 								"v0",
 								"holder",
 								"presentations"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Presentation by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/holder/presentations/{{PRESENTATION_ID}}",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"holder",
+								"presentations",
+								"{{PRESENTATION_ID}}"
 							]
 						}
 					},
