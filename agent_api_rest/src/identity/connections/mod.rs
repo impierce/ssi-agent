@@ -18,6 +18,8 @@ use tracing::info;
 #[serde(rename_all = "camelCase")]
 pub struct PostConnectionsEndpointRequest {
     #[serde(default)]
+    pub alias: Option<String>,
+    #[serde(default)]
     pub domain: Option<Url>,
     #[serde(default)]
     pub dids: Vec<DIDUrl>,
@@ -37,6 +39,7 @@ pub(crate) async fn post_connections(
     info!("Request Body: {}", payload);
 
     let Ok(PostConnectionsEndpointRequest {
+        alias,
         domain,
         dids,
         credential_offer_endpoint,
@@ -49,6 +52,7 @@ pub(crate) async fn post_connections(
 
     let command = ConnectionCommand::AddConnection {
         connection_id: connection_id.clone(),
+        alias,
         domain,
         dids,
         credential_offer_endpoint,

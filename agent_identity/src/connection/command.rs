@@ -7,6 +7,7 @@ use serde::Deserialize;
 pub enum ConnectionCommand {
     AddConnection {
         connection_id: String,
+        alias: Option<String>,
         domain: Option<Url>,
         dids: Vec<DIDUrl>,
         credential_offer_endpoint: Option<Url>,
