@@ -1117,7 +1117,7 @@
 					"response": []
 				},
 				{
-					"name": "Query all Connections",
+					"name": "List all Connections",
 					"event": [
 						{
 							"listen": "test",
@@ -1273,7 +1273,7 @@
 					"response": []
 				},
 				{
-					"name": "Query Connection by ID",
+					"name": "Connection by ID",
 					"event": [
 						{
 							"listen": "test",
