@@ -166,11 +166,7 @@ pub(crate) async fn credentials(
 pub(crate) async fn all_credentials(State(state): State<IssuanceState>) -> Response {
     match query_handler("all_credentials", &state.query.all_credentials).await {
         Ok(Some(all_credentials_view)) => {
-            let all_credentials = all_credentials_view
-                .credentials
-                .into_iter()
-                .map(|(_, credential_view)| credential_view)
-                .collect::<Vec<_>>();
+            let all_credentials = all_credentials_view.credentials.into_values().collect::<Vec<_>>();
 
             (StatusCode::OK, Json(all_credentials)).into_response()
         }

@@ -17,8 +17,7 @@ pub(crate) async fn offers(State(state): State<HolderState>) -> Response {
         Ok(Some(all_received_offers_view)) => {
             let all_received_offers = all_received_offers_view
                 .received_offers
-                .into_iter()
-                .map(|(_, credential_view)| credential_view)
+                .into_values()
                 .collect::<Vec<_>>();
 
             (StatusCode::OK, Json(all_received_offers)).into_response()

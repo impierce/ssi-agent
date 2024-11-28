@@ -12,11 +12,7 @@ use serde_json::json;
 pub(crate) async fn credentials(State(state): State<HolderState>) -> Response {
     match query_handler("all_holder_credentials", &state.query.all_holder_credentials).await {
         Ok(Some(all_credentials_view)) => {
-            let all_credentials = all_credentials_view
-                .credentials
-                .into_iter()
-                .map(|(_, credential_view)| credential_view)
-                .collect::<Vec<_>>();
+            let all_credentials = all_credentials_view.credentials.into_values().collect::<Vec<_>>();
 
             (StatusCode::OK, Json(all_credentials)).into_response()
         }
