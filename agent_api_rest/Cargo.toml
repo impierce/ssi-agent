@@ -17,7 +17,9 @@ axum-macros = "0.4"
 did_manager.workspace = true
 http-api-problem = "0.57"
 hyper = { version = "1.2" }
+identity_core.workspace = true
 identity_credential.workspace = true
+identity_did.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true

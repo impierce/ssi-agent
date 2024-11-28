@@ -1,3 +1,4 @@
+use agent_identity::connection::aggregate::Connection;
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
@@ -6,7 +7,7 @@ use agent_store::{
     AuthorizationRequestEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, EventPublisher,
     HolderCredentialEventPublisher, OfferEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
 };
-use agent_verification::{authorization_request::aggregate::AuthorizationRequest, connection::aggregate::Connection};
+use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, DomainEvent, EventEnvelope, Query};
 use serde::Deserialize;
@@ -17,6 +18,9 @@ use tracing::info;
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Default)]
 pub struct EventPublisherHttp {
+    // Identity
+    pub connection: Option<AggregateEventPublisherHttp<Connection>>,
+
     // Issuance
     pub server_config: Option<AggregateEventPublisherHttp<ServerConfig>>,
     pub credential: Option<AggregateEventPublisherHttp<Credential>>,
@@ -27,7 +31,6 @@ pub struct EventPublisherHttp {
     pub received_offer: Option<AggregateEventPublisherHttp<agent_holder::offer::aggregate::Offer>>,
 
     // Verification
-    pub connection: Option<AggregateEventPublisherHttp<Connection>>,
     pub authorization_request: Option<AggregateEventPublisherHttp<AuthorizationRequest>>,
 }
 
@@ -39,6 +42,18 @@ impl EventPublisherHttp {
         if !event_publisher_http.enabled {
             return Ok(EventPublisherHttp::default());
         }
+
+        let connection = (!event_publisher_http.events.connection.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Connection>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http
+                    .events
+                    .connection
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
 
         let server_config = (!event_publisher_http.events.server_config.is_empty()).then(|| {
             AggregateEventPublisherHttp::<ServerConfig>::new(
@@ -100,18 +115,6 @@ impl EventPublisherHttp {
             )
         });
 
-        let connection = (!event_publisher_http.events.connection.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<Connection>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http
-                    .events
-                    .connection
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
-
         let authorization_request = (!event_publisher_http.events.authorization_request.is_empty()).then(|| {
             AggregateEventPublisherHttp::<AuthorizationRequest>::new(
                 event_publisher_http.target_url.clone(),
@@ -141,6 +144,12 @@ impl EventPublisherHttp {
 }
 
 impl EventPublisher for EventPublisherHttp {
+    fn connection(&mut self) -> Option<ConnectionEventPublisher> {
+        self.connection
+            .take()
+            .map(|publisher| Box::new(publisher) as ConnectionEventPublisher)
+    }
+
     fn server_config(&mut self) -> Option<ServerConfigEventPublisher> {
         self.server_config
             .take()
@@ -169,12 +178,6 @@ impl EventPublisher for EventPublisherHttp {
         self.received_offer
             .take()
             .map(|publisher| Box::new(publisher) as ReceivedOfferEventPublisher)
-    }
-
-    fn connection(&mut self) -> Option<ConnectionEventPublisher> {
-        self.connection
-            .take()
-            .map(|publisher| Box::new(publisher) as ConnectionEventPublisher)
     }
 
     fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher> {

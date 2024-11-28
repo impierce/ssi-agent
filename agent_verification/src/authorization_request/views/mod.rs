@@ -25,6 +25,14 @@ impl View<AuthorizationRequest> for AuthorizationRequest {
                 self.signed_authorization_request_object
                     .replace(signed_authorization_request_object.clone());
             }
+            SIOPv2AuthorizationResponseVerified { id_token, state } => {
+                self.id_token.replace(id_token.clone());
+                self.state.clone_from(state);
+            }
+            OID4VPAuthorizationResponseVerified { vp_token, state } => {
+                self.vp_token.replace(vp_token.clone());
+                self.state.clone_from(state);
+            }
         }
     }
 }

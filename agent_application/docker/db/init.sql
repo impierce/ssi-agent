@@ -10,6 +10,23 @@ CREATE TABLE events
     PRIMARY KEY (aggregate_type, aggregate_id, sequence)
 );
 
+CREATE TABLE connection
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
+
+CREATE TABLE all_connections
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
 CREATE TABLE document
 (
     view_id           text                        NOT NULL,
@@ -147,14 +164,6 @@ CREATE TABLE authorization_request
 );
 
 CREATE TABLE all_authorization_requests
-(
-    view_id           text                        NOT NULL,
-    version           bigint CHECK (version >= 0) NOT NULL,
-    payload           json                        NOT NULL,
-    PRIMARY KEY (view_id)
-);
-
-CREATE TABLE connection
 (
     view_id           text                        NOT NULL,
     version           bigint CHECK (version >= 0) NOT NULL,

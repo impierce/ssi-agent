@@ -13,6 +13,14 @@ pub enum AuthorizationRequestEvent {
     AuthorizationRequestObjectSigned {
         signed_authorization_request_object: String,
     },
+    SIOPv2AuthorizationResponseVerified {
+        id_token: String,
+        state: Option<String>,
+    },
+    OID4VPAuthorizationResponseVerified {
+        vp_token: String,
+        state: Option<String>,
+    },
 }
 
 impl DomainEvent for AuthorizationRequestEvent {
@@ -23,6 +31,8 @@ impl DomainEvent for AuthorizationRequestEvent {
             AuthorizationRequestCreated { .. } => "AuthorizationRequestCreated",
             FormUrlEncodedAuthorizationRequestCreated { .. } => "FormUrlEncodedAuthorizationRequestCreated",
             AuthorizationRequestObjectSigned { .. } => "AuthorizationRequestObjectSigned",
+            SIOPv2AuthorizationResponseVerified { .. } => "SIOPv2AuthorizationResponseVerified",
+            OID4VPAuthorizationResponseVerified { .. } => "OID4VPAuthorizationResponseVerified",
         };
         event_type.to_string()
     }

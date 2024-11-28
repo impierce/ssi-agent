@@ -1,13 +1,14 @@
-use agent_identity::{document::aggregate::Document, service::aggregate::Service};
+use agent_identity::{connection::aggregate::Connection, document::aggregate::Document, service::aggregate::Service};
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
-use agent_verification::{authorization_request::aggregate::AuthorizationRequest, connection::aggregate::Connection};
+use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use cqrs_es::Query;
 
 pub mod in_memory;
 pub mod postgres;
 
+pub type ConnectionEventPublisher = Box<dyn Query<Connection>>;
 pub type DocumentEventPublisher = Box<dyn Query<Document>>;
 pub type ServiceEventPublisher = Box<dyn Query<Service>>;
 pub type ServerConfigEventPublisher = Box<dyn Query<ServerConfig>>;
@@ -17,11 +18,11 @@ pub type HolderCredentialEventPublisher = Box<dyn Query<agent_holder::credential
 pub type PresentationEventPublisher = Box<dyn Query<agent_holder::presentation::aggregate::Presentation>>;
 pub type ReceivedOfferEventPublisher = Box<dyn Query<agent_holder::offer::aggregate::Offer>>;
 pub type AuthorizationRequestEventPublisher = Box<dyn Query<AuthorizationRequest>>;
-pub type ConnectionEventPublisher = Box<dyn Query<Connection>>;
 
 /// Contains all the event_publishers for each aggregate.
 #[derive(Default)]
 pub struct Partitions {
+    pub connection_event_publishers: Vec<ConnectionEventPublisher>,
     pub document_event_publishers: Vec<DocumentEventPublisher>,
     pub service_event_publishers: Vec<ServiceEventPublisher>,
     pub server_config_event_publishers: Vec<ServerConfigEventPublisher>,
@@ -31,7 +32,6 @@ pub struct Partitions {
     pub presentation_event_publishers: Vec<PresentationEventPublisher>,
     pub received_offer_event_publishers: Vec<ReceivedOfferEventPublisher>,
     pub authorization_request_event_publishers: Vec<AuthorizationRequestEventPublisher>,
-    pub connection_event_publishers: Vec<ConnectionEventPublisher>,
 }
 
 /// An outbound event_publisher is a component that listens to events and dispatches them to the appropriate service. For each
@@ -39,6 +39,9 @@ pub struct Partitions {
 /// `Some` with the appropriate query.
 // TODO: move this to a separate crate that will include all the logic for event_publishers, i.e. `agent_event_publisher`.
 pub trait EventPublisher {
+    fn connection(&mut self) -> Option<ConnectionEventPublisher> {
+        None
+    }
     fn document(&mut self) -> Option<DocumentEventPublisher> {
         None
     }
@@ -66,9 +69,6 @@ pub trait EventPublisher {
         None
     }
 
-    fn connection(&mut self) -> Option<ConnectionEventPublisher> {
-        None
-    }
     fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher> {
         None
     }
@@ -78,6 +78,9 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
     event_publishers
         .into_iter()
         .fold(Partitions::default(), |mut partitions, mut event_publisher| {
+            if let Some(connection) = event_publisher.connection() {
+                partitions.connection_event_publishers.push(connection);
+            }
             if let Some(document) = event_publisher.document() {
                 partitions.document_event_publishers.push(document);
             }
@@ -109,9 +112,6 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
                 partitions
                     .authorization_request_event_publishers
                     .push(authorization_request);
-            }
-            if let Some(connection) = event_publisher.connection() {
-                partitions.connection_event_publishers.push(connection);
             }
             partitions
         })
@@ -170,6 +170,7 @@ mod test {
             vec![Box::new(FooEventPublisher), Box::new(BarEventPublisher)];
 
         let Partitions {
+            connection_event_publishers,
             document_event_publishers,
             service_event_publishers,
             server_config_event_publishers,
@@ -179,9 +180,9 @@ mod test {
             presentation_event_publishers,
             received_offer_event_publishers,
             authorization_request_event_publishers,
-            connection_event_publishers,
         } = partition_event_publishers(event_publishers);
 
+        assert_eq!(connection_event_publishers.len(), 2);
         assert_eq!(document_event_publishers.len(), 0);
         assert_eq!(service_event_publishers.len(), 0);
         assert_eq!(server_config_event_publishers.len(), 1);
@@ -191,6 +192,5 @@ mod test {
         assert_eq!(presentation_event_publishers.len(), 0);
         assert_eq!(received_offer_event_publishers.len(), 0);
         assert_eq!(authorization_request_event_publishers.len(), 0);
-        assert_eq!(connection_event_publishers.len(), 2);
     }
 }
