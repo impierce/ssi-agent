@@ -13,10 +13,12 @@ impl View<Offer> for Offer {
             CredentialOfferCreated {
                 pre_authorized_code,
                 access_token,
+                status,
                 ..
             } => {
                 self.pre_authorized_code.clone_from(pre_authorized_code);
-                self.access_token.clone_from(access_token)
+                self.access_token.clone_from(access_token);
+                self.status.clone_from(status);
             }
             CredentialsAdded {
                 credential_ids: credential_id,
@@ -26,11 +28,16 @@ impl View<Offer> for Offer {
             }
             FormUrlEncodedCredentialOfferCreated {
                 form_url_encoded_credential_offer,
+                status,
                 ..
-            } => self
-                .form_url_encoded_credential_offer
-                .clone_from(form_url_encoded_credential_offer),
-            CredentialOfferSent { .. } => {}
+            } => {
+                self.form_url_encoded_credential_offer
+                    .clone_from(form_url_encoded_credential_offer);
+                self.status.clone_from(status);
+            }
+            CredentialOfferSent { status, .. } => {
+                self.status.clone_from(status);
+            }
             CredentialRequestVerified { subject_id, .. } => {
                 self.subject_id.replace(subject_id.clone());
             }
@@ -38,9 +45,12 @@ impl View<Offer> for Offer {
                 self.token_response.replace(token_response.clone());
             }
             CredentialResponseCreated {
-                credential_response, ..
+                credential_response,
+                status,
+                ..
             } => {
                 self.credential_response.replace(credential_response.clone());
+                self.status.clone_from(status);
             }
         }
     }
