@@ -1096,7 +1096,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"domain\": \"http://example.org\",\n    \"dids\": [\"did:example:123\"],\n    \"credential_offer_endpoint\": \"{{HOST}}/openid4vci/offers\"\n}",
+							"raw": "{\n    \"alias\": \"My Connection\",\n    \"domain\": \"http://example.org\",\n    \"dids\": [\"did:example:123\"],\n    \"credentialOfferEndpoint\": \"{{HOST}}/openid4vci/offers\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -1117,7 +1117,7 @@
 					"response": []
 				},
 				{
-					"name": "Query all Connections",
+					"name": "List all Connections",
 					"event": [
 						{
 							"listen": "test",
@@ -1159,6 +1159,49 @@
 							"path": [
 								"v0",
 								"connections"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Query Connection by Alias",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (jsonData && typeof jsonData === 'object') {",
+									"    const connectionId = Object.keys(jsonData)[0];",
+									"",
+									"    if (connectionId) {",
+									"        pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/connections?alias=My+Connection",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"connections"
+							],
+							"query": [
+								{
+									"key": "alias",
+									"value": "My+Connection"
+								}
 							]
 						}
 					},
@@ -1273,7 +1316,7 @@
 					"response": []
 				},
 				{
-					"name": "Query Connection by ID",
+					"name": "Connection by ID",
 					"event": [
 						{
 							"listen": "test",
