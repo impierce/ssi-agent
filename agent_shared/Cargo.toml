@@ -9,7 +9,7 @@ async-trait.workspace = true
 config = { version = "0.14" }
 cqrs-es.workspace = true
 dotenvy = { version = "0.15" }
-http-serde-ext = "1.0"
+http-serde = "2.1"
 # TODO: replace all identity_* with identity_iota?
 identity_iota.workspace = true
 jsonwebtoken.workspace = true

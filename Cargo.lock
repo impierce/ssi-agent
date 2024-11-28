@@ -137,7 +137,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "cqrs-es",
- "http-serde-ext",
+ "http-serde",
  "reqwest 0.12.5",
  "rustls 0.23.10",
  "serde",
@@ -290,7 +290,7 @@ dependencies = [
  "config",
  "cqrs-es",
  "dotenvy",
- "http-serde-ext",
+ "http-serde",
  "identity_iota",
  "jsonwebtoken",
  "oid4vc-core",
@@ -3151,10 +3151,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "add0ab9360ddbd88cfeb3bd9574a1d85cfdfa14db10b3e21d3700dbc4328758f"
 
 [[package]]
-name = "http-serde-ext"
-version = "1.0.2"
+name = "http-serde"
+version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "665c24b8e7e21688dc74edb228f07c1815bbc7ff3b48a3ee72fa20937fbde095"
+checksum = "0f056c8559e3757392c8d091e796416e4649d8e49e88b8d76df6c002f05027fd"
 dependencies = [
  "http 1.1.0",
  "serde",

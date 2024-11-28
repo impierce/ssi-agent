@@ -111,7 +111,7 @@ pub struct EventPublishers {
 pub struct EventPublisherHttp {
     pub enabled: bool,
     pub target_url: String,
-    #[serde(with = "http_serde_ext::header_map::option", default)]
+    #[serde(with = "http_serde::option::header_map", default)]
     pub headers: Option<reqwest::header::HeaderMap>,
     pub events: Events,
 }

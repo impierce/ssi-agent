@@ -202,7 +202,7 @@ where
     A: Aggregate,
 {
     pub target_url: String,
-    #[serde(with = "http_serde_ext::header_map::option", default)]
+    #[serde(with = "http_serde::option::header_map", default)]
     pub headers: Option<reqwest::header::HeaderMap>,
     pub target_events: Vec<String>,
     #[serde(skip)]
