@@ -13,6 +13,7 @@ pub enum OfferEvent {
         credential_offer: CredentialOffer,
         pre_authorized_code: String,
         access_token: String,
+        status: Status,
     },
     CredentialsAdded {
         offer_id: String,

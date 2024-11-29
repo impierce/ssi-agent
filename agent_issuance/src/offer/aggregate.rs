@@ -91,6 +91,7 @@ impl Aggregate for Offer {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 }])
             }
             AddCredentials {
@@ -300,6 +301,7 @@ pub mod tests {
                 credential_offer,
                 pre_authorized_code,
                 access_token,
+                status: Status::Created,
             }]);
     }
 
@@ -316,6 +318,7 @@ pub mod tests {
                 credential_offer,
                 pre_authorized_code,
                 access_token,
+                status: Status::Created,
             }])
             .when(OfferCommand::AddCredentials {
                 offer_id: Default::default(),
@@ -342,6 +345,7 @@ pub mod tests {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: Default::default(),
@@ -375,6 +379,7 @@ pub mod tests {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: Default::default(),
@@ -417,6 +422,7 @@ pub mod tests {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: Default::default(),
@@ -462,6 +468,7 @@ pub mod tests {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: Default::default(),
