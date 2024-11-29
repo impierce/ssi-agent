@@ -1,8 +1,5 @@
 use agent_issuance::{
-    offer::{
-        command::OfferCommand,
-        queries::{pre_authorized_code::PreAuthorizedCodeView, OfferView},
-    },
+    offer::{command::OfferCommand, queries::pre_authorized_code::PreAuthorizedCodeView, views::OfferView},
     state::IssuanceState,
 };
 use agent_shared::handlers::{command_handler, query_handler};

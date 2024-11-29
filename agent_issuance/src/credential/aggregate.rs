@@ -28,12 +28,20 @@ use types_ob_v3::prelude::{
     ProfileBuilder,
 };
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub enum Status {
+    #[default]
+    Pending,
+    Issued,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
 #[derivative(PartialEq)]
 pub struct Credential {
-    data: Option<Data>,
-    credential_configuration: CredentialConfigurationsSupportedObject,
-    signed: Option<serde_json::Value>,
+    pub data: Option<Data>,
+    pub credential_configuration: CredentialConfigurationsSupportedObject,
+    pub signed: Option<serde_json::Value>,
+    pub status: Status,
 }
 
 #[async_trait]
@@ -237,7 +245,10 @@ impl Aggregate for Credential {
                     .ok())
                 };
 
-                Ok(vec![CredentialSigned { signed_credential }])
+                Ok(vec![CredentialSigned {
+                    signed_credential,
+                    status: Status::Issued,
+                }])
             }
         }
     }
@@ -258,8 +269,12 @@ impl Aggregate for Credential {
             SignedCredentialCreated { signed_credential } => {
                 self.signed.replace(signed_credential);
             }
-            CredentialSigned { signed_credential } => {
+            CredentialSigned {
+                signed_credential,
+                status,
+            } => {
                 self.signed.replace(signed_credential);
+                self.status = status;
             }
         }
     }
@@ -347,6 +362,7 @@ pub mod credential_tests {
             })
             .then_expect_events(vec![CredentialEvent::CredentialSigned {
                 signed_credential: json!(verifiable_credential_jwt),
+                status: Status::Issued,
             }])
     }
 }

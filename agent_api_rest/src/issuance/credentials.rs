@@ -1,6 +1,6 @@
 use crate::API_VERSION;
 use agent_issuance::{
-    credential::{command::CredentialCommand, entity::Data, queries::CredentialView},
+    credential::{command::CredentialCommand, entity::Data, views::CredentialView},
     offer::command::OfferCommand,
     server_config::queries::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},

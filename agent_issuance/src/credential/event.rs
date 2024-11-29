@@ -2,7 +2,7 @@ use cqrs_es::DomainEvent;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use serde::{Deserialize, Serialize};
 
-use super::entity::Data;
+use super::{aggregate::Status, entity::Data};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum CredentialEvent {
@@ -16,6 +16,7 @@ pub enum CredentialEvent {
     },
     CredentialSigned {
         signed_credential: serde_json::Value,
+        status: Status,
     },
 }
 

@@ -253,6 +253,7 @@ where
 mod tests {
     use super::*;
 
+    use agent_issuance::offer::aggregate::Status;
     use agent_issuance::offer::event::OfferEvent;
     use agent_shared::config::{set_config, Events};
     use wiremock::matchers::{method, path};
@@ -284,6 +285,7 @@ mod tests {
         let offer_event = OfferEvent::FormUrlEncodedCredentialOfferCreated {
             offer_id: Default::default(),
             form_url_encoded_credential_offer: "form_url_encoded_credential_offer".to_string(),
+            status: Status::Pending,
         };
 
         let events = [EventEnvelope::<Offer> {

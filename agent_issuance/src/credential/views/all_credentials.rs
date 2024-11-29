@@ -1,18 +1,18 @@
-use super::OfferView;
-use crate::offer::queries::Offer;
+use super::CredentialView;
+use crate::credential::views::Credential;
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct AllOffersView {
+pub struct AllCredentialsView {
     #[serde(flatten)]
-    pub offers: HashMap<String, OfferView>,
+    pub credentials: HashMap<String, CredentialView>,
 }
 
-impl View<Offer> for AllOffersView {
-    fn update(&mut self, event: &EventEnvelope<Offer>) {
-        self.offers
+impl View<Credential> for AllCredentialsView {
+    fn update(&mut self, event: &EventEnvelope<Credential>) {
+        self.credentials
             // Get the entry for the aggregate_id
             .entry(event.aggregate_id.clone())
             // or insert a new one if it doesn't exist

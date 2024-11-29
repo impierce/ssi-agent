@@ -1,11 +1,8 @@
 use std::time::{Duration, Instant};
 
 use agent_issuance::{
-    credential::{command::CredentialCommand, queries::CredentialView},
-    offer::{
-        command::OfferCommand,
-        queries::{access_token::AccessTokenView, OfferView},
-    },
+    credential::{command::CredentialCommand, views::CredentialView},
+    offer::{command::OfferCommand, queries::access_token::AccessTokenView, views::OfferView},
     server_config::queries::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
