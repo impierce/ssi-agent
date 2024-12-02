@@ -25,6 +25,7 @@ pub enum Status {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Offer {
+    #[serde(rename = "id")]
     pub offer_id: String,
     pub credential_offer: Option<CredentialOffer>,
     pub subject_id: Option<String>,

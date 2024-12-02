@@ -32,6 +32,7 @@ pub enum ServiceResource {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Service {
+    #[serde(rename = "id")]
     pub service_id: String,
     pub service: Option<DocumentService>,
     pub resource: Option<ServiceResource>,

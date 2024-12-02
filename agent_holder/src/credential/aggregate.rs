@@ -17,6 +17,7 @@ pub struct Data {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Credential {
+    #[serde(rename = "id")]
     pub holder_credential_id: String,
     pub received_offer_id: Option<String>,
     pub signed: Option<Jwt>,
@@ -31,7 +32,7 @@ impl Aggregate for Credential {
     type Services = Arc<HolderServices>;
 
     fn aggregate_type() -> String {
-        "credential".to_string()
+        "holder_credential".to_string()
     }
 
     async fn handle(

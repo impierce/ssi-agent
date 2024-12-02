@@ -38,6 +38,7 @@ pub enum Status {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
 #[derivative(PartialEq)]
 pub struct Credential {
+    #[serde(rename = "id")]
     pub credential_id: String,
     pub data: Option<Data>,
     pub credential_configuration: CredentialConfigurationsSupportedObject,
