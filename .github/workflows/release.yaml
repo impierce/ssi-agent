@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  # TODO: Refine release triggers
+  # Triggering a new release manually allows the team to "collect changes" before publishing a new version.
+  # We have not yet decided, if we want to trigger a release manually or automatically.
+  # - Pushes to the release channels (main, next) will automatically release.
+  # - Pushes to the pre-release channels (beta, alpha) need to be manually triggered.
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - next
+      # - beta
+      # - alpha
+
+permissions:
+  contents: read # for checkout
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write # to be able to publish a GitHub release
+      issues: write # to be able to comment on released issues
+      pull-requests: write # to be able to comment on released pull requests
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+
+      - name: semantic-release
+        run: npx semantic-release@24
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

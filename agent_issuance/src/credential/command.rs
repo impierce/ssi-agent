@@ -9,7 +9,7 @@ pub enum CredentialCommand {
     CreateUnsignedCredential {
         credential_id: String,
         data: Data,
-        credential_configuration: CredentialConfigurationsSupportedObject,
+        credential_configuration: Box<CredentialConfigurationsSupportedObject>,
     },
     CreateSignedCredential {
         credential_id: String,

@@ -92,6 +92,7 @@ impl Aggregate for Offer {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 }])
             }
             AddCredentials {
@@ -114,9 +115,19 @@ impl Aggregate for Offer {
                 // TODO: add to `service`?
                 let client = reqwest::Client::new();
 
+                let form_url_encoded_credential_offer = self
+                    .credential_offer
+                    .as_ref()
+                    .ok_or(MissingCredentialOfferError)?
+                    .to_string();
+
+                let target =
+                    form_url_encoded_credential_offer.replace("openid-credential-offer://", target_url.as_str());
+
+                info!("Sending credential offer to: {}", target);
+
                 client
-                    .get(target_url.clone())
-                    .json(self.credential_offer.as_ref().ok_or(MissingCredentialOfferError)?)
+                    .get(target)
                     .send()
                     .await
                     .map_err(|e| SendCredentialOfferError(e.to_string()))?;
@@ -220,11 +231,13 @@ impl Aggregate for Offer {
                 pre_authorized_code,
                 access_token,
                 credential_offer,
+                status,
             } => {
                 self.offer_id = offer_id;
                 self.pre_authorized_code = pre_authorized_code;
                 self.access_token = access_token;
                 self.credential_offer.replace(credential_offer);
+                self.status = status;
             }
             CredentialsAdded {
                 offer_id,
@@ -299,6 +312,7 @@ pub mod tests {
                 credential_offer,
                 pre_authorized_code,
                 access_token,
+                status: Status::Created,
             }]);
     }
 
@@ -315,6 +329,7 @@ pub mod tests {
                 credential_offer,
                 pre_authorized_code,
                 access_token,
+                status: Status::Created,
             }])
             .when(OfferCommand::AddCredentials {
                 offer_id: Default::default(),
@@ -341,6 +356,7 @@ pub mod tests {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: Default::default(),
@@ -374,6 +390,7 @@ pub mod tests {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: Default::default(),
@@ -416,6 +433,7 @@ pub mod tests {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: Default::default(),
@@ -461,6 +479,7 @@ pub mod tests {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: Default::default(),

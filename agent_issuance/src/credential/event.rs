@@ -10,7 +10,7 @@ pub enum CredentialEvent {
     UnsignedCredentialCreated {
         credential_id: String,
         data: Data,
-        credential_configuration: CredentialConfigurationsSupportedObject,
+        credential_configuration: Box<CredentialConfigurationsSupportedObject>,
     },
     SignedCredentialCreated {
         credential_id: String,

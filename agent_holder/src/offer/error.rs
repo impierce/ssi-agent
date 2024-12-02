@@ -32,6 +32,6 @@ pub enum OfferError {
     UnsupportedDeferredCredentialResponseError,
     #[error("Batch Credential Request are not supported")]
     BatchCredentialRequestError,
-    #[error("Non-JWT credentials are not supported")]
+    #[error("Only JWT credentials are supported")]
     UnsupportedCredentialFormatError,
 }

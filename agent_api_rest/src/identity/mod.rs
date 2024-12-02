@@ -8,7 +8,7 @@ use axum::{
     Router,
 };
 use connections::{get_connection, get_connections, post_connections};
-use services::{linked_vp::linked_vp, services};
+use services::{linked_vp::linked_vp, service, services};
 use well_known::{did::did, did_configuration::did_configuration};
 
 use crate::API_VERSION;
@@ -21,6 +21,7 @@ pub fn router(identity_state: IdentityState) -> Router {
                 .route("/connections", get(get_connections).post(post_connections))
                 .route("/connections/:connection_id", get(get_connection))
                 .route("/services", get(services))
+                .route("/services/:service_id", get(service))
                 .route("/services/linked-vp", post(linked_vp)),
         )
         .route("/.well-known/did.json", get(did))
