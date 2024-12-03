@@ -102,6 +102,18 @@ impl Aggregate for Credential {
                     let credential_subject_json =
                         data.raw.get("credentialSubject").ok_or(MissingCredentialSubjectError)?;
 
+                    let id = data.raw.get("id").map_or(Ok(None), |id| {
+                        id.as_str()
+                            .ok_or_else(|| {
+                                InvalidVerifiableCredentialError("Invalid format: `id` must be a string".to_string())
+                            })
+                            .and_then(|id_str| {
+                                Url::parse(id_str).map(Some).map_err(|_| {
+                                    InvalidVerifiableCredentialError(format!("Could not parse `id` as URL: `{id_str}`"))
+                                })
+                            })
+                    })?;
+
                     // Loop through all the items in the `type` array in reverse until we find a match.
                     while let Some(credential_format) = credential_types.pop() {
                         match credential_format.as_str() {
@@ -119,10 +131,18 @@ impl Aggregate for Credential {
                                     Err(_) => unreachable!("Couldn't parse issuer"),
                                 };
 
-                                let credential: W3CVerifiableCredential = W3CVerifiableCredentialBuilder::default()
+                                let builder = W3CVerifiableCredentialBuilder::default()
                                     .issuer(issuer)
                                     .subject(subject)
-                                    .issuance_date(issuance_date.parse().expect("Could not parse issuance_date"))
+                                    .issuance_date(issuance_date.parse().expect("Could not parse issuance_date"));
+
+                                let builder = if let Some(id) = id {
+                                    builder.id(id.into())
+                                } else {
+                                    builder
+                                };
+
+                                let credential: W3CVerifiableCredential = builder
                                     .build()
                                     .map_err(|e| InvalidVerifiableCredentialError(e.to_string()))?;
 
@@ -148,12 +168,6 @@ impl Aggregate for Credential {
                                 let credential_subject =
                                     serde_json::from_value::<AchievementSubject>(credential_subject_json.clone())
                                         .map_err(|e| InvalidVerifiableCredentialError(e.to_string()))?;
-
-                                let id = data
-                                    .raw
-                                    .get("id")
-                                    .and_then(|id| id.as_str())
-                                    .and_then(|id| Url::parse(id).ok());
 
                                 let builder = AchievementCredentialBuilder::default()
                                     .context(vec![
