@@ -10,6 +10,14 @@ use axum::{
     response::{IntoResponse, Response},
     Form,
 };
+use utoipa::ToSchema;
+
+#[derive(ToSchema)]
+#[schema(as = GenericAuthorizationResponse)]
+pub struct GenericAuthorizationResponseSchema {
+    pub foo: String,
+    pub bar: i32,
+}
 
 /// Redirect Endpoint
 ///
@@ -17,6 +25,7 @@ use axum::{
 #[utoipa::path(
     post,
     path = "/redirect",
+    request_body = GenericAuthorizationResponseSchema,
     tags = ["(public)"],
     responses(
         (status = 200, description = ""),

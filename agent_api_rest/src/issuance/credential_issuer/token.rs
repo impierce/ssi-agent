@@ -12,6 +12,14 @@ use axum::{
 use oid4vci::token_request::TokenRequest;
 use serde_json::json;
 use tracing::info;
+use utoipa::ToSchema;
+
+#[derive(ToSchema)]
+#[schema(as = TokenRequest)]
+pub struct TokenRequestSchema {
+    pub foo: String,
+    pub bar: i32,
+}
 
 /// Token Endpoint
 ///
@@ -19,6 +27,7 @@ use tracing::info;
 #[utoipa::path(
     post,
     path = "/auth/token",
+    request_body = TokenRequestSchema,
     tags = ["(public)"],
     responses(
         (status = 200, description = "Returns an access token."),

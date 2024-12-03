@@ -19,6 +19,13 @@ use serde_json::Value;
 use tracing::info;
 use utoipa::ToSchema;
 
+#[derive(ToSchema)]
+#[schema(as = CredentialView)]
+pub struct CredentialViewSchema {
+    pub foo: String,
+    pub bar: i32,
+}
+
 /// Retrieve a credential
 ///
 /// Retrieves an existing credential by its ID.
@@ -30,7 +37,7 @@ use utoipa::ToSchema;
         ("id" = String, Path, description = "Unique identifier of the Credential", example = "0001"),
     ),
     responses(
-        (status = 200, description = "Credential found", body = [CredentialView])
+        (status = 200, description = "Credential found", body = [CredentialViewSchema])
     )
 )]
 #[axum_macros::debug_handler]
@@ -66,7 +73,7 @@ pub struct CredentialsEndpointRequest {
     ),
     tag = "Issuance",
     responses(
-        (status = 201, description = "Successfully created a new credential.", body = CredentialView,
+        (status = 201, description = "Successfully created a new credential.", body = CredentialViewSchema,
             headers(("Location" = String, description = "URL of the created resource")),
             examples(
                 ("w3c-vc-1-1" = (summary = "W3C VC Data Model v1.1", description = "A credential following the W3C Verifiable Credentials Data Model v1.1", value = json!({"offerId": "0001"}))),

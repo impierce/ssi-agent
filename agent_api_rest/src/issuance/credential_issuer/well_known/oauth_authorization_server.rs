@@ -8,6 +8,15 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
+use utoipa::ToSchema;
+
+#[derive(ToSchema)]
+#[schema(as = AuthorizationServerMetadata)]
+pub struct AuthorizationServerMetadataSchema {
+    pub foo: String,
+    pub bar: i32,
+}
 
 /// Authorization Server Metadata
 ///
@@ -18,7 +27,7 @@ use axum::{
     tag = "(.well-known)",
     tags = ["(public)"],
     responses(
-        (status = 200, description = "Successfully returns the Authorization Server Metadata", body = [AuthorizationServerMetadata])
+        (status = 200, description = "Successfully returns the Authorization Server Metadata", body = [AuthorizationServerMetadataSchema])
     )
 )]
 #[axum_macros::debug_handler]

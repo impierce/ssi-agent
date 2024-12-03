@@ -5,6 +5,7 @@ use agent_shared::{
 };
 use agent_verification::{
     authorization_request::{command::AuthorizationRequestCommand, views::AuthorizationRequestView},
+    generic_oid4vc::GenericAuthorizationRequest,
     state::VerificationState,
 };
 use axum::{
@@ -20,6 +21,27 @@ use serde_json::{json, Value};
 use tracing::info;
 use utoipa::ToSchema;
 
+#[derive(ToSchema)]
+#[schema(as = GenericAuthorizationRequest)]
+pub struct GenericAuthorizationRequestSchema {
+    pub foo: String,
+    pub bar: i32,
+}
+
+// #[derive(ToSchema)]
+// #[schema(as = PresentationDefinitionResource)]
+// pub struct PresentationDefinitionResourceSchema {
+//     pub foo: String,
+//     pub bar: i32,
+// }
+
+#[derive(ToSchema)]
+#[schema(as = AuthorizationRequestsEndpointRequest)]
+pub struct AuthorizationRequestsEndpointRequestSchema {
+    pub foo: String,
+    pub bar: i32,
+}
+
 /// Get an Authorization Request
 ///
 /// Retrieve an existing Authorization Request.
@@ -31,7 +53,7 @@ use utoipa::ToSchema;
         ("id" = String, Path, description = "The ID of the Authorization Request to retrieve.")
     ),
     responses(
-        (status = 200, description = "Successfully returns an existing Authorization Request.", body = [GenericAuthorizationRequest])
+        (status = 200, description = "Successfully returns an existing Authorization Request.", body = [GenericAuthorizationRequestSchema])
     )
 )]
 #[axum_macros::debug_handler]
@@ -62,7 +84,7 @@ pub(crate) async fn authorization_request(
     }
 }
 
-#[derive(Deserialize, Serialize, ToSchema)]
+#[derive(Deserialize, Serialize)]
 pub struct AuthorizationRequestsEndpointRequest {
     pub nonce: String,
     pub state: Option<String>,
@@ -83,7 +105,7 @@ pub enum PresentationDefinitionResource {
 #[utoipa::path(
     post,
     path = "/authorization_requests",
-    request_body = AuthorizationRequestsEndpointRequest,
+    request_body = AuthorizationRequestsEndpointRequestSchema,
     tag = "Verification",
     responses(
         (status = 201, description = "Authorization Request successfully created."),

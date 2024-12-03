@@ -12,6 +12,10 @@ The current version of the REST API is `v0`.
 > [!NOTE]
 > UniCore uses [Scalar](https://scalar.com) to make its OpenAPI specification interactive. It is served under `/<BASE_PATH>/<API_VERSION>/api-reference` (for example: `/v0/api-reference`). The `openapi.yaml` file can be downloaded there as well. The latest version of the `openapi.yaml` file is also deployed as part of the documentation at https://docs.impierce.com/unicore/api-reference.
 
+#### Generate OpenAPI specification
+
+The `openapi.yaml` file can be generated manually by executing the test `generate_openapi_file()` _(ignored in a regular test run)_.
+
 #### Swagger UI
 
 You can also run a local Swagger UI container to inspect the OpenAPI specification.

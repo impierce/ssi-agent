@@ -11,7 +11,13 @@ use tracing::info;
 use url::Url;
 use utoipa::ToSchema;
 
-#[derive(Deserialize, Serialize, ToSchema)]
+#[derive(ToSchema)]
+pub struct SendOfferEndpointRequestSchema {
+    pub offer_id: String,
+    pub target_url: String,
+}
+
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SendOfferEndpointRequest {
     pub offer_id: String,
@@ -25,7 +31,7 @@ pub struct SendOfferEndpointRequest {
 #[utoipa::path(
     post,
     path = "/offers/send",
-    request_body(content = SendOfferEndpointRequest, example = json!({"offerId": "0001", "targetUrl": "https://wallet.example.com/openid4vci/offers"})),
+    request_body(content = SendOfferEndpointRequestSchema, example = json!({"offerId": "0001", "targetUrl": "https://wallet.example.com/openid4vci/offers"})),
     tag = "Issuance",
     responses(
         (status = 200, description = "Successfully sent credential offer to Holder."),

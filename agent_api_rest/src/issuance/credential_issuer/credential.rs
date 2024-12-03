@@ -16,13 +16,28 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
-use oid4vci::credential_request::CredentialRequest;
+use oid4vci::{credential_request::CredentialRequest, credential_response::CredentialResponse};
 use serde_json::json;
 use tokio::time::sleep;
 use tracing::{error, info};
+use utoipa::ToSchema;
 
 const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
 const POLLING_INTERVAL_MS: u64 = 100;
+
+#[derive(ToSchema)]
+#[schema(as = CredentialRequest)]
+pub struct CredentialRequestSchema {
+    pub foo: String,
+    pub bar: i32,
+}
+
+#[derive(ToSchema)]
+#[schema(as = CredentialResponse)]
+pub struct CredentialResponseSchema {
+    pub foo: String,
+    pub bar: i32,
+}
 
 /// Credential Endpoint
 ///
@@ -32,11 +47,11 @@ const POLLING_INTERVAL_MS: u64 = 100;
     path = "/openid4vci/credential",
     // TODO: doesn't work since (external) `CredentialRequest` doesn't implement `ToSchema`?
     // See: https://github.com/juhaku/utoipa?tab=readme-ov-file#how-to-implement-toschema-for-external-type
-    request_body = CredentialRequest,
+    request_body = CredentialRequestSchema,
     tag = "Issuance",
     tags = ["(public)"],
     responses(
-        (status = 200, description = "Successfully returns the credential", body = [CredentialResponse])
+        (status = 200, description = "Successfully returns the credential", body = [CredentialResponseSchema])
     )
 )]
 #[axum_macros::debug_handler]

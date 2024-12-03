@@ -31,8 +31,8 @@ tower-http.workspace = true
 tracing.workspace = true
 url.workspace = true
 uuid.workspace = true
-utoipa = { version = "=5.0.0-beta.0", features = ["axum_extras", "yaml"] }
-utoipa-scalar = { version = "=0.2.0-beta.0", features = ["axum"] }
+utoipa = { version = "5.2", features = ["axum_extras", "yaml"] }
+utoipa-scalar = { version = "0.2", features = ["axum"] }
 # TODO: wait for new release that contains PR juhaku/utoipa#1002 (current version `=5.0.0-alpha.1`)
 # utoipa = { git = "https://github.com/juhaku/utoipa.git", rev = "f2a7143", features = [
 #     "axum_extras",
@@ -44,11 +44,15 @@ utoipa-scalar = { version = "=0.2.0-beta.0", features = ["axum"] }
 # ] }
 
 [dev-dependencies]
-agent_event_publisher_http = { path = "../agent_event_publisher_http", features = ["test_utils"] }
+agent_event_publisher_http = { path = "../agent_event_publisher_http", features = [
+    "test_utils",
+] }
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_identity = { path = "../agent_identity", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
-agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }
+agent_secret_manager = { path = "../agent_secret_manager", features = [
+    "test_utils",
+] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification", features = [

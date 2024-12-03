@@ -12,7 +12,21 @@ use serde_json::Value;
 use tracing::info;
 use utoipa::ToSchema;
 
-#[derive(Deserialize, Serialize, ToSchema)]
+#[derive(ToSchema)]
+#[schema(as = CredentialOffer)]
+pub struct CredentialOfferSchema {
+    pub foo: String,
+    pub bar: i32,
+}
+
+#[derive(ToSchema)]
+#[schema(as = Oid4vciOfferEndpointRequest)]
+pub struct Oid4vciOfferEndpointRequestSchema {
+    pub foo: String,
+    pub bar: i32,
+}
+
+#[derive(Deserialize, Serialize)]
 pub struct Oid4vciOfferEndpointRequest {
     #[serde(flatten)]
     pub credential_offer: CredentialOffer,
@@ -26,7 +40,7 @@ pub struct Oid4vciOfferEndpointRequest {
 #[utoipa::path(
     get,
     path = "/openid4vci/offers",
-    request_body = Oid4vciOfferEndpointRequest,
+    request_body = Oid4vciOfferEndpointRequestSchema,
     tag = "Holder",
     tags = ["(public)"],
     responses(

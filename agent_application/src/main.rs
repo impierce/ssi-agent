@@ -10,7 +10,7 @@ use agent_shared::config::{config, LogFormat};
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use std::sync::Arc;
-use tokio::{fs, io};
+use tokio::io;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 

@@ -140,9 +140,8 @@ paths:
       description: Standard OAuth 2.0 endpoint that returns an access_token after successful authorization.
       operationId: token
       requestBody:
-        description: ''
         content:
-          application/x-www-form-urlencoded:
+          application/json:
             schema:
               $ref: '#/components/schemas/TokenRequest'
         required: true
@@ -182,7 +181,7 @@ paths:
         Standard OpenID4VCI endpoint that allows the Issuer to pass information about the credential offer to the Holder's wallet.
 
         [Specification](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-offer-endpoint)
-      operationId: offers
+      operationId: offers_params
       requestBody:
         content:
           application/json:
@@ -200,9 +199,8 @@ paths:
       description: Standard OAuth 2.0 endpoint.
       operationId: redirect
       requestBody:
-        description: ''
         content:
-          application/x-www-form-urlencoded:
+          application/json:
             schema:
               $ref: '#/components/schemas/GenericAuthorizationResponse'
         required: true
@@ -252,7 +250,7 @@ paths:
       - Verification
       summary: Get an Authorization Request
       description: Retrieve an existing Authorization Request.
-      operationId: get_authorization_requests
+      operationId: all_authorization_requests
       parameters:
       - name: id
         in: path
@@ -328,7 +326,7 @@ paths:
       - Issuance
       summary: Retrieve a credential
       description: Retrieves an existing credential by its ID.
-      operationId: get_credentials
+      operationId: credential
       parameters:
       - name: id
         in: path
@@ -432,7 +430,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SendOfferEndpointRequest'
+              $ref: '#/components/schemas/SendOfferEndpointRequestSchema'
             example:
               offerId: '0001'
               targetUrl: https://wallet.example.com/openid4vci/offers
@@ -445,20 +443,71 @@ paths:
 components:
   schemas:
     AuthorizationRequestsEndpointRequest:
-      allOf:
-      - allOf:
-        - type: 'null'
-        - $ref: '#/components/schemas/PresentationDefinitionResource'
-      - type: object
-        required:
-        - nonce
-        properties:
-          nonce:
-            type: string
-          state:
-            type:
-            - string
-            - 'null'
+      type: object
+      required:
+      - foo
+      - bar
+      properties:
+        bar:
+          type: integer
+          format: int32
+        foo:
+          type: string
+    AuthorizationServerMetadata:
+      type: object
+      required:
+      - foo
+      - bar
+      properties:
+        bar:
+          type: integer
+          format: int32
+        foo:
+          type: string
+    CredentialIssuerMetadata:
+      type: object
+      required:
+      - foo
+      - bar
+      properties:
+        bar:
+          type: integer
+          format: int32
+        foo:
+          type: string
+    CredentialRequest:
+      type: object
+      required:
+      - foo
+      - bar
+      properties:
+        bar:
+          type: integer
+          format: int32
+        foo:
+          type: string
+    CredentialResponse:
+      type: object
+      required:
+      - foo
+      - bar
+      properties:
+        bar:
+          type: integer
+          format: int32
+        foo:
+          type: string
+    CredentialView:
+      type: object
+      required:
+      - foo
+      - bar
+      properties:
+        bar:
+          type: integer
+          format: int32
+        foo:
+          type: string
     CredentialsEndpointRequest:
       type: object
       required:
@@ -473,6 +522,28 @@ components:
           type: boolean
         offerId:
           type: string
+    GenericAuthorizationRequest:
+      type: object
+      required:
+      - foo
+      - bar
+      properties:
+        bar:
+          type: integer
+          format: int32
+        foo:
+          type: string
+    GenericAuthorizationResponse:
+      type: object
+      required:
+      - foo
+      - bar
+      properties:
+        bar:
+          type: integer
+          format: int32
+        foo:
+          type: string
     OffersEndpointRequest:
       type: object
       required:
@@ -481,19 +552,37 @@ components:
         offerId:
           type: string
     Oid4vciOfferEndpointRequest:
-      allOf:
-      - $ref: '#/components/schemas/CredentialOffer'
-      - type: object
-    SendOfferEndpointRequest:
       type: object
       required:
-      - offerId
-      - targetUrl
+      - foo
+      - bar
       properties:
-        offerId:
+        bar:
+          type: integer
+          format: int32
+        foo:
           type: string
-        targetUrl:
-          $ref: '#/components/schemas/Url'
+    SendOfferEndpointRequestSchema:
+      type: object
+      required:
+      - offer_id
+      - target_url
+      properties:
+        offer_id:
+          type: string
+        target_url:
+          type: string
+    TokenRequest:
+      type: object
+      required:
+      - foo
+      - bar
+      properties:
+        bar:
+          type: integer
+          format: int32
+        foo:
+          type: string
 tags:
 - name: (public)
   description: A collection of endpoints that should be publicly accessible without authentication. They are used to resolve metadata or allow communication with wallets.

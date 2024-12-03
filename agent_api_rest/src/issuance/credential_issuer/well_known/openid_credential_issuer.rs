@@ -8,6 +8,15 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
+use utoipa::ToSchema;
+
+#[derive(ToSchema)]
+#[schema(as = CredentialIssuerMetadata)]
+pub struct CredentialIssuerMetadataSchema {
+    pub foo: String,
+    pub bar: i32,
+}
 
 /// Credential Issuer Metadata
 ///
@@ -18,7 +27,7 @@ use axum::{
     tag = "(.well-known)",
     tags = ["(public)"],
     responses(
-        (status = 200, description = "Successfully returns the Credential Issuer Metadata", body = [CredentialIssuerMetadata])
+        (status = 200, description = "Successfully returns the Credential Issuer Metadata", body = [CredentialIssuerMetadataSchema])
     )
 )]
 #[axum_macros::debug_handler]

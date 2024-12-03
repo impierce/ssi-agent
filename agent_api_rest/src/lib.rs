@@ -13,7 +13,7 @@ use axum::{body::Bytes, extract::MatchedPath, http::Request, response::Response,
 use std::time::Duration;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{info, info_span, Span};
-use utoipa::OpenApi;
+use utoipa::{openapi::HttpMethod, OpenApi};
 use utoipa_scalar::{Scalar, Servable};
 
 use crate::openapi::{did_configuration, did_web, HolderApi, IssuanceApi, VerificationApi};
@@ -107,7 +107,7 @@ fn get_base_path() -> Result<String, ConfigError> {
         })
 }
 
-#[derive(utoipa::OpenApi)]
+#[derive(OpenApi)]
 #[openapi(
         // modifiers(),
         paths(
@@ -117,7 +117,7 @@ fn get_base_path() -> Result<String, ConfigError> {
             crate::verification::relying_party::request::request,
             crate::issuance::credential_issuer::token::token,
             // OpenID4VCI
-            crate::holder::openid4vci::offers,
+            crate::holder::openid4vci::offers_params,
             crate::issuance::credential_issuer::credential::credential,
             // .well-known
             crate::issuance::credential_issuer::well_known::oauth_authorization_server::oauth_authorization_server,
@@ -148,11 +148,18 @@ pub fn patch_generated_openapi(mut openapi: utoipa::openapi::OpenApi) -> utoipa:
     //     .description(Some("UniCore development server hosted by Impierce Technologies"))
     //     .build()]
     // .into();
+
     // Append endpoints defined outside of `agent_api_rest`.
-    openapi.paths.add_path("/.well-known/did.json", did_web());
     openapi
         .paths
-        .add_path("/.well-known/did-configuration.json", did_configuration());
+        .add_path_operation("/.well-known/did.json", vec![HttpMethod::Get], did_web());
+
+    openapi.paths.add_path_operation(
+        "/.well-known/did-configuration.json",
+        vec![HttpMethod::Get],
+        did_configuration(),
+    );
+
     openapi
 }
 
@@ -215,6 +222,7 @@ mod tests {
     async fn handler() {}
 
     #[tokio::test]
+    #[ignore = "Execute this test manually to generate the openapi.yaml file"]
     async fn generate_openapi_file() {
         let yaml_value = patch_generated_openapi(ApiDoc::openapi());
         let yaml_string = serde_yaml::to_string(&yaml_value).unwrap();
