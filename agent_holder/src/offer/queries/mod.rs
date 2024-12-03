@@ -11,10 +11,11 @@ impl View<Offer> for Offer {
 
         match &event.payload {
             CredentialOfferReceived {
+                received_offer_id,
                 credential_offer,
                 credential_configurations,
-                ..
             } => {
+                self.received_offer_id.clone_from(received_offer_id);
                 self.credential_offer.replace(*credential_offer.clone());
                 self.credential_configurations
                     .replace(credential_configurations.clone());

@@ -13,6 +13,7 @@ use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Presentation {
+    #[serde(rename = "id")]
     pub presentation_id: String,
     pub signed: Option<Jwt>,
 }

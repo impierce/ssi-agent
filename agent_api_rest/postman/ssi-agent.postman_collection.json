@@ -800,13 +800,18 @@
 								"exec": [
 									"const jsonData = JSON.parse(responseBody);",
 									"",
-									"if (jsonData && typeof jsonData === 'object') {",
-									"    const receivedOfferId = Object.keys(jsonData)[0];",
+									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+									"    const lastItem = jsonData[jsonData.length - 1];",
 									"",
-									"    if (receivedOfferId) {",
-									"        pm.collectionVariables.set(\"RECEIVED_OFFER_ID\", receivedOfferId);",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const receivedOfferId = lastItem.id;",
+									"",
+									"        if (receivedOfferId) {",
+									"            pm.collectionVariables.set(\"RECEIVED_OFFER_ID\", receivedOfferId);",
+									"        }",
 									"    }",
-									"}"
+									"}",
+									""
 								],
 								"type": "text/javascript",
 								"packages": {}
@@ -911,13 +916,18 @@
 								"exec": [
 									"const jsonData = JSON.parse(responseBody);",
 									"",
-									"if (jsonData && typeof jsonData === 'object') {",
-									"    const holderCredentialId = Object.keys(jsonData)[0];",
+									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+									"    const lastItem = jsonData[jsonData.length - 1];",
 									"",
-									"    if (holderCredentialId) {",
-									"        pm.collectionVariables.set(\"HOLDER_CREDENTIAL_ID\", holderCredentialId);",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const holderCredentialId = lastItem.id;",
+									"",
+									"        if (holderCredentialId) {",
+									"            pm.collectionVariables.set(\"HOLDER_CREDENTIAL_ID\", holderCredentialId);",
+									"        }",
 									"    }",
-									"}"
+									"}",
+									""
 								],
 								"type": "text/javascript",
 								"packages": {}
@@ -977,13 +987,18 @@
 								"exec": [
 									"const jsonData = JSON.parse(responseBody);",
 									"",
-									"if (jsonData && typeof jsonData === 'object') {",
-									"    const presentationId = Object.keys(jsonData)[0];",
+									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+									"    const lastItem = jsonData[jsonData.length - 1];",
 									"",
-									"    if (presentationId) {",
-									"        pm.collectionVariables.set(\"PRESENTATION_ID\", presentationId);",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const presentationId = lastItem.id;",
+									"",
+									"        if (presentationId) {",
+									"            pm.collectionVariables.set(\"PRESENTATION_ID\", presentationId);",
+									"        }",
 									"    }",
-									"}"
+									"}",
+									""
 								],
 								"type": "text/javascript",
 								"packages": {}
@@ -1125,13 +1140,18 @@
 								"exec": [
 									"const jsonData = JSON.parse(responseBody);",
 									"",
-									"if (jsonData && typeof jsonData === 'object') {",
-									"    const connectionId = Object.keys(jsonData)[0];",
+									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+									"    const lastItem = jsonData[jsonData.length - 1];",
 									"",
-									"    if (connectionId) {",
-									"        pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const connectionId = lastItem.id;",
+									"",
+									"        if (connectionId) {",
+									"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"        }",
 									"    }",
-									"}"
+									"}",
+									""
 								],
 								"type": "text/javascript",
 								"packages": {}
@@ -1173,13 +1193,18 @@
 								"exec": [
 									"const jsonData = JSON.parse(responseBody);",
 									"",
-									"if (jsonData && typeof jsonData === 'object') {",
-									"    const connectionId = Object.keys(jsonData)[0];",
+									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+									"    const lastItem = jsonData[jsonData.length - 1];",
 									"",
-									"    if (connectionId) {",
-									"        pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const connectionId = lastItem.id;",
+									"",
+									"        if (connectionId) {",
+									"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"        }",
 									"    }",
-									"}"
+									"}",
+									""
 								],
 								"type": "text/javascript"
 							}
@@ -1216,13 +1241,18 @@
 								"exec": [
 									"const jsonData = JSON.parse(responseBody);",
 									"",
-									"if (jsonData && typeof jsonData === 'object') {",
-									"    const connectionId = Object.keys(jsonData)[0];",
+									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+									"    const lastItem = jsonData[jsonData.length - 1];",
 									"",
-									"    if (connectionId) {",
-									"        pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const connectionId = lastItem.id;",
+									"",
+									"        if (connectionId) {",
+									"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"        }",
 									"    }",
-									"}"
+									"}",
+									""
 								],
 								"type": "text/javascript",
 								"packages": {}
@@ -1270,13 +1300,18 @@
 								"exec": [
 									"const jsonData = JSON.parse(responseBody);",
 									"",
-									"if (jsonData && typeof jsonData === 'object') {",
-									"    const connectionId = Object.keys(jsonData)[0];",
+									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+									"    const lastItem = jsonData[jsonData.length - 1];",
 									"",
-									"    if (connectionId) {",
-									"        pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const connectionId = lastItem.id;",
+									"",
+									"        if (connectionId) {",
+									"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"        }",
 									"    }",
-									"}"
+									"}",
+									""
 								],
 								"type": "text/javascript",
 								"packages": {}
@@ -1407,10 +1442,10 @@
 									"const jsonData = JSON.parse(responseBody);",
 									"",
 									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-									"    const firstItem = jsonData[0];",
+									"    const lastItem = jsonData[jsonData.length - 1];",
 									"",
-									"    if (firstItem && typeof firstItem === 'object') {",
-									"        const serviceId = firstItem.service_id;",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const serviceId = lastItem.id;",
 									"",
 									"        if (serviceId) {",
 									"            pm.collectionVariables.set(\"SERVICE_ID\", serviceId);",

@@ -97,6 +97,7 @@ pub(crate) async fn credential(
     let mut signed_credentials = vec![];
     for credential_id in credential_ids {
         let command = CredentialCommand::SignCredential {
+            credential_id: credential_id.clone(),
             subject_id: subject_id.clone(),
             overwrite: false,
         };

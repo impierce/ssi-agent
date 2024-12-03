@@ -12,6 +12,7 @@ use super::{command::ConnectionCommand, error::ConnectionError, event::Connectio
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Connection {
+    #[serde(rename = "id")]
     pub connection_id: String,
     pub alias: Option<String>,
     pub domain: Option<Url>,

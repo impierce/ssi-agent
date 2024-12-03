@@ -28,7 +28,7 @@ impl Aggregate for Document {
     type Services = Arc<IdentityServices>;
 
     fn aggregate_type() -> String {
-        "credential".to_string()
+        "document".to_string()
     }
 
     async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {

@@ -41,7 +41,7 @@ pub(crate) async fn offers_inner(state: HolderState, payload: serde_json::Value)
     info!("Credential Offer: {:#?}", credential_offer);
 
     let command = OfferCommand::ReceiveCredentialOffer {
-        offer_id: received_offer_id.clone(),
+        received_offer_id: received_offer_id.clone(),
         credential_offer,
     };
 
