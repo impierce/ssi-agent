@@ -10,6 +10,24 @@ info:
 
     ### Management endpoints
 
+    UniCore offers a set of APIs to fulfill the requirements of all possible roles in a Self-Sovereign Identity ecosystem.
+
+    #### Issuance
+
+    UniCore can issue Verifiable Credentials to other entities. Credentials can be created and then offered to the recipient for acceptance.
+
+    #### Holder
+
+    UniCore can hold and present Verifiable Credentials to other entities. This is especially useful when UniCore needs to prove its trustworthiness.
+
+    #### Verification
+
+    UniCore can verify Verifiable Credentials that are presented to it.
+
+    #### Identity
+
+    Although "Identity" itself is not a classic role in the SSI ecosystem, UniCore offers an API to manage its own identity.
+
     ### Standardized endpoints
 
     Some endpoints that UniCore offers follow a specification (such as the [OpenID4VC](https://openid.net/sg/openid4vc/specifications) protocol family). These endpoints have the **`(standardized)`** tag.
@@ -29,7 +47,7 @@ info:
 
     ## Authentication & Authorization
 
-    UniCore does not have any user management or authentication built-in (yet). It does not know of any roles or scopes. It is expected that the application which calls UniCore only performs calls which have been checked in the consumer business logic. If you want to deploy UniCore publicly, you should restrict access to the API by running it behind a reverse proxy or some API gateway. In most cases, only the endpoints behind `/v0` need to be protected, but all other endpoints should stay publicly accessible.
+    UniCore has no user management or authentication built in. Its API does not know of any roles or scopes. It is expected that the application which calls UniCore only performs calls which have been checked in the consumer business logic. If you want to make your UniCore reachable via the internet, you **must** restrict direct access to the API by running it behind a reverse proxy or some form of API gateway. In most cases, only the endpoints behind `/v0` need to be protected, but all other endpoints should stay publicly accessible in order for other participants (such as wallets) to interact with UniCore.
 
     ### Example reverse proxy configuration
 
@@ -151,7 +169,6 @@ paths:
   /openid4vci/credential:
     post:
       tags:
-      - Issuance
       - (public)
       summary: Credential Endpoint
       description: Standard OpenID4VCI endpoint for redeeming a token for a credential.
@@ -174,7 +191,6 @@ paths:
   /openid4vci/offers:
     get:
       tags:
-      - Holder
       - (public)
       summary: Credential Offer Endpoint
       description: |-
@@ -423,14 +439,14 @@ paths:
       - Issuance
       summary: Send offer to Holder
       description: |-
-        Manually send a prepared credential offer to a Holder's [Credential Offer Endpoint](#tag/holder/GET/openid4vci/offers) via a `GET` request.
-        This is **not** required if the wallet initiates the flow (usually an end-user mobile wallet), but rather when the Holder that has no prior knowledge of the offer (most often another cloud-based wallet, such as another UniCore instance).
+        Manually send a prepared credential offer to a Holder's [Credential Offer Endpoint](#tag/holder/GET/openid4vci/offers).
+        This is **not** required if the wallet initiates the flow (usually an end-user mobile wallet), but rather when the Holder has no prior knowledge of the offer (most often another cloud-based wallet, such as another UniCore instance).
       operationId: send
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SendOfferEndpointRequestSchema'
+              $ref: '#/components/schemas/SendOfferEndpointRequest'
             example:
               offerId: '0001'
               targetUrl: https://wallet.example.com/openid4vci/offers
@@ -562,7 +578,7 @@ components:
           format: int32
         foo:
           type: string
-    SendOfferEndpointRequestSchema:
+    SendOfferEndpointRequest:
       type: object
       required:
       - offer_id

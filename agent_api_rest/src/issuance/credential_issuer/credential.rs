@@ -48,7 +48,7 @@ pub struct CredentialResponseSchema {
     // TODO: doesn't work since (external) `CredentialRequest` doesn't implement `ToSchema`?
     // See: https://github.com/juhaku/utoipa?tab=readme-ov-file#how-to-implement-toschema-for-external-type
     request_body = CredentialRequestSchema,
-    tag = "Issuance",
+    // tag = "Issuance",
     tags = ["(public)"],
     responses(
         (status = 200, description = "Successfully returns the credential", body = [CredentialResponseSchema])

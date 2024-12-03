@@ -12,6 +12,7 @@ use url::Url;
 use utoipa::ToSchema;
 
 #[derive(ToSchema)]
+#[schema(as = SendOfferEndpointRequest)]
 pub struct SendOfferEndpointRequestSchema {
     pub offer_id: String,
     pub target_url: String,
@@ -26,8 +27,8 @@ pub struct SendOfferEndpointRequest {
 
 /// Send offer to Holder
 ///
-/// Manually send a prepared credential offer to a Holder's [Credential Offer Endpoint](#tag/holder/GET/openid4vci/offers) via a `GET` request.
-/// This is **not** required if the wallet initiates the flow (usually an end-user mobile wallet), but rather when the Holder that has no prior knowledge of the offer (most often another cloud-based wallet, such as another UniCore instance).
+/// Manually send a prepared credential offer to a Holder's [Credential Offer Endpoint](#tag/holder/GET/openid4vci/offers).
+/// This is **not** required if the wallet initiates the flow (usually an end-user mobile wallet), but rather when the Holder has no prior knowledge of the offer (most often another cloud-based wallet, such as another UniCore instance).
 #[utoipa::path(
     post,
     path = "/offers/send",

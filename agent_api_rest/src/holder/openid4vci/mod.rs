@@ -41,7 +41,7 @@ pub struct Oid4vciOfferEndpointRequest {
     get,
     path = "/openid4vci/offers",
     request_body = Oid4vciOfferEndpointRequestSchema,
-    tag = "Holder",
+    // tag = "Holder",
     tags = ["(public)"],
     responses(
         (status = 200, description = "Successfully received offer metadata."),
