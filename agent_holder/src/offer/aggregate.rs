@@ -4,6 +4,7 @@ use crate::offer::event::OfferEvent;
 use crate::services::HolderServices;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
+use identity_credential::credential::Jwt;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants};
 use oid4vci::credential_response::CredentialResponseType;
@@ -19,12 +20,20 @@ pub enum Status {
     #[default]
     Pending,
     Accepted,
-    Received,
+    CredentialsReceived,
     Rejected,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OfferCredential {
+    pub holder_credential_id: String,
+    pub credential: Jwt,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Offer {
+    #[serde(rename = "id")]
+    pub received_offer_id: String,
     pub credential_offer: Option<CredentialOfferParameters>,
     pub status: Status,
     pub credential_configurations: Option<HashMap<String, CredentialConfigurationsSupportedObject>>,
@@ -32,7 +41,7 @@ pub struct Offer {
     // TODO: These should not be part of this Aggregate. Instead, an Event Subscriber should be listening to the
     // `CredentialResponseReceived` event and then trigger the `CredentialCommand::AddCredential` command. We can do
     // this once we have a mechanism implemented that can both listen to events as well as trigger commands.
-    pub credentials: Vec<serde_json::Value>,
+    pub credentials: Vec<OfferCredential>,
 }
 
 #[async_trait]
@@ -43,7 +52,7 @@ impl Aggregate for Offer {
     type Services = Arc<HolderServices>;
 
     fn aggregate_type() -> String {
-        "offer".to_string()
+        "received_offer".to_string()
     }
 
     async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
@@ -55,7 +64,7 @@ impl Aggregate for Offer {
 
         match command {
             ReceiveCredentialOffer {
-                offer_id,
+                received_offer_id,
                 credential_offer,
             } => {
                 let wallet = &services.wallet;
@@ -87,16 +96,16 @@ impl Aggregate for Offer {
                         .collect();
 
                 Ok(vec![CredentialOfferReceived {
-                    offer_id,
+                    received_offer_id,
                     credential_offer: Box::new(credential_offer),
                     credential_configurations,
                 }])
             }
-            AcceptCredentialOffer { offer_id } => {
+            AcceptCredentialOffer { received_offer_id } => {
                 // TODO: reconsider business logic: can an offer be accepted multiple times? if not, should an error be thrown to the user?
                 if self.status != Status::Pending {
                     warn!(
-                        "Accepting Offer with ID: {offer_id} while its current status is: {:?}",
+                        "Accepting Offer with ID: {received_offer_id} while its current status is: {:?}",
                         self.status
                     );
                 }
@@ -142,16 +151,16 @@ impl Aggregate for Offer {
 
                 Ok(vec![
                     CredentialOfferAccepted {
-                        offer_id: offer_id.clone(),
+                        received_offer_id: received_offer_id.clone(),
                         status: Status::Accepted,
                     },
                     TokenResponseReceived {
-                        offer_id,
+                        received_offer_id,
                         token_response,
                     },
                 ])
             }
-            SendCredentialRequest { offer_id } => {
+            SendCredentialRequest { received_offer_id } => {
                 if self.status != Status::Accepted {
                     return Err(CredentialOfferStatusNotAcceptedError);
                 }
@@ -178,7 +187,7 @@ impl Aggregate for Offer {
                     .as_ref()
                     .ok_or(MissingCredentialConfigurationsError)?;
 
-                let credentials: Vec<serde_json::Value> = match credential_configuration_ids.len() {
+                let credentials: Vec<OfferCredential> = match credential_configuration_ids.len() {
                     0 => vec![],
                     1 => {
                         let credential_configuration_id = &credential_configuration_ids[0];
@@ -194,13 +203,23 @@ impl Aggregate for Offer {
                             .map_err(|_| CredentialResponseError)?;
 
                         let credential = match credential_response.credential {
-                            CredentialResponseType::Immediate { credential, .. } => credential,
+                            CredentialResponseType::Immediate { credential, .. } => {
+                                Jwt::from(credential.as_str().ok_or(UnsupportedCredentialFormatError)?.to_string())
+                            }
                             CredentialResponseType::Deferred { .. } => {
                                 return Err(UnsupportedDeferredCredentialResponseError)
                             }
                         };
 
-                        vec![credential]
+                        #[cfg(not(feature = "test_utils"))]
+                        let holder_credential_id = uuid::Uuid::new_v4().to_string();
+                        #[cfg(feature = "test_utils")]
+                        let holder_credential_id = test_utils::holder_credential_id();
+
+                        vec![OfferCredential {
+                            holder_credential_id,
+                            credential,
+                        }]
                     }
                     _batch => {
                         return Err(BatchCredentialRequestError);
@@ -210,19 +229,19 @@ impl Aggregate for Offer {
                 info!("credentials: {:?}", credentials);
 
                 Ok(vec![CredentialResponseReceived {
-                    offer_id,
-                    status: Status::Received,
+                    received_offer_id,
+                    status: Status::CredentialsReceived,
                     credentials,
                 }])
             }
-            RejectCredentialOffer { offer_id } => {
+            RejectCredentialOffer { received_offer_id } => {
                 // TODO: should we 'do nothing' or log a `warn!` message instead of returning an error?
                 if self.status != Status::Pending {
                     return Err(CredentialOfferStatusNotPendingError);
                 }
 
                 Ok(vec![CredentialOfferRejected {
-                    offer_id,
+                    received_offer_id,
                     status: Status::Rejected,
                 }])
             }
@@ -294,7 +313,7 @@ pub mod tests {
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         initialize(&issuance_state, startup_commands(issuer_url.parse().unwrap())).await;
 
-        let offer_id = generate_random_string();
+        let received_offer_id = generate_random_string();
 
         let mut app = issuance::router(issuance_state);
 
@@ -306,7 +325,7 @@ pub mod tests {
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "offerId": offer_id,
+                            "offerId": received_offer_id,
                             "credential": {
                                 "credentialSubject": {
                                     "first_name": "Ferris",
@@ -332,7 +351,7 @@ pub mod tests {
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "offerId": offer_id
+                            "offerId": received_offer_id
                         }))
                         .unwrap(),
                     ))
@@ -366,19 +385,19 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_receive_credential_offer(
-        offer_id: String,
+        received_offer_id: String,
         #[future(awt)] credential_offer_parameters: Box<CredentialOfferParameters>,
         credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
     ) {
         OfferTestFramework::with(Service::default())
             .given_no_previous_events()
             .when_async(OfferCommand::ReceiveCredentialOffer {
-                offer_id: offer_id.clone(),
+                received_offer_id: received_offer_id.clone(),
                 credential_offer: CredentialOffer::CredentialOffer(credential_offer_parameters.clone()),
             })
             .await
             .then_expect_events(vec![OfferEvent::CredentialOfferReceived {
-                offer_id,
+                received_offer_id,
                 credential_offer: credential_offer_parameters,
                 credential_configurations: credential_configurations_supported,
             }]);
@@ -388,28 +407,28 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_accept_credential_offer(
-        offer_id: String,
+        received_offer_id: String,
         #[future(awt)] credential_offer_parameters: Box<CredentialOfferParameters>,
         #[future(awt)] token_response: TokenResponse,
         credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
     ) {
         OfferTestFramework::with(Service::default())
             .given(vec![OfferEvent::CredentialOfferReceived {
-                offer_id: offer_id.clone(),
+                received_offer_id: received_offer_id.clone(),
                 credential_offer: credential_offer_parameters,
                 credential_configurations: credential_configurations_supported,
             }])
             .when_async(OfferCommand::AcceptCredentialOffer {
-                offer_id: offer_id.clone(),
+                received_offer_id: received_offer_id.clone(),
             })
             .await
             .then_expect_events(vec![
                 OfferEvent::CredentialOfferAccepted {
-                    offer_id: offer_id.clone(),
+                    received_offer_id: received_offer_id.clone(),
                     status: Status::Accepted,
                 },
                 OfferEvent::TokenResponseReceived {
-                    offer_id,
+                    received_offer_id,
                     token_response,
                 },
             ]);
@@ -419,35 +438,36 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_send_credential_request(
-        offer_id: String,
+        received_offer_id: String,
         #[future(awt)] credential_offer_parameters: Box<CredentialOfferParameters>,
         #[future(awt)] token_response: TokenResponse,
         credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
+        signed_credentials: Vec<OfferCredential>,
     ) {
         OfferTestFramework::with(Service::default())
             .given(vec![
                 OfferEvent::CredentialOfferReceived {
-                    offer_id: offer_id.clone(),
+                    received_offer_id: received_offer_id.clone(),
                     credential_offer: credential_offer_parameters,
                     credential_configurations: credential_configurations_supported,
                 },
                 OfferEvent::CredentialOfferAccepted {
-                    offer_id: offer_id.clone(),
+                    received_offer_id: received_offer_id.clone(),
                     status: Status::Accepted,
                 },
                 OfferEvent::TokenResponseReceived {
-                    offer_id: offer_id.clone(),
-                    token_response
+                    received_offer_id: received_offer_id.clone(),
+                    token_response,
                 },
             ])
             .when_async(OfferCommand::SendCredentialRequest {
-                offer_id: offer_id.clone(),
+                received_offer_id: received_offer_id.clone(),
             })
             .await
             .then_expect_events(vec![OfferEvent::CredentialResponseReceived {
-                offer_id: offer_id.clone(),
-                status: Status::Received,
-                credentials: vec![json!("eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjoiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJkZWdyZWUiOnsidHlwZSI6Ik1hc3RlckRlZ3JlZSIsIm5hbWUiOiJNYXN0ZXIgb2YgT2NlYW5vZ3JhcGh5In0sImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4ifSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiJ9fQ.jQEpI7DhjOcmyhPEpfGARwcRyzor_fUvynb43-eqD9175FBoshENX0S-8qlloQ7vbT5gat8TjvcDlGDN720ZBw")],
+                received_offer_id: received_offer_id.clone(),
+                status: Status::CredentialsReceived,
+                credentials: signed_credentials,
             }]);
     }
 
@@ -455,22 +475,22 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_reject_credential_offer(
-        offer_id: String,
+        received_offer_id: String,
         #[future(awt)] credential_offer_parameters: Box<CredentialOfferParameters>,
         credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
     ) {
         OfferTestFramework::with(Service::default())
             .given(vec![OfferEvent::CredentialOfferReceived {
-                offer_id: offer_id.clone(),
+                received_offer_id: received_offer_id.clone(),
                 credential_offer: credential_offer_parameters,
                 credential_configurations: credential_configurations_supported,
             }])
             .when_async(OfferCommand::RejectCredentialOffer {
-                offer_id: offer_id.clone(),
+                received_offer_id: received_offer_id.clone(),
             })
             .await
             .then_expect_events(vec![OfferEvent::CredentialOfferRejected {
-                offer_id: offer_id.clone(),
+                received_offer_id: received_offer_id.clone(),
                 status: Status::Rejected,
             }]);
     }
@@ -478,11 +498,23 @@ pub mod tests {
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
+    use super::*;
     use agent_shared::generate_random_string;
+    use identity_credential::credential::Jwt;
     use rstest::*;
 
     #[fixture]
-    pub fn offer_id() -> String {
+    pub fn received_offer_id() -> String {
         generate_random_string()
+    }
+
+    #[fixture]
+    pub fn holder_credential_id() -> String {
+        "holder_credential_id".to_string()
+    }
+
+    #[fixture]
+    pub fn signed_credentials(holder_credential_id: String) -> Vec<OfferCredential> {
+        vec![OfferCredential { holder_credential_id, credential: Jwt::from("eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjoiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJkZWdyZWUiOnsidHlwZSI6Ik1hc3RlckRlZ3JlZSIsIm5hbWUiOiJNYXN0ZXIgb2YgT2NlYW5vZ3JhcGh5In0sImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4ifSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiJ9fQ.jQEpI7DhjOcmyhPEpfGARwcRyzor_fUvynb43-eqD9175FBoshENX0S-8qlloQ7vbT5gat8TjvcDlGDN720ZBw".to_string())}]
     }
 }

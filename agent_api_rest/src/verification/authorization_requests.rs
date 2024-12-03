@@ -4,7 +4,7 @@ use agent_shared::{
     handlers::{command_handler, query_handler},
 };
 use agent_verification::{
-    authorization_request::{command::AuthorizationRequestCommand, queries::AuthorizationRequestView},
+    authorization_request::{command::AuthorizationRequestCommand, views::AuthorizationRequestView},
     state::VerificationState,
 };
 use axum::{
@@ -16,7 +16,7 @@ use axum::{
 use hyper::header;
 use oid4vp::PresentationDefinition;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use tracing::info;
 use utoipa::ToSchema;
 
@@ -35,16 +35,28 @@ use utoipa::ToSchema;
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn get_authorization_requests(
+pub(crate) async fn all_authorization_requests(State(state): State<VerificationState>) -> Response {
+    match query_handler("all_authorization_requests", &state.query.all_authorization_requests).await {
+        Ok(Some(all_authorization_requests_view)) => {
+            let all_authorization_requests = all_authorization_requests_view
+                .authorization_requests
+                .into_values()
+                .collect::<Vec<_>>();
+
+            (StatusCode::OK, Json(all_authorization_requests)).into_response()
+        }
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+#[axum_macros::debug_handler]
+pub(crate) async fn authorization_request(
     State(state): State<VerificationState>,
     Path(authorization_request_id): Path<String>,
 ) -> Response {
-    // Get the authorization request if it exists.
     match query_handler(&authorization_request_id, &state.query.authorization_request).await {
-        Ok(Some(AuthorizationRequestView {
-            authorization_request: Some(authorization_request),
-            ..
-        })) => (StatusCode::OK, Json(authorization_request)).into_response(),
+        Ok(Some(authorization_request_view)) => (StatusCode::OK, Json(authorization_request_view)).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
@@ -141,7 +153,7 @@ pub(crate) async fn authorization_requests(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
-    // Return the credential.
+    // Return the authorization_request.
     match query_handler(&state, &verification_state.query.authorization_request).await {
         Ok(Some(AuthorizationRequestView {
             form_url_encoded_authorization_request: Some(form_url_encoded_authorization_request),

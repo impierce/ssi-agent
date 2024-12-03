@@ -1,6 +1,6 @@
 use crate::API_VERSION;
 use agent_issuance::{
-    credential::{command::CredentialCommand, entity::Data, queries::CredentialView},
+    credential::{command::CredentialCommand, entity::Data, views::CredentialView},
     offer::command::OfferCommand,
     server_config::queries::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
@@ -14,6 +14,7 @@ use axum::{
 use hyper::header;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use serde_json::Value;
 use tracing::info;
 use utoipa::ToSchema;
@@ -33,13 +34,9 @@ use utoipa::ToSchema;
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn get_credentials(State(state): State<IssuanceState>, Path(credential_id): Path<String>) -> Response {
-    // Get the credential if it exists.
+pub(crate) async fn credential(State(state): State<IssuanceState>, Path(credential_id): Path<String>) -> Response {
     match query_handler(&credential_id, &state.query.credential).await {
-        Ok(Some(CredentialView {
-            data: Some(Data { raw }),
-            ..
-        })) => (StatusCode::OK, Json(raw)).into_response(),
+        Ok(Some(credential_view)) => (StatusCode::OK, Json(credential_view)).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
@@ -102,36 +99,40 @@ pub(crate) async fn credentials(
 
     let credential_id = uuid::Uuid::new_v4().to_string();
 
-    let credential_configuration = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
-        Ok(Some(ServerConfigView {
-            credential_issuer_metadata:
-                Some(CredentialIssuerMetadata {
-                    credential_configurations_supported,
-                    ..
-                }),
-            ..
-        })) => {
-            if let Some(credential_configuration) =
-                credential_configurations_supported.get(&credential_configuration_id)
-            {
-                credential_configuration.clone()
-            } else {
-                return (
-                    StatusCode::NOT_FOUND,
-                    format!("No Credential Configuration found with id: `{credential_configuration_id}`"),
-                )
-                    .into_response();
+    let credential_configuration = Box::new(
+        match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
+            Ok(Some(ServerConfigView {
+                credential_issuer_metadata:
+                    Some(CredentialIssuerMetadata {
+                        credential_configurations_supported,
+                        ..
+                    }),
+                ..
+            })) => {
+                if let Some(credential_configuration) =
+                    credential_configurations_supported.get(&credential_configuration_id)
+                {
+                    credential_configuration.clone()
+                } else {
+                    return (
+                        StatusCode::NOT_FOUND,
+                        format!("No Credential Configuration found with id: `{credential_configuration_id}`"),
+                    )
+                        .into_response();
+                }
             }
-        }
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
+            _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        },
+    );
 
     let command = if is_signed {
         CredentialCommand::CreateSignedCredential {
+            credential_id: credential_id.clone(),
             signed_credential: data,
         }
     } else {
         CredentialCommand::CreateUnsignedCredential {
+            credential_id: credential_id.clone(),
             data: Data { raw: data },
             credential_configuration,
         }
@@ -199,6 +200,19 @@ pub(crate) async fn credentials(
     }
 }
 
+#[axum_macros::debug_handler]
+pub(crate) async fn all_credentials(State(state): State<IssuanceState>) -> Response {
+    match query_handler("all_credentials", &state.query.all_credentials).await {
+        Ok(Some(all_credentials_view)) => {
+            let all_credentials = all_credentials_view.credentials.into_values().collect::<Vec<_>>();
+
+            (StatusCode::OK, Json(all_credentials)).into_response()
+        }
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -230,10 +244,7 @@ pub mod tests {
                 "name": "UniCore"
             },
             "issuanceDate": "2010-01-01T00:00:00Z",
-            "credentialSubject": {
-                "first_name": "Ferris",
-                "last_name": "Rustacean"
-            }
+            "credentialSubject": CREDENTIAL_SUBJECT.clone()
         });
     }
 
@@ -248,10 +259,8 @@ pub mod tests {
                         serde_json::to_vec(&json!({
                             "offerId": OFFER_ID,
                             "credential": {
-                                "credentialSubject": {
-                                "first_name": "Ferris",
-                                "last_name": "Rustacean"
-                            }},
+                                "credentialSubject": CREDENTIAL_SUBJECT.clone()
+                            },
                             "credentialConfigurationId": CREDENTIAL_CONFIGURATION_ID
                         }))
                         .unwrap(),
@@ -293,7 +302,7 @@ pub mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body, CREDENTIAL.clone());
+        assert_eq!(body["data"]["raw"], CREDENTIAL.clone());
     }
 
     #[tokio::test]

@@ -3,28 +3,24 @@ pub mod all_credentials;
 use super::event::CredentialEvent;
 use crate::credential::aggregate::Credential;
 use cqrs_es::{EventEnvelope, View};
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct CredentialView {
-    pub credential_id: Option<String>,
-    pub offer_id: Option<String>,
-    pub credential: Option<serde_json::Value>,
-}
+pub type HolderCredentialView = Credential;
 
-impl View<Credential> for CredentialView {
+impl View<Credential> for Credential {
     fn update(&mut self, event: &EventEnvelope<Credential>) {
         use CredentialEvent::*;
 
         match &event.payload {
             CredentialAdded {
-                credential_id,
-                offer_id,
+                holder_credential_id,
+                received_offer_id: offer_id,
                 credential,
+                data,
             } => {
-                self.credential_id.replace(credential_id.clone());
-                self.offer_id.replace(offer_id.clone());
-                self.credential.replace(credential.clone());
+                self.holder_credential_id.clone_from(holder_credential_id);
+                self.received_offer_id.replace(offer_id.clone());
+                self.signed.replace(credential.clone());
+                self.data.replace(data.clone());
             }
         }
     }

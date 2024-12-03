@@ -1,18 +1,19 @@
 pub mod send;
 
 use agent_issuance::{
-    offer::{command::OfferCommand, queries::OfferView},
+    offer::{command::OfferCommand, views::OfferView},
     server_config::queries::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
 use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
-    extract::{Json, State},
+    extract::{Json, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use hyper::header;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use serde_json::Value;
 use tracing::info;
 use utoipa::ToSchema;
@@ -90,6 +91,28 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
             form_url_encoded_credential_offer,
         )
             .into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+#[axum_macros::debug_handler]
+pub(crate) async fn all_offers(State(state): State<IssuanceState>) -> Response {
+    match query_handler("all_offers", &state.query.all_offers).await {
+        Ok(Some(all_offers_view)) => {
+            let all_offers = all_offers_view.offers.into_values().collect::<Vec<_>>();
+
+            (StatusCode::OK, Json(all_offers)).into_response()
+        }
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+#[axum_macros::debug_handler]
+pub(crate) async fn offer(State(state): State<IssuanceState>, Path(offer_id): Path<String>) -> Response {
+    match query_handler(&offer_id, &state.query.offer).await {
+        Ok(Some(offer_view)) => (StatusCode::OK, Json(offer_view)).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

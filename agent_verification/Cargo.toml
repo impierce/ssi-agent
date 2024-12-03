@@ -16,6 +16,7 @@ jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
 oid4vc-manager.workspace = true
 oid4vp.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde.workspace = true
 serde_json.workspace = true
 siopv2.workspace = true
@@ -30,7 +31,7 @@ agent_verification = { path = ".", features = ["test_utils"] }
 
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 did_manager.workspace = true
-identity_core = "1.2.0"
+identity_core.workspace = true
 identity_credential.workspace = true
 lazy_static.workspace = true
 oid4vci.workspace = true

@@ -15,8 +15,18 @@ use crate::offer::error::OfferError::{self, *};
 use crate::offer::event::OfferEvent;
 use crate::services::IssuanceServices;
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub enum Status {
+    #[default]
+    Created,
+    Pending,
+    Issued,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Offer {
+    #[serde(rename = "id")]
+    pub offer_id: String,
     pub credential_offer: Option<CredentialOffer>,
     pub subject_id: Option<String>,
     pub credential_ids: Vec<String>,
@@ -25,6 +35,7 @@ pub struct Offer {
     pub token_response: Option<TokenResponse>,
     pub access_token: String,
     pub credential_response: Option<CredentialResponse>,
+    pub status: Status,
 }
 
 #[async_trait]
@@ -82,6 +93,7 @@ impl Aggregate for Offer {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 }])
             }
             AddCredentials {
@@ -98,19 +110,34 @@ impl Aggregate for Offer {
                     .as_ref()
                     .ok_or(MissingCredentialOfferError)?
                     .to_string(),
+                status: Status::Pending,
             }]),
             SendCredentialOffer { offer_id, target_url } => {
                 // TODO: add to `service`?
                 let client = reqwest::Client::new();
 
+                let form_url_encoded_credential_offer = self
+                    .credential_offer
+                    .as_ref()
+                    .ok_or(MissingCredentialOfferError)?
+                    .to_string();
+
+                let target =
+                    form_url_encoded_credential_offer.replace("openid-credential-offer://", target_url.as_str());
+
+                info!("Sending credential offer to: {}", target);
+
                 client
-                    .get(target_url.clone())
-                    .json(self.credential_offer.as_ref().ok_or(MissingCredentialOfferError)?)
+                    .get(target)
                     .send()
                     .await
                     .map_err(|e| SendCredentialOfferError(e.to_string()))?;
 
-                Ok(vec![CredentialOfferSent { offer_id, target_url }])
+                Ok(vec![CredentialOfferSent {
+                    offer_id,
+                    target_url,
+                    status: Status::Pending,
+                }])
             }
             CreateTokenResponse {
                 offer_id,
@@ -188,6 +215,7 @@ impl Aggregate for Offer {
                 Ok(vec![CredentialResponseCreated {
                     offer_id,
                     credential_response,
+                    status: Status::Issued,
                 }])
             }
         }
@@ -200,23 +228,33 @@ impl Aggregate for Offer {
 
         match event {
             CredentialOfferCreated {
+                offer_id,
                 pre_authorized_code,
                 access_token,
                 credential_offer,
-                ..
+                status,
             } => {
+                self.offer_id = offer_id;
                 self.pre_authorized_code = pre_authorized_code;
                 self.access_token = access_token;
                 self.credential_offer.replace(credential_offer);
+                self.status = status;
             }
-            CredentialsAdded { credential_ids, .. } => {
+            CredentialsAdded {
+                offer_id,
+                credential_ids,
+            } => {
+                self.offer_id = offer_id;
                 self.credential_ids = credential_ids;
             }
             FormUrlEncodedCredentialOfferCreated {
+                offer_id,
                 form_url_encoded_credential_offer,
-                ..
+                status,
             } => {
+                self.offer_id = offer_id;
                 self.form_url_encoded_credential_offer = form_url_encoded_credential_offer;
+                self.status = status;
             }
             CredentialOfferSent { .. } => {}
             CredentialRequestVerified { subject_id, .. } => {
@@ -275,6 +313,7 @@ pub mod tests {
                 credential_offer,
                 pre_authorized_code,
                 access_token,
+                status: Status::Created,
             }]);
     }
 
@@ -291,6 +330,7 @@ pub mod tests {
                 credential_offer,
                 pre_authorized_code,
                 access_token,
+                status: Status::Created,
             }])
             .when(OfferCommand::AddCredentials {
                 offer_id: Default::default(),
@@ -317,6 +357,7 @@ pub mod tests {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: Default::default(),
@@ -329,6 +370,7 @@ pub mod tests {
             .then_expect_events(vec![OfferEvent::FormUrlEncodedCredentialOfferCreated {
                 offer_id: Default::default(),
                 form_url_encoded_credential_offer,
+                status: Status::Pending,
             }]);
     }
 
@@ -349,6 +391,7 @@ pub mod tests {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: Default::default(),
@@ -357,6 +400,7 @@ pub mod tests {
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: Default::default(),
                     form_url_encoded_credential_offer,
+                    status: Status::Pending,
                 },
             ])
             .when(OfferCommand::CreateTokenResponse {
@@ -390,6 +434,7 @@ pub mod tests {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: Default::default(),
@@ -398,6 +443,7 @@ pub mod tests {
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: Default::default(),
                     form_url_encoded_credential_offer,
+                    status: Status::Pending,
                 },
                 OfferEvent::TokenResponseCreated {
                     offer_id: Default::default(),
@@ -434,6 +480,7 @@ pub mod tests {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: Default::default(),
@@ -442,6 +489,7 @@ pub mod tests {
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: Default::default(),
                     form_url_encoded_credential_offer,
+                    status: Status::Pending,
                 },
                 OfferEvent::TokenResponseCreated {
                     offer_id: Default::default(),
@@ -459,6 +507,7 @@ pub mod tests {
             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
                 offer_id: Default::default(),
                 credential_response,
+                status: Status::Issued,
             }]);
     }
 }

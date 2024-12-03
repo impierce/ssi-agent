@@ -28,12 +28,22 @@ use types_ob_v3::prelude::{
     ProfileBuilder,
 };
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub enum Status {
+    #[default]
+    Pending,
+    Issued,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
 #[derivative(PartialEq)]
 pub struct Credential {
-    data: Option<Data>,
-    credential_configuration: CredentialConfigurationsSupportedObject,
-    signed: Option<serde_json::Value>,
+    #[serde(rename = "id")]
+    pub credential_id: String,
+    pub data: Option<Data>,
+    pub credential_configuration: CredentialConfigurationsSupportedObject,
+    pub signed: Option<serde_json::Value>,
+    pub status: Status,
 }
 
 #[async_trait]
@@ -56,6 +66,7 @@ impl Aggregate for Credential {
 
         match command {
             CreateUnsignedCredential {
+                credential_id,
                 data,
                 credential_configuration,
             } => match &credential_configuration.credential_format {
@@ -119,6 +130,7 @@ impl Aggregate for Credential {
                                 raw["type"] = json!(type_);
 
                                 return Ok(vec![UnsignedCredentialCreated {
+                                    credential_id,
                                     data: Data { raw },
                                     credential_configuration,
                                 }]);
@@ -155,6 +167,7 @@ impl Aggregate for Credential {
                                     .map_err(InvalidVerifiableCredentialError)?;
 
                                 return Ok(vec![UnsignedCredentialCreated {
+                                    credential_id,
                                     data: Data { raw: json!(credential) },
                                     credential_configuration,
                                 }]);
@@ -167,8 +180,18 @@ impl Aggregate for Credential {
                 }
                 _ => Err(UnsupportedCredentialFormat),
             },
-            CreateSignedCredential { signed_credential } => Ok(vec![SignedCredentialCreated { signed_credential }]),
-            SignCredential { subject_id, overwrite } => {
+            CreateSignedCredential {
+                credential_id,
+                signed_credential,
+            } => Ok(vec![SignedCredentialCreated {
+                credential_id,
+                signed_credential,
+            }]),
+            SignCredential {
+                credential_id,
+                subject_id,
+                overwrite,
+            } => {
                 if self.signed.is_some() && !overwrite {
                     return Ok(vec![]);
                 }
@@ -193,19 +216,31 @@ impl Aggregate for Credential {
 
                     // Insert the rest of the fields
                     for (key, value) in credential_subject {
-                        new_credential_subject.insert(key, value);
+                        if key != "id" {
+                            new_credential_subject.insert(key, value);
+                        }
                     }
+
+                    info!("Credential subject: {:?}", new_credential_subject);
 
                     // Replace the original credentialSubject with the new map
                     credential.raw["credentialSubject"] = serde_json::Value::Object(new_credential_subject);
 
+                    info!("Credential: {:?}", credential);
+
                     #[cfg(feature = "test_utils")]
                     let iat = 0;
                     #[cfg(not(feature = "test_utils"))]
-                    let iat = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
+                    let iat = credential.raw["issuanceDate"]
+                        .as_str()
                         .unwrap()
-                        .as_secs() as i64;
+                        .parse::<chrono::DateTime<chrono::Utc>>()
+                        .unwrap()
+                        .timestamp();
+                    // let iat = std::time::SystemTime::now()
+                    //     .duration_since(std::time::UNIX_EPOCH)
+                    //     .unwrap()
+                    //     .as_secs() as i64;
 
                     json!(jwt::encode(
                         services.issuer.clone(),
@@ -225,7 +260,11 @@ impl Aggregate for Credential {
                     .ok())
                 };
 
-                Ok(vec![CredentialSigned { signed_credential }])
+                Ok(vec![CredentialSigned {
+                    credential_id,
+                    signed_credential,
+                    status: Status::Issued,
+                }])
             }
         }
     }
@@ -237,17 +276,29 @@ impl Aggregate for Credential {
 
         match event {
             UnsignedCredentialCreated {
+                credential_id,
                 data,
                 credential_configuration,
             } => {
+                self.credential_id = credential_id;
                 self.data.replace(data);
-                self.credential_configuration = credential_configuration;
+                self.credential_configuration = *credential_configuration;
             }
-            SignedCredentialCreated { signed_credential } => {
+            SignedCredentialCreated {
+                credential_id,
+                signed_credential,
+            } => {
+                self.credential_id = credential_id;
                 self.signed.replace(signed_credential);
             }
-            CredentialSigned { signed_credential } => {
+            CredentialSigned {
+                credential_id,
+                signed_credential,
+                status,
+            } => {
+                self.credential_id = credential_id;
                 self.signed.replace(signed_credential);
+                self.status = status;
             }
         }
     }
@@ -288,20 +339,23 @@ pub mod credential_tests {
         #[case] credential_subject: serde_json::Value,
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
         #[case] unsigned_credential: serde_json::Value,
+        credential_id: String,
     ) {
         CredentialTestFramework::with(Service::default())
             .given_no_previous_events()
             .when(CredentialCommand::CreateUnsignedCredential {
+                credential_id: credential_id.clone(),
                 data: Data {
                     raw: credential_subject,
                 },
-                credential_configuration: credential_configuration.clone(),
+                credential_configuration: Box::new(credential_configuration.clone()),
             })
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
+                credential_id,
                 data: Data {
                     raw: unsigned_credential,
                 },
-                credential_configuration,
+                credential_configuration: Box::new(credential_configuration),
             }])
     }
 
@@ -321,20 +375,25 @@ pub mod credential_tests {
         #[case] unsigned_credential: serde_json::Value,
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
         #[case] verifiable_credential_jwt: String,
+        credential_id: String,
     ) {
         CredentialTestFramework::with(Service::default())
             .given(vec![CredentialEvent::UnsignedCredentialCreated {
+                credential_id: credential_id.clone(),
                 data: Data {
                     raw: unsigned_credential,
                 },
-                credential_configuration,
+                credential_configuration: Box::new(credential_configuration),
             }])
             .when(CredentialCommand::SignCredential {
+                credential_id: credential_id.clone(),
                 subject_id: SUBJECT_KEY_DID.identifier("did:key", Algorithm::EdDSA).await.unwrap(),
                 overwrite: false,
             })
             .then_expect_events(vec![CredentialEvent::CredentialSigned {
+                credential_id,
                 signed_credential: json!(verifiable_credential_jwt),
+                status: Status::Issued,
             }])
     }
 }
@@ -351,12 +410,18 @@ pub mod test_utils {
         proof::KeyProofMetadata,
         ProofType,
     };
+    use rstest::fixture;
     use serde_json::json;
     use std::collections::HashMap;
 
     pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHA6Ly9leGFtcGxlLmNvbS9jcmVkZW50aWFscy8zNTI3IiwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5hbWUiOiJUZWFtd29yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJ0eXBlIjpbIkFjaGlldmVtZW50U3ViamVjdCJdLCJhY2hpZXZlbWVudCI6eyJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vYWNoaWV2ZW1lbnRzLzIxc3QtY2VudHVyeS1za2lsbHMvdGVhbXdvcmsiLCJ0eXBlIjoiQWNoaWV2ZW1lbnQiLCJjcml0ZXJpYSI6eyJuYXJyYXRpdmUiOiJUZWFtIG1lbWJlcnMgYXJlIG5vbWluYXRlZCBmb3IgdGhpcyBiYWRnZSBieSB0aGVpciBwZWVycyBhbmQgcmVjb2duaXplZCB1cG9uIHJldmlldyBieSBFeGFtcGxlIENvcnAgbWFuYWdlbWVudC4ifSwiZGVzY3JpcHRpb24iOiJUaGlzIGJhZGdlIHJlY29nbml6ZXMgdGhlIGRldmVsb3BtZW50IG9mIHRoZSBjYXBhY2l0eSB0byBjb2xsYWJvcmF0ZSB3aXRoaW4gYSBncm91cCBlbnZpcm9ubWVudC4iLCJuYW1lIjoiVGVhbXdvcmsifX19fQ.SkC7IvpBGB9e98eobnE9qcLjs-yoZup3cieBla3DRTlcRezXEDPv4YRoUgffho9LJ0rkmfFPsPwb-owXMWyPAA";
 
     pub const W3C_VC_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjoiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIiwiZGVncmVlIjp7InR5cGUiOiJNYXN0ZXJEZWdyZWUiLCJuYW1lIjoiTWFzdGVyIG9mIE9jZWFub2dyYXBoeSJ9fSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiJ9fQ.MUDBbPJfXe0G9sjVTF3RuR6ukRM0d4N57iMGNFcIKMFPIEdig12v-YFB0qfnSghGcQo8hUw3jzxZXTSJATEgBg";
+
+    #[fixture]
+    pub fn credential_id() -> String {
+        "credential_id".to_string()
+    }
 
     lazy_static! {
         pub static ref OPENBADGE_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
@@ -461,7 +526,7 @@ pub mod test_utils {
           "id": "http://example.com/credentials/3527",
           "type": ["VerifiableCredential", "OpenBadgeCredential"],
           "issuer": {
-            "id": "https://my-domain.example.org",
+            "id": "https://my-domain.example.org/",
             "type": "Profile",
             "name": "UniCore"
           },

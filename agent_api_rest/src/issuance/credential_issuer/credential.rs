@@ -1,11 +1,8 @@
 use std::time::{Duration, Instant};
 
 use agent_issuance::{
-    credential::{command::CredentialCommand, queries::CredentialView},
-    offer::{
-        command::OfferCommand,
-        queries::{access_token::AccessTokenView, OfferView},
-    },
+    credential::{command::CredentialCommand, views::CredentialView},
+    offer::{command::OfferCommand, queries::access_token::AccessTokenView, views::OfferView},
     server_config::queries::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
@@ -115,6 +112,7 @@ pub(crate) async fn credential(
     let mut signed_credentials = vec![];
     for credential_id in credential_ids {
         let command = CredentialCommand::SignCredential {
+            credential_id: credential_id.clone(),
             subject_id: subject_id.clone(),
             overwrite: false,
         };

@@ -64,6 +64,7 @@ version = "0.1.0"
 dependencies = [
  "agent_event_publisher_http",
  "agent_holder",
+ "agent_identity",
  "agent_issuance",
  "agent_secret_manager",
  "agent_shared",
@@ -72,9 +73,13 @@ dependencies = [
  "axum 0.7.5",
  "axum-auth 0.7.0",
  "axum-macros",
+ "did_manager",
  "futures",
  "http-api-problem",
  "hyper 1.4.1",
+ "identity_core",
+ "identity_credential",
+ "identity_did",
  "jsonwebtoken",
  "lazy_static",
  "mime",
@@ -91,9 +96,8 @@ dependencies = [
  "siopv2",
  "tokio",
  "tower",
- "tower-http 0.5.2",
+ "tower-http 0.6.1",
  "tracing",
- "tracing-subscriber",
  "tracing-test",
  "url",
  "utoipa",
@@ -109,21 +113,16 @@ dependencies = [
  "agent_api_rest",
  "agent_event_publisher_http",
  "agent_holder",
+ "agent_identity",
  "agent_issuance",
  "agent_secret_manager",
  "agent_shared",
  "agent_store",
  "agent_verification",
  "axum 0.7.5",
- "did_manager",
- "identity_document",
- "identity_verification",
- "serde_json",
  "tokio",
- "tower-http 0.5.2",
  "tracing",
  "tracing-subscriber",
- "url",
 ]
 
 [[package]]
@@ -132,6 +131,7 @@ version = "0.1.0"
 dependencies = [
  "agent_event_publisher_http",
  "agent_holder",
+ "agent_identity",
  "agent_issuance",
  "agent_shared",
  "agent_store",
@@ -139,12 +139,12 @@ dependencies = [
  "anyhow",
  "async-trait",
  "cqrs-es",
+ "http-serde",
  "reqwest 0.12.5",
  "rustls 0.23.10",
  "serde",
  "serde_json",
  "serde_with 3.8.1",
- "serde_yaml",
  "tokio",
  "tracing",
  "wiremock",
@@ -163,14 +163,59 @@ dependencies = [
  "async-std",
  "async-trait",
  "axum 0.7.5",
+ "base64 0.22.1",
  "cqrs-es",
  "did_manager",
+ "identity_core",
+ "identity_credential",
  "jsonwebtoken",
  "lazy_static",
  "mime",
  "names",
  "oid4vc-core",
  "oid4vci",
+ "rand 0.8.5",
+ "reqwest 0.12.5",
+ "rstest",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-test",
+ "uuid",
+]
+
+[[package]]
+name = "agent_identity"
+version = "0.1.0"
+dependencies = [
+ "agent_api_rest",
+ "agent_holder",
+ "agent_identity",
+ "agent_issuance",
+ "agent_secret_manager",
+ "agent_shared",
+ "agent_store",
+ "async-std",
+ "async-trait",
+ "axum 0.7.5",
+ "base64 0.22.1",
+ "cqrs-es",
+ "derivative",
+ "did_manager",
+ "futures",
+ "identity_core",
+ "identity_credential",
+ "identity_did",
+ "identity_document",
+ "jsonwebtoken",
+ "lazy_static",
+ "mime",
+ "names",
+ "oid4vc-core",
  "rand 0.8.5",
  "reqwest 0.12.5",
  "rstest",
@@ -198,14 +243,11 @@ dependencies = [
  "cqrs-es",
  "derivative",
  "did_manager",
- "futures",
  "identity_core",
  "identity_credential",
- "jsonschema",
  "jsonwebtoken",
  "lazy_static",
  "oid4vc-core",
- "oid4vc-manager",
  "oid4vci",
  "once_cell",
  "reqwest 0.12.5",
@@ -214,12 +256,10 @@ dependencies = [
  "serde_json",
  "serial_test",
  "thiserror",
- "tokio",
  "tracing",
  "tracing-test",
  "types-ob-v3",
  "url",
- "uuid",
 ]
 
 [[package]]
@@ -230,7 +270,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.1",
- "cqrs-es",
  "did_manager",
  "futures",
  "identity_iota",
@@ -240,7 +279,6 @@ dependencies = [
  "oid4vc-core",
  "p256 0.13.2",
  "ring",
- "serde",
  "serde_json",
  "tokio",
  "url",
@@ -251,29 +289,21 @@ name = "agent_shared"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "base64 0.22.1",
  "config",
  "cqrs-es",
- "did_manager",
  "dotenvy",
- "identity_core",
- "identity_credential",
- "identity_did",
- "identity_document",
+ "http-serde",
  "identity_iota",
- "identity_storage",
- "identity_verification",
- "is_empty",
  "jsonwebtoken",
  "oid4vc-core",
  "oid4vci",
  "oid4vp",
  "once_cell",
  "rand 0.8.5",
+ "reqwest 0.12.5",
  "serde",
  "serde_json",
  "serde_with 3.8.1",
- "serde_yaml",
  "strum 0.26.3",
  "thiserror",
  "time",
@@ -286,6 +316,7 @@ name = "agent_store"
 version = "0.1.0"
 dependencies = [
  "agent_holder",
+ "agent_identity",
  "agent_issuance",
  "agent_shared",
  "agent_verification",
@@ -318,6 +349,7 @@ dependencies = [
  "oid4vc-manager",
  "oid4vci",
  "oid4vp",
+ "reqwest 0.12.5",
  "rstest",
  "serde",
  "serde_json",
@@ -2072,7 +2104,7 @@ dependencies = [
 [[package]]
 name = "dif-presentation-exchange"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=23facd4#23facd4946e4b2e54ef87f42746c68ad952ae205"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=12fed14#12fed1411ff3c0e1797090f386e44694f7a279b8"
 dependencies = [
  "getset",
  "jsonpath_lib",
@@ -2851,7 +2883,7 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "http 0.2.12",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "slab",
  "tokio",
  "tokio-util",
@@ -2870,7 +2902,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http 1.1.0",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "slab",
  "tokio",
  "tokio-util",
@@ -3121,6 +3153,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "add0ab9360ddbd88cfeb3bd9574a1d85cfdfa14db10b3e21d3700dbc4328758f"
 
 [[package]]
+name = "http-serde"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f056c8559e3757392c8d091e796416e4649d8e49e88b8d76df6c002f05027fd"
+dependencies = [
+ "http 1.1.0",
+ "serde",
+]
+
+[[package]]
 name = "httparse"
 version = "1.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3294,7 +3336,7 @@ dependencies = [
  "identity_did",
  "identity_document",
  "identity_verification",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "itertools 0.11.0",
  "once_cell",
  "roaring",
@@ -3331,7 +3373,7 @@ dependencies = [
  "identity_core",
  "identity_did",
  "identity_verification",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "serde",
  "strum 0.25.0",
  "thiserror",
@@ -3427,13 +3469,10 @@ dependencies = [
  "identity_document",
  "identity_iota_core",
  "identity_verification",
- "iota-crypto",
- "rand 0.8.5",
  "seahash",
  "serde",
  "serde_json",
  "thiserror",
- "tokio",
 ]
 
 [[package]]
@@ -3539,9 +3578,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.2.6"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "168fb715dda47215e360912c096649d23d58bf392ac62f73919e831745e40f26"
+checksum = "68b900aa2f7301e21c36462b170ee99994de34dff39a4a6a528e80e7376d07e5"
 dependencies = [
  "equivalent",
  "hashbrown 0.14.5",
@@ -3954,7 +3993,7 @@ checksum = "179551c27c512c948af1edaf4bd7e1d1486d223f8ec4fd41cd760f7645fd4197"
 dependencies = [
  "cargo-license",
  "data-encoding",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "json-unflattening",
  "serde",
  "serde_json",
@@ -4729,7 +4768,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=23facd4#23facd4946e4b2e54ef87f42746c68ad952ae205"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=12fed14#12fed1411ff3c0e1797090f386e44694f7a279b8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4753,7 +4792,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=23facd4#23facd4946e4b2e54ef87f42746c68ad952ae205"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=12fed14#12fed1411ff3c0e1797090f386e44694f7a279b8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4785,7 +4824,7 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=23facd4#23facd4946e4b2e54ef87f42746c68ad952ae205"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=12fed14#12fed1411ff3c0e1797090f386e44694f7a279b8"
 dependencies = [
  "anyhow",
  "derivative",
@@ -4808,7 +4847,7 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=23facd4#23facd4946e4b2e54ef87f42746c68ad952ae205"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=12fed14#12fed1411ff3c0e1797090f386e44694f7a279b8"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6374,7 +6413,7 @@ version = "1.0.117"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "455182ea6142b14f93f4bc5320a2b31c1f266b66a4a5c858b013302a5d8cbfc3"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "itoa",
  "ryu",
  "serde",
@@ -6458,7 +6497,7 @@ dependencies = [
  "chrono",
  "hex",
  "indexmap 1.9.3",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "serde",
  "serde_derive",
  "serde_json",
@@ -6496,7 +6535,7 @@ version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "itoa",
  "ryu",
  "serde",
@@ -6671,7 +6710,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=23facd4#23facd4946e4b2e54ef87f42746c68ad952ae205"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=12fed14#12fed1411ff3c0e1797090f386e44694f7a279b8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6829,7 +6868,7 @@ dependencies = [
  "futures-util",
  "hashlink",
  "hex",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "log",
  "memchr",
  "once_cell",
@@ -7705,7 +7744,7 @@ version = "0.19.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "toml_datetime",
  "winnow 0.5.40",
 ]
@@ -7716,7 +7755,7 @@ version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8534fd7f78b5405e860340ad6575217ce99f38d4d5c8f2442cb5ecb50090e1"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "toml_datetime",
  "winnow 0.5.40",
 ]
@@ -7727,7 +7766,7 @@ version = "0.22.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f21c7aaf97f1bd9ca9d4f9e73b0a6c74bd5afef56f2bc931943a6e1c37e04e38"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "serde",
  "serde_spanned",
  "toml_datetime",
@@ -7770,15 +7809,14 @@ dependencies = [
 
 [[package]]
 name = "tower-http"
-version = "0.5.2"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e9cd434a998747dd2c4276bc96ee2e0c7a2eadf3cae88e52be55a05fa9053f5"
+checksum = "8437150ab6bbc8c5f0f519e3d5ed4aa883a83dd4cdd3d1b21f9482936046cb97"
 dependencies = [
  "bitflags 2.5.0",
  "bytes",
  "http 1.1.0",
  "http-body 1.0.0",
- "http-body-util",
  "pin-project-lite",
  "tower-layer",
  "tower-service",
@@ -7787,9 +7825,9 @@ dependencies = [
 
 [[package]]
 name = "tower-layer"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c20c8dbed6283a09604c3e69b4b7eeb54e298b8a600d4d5ecb5ad39de609f1d0"
+checksum = "121c2a6cda46980bb0fcd1647ffaf6cd3fc79a013de288782836f6df9c48780e"
 
 [[package]]
 name = "tower-service"
@@ -8115,7 +8153,7 @@ version = "5.0.0-beta.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86fac56d240b49c629b9083c932ac20a23d926937e67c21ba209f836e2983d4f"
 dependencies = [
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -8726,7 +8764,7 @@ dependencies = [
  "crossbeam-utils",
  "displaydoc",
  "flate2",
- "indexmap 2.2.6",
+ "indexmap 2.5.0",
  "memchr",
  "thiserror",
  "zopfli",
