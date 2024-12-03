@@ -289,7 +289,7 @@ impl Aggregate for Credential {
                         .sub(subject_id)
                         .iss(issuer_did)
                         .iat(iat)
-                        .nbf(iat) // TODO: currently iat == nbf
+                        .nbf(iat) // TODO: iat == nbf makes the JWT immediately usable
                         .exp(exp);
 
                     let vc_jwt_builder = if let Some(id) = id {
