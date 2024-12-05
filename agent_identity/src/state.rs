@@ -93,10 +93,10 @@ pub async fn initialize(state: &IdentityState) {
                 document: Some(document),
                 ..
             })) => {
-                info!("DID Web Document already exists: {:?}", document);
+                info!("DID Document for `did:web` already exists: {:?}", document);
             }
             _document_does_not_exist => {
-                info!("Creating new DID Web Document");
+                info!("Creating new DID Document for `did:web`");
 
                 let command = DocumentCommand::CreateDocument {
                     did_method: did_method.clone(),
@@ -106,7 +106,7 @@ pub async fn initialize(state: &IdentityState) {
                     .await
                     .is_err()
                 {
-                    warn!("Failed to create document");
+                    warn!("Failed to create DID Document for `did:web`");
                 }
             }
         }
