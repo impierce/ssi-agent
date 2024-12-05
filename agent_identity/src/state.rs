@@ -87,15 +87,28 @@ pub async fn initialize(state: &IdentityState) {
     // If the did:web method is enabled, create a document
     if enable_did_web {
         let did_method = DidMethod::Web;
-        let command = DocumentCommand::CreateDocument {
-            did_method: did_method.clone(),
-        };
 
-        if command_handler(&did_method.to_string(), &state.command.document, command)
-            .await
-            .is_err()
-        {
-            warn!("Failed to create document");
+        match query_handler(&did_method.to_string(), &state.query.document).await {
+            Ok(Some(Document {
+                document: Some(document),
+                ..
+            })) => {
+                info!("DID Document for `did:web` already exists: {:?}", document);
+            }
+            _document_does_not_exist => {
+                info!("Creating new DID Document for `did:web`");
+
+                let command = DocumentCommand::CreateDocument {
+                    did_method: did_method.clone(),
+                };
+
+                if command_handler(&did_method.to_string(), &state.command.document, command)
+                    .await
+                    .is_err()
+                {
+                    warn!("Failed to create DID Document for `did:web`");
+                }
+            }
         }
 
         // If domain linkage is enabled, create the domain linkage service and add it to the document.
