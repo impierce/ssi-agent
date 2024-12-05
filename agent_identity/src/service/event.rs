@@ -16,6 +16,7 @@ pub enum ServiceEvent {
     },
     LinkedVerifiablePresentationServiceCreated {
         service_id: String,
+        presentation_ids: Vec<String>,
         service: DocumentService,
     },
 }
