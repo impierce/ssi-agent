@@ -243,6 +243,7 @@ dependencies = [
  "did_manager",
  "identity_core",
  "identity_credential",
+ "iso8601-duration",
  "jsonwebtoken",
  "lazy_static",
  "oid4vc-core",
@@ -287,11 +288,13 @@ name = "agent_shared"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "config",
  "cqrs-es",
  "dotenvy",
  "http-serde",
  "identity_iota",
+ "iso8601-duration",
  "jsonwebtoken",
  "oid4vc-core",
  "oid4vci",
@@ -3784,6 +3787,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a26adff60a5d3ca10dc271ad37a34ff376595d2a1e5f21d02564929ca888c511"
 dependencies = [
+ "chrono",
  "nom",
 ]
 

@@ -70,6 +70,8 @@ impl Aggregate for Credential {
                 credential_id,
                 data,
                 credential_configuration,
+                credential_configuration_id,
+                expires,
             } => match &credential_configuration.credential_format {
                 CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
                     parameters:
@@ -96,6 +98,57 @@ impl Aggregate for Credential {
                         .name(name)
                         .try_into()
                         .expect("Could not build issuer profile");
+
+                    // ####### Determine credential expiration date
+
+                    println!("Expiration date (provided): {:?}", expires);
+
+                    // find expiration_date in config() expiration settings
+                    let expiration_date = config().clone().credential_expiry.and_then(|v| {
+                        v.into_iter()
+                            .find(|c| c.credential_configuration_id == credential_configuration_id)
+                            .map(|c| c.expires)
+                    });
+                    println!("Expiration date (config): {:?}", expiration_date);
+
+                    // overwrite expiration_date with "expires" if is Some
+                    let expiration_date = expires.or(expiration_date);
+                    println!("Expiration date (provided or config): {:?}", expiration_date);
+
+                    // if expiration_data is still None, set it to 1 year from issuance_date
+                    let expiration_date = expiration_date.unwrap_or_else(|| {
+                        let issuance_date = chrono::DateTime::parse_from_rfc3339(&issuance_date)
+                            .expect("Could not parse issuance_date")
+                            .timestamp();
+                        (issuance_date + 60 * 60 * 24 * 365).to_string()
+                    });
+
+                    println!("Expiration date (fallback): {:?}", expiration_date);
+
+                    let issuance_date =
+                        chrono::DateTime::parse_from_rfc3339(&issuance_date).expect("Could not parse issuance_date");
+
+                    let x = expiration_date
+                        .parse::<iso8601_duration::Duration>()
+                        .unwrap()
+                        .to_chrono_at_datetime(chrono::Utc::now());
+                    println!("Parsed duration: {:?}", x);
+
+                    let valid_until = chrono::Utc::now() + x;
+                    println!("Valid until: {:?}", valid_until.to_rfc3339());
+
+                    let issuance_date = issuance_date.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+
+                    // Try parsing to Duration
+                    // let time_delta: chrono::TimeDelta = expiration_date
+                    //     .parse::<iso8601_duration::Duration>()
+                    //     .unwrap()
+                    //     .to_chrono()
+                    //     .unwrap();
+
+                    // let x = expiration_date.parse::<chrono::DateTime<chrono::TimeDelta>>().unwrap();
+
+                    // ####### Determine credential expiration date
 
                     let mut credential_types: Vec<String> = type_.clone();
 
@@ -352,12 +405,15 @@ impl Aggregate for Credential {
     }
 }
 
+fn determine_expiry() {}
+
 #[cfg(test)]
 pub mod credential_tests {
     use super::test_utils::*;
     use super::*;
 
     use agent_secret_manager::service::Service;
+    use agent_shared::config::set_config;
     use jsonwebtoken::Algorithm;
 
     use rstest::rstest;
@@ -397,6 +453,8 @@ pub mod credential_tests {
                     raw: credential_subject,
                 },
                 credential_configuration: Box::new(credential_configuration.clone()),
+                credential_configuration_id: "foobar".to_string(),
+                expires: None,
             })
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id,
@@ -442,6 +500,44 @@ pub mod credential_tests {
                 credential_id,
                 signed_credential: json!(verifiable_credential_jwt),
                 status: Status::Issued,
+            }])
+    }
+
+    #[rstest]
+    #[case::w3c_vc(
+        W3C_VC_CREDENTIAL_SUBJECT.clone(),
+        W3C_VC_CREDENTIAL_CONFIGURATION.clone(),
+        UNSIGNED_W3C_VC_CREDENTIAL.clone()
+    )]
+    #[serial_test::serial]
+    async fn test_expiry(
+        #[case] credential_subject: serde_json::Value,
+        #[case] credential_configuration: CredentialConfigurationsSupportedObject,
+        #[case] unsigned_credential: serde_json::Value,
+        credential_id: String,
+    ) {
+        set_config().credential_expiry = Some(vec![agent_shared::config::CredentialExpiry {
+            credential_configuration_id: "foobar".to_string(),
+            expires: "P1D".to_string(),
+        }]);
+        CredentialTestFramework::with(Service::default())
+            .given_no_previous_events()
+            .when(CredentialCommand::CreateUnsignedCredential {
+                credential_id: credential_id.clone(),
+                data: Data {
+                    raw: credential_subject,
+                },
+                credential_configuration: Box::new(credential_configuration.clone()),
+                credential_configuration_id: "foobar".to_string(),
+                expires: Some("P5Y".to_string()),
+                // expires: None,
+            })
+            .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
+                credential_id,
+                data: Data {
+                    raw: unsigned_credential,
+                },
+                credential_configuration: Box::new(credential_configuration),
             }])
     }
 }

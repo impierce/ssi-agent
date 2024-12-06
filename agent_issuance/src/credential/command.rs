@@ -10,6 +10,8 @@ pub enum CredentialCommand {
         credential_id: String,
         data: Data,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
+        credential_configuration_id: String, // required to look up expiration settings from config
+        expires: Option<String>,
     },
     CreateSignedCredential {
         credential_id: String,

@@ -6,12 +6,14 @@ rust-version.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+chrono.workspace = true
 config = { version = "0.14" }
 cqrs-es.workspace = true
 dotenvy = { version = "0.15" }
 http-serde = "2.1"
 # TODO: replace all identity_* with identity_iota?
 identity_iota.workspace = true
+iso8601-duration.workspace = true
 jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true

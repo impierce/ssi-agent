@@ -36,6 +36,7 @@ pub struct CredentialsEndpointRequest {
     #[serde(default)]
     pub is_signed: bool,
     pub credential_configuration_id: String,
+    pub expires: Option<String>,
 }
 
 #[axum_macros::debug_handler]
@@ -50,6 +51,7 @@ pub(crate) async fn credentials(
         credential: data,
         is_signed,
         credential_configuration_id,
+        expires,
     }) = serde_json::from_value(payload)
     else {
         return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
@@ -97,6 +99,8 @@ pub(crate) async fn credentials(
             credential_id: credential_id.clone(),
             data: Data { raw: data },
             credential_configuration,
+            credential_configuration_id,
+            expires,
         }
     };
 

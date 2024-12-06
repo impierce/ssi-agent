@@ -11,6 +11,7 @@ use std::{
     sync::{RwLock, RwLockReadGuard},
 };
 use strum::VariantArray;
+use time::serde::iso8601;
 use tracing::{debug, info};
 use url::Url;
 
@@ -27,10 +28,23 @@ pub struct ApplicationConfiguration {
     pub secret_manager: SecretManagerConfig,
     pub did_document_cache: Option<InMemoryCacheConfig>,
     pub credential_configurations: Vec<CredentialConfiguration>,
+    #[serde(default = "default_credential_expiry")]
+    pub credential_expiry: CredentialExpiry,
     pub signing_algorithms_supported: HashMap<jsonwebtoken::Algorithm, ToggleOptions>,
     pub display: Vec<Display>,
     pub event_publishers: Option<EventPublishers>,
     pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
+}
+
+fn default_credential_expiry() -> CredentialExpiry {
+    CredentialExpiry::Relative(iso8601_duration::Duration::from_str("P1Y").unwrap())
+}
+
+#[serde(untagged)]
+pub enum CredentialExpiry {
+    Fixed(chrono::DateTime),
+    Relative(iso8601_duration::Duration),
+    Never,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -85,6 +99,12 @@ pub struct CredentialConfiguration {
     pub credential_format_with_parameters: CredentialFormats<WithParameters>,
     #[serde(default)]
     pub display: Vec<serde_json::Value>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct CredentialExpiry {
+    pub credential_configuration_id: String,
+    pub expires: String,
 }
 
 #[skip_serializing_none]
