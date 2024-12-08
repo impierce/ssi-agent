@@ -3789,6 +3789,7 @@ checksum = "a26adff60a5d3ca10dc271ad37a34ff376595d2a1e5f21d02564929ca888c511"
 dependencies = [
  "chrono",
  "nom",
+ "serde",
 ]
 
 [[package]]
