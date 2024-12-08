@@ -72,8 +72,8 @@ credential_configurations:
           uri: https://www.impierce.com/external/impierce-logo.png
           alt_text: UniCore Logo
 
-# Refer to the README to get an overview over config options
-credential_expiry: P1Y # default, if not specified
+# Refer to agent_issuance/README.md to get an overview over accepted values
+credential_expires: P1Y # default, if not specified
 
 did_document_cache:
   enabled: false

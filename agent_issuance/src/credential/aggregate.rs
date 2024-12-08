@@ -99,12 +99,10 @@ impl Aggregate for Credential {
                         .try_into()
                         .expect("Could not build issuer profile");
 
-                    let expiration_date = calculate_expiration_timestamp(expires);
-
                     let issuance_date =
-                        chrono::DateTime::parse_from_rfc3339(&issuance_date).expect("Could not parse issuance_date");
+                        identity_core::common::Timestamp::parse(issuance_date).expect("Could not parse issuance_date");
 
-                    let issuance_date = issuance_date.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+                    let expiration_date = calculate_expiration_timestamp(expires);
 
                     let mut credential_types: Vec<String> = type_.clone();
 
@@ -143,7 +141,7 @@ impl Aggregate for Credential {
                                 let builder = W3CVerifiableCredentialBuilder::default()
                                     .issuer(issuer)
                                     .subject(subject)
-                                    .issuance_date(issuance_date.parse().expect("Could not parse issuance_date"))
+                                    .issuance_date(issuance_date)
                                     .expiration_date(expiration_date);
 
                                 let builder = if let Some(id) = id {
@@ -191,7 +189,7 @@ impl Aggregate for Credential {
                                     .name(name)
                                     .issuer(issuer)
                                     .credential_subject(credential_subject)
-                                    .issuance_date(issuance_date)
+                                    .issuance_date(issuance_date.to_rfc3339())
                                     .expiration_date(expiration_date.to_rfc3339());
 
                                 let builder = if let Some(id) = id { builder.id(id) } else { builder };
@@ -288,25 +286,18 @@ impl Aggregate for Credential {
                     let iat = 0;
                     #[cfg(not(feature = "test_utils"))]
                     let iat = issuance_date.timestamp();
-                    // let iat = std::time::SystemTime::now()
-                    //     .duration_since(std::time::UNIX_EPOCH)
-                    //     .unwrap()
-                    //     .as_secs() as i64;
 
                     #[cfg(feature = "test_utils")]
                     let exp = 0;
                     #[cfg(not(feature = "test_utils"))]
                     let exp = expiration_date.timestamp();
 
-                    // let exp = issuance_date + chrono::Duration::days(365);
-                    // let exp: i32 = exp.timestamp();
-
                     // Add standard claims
                     let vc_jwt_builder = VerifiableCredentialJwt::builder()
                         .sub(subject_id)
                         .iss(issuer_did)
                         .iat(iat)
-                        .nbf(iat) // TODO: iat == nbf makes the JWT immediately usable
+                        .nbf(iat) // TODO: setting the `nbf` to `iat` makes the JWT immediately usable
                         .exp(exp);
 
                     let vc_jwt_builder = if let Some(id) = id {
