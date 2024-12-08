@@ -36,7 +36,7 @@ pub struct CredentialsEndpointRequest {
     #[serde(default)]
     pub is_signed: bool,
     pub credential_configuration_id: String,
-    pub expires: Option<String>,
+    pub expires: Option<agent_shared::config::CredentialExpiry>,
 }
 
 #[axum_macros::debug_handler]
@@ -99,7 +99,6 @@ pub(crate) async fn credentials(
             credential_id: credential_id.clone(),
             data: Data { raw: data },
             credential_configuration,
-            credential_configuration_id,
             expires,
         }
     };

@@ -3,8 +3,9 @@ use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError::{self};
 use crate::credential::event::CredentialEvent;
 use crate::services::IssuanceServices;
-use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm};
+use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm, CredentialExpiry};
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use cqrs_es::Aggregate;
 use derivative::Derivative;
 use identity_core::convert::FromJson;
@@ -70,7 +71,6 @@ impl Aggregate for Credential {
                 credential_id,
                 data,
                 credential_configuration,
-                credential_configuration_id,
                 expires,
             } => match &credential_configuration.credential_format {
                 CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
@@ -99,56 +99,12 @@ impl Aggregate for Credential {
                         .try_into()
                         .expect("Could not build issuer profile");
 
-                    // ####### Determine credential expiration date
-
-                    println!("Expiration date (provided): {:?}", expires);
-
-                    // find expiration_date in config() expiration settings
-                    let expiration_date = config().clone().credential_expiry.and_then(|v| {
-                        v.into_iter()
-                            .find(|c| c.credential_configuration_id == credential_configuration_id)
-                            .map(|c| c.expires)
-                    });
-                    println!("Expiration date (config): {:?}", expiration_date);
-
-                    // overwrite expiration_date with "expires" if is Some
-                    let expiration_date = expires.or(expiration_date);
-                    println!("Expiration date (provided or config): {:?}", expiration_date);
-
-                    // if expiration_data is still None, set it to 1 year from issuance_date
-                    let expiration_date = expiration_date.unwrap_or_else(|| {
-                        let issuance_date = chrono::DateTime::parse_from_rfc3339(&issuance_date)
-                            .expect("Could not parse issuance_date")
-                            .timestamp();
-                        (issuance_date + 60 * 60 * 24 * 365).to_string()
-                    });
-
-                    println!("Expiration date (fallback): {:?}", expiration_date);
+                    let expiration_date = calculate_expiration_timestamp(expires);
 
                     let issuance_date =
                         chrono::DateTime::parse_from_rfc3339(&issuance_date).expect("Could not parse issuance_date");
 
-                    let x = expiration_date
-                        .parse::<iso8601_duration::Duration>()
-                        .unwrap()
-                        .to_chrono_at_datetime(chrono::Utc::now());
-                    println!("Parsed duration: {:?}", x);
-
-                    let valid_until = chrono::Utc::now() + x;
-                    println!("Valid until: {:?}", valid_until.to_rfc3339());
-
                     let issuance_date = issuance_date.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-
-                    // Try parsing to Duration
-                    // let time_delta: chrono::TimeDelta = expiration_date
-                    //     .parse::<iso8601_duration::Duration>()
-                    //     .unwrap()
-                    //     .to_chrono()
-                    //     .unwrap();
-
-                    // let x = expiration_date.parse::<chrono::DateTime<chrono::TimeDelta>>().unwrap();
-
-                    // ####### Determine credential expiration date
 
                     let mut credential_types: Vec<String> = type_.clone();
 
@@ -187,7 +143,8 @@ impl Aggregate for Credential {
                                 let builder = W3CVerifiableCredentialBuilder::default()
                                     .issuer(issuer)
                                     .subject(subject)
-                                    .issuance_date(issuance_date.parse().expect("Could not parse issuance_date"));
+                                    .issuance_date(issuance_date.parse().expect("Could not parse issuance_date"))
+                                    .expiration_date(expiration_date);
 
                                 let builder = if let Some(id) = id {
                                     builder.id(id.into())
@@ -234,7 +191,8 @@ impl Aggregate for Credential {
                                     .name(name)
                                     .issuer(issuer)
                                     .credential_subject(credential_subject)
-                                    .issuance_date(issuance_date);
+                                    .issuance_date(issuance_date)
+                                    .expiration_date(expiration_date.to_rfc3339());
 
                                 let builder = if let Some(id) = id { builder.id(id) } else { builder };
 
@@ -320,6 +278,12 @@ impl Aggregate for Credential {
                         .parse::<chrono::DateTime<chrono::Utc>>()
                         .unwrap();
 
+                    let expiration_date = credential.raw["expirationDate"]
+                        .as_str()
+                        .unwrap()
+                        .parse::<chrono::DateTime<chrono::Utc>>()
+                        .unwrap();
+
                     #[cfg(feature = "test_utils")]
                     let iat = 0;
                     #[cfg(not(feature = "test_utils"))]
@@ -332,7 +296,7 @@ impl Aggregate for Credential {
                     #[cfg(feature = "test_utils")]
                     let exp = 0;
                     #[cfg(not(feature = "test_utils"))]
-                    let exp = iat + 60 * 60 * 24 * 365; // TODO: currently hard-coded to one year from issuance date
+                    let exp = expiration_date.timestamp();
 
                     // let exp = issuance_date + chrono::Duration::days(365);
                     // let exp: i32 = exp.timestamp();
@@ -405,7 +369,22 @@ impl Aggregate for Credential {
     }
 }
 
-fn determine_expiry() {}
+fn calculate_expiration_timestamp(overwrite: Option<CredentialExpiry>) -> identity_core::common::Timestamp {
+    #[cfg(feature = "test_utils")]
+    let now = "2010-01-01T00:00:00Z".parse::<DateTime<Utc>>().unwrap();
+    #[cfg(not(feature = "test_utils"))]
+    let now = chrono::Utc::now();
+
+    let config = config().credential_expiry.clone();
+
+    let expires_at = match overwrite.unwrap_or(config) {
+        CredentialExpiry::Relative(duration) => now + duration.to_chrono_at_datetime(now),
+        CredentialExpiry::Fixed(fixed) => fixed,
+        CredentialExpiry::Never => now,
+    };
+
+    identity_core::common::Timestamp::from_unix(expires_at.timestamp()).unwrap()
+}
 
 #[cfg(test)]
 pub mod credential_tests {
@@ -413,7 +392,7 @@ pub mod credential_tests {
     use super::*;
 
     use agent_secret_manager::service::Service;
-    use agent_shared::config::set_config;
+    use agent_shared::config::{set_config, CredentialExpiry};
     use jsonwebtoken::Algorithm;
 
     use rstest::rstest;
@@ -453,7 +432,7 @@ pub mod credential_tests {
                     raw: credential_subject,
                 },
                 credential_configuration: Box::new(credential_configuration.clone()),
-                credential_configuration_id: "foobar".to_string(),
+                // credential_configuration_id: "foobar".to_string(),
                 expires: None,
             })
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
@@ -504,41 +483,22 @@ pub mod credential_tests {
     }
 
     #[rstest]
-    #[case::w3c_vc(
-        W3C_VC_CREDENTIAL_SUBJECT.clone(),
-        W3C_VC_CREDENTIAL_CONFIGURATION.clone(),
-        UNSIGNED_W3C_VC_CREDENTIAL.clone()
-    )]
+    #[case(None, CredentialExpiry::Never, "2010-01-01T00:00:00Z")]
+    #[case(None, CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y2M5D").unwrap()), "2011-03-09T00:00:00Z")]
+    #[case(Some(CredentialExpiry::Never), CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y2M5D").unwrap()), "2010-01-01T00:00:00Z")]
+    #[case(Some(CredentialExpiry::Fixed("2025-04-03T02:01:00Z".parse::<DateTime<Utc>>().unwrap())), CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y2M5D").unwrap()), "2025-04-03T02:01:00Z")]
+    #[case(None, CredentialExpiry::Fixed("2025-04-03T02:01:00Z".parse::<DateTime<Utc>>().unwrap()), "2025-04-03T02:01:00Z")]
     #[serial_test::serial]
-    async fn test_expiry(
-        #[case] credential_subject: serde_json::Value,
-        #[case] credential_configuration: CredentialConfigurationsSupportedObject,
-        #[case] unsigned_credential: serde_json::Value,
-        credential_id: String,
+    async fn test_calculate_expiration_timestamp(
+        #[case] provided: Option<CredentialExpiry>,
+        #[case] configured: CredentialExpiry,
+        #[case] expected: &str,
     ) {
-        set_config().credential_expiry = Some(vec![agent_shared::config::CredentialExpiry {
-            credential_configuration_id: "foobar".to_string(),
-            expires: "P1D".to_string(),
-        }]);
-        CredentialTestFramework::with(Service::default())
-            .given_no_previous_events()
-            .when(CredentialCommand::CreateUnsignedCredential {
-                credential_id: credential_id.clone(),
-                data: Data {
-                    raw: credential_subject,
-                },
-                credential_configuration: Box::new(credential_configuration.clone()),
-                credential_configuration_id: "foobar".to_string(),
-                expires: Some("P5Y".to_string()),
-                // expires: None,
-            })
-            .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
-                credential_id,
-                data: Data {
-                    raw: unsigned_credential,
-                },
-                credential_configuration: Box::new(credential_configuration),
-            }])
+        set_config().credential_expiry = configured;
+
+        let expires = calculate_expiration_timestamp(provided);
+
+        assert_eq!(expires.to_rfc3339(), expected);
     }
 }
 

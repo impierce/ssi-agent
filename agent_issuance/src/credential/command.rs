@@ -1,3 +1,4 @@
+use agent_shared::config::CredentialExpiry;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use serde::Deserialize;
 
@@ -10,8 +11,7 @@ pub enum CredentialCommand {
         credential_id: String,
         data: Data,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
-        credential_configuration_id: String, // required to look up expiration settings from config
-        expires: Option<String>,
+        expires: Option<CredentialExpiry>,
     },
     CreateSignedCredential {
         credential_id: String,
