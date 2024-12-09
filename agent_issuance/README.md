@@ -67,5 +67,5 @@ Values are accepted in the ISO 8601 format. The following examples are valid:
 There are multiple ways to set the expiration date for a credential. The hierarchy is as follows:
 
 - If not specified, the default expiration is set to one year from the time of issuance.
-- If there is a value set in the `config.yaml` under the `credential_expiry` key, it will be used as the default expiration for that credential.
-- If a value is directly provided in the `expires` key when a call towards the Issuance API is made, it overwrite all other settings.
+- If there is a value set in the `config.yaml` under the `credential_expires` key, it will be used as the default expiration for all credentials.
+- If a value is explicitly provided in the `expires` key when a call towards the Issuance API is made, it is preferred over all other settings.
