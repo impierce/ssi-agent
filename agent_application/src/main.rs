@@ -10,7 +10,7 @@ use agent_shared::config::{config, LogFormat};
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use std::sync::Arc;
-use tokio::{fs, io};
+use tokio::io;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -74,12 +74,6 @@ async fn main() -> io::Result<()> {
         holder_state: Some(holder_state),
         verification_state: Some(verification_state),
     });
-
-    // This is used to indicate that the server accepts requests.
-    // In a docker container this file can be searched to see if its ready.
-    // A better solution can be made later (needed for impierce-demo)
-    fs::create_dir_all("/tmp/unicore/").await?;
-    fs::write("/tmp/unicore/accept_requests", []).await?;
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await?;
     info!("listening on {}", listener.local_addr()?);
