@@ -423,7 +423,6 @@ pub mod credential_tests {
                     raw: credential_subject,
                 },
                 credential_configuration: Box::new(credential_configuration.clone()),
-                // credential_configuration_id: "foobar".to_string(),
                 expires: None,
             })
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
