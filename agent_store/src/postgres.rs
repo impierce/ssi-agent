@@ -1,6 +1,6 @@
 use crate::{partition_event_publishers, EventPublisher, Partitions};
 use agent_holder::{services::HolderServices, state::HolderState};
-use agent_identity::{services::IdentityServices, state::IdentityState};
+use agent_identity::{connection, services::IdentityServices, state::IdentityState};
 use agent_issuance::{
     offer::queries::{access_token::AccessTokenQuery, pre_authorized_code::PreAuthorizedCodeQuery},
     services::IssuanceServices,
@@ -13,8 +13,8 @@ use agent_shared::{
 use agent_verification::{services::VerificationServices, state::VerificationState};
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, Query};
-use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
-use sqlx::{Pool, Postgres};
+use postgres_es::{PostgresCqrs, PostgresViewRepository};
+use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 use std::{collections::HashMap, sync::Arc};
 
 struct AggregateHandler<A>
@@ -321,5 +321,38 @@ pub async fn verification_state(
             authorization_request,
             all_authorization_requests,
         },
+    }
+}
+
+/// Replacement for `postgres_es::default_postgress_pool`, but returns an error instead of panicking.
+pub async fn default_postgress_pool(connection_string: &str) -> Result<Pool<Postgres>, sqlx::Error> {
+    PgPoolOptions::new()
+        .max_connections(10)
+        .connect(connection_string)
+        .await
+    // .expect("unable to connect to database")
+}
+
+pub async fn check_connection() -> bool {
+    let connection_string = config().event_store.connection_string.clone().expect(
+        "Missing config parameter `event_store.connection_string` or `UNICORE__EVENT_STORE__CONNECTION_STRING`",
+    );
+    let connection_string = "foobar".to_string();
+    let pool = if let Ok(pool) = default_postgress_pool(&connection_string)
+        .await
+        .inspect_err(|e| tracing::debug!("Database connectivity check failed: {}", e))
+    {
+        pool
+    } else {
+        return false;
+    };
+
+    // sqlx::query("SELECT 1").fetch_one(&pool).await.is_ok()
+    match sqlx::query("SELECT 1").execute(&pool).await {
+        Ok(_) => true,
+        Err(err) => {
+            tracing::debug!("Database connectivity check failed: {}", err);
+            false
+        }
     }
 }

@@ -1,9 +1,9 @@
 {
 	"info": {
-		"_postman_id": "3b1e6396-3bf7-43aa-bc3b-21056fb21dfa",
+		"_postman_id": "d910f16f-e653-4b7d-949e-255b2a7d4834",
 		"name": "ssi-agent",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "24972330"
+		"_exporter_id": "30650915"
 	},
 	"item": [
 		{
@@ -97,7 +97,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    }\n}",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    },\n    \"expires\": \"P2D\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -151,7 +151,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": \"https://ecommerce.impierce.com/\",\n            \"image\": \"https://static.wikia.nocookie.net/fictionalcompanies/images/c/c2/ACME_Corporation.png\",\n            \"name\": \"VirtualVendors\",\n            \"certificaat\": {\n                \"type\": \"ACMECorpCredential\",\n                \"certificeringsDatum\": \"2024-06-26\",\n                \"geldigheidsPeriode\": \"1 jaar\",\n                \"garanties\": [\n                    \"Het bedrijf is echt en bereikbaar.\",\n                    \"Voldoet aan de Thuiswinkel Algemene Voorwaarden.\",\n                    \"14 dagen bedenktijd.\",\n                    \"Veilige betaalmethoden.\",\n                    \"Duidelijke product/servicebeschrijvingen.\",\n                    \"Transparant bestelproces.\",\n                    \"Duidelijke prijzen.\",\n                    \"Veilige betaalomgeving.\",\n                    \"Veilige omgang met persoonlijke gegevens.\",\n                    \"Effectieve klachtenafhandeling en onafhankelijke geschillenbemiddeling.\"\n                ]\n            }\n        }\n    }\n}",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"id\": \"https://acme.example.org/1a2b3c4d5e6f\",\n        \"credentialSubject\": {\n            \"id\": \"https://ecommerce.impierce.com/\",\n            \"image\": \"https://static.wikia.nocookie.net/fictionalcompanies/images/c/c2/ACME_Corporation.png\",\n            \"name\": \"VirtualVendors\",\n            \"certificaat\": {\n                \"type\": \"ACMECorpCredential\",\n                \"certificeringsDatum\": \"2024-06-26\",\n                \"geldigheidsPeriode\": \"1 jaar\",\n                \"garanties\": [\n                    \"Het bedrijf is echt en bereikbaar.\",\n                    \"Voldoet aan de Thuiswinkel Algemene Voorwaarden.\",\n                    \"14 dagen bedenktijd.\",\n                    \"Veilige betaalmethoden.\",\n                    \"Duidelijke product/servicebeschrijvingen.\",\n                    \"Transparant bestelproces.\",\n                    \"Duidelijke prijzen.\",\n                    \"Veilige betaalomgeving.\",\n                    \"Veilige omgang met persoonlijke gegevens.\",\n                    \"Effectieve klachtenafhandeling en onafhankelijke geschillenbemiddeling.\"\n                ]\n            }\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -629,11 +629,26 @@
 						}
 					],
 					"request": {
+						"auth": {
+							"type": "apikey",
+							"apikey": [
+								{
+									"key": "value",
+									"value": "E8C5AEF8F5954FCA9F543D4913569C98",
+									"type": "string"
+								},
+								{
+									"key": "key",
+									"value": "X-API-KEY",
+									"type": "string"
+								}
+							]
+						},
 						"method": "POST",
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"presentation_definition\": {\n        \"id\":\"Verifiable Presentation request for sign-on\",\n        \"input_descriptors\":[\n            {\n                \"id\":\"Request for Verifiable Credential\",\n                \"constraints\":{\n                    \"fields\":[\n                        {\n                            \"path\":[\n                                \"$.vc.type\"\n                            ],\n                            \"filter\":{\n                                \"type\":\"array\",\n                                \"contains\":{\n                                    \"const\":\"VerifiableCredential\"\n                                }\n                            }\n                        }\n                    ]\n                }\n            }\n        ]\n    }\n}",
+							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"presentation_definition\": {\n        \"id\":\"Verifiable Presentation request for sign-on\",\n        \"input_descriptors\":[\n            {\n                \"id\":\"Request for Verifiable Credential\",\n                \"constraints\":{\n                    \"fields\":[\n                        {\n                            \"path\":[\n                                \"$.vc.type\"\n                            ],\n                            \"filter\":{\n                                \"type\":\"array\",\n                                \"contains\":{\n                                    \"const\":\"IdentificationCardCredential\"\n                                }\n                            }\n                        }\n                    ]\n                }\n            }\n        ]\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -641,9 +656,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{HOST}}/v0/authorization_requests",
+							"raw": "https://zkteco.dev.impierce.com/v0/authorization_requests",
+							"protocol": "https",
 							"host": [
-								"{{HOST}}"
+								"zkteco",
+								"dev",
+								"impierce",
+								"com"
 							],
 							"path": [
 								"v0",
@@ -1545,6 +1564,21 @@
 			]
 		}
 	],
+	"auth": {
+		"type": "apikey",
+		"apikey": [
+			{
+				"key": "value",
+				"value": "{{API_KEY}}",
+				"type": "string"
+			},
+			{
+				"key": "key",
+				"value": "X-API-KEY",
+				"type": "string"
+			}
+		]
+	},
 	"event": [
 		{
 			"listen": "prerequest",
@@ -1625,6 +1659,10 @@
 			"key": "CONNECTION_ID",
 			"value": "INITIAL_VALUE",
 			"type": "string"
+		},
+		{
+			"key": "SERVICE_ID",
+			"value": ""
 		}
 	]
 }

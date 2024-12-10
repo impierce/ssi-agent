@@ -118,6 +118,7 @@ dependencies = [
  "agent_store",
  "agent_verification",
  "axum 0.7.5",
+ "axum-macros",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -324,6 +325,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

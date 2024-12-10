@@ -16,6 +16,7 @@ agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification" }
 
 axum.workspace = true
+axum-macros = "0.4"
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
