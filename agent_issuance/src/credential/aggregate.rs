@@ -141,8 +141,13 @@ impl Aggregate for Credential {
                                 let builder = W3CVerifiableCredentialBuilder::default()
                                     .issuer(issuer)
                                     .subject(subject)
-                                    .issuance_date(issuance_date)
-                                    .expiration_date(expiration_date);
+                                    .issuance_date(issuance_date);
+
+                                let builder = if let Some(expiration_date) = expiration_date {
+                                    builder.expiration_date(expiration_date)
+                                } else {
+                                    builder
+                                };
 
                                 let builder = if let Some(id) = id {
                                     builder.id(id.into())
@@ -189,8 +194,13 @@ impl Aggregate for Credential {
                                     .name(name)
                                     .issuer(issuer)
                                     .credential_subject(credential_subject)
-                                    .issuance_date(issuance_date.to_rfc3339())
-                                    .expiration_date(expiration_date.to_rfc3339());
+                                    .issuance_date(issuance_date.to_rfc3339());
+
+                                let builder = if let Some(expiration_date) = expiration_date {
+                                    builder.expiration_date(expiration_date.to_rfc3339())
+                                } else {
+                                    builder
+                                };
 
                                 let builder = if let Some(id) = id { builder.id(id) } else { builder };
 
@@ -276,29 +286,53 @@ impl Aggregate for Credential {
                         .parse::<chrono::DateTime<chrono::Utc>>()
                         .unwrap();
 
-                    let expiration_date = credential.raw["expirationDate"]
-                        .as_str()
-                        .unwrap()
-                        .parse::<chrono::DateTime<chrono::Utc>>()
-                        .unwrap();
-
-                    #[cfg(feature = "test_utils")]
-                    let iat = 0;
-                    #[cfg(not(feature = "test_utils"))]
+                    // #[cfg(feature = "test_utils")]
+                    // let iat = 0;
+                    // #[cfg(not(feature = "test_utils"))]
                     let iat = issuance_date.timestamp();
 
-                    #[cfg(feature = "test_utils")]
-                    let exp = 0;
-                    #[cfg(not(feature = "test_utils"))]
-                    let exp = expiration_date.timestamp();
+                    // #[cfg(feature = "test_utils")]
+                    // let exp = 0;
+                    // #[cfg(feature = "test_utils")]
+                    // let exp = "2010-01-01T00:00:00Z";
+
+                    let expiration_date = credential.raw["expirationDate"]
+                        .as_str()
+                        .map(|e| e.parse::<chrono::DateTime<chrono::Utc>>())
+                        .unwrap()
+                        .ok()
+                        .map(|e| e.timestamp());
+
+                    // let expiration_date = if let Some(e) = expiration_date {
+                    //     // info!("Expiration date: {:?}", e);
+                    //     Some(e.parse::<chrono::DateTime<chrono::Utc>>().unwrap().timestamp())
+                    // } else {
+                    //     None
+                    // };
+
+                    // let exp: Option<i32> = None;
+
+                    // #[cfg(not(feature = "test_utils"))]
+                    // let expiration_date = credential.raw["expirationDate"]
+                    //     .as_str()
+                    //     .unwrap()
+                    //     .parse::<chrono::DateTime<chrono::Utc>>()
+                    //     .unwrap();
+                    // #[cfg(not(feature = "test_utils"))]
+                    // let exp = expiration_date.timestamp();
 
                     // Add standard claims
                     let vc_jwt_builder = VerifiableCredentialJwt::builder()
                         .sub(subject_id)
                         .iss(issuer_did)
                         .iat(iat)
-                        .nbf(iat) // TODO: setting the `nbf` to `iat` makes the JWT immediately usable
-                        .exp(exp);
+                        .nbf(iat); // TODO: setting the `nbf` to `iat` makes the JWT immediately usable
+
+                    let vc_jwt_builder = if let Some(exp) = expiration_date {
+                        vc_jwt_builder.exp(exp)
+                    } else {
+                        vc_jwt_builder
+                    };
 
                     let vc_jwt_builder = if let Some(id) = id {
                         vc_jwt_builder.jti(id.to_string())
@@ -360,7 +394,7 @@ impl Aggregate for Credential {
     }
 }
 
-fn calculate_expiration_timestamp(overwrite: Option<CredentialExpiry>) -> identity_core::common::Timestamp {
+fn calculate_expiration_timestamp(overwrite: Option<CredentialExpiry>) -> Option<identity_core::common::Timestamp> {
     #[cfg(feature = "test_utils")]
     let now = "2010-01-01T00:00:00Z".parse::<DateTime<Utc>>().unwrap();
     #[cfg(not(feature = "test_utils"))]
@@ -368,13 +402,14 @@ fn calculate_expiration_timestamp(overwrite: Option<CredentialExpiry>) -> identi
 
     let config = config().credential_expiry.clone();
 
-    let expires_at = match overwrite.unwrap_or(config) {
-        CredentialExpiry::Relative(duration) => now + duration.to_chrono_at_datetime(now),
-        CredentialExpiry::Fixed(fixed) => fixed,
-        CredentialExpiry::Never => now,
-    };
-
-    identity_core::common::Timestamp::from_unix(expires_at.timestamp()).unwrap()
+    match overwrite.unwrap_or(config) {
+        CredentialExpiry::Relative(duration) => {
+            let expires_at = now + duration.to_chrono_at_datetime(now);
+            Some(identity_core::common::Timestamp::from_unix(expires_at.timestamp()).unwrap())
+        }
+        CredentialExpiry::Fixed(fixed) => Some(identity_core::common::Timestamp::from_unix(fixed.timestamp()).unwrap()),
+        CredentialExpiry::Never => None,
+    }
 }
 
 #[cfg(test)]
@@ -473,22 +508,22 @@ pub mod credential_tests {
     }
 
     #[rstest]
-    #[case(None, CredentialExpiry::Never, "2010-01-01T00:00:00Z")]
-    #[case(None, CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y2M5D").unwrap()), "2011-03-09T00:00:00Z")]
-    #[case(Some(CredentialExpiry::Never), CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y2M5D").unwrap()), "2010-01-01T00:00:00Z")]
-    #[case(Some(CredentialExpiry::Fixed("2025-04-03T02:01:00Z".parse::<DateTime<Utc>>().unwrap())), CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y2M5D").unwrap()), "2025-04-03T02:01:00Z")]
-    #[case(None, CredentialExpiry::Fixed("2025-04-03T02:01:00Z".parse::<DateTime<Utc>>().unwrap()), "2025-04-03T02:01:00Z")]
+    #[case(None, CredentialExpiry::Never, None)]
+    #[case(None, CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y2M5D").unwrap()), Some("2011-03-09T00:00:00Z"))]
+    #[case(Some(CredentialExpiry::Never), CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y2M5D").unwrap()), None)]
+    #[case(Some(CredentialExpiry::Fixed("2025-04-03T02:01:00Z".parse::<DateTime<Utc>>().unwrap())), CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y2M5D").unwrap()), Some("2025-04-03T02:01:00Z"))]
+    #[case(None, CredentialExpiry::Fixed("2025-04-03T02:01:00Z".parse::<DateTime<Utc>>().unwrap()), Some("2025-04-03T02:01:00Z"))]
     #[serial_test::serial]
     async fn test_calculate_expiration_timestamp(
         #[case] provided: Option<CredentialExpiry>,
         #[case] configured: CredentialExpiry,
-        #[case] expected: &str,
+        #[case] expected: Option<&str>,
     ) {
         set_config().credential_expiry = configured;
 
         let expires = calculate_expiration_timestamp(provided);
 
-        assert_eq!(expires.to_rfc3339(), expected);
+        assert_eq!(expires.map(|t| t.to_rfc3339()).as_deref(), expected);
     }
 }
 

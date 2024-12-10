@@ -36,7 +36,7 @@ pub struct ApplicationConfiguration {
 }
 
 fn default_credential_expiry() -> CredentialExpiry {
-    CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y").unwrap())
+    CredentialExpiry::Never
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
