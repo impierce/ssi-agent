@@ -100,7 +100,7 @@ impl Aggregate for Credential {
                         .expect("Could not build issuer profile");
 
                     let issuance_date =
-                        identity_core::common::Timestamp::parse(issuance_date).expect("Could not parse issuance_date");
+                        identity_core::common::Timestamp::parse(&issuance_date).expect("Could not parse issuance_date");
 
                     let expiration_date = calculate_expiration_timestamp(expires);
 
@@ -296,12 +296,20 @@ impl Aggregate for Credential {
                     // #[cfg(feature = "test_utils")]
                     // let exp = "2010-01-01T00:00:00Z";
 
-                    let expiration_date = credential.raw["expirationDate"]
-                        .as_str()
-                        .map(|e| e.parse::<chrono::DateTime<chrono::Utc>>())
-                        .unwrap()
-                        .ok()
-                        .map(|e| e.timestamp());
+                    // let expiration_date: Option<i64> = credential.raw.get("expirationDate").and_then(|v| v.as_str()).map(|s| s.parse::<>();
+
+                    let expiration_date = credential.raw["expirationDate"].as_str().map(|s| {
+                        let datetime = s
+                            .parse::<chrono::DateTime<chrono::Utc>>()
+                            .expect("Could not parse `expirationDate` to DateTime");
+                        datetime.timestamp()
+                    });
+                    // .map(|e| e.timestamp());
+
+                    // let x = expiration_date
+                    //     .unwrap() // TODO: handle gracefully
+                    //     .ok()
+                    //     .map(|e| e.timestamp());
 
                     // let expiration_date = if let Some(e) = expiration_date {
                     //     // info!("Expiration date: {:?}", e);
