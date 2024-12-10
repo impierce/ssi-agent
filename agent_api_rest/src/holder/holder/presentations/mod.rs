@@ -10,7 +10,6 @@ use axum::{
     Json,
 };
 use hyper::StatusCode;
-use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::info;
@@ -40,23 +39,18 @@ pub(crate) async fn presentation(State(state): State<HolderState>, Path(presenta
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PresentationsEndpointRequest {
-    #[serde(default)]
     pub credential_ids: Vec<String>,
-    #[serde(default)]
-    pub credentials: Vec<Jwt>,
 }
 
 #[axum_macros::debug_handler]
 pub(crate) async fn post_presentations(State(state): State<HolderState>, Json(payload): Json<Value>) -> Response {
     info!("Request Body: {}", payload);
 
-    let Ok(PresentationsEndpointRequest {
-        credential_ids,
-        mut credentials,
-    }) = serde_json::from_value(payload)
-    else {
+    let Ok(PresentationsEndpointRequest { credential_ids }) = serde_json::from_value(payload) else {
         return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
     };
+
+    let mut credentials = vec![];
 
     // Get all the credentials.
     for credential_id in credential_ids {
