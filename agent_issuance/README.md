@@ -59,6 +59,7 @@ Values are accepted in the ISO 8601 format. The following examples are valid:
   - `P7D` (7 days)
   - `P1Y` (1 year)
   - `P3Y6M` (3 years and 6 months)
+  - `PT8H` (8 hours)
 
 > If you want the credential to be valid forever, you can set the expiration to `never`.
 

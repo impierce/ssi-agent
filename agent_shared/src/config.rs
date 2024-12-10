@@ -39,12 +39,36 @@ fn default_credential_expiry() -> CredentialExpiry {
     CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y").unwrap())
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum CredentialExpiry {
     Fixed(chrono::DateTime<chrono::Utc>),
     Relative(iso8601_duration::Duration),
+    #[serde(with = "never_as_str")]
     Never,
+}
+
+mod never_as_str {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str("never")
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<(), D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        if s == "never" {
+            Ok(())
+        } else {
+            Err(serde::de::Error::custom("expected 'never'"))
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -422,5 +446,14 @@ mod tests {
         for variant in SupportedDidMethod::VARIANTS {
             let _subject_syntax_type: SubjectSyntaxType = variant.clone().into();
         }
+    }
+
+    #[test]
+    fn custom_serializer_for_credential_expiry() {
+        let deserialized: CredentialExpiry = serde_json::from_value(serde_json::json!("never")).unwrap();
+        assert_eq!(deserialized, CredentialExpiry::Never);
+
+        let serialized = serde_json::to_value(&CredentialExpiry::Never).unwrap();
+        assert_eq!(serialized, serde_json::json!("never"));
     }
 }
