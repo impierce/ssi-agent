@@ -1,6 +1,6 @@
 #![allow(clippy::await_holding_lock)]
 
-mod health;
+mod probes;
 
 use agent_api_rest::{app, ApplicationState};
 use agent_event_publisher_http::EventPublisherHttp;
@@ -11,7 +11,7 @@ use agent_secret_manager::{secret_manager, service::Service as _, subject::Subje
 use agent_shared::config::{config, LogFormat};
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
-use health::liveness::healthz_handler;
+use probes::liveness::healthz_handler;
 use std::sync::Arc;
 use tokio::io;
 use tracing::info;

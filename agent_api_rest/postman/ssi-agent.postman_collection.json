@@ -1521,6 +1521,28 @@
 					"response": []
 				}
 			]
+		},
+		{
+			"name": "_monitoring",
+			"item": [
+				{
+					"name": "Liveness probe",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/healthz",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"healthz"
+							]
+						}
+					},
+					"response": []
+				}
+			]
 		}
 	],
 	"event": [
