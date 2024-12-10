@@ -1,5 +1,7 @@
 #![allow(clippy::await_holding_lock)]
 
+mod probes;
+
 use agent_api_rest::{app, ApplicationState};
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_holder::services::HolderServices;
@@ -9,8 +11,9 @@ use agent_secret_manager::{secret_manager, service::Service as _, subject::Subje
 use agent_shared::config::{config, LogFormat};
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
+use probes::liveness::healthz;
 use std::sync::Arc;
-use tokio::{fs, io};
+use tokio::io;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -68,6 +71,8 @@ async fn main() -> io::Result<()> {
     agent_identity::state::initialize(&identity_state).await;
     agent_issuance::state::initialize(&issuance_state, startup_commands(url.clone())).await;
 
+    let health_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
+
     let app = app(ApplicationState {
         identity_state: Some(identity_state),
         issuance_state: Some(issuance_state),
@@ -75,11 +80,7 @@ async fn main() -> io::Result<()> {
         verification_state: Some(verification_state),
     });
 
-    // This is used to indicate that the server accepts requests.
-    // In a docker container this file can be searched to see if its ready.
-    // A better solution can be made later (needed for impierce-demo)
-    fs::create_dir_all("/tmp/unicore/").await?;
-    fs::write("/tmp/unicore/accept_requests", []).await?;
+    let app = health_router.merge(app);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await?;
     info!("listening on {}", listener.local_addr()?);
