@@ -1,8 +1,5 @@
 use agent_holder::{credential::command::CredentialCommand, state::HolderState};
-use agent_shared::{
-    generate_random_string,
-    handlers::{command_handler, query_handler},
-};
+use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
@@ -13,7 +10,6 @@ use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::info;
-use uuid::Uuid;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(State(state): State<HolderState>) -> Response {
