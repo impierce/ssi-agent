@@ -11,7 +11,7 @@ use agent_secret_manager::{secret_manager, service::Service as _, subject::Subje
 use agent_shared::config::{config, LogFormat};
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
-use probes::liveness::healthz_handler;
+use probes::liveness::healthz;
 use std::sync::Arc;
 use tokio::io;
 use tracing::info;
@@ -71,7 +71,7 @@ async fn main() -> io::Result<()> {
     agent_identity::state::initialize(&identity_state).await;
     agent_issuance::state::initialize(&issuance_state, startup_commands(url.clone())).await;
 
-    let health_router = axum::Router::new().route("/healthz", axum::routing::get(healthz_handler));
+    let health_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
 
     let app = app(ApplicationState {
         identity_state: Some(identity_state),

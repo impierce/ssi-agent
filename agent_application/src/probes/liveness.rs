@@ -1,3 +1,7 @@
-pub async fn healthz_handler() -> impl axum::response::IntoResponse {
-    axum::http::StatusCode::OK
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+
+/// A simple liveness probe following application monitoring conventions.
+pub async fn healthz() -> impl IntoResponse {
+    StatusCode::OK
 }
