@@ -280,54 +280,22 @@ impl Aggregate for Credential {
 
                     info!("Credential: {:?}", credential);
 
-                    let issuance_date = credential.raw["issuanceDate"]
+                    #[cfg(feature = "test_utils")]
+                    let iat = 0;
+                    #[cfg(not(feature = "test_utils"))]
+                    let iat = credential.raw["issuanceDate"]
                         .as_str()
                         .unwrap()
                         .parse::<chrono::DateTime<chrono::Utc>>()
-                        .unwrap();
+                        .unwrap()
+                        .timestamp();
 
-                    // #[cfg(feature = "test_utils")]
-                    // let iat = 0;
-                    // #[cfg(not(feature = "test_utils"))]
-                    let iat = issuance_date.timestamp();
-
-                    // #[cfg(feature = "test_utils")]
-                    // let exp = 0;
-                    // #[cfg(feature = "test_utils")]
-                    // let exp = "2010-01-01T00:00:00Z";
-
-                    // let expiration_date: Option<i64> = credential.raw.get("expirationDate").and_then(|v| v.as_str()).map(|s| s.parse::<>();
-
-                    let expiration_date = credential.raw["expirationDate"].as_str().map(|s| {
-                        let datetime = s
+                    let exp = credential.raw["expirationDate"].as_str().map(|expiration_date| {
+                        expiration_date
                             .parse::<chrono::DateTime<chrono::Utc>>()
-                            .expect("Could not parse `expirationDate` to DateTime");
-                        datetime.timestamp()
+                            .expect("Could not parse `expirationDate` to DateTime")
+                            .timestamp()
                     });
-                    // .map(|e| e.timestamp());
-
-                    // let x = expiration_date
-                    //     .unwrap() // TODO: handle gracefully
-                    //     .ok()
-                    //     .map(|e| e.timestamp());
-
-                    // let expiration_date = if let Some(e) = expiration_date {
-                    //     // info!("Expiration date: {:?}", e);
-                    //     Some(e.parse::<chrono::DateTime<chrono::Utc>>().unwrap().timestamp())
-                    // } else {
-                    //     None
-                    // };
-
-                    // let exp: Option<i32> = None;
-
-                    // #[cfg(not(feature = "test_utils"))]
-                    // let expiration_date = credential.raw["expirationDate"]
-                    //     .as_str()
-                    //     .unwrap()
-                    //     .parse::<chrono::DateTime<chrono::Utc>>()
-                    //     .unwrap();
-                    // #[cfg(not(feature = "test_utils"))]
-                    // let exp = expiration_date.timestamp();
 
                     // Add standard claims
                     let vc_jwt_builder = VerifiableCredentialJwt::builder()
@@ -336,7 +304,7 @@ impl Aggregate for Credential {
                         .iat(iat)
                         .nbf(iat); // TODO: setting the `nbf` to `iat` makes the JWT immediately usable
 
-                    let vc_jwt_builder = if let Some(exp) = expiration_date {
+                    let vc_jwt_builder = if let Some(exp) = exp {
                         vc_jwt_builder.exp(exp)
                     } else {
                         vc_jwt_builder
