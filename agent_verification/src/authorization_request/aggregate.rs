@@ -392,12 +392,15 @@ pub mod tests {
                 let issuer_did = verifier_did(&default_did_method).await;
                 let subject_did = issuer_did.clone();
 
+                // 2010-01-01T00:00:00Z
+                let issued_at = 1262304000;
+
                 // Create a new verifiable credential.
                 let verifiable_credential = VerifiableCredentialJwt::builder()
                     .sub(&subject_did)
                     .iss(&issuer_did)
                     .iat(0)
-                    .exp(9999999999i64)
+                    // .nbf(issued_at)
                     .verifiable_credential(serde_json::json!({
                         "@context": [
                             "https://www.w3.org/2018/credentials/v1",
