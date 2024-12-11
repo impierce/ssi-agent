@@ -339,6 +339,7 @@ dependencies = [
  "anyhow",
  "async-std",
  "async-trait",
+ "chrono",
  "cqrs-es",
  "did_manager",
  "futures",

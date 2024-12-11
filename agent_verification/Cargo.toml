@@ -10,6 +10,7 @@ agent_shared = { path = "../agent_shared" }
 
 anyhow = "1.0"
 async-trait.workspace = true
+chrono.workspace = true
 cqrs-es.workspace = true
 futures.workspace = true
 jsonwebtoken.workspace = true
