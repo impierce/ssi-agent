@@ -281,7 +281,7 @@ impl Aggregate for Credential {
                     info!("Credential: {:?}", credential);
 
                     #[cfg(feature = "test_utils")]
-                    let iat = 0;
+                    let iat = 1262304000; // 2010-01-01T00:00:00Z
                     #[cfg(not(feature = "test_utils"))]
                     let iat = credential.raw["issuanceDate"]
                         .as_str()
