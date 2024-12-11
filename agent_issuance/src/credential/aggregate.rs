@@ -5,7 +5,6 @@ use crate::credential::event::CredentialEvent;
 use crate::services::IssuanceServices;
 use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm, CredentialExpiry};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use cqrs_es::Aggregate;
 use derivative::Derivative;
 use identity_core::convert::FromJson;
@@ -372,7 +371,7 @@ impl Aggregate for Credential {
 
 fn calculate_expiration_timestamp(overwrite: Option<CredentialExpiry>) -> Option<identity_core::common::Timestamp> {
     #[cfg(feature = "test_utils")]
-    let now = "2010-01-01T00:00:00Z".parse::<DateTime<Utc>>().unwrap();
+    let now = "2010-01-01T00:00:00Z".parse::<chrono::DateTime<chrono::Utc>>().unwrap();
     #[cfg(not(feature = "test_utils"))]
     let now = chrono::Utc::now();
 
@@ -487,8 +486,8 @@ pub mod credential_tests {
     #[case(None, CredentialExpiry::Never, None)]
     #[case(None, CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y2M5D").unwrap()), Some("2011-03-09T00:00:00Z"))]
     #[case(Some(CredentialExpiry::Never), CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y2M5D").unwrap()), None)]
-    #[case(Some(CredentialExpiry::Fixed("2025-04-03T02:01:00Z".parse::<DateTime<Utc>>().unwrap())), CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y2M5D").unwrap()), Some("2025-04-03T02:01:00Z"))]
-    #[case(None, CredentialExpiry::Fixed("2025-04-03T02:01:00Z".parse::<DateTime<Utc>>().unwrap()), Some("2025-04-03T02:01:00Z"))]
+    #[case(Some(CredentialExpiry::Fixed("2025-04-03T02:01:00Z".parse::<chrono::DateTime<chrono::Utc>>().unwrap())), CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y2M5D").unwrap()), Some("2025-04-03T02:01:00Z"))]
+    #[case(None, CredentialExpiry::Fixed("2025-04-03T02:01:00Z".parse::<chrono::DateTime<chrono::Utc>>().unwrap()), Some("2025-04-03T02:01:00Z"))]
     #[serial_test::serial]
     async fn test_calculate_expiration_timestamp(
         #[case] provided: Option<CredentialExpiry>,
@@ -498,6 +497,9 @@ pub mod credential_tests {
         set_config().credential_expiry = configured;
 
         let expires = calculate_expiration_timestamp(provided);
+
+        // Test teardown: reset the configuration to the default value
+        set_config().credential_expiry = CredentialExpiry::Never;
 
         assert_eq!(expires.map(|t| t.to_rfc3339()).as_deref(), expected);
     }
@@ -519,7 +521,7 @@ pub mod test_utils {
     use serde_json::json;
     use std::collections::HashMap;
 
-    pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHA6Ly9leGFtcGxlLmNvbS9jcmVkZW50aWFscy8zNTI3IiwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5hbWUiOiJUZWFtd29yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJ0eXBlIjpbIkFjaGlldmVtZW50U3ViamVjdCJdLCJhY2hpZXZlbWVudCI6eyJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vYWNoaWV2ZW1lbnRzLzIxc3QtY2VudHVyeS1za2lsbHMvdGVhbXdvcmsiLCJ0eXBlIjoiQWNoaWV2ZW1lbnQiLCJjcml0ZXJpYSI6eyJuYXJyYXRpdmUiOiJUZWFtIG1lbWJlcnMgYXJlIG5vbWluYXRlZCBmb3IgdGhpcyBiYWRnZSBieSB0aGVpciBwZWVycyBhbmQgcmVjb2duaXplZCB1cG9uIHJldmlldyBieSBFeGFtcGxlIENvcnAgbWFuYWdlbWVudC4ifSwiZGVzY3JpcHRpb24iOiJUaGlzIGJhZGdlIHJlY29nbml6ZXMgdGhlIGRldmVsb3BtZW50IG9mIHRoZSBjYXBhY2l0eSB0byBjb2xsYWJvcmF0ZSB3aXRoaW4gYSBncm91cCBlbnZpcm9ubWVudC4iLCJuYW1lIjoiVGVhbXdvcmsifX19fQ.SkC7IvpBGB9e98eobnE9qcLjs-yoZup3cieBla3DRTlcRezXEDPv4YRoUgffho9LJ0rkmfFPsPwb-owXMWyPAA";
+    pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6Imh0dHA6Ly9leGFtcGxlLmNvbS9jcmVkZW50aWFscy8zNTI3IiwidmMiOnsiQGNvbnRleHQiOlsiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJodHRwczovL3B1cmwuaW1zZ2xvYmFsLm9yZy9zcGVjL29iL3YzcDAvY29udGV4dC0zLjAuMi5qc29uIl0sImlkIjoiaHR0cDovL2V4YW1wbGUuY29tL2NyZWRlbnRpYWxzLzM1MjciLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiT3BlbkJhZGdlQ3JlZGVudGlhbCJdLCJpc3N1ZXIiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwibmFtZSI6IlRlYW13b3JrIEJhZGdlIiwiY3JlZGVudGlhbFN1YmplY3QiOnsiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInR5cGUiOlsiQWNoaWV2ZW1lbnRTdWJqZWN0Il0sImFjaGlldmVtZW50Ijp7ImlkIjoiaHR0cHM6Ly9leGFtcGxlLmNvbS9hY2hpZXZlbWVudHMvMjFzdC1jZW50dXJ5LXNraWxscy90ZWFtd29yayIsInR5cGUiOiJBY2hpZXZlbWVudCIsImNyaXRlcmlhIjp7Im5hcnJhdGl2ZSI6IlRlYW0gbWVtYmVycyBhcmUgbm9taW5hdGVkIGZvciB0aGlzIGJhZGdlIGJ5IHRoZWlyIHBlZXJzIGFuZCByZWNvZ25pemVkIHVwb24gcmV2aWV3IGJ5IEV4YW1wbGUgQ29ycCBtYW5hZ2VtZW50LiJ9LCJkZXNjcmlwdGlvbiI6IlRoaXMgYmFkZ2UgcmVjb2duaXplcyB0aGUgZGV2ZWxvcG1lbnQgb2YgdGhlIGNhcGFjaXR5IHRvIGNvbGxhYm9yYXRlIHdpdGhpbiBhIGdyb3VwIGVudmlyb25tZW50LiIsIm5hbWUiOiJUZWFtd29yayJ9fX19.usNl2TxcNYCOeRwcc3xZHJOuGbni9_5yschpZ28eNpk3xYrCcAEmHP3P03p8R5AIbDFqxo-fuWvrqDHJwPxABg";
 
     pub const W3C_VC_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjoiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIiwiZGVncmVlIjp7InR5cGUiOiJNYXN0ZXJEZWdyZWUiLCJuYW1lIjoiTWFzdGVyIG9mIE9jZWFub2dyYXBoeSJ9fSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiJ9fQ.Zhdom31SC8oh7h4DHz6hoTQeHIV5iA2jUO8gbt3KfYeZFiPbmJiBWNBy3ZmcSJ961YNOdK0I5MWqDw5nlsZpDw";
 
