@@ -80,7 +80,7 @@ impl Aggregate for Credential {
                         },
                 }) => {
                     #[cfg(feature = "test_utils")]
-                    let issuance_date = "2010-01-01T00:00:00Z";
+                    let issuance_date = "2010-01-01T00:00:00Z".to_string();
                     #[cfg(not(feature = "test_utils"))]
                     let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
