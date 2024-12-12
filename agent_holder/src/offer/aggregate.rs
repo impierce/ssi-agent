@@ -32,6 +32,7 @@ pub struct OfferCredential {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Offer {
+    #[serde(rename = "id")]
     pub received_offer_id: String,
     pub credential_offer: Option<CredentialOfferParameters>,
     pub status: Status,
@@ -51,7 +52,7 @@ impl Aggregate for Offer {
     type Services = Arc<HolderServices>;
 
     fn aggregate_type() -> String {
-        "offer".to_string()
+        "received_offer".to_string()
     }
 
     async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {

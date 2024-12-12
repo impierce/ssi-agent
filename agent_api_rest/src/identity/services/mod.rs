@@ -14,11 +14,7 @@ use serde_json::json;
 pub(crate) async fn services(State(state): State<IdentityState>) -> Response {
     match query_handler("all_services", &state.query.all_services).await {
         Ok(Some(all_services_view)) => {
-            let all_services = all_services_view
-                .services
-                .into_iter()
-                .map(|(_, service_view)| service_view)
-                .collect::<Vec<_>>();
+            let all_services = all_services_view.services.into_values().collect::<Vec<_>>();
 
             (StatusCode::OK, Json(all_services)).into_response()
         }

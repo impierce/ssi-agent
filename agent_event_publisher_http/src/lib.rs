@@ -46,6 +46,7 @@ impl EventPublisherHttp {
         let connection = (!event_publisher_http.events.connection.is_empty()).then(|| {
             AggregateEventPublisherHttp::<Connection>::new(
                 event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
                 event_publisher_http
                     .events
                     .connection
@@ -58,6 +59,7 @@ impl EventPublisherHttp {
         let server_config = (!event_publisher_http.events.server_config.is_empty()).then(|| {
             AggregateEventPublisherHttp::<ServerConfig>::new(
                 event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
                 event_publisher_http
                     .events
                     .server_config
@@ -70,6 +72,7 @@ impl EventPublisherHttp {
         let credential = (!event_publisher_http.events.credential.is_empty()).then(|| {
             AggregateEventPublisherHttp::<Credential>::new(
                 event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
                 event_publisher_http
                     .events
                     .credential
@@ -82,6 +85,7 @@ impl EventPublisherHttp {
         let offer = (!event_publisher_http.events.offer.is_empty()).then(|| {
             AggregateEventPublisherHttp::<Offer>::new(
                 event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
                 event_publisher_http
                     .events
                     .offer
@@ -94,6 +98,7 @@ impl EventPublisherHttp {
         let holder_credential = (!event_publisher_http.events.holder_credential.is_empty()).then(|| {
             AggregateEventPublisherHttp::<agent_holder::credential::aggregate::Credential>::new(
                 event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
                 event_publisher_http
                     .events
                     .holder_credential
@@ -106,6 +111,7 @@ impl EventPublisherHttp {
         let received_offer = (!event_publisher_http.events.received_offer.is_empty()).then(|| {
             AggregateEventPublisherHttp::<agent_holder::offer::aggregate::Offer>::new(
                 event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
                 event_publisher_http
                     .events
                     .received_offer
@@ -118,6 +124,7 @@ impl EventPublisherHttp {
         let authorization_request = (!event_publisher_http.events.authorization_request.is_empty()).then(|| {
             AggregateEventPublisherHttp::<AuthorizationRequest>::new(
                 event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
                 event_publisher_http
                     .events
                     .authorization_request
@@ -195,6 +202,8 @@ where
     A: Aggregate,
 {
     pub target_url: String,
+    #[serde(with = "http_serde::option::header_map", default)]
+    pub headers: Option<reqwest::header::HeaderMap>,
     pub target_events: Vec<String>,
     #[serde(skip)]
     pub client: reqwest::Client,
@@ -206,9 +215,10 @@ impl<A> AggregateEventPublisherHttp<A>
 where
     A: Aggregate,
 {
-    pub fn new(target_url: String, target_events: Vec<String>) -> Self {
+    pub fn new(target_url: String, headers: Option<reqwest::header::HeaderMap>, target_events: Vec<String>) -> Self {
         AggregateEventPublisherHttp {
             target_url,
+            headers,
             target_events,
             client: reqwest::Client::new(),
             _marker: std::marker::PhantomData,
@@ -224,11 +234,15 @@ where
     async fn dispatch(&self, _view_id: &str, events: &[EventEnvelope<A>]) {
         for event in events {
             if self.target_events.contains(&event.payload.event_type()) {
-                let request = self.client.post(&self.target_url).json(&event.payload);
+                let mut request = self.client.post(&self.target_url).json(&event.payload);
+
+                if let Some(headers) = &self.headers {
+                    request = request.headers(headers.clone());
+                }
 
                 info!(
-                    "Dispatching event: {:?} to HTTP endpoint: {:?}",
-                    &event.payload, &self.target_url
+                    "Dispatching event: {:?} to HTTP endpoint: {:?} with headers: {:?}",
+                    event.payload, self.target_url, self.headers
                 );
 
                 // Send the request in a separate thread so that we don't have to await the response in the current thread.
@@ -301,10 +315,16 @@ mod tests {
         // Wait for the request to arrive at the mock server endpoint.
         std::thread::sleep(std::time::Duration::from_millis(100));
 
+        let received_requests = mock_server.received_requests().await;
+        let received_request = received_requests.as_ref().unwrap().first().unwrap();
+
         // Assert that the event was dispatched to the target URL.
+        assert_eq!(offer_event, serde_json::from_slice(&received_request.body).unwrap());
+
+        // Assert that the request contained the expected headers.
         assert_eq!(
-            offer_event,
-            serde_json::from_slice(&mock_server.received_requests().await.unwrap().first().unwrap().body).unwrap()
+            "Basic YWxhZGRpbjpvcGVuc2VzYW1l",
+            received_request.headers.get("Authorization").unwrap()
         );
 
         // A new event for the `Offer` aggregate that the publisher is not interested in.

@@ -118,7 +118,7 @@
 					"response": []
 				},
 				{
-					"name": "Thuiswinkel Waarborg Credential",
+					"name": "ACME Corp Credential",
 					"event": [
 						{
 							"listen": "test",
@@ -151,7 +151,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": \"https://ecommerce.impierce.com/\",\n            \"image\": \"https://www.thuiswinkel.org/Images/logo-thuiswinkel_waarborg.svg\",\n            \"name\": \"VirtualVendors\",\n            \"certificaat\": {\n                \"type\": \"ThuiswinkelWaarborg\",\n                \"certificeringsDatum\": \"2024-06-26\",\n                \"geldigheidsPeriode\": \"1 jaar\",\n                \"garanties\": [\n                    \"Het bedrijf is echt en bereikbaar.\",\n                    \"Voldoet aan de Thuiswinkel Algemene Voorwaarden.\",\n                    \"14 dagen bedenktijd.\",\n                    \"Veilige betaalmethoden.\",\n                    \"Duidelijke product/servicebeschrijvingen.\",\n                    \"Transparant bestelproces.\",\n                    \"Duidelijke prijzen.\",\n                    \"Veilige betaalomgeving.\",\n                    \"Veilige omgang met persoonlijke gegevens.\",\n                    \"Effectieve klachtenafhandeling en onafhankelijke geschillenbemiddeling.\"\n                ]\n            }\n        }\n    }\n}",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": \"https://ecommerce.impierce.com/\",\n            \"image\": \"https://static.wikia.nocookie.net/fictionalcompanies/images/c/c2/ACME_Corporation.png\",\n            \"name\": \"VirtualVendors\",\n            \"certificaat\": {\n                \"type\": \"ACMECorpCredential\",\n                \"certificeringsDatum\": \"2024-06-26\",\n                \"geldigheidsPeriode\": \"1 jaar\",\n                \"garanties\": [\n                    \"Het bedrijf is echt en bereikbaar.\",\n                    \"Voldoet aan de Thuiswinkel Algemene Voorwaarden.\",\n                    \"14 dagen bedenktijd.\",\n                    \"Veilige betaalmethoden.\",\n                    \"Duidelijke product/servicebeschrijvingen.\",\n                    \"Transparant bestelproces.\",\n                    \"Duidelijke prijzen.\",\n                    \"Veilige betaalomgeving.\",\n                    \"Veilige omgang met persoonlijke gegevens.\",\n                    \"Effectieve klachtenafhandeling en onafhankelijke geschillenbemiddeling.\"\n                ]\n            }\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -172,7 +172,7 @@
 					"response": []
 				},
 				{
-					"name": "credentials",
+					"name": "All Credentials",
 					"event": [
 						{
 							"listen": "test",
@@ -212,7 +212,7 @@
 					"response": []
 				},
 				{
-					"name": "credential",
+					"name": "Credential by ID",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -285,7 +285,7 @@
 					"response": []
 				},
 				{
-					"name": "offers",
+					"name": "All Offers",
 					"event": [
 						{
 							"listen": "test",
@@ -325,7 +325,7 @@
 					"response": []
 				},
 				{
-					"name": "offer",
+					"name": "Offer by ID",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -344,13 +344,13 @@
 					"response": []
 				},
 				{
-					"name": "offers_send",
+					"name": "Send Offer",
 					"request": {
 						"method": "POST",
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\": \"{{OFFER_ID}}\",\n    \"targetUrl\": \"{{HOST}}/openid4vci/offers\"\n}",
+							"raw": "{\n    \"offerId\": \"{{OFFER_ID}}\",\n    \"targetUrl\": \"{{HOST}}\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -713,7 +713,7 @@
 					"response": []
 				},
 				{
-					"name": "authorization_request",
+					"name": "Authorization Request by ID",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -792,7 +792,7 @@
 			"name": "Holder",
 			"item": [
 				{
-					"name": "offers",
+					"name": "All Received Offers",
 					"event": [
 						{
 							"listen": "test",
@@ -801,10 +801,10 @@
 									"const jsonData = JSON.parse(responseBody);",
 									"",
 									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-									"    const firstItem = jsonData[0];",
+									"    const lastItem = jsonData[jsonData.length - 1];",
 									"",
-									"    if (firstItem && typeof firstItem === 'object') {",
-									"        const receivedOfferId = firstItem.received_offer_id;",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const receivedOfferId = lastItem.id;",
 									"",
 									"        if (receivedOfferId) {",
 									"            pm.collectionVariables.set(\"RECEIVED_OFFER_ID\", receivedOfferId);",
@@ -846,7 +846,7 @@
 					"response": []
 				},
 				{
-					"name": "offer",
+					"name": "Received Offer by ID",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -866,7 +866,7 @@
 					"response": []
 				},
 				{
-					"name": "offers_accept",
+					"name": "Accept Received Offer",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -887,7 +887,7 @@
 					"response": []
 				},
 				{
-					"name": "offers_reject",
+					"name": "Reject Received Offer",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -908,7 +908,7 @@
 					"response": []
 				},
 				{
-					"name": "credentials",
+					"name": "All Holder Credentials",
 					"event": [
 						{
 							"listen": "test",
@@ -917,10 +917,10 @@
 									"const jsonData = JSON.parse(responseBody);",
 									"",
 									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-									"    const firstItem = jsonData[0];",
+									"    const lastItem = jsonData[jsonData.length - 1];",
 									"",
-									"    if (firstItem && typeof firstItem === 'object') {",
-									"        const holderCredentialId = firstItem.holder_credential_id;",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const holderCredentialId = lastItem.id;",
 									"",
 									"        if (holderCredentialId) {",
 									"            pm.collectionVariables.set(\"HOLDER_CREDENTIAL_ID\", holderCredentialId);",
@@ -936,11 +936,8 @@
 						{
 							"listen": "prerequest",
 							"script": {
-								"exec": [
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
+								"exec": [],
+								"type": "text/javascript"
 							}
 						}
 					],
@@ -962,7 +959,46 @@
 					"response": []
 				},
 				{
-					"name": "credential",
+					"name": "Add signed Holder Credential",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"credential\": \"eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjoiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQiLCJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIn0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoifX0.d4QN73vDtZu79RP6GldHObu6rGsjidkLYp0XMRQNbNPY75LJoSv2iXk2Rz5M-VMBZGSU3YPZHytlrKBjxr1IBQ\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/holder/credentials",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"holder",
+								"credentials"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Holder Credential by ID",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -982,7 +1018,7 @@
 					"response": []
 				},
 				{
-					"name": "presentations",
+					"name": "All Presentations",
 					"event": [
 						{
 							"listen": "test",
@@ -991,10 +1027,10 @@
 									"const jsonData = JSON.parse(responseBody);",
 									"",
 									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-									"    const firstItem = jsonData[0];",
+									"    const lastItem = jsonData[jsonData.length - 1];",
 									"",
-									"    if (firstItem && typeof firstItem === 'object') {",
-									"        const presentationId = firstItem.presentation_id;",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const presentationId = lastItem.id;",
 									"",
 									"        if (presentationId) {",
 									"            pm.collectionVariables.set(\"PRESENTATION_ID\", presentationId);",
@@ -1010,11 +1046,8 @@
 						{
 							"listen": "prerequest",
 							"script": {
-								"exec": [
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
+								"exec": [],
+								"type": "text/javascript"
 							}
 						}
 					],
@@ -1036,7 +1069,7 @@
 					"response": []
 				},
 				{
-					"name": "presentation",
+					"name": "Presentation by ID",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -1056,7 +1089,7 @@
 					"response": []
 				},
 				{
-					"name": "presentations",
+					"name": "Create new Presentation",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -1117,7 +1150,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"domain\": \"http://example.org\",\n    \"dids\": [\"did:example:123\"],\n    \"credential_offer_endpoint\": \"{{HOST}}/openid4vci/offers\"\n}",
+							"raw": "{\n    \"alias\": \"My Connection\",\n    \"domain\": \"http://example.org\",\n    \"dids\": [\"did:example:123\"],\n    \"credentialOfferEndpoint\": \"{{HOST}}/openid4vci/offers\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -1138,7 +1171,7 @@
 					"response": []
 				},
 				{
-					"name": "Query all Connections",
+					"name": "List all Connections",
 					"event": [
 						{
 							"listen": "test",
@@ -1147,10 +1180,10 @@
 									"const jsonData = JSON.parse(responseBody);",
 									"",
 									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-									"    const firstItem = jsonData[0];",
+									"    const lastItem = jsonData[jsonData.length - 1];",
 									"",
-									"    if (firstItem && typeof firstItem === 'object') {",
-									"        const connectionId = firstItem.connection_id;",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const connectionId = lastItem.id;",
 									"",
 									"        if (connectionId) {",
 									"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
@@ -1191,6 +1224,54 @@
 					"response": []
 				},
 				{
+					"name": "Query Connection by Alias",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+									"    const lastItem = jsonData[jsonData.length - 1];",
+									"",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const connectionId = lastItem.id;",
+									"",
+									"        if (connectionId) {",
+									"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"        }",
+									"    }",
+									"}",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/connections?alias=My+Connection",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"connections"
+							],
+							"query": [
+								{
+									"key": "alias",
+									"value": "My+Connection"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "Query Connection by DID",
 					"event": [
 						{
@@ -1200,10 +1281,10 @@
 									"const jsonData = JSON.parse(responseBody);",
 									"",
 									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-									"    const firstItem = jsonData[0];",
+									"    const lastItem = jsonData[jsonData.length - 1];",
 									"",
-									"    if (firstItem && typeof firstItem === 'object') {",
-									"        const connectionId = firstItem.connection_id;",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const connectionId = lastItem.id;",
 									"",
 									"        if (connectionId) {",
 									"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
@@ -1259,10 +1340,10 @@
 									"const jsonData = JSON.parse(responseBody);",
 									"",
 									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-									"    const firstItem = jsonData[0];",
+									"    const lastItem = jsonData[jsonData.length - 1];",
 									"",
-									"    if (firstItem && typeof firstItem === 'object') {",
-									"        const connectionId = firstItem.connection_id;",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const connectionId = lastItem.id;",
 									"",
 									"        if (connectionId) {",
 									"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
@@ -1309,7 +1390,7 @@
 					"response": []
 				},
 				{
-					"name": "Query Connection by ID",
+					"name": "Connection by ID",
 					"event": [
 						{
 							"listen": "test",
@@ -1363,7 +1444,7 @@
 					"response": []
 				},
 				{
-					"name": "services/linked-vp",
+					"name": "Create new Linked Verifiable Presentation Service",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -1391,7 +1472,7 @@
 					"response": []
 				},
 				{
-					"name": "services",
+					"name": "All Services",
 					"event": [
 						{
 							"listen": "test",
@@ -1400,10 +1481,10 @@
 									"const jsonData = JSON.parse(responseBody);",
 									"",
 									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-									"    const firstItem = jsonData[0];",
+									"    const lastItem = jsonData[jsonData.length - 1];",
 									"",
-									"    if (firstItem && typeof firstItem === 'object') {",
-									"        const serviceId = firstItem.service_id;",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const serviceId = lastItem.id;",
 									"",
 									"        if (serviceId) {",
 									"            pm.collectionVariables.set(\"SERVICE_ID\", serviceId);",
@@ -1473,6 +1554,28 @@
 								"v0",
 								"services",
 								"linked-verifiable-presentation-service"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "_monitoring",
+			"item": [
+				{
+					"name": "Liveness probe",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/healthz",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"healthz"
 							]
 						}
 					},
@@ -1561,10 +1664,6 @@
 			"key": "CONNECTION_ID",
 			"value": "INITIAL_VALUE",
 			"type": "string"
-		},
-		{
-			"key": "SERVICE_ID",
-			"value": "INITIAL_VALUE"
 		}
 	]
 }

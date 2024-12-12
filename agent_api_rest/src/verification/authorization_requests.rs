@@ -25,8 +25,7 @@ pub(crate) async fn all_authorization_requests(State(state): State<VerificationS
         Ok(Some(all_authorization_requests_view)) => {
             let all_authorization_requests = all_authorization_requests_view
                 .authorization_requests
-                .into_iter()
-                .map(|(_, authorization_request_view)| authorization_request_view)
+                .into_values()
                 .collect::<Vec<_>>();
 
             (StatusCode::OK, Json(all_authorization_requests)).into_response()

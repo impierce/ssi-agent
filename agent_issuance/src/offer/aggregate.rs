@@ -25,6 +25,7 @@ pub enum Status {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Offer {
+    #[serde(rename = "id")]
     pub offer_id: String,
     pub credential_offer: Option<CredentialOffer>,
     pub subject_id: Option<String>,
@@ -92,6 +93,7 @@ impl Aggregate for Offer {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 }])
             }
             AddCredentials {
@@ -230,11 +232,13 @@ impl Aggregate for Offer {
                 pre_authorized_code,
                 access_token,
                 credential_offer,
+                status,
             } => {
                 self.offer_id = offer_id;
                 self.pre_authorized_code = pre_authorized_code;
                 self.access_token = access_token;
                 self.credential_offer.replace(credential_offer);
+                self.status = status;
             }
             CredentialsAdded {
                 offer_id,
@@ -309,6 +313,7 @@ pub mod tests {
                 credential_offer,
                 pre_authorized_code,
                 access_token,
+                status: Status::Created,
             }]);
     }
 
@@ -325,6 +330,7 @@ pub mod tests {
                 credential_offer,
                 pre_authorized_code,
                 access_token,
+                status: Status::Created,
             }])
             .when(OfferCommand::AddCredentials {
                 offer_id: Default::default(),
@@ -351,6 +357,7 @@ pub mod tests {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: Default::default(),
@@ -384,6 +391,7 @@ pub mod tests {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: Default::default(),
@@ -426,6 +434,7 @@ pub mod tests {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: Default::default(),
@@ -471,6 +480,7 @@ pub mod tests {
                     credential_offer,
                     pre_authorized_code,
                     access_token,
+                    status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: Default::default(),

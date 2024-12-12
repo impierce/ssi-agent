@@ -32,6 +32,7 @@ pub enum ServiceResource {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Service {
+    #[serde(rename = "id")]
     pub service_id: String,
     pub presentation_ids: Vec<String>,
     pub service: Option<DocumentService>,
@@ -80,6 +81,7 @@ impl Aggregate for Service {
                 let (issuance_date, expiration_date) = {
                     let issuance_date = Timestamp::now_utc();
                     let expiration_date = issuance_date
+                        // TODO: make this configurable
                         .checked_add(Duration::days(365))
                         .ok_or(InvalidTimestampError)?;
 
@@ -345,7 +347,7 @@ pub mod test_utils {
             )
             .type_("LinkedVerifiablePresentation")
             .service_endpoint(ServiceEndpoint::from(OrderedSet::from_iter(vec![format!(
-                "{origin}/v0/holder/presentations/presentation-1/signed"
+                "{origin}/linked-verifiable-presentations/presentation-1"
             )
             .parse::<Url>()
             .unwrap()])))

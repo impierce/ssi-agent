@@ -61,29 +61,31 @@ pub(crate) async fn credentials(
 
     let credential_id = uuid::Uuid::new_v4().to_string();
 
-    let credential_configuration = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
-        Ok(Some(ServerConfigView {
-            credential_issuer_metadata:
-                Some(CredentialIssuerMetadata {
-                    credential_configurations_supported,
-                    ..
-                }),
-            ..
-        })) => {
-            if let Some(credential_configuration) =
-                credential_configurations_supported.get(&credential_configuration_id)
-            {
-                credential_configuration.clone()
-            } else {
-                return (
-                    StatusCode::NOT_FOUND,
-                    format!("No Credential Configuration found with id: `{credential_configuration_id}`"),
-                )
-                    .into_response();
+    let credential_configuration = Box::new(
+        match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
+            Ok(Some(ServerConfigView {
+                credential_issuer_metadata:
+                    Some(CredentialIssuerMetadata {
+                        credential_configurations_supported,
+                        ..
+                    }),
+                ..
+            })) => {
+                if let Some(credential_configuration) =
+                    credential_configurations_supported.get(&credential_configuration_id)
+                {
+                    credential_configuration.clone()
+                } else {
+                    return (
+                        StatusCode::NOT_FOUND,
+                        format!("No Credential Configuration found with id: `{credential_configuration_id}`"),
+                    )
+                        .into_response();
+                }
             }
-        }
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
+            _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        },
+    );
 
     let command = if is_signed {
         CredentialCommand::CreateSignedCredential {
@@ -164,11 +166,7 @@ pub(crate) async fn credentials(
 pub(crate) async fn all_credentials(State(state): State<IssuanceState>) -> Response {
     match query_handler("all_credentials", &state.query.all_credentials).await {
         Ok(Some(all_credentials_view)) => {
-            let all_credentials = all_credentials_view
-                .credentials
-                .into_iter()
-                .map(|(_, credential_view)| credential_view)
-                .collect::<Vec<_>>();
+            let all_credentials = all_credentials_view.credentials.into_values().collect::<Vec<_>>();
 
             (StatusCode::OK, Json(all_credentials)).into_response()
         }

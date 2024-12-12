@@ -12,7 +12,9 @@ use super::{command::ConnectionCommand, error::ConnectionError, event::Connectio
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Connection {
+    #[serde(rename = "id")]
     pub connection_id: String,
+    pub alias: Option<String>,
     pub domain: Option<Url>,
     pub dids: Vec<DIDUrl>,
     pub first_interacted: Option<Timestamp>,
@@ -49,11 +51,13 @@ impl Aggregate for Connection {
         match command {
             AddConnection {
                 connection_id,
+                alias,
                 domain,
                 dids,
                 credential_offer_endpoint,
             } => Ok(vec![ConnectionAdded {
                 connection_id,
+                alias,
                 domain,
                 dids,
                 credential_offer_endpoint,
@@ -69,11 +73,13 @@ impl Aggregate for Connection {
         match event {
             ConnectionAdded {
                 connection_id,
+                alias,
                 domain,
                 dids,
                 credential_offer_endpoint,
             } => {
                 self.connection_id = connection_id;
+                self.alias = alias;
                 self.domain = domain;
                 self.dids = dids;
                 self.credential_offer_endpoint = credential_offer_endpoint;
@@ -95,6 +101,7 @@ pub mod document_tests {
     #[serial_test::serial]
     async fn test_add_connection(
         connection_id: String,
+        alias: String,
         domain: Url,
         dids: Vec<DIDUrl>,
         credential_offer_endpoint: Url,
@@ -103,12 +110,14 @@ pub mod document_tests {
             .given_no_previous_events()
             .when(ConnectionCommand::AddConnection {
                 connection_id: connection_id.clone(),
+                alias: Some(alias.clone()),
                 domain: Some(domain.clone()),
                 dids: dids.clone(),
                 credential_offer_endpoint: Some(credential_offer_endpoint.clone()),
             })
             .then_expect_events(vec![ConnectionEvent::ConnectionAdded {
                 connection_id: connection_id.clone(),
+                alias: Some(alias),
                 domain: Some(domain.clone()),
                 dids: dids.clone(),
                 credential_offer_endpoint: Some(credential_offer_endpoint.clone()),
@@ -125,6 +134,11 @@ pub mod test_utils {
     #[fixture]
     pub fn connection_id() -> String {
         "connection_id".to_string()
+    }
+
+    #[fixture]
+    pub fn alias() -> String {
+        "My Connection".to_string()
     }
 
     #[fixture]

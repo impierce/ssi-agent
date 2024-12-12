@@ -86,11 +86,7 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
 pub(crate) async fn all_offers(State(state): State<IssuanceState>) -> Response {
     match query_handler("all_offers", &state.query.all_offers).await {
         Ok(Some(all_offers_view)) => {
-            let all_offers = all_offers_view
-                .offers
-                .into_iter()
-                .map(|(_, offer_view)| offer_view)
-                .collect::<Vec<_>>();
+            let all_offers = all_offers_view.offers.into_values().collect::<Vec<_>>();
 
             (StatusCode::OK, Json(all_offers)).into_response()
         }

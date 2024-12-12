@@ -17,6 +17,8 @@ use tracing::info;
 #[serde(rename_all = "camelCase")]
 pub struct PostConnectionsEndpointRequest {
     #[serde(default)]
+    pub alias: Option<String>,
+    #[serde(default)]
     pub domain: Option<Url>,
     #[serde(default)]
     pub dids: Vec<DIDUrl>,
@@ -36,6 +38,7 @@ pub(crate) async fn post_connections(
     info!("Request Body: {}", payload);
 
     let Ok(PostConnectionsEndpointRequest {
+        alias,
         domain,
         dids,
         credential_offer_endpoint,
@@ -48,6 +51,7 @@ pub(crate) async fn post_connections(
 
     let command = ConnectionCommand::AddConnection {
         connection_id: connection_id.clone(),
+        alias,
         domain,
         dids,
         credential_offer_endpoint,
@@ -76,6 +80,8 @@ pub(crate) async fn post_connections(
 #[serde(rename_all = "camelCase")]
 pub struct GetConnectionsEndpointRequest {
     #[serde(default)]
+    pub alias: Option<String>,
+    #[serde(default)]
     pub domain: Option<Url>,
     #[serde(default)]
     pub did: Option<DIDUrl>,
@@ -84,9 +90,9 @@ pub struct GetConnectionsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connections(
     State(state): State<IdentityState>,
-    Form(GetConnectionsEndpointRequest { domain, did }): Form<GetConnectionsEndpointRequest>,
+    Form(GetConnectionsEndpointRequest { alias, domain, did }): Form<GetConnectionsEndpointRequest>,
 ) -> Response {
-    info!("Request Params - domain: {:?}, did: {:?}", domain, did);
+    info!("Request Params - alias: {alias:?}, domain: {domain:?}, did: {did:?}");
 
     match query_handler("all_connections", &state.query.all_connections).await {
         Ok(Some(all_connections_view)) => {
@@ -94,9 +100,12 @@ pub(crate) async fn get_connections(
                 .connections
                 .into_iter()
                 .filter_map(|(_, connection)| {
-                    (domain
+                    (alias
                         .as_ref()
-                        .map_or(true, |domain| connection.domain.as_ref() == Some(domain))
+                        .map_or(true, |alias| connection.alias.as_ref() == Some(alias))
+                        && domain
+                            .as_ref()
+                            .map_or(true, |domain| connection.domain.as_ref() == Some(domain))
                         && did.as_ref().map_or(true, |did| connection.dids.contains(did)))
                     .then_some(connection)
                 })

@@ -18,11 +18,7 @@ use tracing::info;
 pub(crate) async fn get_presentations(State(state): State<HolderState>) -> Response {
     match query_handler("all_presentations", &state.query.all_presentations).await {
         Ok(Some(all_presentations_view)) => {
-            let all_presentations = all_presentations_view
-                .presentations
-                .into_iter()
-                .map(|(_, credential_view)| credential_view)
-                .collect::<Vec<_>>();
+            let all_presentations = all_presentations_view.presentations.into_values().collect::<Vec<_>>();
 
             (StatusCode::OK, Json(all_presentations)).into_response()
         }

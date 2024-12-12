@@ -38,6 +38,7 @@ pub enum Status {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
 #[derivative(PartialEq)]
 pub struct Credential {
+    #[serde(rename = "id")]
     pub credential_id: String,
     pub data: Option<Data>,
     pub credential_configuration: CredentialConfigurationsSupportedObject,
@@ -281,7 +282,7 @@ impl Aggregate for Credential {
             } => {
                 self.credential_id = credential_id;
                 self.data.replace(data);
-                self.credential_configuration = credential_configuration;
+                self.credential_configuration = *credential_configuration;
             }
             SignedCredentialCreated {
                 credential_id,
@@ -347,14 +348,14 @@ pub mod credential_tests {
                 data: Data {
                     raw: credential_subject,
                 },
-                credential_configuration: credential_configuration.clone(),
+                credential_configuration: Box::new(credential_configuration.clone()),
             })
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id,
                 data: Data {
                     raw: unsigned_credential,
                 },
-                credential_configuration,
+                credential_configuration: Box::new(credential_configuration),
             }])
     }
 
@@ -382,7 +383,7 @@ pub mod credential_tests {
                 data: Data {
                     raw: unsigned_credential,
                 },
-                credential_configuration,
+                credential_configuration: Box::new(credential_configuration),
             }])
             .when(CredentialCommand::SignCredential {
                 credential_id: credential_id.clone(),
