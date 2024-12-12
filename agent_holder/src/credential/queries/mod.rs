@@ -18,7 +18,7 @@ impl View<Credential> for Credential {
                 data,
             } => {
                 self.holder_credential_id.clone_from(holder_credential_id);
-                self.received_offer_id.replace(offer_id.clone());
+                self.received_offer_id.clone_from(offer_id);
                 self.signed.replace(credential.clone());
                 self.data.replace(data.clone());
             }

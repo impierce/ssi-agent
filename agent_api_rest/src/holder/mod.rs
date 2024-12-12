@@ -12,7 +12,7 @@ use agent_holder::state::HolderState;
 use axum::routing::get;
 use axum::{routing::post, Router};
 use holder::{
-    credentials::credential,
+    credentials::{credential, post_credentials},
     presentations::{get_presentations, post_presentations, presentation, presentation_signed::presentation_signed},
 };
 
@@ -21,7 +21,7 @@ pub fn router(holder_state: HolderState) -> Router {
         .nest(
             API_VERSION,
             Router::new()
-                .route("/holder/credentials", get(credentials))
+                .route("/holder/credentials", get(credentials).post(post_credentials))
                 .route("/holder/credentials/:credential_id", get(credential))
                 .route("/holder/presentations", get(get_presentations).post(post_presentations))
                 .route("/holder/presentations/:presentation_id", get(presentation))

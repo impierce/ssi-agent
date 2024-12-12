@@ -80,7 +80,7 @@ impl Aggregate for Credential {
                 data,
             } => {
                 self.holder_credential_id = holder_credential_id;
-                self.received_offer_id = Some(received_offer_id);
+                self.received_offer_id = received_offer_id;
                 self.signed = Some(credential);
                 self.data = Some(data);
             }
@@ -123,12 +123,12 @@ pub mod credential_tests {
             .given_no_previous_events()
             .when(CredentialCommand::AddCredential {
                 holder_credential_id: holder_credential_id.clone(),
-                received_offer_id: received_offer_id.clone(),
+                received_offer_id: Some(received_offer_id.clone()),
                 credential: Jwt::from(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string()),
             })
             .then_expect_events(vec![CredentialEvent::CredentialAdded {
                 holder_credential_id,
-                received_offer_id,
+                received_offer_id: Some(received_offer_id),
                 credential: Jwt::from(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string()),
                 data: Data {
                     raw: get_unverified_jwt_claims(&serde_json::json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT)).unwrap()

@@ -8,7 +8,7 @@ use super::aggregate::Data;
 pub enum CredentialEvent {
     CredentialAdded {
         holder_credential_id: String,
-        received_offer_id: String,
+        received_offer_id: Option<String>,
         credential: Jwt,
         data: Data,
     },
