@@ -243,7 +243,6 @@ dependencies = [
  "did_manager",
  "identity_core",
  "identity_credential",
- "iso8601",
  "jsonwebtoken",
  "lazy_static",
  "oid4vc-core",
@@ -294,7 +293,6 @@ dependencies = [
  "dotenvy",
  "http-serde",
  "identity_iota",
- "iso8601",
  "jsonwebtoken",
  "oid4vc-core",
  "oid4vci",
@@ -3779,10 +3777,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "924e5d73ea28f59011fec52a0d12185d496a9b075d360657aed2a5707f701153"
 dependencies = [
- "chrono",
  "nom",
- "num-traits",
- "serde",
 ]
 
 [[package]]

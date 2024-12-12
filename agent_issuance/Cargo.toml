@@ -15,7 +15,6 @@ types-ob-v3 = { git = "https://github.com/impierce/digital-credential-data-model
 derivative = "2.2"
 identity_core.workspace = true
 identity_credential.workspace = true
-iso8601.workspace = true
 jsonwebtoken.workspace = true
 oid4vci.workspace = true
 oid4vc-core.workspace = true
