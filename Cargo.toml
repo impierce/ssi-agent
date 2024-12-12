@@ -20,11 +20,11 @@ rust-version = "1.76.0"
 
 [workspace.dependencies]
 did_manager = { git = "https://git@github.com/impierce/did-manager.git", tag = "v1.0.0-beta.3" }
-siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "12fed14" }
-oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "12fed14" }
-oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "12fed14" }
-oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "12fed14" }
-oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "12fed14" }
+siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7be5b72" }
+oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7be5b72" }
+oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7be5b72" }
+oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7be5b72" }
+oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7be5b72" }
 
 async-trait = "0.1"
 axum = { version = "0.7", features = ["tracing"] }
