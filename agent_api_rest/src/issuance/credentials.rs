@@ -5,7 +5,10 @@ use agent_issuance::{
     server_config::queries::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::{
+    config::CredentialExpiry,
+    handlers::{command_handler, query_handler},
+};
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -36,7 +39,7 @@ pub struct CredentialsEndpointRequest {
     #[serde(default)]
     pub is_signed: bool,
     pub credential_configuration_id: String,
-    pub expires: Option<agent_shared::config::CredentialExpiry>,
+    pub expires: CredentialExpiry,
 }
 
 #[axum_macros::debug_handler]
@@ -99,7 +102,7 @@ pub(crate) async fn credentials(
             credential_id: credential_id.clone(),
             data: Data { raw: data },
             credential_configuration,
-            expires,
+            expires: Some(expires),
         }
     };
 

@@ -155,7 +155,7 @@ mod tests {
     use agent_event_publisher_http::EventPublisherHttp;
     use agent_issuance::{offer::event::OfferEvent, startup_commands::startup_commands, state::initialize};
     use agent_secret_manager::service::Service;
-    use agent_shared::config::{set_config, Events};
+    use agent_shared::config::{set_config, CredentialExpiry, Events};
     use agent_store::{in_memory, EventPublisher};
     use axum::{
         body::Body,
@@ -215,7 +215,7 @@ mod tests {
                                         credential: json!(CREDENTIAL_JWT),
                                         is_signed: true,
                                         credential_configuration_id: CREDENTIAL_CONFIGURATION_ID.to_string(),
-                                        expires: None,
+                                        expires: CredentialExpiry::Never,
                                     }
                                 } else {
                                     // ...or else, submitting the data that will be signed inside `UniCore`.
@@ -230,7 +230,7 @@ mod tests {
                                         }),
                                         is_signed: false,
                                         credential_configuration_id: CREDENTIAL_CONFIGURATION_ID.to_string(),
-                                        expires: None,
+                                        expires: CredentialExpiry::Never,
                                     }
                                 };
 

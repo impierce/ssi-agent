@@ -22,7 +22,7 @@ use oid4vci::VerifiableCredentialJwt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 use types_ob_v3::prelude::{
     AchievementCredential, AchievementCredentialBuilder, AchievementCredentialType, AchievementSubject, Profile,
     ProfileBuilder,
@@ -34,6 +34,37 @@ pub enum Status {
     #[default]
     Pending,
     Issued,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(untagged)]
+pub enum CredentialExpiry {
+    Fixed(chrono::DateTime<chrono::Utc>),
+    #[serde(with = "never_as_str")]
+    Never,
+}
+
+mod never_as_str {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str("never")
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<(), D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        if s == "never" {
+            Ok(())
+        } else {
+            Err(serde::de::Error::custom("expected 'never'"))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
@@ -101,7 +132,10 @@ impl Aggregate for Credential {
                     let issuance_date =
                         identity_core::common::Timestamp::parse(&issuance_date).expect("Could not parse issuance_date");
 
-                    let expiration_date = calculate_expiration_timestamp(expires);
+                    let expiration_date = match expires {
+                        CredentialExpiry::Fixed(fixed) => Some(fixed),
+                        CredentialExpiry::Never => None,
+                    };
 
                     let mut credential_types: Vec<String> = type_.clone();
 
@@ -369,23 +403,73 @@ impl Aggregate for Credential {
     }
 }
 
-fn calculate_expiration_timestamp(overwrite: Option<CredentialExpiry>) -> Option<identity_core::common::Timestamp> {
-    #[cfg(feature = "test_utils")]
-    let now = "2010-01-01T00:00:00Z".parse::<chrono::DateTime<chrono::Utc>>().unwrap();
-    #[cfg(not(feature = "test_utils"))]
-    let now = chrono::Utc::now();
+// fn calculate_expiration_timestamp(
+//     overwrite: Option<CredentialExpiry>,
+// ) -> Result<Option<identity_core::common::Timestamp>, CredentialError> {
+//     #[cfg(feature = "test_utils")]
+//     let now = "2010-01-02T00:00:00Z".parse::<chrono::DateTime<chrono::Utc>>().unwrap();
+//     #[cfg(not(feature = "test_utils"))]
+//     let now = chrono::Utc::now();
 
-    let config = config().credential_expiry.clone();
+//     let config = config().credential_expiry.clone();
 
-    match overwrite.unwrap_or(config) {
-        CredentialExpiry::Relative(duration) => {
-            let expires_at = now + duration.to_chrono_at_datetime(now);
-            Some(identity_core::common::Timestamp::from_unix(expires_at.timestamp()).unwrap())
-        }
-        CredentialExpiry::Fixed(fixed) => Some(identity_core::common::Timestamp::from_unix(fixed.timestamp()).unwrap()),
-        CredentialExpiry::Never => None,
-    }
-}
+//     match overwrite.unwrap_or(config) {
+//         // CredentialExpiry::Relative(duration) => {
+//         //     println!("Duration: {:?}", duration);
+//         //     // === convert iso8601::Duration to `chrono::TimeDelta`
+//         //     let d = chrono::TimeDelta::try_from(duration); // .to_string().parse::<i64>();
+//         //     println!("Duration (parse result): {:?}", d);
+//         //     if d.is_err() {
+//         //         warn!("Could not parse duration: {}", duration);
+//         //         return None;
+//         //     }
+//         //     let n = match duration {
+//         //         iso8601::Duration::YMDHMS {
+//         //             year,
+//         //             month,
+//         //             day,
+//         //             hour,
+//         //             minute,
+//         //             second,
+//         //             millisecond,
+//         //         } => {
+//         //             now.checked_add_days(Days::new(day.into()));
+//         //             // .and_then(|d| d.checked_add_months(month));
+//         //             now
+//         //         }
+//         //         iso8601::Duration::Weeks(weeks) => now,
+//         //     };
+//         //     // let time_delta = chrono::TimeDelta::new(d.unwrap(), 0).unwrap();
+//         //     let time_delta = d.unwrap();
+//         //     // === end
+//         //     let expires_at = now.checked_add_signed(time_delta);
+//         //     match expires_at {
+//         //         Some(expires_at) => Some(identity_core::common::Timestamp::from_unix(expires_at.timestamp()).unwrap()),
+//         //         None => {
+//         //             warn!("{duration} is too large to be added to the current time. Skipping expiration date.");
+//         //             None
+//         //         }
+//         //     }
+//         // }
+//         CredentialExpiry::Fixed(fixed) => {
+//             let x = identity_core::common::Timestamp::from_unix(fixed.timestamp()).map_err(|e| {
+//                 warn!("Invalid timestamp: {:?}", e);
+//                 CredentialError::InvalidVerifiableCredentialError(format!("invalid timestamp: {e}"))
+//             })?;
+//             Ok(Some(x))
+//             // match x {
+//             //     Ok(t) => Some(t),
+//             //     Err(e) => e,
+//             // }
+//             // if fixed.timestamp() > 253402300799 {
+//             //     None
+//             // } else {
+//             //     Some(identity_core::common::Timestamp::from_unix(fixed.timestamp()).unwrap())
+//             // }
+//         }
+//         CredentialExpiry::Never => Ok(None),
+//     }
+// }
 
 #[cfg(test)]
 pub mod credential_tests {
@@ -484,9 +568,6 @@ pub mod credential_tests {
 
     #[rstest]
     #[case(None, CredentialExpiry::Never, None)]
-    #[case(None, CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y2M5D").unwrap()), Some("2011-03-09T00:00:00Z"))]
-    #[case(Some(CredentialExpiry::Never), CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y2M5D").unwrap()), None)]
-    #[case(Some(CredentialExpiry::Fixed("2025-04-03T02:01:00Z".parse::<chrono::DateTime<chrono::Utc>>().unwrap())), CredentialExpiry::Relative(iso8601_duration::Duration::parse("P1Y2M5D").unwrap()), Some("2025-04-03T02:01:00Z"))]
     #[case(None, CredentialExpiry::Fixed("2025-04-03T02:01:00Z".parse::<chrono::DateTime<chrono::Utc>>().unwrap()), Some("2025-04-03T02:01:00Z"))]
     #[serial_test::serial]
     async fn test_calculate_expiration_timestamp(
@@ -501,8 +582,66 @@ pub mod credential_tests {
         // Test teardown: reset the configuration to the default value
         set_config().credential_expiry = CredentialExpiry::Never;
 
-        assert_eq!(expires.map(|t| t.to_rfc3339()).as_deref(), expected);
+        // match expires {
+        //     Ok(Some(e)) => {
+        //         assert_eq!(e.to_rfc3339(), expected.unwrap().unwrap());
+        //     }
+        //     Ok(None) => {
+        //         assert_eq!(None, expected.unwrap());
+        //     }
+        //     Err(e) => {
+        //         assert_eq!(e.to_string(), expected.unwrap_err().to_string());
+        //     }
+        // }
+
+        assert_eq!(expires.unwrap().map(|t| t.to_rfc3339()).as_deref(), expected);
     }
+}
+
+pub mod expiry_tests {
+    use super::*;
+
+    use std::str::FromStr;
+
+    #[test]
+    fn custom_serializer_for_credential_expiry() {
+        let deserialized: CredentialExpiry = serde_json::from_value(serde_json::json!("never")).unwrap();
+        assert_eq!(deserialized, CredentialExpiry::Never);
+
+        let serialized = serde_json::to_value(&CredentialExpiry::Never).unwrap();
+        assert_eq!(serialized, serde_json::json!("never"));
+    }
+
+    // #[test]
+    // fn large_relative_expiry_panics_due_to_overflow() {
+    //     let overwrite = Some(CredentialExpiry::Relative(
+    //         iso8601::Duration::from_str("P100000000Y").unwrap(), // <-- eight 0's
+    //     ));
+
+    //     calculate_expiration_timestamp(overwrite);
+    //     // thread 'credential::aggregate::test' panicked at ~/.cargo/registry/src/index.crates.io-6f17d22bba15001f/chrono-0.4.38/src/datetime/mod.rs:1482:38:
+    //     // `DateTime + TimeDelta` overflowed
+    // }
+
+    #[test]
+    fn large_fixed_expiry_panics_due_to_invalid_timestamp() {
+        let overwrite = Some(CredentialExpiry::Fixed(chrono::DateTime::<chrono::Utc>::MAX_UTC));
+
+        calculate_expiration_timestamp(overwrite);
+        // thread 'credential::aggregate::large_fixed_expiry_panics_due_to_invalid_timestamp' panicked at agent_issuance/src/credential/aggregate.rs:387:111:
+        // called `Result::unwrap()` on an `Err` value: InvalidTimestamp(ComponentRange(ComponentRange { name: "timestamp", minimum: -377705116800, maximum: 253402300799, value: 8210266876799, conditional_range: false }))
+    }
+
+    // #[test]
+    // fn large_relative_expiry_panics_due_to_invalid_timestamp() {
+    //     let overwrite = Some(CredentialExpiry::Relative(
+    //         iso8601::Duration::from_str("P10000000Y").unwrap(), // <-- seven 0's
+    //     ));
+
+    //     calculate_expiration_timestamp(overwrite);
+    //     // thread 'credential::aggregate::test' panicked at agent_issuance/src/credential/aggregate.rs:385:86:
+    //     // called `Result::unwrap()` on an `Err` value: InvalidTimestamp(ComponentRange(ComponentRange { name: "timestamp", minimum: -377705116800, maximum: 253402300799, value: 316622289664, conditional_range: false }))
+    // }
 }
 
 #[cfg(feature = "test_utils")]
