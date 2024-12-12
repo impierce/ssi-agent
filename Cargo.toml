@@ -42,7 +42,7 @@ identity_credential = { version = "1.3", default-features = false, features = [
 identity_did = { version = "1.3" }
 identity_iota = { version = "1.3" }
 identity_verification = { version = "1.3", default-features = false }
-iso8601-duration = { version = "0.2", features = ["chrono", "serde"] }
+iso8601 = { version = "0.6", features = ["chrono", "serde"] }
 jsonwebtoken = "9.3"
 lazy_static = "1.4"
 mime = { version = "0.3" }
