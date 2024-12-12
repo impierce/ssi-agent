@@ -1,14 +1,11 @@
 use crate::API_VERSION;
 use agent_issuance::{
-    credential::{command::CredentialCommand, entity::Data, views::CredentialView},
+    credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data, views::CredentialView},
     offer::command::OfferCommand,
     server_config::queries::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
-use agent_shared::{
-    config::CredentialExpiry,
-    handlers::{command_handler, query_handler},
-};
+use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -102,7 +99,7 @@ pub(crate) async fn credentials(
             credential_id: credential_id.clone(),
             data: Data { raw: data },
             credential_configuration,
-            expires: Some(expires),
+            expires,
         }
     };
 
@@ -229,7 +226,8 @@ pub mod tests {
                             "credential": {
                                 "credentialSubject": CREDENTIAL_SUBJECT.clone()
                             },
-                            "credentialConfigurationId": CREDENTIAL_CONFIGURATION_ID
+                            "credentialConfigurationId": CREDENTIAL_CONFIGURATION_ID,
+                            "expires": "never"
                         }))
                         .unwrap(),
                     ))

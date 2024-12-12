@@ -335,7 +335,8 @@ pub mod tests {
                                         "name": "Master of Oceanography"
                                     }
                             }},
-                            "credentialConfigurationId": "badge"
+                            "credentialConfigurationId": "badge",
+                            "expires": "never"
                         }))
                         .unwrap(),
                     ))
