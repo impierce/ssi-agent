@@ -336,7 +336,7 @@ pub mod tests {
                                     }
                             }},
                             "credentialConfigurationId": "badge",
-                            "expires": "never"
+                            "expiresAt": "never"
                         }))
                         .unwrap(),
                     ))
