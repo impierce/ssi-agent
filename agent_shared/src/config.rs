@@ -1,4 +1,5 @@
 use config::ConfigError;
+use did_manager::DidMethod;
 use identity_iota::did::CoreDID;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
@@ -243,6 +244,31 @@ pub enum SupportedDidMethod {
     #[serde(alias = "did_iota_rms", rename = "did_iota_rms")]
     #[strum(serialize = "did:iota:rms")]
     IotaRms,
+}
+
+impl SupportedDidMethod {
+    pub fn is_deterministic(&self) -> bool {
+        match self {
+            SupportedDidMethod::Jwk | SupportedDidMethod::Key => true,
+            SupportedDidMethod::Web
+            | SupportedDidMethod::Iota
+            | SupportedDidMethod::IotaSmr
+            | SupportedDidMethod::IotaRms => false,
+        }
+    }
+}
+
+impl Into<DidMethod> for SupportedDidMethod {
+    fn into(self) -> DidMethod {
+        match self {
+            SupportedDidMethod::Jwk => DidMethod::Jwk,
+            SupportedDidMethod::Key => DidMethod::Key,
+            SupportedDidMethod::Web => DidMethod::Web,
+            SupportedDidMethod::Iota => DidMethod::IotaMainnet,
+            SupportedDidMethod::IotaSmr => DidMethod::Shimmer,
+            SupportedDidMethod::IotaRms => DidMethod::ShimmerTestnet,
+        }
+    }
 }
 
 impl From<SupportedDidMethod> for SubjectSyntaxType {

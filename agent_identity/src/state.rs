@@ -3,6 +3,9 @@ use agent_shared::handlers::command_handler;
 use agent_shared::{application_state::CommandHandler, handlers::query_handler};
 use cqrs_es::persist::ViewRepository;
 use did_manager::DidMethod;
+use futures::future::{join_all, try_join_all};
+use jsonwebtoken::Algorithm;
+use oid4vc_core::Subject;
 use std::sync::Arc;
 use tracing::{info, warn};
 
@@ -75,7 +78,7 @@ pub const DOMAIN_LINKAGE_SERVICE_ID: &str = "linked-domain-service";
 pub const VERIFIABLE_PRESENTATION_SERVICE_ID: &str = "linked-verifiable-presentation-service";
 
 /// Initialize the identity state.
-pub async fn initialize(state: &IdentityState) {
+pub async fn initialize(state: &IdentityState, subject: Arc<dyn Subject>) {
     info!("Initializing ...");
 
     let enable_did_web = config()
@@ -84,32 +87,86 @@ pub async fn initialize(state: &IdentityState) {
         .unwrap_or(&ToggleOptions::default())
         .enabled;
 
+    let did_methods = config().did_methods.clone();
+    try_join_all(
+        did_methods
+            .iter()
+            .map(|(did_method, toggle_options)| async  {
+                let did_method = did_method.clone();
+                if !did_method.is_deterministic() && toggle_options.enabled {
+                    match query_handler(&did_method.to_string(), &state.query.document).await {
+                        Ok(Some(Document {
+                            document: Some(document),
+                            ..
+                        })) => {
+                            let key_id = subject.key_id(&did_method.to_string(), Algorithm::ES256).await.unwrap();
+
+                            let condition = document.verification_method().iter().any(|vm| {
+                                info!("vm.id().to_string() == key_id: {} == {}", vm.id().to_string(), key_id);
+                                vm.id().to_string() == key_id});
+
+                            if condition {
+                                Err(format!("2: DID Document for `{}` already exists, but the identifier does not match the subject identifier", did_method))
+                            } else {
+                                info!("3: DID Document for `did:web` already exists: {:?}", document);
+                                Ok(())
+                            }
+                        }
+                        _document_does_not_exist => {
+                            info!("4: Creating new DID Document for `did:web`");
+
+                            let document_id = did_method.to_string();
+
+                            let command = DocumentCommand::CreateDocument {
+                                did_method: did_method.into(),
+                            };
+
+                            if command_handler(&document_id, &state.command.document, command)
+                                .await
+                                .is_err()
+                            {
+                                warn!("5: Failed to create DID Document for `did:web`");
+                                
+                            }
+                            Ok(())
+                        }
+                    }
+
+                } else {
+                    Ok(())
+                }
+            })
+            .collect::<Vec<_>>(),
+    )
+    .await
+    .unwrap();
+
     // If the did:web method is enabled, create a document
     if enable_did_web {
         let did_method = DidMethod::Web;
 
-        match query_handler(&did_method.to_string(), &state.query.document).await {
-            Ok(Some(Document {
-                document: Some(document),
-                ..
-            })) => {
-                info!("DID Document for `did:web` already exists: {:?}", document);
-            }
-            _document_does_not_exist => {
-                info!("Creating new DID Document for `did:web`");
+        // match query_handler(&did_method.to_string(), &state.query.document).await {
+        //     Ok(Some(Document {
+        //         document: Some(document),
+        //         ..
+        //     })) => {
+        //         info!("DID Document for `did:web` already exists: {:?}", document);
+        //     }
+        //     _document_does_not_exist => {
+        //         info!("Creating new DID Document for `did:web`");
 
-                let command = DocumentCommand::CreateDocument {
-                    did_method: did_method.clone(),
-                };
+        //         let command = DocumentCommand::CreateDocument {
+        //             did_method: did_method.clone(),
+        //         };
 
-                if command_handler(&did_method.to_string(), &state.command.document, command)
-                    .await
-                    .is_err()
-                {
-                    warn!("Failed to create DID Document for `did:web`");
-                }
-            }
-        }
+        //         if command_handler(&did_method.to_string(), &state.command.document, command)
+        //             .await
+        //             .is_err()
+        //         {
+        //             warn!("Failed to create DID Document for `did:web`");
+        //         }
+        //     }
+        // }
 
         // If domain linkage is enabled, create the domain linkage service and add it to the document.
         // TODO: Support this for other (non-deterministic) DID methods.
