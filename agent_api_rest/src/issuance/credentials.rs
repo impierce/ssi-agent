@@ -227,7 +227,7 @@ pub mod tests {
                                 "credentialSubject": CREDENTIAL_SUBJECT.clone()
                             },
                             "credentialConfigurationId": CREDENTIAL_CONFIGURATION_ID,
-                            "expires": "never"
+                            "expiresAt": "never"
                         }))
                         .unwrap(),
                     ))
