@@ -101,7 +101,7 @@ impl Aggregate for Credential {
                 credential_id,
                 data,
                 credential_configuration,
-                expires,
+                expires_at,
             } => match &credential_configuration.credential_format {
                 CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
                     parameters:
@@ -132,7 +132,7 @@ impl Aggregate for Credential {
                     let issuance_date =
                         identity_core::common::Timestamp::parse(&issuance_date).expect("Could not parse issuance_date");
 
-                    let expiration_date = match expires {
+                    let expiration_date = match expires_at {
                         CredentialExpiry::Fixed(fixed) => {
                             let fixed = identity_core::common::Timestamp::from_unix(fixed.timestamp())
                                 .map_err(|_| InvalidExpirationDateError)?;
@@ -453,7 +453,7 @@ pub mod credential_tests {
                     raw: credential_subject,
                 },
                 credential_configuration: Box::new(credential_configuration.clone()),
-                expires: CredentialExpiry::Never,
+                expires_at: CredentialExpiry::Never,
             })
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id,

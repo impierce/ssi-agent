@@ -10,7 +10,7 @@ pub enum CredentialCommand {
         credential_id: String,
         data: Data,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
-        expires: CredentialExpiry,
+        expires_at: CredentialExpiry,
     },
     CreateSignedCredential {
         credential_id: String,
