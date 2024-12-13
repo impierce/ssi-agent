@@ -49,24 +49,8 @@ server_config:
 
 ### Credential expiration
 
-You can set the expiration of a credential by providing a **fixed** expiration date so that the credential is only valid until that time or a **relative** expiration ("duration") that will be added on top of the current time when the issuance is happening.
+You are required to set the expiration of a credential by providing an expiration date after which the credential should be rejected by verifiers.
 
-Values are accepted in the ISO 8601 format. The following examples are valid:
+Expiration dates need to contain date and time (relative to UTC) following the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) standard, such as `2024-12-09T10:15:00Z`.
 
-- Fixed expiry date:
-  - `2024-12-06T14:30:00Z`
-- Relative from the point of issuance:
-  - `P7D` (7 days)
-  - `P1Y` (1 year)
-  - `P3Y6M` (3 years and 6 months)
-  - `PT8H` (8 hours)
-
-> If you want the credential to be valid forever, you can set the expiration to `never`. The `exp` JWT claim will then not be present at all.
-
-#### Config hierarchy
-
-There are multiple ways to set the expiration date for a credential. The hierarchy is as follows:
-
-- If not specified, no expiration date is set which makes the credential valid forever.
-- If there is a value set in the `config.yaml` under the `credential_expires` key, it will be used as the default expiration for all credentials.
-- If a value is explicitly provided in the `expires` key when a call towards the Issuance API is made, it is preferred over all other settings.
+> If you want the credential to be valid forever, you can set the expiration to `never`. The `exp` claim in the JWT will then be omitted.
