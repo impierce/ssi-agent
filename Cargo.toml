@@ -30,6 +30,7 @@ oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "0f77733
 async-trait = "0.1"
 axum = { version = "0.7", features = ["tracing"] }
 base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
 cqrs-es = "0.4.2"
 futures = "0.3"
 identity_core = { git = "https://github.com/impierce/identity.rs", branch = "fix/compile-fixes" }
