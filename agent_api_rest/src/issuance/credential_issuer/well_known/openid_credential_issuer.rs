@@ -23,18 +23,18 @@ pub(crate) async fn openid_credential_issuer(State(state): State<IssuanceState>)
 
 #[cfg(test)]
 mod tests {
-    use crate::{app, tests::BASE_URL};
-
     use super::*;
+    use crate::{issuance::router, tests::BASE_URL};
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
-    use agent_shared::{config, UrlAppendHelpers};
+    use agent_secret_manager::service::Service;
+    use agent_shared::UrlAppendHelpers;
     use agent_store::in_memory;
-    use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
         http::{self, Request},
         Router,
     };
+    use jsonwebtoken::Algorithm;
     use oid4vci::{
         credential_format_profiles::{
             w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, CredentialFormats, Parameters,
@@ -43,9 +43,12 @@ mod tests {
             credential_configurations_supported::CredentialConfigurationsSupportedObject,
             credential_issuer_metadata::CredentialIssuerMetadata,
         },
+        proof::KeyProofMetadata,
+        ProofType,
     };
     use serde_json::json;
-    use tower::Service;
+    use std::collections::HashMap;
+    use tower::Service as _;
 
     pub async fn openid_credential_issuer(app: &mut Router) -> CredentialIssuerMetadata {
         let response = app
@@ -77,7 +80,7 @@ mod tests {
                         credential_format: CredentialFormats::JwtVcJson(Parameters {
                             parameters: (
                                 CredentialDefinition {
-                                    type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
+                                    type_: vec!["VerifiableCredential".to_string()],
                                     credential_subject: Default::default(),
                                 },
                                 None,
@@ -85,21 +88,38 @@ mod tests {
                                 .into(),
                         }),
                         scope: None,
-                        cryptographic_binding_methods_supported: vec!["did:key".to_string()],
+                        cryptographic_binding_methods_supported: vec![
+                            "did:iota:rms".to_string(),
+                            "did:jwk".to_string(),
+                            "did:key".to_string()
+                        ],
                         credential_signing_alg_values_supported: vec!["EdDSA".to_string()],
-                        // TODO
-                        // proof_types_supported: Some(vec![ProofType::Jwt]),
+                        proof_types_supported: HashMap::from_iter([(
+                            ProofType::Jwt,
+                            KeyProofMetadata {
+                                proof_signing_alg_values_supported: vec![Algorithm::EdDSA],
+                            },
+                        )]),
                         display: vec![json!({
-                           "name": config!("credential_name").unwrap(),
-                           "logo": {
-                                "url": config!("credential_logo_url").unwrap()
-                           }
+                            "name": "Verifiable Credential",
+                            "locale": "en",
+                            "logo": {
+                                "uri": "https://impierce.com/images/logo-blue.png",
+                                "alt_text": "UniCore Logo"
+                            }
                         })],
-                        ..Default::default()
                     }
                 )]
                 .into_iter()
                 .collect(),
+                display: Some(vec![json!({
+                    "name": "UniCore",
+                    "locale": "en",
+                    "logo": {
+                        "uri": "https://impierce.com/images/favicon/apple-touch-icon.png",
+                        "alt_text": "UniCore Logo"
+                    }
+                })]),
                 ..Default::default()
             }
         );
@@ -108,16 +128,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_oauth_authorization_server_endpoint() {
-        let issuance_state = in_memory::issuance_state(Default::default()).await;
-        let verification_state = in_memory::verification_state(
-            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
-            Default::default(),
-        )
-        .await;
+    async fn test_openid_credential_issuer_endpoint() {
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
-        let mut app = app((issuance_state, verification_state));
+        let mut app = router(issuance_state);
 
         let _credential_issuer_metadata = openid_credential_issuer(&mut app).await;
     }

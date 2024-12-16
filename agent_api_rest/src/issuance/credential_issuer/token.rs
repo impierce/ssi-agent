@@ -1,8 +1,5 @@
 use agent_issuance::{
-    offer::{
-        command::OfferCommand,
-        queries::{pre_authorized_code::PreAuthorizedCodeView, OfferView},
-    },
+    offer::{command::OfferCommand, queries::pre_authorized_code::PreAuthorizedCodeView, views::OfferView},
     state::IssuanceState,
 };
 use agent_shared::handlers::{command_handler, query_handler};
@@ -38,7 +35,10 @@ pub(crate) async fn token(
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
-    let command = OfferCommand::CreateTokenResponse { token_request };
+    let command = OfferCommand::CreateTokenResponse {
+        offer_id: offer_id.clone(),
+        token_request,
+    };
 
     // Create a `TokenResponse` using the `offer_id` and `token_request`.
     if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
@@ -57,20 +57,21 @@ pub(crate) async fn token(
 
 #[cfg(test)]
 pub mod tests {
-    use crate::{app, issuance::credentials::tests::credentials, issuance::offers::tests::offers, tests::BASE_URL};
-
     use super::*;
+    use crate::{
+        issuance::{credentials::tests::credentials, offers::tests::offers, router},
+        tests::BASE_URL,
+    };
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
-    use agent_shared::config;
+    use agent_secret_manager::service::Service;
     use agent_store::in_memory;
-    use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
         http::{self, Request},
         Router,
     };
     use oid4vci::token_response::TokenResponse;
-    use tower::Service;
+    use tower::Service as _;
 
     pub async fn token(app: &mut Router, pre_authorized_code: String) -> String {
         let response = app
@@ -104,15 +105,10 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_token_endpoint() {
-        let issuance_state = in_memory::issuance_state(Default::default()).await;
-        let verification_state = in_memory::verification_state(
-            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
-            Default::default(),
-        )
-        .await;
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
-        let mut app = app((issuance_state, verification_state));
+        let mut app = router(issuance_state);
 
         credentials(&mut app).await;
         let pre_authorized_code = offers(&mut app).await;

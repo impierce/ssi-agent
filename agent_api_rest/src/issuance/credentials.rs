@@ -1,7 +1,9 @@
+use crate::API_VERSION;
 use agent_issuance::{
-    credential::{command::CredentialCommand, entity::Data, queries::CredentialView},
+    credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data, views::CredentialView},
     offer::command::OfferCommand,
-    state::IssuanceState,
+    server_config::queries::ServerConfigView,
+    state::{IssuanceState, SERVER_CONFIG_ID},
 };
 use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
@@ -10,18 +12,17 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use hyper::header;
+use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::info;
 
+use serde_json::json;
+
 #[axum_macros::debug_handler]
-pub(crate) async fn get_credentials(State(state): State<IssuanceState>, Path(credential_id): Path<String>) -> Response {
-    // Get the credential if it exists.
+pub(crate) async fn credential(State(state): State<IssuanceState>, Path(credential_id): Path<String>) -> Response {
     match query_handler(&credential_id, &state.query.credential).await {
-        Ok(Some(CredentialView {
-            data: Some(Data { raw }),
-            ..
-        })) => (StatusCode::OK, Json(raw)).into_response(),
+        Ok(Some(credential_view)) => (StatusCode::OK, Json(credential_view)).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
@@ -34,6 +35,8 @@ pub struct CredentialsEndpointRequest {
     pub credential: Value,
     #[serde(default)]
     pub is_signed: bool,
+    pub credential_configuration_id: String,
+    pub expires_at: CredentialExpiry,
 }
 
 #[axum_macros::debug_handler]
@@ -47,6 +50,8 @@ pub(crate) async fn credentials(
         offer_id,
         credential: data,
         is_signed,
+        credential_configuration_id,
+        expires_at,
     }) = serde_json::from_value(payload)
     else {
         return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
@@ -58,17 +63,43 @@ pub(crate) async fn credentials(
 
     let credential_id = uuid::Uuid::new_v4().to_string();
 
+    let credential_configuration = Box::new(
+        match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
+            Ok(Some(ServerConfigView {
+                credential_issuer_metadata:
+                    Some(CredentialIssuerMetadata {
+                        credential_configurations_supported,
+                        ..
+                    }),
+                ..
+            })) => {
+                if let Some(credential_configuration) =
+                    credential_configurations_supported.get(&credential_configuration_id)
+                {
+                    credential_configuration.clone()
+                } else {
+                    return (
+                        StatusCode::NOT_FOUND,
+                        format!("No Credential Configuration found with id: `{credential_configuration_id}`"),
+                    )
+                        .into_response();
+                }
+            }
+            _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        },
+    );
+
     let command = if is_signed {
         CredentialCommand::CreateSignedCredential {
+            credential_id: credential_id.clone(),
             signed_credential: data,
         }
     } else {
         CredentialCommand::CreateUnsignedCredential {
+            credential_id: credential_id.clone(),
             data: Data { raw: data },
-            credential_format_template: serde_json::from_str(include_str!(
-                "../../../agent_issuance/res/credential_format_templates/openbadges_v3.json"
-            ))
-            .unwrap(),
+            credential_configuration,
+            expires_at,
         }
     };
 
@@ -80,13 +111,29 @@ pub(crate) async fn credentials(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
+    // Get the `CredentialIssuerMetadata` from the `ServerConfigView`.
+    let credential_issuer_metadata = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
+        Ok(Some(ServerConfigView {
+            credential_issuer_metadata: Some(credential_issuer_metadata),
+            ..
+        })) => Box::new(credential_issuer_metadata),
+        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
     // Create an offer if it does not exist yet.
     match query_handler(&offer_id, &state.query.offer).await {
         Ok(Some(_)) => {}
         _ => {
-            if command_handler(&offer_id, &state.command.offer, OfferCommand::CreateCredentialOffer)
-                .await
-                .is_err()
+            if command_handler(
+                &offer_id,
+                &state.command.offer,
+                OfferCommand::CreateCredentialOffer {
+                    offer_id: offer_id.clone(),
+                    credential_issuer_metadata,
+                },
+            )
+            .await
+            .is_err()
             {
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
@@ -94,6 +141,7 @@ pub(crate) async fn credentials(
     };
 
     let command = OfferCommand::AddCredentials {
+        offer_id: offer_id.clone(),
         credential_ids: vec![credential_id.clone()],
     };
 
@@ -109,7 +157,7 @@ pub(crate) async fn credentials(
             ..
         })) => (
             StatusCode::CREATED,
-            [(header::LOCATION, &format!("/v1/credentials/{credential_id}"))],
+            [(header::LOCATION, &format!("{API_VERSION}/credentials/{credential_id}"))],
             Json(raw),
         )
             .into_response(),
@@ -117,17 +165,28 @@ pub(crate) async fn credentials(
     }
 }
 
+#[axum_macros::debug_handler]
+pub(crate) async fn all_credentials(State(state): State<IssuanceState>) -> Response {
+    match query_handler("all_credentials", &state.query.all_credentials).await {
+        Ok(Some(all_credentials_view)) => {
+            let all_credentials = all_credentials_view.credentials.into_values().collect::<Vec<_>>();
+
+            (StatusCode::OK, Json(all_credentials)).into_response()
+        }
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::{
-        app,
-        tests::{BASE_URL, OFFER_ID},
-    };
+    use crate::issuance::router;
+    use crate::tests::{BASE_URL, CREDENTIAL_CONFIGURATION_ID, OFFER_ID};
+    use crate::API_VERSION;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
-    use agent_shared::config;
+    use agent_secret_manager::service::Service;
     use agent_store::in_memory;
-    use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -135,7 +194,7 @@ pub mod tests {
     };
     use lazy_static::lazy_static;
     use serde_json::json;
-    use tower::Service;
+    use tower::Service as _;
 
     lazy_static! {
         pub static ref CREDENTIAL_SUBJECT: serde_json::Value = json!({
@@ -143,23 +202,14 @@ pub mod tests {
             "last_name": "Rustacean"
         });
         pub static ref CREDENTIAL: serde_json::Value = json!({
-            "@context": [
-                "https://www.w3.org/2018/credentials/v1",
-                "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
-                ],
-                "id": "http://example.com/credentials/3527",
-                "type": ["VerifiableCredential", "OpenBadgeCredential"],
-                "issuer": {
-                    "id": "https://example.com/issuers/876543",
-                    "type": "Profile",
-                    "name": "Example Corp"
-                },
+            "@context": "https://www.w3.org/2018/credentials/v1",
+            "type": [ "VerifiableCredential" ],
+            "issuer": {
+                "id": "https://my-domain.example.org/",
+                "name": "UniCore"
+            },
             "issuanceDate": "2010-01-01T00:00:00Z",
-            "name": "Teamwork Badge",
-            "credentialSubject": {
-                "first_name": "Ferris",
-                "last_name": "Rustacean"
-            }
+            "credentialSubject": CREDENTIAL_SUBJECT.clone()
         });
     }
 
@@ -168,16 +218,16 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri("/v1/credentials")
+                    .uri(&format!("{API_VERSION}/credentials"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "offerId": OFFER_ID,
                             "credential": {
-                                "credentialSubject": {
-                                "first_name": "Ferris",
-                                "last_name": "Rustacean"
-                            }},
+                                "credentialSubject": CREDENTIAL_SUBJECT.clone()
+                            },
+                            "credentialConfigurationId": CREDENTIAL_CONFIGURATION_ID,
+                            "expiresAt": "never"
                         }))
                         .unwrap(),
                     ))
@@ -218,22 +268,16 @@ pub mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body, CREDENTIAL.clone());
+        assert_eq!(body["data"]["raw"], CREDENTIAL.clone());
     }
 
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_credentials_endpoint() {
-        let issuance_state = in_memory::issuance_state(Default::default()).await;
-        let verification_state = in_memory::verification_state(
-            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
-            Default::default(),
-        )
-        .await;
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
-        let mut app = app((issuance_state, verification_state));
-
+        let mut app = router(issuance_state);
         credentials(&mut app).await;
     }
 }

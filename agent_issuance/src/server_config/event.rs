@@ -12,10 +12,10 @@ use serde::{Deserialize, Serialize};
 pub enum ServerConfigEvent {
     ServerMetadataInitialized {
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
-        credential_issuer_metadata: CredentialIssuerMetadata,
+        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
     },
-    CredentialsSupportedCreated {
-        credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
+    CredentialConfigurationAdded {
+        credential_configurations: HashMap<String, CredentialConfigurationsSupportedObject>,
     },
 }
 
@@ -25,7 +25,7 @@ impl DomainEvent for ServerConfigEvent {
 
         let event_type: &str = match self {
             ServerMetadataInitialized { .. } => "ServerMetadataLoaded",
-            CredentialsSupportedCreated { .. } => "CredentialsSupportedCreated",
+            CredentialConfigurationAdded { .. } => "CredentialConfigurationAdded",
         };
         event_type.to_string()
     }

@@ -16,5 +16,8 @@ RUN cargo build --release --bin agent_application
 
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
-COPY --from=builder /app/target/release/agent_application /usr/local/bin
+COPY --from=builder /app/target/release/agent_application /usr/local/bin/
+
+COPY ../../agent_verification/presentation_definitions agent_verification/presentation_definitions
+
 ENTRYPOINT ["/usr/local/bin/agent_application"]

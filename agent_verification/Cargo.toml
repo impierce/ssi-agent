@@ -10,12 +10,14 @@ agent_shared = { path = "../agent_shared" }
 
 anyhow = "1.0"
 async-trait.workspace = true
-axum.workspace = true
+chrono.workspace = true
 cqrs-es.workspace = true
 futures.workspace = true
+jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
 oid4vc-manager.workspace = true
 oid4vp.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde.workspace = true
 serde_json.workspace = true
 siopv2.workspace = true
@@ -25,22 +27,17 @@ url.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
-agent_shared = { path = "../agent_shared", features = ["test"] }
-agent_verification = { path = ".", features = ["test"] }
+agent_shared = { path = "../agent_shared", features = ["test_utils"] }
+agent_verification = { path = ".", features = ["test_utils"] }
 
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 did_manager.workspace = true
-identity_core = "1.2.0"
-identity_credential = { version = "1.2.0", default-features = false, features = [
-    "validator",
-    "credential",
-    "presentation"
-] }
-jsonwebtoken = "9.3"
+identity_core.workspace = true
+identity_credential.workspace = true
 lazy_static.workspace = true
 oid4vci.workspace = true
 rstest.workspace = true
 serial_test = "3.0"
 
 [features]
-test = []
+test_utils = []

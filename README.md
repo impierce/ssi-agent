@@ -1,5 +1,15 @@
 # SSI Agent
 
+[![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
+[![GitHub License](https://img.shields.io/github/license/impierce/ssi-agent)](https://github.com/impierce/ssi-agent/blob/HEAD/LICENSE)
+[![Docker Pulls](https://img.shields.io/docker/pulls/impiercetechnologies/ssi-agent)](https://hub.docker.com/r/impiercetechnologies/ssi-agent)
+
+<!-- This is a playful reference to the "Twelve-Factor App" conventions that we try to follow. -->
+
+[![twelve-factor-app](https://img.shields.io/badge/factors-twelve-blue)](https://12factor.net)
+
+---
+
 ## API specification
 
 [Follow these instructions](./agent_api_rest/README.md) to inspect the REST API.
@@ -7,6 +17,10 @@
 ## Build & Run
 
 Build and run the **SSI Agent** in a local Docker environment following [these steps](./agent_application/docker/README.md).
+
+## Configuration
+
+All configuration options are documented [here](./agent_application/CONFIGURATION.md).
 
 ## Breaking changes
 
@@ -89,14 +103,14 @@ sequenceDiagram
 
     Note over client, store: Agent Preparations
 
-    client->>api_rest: POST /v1/credentials<br/>offerId: <string><br/>credential: <object>
+    client->>api_rest: POST /v0/credentials<br/>offerId: <string><br/>credential: <object>
     api_rest->>issuance: Command
     issuance->>store: Event(s)
     api_rest->>store: Query
     store->>api_rest: View
     api_rest->>client: 201 CREATED application/json
 
-    client->>api_rest: POST /v1/offers<br/>offerId: <string>
+    client->>api_rest: POST /v0/offers<br/>offerId: <string>
     api_rest->>issuance: Command
     issuance->>store: Event(s)
     api_rest->>store: Query
@@ -132,11 +146,11 @@ sequenceDiagram
 
 ```
 Agent Preparations
-    1: The client sends a `POST` request to the `/v1/credentials` endpoint. The request body contains a (unique) subject ID and a credential object.
+    1: The client sends a `POST` request to the `/v0/credentials` endpoint. The request body contains a (unique) subject ID and a credential object.
   2-3: The API translates the request into a Command and sends it to the core. The core processes the Command and emits one or more Events. The Events are stored in the Event Store.
   4-5: The API sends a Query to the event store to retrieve the View(s) to be returned by the API.
     6: The API returns a `201 CREATED` response with the Credentials View(s) in the response body.
-    7: The client sends a `POST` request to the `/v1/offers` endpoint. The request body contains the subject ID of the subject for which the offer is being created.
+    7: The client sends a `POST` request to the `/v0/offers` endpoint. The request body contains the subject ID of the subject for which the offer is being created.
   8-9: See steps 2-3.
 10-11: See steps 4-5
    12: The API returns a `200 OK` response with the Offer View in the response body.
@@ -157,3 +171,20 @@ OpenID4VCI Pre-Authorized Code Flow
 30-31: See steps 4-5.
    32: The API returns a `200 OK` response with the credential(s) in the response body.
 ```
+
+## Releases
+
+This project uses [semantic-release](https://semantic-release.gitbook.io) - plain and simple, without noteworthy custom configuration.
+
+### Branches
+
+| Branch name | Description                                                                                                  | Example tag      |
+| ----------- | ------------------------------------------------------------------------------------------------------------ | ---------------- |
+| `main`      | Current stable releases. Default version when pulling the `latest` Docker image.                             | `v1.2.1`         |
+| `next`      | Upcoming major version (containing breaking changes). Can be considered a stable preview of coming features. | `v2.0.8`         |
+| `beta`      | Pre-releases that are fully implemented, but require testing, validation and feedback.                       | `v2.0.8-beta.2`  |
+| `alpha`     | Experimental early-stage testing and development.                                                            | `v2.1.2-alpha.4` |
+
+### Merging strategy
+
+All PRs to any of the branches defined above are squashed to preserve a clean history. Since the PR title is used as the commit message, it is important to follow a conventional commit style in order to allow semantic releases (next version is determined by the commits since the last version). Therefore, the PR title is automatically linted by a GitHub Action.

@@ -1,9 +1,10 @@
+use crate::API_VERSION;
 use agent_shared::{
     generate_random_string,
     handlers::{command_handler, query_handler},
 };
 use agent_verification::{
-    authorization_request::{command::AuthorizationRequestCommand, queries::AuthorizationRequestView},
+    authorization_request::{command::AuthorizationRequestCommand, views::AuthorizationRequestView},
     state::VerificationState,
 };
 use axum::{
@@ -13,21 +14,34 @@ use axum::{
     Json,
 };
 use hyper::header;
+use oid4vp::PresentationDefinition;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use tracing::info;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn get_authorization_requests(
+pub(crate) async fn all_authorization_requests(State(state): State<VerificationState>) -> Response {
+    match query_handler("all_authorization_requests", &state.query.all_authorization_requests).await {
+        Ok(Some(all_authorization_requests_view)) => {
+            let all_authorization_requests = all_authorization_requests_view
+                .authorization_requests
+                .into_values()
+                .collect::<Vec<_>>();
+
+            (StatusCode::OK, Json(all_authorization_requests)).into_response()
+        }
+        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+#[axum_macros::debug_handler]
+pub(crate) async fn authorization_request(
     State(state): State<VerificationState>,
     Path(authorization_request_id): Path<String>,
 ) -> Response {
-    // Get the authorization request if it exists.
     match query_handler(&authorization_request_id, &state.query.authorization_request).await {
-        Ok(Some(AuthorizationRequestView {
-            authorization_request: Some(authorization_request),
-            ..
-        })) => (StatusCode::OK, Json(authorization_request)).into_response(),
+        Ok(Some(authorization_request_view)) => (StatusCode::OK, Json(authorization_request_view)).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
@@ -37,7 +51,15 @@ pub(crate) async fn get_authorization_requests(
 pub struct AuthorizationRequestsEndpointRequest {
     pub nonce: String,
     pub state: Option<String>,
-    pub presentation_definition_id: Option<String>,
+    #[serde(flatten)]
+    pub presentation_definition: Option<PresentationDefinitionResource>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PresentationDefinitionResource {
+    PresentationDefinitionId(String),
+    PresentationDefinition(PresentationDefinition),
 }
 
 #[axum_macros::debug_handler]
@@ -50,7 +72,7 @@ pub(crate) async fn authorization_requests(
     let Ok(AuthorizationRequestsEndpointRequest {
         nonce,
         state,
-        presentation_definition_id,
+        presentation_definition,
     }) = serde_json::from_value(payload)
     else {
         return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
@@ -58,19 +80,24 @@ pub(crate) async fn authorization_requests(
 
     let state = state.unwrap_or(generate_random_string());
 
-    // TODO: This needs to be properly fixed instead of reading the presentation definitions from the file system
-    // everytime a request is made. `PresentationDefinition`'s should be implemented as a proper `Aggregate`. This
-    // current suboptimal solution requires the `./tmp:/app/agent_api_rest` volume to be mounted in the `docker-compose.yml`.
-    let presentation_definition = presentation_definition_id.map(|presentation_definition_id| {
-        let project_root_dir = env!("CARGO_MANIFEST_DIR");
+    let presentation_definition = presentation_definition.map(|presentation_definition| {
+        match presentation_definition {
+            // TODO: This needs to be properly fixed instead of reading the presentation definitions from the file system
+            // everytime a request is made. `PresentationDefinition`'s should be implemented as a proper `Aggregate`. This
+            // current suboptimal solution requires the `./tmp:/app/agent_api_rest` volume to be mounted in the `docker-compose.yml`.
+            PresentationDefinitionResource::PresentationDefinitionId(presentation_definition_id) => {
+                let project_root_dir = env!("CARGO_MANIFEST_DIR");
 
-        serde_json::from_reader(
-            std::fs::File::open(format!(
-                "{project_root_dir}/../agent_verification/presentation_definitions/{presentation_definition_id}.json"
-            ))
-            .unwrap(),
-        )
-        .unwrap()
+                serde_json::from_reader(
+                    std::fs::File::open(format!(
+                        "{project_root_dir}/../agent_verification/presentation_definitions/{presentation_definition_id}.json"
+                    ))
+                    .unwrap(),
+                )
+                .unwrap()
+            }
+            PresentationDefinitionResource::PresentationDefinition(presentation_definition) => presentation_definition,
+        }
     });
 
     let command = AuthorizationRequestCommand::CreateAuthorizationRequest {
@@ -99,7 +126,7 @@ pub(crate) async fn authorization_requests(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
-    // Return the credential.
+    // Return the authorization_request.
     match query_handler(&state, &verification_state.query.authorization_request).await {
         Ok(Some(AuthorizationRequestView {
             form_url_encoded_authorization_request: Some(form_url_encoded_authorization_request),
@@ -107,7 +134,10 @@ pub(crate) async fn authorization_requests(
         })) => (
             StatusCode::CREATED,
             [
-                (header::LOCATION, format!("/v1/authorization_requests/{state}").as_str()),
+                (
+                    header::LOCATION,
+                    format!("{API_VERSION}/authorization_requests/{state}").as_str(),
+                ),
                 (header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
             ],
             form_url_encoded_authorization_request,
@@ -120,32 +150,40 @@ pub(crate) async fn authorization_requests(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::app;
-    use agent_shared::config;
+    use crate::verification::router;
+    use agent_secret_manager::service::Service;
     use agent_store::in_memory;
-    use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
         http::{self, Request},
         Router,
     };
-    use serde_json::json;
-    use tower::Service;
+    use rstest::rstest;
+    use tower::Service as _;
 
-    pub async fn authorization_requests(app: &mut Router) -> String {
+    pub async fn authorization_requests(app: &mut Router, by_value: bool) -> String {
+        let request_body = AuthorizationRequestsEndpointRequest {
+            nonce: "nonce".to_string(),
+            state: None,
+            presentation_definition: Some(if by_value {
+                PresentationDefinitionResource::PresentationDefinition(
+                    serde_json::from_str(include_str!(
+                        "../../../agent_verification/presentation_definitions/presentation_definition.json"
+                    ))
+                    .unwrap(),
+                )
+            } else {
+                PresentationDefinitionResource::PresentationDefinitionId("presentation_definition".to_string())
+            }),
+        };
+
         let response = app
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri("/v1/authorization_requests")
+                    .uri(&format!("{API_VERSION}/authorization_requests"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-                    .body(Body::from(
-                        serde_json::to_vec(&json!({
-                            "nonce": "nonce",
-                            "presentation_definition_id": "presentation_definition"
-                        }))
-                        .unwrap(),
-                    ))
+                    .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
                     .unwrap(),
             )
             .await
@@ -188,17 +226,16 @@ pub mod tests {
         form_url_encoded_authorization_request
     }
 
+    #[rstest]
+    #[case::with_presentation_definition_by_value(true)]
+    #[case::with_presentation_definition_id(false)]
     #[tokio::test]
     #[tracing_test::traced_test]
-    async fn test_authorization_requests_endpoint() {
-        let issuance_state = in_memory::issuance_state(Default::default()).await;
-        let verification_state = in_memory::verification_state(
-            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
-            Default::default(),
-        )
-        .await;
-        let mut app = app((issuance_state, verification_state));
+    async fn test_authorization_requests_endpoint(#[case] by_value: bool) {
+        let verification_state = in_memory::verification_state(Service::default(), Default::default()).await;
 
-        authorization_requests(&mut app).await;
+        let mut app = router(verification_state);
+
+        authorization_requests(&mut app, by_value).await;
     }
 }

@@ -5,14 +5,15 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+agent_holder = { path = "../agent_holder" }
+agent_identity = { path = "../agent_identity" }
 agent_issuance = { path = "../agent_issuance" }
 agent_shared = { path = "../agent_shared" }
 agent_verification = { path = "../agent_verification" }
 
+async-trait = "0.1"
 cqrs-es.workspace = true
 postgres-es = "0.4.10"
-
-async-trait = "0.1"
 serde_json.workspace = true
 sqlx = { version = "0.7", features = [
     "postgres",

@@ -1,12 +1,14 @@
-use crate::offer::queries::{CustomQuery, Offer, OfferEvent, ViewRepository};
+use agent_shared::custom_queries::CustomQuery;
 use async_trait::async_trait;
 use cqrs_es::{
-    persist::{PersistenceError, ViewContext},
+    persist::{PersistenceError, ViewContext, ViewRepository},
     EventEnvelope, Query, View,
 };
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::sync::Arc;
+
+use crate::offer::{aggregate::Offer, event::OfferEvent};
 
 /// A custom query trait for the Offer aggregate. This query is used to update the `AccessTokenView`.
 pub struct AccessTokenQuery<R, V>
@@ -43,7 +45,7 @@ where
 }
 
 #[async_trait]
-impl<R, V> CustomQuery<R, V> for AccessTokenQuery<R, V>
+impl<R, V> CustomQuery<R, V, Offer> for AccessTokenQuery<R, V>
 where
     R: ViewRepository<V, Offer>,
     V: View<Offer>,

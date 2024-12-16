@@ -1,58 +1,162 @@
+use agent_identity::connection::aggregate::Connection;
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
+use agent_shared::config::config;
 use agent_store::{
     AuthorizationRequestEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, EventPublisher,
-    OfferEventPublisher, ServerConfigEventPublisher,
+    HolderCredentialEventPublisher, OfferEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
 };
-use agent_verification::{authorization_request::aggregate::AuthorizationRequest, connection::aggregate::Connection};
+use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, DomainEvent, EventEnvelope, Query};
 use serde::Deserialize;
 use serde_with::skip_serializing_none;
-
-#[cfg(feature = "test")]
-pub static TEST_EVENT_PUBLISHER_HTTP_CONFIG: std::sync::Mutex<Option<serde_yaml::Value>> = std::sync::Mutex::new(None);
+use tracing::info;
 
 /// A struct that contains all the event publishers for the different aggregates.
 #[skip_serializing_none]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 pub struct EventPublisherHttp {
+    // Identity
+    pub connection: Option<AggregateEventPublisherHttp<Connection>>,
+
     // Issuance
     pub server_config: Option<AggregateEventPublisherHttp<ServerConfig>>,
     pub credential: Option<AggregateEventPublisherHttp<Credential>>,
     pub offer: Option<AggregateEventPublisherHttp<Offer>>,
 
+    // Holder
+    pub holder_credential: Option<AggregateEventPublisherHttp<agent_holder::credential::aggregate::Credential>>,
+    pub received_offer: Option<AggregateEventPublisherHttp<agent_holder::offer::aggregate::Offer>>,
+
     // Verification
-    pub connection: Option<AggregateEventPublisherHttp<Connection>>,
     pub authorization_request: Option<AggregateEventPublisherHttp<AuthorizationRequest>>,
 }
 
 impl EventPublisherHttp {
     pub fn load() -> anyhow::Result<Self> {
-        #[cfg(feature = "test")]
-        let mut config = TEST_EVENT_PUBLISHER_HTTP_CONFIG
-            .lock()
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .clone();
-        #[cfg(not(feature = "test"))]
-        let mut config: serde_yaml::Value = {
-            match std::fs::File::open("agent_event_publisher_http/config.yml") {
-                Ok(config_file) => serde_yaml::from_reader(config_file)?,
-                // If the config file does not exist, return an empty config.
-                Err(_) => serde_yaml::Value::Null,
-            }
+        let event_publisher_http = config().event_publishers.clone().unwrap().http.unwrap();
+
+        // If it's not enabled, return an empty event publisher.
+        if !event_publisher_http.enabled {
+            return Ok(EventPublisherHttp::default());
+        }
+
+        let connection = (!event_publisher_http.events.connection.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Connection>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .connection
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let server_config = (!event_publisher_http.events.server_config.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<ServerConfig>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .server_config
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let credential = (!event_publisher_http.events.credential.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Credential>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .credential
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let offer = (!event_publisher_http.events.offer.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Offer>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .offer
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let holder_credential = (!event_publisher_http.events.holder_credential.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<agent_holder::credential::aggregate::Credential>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .holder_credential
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let received_offer = (!event_publisher_http.events.received_offer.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<agent_holder::offer::aggregate::Offer>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .received_offer
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let authorization_request = (!event_publisher_http.events.authorization_request.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<AuthorizationRequest>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .authorization_request
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let event_publisher: EventPublisherHttp = EventPublisherHttp {
+            server_config,
+            credential,
+            offer,
+            holder_credential,
+            received_offer,
+            connection,
+            authorization_request,
         };
 
-        config.apply_merge()?;
+        info!("Loaded HTTP event publisher: {:?}", event_publisher);
 
-        serde_yaml::from_value(config).map_err(Into::into)
+        Ok(event_publisher)
     }
 }
 
 impl EventPublisher for EventPublisherHttp {
+    fn connection(&mut self) -> Option<ConnectionEventPublisher> {
+        self.connection
+            .take()
+            .map(|publisher| Box::new(publisher) as ConnectionEventPublisher)
+    }
+
     fn server_config(&mut self) -> Option<ServerConfigEventPublisher> {
         self.server_config
             .take()
@@ -71,10 +175,16 @@ impl EventPublisher for EventPublisherHttp {
             .map(|publisher| Box::new(publisher) as OfferEventPublisher)
     }
 
-    fn connection(&mut self) -> Option<ConnectionEventPublisher> {
-        self.connection
+    fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher> {
+        self.holder_credential
             .take()
-            .map(|publisher| Box::new(publisher) as ConnectionEventPublisher)
+            .map(|publisher| Box::new(publisher) as HolderCredentialEventPublisher)
+    }
+
+    fn received_offer(&mut self) -> Option<ReceivedOfferEventPublisher> {
+        self.received_offer
+            .take()
+            .map(|publisher| Box::new(publisher) as ReceivedOfferEventPublisher)
     }
 
     fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher> {
@@ -92,6 +202,8 @@ where
     A: Aggregate,
 {
     pub target_url: String,
+    #[serde(with = "http_serde::option::header_map", default)]
+    pub headers: Option<reqwest::header::HeaderMap>,
     pub target_events: Vec<String>,
     #[serde(skip)]
     pub client: reqwest::Client,
@@ -103,9 +215,10 @@ impl<A> AggregateEventPublisherHttp<A>
 where
     A: Aggregate,
 {
-    pub fn new(target_url: String, target_events: Vec<String>) -> Self {
+    pub fn new(target_url: String, headers: Option<reqwest::header::HeaderMap>, target_events: Vec<String>) -> Self {
         AggregateEventPublisherHttp {
             target_url,
+            headers,
             target_events,
             client: reqwest::Client::new(),
             _marker: std::marker::PhantomData,
@@ -121,12 +234,30 @@ where
     async fn dispatch(&self, _view_id: &str, events: &[EventEnvelope<A>]) {
         for event in events {
             if self.target_events.contains(&event.payload.event_type()) {
-                self.client
-                    .post(&self.target_url)
-                    .json(&event.payload)
-                    .send()
-                    .await
-                    .ok();
+                let mut request = self.client.post(&self.target_url).json(&event.payload);
+
+                if let Some(headers) = &self.headers {
+                    request = request.headers(headers.clone());
+                }
+
+                info!(
+                    "Dispatching event: {:?} to HTTP endpoint: {:?} with headers: {:?}",
+                    event.payload, self.target_url, self.headers
+                );
+
+                // Send the request in a separate thread so that we don't have to await the response in the current thread.
+                tokio::task::spawn(async move {
+                    request
+                        .send()
+                        .await
+                        .inspect(|response| {
+                            info!("Response: {:?}", response);
+                        })
+                        .inspect_err(|error| {
+                            info!("Error: {:?}", error);
+                        })
+                        .ok();
+                });
             }
         }
     }
@@ -136,11 +267,13 @@ where
 mod tests {
     use super::*;
 
+    use agent_issuance::offer::aggregate::Status;
     use agent_issuance::offer::event::OfferEvent;
+    use agent_shared::config::{set_config, Events};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn it_works() {
         let mock_server = MockServer::start().await;
 
@@ -153,27 +286,20 @@ mod tests {
         let target_url = format!("{}/ssi-events-subscriber", &mock_server.uri());
 
         // Set the test configuration.
-        TEST_EVENT_PUBLISHER_HTTP_CONFIG.lock().unwrap().replace(
-            serde_yaml::from_str(&format!(
-                r#"
-                    target_url: &target_url {target_url}
-
-                    offer: {{
-                        target_url: *target_url,
-                        target_events: [
-                            FormUrlEncodedCredentialOfferCreated
-                        ]
-                    }}
-                "#
-            ))
-            .unwrap(),
-        );
+        set_config().enable_event_publisher_http();
+        set_config().set_event_publisher_http_target_url(target_url.clone());
+        set_config().set_event_publisher_http_target_events(Events {
+            offer: vec![agent_shared::config::OfferEvent::FormUrlEncodedCredentialOfferCreated],
+            ..Default::default()
+        });
 
         let publisher = EventPublisherHttp::load().unwrap();
 
         // A new event for the `Offer` aggregate.
         let offer_event = OfferEvent::FormUrlEncodedCredentialOfferCreated {
+            offer_id: Default::default(),
             form_url_encoded_credential_offer: "form_url_encoded_credential_offer".to_string(),
+            status: Status::Pending,
         };
 
         let events = [EventEnvelope::<Offer> {
@@ -186,14 +312,24 @@ mod tests {
         // Dispatch the event.
         publisher.offer.as_ref().unwrap().dispatch("view_id", &events).await;
 
+        // Wait for the request to arrive at the mock server endpoint.
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        let received_requests = mock_server.received_requests().await;
+        let received_request = received_requests.as_ref().unwrap().first().unwrap();
+
         // Assert that the event was dispatched to the target URL.
+        assert_eq!(offer_event, serde_json::from_slice(&received_request.body).unwrap());
+
+        // Assert that the request contained the expected headers.
         assert_eq!(
-            offer_event,
-            serde_json::from_slice(&mock_server.received_requests().await.unwrap().first().unwrap().body).unwrap()
+            "Basic YWxhZGRpbjpvcGVuc2VzYW1l",
+            received_request.headers.get("Authorization").unwrap()
         );
 
         // A new event for the `Offer` aggregate that the publisher is not interested in.
         let offer_event = OfferEvent::CredentialsAdded {
+            offer_id: Default::default(),
             credential_ids: vec!["credential-0001".to_string()],
         };
 

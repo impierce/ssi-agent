@@ -1,13 +1,15 @@
+use std::time::{Duration, Instant};
+
 use agent_issuance::{
-    credential::{command::CredentialCommand, queries::CredentialView},
-    offer::{
-        command::OfferCommand,
-        queries::{access_token::AccessTokenView, OfferView},
-    },
+    credential::{command::CredentialCommand, views::CredentialView},
+    offer::{command::OfferCommand, queries::access_token::AccessTokenView, views::OfferView},
     server_config::queries::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::{
+    config::config,
+    handlers::{command_handler, query_handler},
+};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -16,9 +18,11 @@ use axum::{
 use axum_auth::AuthBearer;
 use oid4vci::credential_request::CredentialRequest;
 use serde_json::json;
-use tracing::info;
+use tokio::time::sleep;
+use tracing::{error, info};
 
-const EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 250;
+const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
+const POLLING_INTERVAL_MS: u64 = 100;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
@@ -41,7 +45,10 @@ pub(crate) async fn credential(
             Ok(Some(ServerConfigView {
                 credential_issuer_metadata: Some(credential_issuer_metadata),
                 authorization_server_metadata,
-            })) => (credential_issuer_metadata, Box::new(authorization_server_metadata)),
+            })) => (
+                Box::new(credential_issuer_metadata),
+                Box::new(authorization_server_metadata),
+            ),
             _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         };
 
@@ -57,24 +64,40 @@ pub(crate) async fn credential(
         StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
 
-    // This ensures that the server waits for a sufficient duration to potentially receive a credential from an external
-    // server.
-    std::thread::sleep(std::time::Duration::from_millis(EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS));
+    let timeout = config()
+        .external_server_response_timeout_ms
+        .unwrap_or(DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS);
+    let start_time = Instant::now();
 
+    // TODO: replace this polling solution with a call to the `TxChannelRegistry` as described here: https://github.com/impierce/ssi-agent/issues/75
     // Use the `offer_id` to get the `credential_ids` and `subject_id` from the `OfferView`.
-    let (credential_ids, subject_id) = match query_handler(&offer_id, &state.query.offer).await {
-        Ok(Some(OfferView {
-            credential_ids,
-            subject_id: Some(subject_id),
-            ..
-        })) => (credential_ids, subject_id),
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    let (credential_ids, subject_id) = loop {
+        match query_handler(&offer_id, &state.query.offer).await {
+            // When the Offer does not include the credential id's yet, wait for the external server to provide them.
+            Ok(Some(OfferView { credential_ids, .. })) if credential_ids.is_empty() => {
+                if start_time.elapsed().as_millis() <= timeout.into() {
+                    sleep(Duration::from_millis(POLLING_INTERVAL_MS)).await;
+                } else {
+                    error!("timeout failure");
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            }
+            Ok(Some(OfferView {
+                credential_ids,
+                subject_id: Some(subject_id),
+                ..
+            })) => break (credential_ids, subject_id),
+            _ => {
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        }
     };
 
     // Use the `credential_ids` and `subject_id` to sign all the credentials.
     let mut signed_credentials = vec![];
     for credential_id in credential_ids {
         let command = CredentialCommand::SignCredential {
+            credential_id: credential_id.clone(),
             subject_id: subject_id.clone(),
             overwrite: false,
         };
@@ -97,7 +120,10 @@ pub(crate) async fn credential(
         signed_credentials.push(signed_credential);
     }
 
-    let command = OfferCommand::CreateCredentialResponse { signed_credentials };
+    let command = OfferCommand::CreateCredentialResponse {
+        offer_id: offer_id.clone(),
+        signed_credentials,
+    };
 
     // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
     if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
@@ -116,22 +142,22 @@ pub(crate) async fn credential(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
+    use super::*;
+    use crate::issuance::credentials::tests::credentials;
+    use crate::issuance::router;
+    use crate::API_VERSION;
     use crate::{
-        app,
         issuance::{
             credential_issuer::token::tests::token, credentials::CredentialsEndpointRequest, offers::tests::offers,
         },
-        tests::{BASE_URL, OFFER_ID},
+        tests::{BASE_URL, CREDENTIAL_CONFIGURATION_ID, OFFER_ID},
     };
-
-    use super::*;
-    use agent_event_publisher_http::{EventPublisherHttp, TEST_EVENT_PUBLISHER_HTTP_CONFIG};
+    use agent_event_publisher_http::EventPublisherHttp;
+    use agent_issuance::credential::aggregate::CredentialExpiry;
     use agent_issuance::{offer::event::OfferEvent, startup_commands::startup_commands, state::initialize};
-    use agent_shared::config;
+    use agent_secret_manager::service::Service;
+    use agent_shared::config::{set_config, Events};
     use agent_store::{in_memory, EventPublisher};
-    use agent_verification::services::test_utils::test_verification_services;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -139,6 +165,7 @@ mod tests {
     };
     use rstest::rstest;
     use serde_json::{json, Value};
+    use std::sync::Arc;
     use tokio::sync::Mutex;
     use tower::ServiceExt;
     use wiremock::{
@@ -146,34 +173,27 @@ mod tests {
         Mock, MockServer, ResponseTemplate,
     };
 
-    const CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dF\
-                                  ODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtn\
-                                  RTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJ\
-                                  pc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXd\
-                                  KdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp\
-                                  2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwiZXhwIjo5OTk5OTk5OTk\
-                                  5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8\
-                                  yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmc\
-                                  vc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHA6Ly9\
-                                  leGFtcGxlLmNvbS9jcmVkZW50aWFscy8zNTI3IiwidHlwZSI6WyJWZXJpZmlhYmx\
-                                  lQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGl\
-                                  kOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05\
-                                  rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5\
-                                  hbWUiOiJUZWFtd29yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN\
-                                  0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJpZCI6ImR\
-                                  pZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3J\
-                                  qWnBYM3FkIn19fQ.MzHsluxKNsnA01df0kUyXVBIzkBJajKhHbuG-_vNGz0QAPQ1\
-                                  6jZ4IwAtEwt6XfbV9luFalRL3qtsmDvaNBf7CA";
+    const CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjoiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQiLCJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIn0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoifX0.9IMQOMPD3V350XXlMthINwIT38gUC6WsPHKFpuR5hJ0w2DArrY5pjf2nG-_Ba5sSa3utKcc0QPHMaMCBPLpdAw";
 
     trait CredentialEventTrigger {
-        async fn prepare_credential_event_trigger(&self, app: Arc<Mutex<Option<Router>>>, is_self_signed: bool);
+        async fn prepare_credential_event_trigger(
+            &self,
+            app: Arc<Mutex<Option<Router>>>,
+            is_self_signed: bool,
+            delay: u64,
+        );
     }
 
     // Adds a method to `MockServer` which can be used to mount a mock endpoint that will be triggered when a
     // `CredentialRequestVerified` event is dispatched from the `UniCore` server. The `MockServer` used in this test
     // module must be seen as a representation of an outside backend server.
     impl CredentialEventTrigger for MockServer {
-        async fn prepare_credential_event_trigger(&self, app: Arc<Mutex<Option<Router>>>, is_self_signed: bool) {
+        async fn prepare_credential_event_trigger(
+            &self,
+            app: Arc<Mutex<Option<Router>>>,
+            is_self_signed: bool,
+            delay: u64,
+        ) {
             Mock::given(method("POST"))
                 .and(path("/ssi-events-subscriber"))
                 .and(
@@ -195,6 +215,8 @@ mod tests {
                                         offer_id: offer_id.clone(),
                                         credential: json!(CREDENTIAL_JWT),
                                         is_signed: true,
+                                        credential_configuration_id: CREDENTIAL_CONFIGURATION_ID.to_string(),
+                                        expires_at: CredentialExpiry::Never,
                                     }
                                 } else {
                                     // ...or else, submitting the data that will be signed inside `UniCore`.
@@ -208,15 +230,19 @@ mod tests {
                                             }
                                         }),
                                         is_signed: false,
+                                        credential_configuration_id: CREDENTIAL_CONFIGURATION_ID.to_string(),
+                                        expires_at: CredentialExpiry::Never,
                                     }
                                 };
+
+                                std::thread::sleep(Duration::from_millis(delay));
 
                                 // Sends the `CredentialsRequest` to the `credentials` endpoint.
                                 app_clone
                                     .oneshot(
                                         Request::builder()
                                             .method(http::Method::POST)
-                                            .uri("/v1/credentials")
+                                            .uri(&format!("{API_VERSION}/credentials"))
                                             .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                                             .body(Body::from(
                                                 serde_json::to_vec(&credentials_endpoint_request).unwrap(),
@@ -239,58 +265,47 @@ mod tests {
     }
 
     #[rstest]
-    #[case::without_external_server(false, false)]
-    #[case::with_external_server(true, false)]
-    #[case::with_external_server_and_self_signed_credential(true, true)]
+    #[case::without_external_server(false, false, 0)]
+    #[case::with_external_server(true, false, 0)]
+    #[case::with_external_server_and_self_signed_credential(true, true, 0)]
+    #[should_panic(expected = "assertion `left == right` failed\n  left: 500\n right: 200")]
+    #[case::should_panic_due_to_timout(true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100)]
     #[serial_test::serial]
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
-    async fn test_credential_endpoint(#[case] with_external_server: bool, #[case] is_self_signed: bool) {
-        use crate::issuance::credentials::tests::credentials;
-
-        let (external_server, issuance_event_publishers, verification_event_publishers) = if with_external_server {
+    async fn test_credential_endpoint(
+        #[case] with_external_server: bool,
+        #[case] is_self_signed: bool,
+        #[case] delay: u64,
+    ) {
+        let (external_server, issuance_event_publishers) = if with_external_server {
             let external_server = MockServer::start().await;
 
             let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
 
-            TEST_EVENT_PUBLISHER_HTTP_CONFIG.lock().unwrap().replace(
-                serde_yaml::from_str(&format!(
-                    r#"
-                        target_url: &target_url {target_url}
-    
-                        offer: {{
-                            target_url: *target_url,
-                            target_events: [
-                                CredentialRequestVerified
-                            ]
-                        }}
-                    "#,
-                ))
-                .unwrap(),
-            );
+            set_config().enable_event_publisher_http();
+            set_config().set_event_publisher_http_target_url(target_url.clone());
+            set_config().set_event_publisher_http_target_events(Events {
+                offer: vec![agent_shared::config::OfferEvent::CredentialRequestVerified],
+                ..Default::default()
+            });
 
             (
                 Some(external_server),
                 vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>],
-                vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>],
             )
         } else {
-            (None, Default::default(), Default::default())
+            (None, Default::default())
         };
 
-        let issuance_state = in_memory::issuance_state(issuance_event_publishers).await;
-        let verification_state = in_memory::verification_state(
-            test_verification_services(&config!("default_did_method").unwrap_or("did:key".to_string())),
-            verification_event_publishers,
-        )
-        .await;
+        let issuance_state = in_memory::issuance_state(Service::default(), issuance_event_publishers).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
-        let mut app = app((issuance_state, verification_state));
+        let mut app = router(issuance_state);
 
         if let Some(external_server) = &external_server {
             external_server
-                .prepare_credential_event_trigger(Arc::new(Mutex::new(Some(app.clone()))), is_self_signed)
+                .prepare_credential_event_trigger(Arc::new(Mutex::new(Some(app.clone()))), is_self_signed, delay)
                 .await;
         }
 

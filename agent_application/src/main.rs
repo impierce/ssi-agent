@@ -1,93 +1,110 @@
-use agent_api_rest::{app, metrics};
+#![allow(clippy::await_holding_lock)]
+
+mod probes;
+
+use agent_api_rest::{
+    app,
+    metrics::{metrics, track_metrics},
+    ApplicationState,
+};
 use agent_event_publisher_http::EventPublisherHttp;
-use agent_issuance::{startup_commands::startup_commands, state::initialize};
-use agent_secret_manager::{secret_manager, subject::Subject};
-use agent_shared::config;
+use agent_holder::services::HolderServices;
+use agent_identity::services::IdentityServices;
+use agent_issuance::{services::IssuanceServices, startup_commands::startup_commands};
+use agent_secret_manager::{secret_manager, service::Service as _, subject::Subject};
+use agent_shared::config::{config, LogFormat};
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
-use axum::Router;
-use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
-use serde_json::json;
-use std::{str::FromStr, sync::Arc};
+use probes::liveness::healthz;
+use std::sync::Arc;
+use tokio::io;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> io::Result<()> {
     let tracing_subscriber = tracing_subscriber::registry()
         // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
         .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
 
-    match config!("log_format") {
-        Ok(log_format) if log_format == "json" => {
-            tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init()
-        }
-        _ => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
+    match config().log_format {
+        LogFormat::Json => tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init(),
+        LogFormat::Text => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
     }
 
-    let default_did_method = config!("default_did_method").unwrap_or("did:key".to_string());
-    let verification_services = Arc::new(VerificationServices::new(
-        Arc::new(Subject {
-            secret_manager: secret_manager().await,
-        }),
-        // TODO: Temporary solution. Remove this once `ClientMetadata` is part of `RelyingPartyManager`.
-        ClientMetadataResource::ClientMetadata {
-            client_name: None,
-            logo_uri: None,
-            extension: siopv2::authorization_request::ClientMetadataParameters {
-                subject_syntax_types_supported: vec![SubjectSyntaxType::from_str(&default_did_method).unwrap()],
-            },
-        },
-        ClientMetadataResource::ClientMetadata {
-            client_name: None,
-            logo_uri: None,
-            // TODO: fix this once `vp_formats` is public.
-            extension: serde_json::from_value(json!({
-                "vp_formats": {}
-            }))
-            .unwrap(),
-        },
-        &default_did_method,
-    ));
+    let subject = Arc::new(Subject {
+        secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
+    });
 
-    // TODO: Currently `issuance_event_publishers` and `verification_event_publishers` are exactly the same, which is
-    // weird. We need some sort of layer between `agent_application` and `agent_store` that will provide a cleaner way
-    // of initializing the event publishers and sending them over to `agent_store`.
+    let identity_services = Arc::new(IdentityServices::new(subject.clone()));
+    let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
+    let holder_services = Arc::new(HolderServices::new(subject.clone()));
+    let verification_services = Arc::new(VerificationServices::new(subject.clone()));
+
+    // TODO: Currently `issuance_event_publishers`, `holder_event_publishers` and `verification_event_publishers` are
+    // exactly the same, which is weird. We need some sort of layer between `agent_application` and `agent_store` that
+    // will provide a cleaner way of initializing the event publishers and sending them over to `agent_store`.
+    let identity_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
     let issuance_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
+    let holder_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
     let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
-    let (issuance_state, verification_state) = match agent_shared::config!("event_store").unwrap().as_str() {
-        "postgres" => (
-            postgres::issuance_state(issuance_event_publishers).await,
-            postgres::verification_state(verification_services, verification_event_publishers).await,
-        ),
-        _ => (
-            in_memory::issuance_state(issuance_event_publishers).await,
-            in_memory::verification_state(verification_services, verification_event_publishers).await,
-        ),
-    };
+    let (identity_state, issuance_state, holder_state, verification_state) =
+        match agent_shared::config::config().event_store.type_ {
+            agent_shared::config::EventStoreType::Postgres => (
+                postgres::identity_state(identity_services, identity_event_publishers).await,
+                postgres::issuance_state(issuance_services, issuance_event_publishers).await,
+                postgres::holder_state(holder_services, holder_event_publishers).await,
+                postgres::verification_state(verification_services, verification_event_publishers).await,
+            ),
+            agent_shared::config::EventStoreType::InMemory => (
+                in_memory::identity_state(identity_services, identity_event_publishers).await,
+                in_memory::issuance_state(issuance_services, issuance_event_publishers).await,
+                in_memory::holder_state(holder_services, holder_event_publishers).await,
+                in_memory::verification_state(verification_services, verification_event_publishers).await,
+            ),
+        };
 
-    let url = config!("url").expect("AGENT_APPLICATION_URL is not set");
-    // TODO: Temporary solution. In the future we need to read these kinds of values from a config file.
-    std::env::set_var("AGENT_VERIFICATION_URL", &url);
+    info!("{:?}", config());
 
-    info!("Application url: {:?}", url);
+    let url = &config().url;
 
-    let url = url::Url::parse(&url).unwrap();
+    info!("Application url: {}", url);
 
-    initialize(&issuance_state, startup_commands(url)).await;
+    agent_identity::state::initialize(&identity_state).await;
+    agent_issuance::state::initialize(&issuance_state, startup_commands(url.clone())).await;
+
+    let health_router = axum::Router::new()
+        .route("/healthz", axum::routing::get(healthz))
+        .route_layer(axum::middleware::from_fn(track_metrics));
+
+    let app = app(ApplicationState {
+        identity_state: Some(identity_state),
+        issuance_state: Some(issuance_state),
+        holder_state: Some(holder_state),
+        verification_state: Some(verification_state),
+    });
+
+    let app = health_router.merge(app);
+
+    // let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await?;
+    // info!("listening on {}", listener.local_addr()?);
+    // axum::serve(listener, app).await?;
 
     tokio::join!(
-        start_server("app".to_string(), app((issuance_state, verification_state)), 3033),
+        start_server("app".to_string(), app, 3033),
         // The `/metrics` endpoint should not be publicly available. If behind a reverse proxy, this
         // can be achieved by rejecting requests to `/metrics`. In this example, a second server is
         // started on another port to expose `/metrics`.
         start_server("metrics".to_string(), metrics(), 3031)
     );
+
+    Ok(())
 }
 
-async fn start_server(alias: String, router: Router, port: u16) {
+/// Start a server for a given router on a given port.
+async fn start_server(alias: String, router: axum::Router, port: u16) {
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await.unwrap();
     info!("`{alias}` server listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, router).await.unwrap();

@@ -1,0 +1,27 @@
+pub mod all_credentials;
+
+use super::event::CredentialEvent;
+use crate::credential::aggregate::Credential;
+use cqrs_es::{EventEnvelope, View};
+
+pub type HolderCredentialView = Credential;
+
+impl View<Credential> for Credential {
+    fn update(&mut self, event: &EventEnvelope<Credential>) {
+        use CredentialEvent::*;
+
+        match &event.payload {
+            CredentialAdded {
+                holder_credential_id,
+                received_offer_id: offer_id,
+                credential,
+                data,
+            } => {
+                self.holder_credential_id.clone_from(holder_credential_id);
+                self.received_offer_id.clone_from(offer_id);
+                self.signed.replace(credential.clone());
+                self.data.replace(data.clone());
+            }
+        }
+    }
+}
