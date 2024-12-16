@@ -51,10 +51,11 @@ services:
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
 
   ssi-agent:
-    image: impiercetechnologies/ssi-agent:837870c
-    # build:
-    #   context: ../..
-    #   dockerfile: ./agent_application/docker/Dockerfile
+    container_name: ssi-agent
+    # image: impiercetechnologies/ssi-agent:1.0.0-beta.8
+    build:
+      context: ../..
+      dockerfile: ./agent_application/docker/Dockerfile
     ports:
       - 3033:3033
     environment:
@@ -62,6 +63,9 @@ services:
       UNICORE__EVENT_STORE__TYPE: postgres
       UNICORE__EVENT_STORE__CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo
       UNICORE__URL: ${UNICORE__URL}
+
+      UNICORE__DID_METHODS__DID_WEB__ENABLED: false
+      UNICORE__DID_METHODS__DID_JWK__PREFERRED: true
 
       UNICORE__SECRET_MANAGER__STRONGHOLD_PATH: "/app/res/stronghold"
       UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD: "secure_password"
