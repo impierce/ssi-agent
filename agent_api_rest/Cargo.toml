@@ -44,20 +44,14 @@ utoipa-scalar = { version = "0.2", features = ["axum"] }
 # ] }
 
 [dev-dependencies]
-agent_event_publisher_http = { path = "../agent_event_publisher_http", features = [
-    "test_utils",
-] }
+agent_event_publisher_http = { path = "../agent_event_publisher_http", features = ["test_utils"] }
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_identity = { path = "../agent_identity", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
-agent_secret_manager = { path = "../agent_secret_manager", features = [
-    "test_utils",
-] }
+agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
-agent_verification = { path = "../agent_verification", features = [
-    "test_utils",
-] }
+agent_verification = { path = "../agent_verification", features = ["test_utils"] }
 
 futures.workspace = true
 jsonwebtoken.workspace = true
