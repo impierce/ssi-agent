@@ -1,5 +1,7 @@
 #![allow(clippy::await_holding_lock)]
 
+mod probes;
+
 use agent_api_rest::{app, ApplicationState};
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_holder::services::HolderServices;
@@ -9,6 +11,7 @@ use agent_secret_manager::{secret_manager, service::Service as _, subject::Subje
 use agent_shared::config::{config, LogFormat};
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
+use probes::liveness::healthz;
 use std::sync::Arc;
 use tokio::io;
 use tracing::info;
@@ -68,12 +71,16 @@ async fn main() -> io::Result<()> {
     agent_identity::state::initialize(&identity_state).await;
     agent_issuance::state::initialize(&issuance_state, startup_commands(url.clone())).await;
 
+    let health_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
+
     let app = app(ApplicationState {
         identity_state: Some(identity_state),
         issuance_state: Some(issuance_state),
         holder_state: Some(holder_state),
         verification_state: Some(verification_state),
     });
+
+    let app = health_router.merge(app);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await?;
     info!("listening on {}", listener.local_addr()?);

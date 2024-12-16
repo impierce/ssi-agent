@@ -18,7 +18,6 @@ CREATE TABLE connection
     PRIMARY KEY (view_id)
 );
 
-
 CREATE TABLE all_connections
 (
     view_id           text                        NOT NULL,

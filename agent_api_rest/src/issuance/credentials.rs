@@ -1,6 +1,6 @@
 use crate::API_VERSION;
 use agent_issuance::{
-    credential::{command::CredentialCommand, entity::Data, views::CredentialView},
+    credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data, views::CredentialView},
     offer::command::OfferCommand,
     server_config::queries::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
@@ -57,6 +57,7 @@ pub struct CredentialsEndpointRequest {
     #[serde(default)]
     pub is_signed: bool,
     pub credential_configuration_id: String,
+    pub expires_at: CredentialExpiry,
 }
 
 /// Create a new credential
@@ -95,6 +96,7 @@ pub(crate) async fn credentials(
         credential: data,
         is_signed,
         credential_configuration_id,
+        expires_at,
     }) = serde_json::from_value(payload)
     else {
         return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
@@ -142,6 +144,7 @@ pub(crate) async fn credentials(
             credential_id: credential_id.clone(),
             data: Data { raw: data },
             credential_configuration,
+            expires_at,
         }
     };
 
@@ -268,7 +271,8 @@ pub mod tests {
                             "credential": {
                                 "credentialSubject": CREDENTIAL_SUBJECT.clone()
                             },
-                            "credentialConfigurationId": CREDENTIAL_CONFIGURATION_ID
+                            "credentialConfigurationId": CREDENTIAL_CONFIGURATION_ID,
+                            "expiresAt": "never"
                         }))
                         .unwrap(),
                     ))

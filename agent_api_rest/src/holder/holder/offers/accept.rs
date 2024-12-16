@@ -76,7 +76,7 @@ pub(crate) async fn accept(State(state): State<HolderState>, Path(received_offer
     {
         let command = CredentialCommand::AddCredential {
             holder_credential_id: holder_credential_id.clone(),
-            received_offer_id: received_offer_id.clone(),
+            received_offer_id: Some(received_offer_id.clone()),
             credential,
         };
 

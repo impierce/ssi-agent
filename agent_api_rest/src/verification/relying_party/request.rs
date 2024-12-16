@@ -33,7 +33,7 @@ pub(crate) async fn request(
             ..
         })) => (
             StatusCode::OK,
-            [(header::CONTENT_TYPE, "application/jwt")],
+            [(header::CONTENT_TYPE, "application/oauth-authz-req+jwt")],
             signed_authorization_request_object,
         )
             .into_response(),
@@ -69,13 +69,16 @@ pub mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        assert_eq!(response.headers().get("Content-Type").unwrap(), "application/jwt");
+        assert_eq!(
+            response.headers().get("Content-Type").unwrap(),
+            "application/oauth-authz-req+jwt"
+        );
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: String = String::from_utf8(body.to_vec()).unwrap();
 
         let header = body.split_once('.').unwrap().0;
-        assert_eq!(header, "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9");
+        assert_eq!(header, "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCN6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifQ");
     }
 
     #[tokio::test]
