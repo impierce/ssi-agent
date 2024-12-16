@@ -75,16 +75,16 @@ async fn main() -> io::Result<()> {
     agent_identity::state::initialize(&identity_state).await;
     agent_issuance::state::initialize(&issuance_state, startup_commands(url.clone())).await;
 
-    let health_router = axum::Router::new()
-        .route("/healthz", axum::routing::get(healthz))
-        .route_layer(axum::middleware::from_fn(track_metrics));
+    let health_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
 
     let app = app(ApplicationState {
         identity_state: Some(identity_state),
         issuance_state: Some(issuance_state),
         holder_state: Some(holder_state),
         verification_state: Some(verification_state),
-    });
+    })
+    // Metrics layer
+    .route_layer(axum::middleware::from_fn(track_metrics));
 
     let app = health_router.merge(app);
 
