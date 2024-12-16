@@ -118,6 +118,8 @@ dependencies = [
  "agent_store",
  "agent_verification",
  "axum 0.7.5",
+ "chrono",
+ "serde",
  "tokio",
  "tracing",
  "tracing-subscriber",
