@@ -138,6 +138,8 @@ fn get_base_path() -> Result<String, ConfigError> {
             (name = "(public)", description = "A collection of endpoints that should be publicly accessible without authentication. They are used to resolve metadata or allow communication with wallets."),
             (name = "(.well-known)", description = "Well-known endpoints provide metadata about the server."),
             (name = "Issuance", description = "Issue credentials to holders that will store them in their wallets.", external_docs(description="Issuance API Documentation", url="https://docs.impierce.com")),
+            (name = "Verification", description = "Request holders to present credentials that meet certain criteria and verify the received presentations."),
+            (name = "Holder", description = "Manage credentials and presentations for UniCore itself to enhance trustworthiness.")
         ),
         external_docs(description="Official Documentation", url="https://docs.impierce.com"),
     )]
