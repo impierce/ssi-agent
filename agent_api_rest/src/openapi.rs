@@ -51,6 +51,9 @@ pub(crate) struct VerificationApi;
         holder::offers::offers,
         holder::offers::accept::accept,
         holder::offers::reject::reject,
+        holder::presentations::presentation,
+        holder::presentations::get_presentations,
+        holder::presentations::post_presentations,
     ),
     components(schemas(openid4vci::Oid4vciOfferEndpointRequestSchema))
 )]

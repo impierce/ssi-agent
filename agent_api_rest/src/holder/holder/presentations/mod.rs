@@ -15,6 +15,18 @@ use serde_json::{json, Value};
 use tracing::info;
 use utoipa::ToSchema;
 
+/// List all Presentations
+///
+/// Retrieve all presentations that this UniCore instance currently holds.
+/// A Presentation contains one or more Credentials.
+#[utoipa::path(
+    get,
+    path = "/holder/presentations",
+    tag = "Holder",
+    responses(
+        (status = 200, description = "Successfully retrieved all presentations."),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn get_presentations(State(state): State<HolderState>) -> Response {
     match query_handler("all_presentations", &state.query.all_presentations).await {
@@ -28,6 +40,21 @@ pub(crate) async fn get_presentations(State(state): State<HolderState>) -> Respo
     }
 }
 
+/// Get a Presentation by ID
+///
+/// Retrieves a presentation for a given ID.
+/// A Presentation contains one or more Credentials.
+#[utoipa::path(
+    get,
+    path = "/holder/presentations/{id}",
+    params(
+        ("id" = String, Path, description = "Unique identifier of the Presentation", example = "57ea9bf4-3a50-4b34-a340-7ef969bfab12"),
+    ),
+    tag = "Holder",
+    responses(
+        (status = 200, description = "Successfully retrieved the presentation."),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn presentation(State(state): State<HolderState>, Path(presentation_id): Path<String>) -> Response {
     match query_handler(&presentation_id, &state.query.presentation).await {
@@ -43,6 +70,19 @@ pub struct PresentationsEndpointRequest {
     pub credential_ids: Vec<String>,
 }
 
+/// Create new Presentation for given Credentials
+///
+/// One or more Credentials in UniCore's Holder wallet can be made available to be verified by other parties.
+/// Depending on the content of the Credentials, this can increase the trustworthiness of this UniCore instance.
+#[utoipa::path(
+    post,
+    path = "/holder/presentations",
+    request_body = PresentationsEndpointRequest,
+    tag = "Holder",
+    responses(
+        (status = 200, description = "Successfully created a presentation."),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn post_presentations(State(state): State<HolderState>, Json(payload): Json<Value>) -> Response {
     info!("Request Body: {}", payload);

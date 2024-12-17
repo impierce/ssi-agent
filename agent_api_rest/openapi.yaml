@@ -325,11 +325,11 @@ paths:
             examples:
               openbadges:
                 summary: Open Badges 3.0
-                description: s0me descr1pti0n
+                description: An badge following the Open Badges Specification 3.0
                 externalValue: res/open-badge-request.json
               w3c-vc:
-                summary: W3C v1.1
-                description: s0me descr1pti0n
+                summary: W3C VC Data Model v1.1
+                description: A credential following the W3C Verifiable Credentials Data Model v1.1
                 value:
                   offerId: '123'
                   credentialConfigurationId: w3c_vc_credential
@@ -356,7 +356,30 @@ paths:
                   summary: Open Badges 3.0
                   description: An badge following the Open Badges Specification 3.0
                   value:
-                    foo: bar
+                    '@context':
+                    - https://www.w3.org/2018/credentials/v1
+                    - https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json
+                    id: https://acme.example.org/1a2b3c4d5e6f
+                    type:
+                    - VerifiableCredential
+                    - OpenBadgeCredential
+                    name: ImpierceCredential
+                    credentialSubject:
+                      type:
+                      - AchievementSubject
+                      achievement:
+                        id: https://example.com/achievements/21st-century-skills/teamwork
+                        type: Achievement
+                        criteria:
+                          narrative: TeammembersarenominatedforthisbadgebytheirpeersandrecognizeduponreviewbyExampleCorpmanagement.
+                        description: Thisbadgerecognizesthedevelopmentofthecapacitytocollaboratewithinagroupenvironment.
+                        name: Teamwork
+                    issuer:
+                      id: http://localhost:3033/
+                      type: Profile
+                      name: UniCore
+                    issuanceDate: 2024-12-17T22:37:59Z
+                    expirationDate: 2028-04-12T09:15:23Z
                 w3c-vc-1-1:
                   summary: W3C VC Data Model v1.1
                   description: A credential following the W3C Verifiable Credentials Data Model v1.1
@@ -421,18 +444,20 @@ paths:
         '200':
           description: Successfully posted a credential.
   /v0/holder/credentials/{id}:
-    post:
+    get:
       tags:
       - Holder
       summary: Get a credential from UniCore's Holder wallet
-      description: Directly upload a credential to the UniCore's Holder wallet.
+      description: Get a specific credential from UniCore's Holder wallet by ID.
       operationId: credential
       parameters:
       - name: id
         in: path
+        description: Unique identifier of the Credential
         required: true
         schema:
           type: string
+        example: 57ea9bf4-3a50-4b34-a340-7ef969bfab12
       responses:
         '200':
           description: Successfully retrieved a credential.
@@ -447,22 +472,24 @@ paths:
         '200':
           description: Successfully retrieved all pending offers.
   /v0/holder/offers/{id}:
-    post:
+    get:
       tags:
       - Holder
       summary: Get an offer by ID
-      description: TODO
+      description: Retrieve an offer for a given ID.
       operationId: offer
       parameters:
       - name: id
         in: path
+        description: Unique identifier of the Offer
         required: true
         schema:
           type: string
+        example: 57ea9bf4-3a50-4b34-a340-7ef969bfab12
       responses:
         '200':
           description: Successfully retrieved an offer.
-  /v0/holder/offers/{offer_id}/accept:
+  /v0/holder/offers/{id}/accept:
     post:
       tags:
       - Holder
@@ -470,15 +497,17 @@ paths:
       description: Accept a pending credential offer. UniCore will then make a request to the Issuer to receive the offer.
       operationId: accept
       parameters:
-      - name: offer_id
+      - name: id
         in: path
+        description: Unique identifier of the Offer
         required: true
         schema:
           type: string
+        example: 57ea9bf4-3a50-4b34-a340-7ef969bfab12
       responses:
         '200':
           description: Successfully accepted a pending offer.
-  /v0/holder/offers/{offer_id}/reject:
+  /v0/holder/offers/{id}/reject:
     post:
       tags:
       - Holder
@@ -486,14 +515,65 @@ paths:
       description: Reject a pending credential offer. UniCore will not make any further requests to the Issuer.
       operationId: reject
       parameters:
-      - name: offer_id
+      - name: id
         in: path
+        description: Unique identifier of the Offer
         required: true
         schema:
           type: string
+        example: 57ea9bf4-3a50-4b34-a340-7ef969bfab12
       responses:
         '200':
           description: Successfully rejected a pending offer.
+  /v0/holder/presentations:
+    get:
+      tags:
+      - Holder
+      summary: List all Presentations
+      description: |-
+        Retrieve all presentations that this UniCore instance currently holds.
+        A Presentation contains one or more Credentials.
+      operationId: get_presentations
+      responses:
+        '200':
+          description: Successfully retrieved all presentations.
+    post:
+      tags:
+      - Holder
+      summary: Create new Presentation for given Credentials
+      description: |-
+        One or more Credentials in UniCore's Holder wallet can be made available to be verified by other parties.
+        Depending on the content of the Credentials, this can increase the trustworthiness of this UniCore instance.
+      operationId: post_presentations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresentationsEndpointRequest'
+        required: true
+      responses:
+        '200':
+          description: Successfully created a presentation.
+  /v0/holder/presentations/{id}:
+    get:
+      tags:
+      - Holder
+      summary: Get a Presentation by ID
+      description: |-
+        Retrieves a presentation for a given ID.
+        A Presentation contains one or more Credentials.
+      operationId: presentation
+      parameters:
+      - name: id
+        in: path
+        description: Unique identifier of the Presentation
+        required: true
+        schema:
+          type: string
+        example: 57ea9bf4-3a50-4b34-a340-7ef969bfab12
+      responses:
+        '200':
+          description: Successfully retrieved the presentation.
   /v0/offers:
     get:
       tags:
@@ -501,22 +581,9 @@ paths:
       summary: List all offers
       description: Retrieve all available credential offers.
       operationId: all_offers
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OffersEndpointRequest'
-            example:
-              offerId: '0001'
-        required: true
       responses:
         '200':
-          description: Successfully created a new credential offer. Response value is standard-compliant and can be interpreted by an identity wallet.
-          content:
-            application/x-www-form-urlencoded:
-              schema:
-                type: string
-              example: openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fcredential-issuer.example.com%2F%22%2C%22credentials%22%3A%5B%7B%22format%22%3A%22ldp_vc%22%2C%22credential_definition%22%3A%7B%22%40context%22%3A%5B%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fv1%22%2C%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fexamples%2Fv1%22%5D%2C%22type%22%3A%5B%22VerifiableCredential%22%2C%22UniversityDegreeCredential%22%5D%7D%7D%5D%7D
+          description: Successfully retrieved all credential offers.
     post:
       tags:
       - Issuance
@@ -677,8 +744,10 @@ components:
         expiresAt:
           oneOf:
           - type: string
+            title: Credential expires at a fixed date
             format: date-time
           - type: string
+            title: Credential never expires
             enum:
             - never
         isSigned:
@@ -742,16 +811,26 @@ components:
           type:
           - string
           - 'null'
+    PresentationsEndpointRequest:
+      type: object
+      required:
+      - credentialIds
+      properties:
+        credentialIds:
+          type: array
+          items:
+            type: string
     SendOfferEndpointRequest:
       type: object
       required:
-      - offer_id
-      - target_url
+      - offerId
+      - targetUrl
       properties:
-        offer_id:
+        offerId:
           type: string
-        target_url:
+        targetUrl:
           type: string
+          format: uri
     TokenRequest:
       type: object
       required:
@@ -773,6 +852,10 @@ tags:
   externalDocs:
     url: https://docs.impierce.com
     description: Issuance API Documentation
+- name: Verification
+  description: Request holders to present credentials that meet certain criteria and verify the received presentations.
+- name: Holder
+  description: Manage credentials and presentations for UniCore itself to enhance trustworthiness.
 externalDocs:
   url: https://docs.impierce.com
   description: Official Documentation
