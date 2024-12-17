@@ -1,6 +1,6 @@
-![Banner](https://images.placeholders.dev/?width=1280&height=720)
+<!-- ![Banner](https://images.placeholders.dev/?width=1280&height=720) -->
 
-Full HTTP API reference for the UniCore SSI Agent.
+Full HTTP API reference for UniCore, an open-source SSI Agent by [Impierce Technologies B.V.](https://www.impierce.com)
 
 ## Overview
 
@@ -14,7 +14,7 @@ UniCore can issue Verifiable Credentials to other entities. Credentials can be c
 
 #### Holder
 
-UniCore can hold and present Verifiable Credentials to other entities. This is especially useful when UniCore needs to prove its trustworthiness.
+UniCore can hold and present Verifiable Credentials to other entities. This is useful when UniCore wants to prove its own trustworthiness.
 
 #### Verification
 
@@ -22,7 +22,7 @@ UniCore can verify Verifiable Credentials that are presented to it.
 
 #### Identity
 
-Although "Identity" itself is not a classic role in the SSI ecosystem, UniCore offers an API to manage its own identity.
+An easy way to manage UniCore's _own_ identity. Closely related to the Holder role.
 
 ### Standardized endpoints
 
@@ -35,15 +35,15 @@ Some endpoints should always be publicly accessible to allow identity wallets to
 > [!NOTE]
 > Endpoints that should not sit behind some form of authentication are grouped under the `(public)` tag.
 
-```json
+<!-- ```json
 {
   "foo": "bar"
 }
-```
+``` -->
 
 ## Authentication & Authorization
 
-UniCore has no user management or authentication built in. Its API does not know of any roles or scopes. It is expected that the application which calls UniCore only performs calls which have been checked in the consumer business logic. If you want to make your UniCore reachable via the internet, you **must** restrict direct access to the API by running it behind a reverse proxy or some form of API gateway. In most cases, only the endpoints behind `/v0` need to be protected, but all other endpoints should stay publicly accessible in order for other participants (such as wallets) to interact with UniCore.
+UniCore has no user management or authentication built in by default. The API does not check for any roles or scopes. Currently, it is expected that the application which calls UniCore only performs calls which have been checked in the consumer business logic. If you want to make your UniCore deployment reachable via the internet, you **MUST** restrict direct access to the API by running it behind a reverse proxy or some form of API gateway and check for an API key or similar. In most cases, only the endpoints behind `/v0` need to be protected and all other non-sensitive endpoints can stay publicly accessible in order for other participants (such as wallets) to interact with UniCore.
 
 ### Example reverse proxy configuration
 

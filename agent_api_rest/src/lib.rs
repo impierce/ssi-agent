@@ -146,8 +146,7 @@ pub struct ApiDoc;
 pub fn patch_generated_openapi(mut openapi: utoipa::openapi::OpenApi) -> utoipa::openapi::OpenApi {
     openapi.info.title = "UniCore HTTP API".into();
     openapi.info.description = Some(include_str!("../docs/openapi-description.md").into());
-    // openapi.info.version = "1.0.0-alpha.1".into(); // can UniCore even be aware of its current version or does it need to be removed from the openapi.yaml?
-    openapi.info.version = "".into();
+    openapi.info.version = std::env::var("UNICORE__APP_VERSION").unwrap_or_else(|_| "".to_string());
     // TODO: required to use `UNICORE__URL` as the "self" server?
     // openapi.servers = vec![ServerBuilder::new()
     //     .url("https://playground.agent-dev.impierce.com")
