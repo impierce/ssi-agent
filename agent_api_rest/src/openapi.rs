@@ -14,13 +14,15 @@ use crate::verification::authorization_requests;
     paths(
         credentials::credential,
         credentials::credentials,
+        offers::offer,
         offers::offers,
+        offers::all_offers,
         offers::send::send,
     ),
     components(schemas(
         credentials::CredentialsEndpointRequest,
         offers::OffersEndpointRequest,
-        offers::send::SendOfferEndpointRequestSchema
+        offers::send::SendOfferEndpointRequest
     ))
 )]
 pub(crate) struct IssuanceApi;
@@ -29,19 +31,26 @@ pub(crate) struct IssuanceApi;
 #[openapi(
     paths(
         authorization_requests::all_authorization_requests,
-        authorization_requests::authorization_requests
+        authorization_requests::authorization_request,
+        authorization_requests::authorization_requests,
     ),
-    components(schemas(authorization_requests::AuthorizationRequestsEndpointRequestSchema))
+    components(schemas(
+        authorization_requests::AuthorizationRequestsEndpointRequestSchema,
+        authorization_requests::PresentationDefinitionSchema
+    ))
 )]
 pub(crate) struct VerificationApi;
 
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        holder::credentials::credential,
         holder::credentials::credentials,
+        holder::credentials::post_credentials,
+        holder::offers::offer,
         holder::offers::offers,
         holder::offers::accept::accept,
-        holder::offers::reject::reject
+        holder::offers::reject::reject,
     ),
     components(schemas(openid4vci::Oid4vciOfferEndpointRequestSchema))
 )]

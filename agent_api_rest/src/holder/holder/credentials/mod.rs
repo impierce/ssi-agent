@@ -41,6 +41,17 @@ pub struct HolderCredentialsEndpointRequest {
     pub credential: Jwt,
 }
 
+/// Upload a credential
+///
+/// Directly upload a credential to the UniCore's Holder wallet.
+#[utoipa::path(
+    post,
+    path = "/holder/credentials",
+    tag = "Holder",
+    responses(
+        (status = 200, description = "Successfully posted a credential."),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn post_credentials(State(state): State<HolderState>, Json(payload): Json<Value>) -> Response {
     info!("Request Body: {}", payload);
@@ -71,6 +82,17 @@ pub(crate) async fn post_credentials(State(state): State<HolderState>, Json(payl
     }
 }
 
+/// Get a credential from UniCore's Holder wallet
+///
+/// Directly upload a credential to the UniCore's Holder wallet.
+#[utoipa::path(
+    post,
+    path = "/holder/credentials/{id}",
+    tag = "Holder",
+    responses(
+        (status = 200, description = "Successfully retrieved a credential."),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(State(state): State<HolderState>, Path(holder_credential_id): Path<String>) -> Response {
     match query_handler(&holder_credential_id, &state.query.holder_credential).await {

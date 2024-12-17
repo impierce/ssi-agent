@@ -13,6 +13,7 @@ use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::info;
+use utoipa::ToSchema;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn get_presentations(State(state): State<HolderState>) -> Response {
@@ -36,7 +37,7 @@ pub(crate) async fn presentation(State(state): State<HolderState>, Path(presenta
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PresentationsEndpointRequest {
     pub credential_ids: Vec<String>,

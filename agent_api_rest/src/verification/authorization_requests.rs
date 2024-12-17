@@ -19,7 +19,13 @@ use oid4vp::PresentationDefinition;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::info;
-use utoipa::ToSchema;
+use utoipa::{
+    openapi::{
+        schema::{RefBuilder, SchemaType},
+        ObjectBuilder, OneOf, Ref, Schema,
+    },
+    ToSchema,
+};
 
 #[derive(ToSchema)]
 #[schema(as = GenericAuthorizationRequest)]
@@ -35,25 +41,26 @@ pub struct GenericAuthorizationRequestSchema {
 //     pub bar: i32,
 // }
 
-#[derive(ToSchema)]
+#[derive(Serialize, ToSchema)]
 #[schema(as = AuthorizationRequestsEndpointRequest)]
 pub struct AuthorizationRequestsEndpointRequestSchema {
-    pub foo: String,
-    pub bar: i32,
+    #[schema(example = "MxZTU3ZDI1NzBjMWQ5NTcyYTNmZTE1ZW")]
+    pub nonce: String,
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    #[schema(schema_with = presentation_definition_resource_schema)]
+    pub presentation_definition: Option<PresentationDefinitionResource>,
 }
 
-/// Get an Authorization Request
+/// List all Authorization Requests
 ///
-/// Retrieve an existing Authorization Request.
+/// Retrieve all existing Authorization Requests.
 #[utoipa::path(
     get,
-    path = "/authorization_requests/{id}",
+    path = "/authorization_requests",
     tag = "Verification",
-    params(
-        ("id" = String, Path, description = "The ID of the Authorization Request to retrieve.")
-    ),
     responses(
-        (status = 200, description = "Successfully returns an existing Authorization Request.", body = [GenericAuthorizationRequestSchema])
+        (status = 200, description = "Successfully returns all existing Authorization Requests.", body = [GenericAuthorizationRequestSchema])
     )
 )]
 #[axum_macros::debug_handler]
@@ -72,6 +79,21 @@ pub(crate) async fn all_authorization_requests(State(state): State<VerificationS
     }
 }
 
+/// Get an Authorization Request
+///
+/// Retrieve an existing Authorization Request.This endpoint can be polled to check whether
+/// the Holder has responded to the Authorization Request.
+#[utoipa::path(
+    get,
+    path = "/authorization_requests/{id}",
+    tag = "Verification",
+    params(
+        ("id" = String, Path, description = "The ID of the Authorization Request to retrieve.")
+    ),
+    responses(
+        (status = 200, description = "Successfully returns an existing Authorization Request.", body = GenericAuthorizationRequestSchema)
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_request(
     State(state): State<VerificationState>,
@@ -92,6 +114,36 @@ pub struct AuthorizationRequestsEndpointRequest {
     pub presentation_definition: Option<PresentationDefinitionResource>,
 }
 
+fn presentation_definition_resource_schema() -> Schema {
+    Schema::OneOf(
+        OneOf::builder()
+            .description(Some(
+                "Provide a Presentation Definition to ask the Holder for verifiable data. The Presentation Definition can either be specified by value or by reference.",
+            ))
+            .item(Schema::Object(
+                ObjectBuilder::new()
+                    .title(Some("Presentation Definition by Reference"))
+                    .schema_type(SchemaType::Type(utoipa::openapi::Type::String))
+                    // name: presentation_definition_id
+                    .examples(vec!["123123".to_string()])
+                    .build(),
+            ))
+            // .item(RefBuilder::new().ref_location_from_schema_name("PresentationDefinition").build())
+            .item(Ref::from_schema_name("PresentationDefinition"))
+            .build(),
+    )
+}
+
+#[derive(ToSchema)]
+#[schema(as = PresentationDefinition, title = "Presentation Definition by Value")]
+pub struct PresentationDefinitionSchema {
+    pub id: String,
+    // pub input_descriptors: Vec<InputDescriptor>,
+    pub name: Option<String>,
+    pub purpose: Option<String>,
+    // pub format: Option<HashMap<ClaimFormatDesignation, ClaimFormatProperty>>,
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PresentationDefinitionResource {
@@ -99,16 +151,17 @@ pub enum PresentationDefinitionResource {
     PresentationDefinition(PresentationDefinition),
 }
 
-/// Create a new Authorization Request
+/// Request data from a Holder
 ///
-/// UniCore will ask a holder for certain information based on the Presentation Definition specified.
+/// Create an Authorization Request. It can just authenticate the end user without asking for more data (SIOPv2)
+/// or ask a Holder to present certain information from their Verifiable Credentials (OpenID4VP).
 #[utoipa::path(
     post,
     path = "/authorization_requests",
     request_body = AuthorizationRequestsEndpointRequestSchema,
     tag = "Verification",
     responses(
-        (status = 201, description = "Authorization Request successfully created."),
+        (status = 201, description = "Authorization Request successfully created.", body = String, headers(("Location" = String, description = "URL of the created resource")), content_type = "application/x-www-form-urlencoded", example = json!("openid://?client_id=did%3Aweb%3Alocalhost%253A3033&request_uri=http%3A%2F%2Flocalhost%3A3033%2Frequest%2Fe52754020328cd2958a43bfd85efb3ecb87cf3febda82346d8e5e5aa2340aad8")),
     )
 )]
 #[axum_macros::debug_handler]

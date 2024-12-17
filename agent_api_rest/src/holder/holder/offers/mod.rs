@@ -38,6 +38,17 @@ pub(crate) async fn offers(State(state): State<HolderState>) -> Response {
     }
 }
 
+/// Get an offer by ID
+///
+/// TODO
+#[utoipa::path(
+    post,
+    path = "/holder/offers/{id}",
+    tag = "Holder",
+    responses(
+        (status = 200, description = "Successfully retrieved an offer."),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn offer(State(state): State<HolderState>, Path(received_offer_id): Path<String>) -> Response {
     match query_handler(&received_offer_id, &state.query.received_offer).await {

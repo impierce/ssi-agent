@@ -24,16 +24,16 @@ pub struct OffersEndpointRequest {
     pub offer_id: String,
 }
 
-/// Create a new credential offer
+/// Offer a credential
 ///
 /// Create a new offer for one or more credentials.
 #[utoipa::path(
     post,
     path = "/offers",
-    request_body = OffersEndpointRequest,
+    request_body(content = OffersEndpointRequest, example = json!({"offerId": "0001"})),
     tag = "Issuance",
     responses(
-        (status = 200, description = "Successfully created a new credential offer. Response value is standard-compliant and can be used by identity wallet.", body = String, content_type = "application/x-www-form-urlencoded", example = json!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fcredential-issuer.example.com%2F%22%2C%22credentials%22%3A%5B%7B%22format%22%3A%22ldp_vc%22%2C%22credential_definition%22%3A%7B%22%40context%22%3A%5B%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fv1%22%2C%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fexamples%2Fv1%22%5D%2C%22type%22%3A%5B%22VerifiableCredential%22%2C%22UniversityDegreeCredential%22%5D%7D%7D%5D%7D"))
+        (status = 200, description = "Successfully created a new credential offer. Response value is standard-compliant and can be interpreted by an identity wallet.", body = String, content_type = "application/x-www-form-urlencoded", example = json!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fcredential-issuer.example.com%2F%22%2C%22credentials%22%3A%5B%7B%22format%22%3A%22ldp_vc%22%2C%22credential_definition%22%3A%7B%22%40context%22%3A%5B%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fv1%22%2C%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fexamples%2Fv1%22%5D%2C%22type%22%3A%5B%22VerifiableCredential%22%2C%22UniversityDegreeCredential%22%5D%7D%7D%5D%7D"))
     )
 )]
 #[axum_macros::debug_handler]
@@ -95,6 +95,18 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
     }
 }
 
+/// List all offers
+///
+/// Retrieve all available credential offers.
+#[utoipa::path(
+    get,
+    path = "/offers",
+    request_body(content = OffersEndpointRequest, example = json!({"offerId": "0001"})),
+    tag = "Issuance",
+    responses(
+        (status = 200, description = "Successfully created a new credential offer. Response value is standard-compliant and can be interpreted by an identity wallet.", body = String, content_type = "application/x-www-form-urlencoded", example = json!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fcredential-issuer.example.com%2F%22%2C%22credentials%22%3A%5B%7B%22format%22%3A%22ldp_vc%22%2C%22credential_definition%22%3A%7B%22%40context%22%3A%5B%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fv1%22%2C%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fexamples%2Fv1%22%5D%2C%22type%22%3A%5B%22VerifiableCredential%22%2C%22UniversityDegreeCredential%22%5D%7D%7D%5D%7D"))
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn all_offers(State(state): State<IssuanceState>) -> Response {
     match query_handler("all_offers", &state.query.all_offers).await {
@@ -108,6 +120,18 @@ pub(crate) async fn all_offers(State(state): State<IssuanceState>) -> Response {
     }
 }
 
+/// Get an offer by ID
+///
+/// Retrieve an offer by ID.
+#[utoipa::path(
+    get,
+    path = "/offers/{id}",
+    request_body(content = OffersEndpointRequest, example = json!({"offerId": "0001"})),
+    tag = "Issuance",
+    responses(
+        (status = 200, description = "Offer found")
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn offer(State(state): State<IssuanceState>, Path(offer_id): Path<String>) -> Response {
     match query_handler(&offer_id, &state.query.offer).await {

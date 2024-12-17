@@ -25,8 +25,8 @@ use utoipa::{
 #[derive(ToSchema)]
 #[schema(as = CredentialView)]
 pub struct CredentialViewSchema {
-    pub foo: String,
-    pub bar: i32,
+    pub id: uuid::Uuid,
+    pub data: Object,
 }
 
 /// Retrieve a credential
@@ -40,7 +40,7 @@ pub struct CredentialViewSchema {
         ("id" = String, Path, description = "Unique identifier of the Credential", example = "0001"),
     ),
     responses(
-        (status = 200, description = "Credential found", body = [CredentialViewSchema])
+        (status = 200, description = "Credential found", body = CredentialViewSchema)
     )
 )]
 #[axum_macros::debug_handler]
@@ -88,6 +88,7 @@ fn credential_expiry_schema() -> Schema {
 #[derive(Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialsEndpointRequest {
+    #[schema(example = "0001")]
     pub offer_id: String,
     pub credential: Value,
     #[serde(default)]
@@ -99,22 +100,22 @@ pub struct CredentialsEndpointRequest {
 
 /// Create a new credential
 ///
-/// Create a new credential for a given subject.
+/// Create a new credential for a given subject. This action does not issue the credential to the end user yet.
 #[utoipa::path(
     post,
     path = "/credentials",
     request_body(content = CredentialsEndpointRequest,
         examples(
-            ("w3c-vc" = (summary = "W3C v1.1", description = "s0me descr1pti0n", value = json!({"offerId": "123", "credentialConfigurationId": "w3c_vc_credential", "credential": {"credentialSubject": {"first_name": "Ferris", "last_name": "Rustacean"}}}))),
+            ("w3c-vc" = (summary = "W3C v1.1", description = "s0me descr1pti0n", value = json!({"offerId": "123", "credentialConfigurationId": "w3c_vc_credential", "credential": {"credentialSubject": {"first_name": "Ferris", "last_name": "Rustacean"}}, "expiresAt": "never"}))),
             ("openbadges" = (summary = "Open Badges 3.0", description = "s0me descr1pti0n", external_value = "res/open-badge-request.json"))
         )
     ),
     tag = "Issuance",
     responses(
-        (status = 201, description = "Successfully created a new credential.", body = CredentialViewSchema,
+        (status = 201, description = "Successfully created a new credential.", body = Object,
             headers(("Location" = String, description = "URL of the created resource")),
             examples(
-                ("w3c-vc-1-1" = (summary = "W3C VC Data Model v1.1", description = "A credential following the W3C Verifiable Credentials Data Model v1.1", value = json!({"offerId": "0001"}))),
+                ("w3c-vc-1-1" = (summary = "W3C VC Data Model v1.1", description = "A credential following the W3C Verifiable Credentials Data Model v1.1", value = json!({"@context":"https://www.w3.org/2018/credentials/v1","type":["VerifiableCredential"],"credentialSubject":{"dob":"1982-01-01","first_name":"Ferris","last_name":"Crabman"},"issuer":{"id":"http://localhost:3033/","name":"UniCore"},"issuanceDate":"2024-12-17T12:33:28Z"}))),
                 ("openbadges-3-0" = (summary = "Open Badges 3.0", description = "An badge following the Open Badges Specification 3.0", value = json!({"foo": "bar"})))
             )
         ),
@@ -247,6 +248,17 @@ pub(crate) async fn credentials(
     }
 }
 
+/// List all credentials
+///
+/// Retrieve all credentials that were issued.
+#[utoipa::path(
+    get,
+    path = "/credentials",
+    tag = "Issuance",
+    responses(
+        (status = 200, description = "List of all credentials", body = [CredentialViewSchema])
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn all_credentials(State(state): State<IssuanceState>) -> Response {
     match query_handler("all_credentials", &state.query.all_credentials).await {

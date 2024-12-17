@@ -2,9 +2,9 @@ openapi: 3.1.0
 info:
   title: UniCore HTTP API
   description: |
-    ![Banner](https://images.placeholders.dev/?width=1280&height=720)
+    <!-- ![Banner](https://images.placeholders.dev/?width=1280&height=720) -->
 
-    Full HTTP API reference for the UniCore SSI Agent.
+    Full HTTP API reference for UniCore, an open-source SSI Agent by [Impierce Technologies B.V.](https://www.impierce.com)
 
     ## Overview
 
@@ -18,7 +18,7 @@ info:
 
     #### Holder
 
-    UniCore can hold and present Verifiable Credentials to other entities. This is especially useful when UniCore needs to prove its trustworthiness.
+    UniCore can hold and present Verifiable Credentials to other entities. This is useful when UniCore wants to prove its own trustworthiness.
 
     #### Verification
 
@@ -26,7 +26,7 @@ info:
 
     #### Identity
 
-    Although "Identity" itself is not a classic role in the SSI ecosystem, UniCore offers an API to manage its own identity.
+    An easy way to manage UniCore's _own_ identity. Closely related to the Holder role.
 
     ### Standardized endpoints
 
@@ -39,15 +39,15 @@ info:
     > [!NOTE]
     > Endpoints that should not sit behind some form of authentication are grouped under the `(public)` tag.
 
-    ```json
+    <!-- ```json
     {
       "foo": "bar"
     }
-    ```
+    ``` -->
 
     ## Authentication & Authorization
 
-    UniCore has no user management or authentication built in. Its API does not know of any roles or scopes. It is expected that the application which calls UniCore only performs calls which have been checked in the consumer business logic. If you want to make your UniCore reachable via the internet, you **must** restrict direct access to the API by running it behind a reverse proxy or some form of API gateway. In most cases, only the endpoints behind `/v0` need to be protected, but all other endpoints should stay publicly accessible in order for other participants (such as wallets) to interact with UniCore.
+    UniCore has no user management or authentication built in by default. The API does not check for any roles or scopes. Currently, it is expected that the application which calls UniCore only performs calls which have been checked in the consumer business logic. If you want to make your UniCore deployment reachable via the internet, you **MUST** restrict direct access to the API by running it behind a reverse proxy or some form of API gateway and check for an API key or similar. In most cases, only the endpoints behind `/v0` need to be protected and all other non-sensitive endpoints can stay publicly accessible in order for other participants (such as wallets) to interact with UniCore.
 
     ### Example reverse proxy configuration
 
@@ -245,11 +245,28 @@ paths:
         '200':
           description: ''
   /v0/authorization_requests:
+    get:
+      tags:
+      - Verification
+      summary: List all Authorization Requests
+      description: Retrieve all existing Authorization Requests.
+      operationId: all_authorization_requests
+      responses:
+        '200':
+          description: Successfully returns all existing Authorization Requests.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GenericAuthorizationRequest'
     post:
       tags:
       - Verification
-      summary: Create a new Authorization Request
-      description: UniCore will ask a holder for certain information based on the Presentation Definition specified.
+      summary: Request data from a Holder
+      description: |-
+        Create an Authorization Request. It can just authenticate the end user without asking for more data (SIOPv2)
+        or ask a Holder to present certain information from their Verifiable Credentials (OpenID4VP).
       operationId: authorization_requests
       requestBody:
         content:
@@ -260,13 +277,25 @@ paths:
       responses:
         '201':
           description: Authorization Request successfully created.
+          headers:
+            Location:
+              schema:
+                type: string
+              description: URL of the created resource
+          content:
+            application/x-www-form-urlencoded:
+              schema:
+                type: string
+              example: openid://?client_id=did%3Aweb%3Alocalhost%253A3033&request_uri=http%3A%2F%2Flocalhost%3A3033%2Frequest%2Fe52754020328cd2958a43bfd85efb3ecb87cf3febda82346d8e5e5aa2340aad8
   /v0/authorization_requests/{id}:
     get:
       tags:
       - Verification
       summary: Get an Authorization Request
-      description: Retrieve an existing Authorization Request.
-      operationId: all_authorization_requests
+      description: |-
+        Retrieve an existing Authorization Request.This endpoint can be polled to check whether
+        the Holder has responded to the Authorization Request.
+      operationId: authorization_request
       parameters:
       - name: id
         in: path
@@ -280,15 +309,13 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/GenericAuthorizationRequest'
+                $ref: '#/components/schemas/GenericAuthorizationRequest'
   /v0/credentials:
     post:
       tags:
       - Issuance
       summary: Create a new credential
-      description: Create a new credential for a given subject.
+      description: Create a new credential for a given subject. This action does not issue the credential to the end user yet.
       operationId: credentials
       requestBody:
         content:
@@ -310,6 +337,7 @@ paths:
                     credentialSubject:
                       first_name: Ferris
                       last_name: Rustacean
+                  expiresAt: never
         required: true
       responses:
         '201':
@@ -322,7 +350,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CredentialView'
+                type: object
               examples:
                 openbadges-3-0:
                   summary: Open Badges 3.0
@@ -333,7 +361,17 @@ paths:
                   summary: W3C VC Data Model v1.1
                   description: A credential following the W3C Verifiable Credentials Data Model v1.1
                   value:
-                    offerId: '0001'
+                    '@context': https://www.w3.org/2018/credentials/v1
+                    type:
+                    - VerifiableCredential
+                    credentialSubject:
+                      dob: 1982-01-01
+                      first_name: Ferris
+                      last_name: Crabman
+                    issuer:
+                      id: http://localhost:3033/
+                      name: UniCore
+                    issuanceDate: 2024-12-17T12:33:28Z
         '400':
           description: Invalid payload.
   /v0/credentials/{id}:
@@ -357,9 +395,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/CredentialView'
+                $ref: '#/components/schemas/CredentialView'
   /v0/holder/credentials:
     get:
       tags:
@@ -370,6 +406,36 @@ paths:
       responses:
         '200':
           description: Successfully retrieved all credentials.
+    post:
+      tags:
+      - Holder
+      summary: Upload a credential
+      description: Directly upload a credential to the UniCore's Holder wallet.
+      operationId: post_credentials
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+        required: true
+      responses:
+        '200':
+          description: Successfully posted a credential.
+  /v0/holder/credentials/{id}:
+    post:
+      tags:
+      - Holder
+      summary: Get a credential from UniCore's Holder wallet
+      description: Directly upload a credential to the UniCore's Holder wallet.
+      operationId: credential
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successfully retrieved a credential.
   /v0/holder/offers:
     get:
       tags:
@@ -380,6 +446,22 @@ paths:
       responses:
         '200':
           description: Successfully retrieved all pending offers.
+  /v0/holder/offers/{id}:
+    post:
+      tags:
+      - Holder
+      summary: Get an offer by ID
+      description: TODO
+      operationId: offer
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successfully retrieved an offer.
   /v0/holder/offers/{offer_id}/accept:
     post:
       tags:
@@ -413,10 +495,32 @@ paths:
         '200':
           description: Successfully rejected a pending offer.
   /v0/offers:
+    get:
+      tags:
+      - Issuance
+      summary: List all offers
+      description: Retrieve all available credential offers.
+      operationId: all_offers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OffersEndpointRequest'
+            example:
+              offerId: '0001'
+        required: true
+      responses:
+        '200':
+          description: Successfully created a new credential offer. Response value is standard-compliant and can be interpreted by an identity wallet.
+          content:
+            application/x-www-form-urlencoded:
+              schema:
+                type: string
+              example: openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fcredential-issuer.example.com%2F%22%2C%22credentials%22%3A%5B%7B%22format%22%3A%22ldp_vc%22%2C%22credential_definition%22%3A%7B%22%40context%22%3A%5B%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fv1%22%2C%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fexamples%2Fv1%22%5D%2C%22type%22%3A%5B%22VerifiableCredential%22%2C%22UniversityDegreeCredential%22%5D%7D%7D%5D%7D
     post:
       tags:
       - Issuance
-      summary: Create a new credential offer
+      summary: Offer a credential
       description: Create a new offer for one or more credentials.
       operationId: offers
       requestBody:
@@ -424,10 +528,12 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/OffersEndpointRequest'
+            example:
+              offerId: '0001'
         required: true
       responses:
         '200':
-          description: Successfully created a new credential offer. Response value is standard-compliant and can be used by identity wallet.
+          description: Successfully created a new credential offer. Response value is standard-compliant and can be interpreted by an identity wallet.
           content:
             application/x-www-form-urlencoded:
               schema:
@@ -456,19 +562,52 @@ paths:
           description: Successfully sent credential offer to Holder.
         '400':
           description: Invalid payload.
+  /v0/offers/{id}:
+    get:
+      tags:
+      - Issuance
+      summary: Get an offer by ID
+      description: Retrieve an offer by ID.
+      operationId: offer
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OffersEndpointRequest'
+            example:
+              offerId: '0001'
+        required: true
+      responses:
+        '200':
+          description: Offer found
 components:
   schemas:
     AuthorizationRequestsEndpointRequest:
       type: object
       required:
-      - foo
-      - bar
+      - nonce
       properties:
-        bar:
-          type: integer
-          format: int32
-        foo:
+        nonce:
           type: string
+          example: MxZTU3ZDI1NzBjMWQ5NTcyYTNmZTE1ZW
+        presentation_definition:
+          oneOf:
+          - type: string
+            title: Presentation Definition by Reference
+            examples:
+            - '123123'
+          - $ref: '#/components/schemas/PresentationDefinition'
+          description: Provide a Presentation Definition to ask the Holder for verifiable data. The Presentation Definition can either be specified by value or by reference.
+        state:
+          type:
+          - string
+          - 'null'
     AuthorizationServerMetadata:
       type: object
       required:
@@ -516,14 +655,14 @@ components:
     CredentialView:
       type: object
       required:
-      - foo
-      - bar
+      - id
+      - data
       properties:
-        bar:
-          type: integer
-          format: int32
-        foo:
+        data:
+          type: object
+        id:
           type: string
+          format: uuid
     CredentialsEndpointRequest:
       type: object
       required:
@@ -546,6 +685,7 @@ components:
           type: boolean
         offerId:
           type: string
+          example: '0001'
     GenericAuthorizationRequest:
       type: object
       required:
@@ -586,6 +726,22 @@ components:
           format: int32
         foo:
           type: string
+    PresentationDefinition:
+      type: object
+      title: Presentation Definition by Value
+      required:
+      - id
+      properties:
+        id:
+          type: string
+        name:
+          type:
+          - string
+          - 'null'
+        purpose:
+          type:
+          - string
+          - 'null'
     SendOfferEndpointRequest:
       type: object
       required:
