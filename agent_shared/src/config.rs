@@ -31,6 +31,7 @@ pub struct ApplicationConfiguration {
     pub display: Vec<Display>,
     pub event_publishers: Option<EventPublishers>,
     pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
+    pub serve_openapi_docs: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]

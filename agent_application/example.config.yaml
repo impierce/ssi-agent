@@ -76,6 +76,8 @@ did_document_cache:
   enabled: false
   ttl: 5000
 
+serve_openapi_docs: false
+
 # Key configuration (temporary)
 secret_manager:
   stronghold_path: "/tmp/local.stronghold"

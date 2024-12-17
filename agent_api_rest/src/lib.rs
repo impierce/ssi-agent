@@ -43,12 +43,7 @@ pub fn app(
                 .merge(identity_state.map(identity::router).unwrap_or_default())
                 .merge(issuance_state.map(issuance::router).unwrap_or_default())
                 .merge(holder_state.map(holder::router).unwrap_or_default())
-                .merge(verification_state.map(verification::router).unwrap_or_default())
-                // API Docs
-                .merge(Scalar::with_url(
-                    format!("{}/api-reference", API_VERSION),
-                    patch_generated_openapi(ApiDoc::openapi()),
-                )),
+                .merge(verification_state.map(verification::router).unwrap_or_default()),
         )
         // Trace layer
         .layer(
@@ -73,6 +68,17 @@ pub fn app(
                     info!("Response Body: {}", std::str::from_utf8(chunk).unwrap());
                 }),
         );
+
+    // API reference
+    let app = if config().serve_openapi_docs.unwrap_or(false) {
+        info!("Serving OpenAPI docs at `{}/api-reference`", API_VERSION);
+        app.merge(Scalar::with_url(
+            format!("{}/api-reference", API_VERSION),
+            patch_generated_openapi(ApiDoc::openapi()),
+        ))
+    } else {
+        app
+    };
 
     // CORS
     if config().cors_enabled.unwrap_or(false) {
