@@ -73,6 +73,7 @@ dependencies = [
  "axum 0.7.5",
  "axum-auth 0.7.0",
  "axum-macros",
+ "chrono",
  "did_manager",
  "futures",
  "http-api-problem",

@@ -530,10 +530,18 @@ components:
       - offerId
       - credential
       - credentialConfigurationId
+      - expiresAt
       properties:
         credential: {}
         credentialConfigurationId:
           type: string
+        expiresAt:
+          oneOf:
+          - type: string
+            format: date-time
+          - type: string
+            enum:
+            - never
         isSigned:
           type: boolean
         offerId:

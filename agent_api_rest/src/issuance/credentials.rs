@@ -17,7 +17,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_json::Value;
 use tracing::info;
-use utoipa::ToSchema;
+use utoipa::{
+    openapi::{schema::SchemaType, Object, ObjectBuilder, OneOf, OneOfBuilder, RefOr, Schema},
+    PartialSchema, ToSchema,
+};
 
 #[derive(ToSchema)]
 #[schema(as = CredentialView)]
@@ -49,6 +52,39 @@ pub(crate) async fn credential(State(state): State<IssuanceState>, Path(credenti
     }
 }
 
+fn credential_expiry_schema() -> Schema {
+    utoipa::openapi::Schema::OneOf(
+        OneOf::builder()
+            .item(Schema::Object(
+                ObjectBuilder::new()
+                    .schema_type(SchemaType::Type(utoipa::openapi::Type::String))
+                    .format(Some(utoipa::openapi::SchemaFormat::KnownFormat(
+                        utoipa::openapi::KnownFormat::DateTime,
+                    )))
+                    .build(),
+            ))
+            .item(Schema::Object(
+                ObjectBuilder::new()
+                    .schema_type(SchemaType::Type(utoipa::openapi::Type::String))
+                    .enum_values(Some(vec!["never".to_string()]))
+                    .build(),
+            ))
+            .build(),
+    )
+}
+
+// #[derive(Serialize, ToSchema)]
+// #[serde(rename_all = "camelCase")]
+// #[schema(as = CredentialsEndpointRequest)]
+// pub struct _CredentialsEndpointRequestSchema {
+//     pub offer_id: String,
+//     pub credential: Value,
+//     pub is_signed: bool,
+//     pub credential_configuration_id: String,
+//     #[schema(schema_with = credential_expiry_schema)]
+//     pub expires_at: CredentialExpiry,
+// }
+
 #[derive(Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialsEndpointRequest {
@@ -57,6 +93,7 @@ pub struct CredentialsEndpointRequest {
     #[serde(default)]
     pub is_signed: bool,
     pub credential_configuration_id: String,
+    #[schema(schema_with = credential_expiry_schema)]
     pub expires_at: CredentialExpiry,
 }
 
