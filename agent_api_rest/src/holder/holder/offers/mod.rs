@@ -40,10 +40,13 @@ pub(crate) async fn offers(State(state): State<HolderState>) -> Response {
 
 /// Get an offer by ID
 ///
-/// TODO
+/// Retrieve an offer for a given ID.
 #[utoipa::path(
-    post,
+    get,
     path = "/holder/offers/{id}",
+    params(
+        ("id" = String, Path, description = "Unique identifier of the Offer", example = "57ea9bf4-3a50-4b34-a340-7ef969bfab12"),
+    ),
     tag = "Holder",
     responses(
         (status = 200, description = "Successfully retrieved an offer."),

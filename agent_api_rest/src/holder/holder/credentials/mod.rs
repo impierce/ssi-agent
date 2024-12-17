@@ -84,10 +84,13 @@ pub(crate) async fn post_credentials(State(state): State<HolderState>, Json(payl
 
 /// Get a credential from UniCore's Holder wallet
 ///
-/// Directly upload a credential to the UniCore's Holder wallet.
+/// Get a specific credential from UniCore's Holder wallet by ID.
 #[utoipa::path(
-    post,
+    get,
     path = "/holder/credentials/{id}",
+    params(
+        ("id" = String, Path, description = "Unique identifier of the Credential", example = "57ea9bf4-3a50-4b34-a340-7ef969bfab12"),
+    ),
     tag = "Holder",
     responses(
         (status = 200, description = "Successfully retrieved a credential."),

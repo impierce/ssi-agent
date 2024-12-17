@@ -58,6 +58,7 @@ fn credential_expiry_schema() -> Schema {
             .item(Schema::Object(
                 ObjectBuilder::new()
                     .schema_type(SchemaType::Type(utoipa::openapi::Type::String))
+                    .title(Some("Credential expires at a fixed date"))
                     .format(Some(utoipa::openapi::SchemaFormat::KnownFormat(
                         utoipa::openapi::KnownFormat::DateTime,
                     )))
@@ -66,6 +67,7 @@ fn credential_expiry_schema() -> Schema {
             .item(Schema::Object(
                 ObjectBuilder::new()
                     .schema_type(SchemaType::Type(utoipa::openapi::Type::String))
+                    .title(Some("Credential never expires"))
                     .enum_values(Some(vec!["never".to_string()]))
                     .build(),
             ))
@@ -106,8 +108,8 @@ pub struct CredentialsEndpointRequest {
     path = "/credentials",
     request_body(content = CredentialsEndpointRequest,
         examples(
-            ("w3c-vc" = (summary = "W3C v1.1", description = "s0me descr1pti0n", value = json!({"offerId": "123", "credentialConfigurationId": "w3c_vc_credential", "credential": {"credentialSubject": {"first_name": "Ferris", "last_name": "Rustacean"}}, "expiresAt": "never"}))),
-            ("openbadges" = (summary = "Open Badges 3.0", description = "s0me descr1pti0n", external_value = "res/open-badge-request.json"))
+            ("w3c-vc" = (summary = "W3C VC Data Model v1.1", description = "A credential following the W3C Verifiable Credentials Data Model v1.1", value = json!({"offerId": "123", "credentialConfigurationId": "w3c_vc_credential", "credential": {"credentialSubject": {"first_name": "Ferris", "last_name": "Rustacean"}}, "expiresAt": "never"}))),
+            ("openbadges" = (summary = "Open Badges 3.0", description = "An badge following the Open Badges Specification 3.0", external_value = "res/open-badge-request.json"))
         )
     ),
     tag = "Issuance",
@@ -116,7 +118,7 @@ pub struct CredentialsEndpointRequest {
             headers(("Location" = String, description = "URL of the created resource")),
             examples(
                 ("w3c-vc-1-1" = (summary = "W3C VC Data Model v1.1", description = "A credential following the W3C Verifiable Credentials Data Model v1.1", value = json!({"@context":"https://www.w3.org/2018/credentials/v1","type":["VerifiableCredential"],"credentialSubject":{"dob":"1982-01-01","first_name":"Ferris","last_name":"Crabman"},"issuer":{"id":"http://localhost:3033/","name":"UniCore"},"issuanceDate":"2024-12-17T12:33:28Z"}))),
-                ("openbadges-3-0" = (summary = "Open Badges 3.0", description = "An badge following the Open Badges Specification 3.0", value = json!({"foo": "bar"})))
+                ("openbadges-3-0" = (summary = "Open Badges 3.0", description = "An badge following the Open Badges Specification 3.0", value = json!({"@context":["https://www.w3.org/2018/credentials/v1","https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"],"id":"https://acme.example.org/1a2b3c4d5e6f","type":["VerifiableCredential","OpenBadgeCredential"],"name":"ImpierceCredential","credentialSubject":{"type":["AchievementSubject"],"achievement":{"id":"https://example.com/achievements/21st-century-skills/teamwork","type":"Achievement","criteria":{"narrative":"TeammembersarenominatedforthisbadgebytheirpeersandrecognizeduponreviewbyExampleCorpmanagement."},"description":"Thisbadgerecognizesthedevelopmentofthecapacitytocollaboratewithinagroupenvironment.","name":"Teamwork"}},"issuer":{"id":"http://localhost:3033/","type":"Profile","name":"UniCore"},"issuanceDate":"2024-12-17T22:37:59Z","expirationDate":"2028-04-12T09:15:23Z"})))
             )
         ),
         (status = 400, description = "Invalid payload.")

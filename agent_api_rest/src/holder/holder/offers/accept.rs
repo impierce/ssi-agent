@@ -16,8 +16,11 @@ use hyper::StatusCode;
 /// Accept a pending credential offer. UniCore will then make a request to the Issuer to receive the offer.
 #[utoipa::path(
     post,
-    path = "/holder/offers/{offer_id}/accept",
+    path = "/holder/offers/{id}/accept",
     // request_body = ?,
+    params(
+        ("id" = String, Path, description = "Unique identifier of the Offer", example = "57ea9bf4-3a50-4b34-a340-7ef969bfab12"),
+    ),
     tag = "Holder",
     responses(
         (status = 200, description = "Successfully accepted a pending offer."),

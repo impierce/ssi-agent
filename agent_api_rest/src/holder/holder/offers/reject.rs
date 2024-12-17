@@ -11,8 +11,11 @@ use hyper::StatusCode;
 /// Reject a pending credential offer. UniCore will not make any further requests to the Issuer.
 #[utoipa::path(
     post,
-    path = "/holder/offers/{offer_id}/reject",
+    path = "/holder/offers/{id}/reject",
     // request_body = ?,
+    params(
+        ("id" = String, Path, description = "Unique identifier of the Offer", example = "57ea9bf4-3a50-4b34-a340-7ef969bfab12"),
+    ),
     tag = "Holder",
     responses(
         (status = 200, description = "Successfully rejected a pending offer."),
