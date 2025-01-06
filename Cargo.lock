@@ -287,6 +287,7 @@ name = "agent_shared"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "config",
  "cqrs-es",
  "did_manager",
@@ -337,6 +338,7 @@ dependencies = [
  "anyhow",
  "async-std",
  "async-trait",
+ "chrono",
  "cqrs-es",
  "did_manager",
  "futures",

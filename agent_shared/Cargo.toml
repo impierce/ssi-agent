@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+chrono.workspace = true
 config = { version = "0.14" }
 cqrs-es.workspace = true
 did_manager.workspace = true

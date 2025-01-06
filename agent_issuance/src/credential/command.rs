@@ -1,7 +1,7 @@
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use serde::Deserialize;
 
-use super::entity::Data;
+use super::{aggregate::CredentialExpiry, entity::Data};
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -10,6 +10,7 @@ pub enum CredentialCommand {
         credential_id: String,
         data: Data,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
+        expires_at: CredentialExpiry,
     },
     CreateSignedCredential {
         credential_id: String,

@@ -27,12 +27,44 @@ use types_ob_v3::prelude::{
     AchievementCredential, AchievementCredentialBuilder, AchievementCredentialType, AchievementSubject, Profile,
     ProfileBuilder,
 };
+use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum Status {
     #[default]
     Pending,
     Issued,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(untagged)]
+pub enum CredentialExpiry {
+    Fixed(chrono::DateTime<chrono::Utc>),
+    #[serde(with = "never_as_str")]
+    Never,
+}
+
+mod never_as_str {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str("never")
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<(), D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        if s == "never" {
+            Ok(())
+        } else {
+            Err(serde::de::Error::custom("expected 'never'"))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
@@ -69,6 +101,7 @@ impl Aggregate for Credential {
                 credential_id,
                 data,
                 credential_configuration,
+                expires_at,
             } => match &credential_configuration.credential_format {
                 CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
                     parameters:
@@ -78,7 +111,7 @@ impl Aggregate for Credential {
                         },
                 }) => {
                     #[cfg(feature = "test_utils")]
-                    let issuance_date = "2010-01-01T00:00:00Z";
+                    let issuance_date = "2010-01-01T00:00:00Z".to_string();
                     #[cfg(not(feature = "test_utils"))]
                     let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
@@ -96,10 +129,35 @@ impl Aggregate for Credential {
                         .try_into()
                         .expect("Could not build issuer profile");
 
+                    let issuance_date =
+                        identity_core::common::Timestamp::parse(&issuance_date).expect("Could not parse issuance_date");
+
+                    let expiration_date = match expires_at {
+                        CredentialExpiry::Fixed(fixed) => {
+                            let fixed = identity_core::common::Timestamp::from_unix(fixed.timestamp())
+                                .map_err(|_| InvalidExpirationDateError)?;
+
+                            Some(fixed)
+                        }
+                        CredentialExpiry::Never => None,
+                    };
+
                     let mut credential_types: Vec<String> = type_.clone();
 
                     let credential_subject_json =
                         data.raw.get("credentialSubject").ok_or(MissingCredentialSubjectError)?;
+
+                    let id = data.raw.get("id").map_or(Ok(None), |id| {
+                        id.as_str()
+                            .ok_or_else(|| {
+                                InvalidVerifiableCredentialError("Invalid format: `id` must be a string".to_string())
+                            })
+                            .and_then(|id_str| {
+                                Url::parse(id_str).map(Some).map_err(|_| {
+                                    InvalidVerifiableCredentialError(format!("Could not parse `id` as URL: `{id_str}`"))
+                                })
+                            })
+                    })?;
 
                     // Loop through all the items in the `type` array in reverse until we find a match.
                     while let Some(credential_format) = credential_types.pop() {
@@ -118,10 +176,24 @@ impl Aggregate for Credential {
                                     Err(_) => unreachable!("Couldn't parse issuer"),
                                 };
 
-                                let credential: W3CVerifiableCredential = W3CVerifiableCredentialBuilder::default()
+                                let builder = W3CVerifiableCredentialBuilder::default()
                                     .issuer(issuer)
                                     .subject(subject)
-                                    .issuance_date(issuance_date.parse().expect("Could not parse issuance_date"))
+                                    .issuance_date(issuance_date);
+
+                                let builder = if let Some(expiration_date) = expiration_date {
+                                    builder.expiration_date(expiration_date)
+                                } else {
+                                    builder
+                                };
+
+                                let builder = if let Some(id) = id {
+                                    builder.id(id.into())
+                                } else {
+                                    builder
+                                };
+
+                                let credential: W3CVerifiableCredential = builder
                                     .build()
                                     .map_err(|e| InvalidVerifiableCredentialError(e.to_string()))?;
 
@@ -148,7 +220,7 @@ impl Aggregate for Credential {
                                     serde_json::from_value::<AchievementSubject>(credential_subject_json.clone())
                                         .map_err(|e| InvalidVerifiableCredentialError(e.to_string()))?;
 
-                                let credential: AchievementCredential = AchievementCredentialBuilder::default()
+                                let builder = AchievementCredentialBuilder::default()
                                     .context(vec![
                                         "https://www.w3.org/2018/credentials/v1",
                                         "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json",
@@ -157,14 +229,21 @@ impl Aggregate for Credential {
                                         "VerifiableCredential",
                                         &credential_format,
                                     ]))
-                                    // TODO: Come up with a way to get the credential id.
-                                    .id("http://example.com/credentials/3527")
                                     .name(name)
                                     .issuer(issuer)
                                     .credential_subject(credential_subject)
-                                    .issuance_date(issuance_date)
-                                    .try_into()
-                                    .map_err(InvalidVerifiableCredentialError)?;
+                                    .issuance_date(issuance_date.to_rfc3339());
+
+                                let builder = if let Some(expiration_date) = expiration_date {
+                                    builder.expiration_date(expiration_date.to_rfc3339())
+                                } else {
+                                    builder
+                                };
+
+                                let builder = if let Some(id) = id { builder.id(id) } else { builder };
+
+                                let credential: AchievementCredential =
+                                    builder.try_into().map_err(InvalidVerifiableCredentialError)?;
 
                                 return Ok(vec![UnsignedCredentialCreated {
                                     credential_id,
@@ -196,6 +275,13 @@ impl Aggregate for Credential {
                     return Ok(vec![]);
                 }
 
+                let id: Option<Url> = self
+                    .data
+                    .as_ref()
+                    .and_then(|data| data.raw.get("id"))
+                    .and_then(|id| id.as_str())
+                    .and_then(|id| Url::parse(id).ok());
+
                 let default_did_method = get_preferred_did_method();
 
                 let issuer_did = services
@@ -205,6 +291,10 @@ impl Aggregate for Credential {
                     .unwrap();
                 let signed_credential = {
                     let mut credential = self.data.as_ref().ok_or(MissingCredentialDataError)?.clone();
+
+                    if let Some(ref id) = id {
+                        credential.raw["id"] = json!(id);
+                    };
 
                     credential.raw["issuer"] = json!(issuer_did);
 
@@ -229,7 +319,7 @@ impl Aggregate for Credential {
                     info!("Credential: {:?}", credential);
 
                     #[cfg(feature = "test_utils")]
-                    let iat = 0;
+                    let iat = 1262304000; // 2010-01-01T00:00:00Z
                     #[cfg(not(feature = "test_utils"))]
                     let iat = credential.raw["issuanceDate"]
                         .as_str()
@@ -237,23 +327,37 @@ impl Aggregate for Credential {
                         .parse::<chrono::DateTime<chrono::Utc>>()
                         .unwrap()
                         .timestamp();
-                    // let iat = std::time::SystemTime::now()
-                    //     .duration_since(std::time::UNIX_EPOCH)
-                    //     .unwrap()
-                    //     .as_secs() as i64;
+
+                    let exp = credential.raw["expirationDate"].as_str().map(|expiration_date| {
+                        expiration_date
+                            .parse::<chrono::DateTime<chrono::Utc>>()
+                            .expect("Could not parse `expirationDate` to DateTime")
+                            .timestamp()
+                    });
+
+                    // Add standard claims
+                    let vc_jwt_builder = VerifiableCredentialJwt::builder()
+                        .sub(subject_id)
+                        .iss(issuer_did)
+                        .iat(iat)
+                        .nbf(iat); // TODO: setting the `nbf` to `iat` makes the JWT immediately usable
+
+                    let vc_jwt_builder = if let Some(exp) = exp {
+                        vc_jwt_builder.exp(exp)
+                    } else {
+                        vc_jwt_builder
+                    };
+
+                    let vc_jwt_builder = if let Some(id) = id {
+                        vc_jwt_builder.jti(id.to_string())
+                    } else {
+                        vc_jwt_builder
+                    };
 
                     json!(jwt::encode(
                         services.issuer.clone(),
                         Header::new(get_preferred_signing_algorithm()),
-                        VerifiableCredentialJwt::builder()
-                            .sub(subject_id)
-                            .iss(issuer_did)
-                            .iat(iat)
-                            // TODO: find out whether this is a required field.
-                            .exp(9999999999i64)
-                            .verifiable_credential(credential.raw)
-                            .build()
-                            .ok(),
+                        vc_jwt_builder.verifiable_credential(credential.raw).build().ok(),
                         &default_did_method.to_string()
                     )
                     .await
@@ -349,6 +453,7 @@ pub mod credential_tests {
                     raw: credential_subject,
                 },
                 credential_configuration: Box::new(credential_configuration.clone()),
+                expires_at: CredentialExpiry::Never,
             })
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id,
@@ -396,8 +501,20 @@ pub mod credential_tests {
                 status: Status::Issued,
             }])
     }
-}
 
+    pub mod expiry_tests {
+        use super::*;
+
+        #[test]
+        fn custom_serializer_for_credential_expiry() {
+            let deserialized: CredentialExpiry = serde_json::from_value(serde_json::json!("never")).unwrap();
+            assert_eq!(deserialized, CredentialExpiry::Never);
+
+            let serialized = serde_json::to_value(&CredentialExpiry::Never).unwrap();
+            assert_eq!(serialized, serde_json::json!("never"));
+        }
+    }
+}
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::*;
@@ -414,9 +531,9 @@ pub mod test_utils {
     use serde_json::json;
     use std::collections::HashMap;
 
-    pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHA6Ly9leGFtcGxlLmNvbS9jcmVkZW50aWFscy8zNTI3IiwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsIk9wZW5CYWRnZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsIm5hbWUiOiJUZWFtd29yayBCYWRnZSIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJ0eXBlIjpbIkFjaGlldmVtZW50U3ViamVjdCJdLCJhY2hpZXZlbWVudCI6eyJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vYWNoaWV2ZW1lbnRzLzIxc3QtY2VudHVyeS1za2lsbHMvdGVhbXdvcmsiLCJ0eXBlIjoiQWNoaWV2ZW1lbnQiLCJjcml0ZXJpYSI6eyJuYXJyYXRpdmUiOiJUZWFtIG1lbWJlcnMgYXJlIG5vbWluYXRlZCBmb3IgdGhpcyBiYWRnZSBieSB0aGVpciBwZWVycyBhbmQgcmVjb2duaXplZCB1cG9uIHJldmlldyBieSBFeGFtcGxlIENvcnAgbWFuYWdlbWVudC4ifSwiZGVzY3JpcHRpb24iOiJUaGlzIGJhZGdlIHJlY29nbml6ZXMgdGhlIGRldmVsb3BtZW50IG9mIHRoZSBjYXBhY2l0eSB0byBjb2xsYWJvcmF0ZSB3aXRoaW4gYSBncm91cCBlbnZpcm9ubWVudC4iLCJuYW1lIjoiVGVhbXdvcmsifX19fQ.SkC7IvpBGB9e98eobnE9qcLjs-yoZup3cieBla3DRTlcRezXEDPv4YRoUgffho9LJ0rkmfFPsPwb-owXMWyPAA";
+    pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJPcGVuQmFkZ2VDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJuYW1lIjoiVGVhbXdvcmsgQmFkZ2UiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwidHlwZSI6WyJBY2hpZXZlbWVudFN1YmplY3QiXSwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEiOnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY29nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNvZ25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbnQuIiwibmFtZSI6IlRlYW13b3JrIn19fX0.GBbACSRxM_nBdhWqntrVaMA78ftPR0fO0sHM1v5sYMIJUWCrOamo9EN_67nAHuvwl_og6EVz36o1we7U9M6oCA";
 
-    pub const W3C_VC_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjoiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIiwiZGVncmVlIjp7InR5cGUiOiJNYXN0ZXJEZWdyZWUiLCJuYW1lIjoiTWFzdGVyIG9mIE9jZWFub2dyYXBoeSJ9fSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiJ9fQ.MUDBbPJfXe0G9sjVTF3RuR6ukRM0d4N57iMGNFcIKMFPIEdig12v-YFB0qfnSghGcQo8hUw3jzxZXTSJATEgBg";
+    pub const W3C_VC_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjoiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIiwiZGVncmVlIjp7InR5cGUiOiJNYXN0ZXJEZWdyZWUiLCJuYW1lIjoiTWFzdGVyIG9mIE9jZWFub2dyYXBoeSJ9fSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiJ9fQ.Zhdom31SC8oh7h4DHz6hoTQeHIV5iA2jUO8gbt3KfYeZFiPbmJiBWNBy3ZmcSJ961YNOdK0I5MWqDw5nlsZpDw";
 
     #[fixture]
     pub fn credential_id() -> String {
@@ -492,6 +609,7 @@ pub mod test_utils {
             };
         pub static ref OPENBADGE_CREDENTIAL_SUBJECT: serde_json::Value = json!(
             {
+                "id": "https://example.com/credentials/3527",
                 "credentialSubject": {
                     "type": [ "AchievementSubject" ],
                     "achievement": {
@@ -523,7 +641,7 @@ pub mod test_utils {
             "https://www.w3.org/2018/credentials/v1",
             "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
           ],
-          "id": "http://example.com/credentials/3527",
+          "id": "https://example.com/credentials/3527",
           "type": ["VerifiableCredential", "OpenBadgeCredential"],
           "issuer": {
             "id": "https://my-domain.example.org/",
