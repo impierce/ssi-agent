@@ -1,6 +1,6 @@
 use cqrs_es::DomainEvent;
 use derivative::Derivative;
-use identity_document::service::Service as DocumentService;
+use identity_document::service::{Service as DocumentService, ServiceEndpoint};
 use serde::{Deserialize, Serialize};
 
 use super::aggregate::ServiceResource;
@@ -10,14 +10,16 @@ use super::aggregate::ServiceResource;
 pub enum ServiceEvent {
     DomainLinkageServiceCreated {
         service_id: String,
-        service: DocumentService,
+        type_: String,
+        service_endpoint: ServiceEndpoint,
         #[derivative(PartialEq = "ignore")]
         resource: ServiceResource,
     },
     LinkedVerifiablePresentationServiceCreated {
         service_id: String,
         presentation_ids: Vec<String>,
-        service: DocumentService,
+        type_: String,
+        service_endpoint: ServiceEndpoint,
     },
 }
 

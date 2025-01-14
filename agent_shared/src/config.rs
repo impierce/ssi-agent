@@ -256,6 +256,13 @@ impl SupportedDidMethod {
             | SupportedDidMethod::IotaRms => false,
         }
     }
+
+    pub fn is_external(&self) -> bool {
+        match self {
+            SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => false,
+            SupportedDidMethod::Iota | SupportedDidMethod::IotaSmr | SupportedDidMethod::IotaRms => true,
+        }
+    }
 }
 
 impl Into<DidMethod> for SupportedDidMethod {

@@ -81,128 +81,145 @@ pub const VERIFIABLE_PRESENTATION_SERVICE_ID: &str = "linked-verifiable-presenta
 pub async fn initialize(state: &IdentityState, subject: Arc<dyn Subject>) {
     info!("Initializing ...");
 
-    let enable_did_web = config()
+    // Only consider non-deterministic DID methods that are enabled.
+    let did_methods = config()
         .did_methods
-        .get(&SupportedDidMethod::Web)
-        .unwrap_or(&ToggleOptions::default())
-        .enabled;
-
-    let did_methods = config().did_methods.clone();
-    try_join_all(
+        .clone()
+        .into_iter()
+        .filter(|(did_method, toggle_options)| !did_method.is_deterministic() && toggle_options.enabled)
+        .collect::<Vec<_>>();
+    let documents = try_join_all(
+        // Loop through all DID methods.
         did_methods
             .iter()
-            .map(|(did_method, toggle_options)| async  {
+            .map(|(did_method, _)| async  {
+                // Clone the variables into the async closure.
                 let did_method = did_method.clone();
-                if !did_method.is_deterministic() && toggle_options.enabled {
+                    let document_id = did_method.to_string();
+
+                    // Check whether the DID methods document already exists.
                     match query_handler(&did_method.to_string(), &state.query.document).await {
                         Ok(Some(Document {
                             document: Some(document),
                             ..
                         })) => {
+                            // TODO: FIX THISS
                             let key_id = subject.key_id(&did_method.to_string(), Algorithm::ES256).await.unwrap();
-
                             let condition = document.verification_method().iter().any(|vm| {
                                 info!("vm.id().to_string() == key_id: {} == {}", vm.id().to_string(), key_id);
                                 vm.id().to_string() == key_id});
 
                             if condition {
-                                Err(format!("2: DID Document for `{}` already exists, but the identifier does not match the subject identifier", did_method))
+                                return Err(format!("2: DID Document for `{}` already exists, but the identifier does not match the subject identifier", did_method));
                             } else {
-                                info!("3: DID Document for `did:web` already exists: {:?}", document);
-                                Ok(())
+                                info!("3: DID Document for `{did_method}` already exists: {:?}", document);
                             }
                         }
+                        // If the DID document does not exist yet, then it needs to be created.
                         _document_does_not_exist => {
-                            info!("4: Creating new DID Document for `did:web`");
+                            info!("4: Creating new DID Document for `{did_method}`");
 
-                            let document_id = did_method.to_string();
 
                             let command = DocumentCommand::CreateDocument {
-                                did_method: did_method.into(),
+                                document_id: document_id.clone(),
                             };
 
                             if command_handler(&document_id, &state.command.document, command)
                                 .await
                                 .is_err()
                             {
-                                warn!("5: Failed to create DID Document for `did:web`");
-                                
+                                warn!("5: Failed to create DID Document for `{did_method}`");
                             }
-                            Ok(())
+
+                            info!("6: Created document for `{}`", did_method);
                         }
                     }
 
-                } else {
-                    Ok(())
-                }
+                    match query_handler(&did_method.to_string(), &state.query.document).await {
+                        Ok(Some(document)) => Ok(document),
+                        _ => Err(format!("DID Document for `{}` does not exist", did_method)),
+                    }
+
+
             })
             .collect::<Vec<_>>(),
     )
     .await
     .unwrap();
 
-    // If the did:web method is enabled, create a document
-    if enable_did_web {
-        let did_method = DidMethod::Web;
+    if config().domain_linkage_enabled {
+        let command = ServiceCommand::CreateDomainLinkageService {
+            service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
+            documents,
+        };
 
-        // match query_handler(&did_method.to_string(), &state.query.document).await {
-        //     Ok(Some(Document {
-        //         document: Some(document),
-        //         ..
-        //     })) => {
-        //         info!("DID Document for `did:web` already exists: {:?}", document);
-        //     }
-        //     _document_does_not_exist => {
-        //         info!("Creating new DID Document for `did:web`");
-
-        //         let command = DocumentCommand::CreateDocument {
-        //             did_method: did_method.clone(),
-        //         };
-
-        //         if command_handler(&did_method.to_string(), &state.command.document, command)
-        //             .await
-        //             .is_err()
-        //         {
-        //             warn!("Failed to create DID Document for `did:web`");
-        //         }
-        //     }
-        // }
-
-        // If domain linkage is enabled, create the domain linkage service and add it to the document.
-        // TODO: Support this for other (non-deterministic) DID methods.
-        if config().domain_linkage_enabled {
-            let command = ServiceCommand::CreateDomainLinkageService {
-                service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-            };
-
-            if command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command)
-                .await
-                .is_err()
-            {
-                warn!("Failed to create domain linkage service");
-            }
-
-            let linked_domains_service = match query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
-                Ok(Some(Service {
-                    service: Some(linked_domains_service),
-                    ..
-                })) => linked_domains_service,
-                _ => {
-                    warn!("Failed to retrieve linked domains service");
-                    return;
-                }
-            };
-
-            let command = DocumentCommand::AddService {
-                service: linked_domains_service,
-            };
-
-            if command_handler(&did_method.to_string(), &state.command.document, command)
-                .await
-                .is_err()
-            {
-                warn!("Failed to add service to document");
-            }
+        if command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command)
+            .await
+            .is_err()
+        {
+            warn!("Failed to create domain linkage service");
         }
+
+        match query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
+            Ok(domain_linkage_service) => {
+                try_join_all(
+                    // Loop through all DID methods.
+                    did_methods
+                        .iter()
+                        .map(|(did_method, _)| async {
+                            // Clone the variables into the async closure.
+                            let did_method = did_method.clone();
+                            let document_id = did_method.to_string();
+                            let domain_linkage_service = domain_linkage_service.clone();
+
+                            if let Some(Service {
+                                type_: Some(type_),
+                                service_endpoint: Some(service_endpoint),
+                                ..
+                            }) = domain_linkage_service
+                            {
+                                let command = DocumentCommand::AddService {
+                                    service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
+                                    type_,
+                                    service_endpoint,
+                                };
+
+                                if command_handler(&did_method.to_string(), &state.command.document, command)
+                                    .await
+                                    .is_err()
+                                {
+                                    warn!("7: Failed to add service to document");
+                                }
+
+                                info!("8: Added service to document for `{}`", did_method);
+                            }
+
+                            if did_method.is_external() {
+                                let command = DocumentCommand::PublishDocument {
+                                    document_id: document_id.clone(),
+                                };
+
+                                if command_handler(&document_id, &state.command.document, command)
+                                    .await
+                                    .is_err()
+                                {
+                                    warn!("9: Failed to publish DID Document for `{did_method}`");
+                                }
+                            }
+
+                            info!("10: Published document for `{}`", did_method);
+
+                            Ok::<(), ()>(())
+                        })
+                        .collect::<Vec<_>>(),
+                )
+                .await
+                .unwrap();
+            }
+            _ => {
+                warn!("Failed to retrieve linked domains service");
+                return;
+            }
+        };
     }
 }

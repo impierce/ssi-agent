@@ -4,8 +4,16 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum DocumentEvent {
-    DocumentCreated { document: CoreDocument },
-    ServiceAdded { document: CoreDocument },
+    DocumentCreated {
+        document_id: String,
+        document: CoreDocument,
+    },
+    ServiceAdded {
+        document: CoreDocument,
+    },
+    DocumentPublished {
+        document_id: String,
+    },
 }
 
 impl DomainEvent for DocumentEvent {
@@ -15,6 +23,7 @@ impl DomainEvent for DocumentEvent {
         let event_type: &str = match self {
             DocumentCreated { .. } => "DocumentCreated",
             ServiceAdded { .. } => "ServiceAdded",
+            DocumentPublished { .. } => "DocumentPublished",
         };
         event_type.to_string()
     }

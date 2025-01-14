@@ -13,6 +13,7 @@ impl View<Document> for Document {
             ServiceAdded { document, .. } => {
                 self.document.replace(document.clone());
             }
+            DocumentPublished { document_id } => {}
         }
     }
 }
