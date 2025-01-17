@@ -1,7 +1,3 @@
----
-sidebar_position: 2
----
-
 # Quick Start
 
 This guide will help you quickly get started with **UniCore**. You will:
