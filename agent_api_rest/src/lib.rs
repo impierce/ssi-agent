@@ -119,11 +119,11 @@ fn get_base_path() -> Result<String, ConfigError> {
         paths(
             // Standard endpoints as defined in the protocol specifications.
             // OAuth 2.0
-            crate::verification::relying_party::redirect::redirect,
-            crate::verification::relying_party::request::request,
-            crate::issuance::credential_issuer::token::token,
+            // crate::verification::relying_party::redirect::redirect, // /redirect
+            // crate::verification::relying_party::request::request, // /request/{id}
+            // crate::issuance::credential_issuer::token::token, // /auth/token
             // OpenID4VCI
-            crate::holder::openid4vci::offers_params,
+            // crate::holder::openid4vci::offers_params, // /openid4vci/offers
             crate::issuance::credential_issuer::credential::credential,
             // .well-known
             crate::issuance::credential_issuer::well_known::oauth_authorization_server::oauth_authorization_server,
@@ -132,14 +132,14 @@ fn get_base_path() -> Result<String, ConfigError> {
         nest(
             (path = "/v0", api = IssuanceApi),
             (path = "/v0", api = VerificationApi),
-            (path = "/v0", api = HolderApi)
+            // (path = "/v0", api = HolderApi)
         ),
         tags(
             (name = "(public)", description = "A collection of endpoints that should be publicly accessible without authentication. They are used to resolve metadata or allow communication with wallets."),
             (name = "(.well-known)", description = "Well-known endpoints provide metadata about the server."),
             (name = "Issuance", description = "Issue credentials to holders that will store them in their wallets.", external_docs(description="Issuance API Documentation", url="https://docs.impierce.com")),
             (name = "Verification", description = "Request holders to present credentials that meet certain criteria and verify the received presentations."),
-            (name = "Holder", description = "Manage credentials and presentations for UniCore itself to enhance trustworthiness.")
+            // (name = "Holder", description = "Manage credentials and presentations for UniCore itself to enhance trustworthiness.")
         ),
         external_docs(description="Official Documentation", url="https://docs.impierce.com"),
     )]
