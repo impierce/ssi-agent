@@ -19,12 +19,12 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
-did_manager = { git = "https://git@github.com/impierce/did-manager.git", branch = "build/bump-iota-deps" }
-siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7be5b72" }
-oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7be5b72" }
-oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7be5b72" }
-oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7be5b72" }
-oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "7be5b72" }
+did_manager = { git = "https://git@github.com/impierce/did-manager.git", rev = "7c31432" }
+siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "2d89065" }
+oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "2d89065" }
+oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "2d89065" }
+oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "2d89065" }
+oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "2d89065" }
 
 async-trait = "0.1"
 axum = { version = "0.7", features = ["tracing"] }
@@ -33,18 +33,18 @@ bls12_381_plus = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
 cqrs-es = "0.4.2"
 futures = "0.3"
-identity_core = "1.3"
-identity_credential = { version = "1.4", default-features = false, features = [
+identity_core = "1.5"
+identity_credential = { version = "1.5", default-features = false, features = [
     "validator",
     "credential",
     "presentation",
     "domain-linkage",
 ] }
-identity_did = { version = "1.4" }
-identity_document = { version = "1.4" }
-identity_iota = { version = "1.4" }
-identity_stronghold = { version = "1.4", default-features = false, features = ["bbs-plus"] }
-identity_verification = { version = "1.4", default-features = false }
+identity_did = { version = "1.5" }
+identity_document = { version = "1.5" }
+identity_iota = { version = "1.5" }
+identity_stronghold = { version = "1.5", default-features = false, features = ["bbs-plus"] }
+identity_verification = { version = "1.5", default-features = false }
 iota-sdk = { version = "1.0", default-features = false, features = ["tls", "client", "stronghold"] }
 jsonwebtoken = "9.3"
 lazy_static = "1.4"

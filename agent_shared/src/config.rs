@@ -246,18 +246,30 @@ pub enum SupportedDidMethod {
     IotaRms,
 }
 
+/// (A subset of) DID method traits as defined here: https://identity.foundation/did-traits/
 impl SupportedDidMethod {
-    pub fn is_deterministic(&self) -> bool {
+    pub fn is_updateable(&self) -> bool {
         match self {
-            SupportedDidMethod::Jwk | SupportedDidMethod::Key => true,
             SupportedDidMethod::Web
             | SupportedDidMethod::Iota
             | SupportedDidMethod::IotaSmr
-            | SupportedDidMethod::IotaRms => false,
+            | SupportedDidMethod::IotaRms => true,
+            SupportedDidMethod::Jwk | SupportedDidMethod::Key => false,
         }
     }
 
-    pub fn is_external(&self) -> bool {
+    pub fn is_centrally_hosted(&self) -> bool {
+        match self {
+            SupportedDidMethod::Jwk
+            | SupportedDidMethod::Key
+            | SupportedDidMethod::Iota
+            | SupportedDidMethod::IotaSmr
+            | SupportedDidMethod::IotaRms => false,
+            SupportedDidMethod::Web => true,
+        }
+    }
+
+    pub fn is_decentrally_hosted(&self) -> bool {
         match self {
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => false,
             SupportedDidMethod::Iota | SupportedDidMethod::IotaSmr | SupportedDidMethod::IotaRms => true,

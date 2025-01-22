@@ -116,8 +116,6 @@ impl Aggregate for ServerConfig {
     fn apply(&mut self, event: Self::Event) {
         use ServerConfigEvent::*;
 
-        info!("Applying event: {:?}", event);
-
         match event {
             ServerMetadataInitialized {
                 authorization_server_metadata,

@@ -1,25 +1,31 @@
 use cqrs_es::DomainEvent;
 use derivative::Derivative;
-use identity_document::service::{Service as DocumentService, ServiceEndpoint};
+use identity_document::service::Service as DocumentService;
 use serde::{Deserialize, Serialize};
 
-use super::aggregate::ServiceResource;
+use super::aggregate::{ServiceResource, Status};
 
 #[derive(Clone, Debug, Deserialize, Serialize, Derivative)]
 #[derivative(PartialEq)]
 pub enum ServiceEvent {
     DomainLinkageServiceCreated {
         service_id: String,
-        type_: String,
-        service_endpoint: ServiceEndpoint,
+        status: Status,
+        service: DocumentService,
         #[derivative(PartialEq = "ignore")]
         resource: ServiceResource,
+    },
+    DomainLinkageServiceDeleted {
+        service_id: String,
+        status: Status,
+        service: Option<DocumentService>,
+        #[derivative(PartialEq = "ignore")]
+        resource: Option<ServiceResource>,
     },
     LinkedVerifiablePresentationServiceCreated {
         service_id: String,
         presentation_ids: Vec<String>,
-        type_: String,
-        service_endpoint: ServiceEndpoint,
+        service: DocumentService,
     },
 }
 
@@ -29,6 +35,7 @@ impl DomainEvent for ServiceEvent {
 
         let event_type: &str = match self {
             DomainLinkageServiceCreated { .. } => "DomainLinkageServiceCreated",
+            DomainLinkageServiceDeleted { .. } => "DomainLinkageServiceDeleted",
             LinkedVerifiablePresentationServiceCreated { .. } => "LinkedVerifiablePresentationServiceCreated",
         };
         event_type.to_string()

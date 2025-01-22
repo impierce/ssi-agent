@@ -116,8 +116,6 @@ impl Aggregate for Presentation {
     fn apply(&mut self, event: Self::Event) {
         use PresentationEvent::*;
 
-        info!("Applying event: {:?}", event);
-
         match event {
             PresentationCreated {
                 presentation_id,

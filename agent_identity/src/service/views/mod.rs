@@ -11,25 +11,34 @@ impl View<Service> for Service {
         match &event.payload {
             DomainLinkageServiceCreated {
                 service_id,
-                type_,
-                service_endpoint,
+                status,
+                service,
                 resource,
             } => {
                 self.service_id.clone_from(service_id);
-                self.type_.replace(type_.clone());
-                self.service_endpoint.replace(service_endpoint.clone());
+                self.status.clone_from(status);
+                self.service.replace(service.clone());
                 self.resource.replace(resource.clone());
+            }
+            DomainLinkageServiceDeleted {
+                service_id,
+                status,
+                service,
+                resource,
+            } => {
+                self.service_id.clone_from(service_id);
+                self.status.clone_from(status);
+                self.service.clone_from(service);
+                self.resource.clone_from(resource);
             }
             LinkedVerifiablePresentationServiceCreated {
                 service_id,
                 presentation_ids,
-                type_,
-                service_endpoint,
+                service,
             } => {
                 self.service_id.clone_from(service_id);
                 self.presentation_ids.clone_from(presentation_ids);
-                self.type_.replace(type_.clone());
-                self.service_endpoint.replace(service_endpoint.clone());
+                self.service.replace(service.clone());
             }
         }
     }

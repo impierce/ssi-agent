@@ -251,8 +251,6 @@ impl Aggregate for Offer {
     fn apply(&mut self, event: Self::Event) {
         use OfferEvent::*;
 
-        info!("Applying event: {:?}", event);
-
         match event {
             CredentialOfferReceived {
                 credential_offer,

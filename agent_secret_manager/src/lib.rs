@@ -41,6 +41,13 @@ pub async fn secret_manager() -> SecretManager {
                 .with_fragment(&issuer_fragment.expect(
                     "`You have enabled did:iota:rms, which requires the fragment identifier of the key to be used. Please provide the value through the config or environment variable.`",
                 ));
+    } else {
+        if let Some(issuer_did) = issuer_did {
+            builder = builder.with_did(&issuer_did);
+        }
+        if let Some(issuer_fragment) = issuer_fragment {
+            builder = builder.with_fragment(&issuer_fragment);
+        }
     }
 
     if let Some(did_document_cache) = config().did_document_cache.clone() {

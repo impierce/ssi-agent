@@ -68,8 +68,6 @@ impl Aggregate for Connection {
     fn apply(&mut self, event: Self::Event) {
         use ConnectionEvent::*;
 
-        info!("Applying event: {:?}", event);
-
         match event {
             ConnectionAdded {
                 connection_id,

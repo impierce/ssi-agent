@@ -43,19 +43,17 @@ pub(crate) async fn linked_vp(State(state): State<IdentityState>, Json(payload):
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    let (type_, service_endpoint) = match query_handler(&service_id, &state.query.service).await {
+    let linked_verifiable_presentation_service = match query_handler(&service_id, &state.query.service).await {
         Ok(Some(Service {
-            type_: Some(type_),
-            service_endpoint: Some(service_endpoint),
+            service: Some(linked_verifiable_presentation_service),
             ..
-        })) => (type_, service_endpoint),
+        })) => linked_verifiable_presentation_service,
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
     let command = DocumentCommand::AddService {
         service_id,
-        type_,
-        service_endpoint,
+        service: linked_verifiable_presentation_service,
     };
 
     if command_handler(&DidMethod::Web.to_string(), &state.command.document, command)

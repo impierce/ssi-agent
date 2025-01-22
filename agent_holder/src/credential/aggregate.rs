@@ -70,8 +70,6 @@ impl Aggregate for Credential {
     fn apply(&mut self, event: Self::Event) {
         use CredentialEvent::*;
 
-        info!("Applying event: {:?}", event);
-
         match event {
             CredentialAdded {
                 holder_credential_id,

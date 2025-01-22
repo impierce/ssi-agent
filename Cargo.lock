@@ -1446,7 +1446,7 @@ checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?branch=build/bump-iota-deps#4435f4b4207cd9ff632102651504f2a8d37b79a4"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=7c31432#7c31432bf291eb1e9788c5028fc7ceede2d03491"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -2012,9 +2012,8 @@ dependencies = [
 [[package]]
 name = "did_iota"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?branch=build/bump-iota-deps#4435f4b4207cd9ff632102651504f2a8d37b79a4"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=7c31432#7c31432bf291eb1e9788c5028fc7ceede2d03491"
 dependencies = [
- "bls12_381_plus 0.8.17",
  "identity_iota",
  "identity_stronghold",
  "iota-sdk",
@@ -2026,7 +2025,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?branch=build/bump-iota-deps#4435f4b4207cd9ff632102651504f2a8d37b79a4"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=7c31432#7c31432bf291eb1e9788c5028fc7ceede2d03491"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -2043,7 +2042,7 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?branch=build/bump-iota-deps#4435f4b4207cd9ff632102651504f2a8d37b79a4"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=7c31432#7c31432bf291eb1e9788c5028fc7ceede2d03491"
 dependencies = [
  "did-method-key",
  "identity_iota",
@@ -2061,7 +2060,7 @@ dependencies = [
 [[package]]
 name = "did_manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?branch=build/bump-iota-deps#4435f4b4207cd9ff632102651504f2a8d37b79a4"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=7c31432#7c31432bf291eb1e9788c5028fc7ceede2d03491"
 dependencies = [
  "consumer",
  "producer",
@@ -2087,9 +2086,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "did_url_parser"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b83822347b20ece984662821ac650ac5bcb3602d83ed83ab992b7f8dda388bdb"
+dependencies = [
+ "form_urlencoded",
+ "serde",
+]
+
+[[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?branch=build/bump-iota-deps#4435f4b4207cd9ff632102651504f2a8d37b79a4"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=7c31432#7c31432bf291eb1e9788c5028fc7ceede2d03491"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -2108,7 +2117,7 @@ dependencies = [
 [[package]]
 name = "dif-presentation-exchange"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=7be5b72#7be5b7219be93e348a4ecd0231c764d53b4eda0e"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=2d89065#2d89065518c388aba3500b3c229a3f091d5bdfbd"
 dependencies = [
  "getset",
  "jsonpath_lib",
@@ -3312,9 +3321,9 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "identity_core"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1ab2b958bbaa25150b31e2249a608b434193a55c86f1db57134721ad84f48ef"
+checksum = "7064800b974717ee628a9c4469881255e1720ec3e73942ccd75b64129c6d9325"
 dependencies = [
  "js-sys",
  "multibase 0.9.1",
@@ -3329,13 +3338,15 @@ dependencies = [
 
 [[package]]
 name = "identity_credential"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a89327409c87d9d66e43305319fbf0828947378b5b605340bb19436cbcd069b"
+checksum = "1f8f319eeaa1825db8b2dc7a4367ea506c26c9219ac8470e59f2e5fc9432b0d7"
 dependencies = [
+ "anyhow",
  "async-trait",
  "bls12_381_plus 0.8.17",
  "flate2",
+ "futures",
  "identity_core",
  "identity_did",
  "identity_document",
@@ -3357,11 +3368,11 @@ dependencies = [
 
 [[package]]
 name = "identity_did"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4013089d433d00ff7a9a8e9f6b8e6e99d05d3868617d14ccf2eeeb50408b87fb"
+checksum = "b5e1ee3a38c9f9bb55f943576872747b09c3e227360d0ad674620f1a9e382786"
 dependencies = [
- "did_url_parser",
+ "did_url_parser 0.3.0",
  "form_urlencoded",
  "identity_core",
  "identity_jose",
@@ -3372,11 +3383,11 @@ dependencies = [
 
 [[package]]
 name = "identity_document"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "924f491cc04f31b5f3fb83154cca44782a12e03a7248dae180f8e44f6e779973"
+checksum = "5e40a92bd8ee2880437cc3ce6853ec3bb9ec57c29583d0f8ca90c1736fa7b66b"
 dependencies = [
- "did_url_parser",
+ "did_url_parser 0.2.0",
  "identity_core",
  "identity_did",
  "identity_verification",
@@ -3388,9 +3399,9 @@ dependencies = [
 
 [[package]]
 name = "identity_iota"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ed0705581a07fce062e9aba3ed985028b62cc265800194dd9d1c5efa7598629"
+checksum = "1757a5a3f72a8eaa8c581caac72e6a3c362ecb7e28a2d28f459d9dbffd8feed0"
 dependencies = [
  "identity_core",
  "identity_credential",
@@ -3404,9 +3415,9 @@ dependencies = [
 
 [[package]]
 name = "identity_iota_core"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2315ee77f89a180ced0989168fedaba18711c6026b59af27d54734f70d9605c2"
+checksum = "eef0c1892c59cc44ad2145396e5e9ed5c9dc40640168222a4ba7aa9d82948ee1"
 dependencies = [
  "async-trait",
  "futures",
@@ -3428,9 +3439,9 @@ dependencies = [
 
 [[package]]
 name = "identity_jose"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bcd846da1067ff61b6d708661c97d3056966766495ce3e3364650b96610f9b65"
+checksum = "aab986d1ed98f01a73cadf76922d7375a59abfe657d8912412ea0ccc69715d6e"
 dependencies = [
  "bls12_381_plus 0.8.17",
  "identity_core",
@@ -3445,9 +3456,9 @@ dependencies = [
 
 [[package]]
 name = "identity_resolver"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3596728e2222f483b73f607709da5b1e2e82b00ee4d38a28f563552877f6bd75"
+checksum = "7506310391381683102cb232928baff7956e5b53b118825e578808e2ad647c31"
 dependencies = [
  "async-trait",
  "futures",
@@ -3463,9 +3474,9 @@ dependencies = [
 
 [[package]]
 name = "identity_storage"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e0afc2c797489b212c523beffccf71144d243f670952589ad8cc929aa0cae39"
+checksum = "5056f32d605f803067f38e87da01ca06f605f112ae9d8be7cc7e6590fe91c063"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3487,9 +3498,9 @@ dependencies = [
 
 [[package]]
 name = "identity_stronghold"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "808be66f9cdc0fd0c7b49548d2517081063997ca3ebfbd343e4b187369596420"
+checksum = "95ff20458f3939df912af176da0409131146b0214066dc82ad028430fcda44d2"
 dependencies = [
  "async-trait",
  "bls12_381_plus 0.8.17",
@@ -3508,7 +3519,7 @@ dependencies = [
 [[package]]
 name = "identity_stronghold_ext"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?branch=build/bump-iota-deps#4435f4b4207cd9ff632102651504f2a8d37b79a4"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=7c31432#7c31432bf291eb1e9788c5028fc7ceede2d03491"
 dependencies = [
  "async-trait",
  "elliptic-curve 0.13.8",
@@ -3526,9 +3537,9 @@ dependencies = [
 
 [[package]]
 name = "identity_verification"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8086f82528ffbb0fe286ff5e069235536a1089e4424d4c40e014b5477b891cfc"
+checksum = "6a651188b8864fd5f69b4fe9e24d0b457ccd387504851d8e1df830df89f7e2f2"
 dependencies = [
  "identity_core",
  "identity_did",
@@ -4781,7 +4792,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=7be5b72#7be5b7219be93e348a4ecd0231c764d53b4eda0e"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=2d89065#2d89065518c388aba3500b3c229a3f091d5bdfbd"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4805,7 +4816,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=7be5b72#7be5b7219be93e348a4ecd0231c764d53b4eda0e"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=2d89065#2d89065518c388aba3500b3c229a3f091d5bdfbd"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4837,7 +4848,7 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=7be5b72#7be5b7219be93e348a4ecd0231c764d53b4eda0e"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=2d89065#2d89065518c388aba3500b3c229a3f091d5bdfbd"
 dependencies = [
  "anyhow",
  "derivative",
@@ -4860,7 +4871,7 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=7be5b72#7be5b7219be93e348a4ecd0231c764d53b4eda0e"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=2d89065#2d89065518c388aba3500b3c229a3f091d5bdfbd"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5485,7 +5496,7 @@ dependencies = [
 [[package]]
 name = "producer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?branch=build/bump-iota-deps#4435f4b4207cd9ff632102651504f2a8d37b79a4"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=7c31432#7c31432bf291eb1e9788c5028fc7ceede2d03491"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -6647,7 +6658,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?branch=build/bump-iota-deps#4435f4b4207cd9ff632102651504f2a8d37b79a4"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=7c31432#7c31432bf291eb1e9788c5028fc7ceede2d03491"
 dependencies = [
  "identity_iota",
  "identity_storage",
@@ -6723,7 +6734,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=7be5b72#7be5b7219be93e348a4ecd0231c764d53b4eda0e"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=2d89065#2d89065518c388aba3500b3c229a3f091d5bdfbd"
 dependencies = [
  "anyhow",
  "async-trait",

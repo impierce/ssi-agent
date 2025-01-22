@@ -178,8 +178,6 @@ impl Aggregate for AuthorizationRequest {
     fn apply(&mut self, event: Self::Event) {
         use AuthorizationRequestEvent::*;
 
-        info!("Applying event: {:?}", event);
-
         match event {
             AuthorizationRequestCreated { authorization_request } => {
                 self.authorization_request.replace(*authorization_request);

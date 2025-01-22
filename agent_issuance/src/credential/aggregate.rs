@@ -376,8 +376,6 @@ impl Aggregate for Credential {
     fn apply(&mut self, event: Self::Event) {
         use CredentialEvent::*;
 
-        info!("Applying event: {:?}", event);
-
         match event {
             UnsignedCredentialCreated {
                 credential_id,

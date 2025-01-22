@@ -7,13 +7,18 @@ use agent_shared::{
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use did_manager::{DidMethod, MethodSpecificParameters};
-use identity_did::DIDUrl;
+use identity_did::{CoreDID, DIDUrl, DID as _};
 use identity_document::{document::CoreDocument, service::Service as DocumentService};
-use identity_iota::iota::{IotaClientExt as _, IotaDocument, IotaIdentityClientExt as _};
-use identity_stronghold::StrongholdStorage;
+use identity_iota::{
+    iota::{IotaClientExt as _, IotaDID, IotaDocument, IotaIdentityClientExt as _},
+    storage::KeyId,
+    verification::{MethodData, MethodScope, MethodType, VerificationMethod},
+};
+use identity_stronghold::{StrongholdKeyType, StrongholdStorage};
 use iota_sdk::{
     client::{
         secret::{stronghold::StrongholdSecretManager, SecretManager},
+        stronghold::StrongholdAdapter,
         Client, Password,
     },
     types::block::output::{AliasOutput, AliasOutputBuilder, RentStructure},
@@ -26,10 +31,20 @@ use crate::services::IdentityServices;
 
 use super::{command::DocumentCommand, error::DocumentError, event::DocumentEvent};
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub enum Status {
+    SignAndValidate,
+    ValidateOnly,
+    #[default]
+    Disabled,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Document {
+    #[serde(rename = "id")]
     pub document_id: String,
     pub document: Option<CoreDocument>,
+    pub status: Status,
 }
 
 #[async_trait]
@@ -51,7 +66,8 @@ impl Aggregate for Document {
         info!("Handling command: {:?}", command);
 
         match command {
-            CreateDocument { document_id } => {
+            CreateDocument { document_id, status } => {
+                info!("Service ID 1: {:?}", document_id);
                 info!("Creating document: {:?}", document_id);
 
                 let mut secret_manager = services.subject.secret_manager.lock().await;
@@ -85,14 +101,76 @@ impl Aggregate for Document {
 
                 info!("Document: {:#?}", document);
 
-                Ok(vec![DocumentCreated { document_id, document }])
+                Ok(vec![DocumentCreated {
+                    document_id,
+                    status,
+                    document,
+                }])
+            }
+            SetStatus { document_id, status } => {
+                info!("Service ID 2: {:?}", self.document_id);
+                let mut document = self.document.clone().unwrap();
+
+                let did = document.id().clone();
+                let fragment = config().secret_manager.issuer_fragment.clone().unwrap();
+                let password = config().secret_manager.stronghold_password.clone();
+                let stronghold_path = config().secret_manager.stronghold_path.clone();
+                let issuer_eddsa_key_id = config().secret_manager.issuer_eddsa_key_id.clone().unwrap();
+
+                let adapter = StrongholdAdapter::builder()
+                    .password(password)
+                    .build(stronghold_path)
+                    .unwrap();
+
+                let stronghold_storage = StrongholdStorage::new(adapter);
+
+                let jwk: identity_iota::verification::jwk::Jwk = stronghold_storage
+                    .get_public_key_with_type(&KeyId::new(issuer_eddsa_key_id), StrongholdKeyType::Ed25519)
+                    .await
+                    .unwrap();
+
+                info!("DID : {}", did);
+                info!("Fragment : {}", fragment);
+                info!("JWK : {:#?}", jwk);
+
+                fn method(
+                    controller: &CoreDID,
+                    fragment: &str,
+                    jwk: identity_iota::verification::jwk::Jwk,
+                ) -> VerificationMethod {
+                    VerificationMethod::builder(Default::default())
+                        .id(controller.to_url().join(fragment).unwrap())
+                        .controller(controller.clone())
+                        .type_(MethodType::JSON_WEB_KEY_2020)
+                        .data(MethodData::PublicKeyJwk(jwk))
+                        .build()
+                        .unwrap()
+                }
+
+                let verification_method = method(&did, &format!("#{fragment}"), jwk);
+
+                document.remove_method(&verification_method.id());
+                document
+                    .insert_method(verification_method, MethodScope::VerificationMethod)
+                    .unwrap();
+
+                info!("HELLOOO 2: {:#?}", document);
+
+                Ok(vec![StatusSet {
+                    document_id,
+                    status,
+                    document,
+                }])
             }
             AddService {
                 service_id,
-                type_,
-                service_endpoint,
+                mut service,
             } => {
+                info!("Service ID 3: {:?}", self.document_id);
+
                 let mut document = self.document.clone().ok_or(MissingDocumentError)?;
+
+                info!("HELLOOO 3: {:#?}", document);
 
                 // FIX THISS
                 let document_id = self.document_id.clone();
@@ -100,20 +178,15 @@ impl Aggregate for Document {
 
                 let subject = &services.subject;
                 let subject_did = subject
+                    // FIX THIS
                     .identifier(&did_method.to_string(), get_preferred_signing_algorithm())
                     .await
                     .unwrap();
 
-                // Create a new service.
-                let service = DocumentService::builder(Default::default())
-                    .id(
-                        format!("{subject_did}#{service_id}").parse::<DIDUrl>().unwrap(),
-                        // .map_err(|err| InvalidUrlError(err.to_string()))?
-                    )
-                    .type_(type_)
-                    .service_endpoint(service_endpoint)
-                    .build()
-                    .expect("Failed to create DID Configuration Resource");
+                // Set the service ID.
+                service
+                    .set_id(format!("{subject_did}#{service_id}").parse::<DIDUrl>().unwrap())
+                    .unwrap();
 
                 // Overwrite the service if it already exists.
                 document.remove_service(service.id());
@@ -123,7 +196,31 @@ impl Aggregate for Document {
 
                 Ok(vec![ServiceAdded { document }])
             }
+            RemoveService { service_id } => {
+                info!("Service ID 4: {:?}", self.document_id);
+                let mut document = self.document.clone().ok_or(MissingDocumentError)?;
+
+                // FIX THISS
+                let document_id = self.document_id.clone();
+                let did_method: DidMethod = serde_json::from_value(serde_json::json!(document_id)).unwrap();
+
+                let subject = &services.subject;
+                let subject_did = subject
+                    // FIX THIS
+                    .identifier(&did_method.to_string(), get_preferred_signing_algorithm())
+                    .await
+                    .unwrap();
+
+                document.remove_service(
+                    &format!("{subject_did}#{service_id}").parse::<DIDUrl>().unwrap(),
+                    // .map_err(|err| InvalidUrlError(err.to_string()))?
+                );
+
+                Ok(vec![ServiceRemoved { document }])
+            }
             PublishDocument { document_id } => {
+                info!("Service ID 5: {:?}", self.document_id);
+
                 let SecretManagerConfig {
                     stronghold_path: snapshot_path,
                     stronghold_password: password,
@@ -141,12 +238,6 @@ impl Aggregate for Document {
                     .await
                     .expect("FIX THIS");
 
-                // // FIX THIS
-                // let did = self.document.as_ref().ok_or(MissingDocumentError)?.id().clone();
-
-                // Resolve the latest state of the document.
-                let document: IotaDocument = self.document.as_ref().ok_or(MissingDocumentError)?.clone().into();
-
                 // Create a new secret manager backed by a Stronghold.
                 let secret_manager: SecretManager = SecretManager::Stronghold(
                     StrongholdSecretManager::builder()
@@ -155,8 +246,31 @@ impl Aggregate for Document {
                         .expect("FIX THIS"),
                 );
 
-                // Resolve the latest output and update it with the given document.
-                let alias_output: AliasOutput = client.update_did_output(document.clone()).await.expect("FIX THIS");
+                // Resolve the latest state of the document.
+                let document: IotaDocument = self.document.as_ref().ok_or(MissingDocumentError)?.clone().into();
+
+                info!("HELLO document: {:#?}", document);
+
+                let alias_output = match self.status {
+                    Status::SignAndValidate | Status::ValidateOnly => {
+                        // Resolve the latest output and update it with the given document.
+                        let alias_output: AliasOutput =
+                            client.update_did_output(document.clone()).await.expect("FIX THIS");
+
+                        alias_output
+                    }
+                    Status::Disabled => {
+                        let did: IotaDID = document.id().clone();
+
+                        // Deactivate the DID by publishing an empty document.
+                        // This process can be reversed since the Alias Output is not destroyed.
+                        // Deactivation may only be performed by the state controller of the Alias Output.
+                        let deactivated_output: AliasOutput =
+                            client.deactivate_did_output(&did).await.expect("FIX THIS");
+
+                        deactivated_output
+                    }
+                };
 
                 // Because the size of the DID document increased, we have to increase the allocated storage deposit.
                 // This increases the deposit amount to the new minimum.
@@ -167,13 +281,16 @@ impl Aggregate for Document {
                     .expect("FIX THIS");
 
                 // Publish the updated Alias Output.
-                let updated: IotaDocument = client
+                let updated_document: IotaDocument = client
                     .publish_did_output(&secret_manager, alias_output)
                     .await
                     .expect("FIX THIS");
-                info!("Updated DID document: {updated:#}");
+                info!("Updated DID document: {updated_document:#}");
 
-                Ok(vec![DocumentPublished { document_id }])
+                Ok(vec![DocumentPublished {
+                    document_id,
+                    updated_document,
+                }])
             }
         }
     }
@@ -181,17 +298,33 @@ impl Aggregate for Document {
     fn apply(&mut self, event: Self::Event) {
         use DocumentEvent::*;
 
-        info!("Applying event: {:?}", event);
-
         match event {
-            DocumentCreated { document_id, document } => {
+            DocumentCreated {
+                document_id,
+                status,
+                document,
+            } => {
                 self.document_id = document_id;
+                self.status = status;
+                self.document.replace(document);
+            }
+            StatusSet { status, document, .. } => {
+                self.status = status;
                 self.document.replace(document);
             }
             ServiceAdded { document } => {
                 self.document.replace(document);
             }
-            DocumentPublished { document_id } => {}
+            ServiceRemoved { document } => {
+                self.document.replace(document);
+            }
+            DocumentPublished {
+                document_id,
+                updated_document,
+            } => {
+                self.document_id = document_id;
+                self.document.replace(CoreDocument::from(updated_document));
+            }
         }
     }
 }

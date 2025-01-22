@@ -26,6 +26,13 @@ use serde_json::json;
 use std::sync::Arc;
 use tracing::info;
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub enum Status {
+    #[default]
+    Created,
+    Deleted,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServiceResource {
     DomainLinkage(DomainLinkageConfiguration),
@@ -35,8 +42,8 @@ pub enum ServiceResource {
 pub struct Service {
     #[serde(rename = "id")]
     pub service_id: String,
-    pub type_: Option<String>,
-    pub service_endpoint: Option<ServiceEndpoint>,
+    pub status: Status,
+    pub service: Option<DocumentService>,
     pub presentation_ids: Vec<String>,
     pub resource: Option<ServiceResource>,
 }
@@ -88,67 +95,75 @@ impl Aggregate for Service {
                 // TODO: make sure that multiple signing algorithms are supported.
                 let signing_algorithm = get_preferred_signing_algorithm();
 
-                let messages = try_join_all(
-                    documents
-                        .into_iter()
-                        .map(|document| async {
-                            let document = document.document.expect("FIX THIS");
-                            let subject_did = document.id().clone();
-                            // TODO: can we assume that we can take the first verification method?
-                            let fragment = document
-                                .verification_method()
-                                .first()
-                                .expect("FIX THIS")
-                                .id()
-                                .fragment()
-                                .expect("FIX THIS");
+                let mut messages = vec![];
 
-                            let domain_linkage_credential = DomainLinkageCredentialBuilder::new()
-                                .issuer(subject_did.clone())
-                                .origin(origin.clone())
-                                .issuance_date(issuance_date)
-                                .expiration_date(expiration_date)
-                                .build()
-                                .map_err(|err| DomainLinkageCredentialBuilderError(err.to_string()))?
-                                .serialize_jwt(Default::default())
-                                .map_err(|err| SerializationError(err.to_string()))?;
+                for document in documents.into_iter() {
+                    let core_document = document.document.expect("FIX THIS");
+                    let subject_did = core_document.id().clone();
 
-                            // Compose JWT
-                            let header = Header {
-                                alg: signing_algorithm.clone(),
-                                typ: None,
-                                // TODO: make dynamic
-                                kid: Some(format!("{subject_did}#{fragment}")),
-                                ..Default::default()
-                            };
+                    let fragment = if document.document_id == "did:iota:rms" {
+                        config().secret_manager.issuer_fragment.clone().unwrap()
+                    } else {
+                        // TODO: can we assume that we can take the first verification method?
+                        core_document
+                            .verification_method()
+                            .first()
+                            .expect("FIX THIS")
+                            .id()
+                            .fragment()
+                            .expect("FIX THIS")
+                            .to_string()
+                    };
 
-                            let message = [
-                                URL_SAFE_NO_PAD.encode(
-                                    header
-                                        .to_json_vec()
-                                        .map_err(|err| SerializationError(err.to_string()))?,
-                                ),
-                                URL_SAFE_NO_PAD.encode(domain_linkage_credential.as_bytes()),
-                            ]
-                            .join(".");
+                    let domain_linkage_credential = DomainLinkageCredentialBuilder::new()
+                        .issuer(subject_did.clone())
+                        .origin(origin.clone())
+                        .issuance_date(issuance_date)
+                        .expiration_date(expiration_date)
+                        .build()
+                        .map_err(|err| DomainLinkageCredentialBuilderError(err.to_string()))?
+                        .serialize_jwt(Default::default())
+                        .map_err(|err| SerializationError(err.to_string()))?;
 
-                            let proof_value = secret_manager
-                                .sign(
-                                    message.as_bytes(),
-                                    from_jsonwebtoken_algorithm_to_jwsalgorithm(&signing_algorithm),
-                                )
-                                .await
-                                .map_err(|err| SigningError(err.to_string()))?;
-                            let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
-                            let message = [message, signature].join(".");
+                    // Compose JWT
+                    let header = Header {
+                        alg: signing_algorithm.clone(),
+                        typ: None,
+                        // TODO: make dynamic
+                        kid: Some(format!("{subject_did}#{fragment}")),
+                        ..Default::default()
+                    };
 
-                            Ok(Jwt::from(message))
-                        })
-                        .collect::<Vec<_>>(),
-                )
-                .await?;
+                    let message = [
+                        URL_SAFE_NO_PAD.encode(
+                            header
+                                .to_json_vec()
+                                .map_err(|err| SerializationError(err.to_string()))?,
+                        ),
+                        URL_SAFE_NO_PAD.encode(domain_linkage_credential.as_bytes()),
+                    ]
+                    .join(".");
+
+                    let proof_value = secret_manager
+                        .sign(
+                            message.as_bytes(),
+                            from_jsonwebtoken_algorithm_to_jwsalgorithm(&signing_algorithm),
+                        )
+                        .await
+                        .map_err(|err| SigningError(err.to_string()))?;
+                    let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
+                    let message = [message, signature].join(".");
+
+                    messages.push(Jwt::from(message))
+                }
+
+                if messages.is_empty() {
+                    panic!("FIX THISS")
+                    // return Err(NoMessagesError);
+                }
 
                 let domain_linkage_configuration = DomainLinkageConfiguration::new(messages);
+
                 info!("Configuration Resource >>: {domain_linkage_configuration:#}");
 
                 let type_ = "LinkedDomains".to_string();
@@ -157,13 +172,30 @@ impl Aggregate for Service {
                 }))
                 .map_err(|err| InvalidServiceEndpointError(err.to_string()))?;
 
+                // Create a new service.
+                let service = DocumentService::builder(Default::default())
+                    .id(
+                        format!("did:place:holder#{service_id}").parse::<DIDUrl>().unwrap(),
+                        // .map_err(|err| InvalidUrlError(err.to_string()))?
+                    )
+                    .type_(type_)
+                    .service_endpoint(service_endpoint)
+                    .build()
+                    .expect("Failed to create DID Configuration Resource");
+
                 Ok(vec![DomainLinkageServiceCreated {
                     service_id,
-                    type_,
-                    service_endpoint,
+                    status: Status::Created,
+                    service,
                     resource: ServiceResource::DomainLinkage(domain_linkage_configuration),
                 }])
             }
+            DeleteDomainLinkageService { service_id } => Ok(vec![DomainLinkageServiceDeleted {
+                service_id,
+                status: Status::Deleted,
+                service: None,
+                resource: None,
+            }]),
             CreateLinkedVerifiablePresentationService {
                 service_id,
                 presentation_ids,
@@ -186,11 +218,21 @@ impl Aggregate for Service {
                         .map_err(|err| InvalidUrlError(err.to_string()))?,
                 ));
 
+                // Create a new service.
+                let service = DocumentService::builder(Default::default())
+                    .id(
+                        format!("did:place:holder#{service_id}").parse::<DIDUrl>().unwrap(),
+                        // .map_err(|err| InvalidUrlError(err.to_string()))?
+                    )
+                    .type_(type_)
+                    .service_endpoint(service_endpoint)
+                    .build()
+                    .expect("Failed to create DID Configuration Resource");
+
                 Ok(vec![LinkedVerifiablePresentationServiceCreated {
                     service_id,
                     presentation_ids,
-                    type_,
-                    service_endpoint,
+                    service,
                 }])
             }
         }
@@ -199,30 +241,37 @@ impl Aggregate for Service {
     fn apply(&mut self, event: Self::Event) {
         use ServiceEvent::*;
 
-        info!("Applying event: {:?}", event);
-
         match event {
             DomainLinkageServiceCreated {
                 service_id,
-                type_,
-                service_endpoint,
+                status,
+                service,
                 resource,
             } => {
                 self.service_id = service_id;
-                self.type_.replace(type_);
-                self.service_endpoint.replace(service_endpoint);
+                self.status = status;
+                self.service.replace(service);
                 self.resource.replace(resource);
+            }
+            DomainLinkageServiceDeleted {
+                service_id,
+                status,
+                service,
+                resource,
+            } => {
+                self.service_id = service_id;
+                self.status = status;
+                self.service = service;
+                self.resource = resource;
             }
             LinkedVerifiablePresentationServiceCreated {
                 service_id,
-                type_,
-                service_endpoint,
+                service,
                 presentation_ids,
             } => {
                 self.service_id = service_id;
                 self.presentation_ids = presentation_ids;
-                self.type_.replace(type_);
-                self.service_endpoint.replace(service_endpoint);
+                self.service.replace(service);
             }
         }
     }

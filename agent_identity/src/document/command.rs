@@ -1,4 +1,5 @@
-use identity_document::service::ServiceEndpoint;
+use super::aggregate::Status;
+use identity_document::service::Service as DocumentService;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -6,11 +7,18 @@ use serde::Deserialize;
 pub enum DocumentCommand {
     CreateDocument {
         document_id: String,
+        status: Status,
+    },
+    SetStatus {
+        document_id: String,
+        status: Status,
     },
     AddService {
         service_id: String,
-        type_: String,
-        service_endpoint: ServiceEndpoint,
+        service: DocumentService,
+    },
+    RemoveService {
+        service_id: String,
     },
     PublishDocument {
         document_id: String,
