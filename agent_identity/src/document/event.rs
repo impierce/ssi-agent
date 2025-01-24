@@ -1,6 +1,5 @@
 use cqrs_es::DomainEvent;
 use identity_document::document::CoreDocument;
-use identity_iota::iota::IotaDocument;
 use serde::{Deserialize, Serialize};
 
 use super::aggregate::Status;
@@ -12,10 +11,13 @@ pub enum DocumentEvent {
         status: Status,
         document: CoreDocument,
     },
+    PublicKeyJwkAdded {
+        document_id: String,
+        document: CoreDocument,
+    },
     StatusSet {
         document_id: String,
         status: Status,
-        document: CoreDocument,
     },
     ServiceAdded {
         document: CoreDocument,
@@ -25,7 +27,7 @@ pub enum DocumentEvent {
     },
     DocumentPublished {
         document_id: String,
-        updated_document: IotaDocument,
+        updated_document: CoreDocument,
     },
 }
 
@@ -35,6 +37,7 @@ impl DomainEvent for DocumentEvent {
 
         let event_type: &str = match self {
             DocumentCreated { .. } => "DocumentCreated",
+            PublicKeyJwkAdded { .. } => "PublicKeyJwkAdded",
             StatusSet { .. } => "StatusSet",
             ServiceAdded { .. } => "ServiceAdded",
             ServiceRemoved { .. } => "ServiceRemoved",

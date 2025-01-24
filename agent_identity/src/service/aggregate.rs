@@ -101,19 +101,16 @@ impl Aggregate for Service {
                     let core_document = document.document.expect("FIX THIS");
                     let subject_did = core_document.id().clone();
 
-                    let fragment = if document.document_id == "did:iota:rms" {
-                        config().secret_manager.issuer_fragment.clone().unwrap()
-                    } else {
-                        // TODO: can we assume that we can take the first verification method?
-                        core_document
-                            .verification_method()
-                            .first()
-                            .expect("FIX THIS")
-                            .id()
-                            .fragment()
-                            .expect("FIX THIS")
-                            .to_string()
-                    };
+                    // TODO: Once we support multiple algorithms we cannot simply pick the first (and only) verification
+                    // method in the Document.
+                    let fragment = core_document
+                        .verification_method()
+                        .first()
+                        .expect("FIX THIS")
+                        .id()
+                        .fragment()
+                        .expect("FIX THIS")
+                        .to_string();
 
                     let domain_linkage_credential = DomainLinkageCredentialBuilder::new()
                         .issuer(subject_did.clone())

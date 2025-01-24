@@ -1,7 +1,7 @@
 use agent_shared::{config::config, from_jsonwebtoken_algorithm_to_jwsalgorithm};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use did_manager::{DidMethod, Resolver, SecretManager};
+use did_manager::{DidMethod, Resolver, SecretManager, StrongholdExtStorage};
 use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
@@ -11,6 +11,7 @@ use tokio::sync::Mutex;
 /// Reponsible for signing and verifying data.
 pub struct Subject {
     pub secret_manager: Arc<Mutex<SecretManager>>,
+    pub stronghold_storage: StrongholdExtStorage,
 }
 
 #[async_trait]
@@ -64,27 +65,14 @@ impl Sign for Subject {
         let method: DidMethod = serde_json::from_str(&format!("{subject_syntax_type:?}")).ok()?;
 
         let mut secret_manager = self.secret_manager.lock().await;
-        if method == DidMethod::Web {
-            return secret_manager
-                .produce_document(
-                    method,
-                    Some(did_manager::MethodSpecificParameters::Web { origin: origin() }),
-                    from_jsonwebtoken_algorithm_to_jwsalgorithm(
-                        &agent_shared::config::get_preferred_signing_algorithm(),
-                    ),
-                )
-                .await
-                .ok()
-                .and_then(|document| document.verification_method().first().cloned())
-                .map(|first| first.id().to_string());
-        }
 
-        // TODO: refactor: https://github.com/impierce/ssi-agent/pull/31#discussion_r1634590990
+        let method_specific_parameters =
+            (method == DidMethod::Web).then_some(did_manager::MethodSpecificParameters::Web { origin: origin() });
 
         secret_manager
             .produce_document(
                 method,
-                None,
+                method_specific_parameters,
                 from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
             )
             .await
@@ -146,6 +134,8 @@ fn origin() -> url::Origin {
 
 #[cfg(test)]
 mod tests {
+    use crate::stronghold_storage;
+
     use super::*;
     use agent_shared::config::{set_config, SecretManagerConfig};
     use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED, ED25519};
@@ -155,12 +145,7 @@ mod tests {
 
     lazy_static::lazy_static! {
         static ref SECRET_MANAGER_CONFIG: SecretManagerConfig = SecretManagerConfig {
-            stronghold_path: "../agent_secret_manager/tests/res/all_slots.stronghold".to_string(),
             stronghold_password: "sup3rSecr3t".to_string(),
-            issuer_eddsa_key_id: Some("ed25519-0".to_string()),
-            issuer_es256_key_id: Some("es256-0".to_string()),
-            issuer_did: Some("did:foo:bar".to_string()),
-            issuer_fragment: Some("0".to_string()),
         };
     }
 
@@ -170,6 +155,7 @@ mod tests {
 
         let subject = Arc::new(Subject {
             secret_manager: Arc::new(Mutex::new(crate::secret_manager().await)),
+            stronghold_storage: stronghold_storage().await,
         });
 
         let mut split = ES256_SIGNED_JWT.rsplitn(2, '.');
@@ -192,6 +178,7 @@ mod tests {
 
         let subject = Arc::new(Subject {
             secret_manager: Arc::new(Mutex::new(crate::secret_manager().await)),
+            stronghold_storage: stronghold_storage().await,
         });
 
         let mut split = EDDSA_SIGNED_JWT.rsplitn(2, '.');

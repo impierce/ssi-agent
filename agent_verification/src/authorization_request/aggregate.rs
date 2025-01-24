@@ -212,6 +212,7 @@ pub mod tests {
 
     use agent_secret_manager::secret_manager;
     use agent_secret_manager::service::Service as _;
+    use agent_secret_manager::stronghold_storage;
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::set_config;
     use agent_shared::config::SupportedDidMethod;
@@ -368,6 +369,7 @@ pub mod tests {
             Arc::new(futures::executor::block_on(async {
                 Subject {
                     secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
+                    stronghold_storage: stronghold_storage().await,
                 }
             })),
             vec![did_method],
@@ -547,6 +549,7 @@ pub mod tests {
         pub static ref VERIFIER: Subject = futures::executor::block_on(async {
             Subject {
                 secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
+                stronghold_storage: stronghold_storage().await,
             }
         });
         pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();

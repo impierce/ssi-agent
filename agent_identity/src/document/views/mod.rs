@@ -17,9 +17,11 @@ impl View<Document> for Document {
                 self.document.replace(document.clone());
                 self.status.clone_from(status);
             }
-            StatusSet { status, document, .. } => {
-                self.status.clone_from(status);
+            PublicKeyJwkAdded { document, .. } => {
                 self.document.replace(document.clone());
+            }
+            StatusSet { status, .. } => {
+                self.status.clone_from(status);
             }
             ServiceAdded { document, .. } => {
                 self.document.replace(document.clone());

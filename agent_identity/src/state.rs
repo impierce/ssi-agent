@@ -1,10 +1,17 @@
+use agent_secret_manager::{stronghold_storage, ED25519_KEY_ID, STRONGHOLD_PATH};
 use agent_shared::config::{config, SupportedDidMethod, ToggleOptions};
 use agent_shared::handlers::command_handler;
 use agent_shared::{application_state::CommandHandler, handlers::query_handler};
 use cqrs_es::persist::ViewRepository;
-use did_manager::DidMethod;
+use did_manager::StrongholdExtStorage;
 use futures::future::{join_all, try_join_all};
 use identity_iota::core::Duration;
+use identity_iota::credential::Jws;
+use identity_iota::storage::{KeyId, KeyType};
+use identity_stronghold::{StrongholdKeyType, StrongholdStorage};
+use iota_sdk::client::secret::stronghold::StrongholdSecretManager;
+use iota_sdk::types::block::output::{AliasOutputBuilder, RentStructure};
+use iota_stronghold::{SnapshotPath, Stronghold};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::Subject;
 use std::str::FromStr;
@@ -21,6 +28,31 @@ use crate::{
     document::{aggregate::Document, views::DocumentView},
     service::{aggregate::Service, command::ServiceCommand, views::ServiceView},
 };
+
+use std::path::PathBuf;
+
+use anyhow::Context;
+
+use identity_iota::iota::block::output::AliasOutput;
+use identity_iota::iota::IotaClientExt;
+use identity_iota::iota::IotaDocument;
+use identity_iota::iota::IotaIdentityClientExt;
+use identity_iota::iota::NetworkName;
+use identity_iota::storage::JwkDocumentExt;
+use identity_iota::storage::Storage;
+use identity_iota::verification::{MethodScope, VerificationMethod};
+
+use identity_iota::verification::jws::JwsAlgorithm;
+use iota_sdk::client::api::GetAddressesOptions;
+use iota_sdk::client::node_api::indexer::query_parameters::QueryParameter;
+use iota_sdk::client::secret::SecretManager;
+use iota_sdk::client::Client;
+use iota_sdk::crypto::keys::bip39;
+use iota_sdk::types::block::address::Address;
+use iota_sdk::types::block::address::Bech32Address;
+use iota_sdk::types::block::address::Hrp;
+use rand::distributions::DistString;
+use serde_json::Value;
 
 #[derive(Clone)]
 pub struct IdentityState {
@@ -74,11 +106,182 @@ impl Clone for Queries {
     }
 }
 
+/// Initializes the [`SecretManager`] with a new mnemonic, if necessary,
+/// and generates an address from the given [`SecretManager`].
+pub async fn get_address(client: &Client, secret_manager: &SecretManager) -> anyhow::Result<Bech32Address> {
+    let random: [u8; 32] = rand::random();
+    let mnemonic = bip39::wordlist::encode(random.as_ref(), &bip39::wordlist::ENGLISH)
+        .map_err(|err| anyhow::anyhow!(format!("{err:?}")))?;
+
+    if let SecretManager::Stronghold(ref stronghold) = secret_manager {
+        match stronghold.store_mnemonic(mnemonic).await {
+            Ok(()) => (),
+            Err(iota_sdk::client::stronghold::Error::MnemonicAlreadyStored) => (),
+            Err(err) => anyhow::bail!(err),
+        }
+    } else {
+        anyhow::bail!("expected a `StrongholdSecretManager`");
+    }
+
+    let bech32_hrp: Hrp = client.get_bech32_hrp().await?;
+    let address: Bech32Address = secret_manager
+        .generate_ed25519_addresses(
+            GetAddressesOptions::default()
+                .with_range(0..1)
+                .with_bech32_hrp(bech32_hrp),
+        )
+        .await?[0];
+
+    Ok(address)
+}
+use identity_iota::storage::JwkStorage;
+
+pub async fn generate(
+    stronghold_ext_storage: &StrongholdExtStorage,
+    key_type: KeyType,
+    alg: JwsAlgorithm,
+) -> Result<KeyId, ()> {
+    let jwk_gen_output = stronghold_ext_storage.generate(key_type.clone(), alg).await.unwrap();
+    info!(
+        "Generated new {:?} key with key ID {:?}",
+        &key_type.as_str(),
+        &jwk_gen_output.key_id.as_str()
+    );
+    Ok(jwk_gen_output.key_id)
+}
+
 /// The unique identifier for the linked domain service.
 pub const DOMAIN_LINKAGE_SERVICE_ID: &str = "linked-domain-service";
 
 /// The unique identifier for the linked verifiable presentation service.
 pub const VERIFIABLE_PRESENTATION_SERVICE_ID: &str = "linked-verifiable-presentation-service";
+
+// #[tokio::test]
+// async fn test() {
+//     iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).unwrap();
+//     test_function().await;
+// }
+
+pub async fn test_function() {
+    // The API endpoint of an IOTA node, e.g. Hornet.
+    let api_endpoint: &str = "https://api.testnet.shimmer.network";
+
+    // Create a new client to interact with the IOTA ledger.
+    let client: Client = Client::builder()
+        .with_primary_node(api_endpoint, None)
+        .unwrap()
+        .finish()
+        .await
+        .unwrap();
+
+    let stronghold_password = config().secret_manager.stronghold_password.clone();
+
+    let stronghold_adapter = StrongholdSecretManager::builder()
+        .password(stronghold_password.clone())
+        .build(STRONGHOLD_PATH)
+        .unwrap();
+
+    // Create a `StrongholdStorage`.
+    // `StrongholdStorage` creates internally a `SecretManager` that can be
+    // referenced to avoid creating multiple instances around the same stronghold snapshot.
+    let stronghold_ext_storage = StrongholdExtStorage::new(stronghold_adapter);
+
+    let ed25519_key_id = generate(&stronghold_ext_storage, KeyType::new("Ed25519"), JwsAlgorithm::EdDSA)
+        .await
+        .unwrap();
+    let es256_key_id = generate(&stronghold_ext_storage, KeyType::new("ES256"), JwsAlgorithm::ES256)
+        .await
+        .unwrap();
+
+    let ed25519_jwk = stronghold_ext_storage
+        .get_ed25519_public_key(&ed25519_key_id)
+        .await
+        .unwrap();
+
+    let es256_jwk = stronghold_ext_storage
+        .get_es256_public_key(&es256_key_id)
+        .await
+        .unwrap();
+
+    // Create a DID document.
+    let address: Bech32Address = get_address(&client, stronghold_ext_storage.as_secret_manager())
+        .await
+        .unwrap();
+    println!("Address: {}", address);
+
+    {
+        let ledger_sponsoring_service = config().ledger_sponsoring_service.clone().unwrap();
+        let access_key = ledger_sponsoring_service.access_key;
+        let url = ledger_sponsoring_service.url;
+        let authorization = ledger_sponsoring_service.authorization;
+
+        let client = reqwest::Client::builder().build().unwrap();
+
+        let json = serde_json::json!({
+            "RequestSponsoring": {
+                "access_key": access_key,
+                "amount": 200000,
+                "address": address.to_string()
+            }
+        });
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("Authorization", authorization.parse().unwrap());
+
+        let request = client.request(reqwest::Method::POST, url).headers(headers).json(&json);
+
+        let response = request.send().await.unwrap();
+
+        println!("Status: {}", response.status());
+
+        std::thread::sleep(std::time::Duration::from_secs(15));
+    }
+    let address: Address = *address;
+    println!("Address: {}", address);
+
+    let network_name: NetworkName = client.network_name().await.unwrap();
+    let document: IotaDocument = IotaDocument::new(&network_name);
+
+    // Construct an Alias Output containing the DID document, with the wallet address
+    // set as both the state controller and governor.
+    let alias_output: AliasOutput = client.new_did_output(address, document, None).await.unwrap();
+
+    // Publish the Alias Output and get the published DID document.
+    let mut document: IotaDocument = client
+        .publish_did_output(stronghold_ext_storage.as_secret_manager(), alias_output)
+        .await
+        .unwrap();
+    let did = document.id().clone();
+
+    let ed25519_verification_method: VerificationMethod =
+        VerificationMethod::new_from_jwk(did.clone(), ed25519_jwk, None).unwrap();
+    let es256_verification_method: VerificationMethod = VerificationMethod::new_from_jwk(did, es256_jwk, None).unwrap();
+
+    document
+        .insert_method(ed25519_verification_method, MethodScope::VerificationMethod)
+        .unwrap();
+    document
+        .insert_method(es256_verification_method, MethodScope::VerificationMethod)
+        .unwrap();
+
+    // Resolve the latest output and update it with the given document.
+    let alias_output: AliasOutput = client.update_did_output(document.clone()).await.unwrap();
+
+    // Because the size of the DID document increased, we have to increase the allocated storage deposit.
+    // This increases the deposit amount to the new minimum.
+    let rent_structure: RentStructure = client.get_rent_structure().await.unwrap();
+    let alias_output: AliasOutput = AliasOutputBuilder::from(&alias_output)
+        .with_minimum_storage_deposit(rent_structure)
+        .finish()
+        .unwrap();
+
+    // Publish the updated Alias Output.
+    let updated: IotaDocument = client
+        .publish_did_output(stronghold_ext_storage.as_secret_manager(), alias_output)
+        .await
+        .unwrap();
+    println!("Updated DID document: {updated:#}");
+}
 
 /// Initialize the identity state.
 pub async fn initialize(state: &IdentityState, subject: Arc<dyn Subject>) {
@@ -105,60 +308,63 @@ pub async fn initialize(state: &IdentityState, subject: Arc<dyn Subject>) {
 
                 // Check whether the DID methods document already exists.
                 let command = match query_handler(&document_id, &state.query.document).await {
-                    Ok(Some(Document {
-                        document: Some(document),
-                        ..
-                    })) => {
-                        enabled
-                            .then_some(DocumentCommand::SetStatus {
+                    Ok(Some(_document_exists)) => {
+                        if *enabled {
+                            DocumentCommand::SetStatus {
                                 document_id: document_id.clone(),
                                 status: Status::SignAndValidate,
-                            })
-                            .or_else(|| {
-                                Some(DocumentCommand::SetStatus {
-                                    document_id: document_id.clone(),
-                                    status: Status::Disabled,
-                                })
-                            })
-
-                        // TODO: FIX THISS
-                        // let key_id = subject.key_id(&did_method.to_string(), Algorithm::EdDSA).await.unwrap();
-                        // let condition = document.verification_method().iter().any(|vm| {
-                        //     info!("vm.id().to_string() == key_id: {} == {}", vm.id().to_string(), key_id);
-                        //     vm.id().to_string() == key_id});
-
-                        // if condition {
-                        //     info!("3: DID Document for `{did_method}` already exists: {:?}", document);
-                        // } else {
-                        //     return Err(format!("2: DID Document for `{}` already exists, but the identifier does not match the subject identifier", did_method));
-                        // }
-                    }
-                    // If the DID document does not exist yet, then it needs to be created.
-                    _document_does_not_exist => enabled
-                        .then_some(DocumentCommand::CreateDocument {
-                            document_id: document_id.clone(),
-                            status: Status::SignAndValidate,
-                        })
-                        .or_else(|| {
-                            Some(DocumentCommand::CreateDocument {
+                            }
+                        } else {
+                            DocumentCommand::SetStatus {
                                 document_id: document_id.clone(),
                                 status: Status::Disabled,
-                            })
-                        }),
+                            }
+                        }
+                    }
+                    // If the DID document does not exist yet, then it needs to be created.
+                    _document_does_not_exist => {
+                        if *enabled {
+                            DocumentCommand::CreateDocument {
+                                document_id: document_id.clone(),
+                                status: Status::SignAndValidate,
+                            }
+                        } else {
+                            return Err(format!("DID Document for `{did_method}` does not exist"));
+                        }
+                    }
                 };
 
                 info!("Executing command now: {:#?}", command);
 
-                if let Some(command) = command {
-                    if command_handler(&document_id, &state.command.document, command)
-                        .await
-                        .is_err()
-                    {
-                        warn!("5: Failed to Set status `{did_method}`");
-                    }
-
-                    info!("C: here");
+                if command_handler(&document_id, &state.command.document, command)
+                    .await
+                    .is_err()
+                {
+                    warn!("5: Failed to Set status `{did_method}`");
                 }
+
+                info!("C: here");
+
+                let stronghold_storage = stronghold_storage().await;
+
+                let public_key_jwk: identity_iota::verification::jwk::Jwk = stronghold_storage
+                    .get_ed25519_public_key(&KeyId::new(ED25519_KEY_ID))
+                    .await
+                    .unwrap();
+
+                let command = DocumentCommand::AddPublicKeyJwk {
+                    document_id: document_id.clone(),
+                    public_key_jwk,
+                };
+
+                if command_handler(&document_id, &state.command.document, command)
+                    .await
+                    .is_err()
+                {
+                    warn!("5: Failed to Set status `{did_method}`");
+                }
+
+                info!("D: here");
 
                 match query_handler(&document_id, &state.query.document).await {
                     Ok(Some(document)) => Ok(document),

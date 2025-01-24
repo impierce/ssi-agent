@@ -21,16 +21,21 @@ identity_document.workspace = true
 identity_iota.workspace = true
 identity_stronghold.workspace = true
 iota-sdk.workspace = true
+iota_stronghold = { version = "2.1" }
 jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+rand = "0.8"
+reqwest.workspace = true
+anyhow = "1.0"
+serial_test = "3.0"
 
 # `test_utils` dependencies
 rstest = { workspace = true, optional = true }
-tokio = { workspace = true, optional = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
 agent_api_rest = { path = "../agent_api_rest" }
@@ -57,5 +62,5 @@ async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 [features]
 test_utils = [
     "dep:rstest",
-    "dep:tokio",
+    # "dep:tokio",
 ]

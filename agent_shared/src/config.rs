@@ -26,6 +26,7 @@ pub struct ApplicationConfiguration {
     pub external_server_response_timeout_ms: Option<u64>,
     pub domain_linkage_enabled: bool,
     pub secret_manager: SecretManagerConfig,
+    pub ledger_sponsoring_service: Option<LedgerSponsoringService>,
     pub did_document_cache: Option<InMemoryCacheConfig>,
     pub credential_configurations: Vec<CredentialConfiguration>,
     pub signing_algorithms_supported: HashMap<jsonwebtoken::Algorithm, ToggleOptions>,
@@ -64,12 +65,14 @@ pub struct EventStorePostgresConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct SecretManagerConfig {
-    pub stronghold_path: String,
     pub stronghold_password: String,
-    pub issuer_eddsa_key_id: Option<String>,
-    pub issuer_es256_key_id: Option<String>,
-    pub issuer_did: Option<String>,
-    pub issuer_fragment: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct LedgerSponsoringService {
+    pub url: Url,
+    pub authorization: String,
+    pub access_key: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]

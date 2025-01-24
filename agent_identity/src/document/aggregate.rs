@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use agent_secret_manager::STRONGHOLD_PATH;
 use agent_shared::{
     config::{config, get_preferred_did_method, get_preferred_signing_algorithm, SecretManagerConfig},
     from_jsonwebtoken_algorithm_to_jwsalgorithm,
@@ -99,39 +100,24 @@ impl Aggregate for Document {
                     .await
                     .map_err(|err| ProduceDocumentError(err.to_string()))?;
 
-                info!("Document: {:#?}", document);
-
                 Ok(vec![DocumentCreated {
                     document_id,
                     status,
                     document,
                 }])
             }
-            SetStatus { document_id, status } => {
-                info!("Service ID 2: {:?}", self.document_id);
+            AddPublicKeyJwk {
+                document_id,
+                public_key_jwk,
+            } => {
                 let mut document = self.document.clone().unwrap();
 
                 let did = document.id().clone();
-                let fragment = config().secret_manager.issuer_fragment.clone().unwrap();
-                let password = config().secret_manager.stronghold_password.clone();
-                let stronghold_path = config().secret_manager.stronghold_path.clone();
-                let issuer_eddsa_key_id = config().secret_manager.issuer_eddsa_key_id.clone().unwrap();
-
-                let adapter = StrongholdAdapter::builder()
-                    .password(password)
-                    .build(stronghold_path)
-                    .unwrap();
-
-                let stronghold_storage = StrongholdStorage::new(adapter);
-
-                let jwk: identity_iota::verification::jwk::Jwk = stronghold_storage
-                    .get_public_key_with_type(&KeyId::new(issuer_eddsa_key_id), StrongholdKeyType::Ed25519)
-                    .await
-                    .unwrap();
-
-                info!("DID : {}", did);
-                info!("Fragment : {}", fragment);
-                info!("JWK : {:#?}", jwk);
+                let fragment = match self.document_id.as_str() {
+                    "did:web" => "key-0",
+                    "did:iota:rms" => public_key_jwk.kid().unwrap(),
+                    _ => panic!("FIX THIS"),
+                };
 
                 fn method(
                     controller: &CoreDID,
@@ -147,20 +133,19 @@ impl Aggregate for Document {
                         .unwrap()
                 }
 
-                let verification_method = method(&did, &format!("#{fragment}"), jwk);
+                let verification_method = method(&did, &format!("#{fragment}"), public_key_jwk);
 
                 document.remove_method(&verification_method.id());
                 document
                     .insert_method(verification_method, MethodScope::VerificationMethod)
                     .unwrap();
 
-                info!("HELLOOO 2: {:#?}", document);
+                Ok(vec![PublicKeyJwkAdded { document_id, document }])
+            }
+            SetStatus { document_id, status } => {
+                info!("Service ID 2: {:?}", self.document_id);
 
-                Ok(vec![StatusSet {
-                    document_id,
-                    status,
-                    document,
-                }])
+                Ok(vec![StatusSet { document_id, status }])
             }
             AddService {
                 service_id,
@@ -222,7 +207,6 @@ impl Aggregate for Document {
                 info!("Service ID 5: {:?}", self.document_id);
 
                 let SecretManagerConfig {
-                    stronghold_path: snapshot_path,
                     stronghold_password: password,
                     ..
                 } = config().secret_manager.clone();
@@ -242,7 +226,7 @@ impl Aggregate for Document {
                 let secret_manager: SecretManager = SecretManager::Stronghold(
                     StrongholdSecretManager::builder()
                         .password(Password::from(password))
-                        .build(snapshot_path)
+                        .build(STRONGHOLD_PATH)
                         .expect("FIX THIS"),
                 );
 
@@ -281,9 +265,10 @@ impl Aggregate for Document {
                     .expect("FIX THIS");
 
                 // Publish the updated Alias Output.
-                let updated_document: IotaDocument = client
+                let updated_document: CoreDocument = client
                     .publish_did_output(&secret_manager, alias_output)
                     .await
+                    .map(CoreDocument::from)
                     .expect("FIX THIS");
                 info!("Updated DID document: {updated_document:#}");
 
@@ -308,9 +293,11 @@ impl Aggregate for Document {
                 self.status = status;
                 self.document.replace(document);
             }
-            StatusSet { status, document, .. } => {
-                self.status = status;
+            PublicKeyJwkAdded { document, .. } => {
                 self.document.replace(document);
+            }
+            StatusSet { status, .. } => {
+                self.status = status;
             }
             ServiceAdded { document } => {
                 self.document.replace(document);
