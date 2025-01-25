@@ -210,9 +210,9 @@ impl Aggregate for AuthorizationRequest {
 pub mod tests {
     use std::str::FromStr;
 
-    use agent_secret_manager::secret_manager;
     use agent_secret_manager::service::Service as _;
     use agent_secret_manager::stronghold_storage;
+    use agent_secret_manager::subject::DidMethods;
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::set_config;
     use agent_shared::config::SupportedDidMethod;
@@ -366,12 +366,7 @@ pub mod tests {
         authorization_request: &GenericAuthorizationRequest,
     ) -> GenericAuthorizationResponse {
         let provider_manager = ProviderManager::new(
-            Arc::new(futures::executor::block_on(async {
-                Subject {
-                    secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
-                    stronghold_storage: stronghold_storage().await,
-                }
-            })),
+            Arc::new(futures::executor::block_on(async { Subject::new().await })),
             vec![did_method],
             vec![Algorithm::EdDSA],
         )
@@ -548,8 +543,8 @@ pub mod tests {
     lazy_static! {
         pub static ref VERIFIER: Subject = futures::executor::block_on(async {
             Subject {
-                secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
                 stronghold_storage: stronghold_storage().await,
+                did_methods: Default::default(),
             }
         });
         pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();

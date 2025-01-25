@@ -1,8 +1,10 @@
-use agent_shared::{config::config, from_jsonwebtoken_algorithm_to_jwsalgorithm};
+use crate::{stronghold_storage, ED25519_KEY_ID, ES256_KEY_ID};
+use agent_shared::config::get_preferred_signing_algorithm;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use did_manager::{DidMethod, Resolver, SecretManager, StrongholdExtStorage};
-use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
+use did_manager::{Resolver, StrongholdExtStorage};
+use identity_iota::storage::JwkStorage;
+use identity_iota::{did::DID, document::DIDUrlQuery, storage::KeyId, verification::jwk::JwkParams};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
 use std::sync::Arc;
@@ -10,8 +12,17 @@ use tokio::sync::Mutex;
 
 /// Reponsible for signing and verifying data.
 pub struct Subject {
-    pub secret_manager: Arc<Mutex<SecretManager>>,
     pub stronghold_storage: StrongholdExtStorage,
+    pub did_methods: Arc<Mutex<DidMethods>>,
+}
+
+impl Subject {
+    pub async fn new() -> Self {
+        Self {
+            stronghold_storage: stronghold_storage().await,
+            did_methods: Default::default(),
+        }
+    }
 }
 
 #[async_trait]
@@ -62,34 +73,47 @@ impl Verify for Subject {
 #[async_trait]
 impl Sign for Subject {
     async fn key_id(&self, subject_syntax_type: &str, _algorithm: Algorithm) -> Option<String> {
-        let method: DidMethod = serde_json::from_str(&format!("{subject_syntax_type:?}")).ok()?;
+        let algorithm = agent_shared::config::get_preferred_signing_algorithm();
 
-        let mut secret_manager = self.secret_manager.lock().await;
-
-        let method_specific_parameters =
-            (method == DidMethod::Web).then_some(did_manager::MethodSpecificParameters::Web { origin: origin() });
-
-        secret_manager
-            .produce_document(
-                method,
-                method_specific_parameters,
-                from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
-            )
+        self.did_methods
+            .lock()
             .await
-            .ok()
-            .and_then(|document| document.verification_method().first().cloned())
-            .map(|first| first.id().to_string())
+            .get(subject_syntax_type)
+            .get(&algorithm)
+            .verification_method_id
+            .clone()
     }
 
     async fn sign(&self, message: &str, _subject_syntax_type: &str, _algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
-        let secret_manager = self.secret_manager.lock().await;
+        let (key_id, public_key) = match get_preferred_signing_algorithm() {
+            Algorithm::ES256 => {
+                let key_id = KeyId::new(ES256_KEY_ID);
+                let public_key = self
+                    .stronghold_storage
+                    .get_es256_public_key(&key_id)
+                    .await
+                    .expect("failed to get public key");
+                (key_id, public_key)
+            }
+            Algorithm::EdDSA => {
+                let key_id = KeyId::new(ED25519_KEY_ID);
+                let public_key = self
+                    .stronghold_storage
+                    .get_ed25519_public_key(&key_id)
+                    .await
+                    .expect("failed to get public key");
+                (key_id, public_key)
+            }
+            _ => panic!("FIX THIS"),
+        };
 
-        Ok(secret_manager
-            .sign(
-                message.as_bytes(),
-                from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
-            )
-            .await?)
+        let signature = self
+            .stronghold_storage
+            .sign(&key_id, message.as_bytes(), &public_key)
+            .await
+            .expect("failed to sign data");
+
+        Ok(signature)
     }
 
     fn external_signer(&self) -> Option<Arc<dyn ExternalSign>> {
@@ -100,36 +124,102 @@ impl Sign for Subject {
 #[async_trait]
 impl oid4vc_core::Subject for Subject {
     async fn identifier(&self, subject_syntax_type: &str, _algorithm: Algorithm) -> anyhow::Result<String> {
-        let method: DidMethod = serde_json::from_str(&format!("{subject_syntax_type:?}"))?;
+        let algorithm = agent_shared::config::get_preferred_signing_algorithm();
 
-        let mut secret_manager = self.secret_manager.lock().await;
-
-        if method == DidMethod::Web {
-            return Ok(secret_manager
-                .produce_document(
-                    method,
-                    Some(did_manager::MethodSpecificParameters::Web { origin: origin() }),
-                    from_jsonwebtoken_algorithm_to_jwsalgorithm(
-                        &agent_shared::config::get_preferred_signing_algorithm(),
-                    ),
-                )
-                .await
-                .map(|document| document.id().to_string())?);
-        }
-
-        Ok(secret_manager
-            .produce_document(
-                method,
-                None,
-                from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
-            )
+        let did = self
+            .did_methods
+            .lock()
             .await
-            .map(|document| document.id().to_string())?)
+            .get(subject_syntax_type)
+            .get(&algorithm)
+            .did
+            .clone();
+
+        Ok(did)
     }
 }
 
-fn origin() -> url::Origin {
-    config().url.origin()
+#[derive(Default)]
+pub struct DidMethods {
+    pub did_iota: Algorithms,
+    pub did_iota_smr: Algorithms,
+    pub did_iota_rms: Algorithms,
+    pub did_jwk: Algorithms,
+    pub did_key: Algorithms,
+    pub did_web: Algorithms,
+}
+
+impl DidMethods {
+    pub fn insert(&mut self, method: &str, algorithms: Algorithms) {
+        match method {
+            "did:iota" => self.did_iota = algorithms,
+            "did:iota:smr" => self.did_iota_smr = algorithms,
+            "did:iota:rms" => self.did_iota_rms = algorithms,
+            "did:jwk" => self.did_jwk = algorithms,
+            "did:key" => self.did_key = algorithms,
+            "did:web" => self.did_web = algorithms,
+            _ => panic!("FIX THIS"),
+        }
+    }
+
+    pub fn get(&self, method: &str) -> &Algorithms {
+        match method {
+            "did:iota" => &self.did_iota,
+            "did:iota:smr" => &self.did_iota_smr,
+            "did:iota:rms" => &self.did_iota_rms,
+            "did:jwk" => &self.did_jwk,
+            "did:key" => &self.did_key,
+            "did:web" => &self.did_web,
+            _ => panic!("FIX THIS"),
+        }
+    }
+
+    pub fn insert_verification_method_id(&mut self, method: &str, algorithm: &str, verification_method_id: &str) {
+        let algorithms = match method {
+            "did:iota" => &mut self.did_iota,
+            "did:iota:smr" => &mut self.did_iota_smr,
+            "did:iota:rms" => &mut self.did_iota_rms,
+            "did:jwk" => &mut self.did_jwk,
+            "did:key" => &mut self.did_key,
+            "did:web" => &mut self.did_web,
+            _ => panic!("FIX THIS"),
+        };
+
+        match algorithm {
+            "ES256" => {
+                if let Some(document_data) = &mut algorithms.es256 {
+                    document_data.verification_method_id = Some(verification_method_id.to_string());
+                }
+            }
+            "EdDSA" => {
+                if let Some(document_data) = &mut algorithms.eddsa {
+                    document_data.verification_method_id = Some(verification_method_id.to_string());
+                }
+            }
+            _ => panic!("FIX THIS"),
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct Algorithms {
+    pub es256: Option<DocumentData>,
+    pub eddsa: Option<DocumentData>,
+}
+
+impl Algorithms {
+    pub fn get(&self, algorithm: &Algorithm) -> &DocumentData {
+        match algorithm {
+            Algorithm::ES256 => self.es256.as_ref().unwrap(),
+            Algorithm::EdDSA => self.eddsa.as_ref().unwrap(),
+            _ => panic!("FIX THIS"),
+        }
+    }
+}
+
+pub struct DocumentData {
+    pub did: String,
+    pub verification_method_id: Option<String>,
 }
 
 #[cfg(test)]
@@ -153,10 +243,7 @@ mod tests {
     async fn es256_signed_jwt_successfully_verified() {
         set_config().set_secret_manager_config(SECRET_MANAGER_CONFIG.clone());
 
-        let subject = Arc::new(Subject {
-            secret_manager: Arc::new(Mutex::new(crate::secret_manager().await)),
-            stronghold_storage: stronghold_storage().await,
-        });
+        let subject = Arc::new(Subject::new().await);
 
         let mut split = ES256_SIGNED_JWT.rsplitn(2, '.');
         let (signature, message) = (split.next().unwrap(), split.next().unwrap());
@@ -176,10 +263,7 @@ mod tests {
     async fn eddsa_signed_jwt_successfully_verified() {
         set_config().set_secret_manager_config(SECRET_MANAGER_CONFIG.clone());
 
-        let subject = Arc::new(Subject {
-            secret_manager: Arc::new(Mutex::new(crate::secret_manager().await)),
-            stronghold_storage: stronghold_storage().await,
-        });
+        let subject = Arc::new(Subject::new().await);
 
         let mut split = EDDSA_SIGNED_JWT.rsplitn(2, '.');
         let (signature, message) = (split.next().unwrap(), split.next().unwrap());

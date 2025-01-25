@@ -8,11 +8,10 @@ use serde::Deserialize;
 pub enum DocumentCommand {
     CreateDocument {
         document_id: String,
-        status: Status,
     },
-    AddPublicKeyJwk {
+    SetPublicKeyJwks {
         document_id: String,
-        public_key_jwk: Jwk,
+        public_key_jwks: Vec<Jwk>,
     },
     SetStatus {
         document_id: String,

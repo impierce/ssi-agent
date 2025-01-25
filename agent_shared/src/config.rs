@@ -1,6 +1,7 @@
 use config::ConfigError;
 use did_manager::DidMethod;
 use identity_iota::did::CoreDID;
+use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
 use oid4vp::ClaimFormatDesignation;
@@ -418,6 +419,20 @@ pub fn get_all_enabled_did_methods() -> Vec<SupportedDidMethod> {
     did_methods.sort();
 
     did_methods
+}
+
+// TODO: should fail when none is enabled
+pub fn get_all_enabled_signing_algorithms_supported() -> Vec<Algorithm> {
+    let mut signing_algorithms_supported: Vec<_> = config()
+        .signing_algorithms_supported
+        .iter()
+        .filter(|(_, v)| v.enabled)
+        .map(|(k, _)| k.clone())
+        .collect();
+
+    // signing_algorithms_supported.sort();
+
+    signing_algorithms_supported
 }
 
 // TODO: should fail when there's more than one result

@@ -1,14 +1,9 @@
 use super::{command::ServiceCommand, error::ServiceError, event::ServiceEvent};
 use crate::services::IdentityServices;
-use agent_shared::{
-    config::{config, get_preferred_did_method, get_preferred_signing_algorithm},
-    from_jsonwebtoken_algorithm_to_jwsalgorithm,
-};
+use agent_shared::config::{config, get_preferred_signing_algorithm};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::Aggregate;
-use did_manager::{DidMethod, MethodSpecificParameters};
-use futures::future::try_join_all;
 use identity_core::{
     common::{Duration, OrderedSet, Timestamp},
     convert::{FromJson, ToJson},
@@ -17,10 +12,10 @@ use identity_credential::{
     credential::Jwt,
     domain_linkage::{DomainLinkageConfiguration, DomainLinkageCredentialBuilder},
 };
-use identity_did::{CoreDID, DIDUrl};
+use identity_did::DIDUrl;
 use identity_document::service::{Service as DocumentService, ServiceEndpoint};
 use jsonwebtoken::Header;
-use oid4vc_core::authentication::subject::Subject as _;
+use oid4vc_core::Sign as _;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
@@ -69,7 +64,6 @@ impl Aggregate for Service {
         match command {
             CreateDomainLinkageService { service_id, documents } => {
                 let subject = &services.subject;
-                let secret_manager = subject.secret_manager.lock().await;
 
                 let origin = config().url.origin();
                 let origin = identity_core::common::Url::parse(origin.ascii_serialization())
@@ -141,11 +135,8 @@ impl Aggregate for Service {
                     ]
                     .join(".");
 
-                    let proof_value = secret_manager
-                        .sign(
-                            message.as_bytes(),
-                            from_jsonwebtoken_algorithm_to_jwsalgorithm(&signing_algorithm),
-                        )
+                    let proof_value = subject
+                        .sign(message.as_str(), "FIX THIS", signing_algorithm)
                         .await
                         .map_err(|err| SigningError(err.to_string()))?;
                     let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());

@@ -17,7 +17,7 @@ impl View<Document> for Document {
                 self.document.replace(document.clone());
                 self.status.clone_from(status);
             }
-            PublicKeyJwkAdded { document, .. } => {
+            PublicKeyJwksSet { document, .. } => {
                 self.document.replace(document.clone());
             }
             StatusSet { status, .. } => {

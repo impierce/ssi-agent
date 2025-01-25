@@ -32,6 +32,8 @@ rand = "0.8"
 reqwest.workspace = true
 anyhow = "1.0"
 serial_test = "3.0"
+url.workspace = true
+urlencoding = "2.1"
 
 # `test_utils` dependencies
 rstest = { workspace = true, optional = true }

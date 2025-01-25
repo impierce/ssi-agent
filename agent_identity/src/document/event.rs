@@ -11,7 +11,7 @@ pub enum DocumentEvent {
         status: Status,
         document: CoreDocument,
     },
-    PublicKeyJwkAdded {
+    PublicKeyJwksSet {
         document_id: String,
         document: CoreDocument,
     },
@@ -37,7 +37,7 @@ impl DomainEvent for DocumentEvent {
 
         let event_type: &str = match self {
             DocumentCreated { .. } => "DocumentCreated",
-            PublicKeyJwkAdded { .. } => "PublicKeyJwkAdded",
+            PublicKeyJwksSet { .. } => "PublicKeyJwksSet",
             StatusSet { .. } => "StatusSet",
             ServiceAdded { .. } => "ServiceAdded",
             ServiceRemoved { .. } => "ServiceRemoved",
