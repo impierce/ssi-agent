@@ -20,7 +20,7 @@ This guide will help you quickly get started with **UniCore**. You will:
 
 Download the UniMe app on your mobile device:
 
-- [App Store](https://apps.apple.com/us/app/unime-identity-wallet/id6451394321
+- [App Store](https://apps.apple.com/us/app/unime-identity-wallet/id6451394321)
 - [Google Play Store](https://play.google.com/store/apps/details?id=com.impierce.identity_wallet)
 
 ---
