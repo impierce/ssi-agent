@@ -89,6 +89,7 @@ fn credential_expiry_schema() -> Schema {
 
 #[derive(Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(example = json!({"offerId": "987", "credentialConfigurationId": "some-id", "expiresAt": "never", "credential": {"foo": "bar"}}))]
 pub struct CredentialsEndpointRequest {
     #[schema(example = "0001")]
     pub offer_id: String,

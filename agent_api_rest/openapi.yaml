@@ -243,29 +243,15 @@ paths:
       tags:
       - Issuance
       summary: Create a new credential
-      description: Create a new credential for a given subject. This action does not issue the credential to the end user yet.
+      description: |-
+        Create a new credential for a given subject. This action does not issue the credential to the end user yet.
+        In order to issue the credential to the end user, please refer to [Offer a credential](#tag/issuance/POST/v0/offers).
       operationId: credentials
       requestBody:
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/CredentialsEndpointRequest'
-            examples:
-              openbadges:
-                summary: Open Badges 3.0
-                description: An badge following the Open Badges Specification 3.0
-                externalValue: res/open-badge-request.json
-              w3c-vc:
-                summary: W3C VC Data Model v1.1
-                description: A credential following the W3C Verifiable Credentials Data Model v1.1
-                value:
-                  offerId: '123'
-                  credentialConfigurationId: w3c_vc_credential
-                  credential:
-                    credentialSubject:
-                      first_name: Ferris
-                      last_name: Rustacean
-                  expiresAt: never
         required: true
       responses:
         '201':
@@ -393,9 +379,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SendOfferEndpointRequest'
-            example:
-              offerId: '0001'
-              targetUrl: https://wallet.example.com/openid4vci/offers
         required: true
       responses:
         '200':
@@ -522,6 +505,12 @@ components:
         offerId:
           type: string
           example: '0001'
+      example:
+        offerId: '987'
+        credentialConfigurationId: some-id
+        expiresAt: never
+        credential:
+          foo: bar
     GenericAuthorizationRequest:
       type: object
       required:
@@ -567,6 +556,9 @@ components:
         targetUrl:
           type: string
           format: uri
+      example:
+        offerId: '987'
+        targetUrl: https://example.com
 tags:
 - name: (public)
   description: A collection of endpoints that should be publicly accessible without authentication. They are used to resolve metadata or allow communication with wallets.

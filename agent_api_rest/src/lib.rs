@@ -229,7 +229,7 @@ mod tests {
     async fn handler() {}
 
     #[tokio::test]
-    #[ignore = "Execute this test manually to generate the openapi.yaml file"]
+    #[ignore = "NOTE: this test can be executed manually to generate the openapi.yaml file"]
     async fn generate_openapi_file() {
         let yaml_value = patch_generated_openapi(ApiDoc::openapi());
         let yaml_string = serde_yaml::to_string(&yaml_value).unwrap();
