@@ -8,14 +8,20 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
-use utoipa::ToSchema;
+use utoipa::{openapi::Object, ToSchema};
 
 #[derive(ToSchema)]
 #[schema(as = CredentialIssuerMetadata)]
 pub struct CredentialIssuerMetadataSchema {
-    pub foo: String,
-    pub bar: i32,
+    #[schema(example = "http://localhost:3033/")]
+    pub credential_issuer: String,
+    #[schema(example = "http://localhost:3033/openid4vci/credential")]
+    pub credential_endpoint: url::Url,
+    #[schema(example = json!([{"name":"UniCore","locale":"en","logo":{"uri":"https://www.impierce.com/external/impierce-icon.png","alt_text":"UniCore Logo"}}]))]
+    pub display: Vec<Object>,
+    // TODO: json example doesn't apply to `utoipa::Object`
+    // #[schema(example = json!({"w3c_vc_credential":{"format":"jwt_vc_json","credential_definition":{"type":["VerifiableCredential"]},"cryptographic_binding_methods_supported":["did:jwk","did:key","did:web"],"credential_signing_alg_values_supported":["ES256"],"proof_types_supported":{"jwt":{"proof_signing_alg_values_supported":["ES256"]}},"display":[{"locale":"en","name":"Impierce Credential","logo":{"alt_text":"UniCore Logo","uri":"https://www.impierce.com/external/impierce-logo.png"}}]}}))]
+    pub credential_configurations_supported: Object,
 }
 
 /// Credential Issuer Metadata
@@ -27,7 +33,7 @@ pub struct CredentialIssuerMetadataSchema {
     tag = "(.well-known)",
     tags = ["(public)"],
     responses(
-        (status = 200, description = "Successfully returns the Credential Issuer Metadata", body = [CredentialIssuerMetadataSchema])
+        (status = 200, description = "Successfully returns the Credential Issuer Metadata", body = CredentialIssuerMetadataSchema)
     )
 )]
 #[axum_macros::debug_handler]

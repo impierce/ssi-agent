@@ -16,10 +16,7 @@ use utoipa::ToSchema;
 
 #[derive(ToSchema)]
 #[schema(as = TokenRequest)]
-pub struct TokenRequestSchema {
-    pub foo: String,
-    pub bar: i32,
-}
+pub struct TokenRequestSchema {}
 
 /// Token Endpoint
 ///

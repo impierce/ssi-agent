@@ -27,6 +27,9 @@ use utoipa::{
 pub struct CredentialViewSchema {
     pub id: uuid::Uuid,
     pub data: Object,
+    pub credential_configuration: Object,
+    pub signed: Option<bool>,
+    pub status: String,
 }
 
 /// Retrieve a credential
@@ -37,7 +40,7 @@ pub struct CredentialViewSchema {
     path = "/credentials/{id}",
     tag = "Issuance",
     params(
-        ("id" = String, Path, description = "Unique identifier of the Credential", example = "0001"),
+        ("id" = String, Path, description = "Unique identifier of the Credential", example = "0ca13ca7-7100-478f-8473-67772bad4f2c"),
     ),
     responses(
         (status = 200, description = "Credential found", body = CredentialViewSchema)
@@ -71,6 +74,7 @@ fn credential_expiry_schema() -> Schema {
                     .enum_values(Some(vec!["never".to_string()]))
                     .build(),
             ))
+            .examples(vec![json!("never"), json!("2025-02-05T15:33:12Z")])
             .build(),
     )
 }
@@ -89,13 +93,17 @@ fn credential_expiry_schema() -> Schema {
 
 #[derive(Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[schema(example = json!({"offerId": "987", "credentialConfigurationId": "some-id", "expiresAt": "never", "credential": {"foo": "bar"}}))]
+#[schema(description = "All data required to create a new credential.")]
+// #[schema(example = json!({"offerId": "987", "credentialConfigurationId": "some-id", "expiresAt": "never", "credential": {"foo": "bar"}}))]
 pub struct CredentialsEndpointRequest {
     #[schema(example = "0001")]
     pub offer_id: String,
+    // TODO: json example doesn't seem to apply to `serde_json::Value` or `utoipa::Object` in Scalar?
+    #[schema(example = json!({"credentialSubject": {"first_name": "Ferris", "last_name": "Rustacean", "dob":"1982-01-01"}}))]
     pub credential: Value,
     #[serde(default)]
     pub is_signed: bool,
+    #[schema(example = "w3c_vc_credential")]
     pub credential_configuration_id: String,
     #[schema(schema_with = credential_expiry_schema)]
     pub expires_at: CredentialExpiry,
@@ -109,8 +117,8 @@ pub struct CredentialsEndpointRequest {
     path = "/credentials",
     request_body(content = CredentialsEndpointRequest,
         examples(
-            ("w3c-vc" = (summary = "W3C VC Data Model v1.1", description = "A credential following the W3C Verifiable Credentials Data Model v1.1", value = json!({"offerId": "123", "credentialConfigurationId": "w3c_vc_credential", "credential": {"credentialSubject": {"first_name": "Ferris", "last_name": "Rustacean"}}, "expiresAt": "never"}))),
-            ("openbadges" = (summary = "Open Badges 3.0", description = "An badge following the Open Badges Specification 3.0", external_value = "res/open-badge-request.json"))
+            ("01_w3c-vc-1-1" = (summary = "W3C VC Data Model v1.1", description = "A credential following the W3C Verifiable Credentials Data Model v1.1", value = json!({"offerId": "0001", "credentialConfigurationId": "w3c_vc_credential", "credential": {"credentialSubject": {"first_name": "Ferris", "last_name": "Rustacean", "dob":"1982-01-01"}}, "expiresAt": "never"}))),
+            ("02_openbadges-3-0" = (summary = "Open Badges 3.0", description = "A badge following the Open Badges Specification 3.0", external_value = "res/open-badge-request.json"))
         )
     ),
     tag = "Issuance",
@@ -118,8 +126,8 @@ pub struct CredentialsEndpointRequest {
         (status = 201, description = "Successfully created a new credential.", body = Object,
             headers(("Location" = String, description = "URL of the created resource")),
             examples(
-                ("w3c-vc-1-1" = (summary = "W3C VC Data Model v1.1", description = "A credential following the W3C Verifiable Credentials Data Model v1.1", value = json!({"@context":"https://www.w3.org/2018/credentials/v1","type":["VerifiableCredential"],"credentialSubject":{"dob":"1982-01-01","first_name":"Ferris","last_name":"Crabman"},"issuer":{"id":"http://localhost:3033/","name":"UniCore"},"issuanceDate":"2024-12-17T12:33:28Z"}))),
-                ("openbadges-3-0" = (summary = "Open Badges 3.0", description = "An badge following the Open Badges Specification 3.0", value = json!({"@context":["https://www.w3.org/2018/credentials/v1","https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"],"id":"https://acme.example.org/1a2b3c4d5e6f","type":["VerifiableCredential","OpenBadgeCredential"],"name":"ImpierceCredential","credentialSubject":{"type":["AchievementSubject"],"achievement":{"id":"https://example.com/achievements/21st-century-skills/teamwork","type":"Achievement","criteria":{"narrative":"TeammembersarenominatedforthisbadgebytheirpeersandrecognizeduponreviewbyExampleCorpmanagement."},"description":"Thisbadgerecognizesthedevelopmentofthecapacitytocollaboratewithinagroupenvironment.","name":"Teamwork"}},"issuer":{"id":"http://localhost:3033/","type":"Profile","name":"UniCore"},"issuanceDate":"2024-12-17T22:37:59Z","expirationDate":"2028-04-12T09:15:23Z"})))
+                ("01_w3c-vc-1-1" = (summary = "W3C VC Data Model v1.1", description = "A credential following the W3C Verifiable Credentials Data Model v1.1", value = json!({"@context":"https://www.w3.org/2018/credentials/v1","type":["VerifiableCredential"],"credentialSubject":{"first_name":"Ferris","last_name":"Rustacean","dob":"1982-01-01"},"issuer":{"id":"http://localhost:3033/","name":"UniCore"},"issuanceDate":"2024-12-17T12:33:28Z"}))),
+                ("02_openbadges-3-0" = (summary = "Open Badges 3.0", description = "A badge following the Open Badges Specification 3.0", value = json!({"@context":["https://www.w3.org/2018/credentials/v1","https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"],"id":"https://acme.example.org/1a2b3c4d5e6f","type":["VerifiableCredential","OpenBadgeCredential"],"name":"ImpierceCredential","credentialSubject":{"type":["AchievementSubject"],"achievement":{"id":"https://example.com/achievements/21st-century-skills/teamwork","type":"Achievement","criteria":{"narrative":"TeammembersarenominatedforthisbadgebytheirpeersandrecognizeduponreviewbyExampleCorpmanagement."},"description":"Thisbadgerecognizesthedevelopmentofthecapacitytocollaboratewithinagroupenvironment.","name":"Teamwork"}},"issuer":{"id":"http://localhost:3033/","type":"Profile","name":"UniCore"},"issuanceDate":"2024-12-17T22:37:59Z","expirationDate":"2028-04-12T09:15:23Z"})))
             )
         ),
         (status = 400, description = "Invalid payload.")

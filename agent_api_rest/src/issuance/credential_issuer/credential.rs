@@ -27,17 +27,11 @@ const POLLING_INTERVAL_MS: u64 = 100;
 
 #[derive(ToSchema)]
 #[schema(as = CredentialRequest)]
-pub struct CredentialRequestSchema {
-    pub foo: String,
-    pub bar: i32,
-}
+pub struct CredentialRequestSchema {}
 
 #[derive(ToSchema)]
 #[schema(as = CredentialResponse)]
-pub struct CredentialResponseSchema {
-    pub foo: String,
-    pub bar: i32,
-}
+pub struct CredentialResponseSchema {}
 
 /// Credential Endpoint
 ///

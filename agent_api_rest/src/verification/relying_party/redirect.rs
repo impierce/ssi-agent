@@ -14,10 +14,7 @@ use utoipa::ToSchema;
 
 #[derive(ToSchema)]
 #[schema(as = GenericAuthorizationResponse)]
-pub struct GenericAuthorizationResponseSchema {
-    pub foo: String,
-    pub bar: i32,
-}
+pub struct GenericAuthorizationResponseSchema {}
 
 /// Redirect Endpoint
 ///

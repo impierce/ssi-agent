@@ -231,8 +231,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "NOTE: this test can be executed manually to generate the openapi.yaml file"]
     async fn generate_openapi_file() {
-        let yaml_value = patch_generated_openapi(ApiDoc::openapi());
-        let yaml_string = serde_yaml::to_string(&yaml_value).unwrap();
+        let open_api = patch_generated_openapi(ApiDoc::openapi());
+        let yaml_string = serde_yaml::to_string(&open_api).unwrap();
         println!("{}", yaml_string);
         std::fs::write("openapi.yaml", yaml_string).unwrap();
     }

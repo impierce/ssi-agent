@@ -130,9 +130,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/AuthorizationServerMetadata'
+                $ref: '#/components/schemas/AuthorizationServerMetadata'
   /.well-known/openid-credential-issuer:
     get:
       tags:
@@ -147,9 +145,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/CredentialIssuerMetadata'
+                $ref: '#/components/schemas/CredentialIssuerMetadata'
   /openid4vci/credential:
     post:
       tags:
@@ -187,7 +183,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/GenericAuthorizationRequest'
+                  $ref: '#/components/schemas/SIOPv2AuthorizationResponse'
     post:
       tags:
       - Verification
@@ -237,21 +233,36 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GenericAuthorizationRequest'
+                $ref: '#/components/schemas/SIOPv2AuthorizationResponse'
   /v0/credentials:
     post:
       tags:
       - Issuance
       summary: Create a new credential
-      description: |-
-        Create a new credential for a given subject. This action does not issue the credential to the end user yet.
-        In order to issue the credential to the end user, please refer to [Offer a credential](#tag/issuance/POST/v0/offers).
+      description: Create a new credential for a given subject. This action does not issue the credential to the end user yet.
       operationId: credentials
       requestBody:
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/CredentialsEndpointRequest'
+            examples:
+              01_w3c-vc-1-1:
+                summary: W3C VC Data Model v1.1
+                description: A credential following the W3C Verifiable Credentials Data Model v1.1
+                value:
+                  offerId: '0001'
+                  credentialConfigurationId: w3c_vc_credential
+                  credential:
+                    credentialSubject:
+                      first_name: Ferris
+                      last_name: Rustacean
+                      dob: 1982-01-01
+                  expiresAt: never
+              02_openbadges-3-0:
+                summary: Open Badges 3.0
+                description: A badge following the Open Badges Specification 3.0
+                externalValue: res/open-badge-request.json
         required: true
       responses:
         '201':
@@ -266,9 +277,24 @@ paths:
               schema:
                 type: object
               examples:
-                openbadges-3-0:
+                01_w3c-vc-1-1:
+                  summary: W3C VC Data Model v1.1
+                  description: A credential following the W3C Verifiable Credentials Data Model v1.1
+                  value:
+                    '@context': https://www.w3.org/2018/credentials/v1
+                    type:
+                    - VerifiableCredential
+                    credentialSubject:
+                      first_name: Ferris
+                      last_name: Rustacean
+                      dob: 1982-01-01
+                    issuer:
+                      id: http://localhost:3033/
+                      name: UniCore
+                    issuanceDate: 2024-12-17T12:33:28Z
+                02_openbadges-3-0:
                   summary: Open Badges 3.0
-                  description: An badge following the Open Badges Specification 3.0
+                  description: A badge following the Open Badges Specification 3.0
                   value:
                     '@context':
                     - https://www.w3.org/2018/credentials/v1
@@ -294,21 +320,6 @@ paths:
                       name: UniCore
                     issuanceDate: 2024-12-17T22:37:59Z
                     expirationDate: 2028-04-12T09:15:23Z
-                w3c-vc-1-1:
-                  summary: W3C VC Data Model v1.1
-                  description: A credential following the W3C Verifiable Credentials Data Model v1.1
-                  value:
-                    '@context': https://www.w3.org/2018/credentials/v1
-                    type:
-                    - VerifiableCredential
-                    credentialSubject:
-                      dob: 1982-01-01
-                      first_name: Ferris
-                      last_name: Crabman
-                    issuer:
-                      id: http://localhost:3033/
-                      name: UniCore
-                    issuanceDate: 2024-12-17T12:33:28Z
         '400':
           description: Invalid payload.
   /v0/credentials/{id}:
@@ -325,7 +336,7 @@ paths:
         required: true
         schema:
           type: string
-        example: '0001'
+        example: 0ca13ca7-7100-478f-8473-67772bad4f2c
       responses:
         '200':
           description: Credential found
@@ -379,6 +390,9 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SendOfferEndpointRequest'
+            example:
+              offerId: '0001'
+              targetUrl: https://wallet.example.com/openid4vci/offers
         required: true
       responses:
         '200':
@@ -418,7 +432,7 @@ components:
           - type: string
             title: Presentation Definition by Reference
             examples:
-            - '123123'
+            - pr3s3nt4t1on_d3f1n1t1on_id
           - $ref: '#/components/schemas/PresentationDefinition'
           description: Provide a Presentation Definition to ask the Holder for verifiable data. The Presentation Definition can either be specified by value or by reference.
         state:
@@ -428,60 +442,71 @@ components:
     AuthorizationServerMetadata:
       type: object
       required:
-      - foo
-      - bar
+      - issuer
+      - token_endpoint
       properties:
-        bar:
-          type: integer
-          format: int32
-        foo:
+        issuer:
           type: string
+          example: http://localhost:3033/
+        token_endpoint:
+          type: string
+          format: uri
+          example: http://localhost:3033/auth/token
     CredentialIssuerMetadata:
       type: object
       required:
-      - foo
-      - bar
+      - credential_issuer
+      - credential_endpoint
+      - display
+      - credential_configurations_supported
       properties:
-        bar:
-          type: integer
-          format: int32
-        foo:
+        credential_configurations_supported:
+          type: object
+        credential_endpoint:
           type: string
+          format: uri
+          example: http://localhost:3033/openid4vci/credential
+        credential_issuer:
+          type: string
+          example: http://localhost:3033/
+        display:
+          type: array
+          items:
+            type: object
+          example:
+          - name: UniCore
+            locale: en
+            logo:
+              uri: https://www.impierce.com/external/impierce-icon.png
+              alt_text: UniCore Logo
     CredentialRequest:
       type: object
-      required:
-      - foo
-      - bar
-      properties:
-        bar:
-          type: integer
-          format: int32
-        foo:
-          type: string
     CredentialResponse:
       type: object
-      required:
-      - foo
-      - bar
-      properties:
-        bar:
-          type: integer
-          format: int32
-        foo:
-          type: string
     CredentialView:
       type: object
       required:
       - id
       - data
+      - credential_configuration
+      - status
       properties:
+        credential_configuration:
+          type: object
         data:
           type: object
         id:
           type: string
           format: uuid
+        signed:
+          type:
+          - boolean
+          - 'null'
+        status:
+          type: string
     CredentialsEndpointRequest:
       type: object
+      description: All data required to create a new credential.
       required:
       - offerId
       - credential
@@ -491,6 +516,7 @@ components:
         credential: {}
         credentialConfigurationId:
           type: string
+          example: w3c_vc_credential
         expiresAt:
           oneOf:
           - type: string
@@ -500,28 +526,14 @@ components:
             title: Credential never expires
             enum:
             - never
+          examples:
+          - never
+          - 2025-02-05T15:33:12Z
         isSigned:
           type: boolean
         offerId:
           type: string
           example: '0001'
-      example:
-        offerId: '987'
-        credentialConfigurationId: some-id
-        expiresAt: never
-        credential:
-          foo: bar
-    GenericAuthorizationRequest:
-      type: object
-      required:
-      - foo
-      - bar
-      properties:
-        bar:
-          type: integer
-          format: int32
-        foo:
-          type: string
     OffersEndpointRequest:
       type: object
       required:
@@ -534,9 +546,18 @@ components:
       title: Presentation Definition by Value
       required:
       - id
+      - input_descriptors
       properties:
+        format:
+          type:
+          - object
+          - 'null'
         id:
           type: string
+        input_descriptors:
+          type: array
+          items:
+            type: object
         name:
           type:
           - string
@@ -545,6 +566,28 @@ components:
           type:
           - string
           - 'null'
+    SIOPv2AuthorizationResponse:
+      type: object
+      required:
+      - authorization_request
+      - form_url_encoded_authorization_request
+      - signed_authorization_request_object
+      - id_token
+      - vp_token
+      - state
+      properties:
+        authorization_request:
+          type: string
+        form_url_encoded_authorization_request:
+          type: string
+        id_token:
+          type: string
+        signed_authorization_request_object:
+          type: string
+        state:
+          type: string
+        vp_token:
+          type: string
     SendOfferEndpointRequest:
       type: object
       required:
@@ -556,9 +599,6 @@ components:
         targetUrl:
           type: string
           format: uri
-      example:
-        offerId: '987'
-        targetUrl: https://example.com
 tags:
 - name: (public)
   description: A collection of endpoints that should be publicly accessible without authentication. They are used to resolve metadata or allow communication with wallets.

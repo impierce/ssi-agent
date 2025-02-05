@@ -14,17 +14,11 @@ use utoipa::ToSchema;
 
 #[derive(ToSchema)]
 #[schema(as = CredentialOffer)]
-pub struct CredentialOfferSchema {
-    pub foo: String,
-    pub bar: i32,
-}
+pub struct CredentialOfferSchema {}
 
 #[derive(ToSchema)]
 #[schema(as = Oid4vciOfferEndpointRequest)]
-pub struct Oid4vciOfferEndpointRequestSchema {
-    pub foo: String,
-    pub bar: i32,
-}
+pub struct Oid4vciOfferEndpointRequestSchema {}
 
 #[derive(Deserialize, Serialize)]
 pub struct Oid4vciOfferEndpointRequest {

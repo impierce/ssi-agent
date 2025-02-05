@@ -22,24 +22,21 @@ use tracing::info;
 use utoipa::{
     openapi::{
         schema::{RefBuilder, SchemaType},
-        ObjectBuilder, OneOf, Ref, Schema,
+        Object, ObjectBuilder, OneOf, Ref, Schema,
     },
     ToSchema,
 };
 
 #[derive(ToSchema)]
-#[schema(as = GenericAuthorizationRequest)]
-pub struct GenericAuthorizationRequestSchema {
-    pub foo: String,
-    pub bar: i32,
+#[schema(as = SIOPv2AuthorizationResponse)]
+pub struct SIOPv2AuthorizationResponseSchema {
+    pub authorization_request: String,
+    pub form_url_encoded_authorization_request: String,
+    pub signed_authorization_request_object: String,
+    pub id_token: String,
+    pub vp_token: String,
+    pub state: String,
 }
-
-// #[derive(ToSchema)]
-// #[schema(as = PresentationDefinitionResource)]
-// pub struct PresentationDefinitionResourceSchema {
-//     pub foo: String,
-//     pub bar: i32,
-// }
 
 #[derive(Serialize, ToSchema)]
 #[schema(as = AuthorizationRequestsEndpointRequest)]
@@ -60,7 +57,7 @@ pub struct AuthorizationRequestsEndpointRequestSchema {
     path = "/authorization_requests",
     tag = "Verification",
     responses(
-        (status = 200, description = "Successfully returns all existing Authorization Requests.", body = [GenericAuthorizationRequestSchema])
+        (status = 200, description = "Successfully returns all existing Authorization Requests.", body = [SIOPv2AuthorizationResponseSchema])
     )
 )]
 #[axum_macros::debug_handler]
@@ -91,7 +88,7 @@ pub(crate) async fn all_authorization_requests(State(state): State<VerificationS
         ("id" = String, Path, description = "The ID of the Authorization Request to retrieve.")
     ),
     responses(
-        (status = 200, description = "Successfully returns an existing Authorization Request.", body = GenericAuthorizationRequestSchema)
+        (status = 200, description = "Successfully returns an existing Authorization Request.", body = SIOPv2AuthorizationResponseSchema)
     )
 )]
 #[axum_macros::debug_handler]
@@ -125,7 +122,7 @@ fn presentation_definition_resource_schema() -> Schema {
                     .title(Some("Presentation Definition by Reference"))
                     .schema_type(SchemaType::Type(utoipa::openapi::Type::String))
                     // name: presentation_definition_id
-                    .examples(vec!["123123".to_string()])
+                    .examples(vec!["pr3s3nt4t1on_d3f1n1t1on_id".to_string()])
                     .build(),
             ))
             // .item(RefBuilder::new().ref_location_from_schema_name("PresentationDefinition").build())
@@ -138,10 +135,10 @@ fn presentation_definition_resource_schema() -> Schema {
 #[schema(as = PresentationDefinition, title = "Presentation Definition by Value")]
 pub struct PresentationDefinitionSchema {
     pub id: String,
-    // pub input_descriptors: Vec<InputDescriptor>,
+    pub input_descriptors: Vec<Object>,
     pub name: Option<String>,
     pub purpose: Option<String>,
-    // pub format: Option<HashMap<ClaimFormatDesignation, ClaimFormatProperty>>,
+    pub format: Option<Object>,
 }
 
 #[derive(Deserialize, Serialize)]
