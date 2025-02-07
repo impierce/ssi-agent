@@ -1,8 +1,9 @@
 use cqrs_es::DomainEvent;
 use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
+use strum::Display;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
 pub enum PresentationEvent {
     PresentationCreated {
         presentation_id: String,
@@ -12,12 +13,7 @@ pub enum PresentationEvent {
 
 impl DomainEvent for PresentationEvent {
     fn event_type(&self) -> String {
-        use PresentationEvent::*;
-
-        let event_type: &str = match self {
-            PresentationCreated { .. } => "PresentationCreated",
-        };
-        event_type.to_string()
+        self.to_string()
     }
 
     fn event_version(&self) -> String {
