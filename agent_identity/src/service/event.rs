@@ -2,10 +2,11 @@ use cqrs_es::DomainEvent;
 use derivative::Derivative;
 use identity_document::service::Service as DocumentService;
 use serde::{Deserialize, Serialize};
+use strum::Display;
 
 use super::aggregate::ServiceResource;
 
-#[derive(Clone, Debug, Deserialize, Serialize, Derivative)]
+#[derive(Clone, Debug, Deserialize, Serialize, Derivative, Display)]
 #[derivative(PartialEq)]
 pub enum ServiceEvent {
     DomainLinkageServiceCreated {
@@ -23,13 +24,7 @@ pub enum ServiceEvent {
 
 impl DomainEvent for ServiceEvent {
     fn event_type(&self) -> String {
-        use ServiceEvent::*;
-
-        let event_type: &str = match self {
-            DomainLinkageServiceCreated { .. } => "DomainLinkageServiceCreated",
-            LinkedVerifiablePresentationServiceCreated { .. } => "LinkedVerifiablePresentationServiceCreated",
-        };
-        event_type.to_string()
+        self.to_string()
     }
 
     fn event_version(&self) -> String {
