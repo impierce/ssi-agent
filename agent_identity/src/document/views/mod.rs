@@ -1,6 +1,5 @@
 use super::aggregate::Document;
 use cqrs_es::{EventEnvelope, View};
-use identity_iota::document::CoreDocument;
 
 pub type DocumentView = Document;
 impl View<Document> for Document {
@@ -17,25 +16,28 @@ impl View<Document> for Document {
                 self.document.replace(document.clone());
                 self.status.clone_from(status);
             }
-            PublicKeyJwksSet { document, .. } => {
+            PublicKeyJwksSet { document_id, document } => {
+                self.document_id.clone_from(document_id);
                 self.document.replace(document.clone());
             }
-            StatusSet { status, .. } => {
+            StatusSet { document_id, status } => {
+                self.document_id.clone_from(document_id);
                 self.status.clone_from(status);
             }
-            ServiceAdded { document, .. } => {
+            ServiceAdded { document_id, document } => {
+                self.document_id.clone_from(document_id);
                 self.document.replace(document.clone());
             }
-            ServiceRemoved { document, .. } => {
+            ServiceRemoved { document_id, document } => {
+                self.document_id.clone_from(document_id);
                 self.document.replace(document.clone());
             }
             DocumentPublished {
                 document_id,
                 updated_document,
             } => {
-                self.document_id = document_id.clone();
-                // FIX THIS
-                self.document.replace(CoreDocument::from(updated_document.clone()));
+                self.document_id.clone_from(document_id);
+                self.document.replace(updated_document.clone());
             }
         }
     }

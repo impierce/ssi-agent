@@ -1,6 +1,6 @@
 use super::{command::ServiceCommand, error::ServiceError, event::ServiceEvent};
 use crate::services::IdentityServices;
-use agent_shared::config::{config, get_preferred_signing_algorithm};
+use agent_shared::config::config;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::Aggregate;
@@ -14,11 +14,11 @@ use identity_credential::{
 };
 use identity_did::DIDUrl;
 use identity_document::service::{Service as DocumentService, ServiceEndpoint};
-use jsonwebtoken::Header;
+use jsonwebtoken::{Algorithm, Header};
 use oid4vc_core::Sign as _;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::Arc;
+use std::{str::FromStr as _, sync::Arc};
 use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -86,75 +86,73 @@ impl Aggregate for Service {
                     (issuance_date, expiration_date)
                 };
 
-                // TODO: make sure that multiple signing algorithms are supported.
-                let signing_algorithm = get_preferred_signing_algorithm();
+                let mut linked_dids = vec![];
 
-                let mut messages = vec![];
-
-                for document in documents.into_iter() {
-                    let core_document = document.document.expect("FIX THIS");
+                // Iterate through all the documents
+                for core_document in documents.into_iter() {
                     let subject_did = core_document.id().clone();
 
-                    // TODO: Once we support multiple algorithms we cannot simply pick the first (and only) verification
-                    // method in the Document.
-                    let fragment = core_document
-                        .verification_method()
-                        .first()
-                        .expect("FIX THIS")
-                        .id()
-                        .fragment()
-                        .expect("FIX THIS")
-                        .to_string();
+                    // For each document, create a new linked DID JWT token for every Verification Method it contains.
+                    for verification_method in core_document.verification_method().iter() {
+                        let verification_method_id = verification_method.id();
+                        let fragment = verification_method_id
+                            .fragment()
+                            .ok_or_else(|| MissingVerificationMethodFragment(verification_method_id.to_string()))?;
+                        let alg = verification_method
+                            .data()
+                            .public_key_jwk()
+                            .and_then(|jwk| jwk.alg())
+                            .ok_or_else(|| MissingVerificationMethodAlgorithm(verification_method_id.to_string()))?;
+                        let algorithm = Algorithm::from_str(alg)
+                            .map_err(|_| UnsupportedVerificationMethodAlgorithm(alg.to_string()))?;
 
-                    let domain_linkage_credential = DomainLinkageCredentialBuilder::new()
-                        .issuer(subject_did.clone())
-                        .origin(origin.clone())
-                        .issuance_date(issuance_date)
-                        .expiration_date(expiration_date)
-                        .build()
-                        .map_err(|err| DomainLinkageCredentialBuilderError(err.to_string()))?
-                        .serialize_jwt(Default::default())
-                        .map_err(|err| SerializationError(err.to_string()))?;
+                        let domain_linkage_credential = DomainLinkageCredentialBuilder::new()
+                            .issuer(subject_did.clone())
+                            .origin(origin.clone())
+                            .issuance_date(issuance_date)
+                            .expiration_date(expiration_date)
+                            .build()
+                            .map_err(|err| DomainLinkageCredentialBuilderError(err.to_string()))?
+                            .serialize_jwt(Default::default())
+                            .map_err(|err| SerializationError(err.to_string()))?;
 
-                    // Compose JWT
-                    let header = Header {
-                        alg: signing_algorithm.clone(),
-                        typ: None,
-                        // TODO: make dynamic
-                        kid: Some(format!("{subject_did}#{fragment}")),
-                        ..Default::default()
-                    };
+                        // Compose JWT
+                        let header = Header {
+                            alg: algorithm,
+                            typ: None,
+                            kid: Some(format!("{subject_did}#{fragment}")),
+                            ..Default::default()
+                        };
 
-                    let message = [
-                        URL_SAFE_NO_PAD.encode(
-                            header
-                                .to_json_vec()
-                                .map_err(|err| SerializationError(err.to_string()))?,
-                        ),
-                        URL_SAFE_NO_PAD.encode(domain_linkage_credential.as_bytes()),
-                    ]
-                    .join(".");
+                        let linked_did = [
+                            URL_SAFE_NO_PAD.encode(
+                                header
+                                    .to_json_vec()
+                                    .map_err(|err| SerializationError(err.to_string()))?,
+                            ),
+                            URL_SAFE_NO_PAD.encode(domain_linkage_credential.as_bytes()),
+                        ]
+                        .join(".");
 
-                    let proof_value = subject
-                        .sign(message.as_str(), "FIX THIS", signing_algorithm)
-                        .await
-                        .map_err(|err| SigningError(err.to_string()))?;
-                    let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
-                    let message = [message, signature].join(".");
+                        let proof_value = subject
+                            .sign(linked_did.as_str(), "placeholder", algorithm)
+                            .await
+                            .map_err(|err| SigningError(err.to_string()))?;
+                        let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
+                        let linked_did = [linked_did, signature].join(".");
 
-                    messages.push(Jwt::from(message))
+                        linked_dids.push(Jwt::from(linked_did))
+                    }
                 }
 
-                if messages.is_empty() {
-                    panic!("FIX THISS")
-                    // return Err(NoMessagesError);
+                if linked_dids.is_empty() {
+                    return Err(EmptyLinkedDidsError);
                 }
 
-                let domain_linkage_configuration = DomainLinkageConfiguration::new(messages);
+                let domain_linkage_configuration = DomainLinkageConfiguration::new(linked_dids);
 
-                info!("Configuration Resource >>: {domain_linkage_configuration:#}");
+                info!("Configuration Resource: {domain_linkage_configuration:#}");
 
-                let type_ = "LinkedDomains".to_string();
                 let service_endpoint = ServiceEndpoint::from_json_value(json!({
                     "origins": [origin]
                 }))
@@ -162,11 +160,12 @@ impl Aggregate for Service {
 
                 // Create a new service.
                 let service = DocumentService::builder(Default::default())
-                    .id(
-                        format!("did:place:holder#{service_id}").parse::<DIDUrl>().unwrap(),
-                        // .map_err(|err| InvalidUrlError(err.to_string()))?
-                    )
-                    .type_(type_)
+                    // This service is DID method-agnostic. When added to an enabled DID Document,
+                    // its placeholder value is replaced with the appropriate DID method-specific identifier.
+                    .id(format!("did:place:holder#{service_id}")
+                        .parse::<DIDUrl>()
+                        .map_err(|err| InvalidDidError(err.to_string()))?)
+                    .type_("LinkedDomains")
                     .service_endpoint(service_endpoint)
                     .build()
                     .expect("Failed to create DID Configuration Resource");
@@ -188,11 +187,9 @@ impl Aggregate for Service {
                 service_id,
                 presentation_ids,
             } => {
-                let origin = config().url.origin();
-                let origin = identity_core::common::Url::parse(origin.ascii_serialization())
+                let origin = identity_core::common::Url::parse(config().url.origin().ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
-                let type_ = "LinkedVerifiablePresentation".to_string();
                 let service_endpoint = ServiceEndpoint::from(OrderedSet::from_iter(
                     presentation_ids
                         .clone()
@@ -208,11 +205,12 @@ impl Aggregate for Service {
 
                 // Create a new service.
                 let service = DocumentService::builder(Default::default())
-                    .id(
-                        format!("did:place:holder#{service_id}").parse::<DIDUrl>().unwrap(),
-                        // .map_err(|err| InvalidUrlError(err.to_string()))?
-                    )
-                    .type_(type_)
+                    // This service is DID method-agnostic. When added to an enabled DID Document,
+                    // its placeholder value is replaced with the appropriate DID method-specific identifier.
+                    .id(format!("did:place:holder#{service_id}")
+                        .parse::<DIDUrl>()
+                        .map_err(|err| InvalidDidError(err.to_string()))?)
+                    .type_("LinkedVerifiablePresentation")
                     .service_endpoint(service_endpoint)
                     .build()
                     .expect("Failed to create DID Configuration Resource");
@@ -265,60 +263,62 @@ impl Aggregate for Service {
     }
 }
 
-// #[cfg(test)]
-// pub mod service_tests {
-//     use agent_shared::config::set_config;
-//     use identity_document::service::Service as DocumentService;
+#[cfg(test)]
+pub mod service_tests {
+    use agent_shared::config::set_config;
+    use identity_document::service::Service as DocumentService;
 
-//     use super::test_utils::*;
-//     use super::*;
-//     use cqrs_es::test::TestFramework;
-//     use rstest::rstest;
+    use super::test_utils::*;
+    use super::*;
+    use cqrs_es::test::TestFramework;
+    use rstest::rstest;
 
-//     type ServiceTestFramework = TestFramework<Service>;
+    type ServiceTestFramework = TestFramework<Service>;
 
-//     #[rstest]
-//     #[serial_test::serial]
-//     async fn test_create_domain_linkage_service(
-//         domain_linkage_service_id: String,
-//         domain_linkage_service: DocumentService,
-//         domain_linkage_resource: ServiceResource,
-//     ) {
-//         set_config().set_preferred_did_method(agent_shared::config::SupportedDidMethod::Web);
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_domain_linkage_service(
+        domain_linkage_service_id: String,
+        domain_linkage_service: DocumentService,
+        domain_linkage_resource: ServiceResource,
+    ) {
+        set_config().set_preferred_did_method(agent_shared::config::SupportedDidMethod::Web);
 
-//         ServiceTestFramework::with(IdentityServices::default())
-//             .given_no_previous_events()
-//             .when(ServiceCommand::CreateDomainLinkageService {
-//                 service_id: domain_linkage_service_id.clone(),
-//             })
-//             .then_expect_events(vec![ServiceEvent::DomainLinkageServiceCreated {
-//                 service_id: domain_linkage_service_id,
-//                 service: domain_linkage_service,
-//                 resource: domain_linkage_resource,
-//             }])
-//     }
+        ServiceTestFramework::with(IdentityServices::default())
+            .given_no_previous_events()
+            .when(ServiceCommand::CreateDomainLinkageService {
+                service_id: domain_linkage_service_id.clone(),
+                documents: vec![],
+            })
+            .then_expect_events(vec![ServiceEvent::DomainLinkageServiceCreated {
+                service_id: domain_linkage_service_id,
+                status: Status::Created,
+                service: domain_linkage_service,
+                resource: domain_linkage_resource,
+            }])
+    }
 
-//     #[rstest]
-//     #[serial_test::serial]
-//     async fn test_create_linked_verifiable_presentation_service(
-//         linked_verifiable_presentation_service_id: String,
-//         linked_verifiable_presentation_service: DocumentService,
-//     ) {
-//         set_config().set_preferred_did_method(agent_shared::config::SupportedDidMethod::Web);
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_linked_verifiable_presentation_service(
+        linked_verifiable_presentation_service_id: String,
+        linked_verifiable_presentation_service: DocumentService,
+    ) {
+        set_config().set_preferred_did_method(agent_shared::config::SupportedDidMethod::Web);
 
-//         ServiceTestFramework::with(IdentityServices::default())
-//             .given_no_previous_events()
-//             .when(ServiceCommand::CreateLinkedVerifiablePresentationService {
-//                 service_id: linked_verifiable_presentation_service_id.clone(),
-//                 presentation_ids: vec!["presentation-1".to_string()],
-//             })
-//             .then_expect_events(vec![ServiceEvent::LinkedVerifiablePresentationServiceCreated {
-//                 service_id: linked_verifiable_presentation_service_id,
-//                 presentation_ids: vec!["presentation-1".to_string()],
-//                 service: linked_verifiable_presentation_service,
-//             }])
-//     }
-// }
+        ServiceTestFramework::with(IdentityServices::default())
+            .given_no_previous_events()
+            .when(ServiceCommand::CreateLinkedVerifiablePresentationService {
+                service_id: linked_verifiable_presentation_service_id.clone(),
+                presentation_ids: vec!["presentation-1".to_string()],
+            })
+            .then_expect_events(vec![ServiceEvent::LinkedVerifiablePresentationServiceCreated {
+                service_id: linked_verifiable_presentation_service_id,
+                presentation_ids: vec!["presentation-1".to_string()],
+                service: linked_verifiable_presentation_service,
+            }])
+    }
+}
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {

@@ -1,5 +1,6 @@
 use crate::{stronghold_storage, ED25519_KEY_ID, ES256_KEY_ID};
-use agent_shared::config::get_preferred_signing_algorithm;
+use agent_shared::config::SupportedDidMethod;
+use anyhow::anyhow;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager_consumer::resolver::Resolver;
@@ -8,6 +9,7 @@ use identity_iota::storage::JwkStorage;
 use identity_iota::{did::DID, document::DIDUrlQuery, storage::KeyId, verification::jwk::JwkParams};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -29,18 +31,22 @@ impl Subject {
 #[async_trait]
 impl Verify for Subject {
     async fn public_key(&self, did_url: &str) -> anyhow::Result<Vec<u8>> {
-        let did_url = identity_iota::did::DIDUrl::parse(did_url).unwrap();
+        let did_url =
+            identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
 
         let resolver = Resolver::new().await;
 
-        let document = resolver.resolve(did_url.did().as_str()).await.unwrap();
+        let document = resolver
+            .resolve(did_url.did().as_str())
+            .await
+            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: {did_url}, error: {err}"))?;
 
         let verification_method = document
             .resolve_method(
                 DIDUrlQuery::from(&did_url),
                 Some(identity_iota::verification::MethodScope::VerificationMethod),
             )
-            .unwrap();
+            .ok_or(anyhow!("Failed to resolve verification method for DID URL: {did_url}"))?;
 
         // Try decode from `MethodData` directly, else use public JWK params.
         verification_method.data().try_decode().or_else(|_| {
@@ -66,53 +72,43 @@ impl Verify for Subject {
                     }
                     _ => None,
                 })
-                .ok_or(anyhow::anyhow!("Failed to decode public key for DID URL: {}", did_url))
+                .ok_or(anyhow!("Failed to decode public key for DID URL: {}", did_url))
         })
     }
 }
 
 #[async_trait]
 impl Sign for Subject {
-    async fn key_id(&self, subject_syntax_type: &str, _algorithm: Algorithm) -> Option<String> {
-        let algorithm = agent_shared::config::get_preferred_signing_algorithm();
+    async fn key_id(&self, subject_syntax_type: &str, algorithm: Algorithm) -> Option<String> {
+        let method = SupportedDidMethod::from_str(subject_syntax_type).ok()?;
 
         self.did_methods
             .lock()
             .await
-            .get(subject_syntax_type)
+            .get(&method)
             .get(&algorithm)
-            .verification_method_id
-            .clone()
+            .and_then(|document_data| document_data.verification_method_id.clone())
     }
 
-    async fn sign(&self, message: &str, _subject_syntax_type: &str, _algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
-        let (key_id, public_key) = match get_preferred_signing_algorithm() {
+    async fn sign(&self, message: &str, _subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
+        let (key_id, public_key) = match algorithm {
             Algorithm::ES256 => {
                 let key_id = KeyId::new(ES256_KEY_ID);
-                let public_key = self
-                    .stronghold_storage
-                    .get_es256_public_key(&key_id)
-                    .await
-                    .expect("failed to get public key");
+                let public_key = self.stronghold_storage.get_es256_public_key(&key_id).await?;
                 (key_id, public_key)
             }
             Algorithm::EdDSA => {
                 let key_id = KeyId::new(ED25519_KEY_ID);
-                let public_key = self
-                    .stronghold_storage
-                    .get_ed25519_public_key(&key_id)
-                    .await
-                    .expect("failed to get public key");
+                let public_key = self.stronghold_storage.get_ed25519_public_key(&key_id).await?;
                 (key_id, public_key)
             }
-            _ => panic!("FIX THIS"),
+            _ => return Err(anyhow!("Unsupported algorithm")),
         };
 
         let signature = self
             .stronghold_storage
             .sign(&key_id, message.as_bytes(), &public_key)
-            .await
-            .expect("failed to sign data");
+            .await?;
 
         Ok(signature)
     }
@@ -124,15 +120,17 @@ impl Sign for Subject {
 
 #[async_trait]
 impl oid4vc_core::Subject for Subject {
-    async fn identifier(&self, subject_syntax_type: &str, _algorithm: Algorithm) -> anyhow::Result<String> {
-        let algorithm = agent_shared::config::get_preferred_signing_algorithm();
+    async fn identifier(&self, subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<String> {
+        let method = SupportedDidMethod::from_str(subject_syntax_type)
+            .map_err(|e| anyhow!("Failed to parse SupportedDidMethod from string: {}", e))?;
 
         let did = self
             .did_methods
             .lock()
             .await
-            .get(subject_syntax_type)
+            .get(&method)
             .get(&algorithm)
+            .ok_or(anyhow!("Failed to get DID for method: {method}"))?
             .did
             .clone();
 
@@ -140,6 +138,7 @@ impl oid4vc_core::Subject for Subject {
     }
 }
 
+/// Stores all the DIDs and their associated Verification Method IDs for each (enabled) DID method.
 #[derive(Default)]
 pub struct DidMethods {
     pub did_iota: Algorithms,
@@ -151,39 +150,41 @@ pub struct DidMethods {
 }
 
 impl DidMethods {
-    pub fn insert(&mut self, method: &str, algorithms: Algorithms) {
+    pub fn insert(&mut self, method: &SupportedDidMethod, algorithms: Algorithms) {
         match method {
-            "did:iota" => self.did_iota = algorithms,
-            "did:iota:smr" => self.did_iota_smr = algorithms,
-            "did:iota:rms" => self.did_iota_rms = algorithms,
-            "did:jwk" => self.did_jwk = algorithms,
-            "did:key" => self.did_key = algorithms,
-            "did:web" => self.did_web = algorithms,
-            _ => panic!("FIX THIS"),
+            SupportedDidMethod::Iota => self.did_iota = algorithms,
+            SupportedDidMethod::IotaSmr => self.did_iota_smr = algorithms,
+            SupportedDidMethod::IotaRms => self.did_iota_rms = algorithms,
+            SupportedDidMethod::Jwk => self.did_jwk = algorithms,
+            SupportedDidMethod::Key => self.did_key = algorithms,
+            SupportedDidMethod::Web => self.did_web = algorithms,
         }
     }
 
-    pub fn get(&self, method: &str) -> &Algorithms {
+    pub fn get(&self, method: &SupportedDidMethod) -> &Algorithms {
         match method {
-            "did:iota" => &self.did_iota,
-            "did:iota:smr" => &self.did_iota_smr,
-            "did:iota:rms" => &self.did_iota_rms,
-            "did:jwk" => &self.did_jwk,
-            "did:key" => &self.did_key,
-            "did:web" => &self.did_web,
-            _ => panic!("FIX THIS"),
+            SupportedDidMethod::Iota => &self.did_iota,
+            SupportedDidMethod::IotaSmr => &self.did_iota_smr,
+            SupportedDidMethod::IotaRms => &self.did_iota_rms,
+            SupportedDidMethod::Jwk => &self.did_jwk,
+            SupportedDidMethod::Key => &self.did_key,
+            SupportedDidMethod::Web => &self.did_web,
         }
     }
 
-    pub fn insert_verification_method_id(&mut self, method: &str, algorithm: &str, verification_method_id: &str) {
+    pub fn insert_verification_method_id(
+        &mut self,
+        method: &SupportedDidMethod,
+        algorithm: &str,
+        verification_method_id: &str,
+    ) {
         let algorithms = match method {
-            "did:iota" => &mut self.did_iota,
-            "did:iota:smr" => &mut self.did_iota_smr,
-            "did:iota:rms" => &mut self.did_iota_rms,
-            "did:jwk" => &mut self.did_jwk,
-            "did:key" => &mut self.did_key,
-            "did:web" => &mut self.did_web,
-            _ => panic!("FIX THIS"),
+            SupportedDidMethod::Iota => &mut self.did_iota,
+            SupportedDidMethod::IotaSmr => &mut self.did_iota_smr,
+            SupportedDidMethod::IotaRms => &mut self.did_iota_rms,
+            SupportedDidMethod::Jwk => &mut self.did_jwk,
+            SupportedDidMethod::Key => &mut self.did_key,
+            SupportedDidMethod::Web => &mut self.did_web,
         };
 
         match algorithm {
@@ -197,7 +198,7 @@ impl DidMethods {
                     document_data.verification_method_id = Some(verification_method_id.to_string());
                 }
             }
-            _ => panic!("FIX THIS"),
+            _ => {}
         }
     }
 }
@@ -209,11 +210,11 @@ pub struct Algorithms {
 }
 
 impl Algorithms {
-    pub fn get(&self, algorithm: &Algorithm) -> &DocumentData {
+    pub fn get(&self, algorithm: &Algorithm) -> Option<&DocumentData> {
         match algorithm {
-            Algorithm::ES256 => self.es256.as_ref().unwrap(),
-            Algorithm::EdDSA => self.eddsa.as_ref().unwrap(),
-            _ => panic!("FIX THIS"),
+            Algorithm::ES256 => self.es256.as_ref(),
+            Algorithm::EdDSA => self.eddsa.as_ref(),
+            _ => None,
         }
     }
 }
@@ -234,6 +235,7 @@ mod tests {
 
     lazy_static::lazy_static! {
         static ref SECRET_MANAGER_CONFIG: SecretManagerConfig = SecretManagerConfig {
+            stronghold_path: "../agent_secret_manager/tests/res/all_slots.stronghold".to_string(),
             stronghold_password: "sup3rSecr3t".to_string(),
         };
     }

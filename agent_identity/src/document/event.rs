@@ -1,8 +1,7 @@
+use super::aggregate::Status;
 use cqrs_es::DomainEvent;
 use identity_document::document::CoreDocument;
 use serde::{Deserialize, Serialize};
-
-use super::aggregate::Status;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum DocumentEvent {
@@ -20,9 +19,11 @@ pub enum DocumentEvent {
         status: Status,
     },
     ServiceAdded {
+        document_id: String,
         document: CoreDocument,
     },
     ServiceRemoved {
+        document_id: String,
         document: CoreDocument,
     },
     DocumentPublished {

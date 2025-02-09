@@ -6,6 +6,7 @@ use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
 use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use serde_with::{skip_serializing_none, SerializeDisplay};
 use std::{
     collections::HashMap,
@@ -65,12 +66,14 @@ pub struct EventStorePostgresConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct SecretManagerConfig {
+    pub stronghold_path: String,
     pub stronghold_password: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct LedgerSponsoringService {
     pub url: Url,
+    // TODO: Remove this once the ledger sponsoring service does not require authorization anymore.
     pub authorization: String,
     pub access_key: String,
 }
@@ -280,6 +283,21 @@ impl SupportedDidMethod {
     }
 }
 
+static MAINNET_URL: &str = "https://api.stardust-mainnet.iotaledger.net";
+static SHIMMER_URL: &str = "https://api.shimmer.network";
+static TESTNET_URL: &str = "https://api.testnet.shimmer.network";
+
+impl SupportedDidMethod {
+    pub fn api_endpoint(&self) -> Option<&str> {
+        match self {
+            SupportedDidMethod::Iota => Some(MAINNET_URL),
+            SupportedDidMethod::IotaSmr => Some(SHIMMER_URL),
+            SupportedDidMethod::IotaRms => Some(TESTNET_URL),
+            SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
+        }
+    }
+}
+
 impl From<SupportedDidMethod> for SubjectSyntaxType {
     fn from(val: SupportedDidMethod) -> Self {
         SubjectSyntaxType::try_from(val.to_string().as_str()).expect("conversion into `SubjectSyntaxType` failed")
@@ -413,10 +431,12 @@ pub fn get_all_enabled_signing_algorithms_supported() -> Vec<Algorithm> {
         .signing_algorithms_supported
         .iter()
         .filter(|(_, v)| v.enabled)
-        .map(|(k, _)| k.clone())
+        .map(|(k, _)| *k)
         .collect();
 
-    // signing_algorithms_supported.sort();
+    // `jsonwebtoken::Algorithm` does not implement `Display` so we need to serialize it through `serde_json` first in
+    // order to sort.
+    signing_algorithms_supported.sort_by(|a, b| json!(a).as_str().cmp(&json!(b).as_str()));
 
     signing_algorithms_supported
 }

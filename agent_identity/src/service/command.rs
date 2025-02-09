@@ -1,4 +1,4 @@
-use crate::document::aggregate::Document;
+use identity_iota::document::CoreDocument;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -6,7 +6,7 @@ use serde::Deserialize;
 pub enum ServiceCommand {
     CreateDomainLinkageService {
         service_id: String,
-        documents: Vec<Document>,
+        documents: Vec<CoreDocument>,
     },
     DeleteDomainLinkageService {
         service_id: String,

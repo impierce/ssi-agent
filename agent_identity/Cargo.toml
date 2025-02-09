@@ -36,7 +36,7 @@ urlencoding = "2.1"
 
 # `test_utils` dependencies
 rstest = { workspace = true, optional = true }
-tokio = { workspace = true }
+tokio = { workspace = true, optional = true }
 
 [dev-dependencies]
 agent_api_rest = { path = "../agent_api_rest" }
@@ -62,5 +62,5 @@ async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 [features]
 test_utils = [
     "dep:rstest",
-    # "dep:tokio",
+    "dep:tokio",
 ]

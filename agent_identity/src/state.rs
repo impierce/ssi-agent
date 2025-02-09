@@ -138,12 +138,12 @@ pub async fn initialize(state: &IdentityState) {
                     Ok(Some(_document_exists)) => {
                         if *enabled {
                             DocumentCommand::SetStatus {
-                                document_id: document_id.clone(),
+                                did_method: did_method.clone(),
                                 status: Status::SignAndValidate,
                             }
                         } else {
                             DocumentCommand::SetStatus {
-                                document_id: document_id.clone(),
+                                did_method: did_method.clone(),
                                 status: Status::Disabled,
                             }
                         }
@@ -152,7 +152,7 @@ pub async fn initialize(state: &IdentityState) {
                     _document_does_not_exist => {
                         if *enabled {
                             DocumentCommand::CreateDocument {
-                                document_id: document_id.clone(),
+                                did_method: did_method.clone(),
                             }
                         } else {
                             return Err(format!("DID Document for `{did_method}` does not exist"));
@@ -174,7 +174,7 @@ pub async fn initialize(state: &IdentityState) {
                 let public_key_jwks = vec![];
 
                 let command = DocumentCommand::SetPublicKeyJwks {
-                    document_id: document_id.clone(),
+                    did_method: did_method.clone(),
                     public_key_jwks,
                 };
 
@@ -204,7 +204,13 @@ pub async fn initialize(state: &IdentityState) {
     let enabled_updateable_documents = documents
         .clone()
         .into_iter()
-        .filter(|document| document.status != Status::Disabled)
+        .filter_map(|document| {
+            if document.status != Status::Disabled {
+                document.document
+            } else {
+                None
+            }
+        })
         .collect::<Vec<_>>();
 
     if config().domain_linkage_enabled && !enabled_updateable_documents.is_empty() {
@@ -251,7 +257,7 @@ pub async fn initialize(state: &IdentityState) {
                                         service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
                                     }
                                 }
-                                Status::SignAndValidate | Status::ValidateOnly => {
+                                Status::SignAndValidate => {
                                     info!("II: Adding service: {document_id}");
                                     DocumentCommand::AddService {
                                         service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
@@ -330,7 +336,7 @@ pub async fn initialize(state: &IdentityState) {
 
                 if did_method.is_decentrally_hosted() {
                     let command = DocumentCommand::PublishDocument {
-                        document_id: document_id.clone(),
+                        did_method: did_method.clone(),
                     };
 
                     info!("Publishing document for `{}`", did_method);
