@@ -12,10 +12,7 @@ use agent_shared::config::{config, SupportedDidMethod, ToggleOptions};
 use agent_shared::handlers::command_handler;
 use agent_shared::{application_state::CommandHandler, handlers::query_handler};
 use cqrs_es::persist::ViewRepository;
-use did_manager::StrongholdExtStorage;
 use futures::future::{join_all, try_join_all};
-use identity_iota::storage::{KeyId, KeyType};
-use identity_iota::verification::jws::JwsAlgorithm;
 use iota_sdk::client::api::GetAddressesOptions;
 use iota_sdk::client::secret::SecretManager;
 use iota_sdk::client::Client;
@@ -105,21 +102,6 @@ pub async fn get_address(client: &Client, secret_manager: &SecretManager) -> any
         .await?[0];
 
     Ok(address)
-}
-use identity_iota::storage::JwkStorage;
-
-pub async fn generate(
-    stronghold_ext_storage: &StrongholdExtStorage,
-    key_type: KeyType,
-    alg: JwsAlgorithm,
-) -> Result<KeyId, ()> {
-    let jwk_gen_output = stronghold_ext_storage.generate(key_type.clone(), alg).await.unwrap();
-    info!(
-        "Generated new {:?} key with key ID {:?}",
-        &key_type.as_str(),
-        &jwk_gen_output.key_id.as_str()
-    );
-    Ok(jwk_gen_output.key_id)
 }
 
 /// The unique identifier for the linked domain service.

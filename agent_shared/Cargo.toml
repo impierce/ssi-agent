@@ -9,7 +9,6 @@ async-trait.workspace = true
 chrono.workspace = true
 config = { version = "0.14" }
 cqrs-es.workspace = true
-did_manager.workspace = true
 dotenvy = { version = "0.15" }
 http-serde = "2.1"
 # TODO: replace all identity_* with identity_iota?

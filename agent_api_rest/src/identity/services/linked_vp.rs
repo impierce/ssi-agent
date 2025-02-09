@@ -3,13 +3,13 @@ use agent_identity::{
     service::{aggregate::Service, command::ServiceCommand},
     state::IdentityState,
 };
+use agent_shared::config::SupportedDidMethod;
 use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
     Json,
 };
-use did_manager::DidMethod;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -56,14 +56,14 @@ pub(crate) async fn linked_vp(State(state): State<IdentityState>, Json(payload):
         service: linked_verifiable_presentation_service,
     };
 
-    if command_handler(&DidMethod::Web.to_string(), &state.command.document, command)
+    if command_handler(&SupportedDidMethod::Web.to_string(), &state.command.document, command)
         .await
         .is_err()
     {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    match query_handler(&DidMethod::Web.to_string(), &state.query.document).await {
+    match query_handler(&SupportedDidMethod::Web.to_string(), &state.query.document).await {
         Ok(Some(document)) => (StatusCode::OK, Json(document)).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }

@@ -2,7 +2,8 @@ use crate::{stronghold_storage, ED25519_KEY_ID, ES256_KEY_ID};
 use agent_shared::config::get_preferred_signing_algorithm;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use did_manager::{Resolver, StrongholdExtStorage};
+use did_manager_consumer::resolver::Resolver;
+use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use identity_iota::storage::JwkStorage;
 use identity_iota::{did::DID, document::DIDUrlQuery, storage::KeyId, verification::jwk::JwkParams};
 use jsonwebtoken::Algorithm;
@@ -224,8 +225,6 @@ pub struct DocumentData {
 
 #[cfg(test)]
 mod tests {
-    use crate::stronghold_storage;
-
     use super::*;
     use agent_shared::config::{set_config, SecretManagerConfig};
     use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED, ED25519};

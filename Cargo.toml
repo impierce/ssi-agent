@@ -19,9 +19,6 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
-did_manager = { git = "https://git@github.com/impierce/did-manager.git", rev = "725af22" }
-# did_manager = { git = "https://git@github.com/impierce/did-manager.git", branch = "build/bump-iota-deps" }
-# did_manager = { path = "../did-manager" }
 siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "c2de2e7" }
 oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "c2de2e7" }
 oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "c2de2e7" }

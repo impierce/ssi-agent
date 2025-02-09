@@ -73,7 +73,6 @@ dependencies = [
  "axum 0.7.5",
  "axum-auth 0.7.0",
  "axum-macros",
- "did_manager",
  "futures",
  "http-api-problem",
  "hyper 1.4.1",
@@ -163,7 +162,6 @@ dependencies = [
  "axum 0.7.5",
  "base64 0.22.1",
  "cqrs-es",
- "did_manager",
  "identity_core",
  "identity_credential",
  "jsonwebtoken",
@@ -204,7 +202,6 @@ dependencies = [
  "base64 0.22.1",
  "cqrs-es",
  "derivative",
- "did_manager",
  "futures",
  "identity_core",
  "identity_credential",
@@ -247,7 +244,6 @@ dependencies = [
  "chrono",
  "cqrs-es",
  "derivative",
- "did_manager",
  "identity_core",
  "identity_credential",
  "jsonwebtoken",
@@ -275,10 +271,11 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.1",
- "did_manager",
+ "consumer",
  "futures",
  "identity_iota",
  "identity_stronghold",
+ "identity_stronghold_ext",
  "iota-sdk",
  "iota_stronghold",
  "jsonwebtoken",
@@ -287,6 +284,7 @@ dependencies = [
  "oid4vc-core",
  "p256 0.13.2",
  "ring",
+ "serde",
  "serde_json",
  "tokio",
  "url",
@@ -300,7 +298,6 @@ dependencies = [
  "chrono",
  "config",
  "cqrs-es",
- "did_manager",
  "dotenvy",
  "http-serde",
  "identity_iota",
@@ -350,7 +347,6 @@ dependencies = [
  "async-trait",
  "chrono",
  "cqrs-es",
- "did_manager",
  "futures",
  "identity_core",
  "identity_credential",
@@ -1453,7 +1449,7 @@ checksum = "f7144d30dcf0fafbce74250a3963025d8d52177934239851c917d29f1df280c2"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=725af22#725af22455ec172255b4fb52f233abf8e6ff91fd"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=5a5c124#5a5c124f315585934837f84a3d476404291fabc6"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -2019,7 +2015,7 @@ dependencies = [
 [[package]]
 name = "did_iota"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=725af22#725af22455ec172255b4fb52f233abf8e6ff91fd"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=5a5c124#5a5c124f315585934837f84a3d476404291fabc6"
 dependencies = [
  "identity_iota",
  "identity_stronghold",
@@ -2032,7 +2028,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=725af22#725af22455ec172255b4fb52f233abf8e6ff91fd"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=5a5c124#5a5c124f315585934837f84a3d476404291fabc6"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -2049,7 +2045,7 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=725af22#725af22455ec172255b4fb52f233abf8e6ff91fd"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=5a5c124#5a5c124f315585934837f84a3d476404291fabc6"
 dependencies = [
  "did-method-key",
  "identity_iota",
@@ -2062,16 +2058,6 @@ dependencies = [
  "ssi-dids 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ssi-jwk 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio",
-]
-
-[[package]]
-name = "did_manager"
-version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=725af22#725af22455ec172255b4fb52f233abf8e6ff91fd"
-dependencies = [
- "consumer",
- "identity_stronghold_ext",
- "producer",
 ]
 
 [[package]]
@@ -2106,7 +2092,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=725af22#725af22455ec172255b4fb52f233abf8e6ff91fd"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=5a5c124#5a5c124f315585934837f84a3d476404291fabc6"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -3517,7 +3503,7 @@ dependencies = [
 [[package]]
 name = "identity_stronghold_ext"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=725af22#725af22455ec172255b4fb52f233abf8e6ff91fd"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=5a5c124#5a5c124f315585934837f84a3d476404291fabc6"
 dependencies = [
  "async-trait",
  "elliptic-curve 0.13.8",
@@ -3987,9 +3973,9 @@ dependencies = [
 
 [[package]]
 name = "json-number"
-version = "0.4.8"
+version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c54d19ae7e6fc83aafa649707655a9a0ac956a0f62793bde4cfd193b0693fdf"
+checksum = "66994b2bac615128d07a1e4527ad29e98b004dd1a1769e7b8fbc1173ccf43006"
 dependencies = [
  "lexical",
  "ryu-js",
@@ -4195,18 +4181,18 @@ dependencies = [
 
 [[package]]
 name = "lexical"
-version = "6.1.1"
+version = "7.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7aefb36fd43fef7003334742cbf77b243fcd36418a1d1bdd480d613a67968f6"
+checksum = "70ed980ff02623721dc334b9105150b66d0e1f246a92ab5a2eca0335d54c48f6"
 dependencies = [
  "lexical-core",
 ]
 
 [[package]]
 name = "lexical-core"
-version = "0.8.5"
+version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2cde5de06e8d4c2faabc400238f9ae1c74d5412d03a7bd067645ccbc47070e46"
+checksum = "b765c31809609075565a70b4b71402281283aeda7ecaf4818ac14a7b2ade8958"
 dependencies = [
  "lexical-parse-float",
  "lexical-parse-integer",
@@ -4217,9 +4203,9 @@ dependencies = [
 
 [[package]]
 name = "lexical-parse-float"
-version = "0.8.5"
+version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "683b3a5ebd0130b8fb52ba0bdc718cc56815b6a097e28ae5a6997d0ad17dc05f"
+checksum = "de6f9cb01fb0b08060209a057c048fcbab8717b4c1ecd2eac66ebfe39a65b0f2"
 dependencies = [
  "lexical-parse-integer",
  "lexical-util",
@@ -4228,9 +4214,9 @@ dependencies = [
 
 [[package]]
 name = "lexical-parse-integer"
-version = "0.8.6"
+version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d0994485ed0c312f6d965766754ea177d07f9c00c9b82a5ee62ed5b47945ee9"
+checksum = "72207aae22fc0a121ba7b6d479e42cbfea549af1479c3f3a4f12c70dd66df12e"
 dependencies = [
  "lexical-util",
  "static_assertions",
@@ -4238,18 +4224,18 @@ dependencies = [
 
 [[package]]
 name = "lexical-util"
-version = "0.8.5"
+version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5255b9ff16ff898710eb9eb63cb39248ea8a5bb036bea8085b1a767ff6c4e3fc"
+checksum = "5a82e24bf537fd24c177ffbbdc6ebcc8d54732c35b50a3f28cc3f4e4c949a0b3"
 dependencies = [
  "static_assertions",
 ]
 
 [[package]]
 name = "lexical-write-float"
-version = "0.8.5"
+version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "accabaa1c4581f05a3923d1b4cfd124c329352288b7b9da09e766b0668116862"
+checksum = "c5afc668a27f460fb45a81a757b6bf2f43c2d7e30cb5a2dcd3abf294c78d62bd"
 dependencies = [
  "lexical-util",
  "lexical-write-integer",
@@ -4258,9 +4244,9 @@ dependencies = [
 
 [[package]]
 name = "lexical-write-integer"
-version = "0.8.5"
+version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1b6f3d1f4422866b68192d62f77bc5c700bee84f3069f2469d7bc8c77852446"
+checksum = "629ddff1a914a836fb245616a7888b62903aae58fa771e1d83943035efa0f978"
 dependencies = [
  "lexical-util",
  "static_assertions",
@@ -5492,28 +5478,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "producer"
-version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=725af22#725af22455ec172255b4fb52f233abf8e6ff91fd"
-dependencies = [
- "did_iota",
- "did_jwk",
- "did_key",
- "did_web",
- "identity_iota",
- "identity_storage",
- "identity_stronghold",
- "identity_stronghold_ext",
- "iota-sdk",
- "iota_stronghold",
- "log",
- "serde",
- "serde_json",
- "shared",
- "url",
-]
-
-[[package]]
 name = "psm"
 version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6656,7 +6620,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/did-manager.git?rev=725af22#725af22455ec172255b4fb52f233abf8e6ff91fd"
+source = "git+https://git@github.com/impierce/did-manager.git?rev=5a5c124#5a5c124f315585934837f84a3d476404291fabc6"
 dependencies = [
  "identity_iota",
  "identity_storage",
@@ -7077,13 +7041,13 @@ dependencies = [
 [[package]]
 name = "ssi-contexts"
 version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3009b82cbae3d88a76f15460fb5fb3f30a1673eb0359ac6917ffaa3c57f7164"
+source = "git+https://github.com/impierce/spruceid-ssi.git#ff91409b2a38188cf71268d1bfaaba7ede006d08"
 
 [[package]]
 name = "ssi-contexts"
-version = "0.1.5"
-source = "git+https://github.com/impierce/spruceid-ssi.git#ff91409b2a38188cf71268d1bfaaba7ede006d08"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53b9b14b02742a39a37d33c79d5fc6b0db9656089eabb6b5dc554aa1ddf9aa69"
 
 [[package]]
 name = "ssi-core"
@@ -7202,7 +7166,7 @@ dependencies = [
  "lazy_static",
  "locspan",
  "rdf-types",
- "ssi-contexts 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ssi-contexts 0.1.9",
  "ssi-crypto 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "static-iref",
  "thiserror",
@@ -7223,7 +7187,7 @@ dependencies = [
  "lazy_static",
  "locspan",
  "rdf-types",
- "ssi-contexts 0.1.5 (git+https://github.com/impierce/spruceid-ssi.git)",
+ "ssi-contexts 0.1.5",
  "ssi-crypto 0.1.1 (git+https://github.com/impierce/spruceid-ssi.git)",
  "static-iref",
  "thiserror",
@@ -7380,7 +7344,7 @@ dependencies = [
 [[package]]
 name = "stronghold_ext"
 version = "0.1.0"
-source = "git+https://github.com/impierce/stronghold_ext.git#cad0e5ac4d9011a38c88303b668e790e2f2f3a5e"
+source = "git+https://github.com/impierce/stronghold_ext.git#c3fa9c1cff0eaa8cd518b9a758cb8df76b899bf8"
 dependencies = [
  "ecdsa 0.16.9",
  "iota_stronghold",

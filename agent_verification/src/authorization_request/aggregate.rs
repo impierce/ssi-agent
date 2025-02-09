@@ -212,7 +212,6 @@ pub mod tests {
 
     use agent_secret_manager::service::Service as _;
     use agent_secret_manager::stronghold_storage;
-    use agent_secret_manager::subject::DidMethods;
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::set_config;
     use agent_shared::config::SupportedDidMethod;

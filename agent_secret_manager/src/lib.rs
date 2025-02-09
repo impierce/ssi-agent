@@ -1,6 +1,9 @@
-use agent_shared::config::{config, get_all_enabled_did_methods, SecretManagerConfig};
-use did_manager::{generate, InMemoryCache, SecretManager, StrongholdExtStorage};
-use identity_iota::{core::ToJson, storage::KeyType, verification::jws::JwsAlgorithm};
+use agent_shared::config::config;
+use did_manager_identity_stronghold_ext::StrongholdExtStorage;
+use identity_iota::{
+    storage::{JwkStorage, KeyId, KeyType},
+    verification::jws::JwsAlgorithm,
+};
 use iota_sdk::client::secret::stronghold::StrongholdSecretManager;
 use log::info;
 
@@ -68,4 +71,22 @@ pub async fn stronghold_storage() -> StrongholdExtStorage {
         stronghold_password
     );
     stronghold_storage
+}
+
+pub async fn generate(
+    stronghold_ext_storage: &StrongholdExtStorage,
+    key_type: KeyType,
+    alg: JwsAlgorithm,
+) -> Result<KeyId, ()> {
+    let jwk_gen_output = stronghold_ext_storage
+        .generate(key_type.clone(), alg)
+        .await
+        // FIX THIS
+        .map_err(|_| ())?;
+    info!(
+        "Generated new {:?} key with key ID {:?}",
+        &key_type.as_str(),
+        &jwk_gen_output.key_id.as_str()
+    );
+    Ok(jwk_gen_output.key_id)
 }

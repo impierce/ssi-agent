@@ -36,7 +36,6 @@ agent_issuance = { path = ".", features = ["test_utils"] }
 agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 
-did_manager.workspace = true
 serial_test = "3.0"
 tracing-test.workspace = true
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }

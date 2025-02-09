@@ -1,31 +1,25 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 
 use agent_secret_manager::{
     subject::{Algorithms, DocumentData},
     ED25519_KEY_ID, ES256_KEY_ID, STRONGHOLD_PATH,
 };
-use agent_shared::{
-    config::{
-        config, get_all_enabled_signing_algorithms_supported, get_preferred_did_method,
-        get_preferred_signing_algorithm, SecretManagerConfig,
-    },
-    from_jsonwebtoken_algorithm_to_jwsalgorithm,
+use agent_shared::config::SupportedDidMethod;
+use agent_shared::config::{
+    config, get_all_enabled_signing_algorithms_supported, get_preferred_signing_algorithm, SecretManagerConfig,
 };
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use did_manager::{get_properties, DidMethod, MethodSpecificParameters};
 use identity_did::{CoreDID, DIDUrl, DID as _};
-use identity_document::{document::CoreDocument, service::Service as DocumentService};
+use identity_document::document::CoreDocument;
 use identity_iota::{
     iota::{IotaClientExt as _, IotaDID, IotaDocument, IotaIdentityClientExt as _, NetworkName},
     storage::KeyId,
     verification::{jwk::Jwk, MethodData, MethodScope, MethodType, VerificationMethod},
 };
-use identity_stronghold::{StrongholdKeyType, StrongholdStorage};
 use iota_sdk::{
     client::{
         secret::{stronghold::StrongholdSecretManager, SecretManager},
-        stronghold::StrongholdAdapter,
         Client, Password,
     },
     types::block::{
@@ -36,6 +30,7 @@ use iota_sdk::{
 use jsonwebtoken::Algorithm;
 use oid4vc_core::authentication::subject::Subject as _;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tracing::{debug, info};
 
 use crate::{services::IdentityServices, state::get_address};
@@ -148,40 +143,6 @@ impl Aggregate for Document {
                             .unwrap();
 
                         CoreDocument::from(document)
-
-                        // let jwk = match get_preferred_signing_algorithm() {
-                        //     Algorithm::EdDSA => stronghold_storage
-                        //         .get_ed25519_public_key(&KeyId::new(ED25519_KEY_ID))
-                        //         .await
-                        //         .unwrap(),
-                        //     Algorithm::ES256 => stronghold_storage
-                        //         .get_es256_public_key(&KeyId::new(ES256_KEY_ID))
-                        //         .await
-                        //         .unwrap(),
-                        //     _ => panic!("FIX THIS"),
-                        // };
-                        // let verification_method = VerificationMethod::new_from_jwk(did.clone(), jwk, None).unwrap();
-
-                        // document
-                        //     .insert_method(verification_method, MethodScope::VerificationMethod)
-                        //     .unwrap();
-
-                        // // Resolve the latest output and update it with the given document.
-                        // let alias_output: AliasOutput = client.update_did_output(document.clone()).await.unwrap();
-
-                        // // Because the size of the DID document increased, we have to increase the allocated storage deposit.
-                        // // This increases the deposit amount to the new minimum.
-                        // let rent_structure: RentStructure = client.get_rent_structure().await.unwrap();
-                        // let alias_output: AliasOutput = AliasOutputBuilder::from(&alias_output)
-                        //     .with_minimum_storage_deposit(rent_structure)
-                        //     .finish()
-                        //     .unwrap();
-
-                        // // Publish the updated Alias Output.
-                        // let document: IotaDocument = client
-                        //     .publish_did_output(stronghold_storage.as_secret_manager(), alias_output)
-                        //     .await
-                        //     .unwrap();
                     }
                     "did:web" => {
                         let origin = config().url.origin();
@@ -366,7 +327,7 @@ impl Aggregate for Document {
 
                 // FIX THISS
                 let document_id = self.document_id.clone();
-                let did_method: DidMethod = serde_json::from_value(serde_json::json!(document_id)).unwrap();
+                let did_method = SupportedDidMethod::from_str(&document_id).unwrap();
 
                 let subject = &services.subject;
                 let subject_did = subject
@@ -394,7 +355,7 @@ impl Aggregate for Document {
 
                 // FIX THISS
                 let document_id = self.document_id.clone();
-                let did_method: DidMethod = serde_json::from_value(serde_json::json!(document_id)).unwrap();
+                let did_method = SupportedDidMethod::from_str(&document_id).unwrap();
 
                 let subject = &services.subject;
                 let subject_did = subject
@@ -523,6 +484,26 @@ impl Aggregate for Document {
     }
 }
 
+// for did:web
+pub fn get_properties(method_type: MethodType) -> BTreeMap<String, serde_json::Value> {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "@context".to_string(),
+        match method_type.as_str() {
+            "Ed25519VerificationKey2018" => json!([
+                "https://www.w3.org/ns/did/v1",
+                "https://w3id.org/security/suites/ed25519-2018/v1"
+            ]),
+            "JsonWebKey2020" => json!([
+                "https://www.w3.org/ns/did/v1",
+                "https://w3id.org/security/suites/jws-2020/v1"
+            ]),
+            _ => unimplemented!("Unsupported method type"),
+        },
+    );
+    properties
+}
+
 #[cfg(test)]
 pub mod document_tests {
     use super::test_utils::*;
@@ -562,11 +543,11 @@ pub mod document_tests {
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
+    use agent_shared::config::SupportedDidMethod;
     use agent_shared::{
         config::{config, get_preferred_signing_algorithm},
         from_jsonwebtoken_algorithm_to_jwsalgorithm,
     };
-    use did_manager::{DidMethod, MethodSpecificParameters};
     use identity_core::convert::FromJson;
     use identity_document::{
         document::CoreDocument,
@@ -576,8 +557,8 @@ pub mod test_utils {
     use serde_json::json;
 
     #[fixture]
-    pub fn did_method() -> DidMethod {
-        DidMethod::Web
+    pub fn did_method() -> SupportedDidMethod {
+        SupportedDidMethod::Web
     }
 
     // #[fixture]

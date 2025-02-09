@@ -1,5 +1,4 @@
 use config::ConfigError;
-use did_manager::DidMethod;
 use identity_iota::did::CoreDID;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
@@ -277,19 +276,6 @@ impl SupportedDidMethod {
         match self {
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => false,
             SupportedDidMethod::Iota | SupportedDidMethod::IotaSmr | SupportedDidMethod::IotaRms => true,
-        }
-    }
-}
-
-impl Into<DidMethod> for SupportedDidMethod {
-    fn into(self) -> DidMethod {
-        match self {
-            SupportedDidMethod::Jwk => DidMethod::Jwk,
-            SupportedDidMethod::Key => DidMethod::Key,
-            SupportedDidMethod::Web => DidMethod::Web,
-            SupportedDidMethod::Iota => DidMethod::IotaMainnet,
-            SupportedDidMethod::IotaSmr => DidMethod::Shimmer,
-            SupportedDidMethod::IotaRms => DidMethod::ShimmerTestnet,
         }
     }
 }
