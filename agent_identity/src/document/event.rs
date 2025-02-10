@@ -2,8 +2,9 @@ use super::aggregate::Status;
 use cqrs_es::DomainEvent;
 use identity_document::document::CoreDocument;
 use serde::{Deserialize, Serialize};
+use strum::Display;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
 pub enum DocumentEvent {
     DocumentCreated {
         document_id: String,
@@ -34,17 +35,7 @@ pub enum DocumentEvent {
 
 impl DomainEvent for DocumentEvent {
     fn event_type(&self) -> String {
-        use DocumentEvent::*;
-
-        let event_type: &str = match self {
-            DocumentCreated { .. } => "DocumentCreated",
-            PublicKeyJwksSet { .. } => "PublicKeyJwksSet",
-            StatusSet { .. } => "StatusSet",
-            ServiceAdded { .. } => "ServiceAdded",
-            ServiceRemoved { .. } => "ServiceRemoved",
-            DocumentPublished { .. } => "DocumentPublished",
-        };
-        event_type.to_string()
+        self.to_string()
     }
 
     fn event_version(&self) -> String {

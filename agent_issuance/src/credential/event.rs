@@ -1,10 +1,10 @@
+use super::{aggregate::Status, entity::Data};
 use cqrs_es::DomainEvent;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use serde::{Deserialize, Serialize};
+use strum::Display;
 
-use super::{aggregate::Status, entity::Data};
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
 pub enum CredentialEvent {
     // TODO: rename to `DataCredentialCreated`?
     UnsignedCredentialCreated {
@@ -25,14 +25,7 @@ pub enum CredentialEvent {
 
 impl DomainEvent for CredentialEvent {
     fn event_type(&self) -> String {
-        use CredentialEvent::*;
-
-        let event_type: &str = match self {
-            UnsignedCredentialCreated { .. } => "UnsignedCredentialCreated",
-            SignedCredentialCreated { .. } => "SignedCredentialCreated",
-            CredentialSigned { .. } => "CredentialSigned",
-        };
-        event_type.to_string()
+        self.to_string()
     }
 
     fn event_version(&self) -> String {
