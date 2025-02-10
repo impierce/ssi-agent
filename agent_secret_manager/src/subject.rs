@@ -235,7 +235,6 @@ mod tests {
 
     lazy_static::lazy_static! {
         static ref SECRET_MANAGER_CONFIG: SecretManagerConfig = SecretManagerConfig {
-            stronghold_path: "../agent_secret_manager/tests/res/all_slots.stronghold".to_string(),
             stronghold_password: "sup3rSecr3t".to_string(),
         };
     }

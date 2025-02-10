@@ -66,7 +66,6 @@ pub struct EventStorePostgresConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct SecretManagerConfig {
-    pub stronghold_path: String,
     pub stronghold_password: String,
 }
 
