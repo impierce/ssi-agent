@@ -21,17 +21,13 @@ async-trait = "0.1"
 base64.workspace = true
 futures.workspace = true
 identity_iota.workspace = true
-identity_stronghold.workspace = true
 iota-sdk.workspace = true
 jsonwebtoken = "9.3"
 log = "0.4"
 oid4vc-core.workspace = true
 p256 = { version = "0.13", features = ["jwk"] }
-serde.workspace = true
-serde_json.workspace = true
 tokio.workspace = true
 url.workspace = true
-iota_stronghold = { version = "2.1" }
 
 [dev-dependencies]
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }

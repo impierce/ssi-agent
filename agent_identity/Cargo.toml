@@ -8,6 +8,7 @@ rust-version.workspace = true
 agent_shared = { path = "../agent_shared" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 
+anyhow = "1.0"
 async-trait.workspace = true
 base64.workspace = true
 cqrs-es.workspace = true
@@ -18,21 +19,17 @@ identity_core.workspace = true
 identity_did.workspace = true
 identity_document.workspace = true
 identity_iota.workspace = true
-identity_stronghold.workspace = true
 iota-sdk.workspace = true
-iota_stronghold = { version = "2.1" }
 jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
+rand = "0.8"
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 strum.workspace = true
 strum_macros.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-rand = "0.8"
-reqwest.workspace = true
-anyhow = "1.0"
-serial_test = "3.0"
 url.workspace = true
 urlencoding = "2.1"
 
