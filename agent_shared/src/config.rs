@@ -16,6 +16,15 @@ use strum::VariantArray;
 use tracing::{debug, info};
 use url::Url;
 
+// TODO: the stronghold path does not need to be configured through the config file anymore. Is this static variable for
+// the stronghold path the right solution?
+static STRONGHOLD_PATH: &str = "./app/res/stronghold";
+
+// TODO: Once we have a proper state implementation for `agent_secret_manager` we can make use of randomly generated Key
+// IDs. For now we need to make use of these static variables.
+static ED25519_KEY_ID: &str = "ed25519-0";
+static ES256_KEY_ID: &str = "es256-0";
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct ApplicationConfiguration {
     pub log_format: LogFormat,
@@ -66,7 +75,25 @@ pub struct EventStorePostgresConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct SecretManagerConfig {
+    #[serde(default = "default_stronghold_path")]
+    pub stronghold_path: String,
     pub stronghold_password: String,
+    #[serde(default = "default_issuer_eddsa_key_id")]
+    pub issuer_eddsa_key_id: String,
+    #[serde(default = "default_issuer_es256_key_id")]
+    pub issuer_es256_key_id: String,
+}
+
+fn default_stronghold_path() -> String {
+    STRONGHOLD_PATH.to_string()
+}
+
+pub fn default_issuer_eddsa_key_id() -> String {
+    ED25519_KEY_ID.to_string()
+}
+
+pub fn default_issuer_es256_key_id() -> String {
+    ES256_KEY_ID.to_string()
 }
 
 #[derive(Debug, Deserialize, Clone)]

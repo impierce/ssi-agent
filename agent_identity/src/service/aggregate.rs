@@ -265,12 +265,13 @@ impl Aggregate for Service {
 
 #[cfg(test)]
 pub mod service_tests {
-    use agent_shared::config::set_config;
-    use identity_document::service::Service as DocumentService;
-
     use super::test_utils::*;
     use super::*;
+    use crate::document::aggregate::test_utils::document_with_domain_linkage_service;
+    use agent_shared::config::set_config;
     use cqrs_es::test::TestFramework;
+    use identity_document::service::Service as DocumentService;
+    use identity_iota::document::CoreDocument;
     use rstest::rstest;
 
     type ServiceTestFramework = TestFramework<Service>;
@@ -281,6 +282,7 @@ pub mod service_tests {
         domain_linkage_service_id: String,
         domain_linkage_service: DocumentService,
         domain_linkage_resource: ServiceResource,
+        document_with_domain_linkage_service: CoreDocument,
     ) {
         set_config().set_preferred_did_method(agent_shared::config::SupportedDidMethod::Web);
 
@@ -288,7 +290,7 @@ pub mod service_tests {
             .given_no_previous_events()
             .when(ServiceCommand::CreateDomainLinkageService {
                 service_id: domain_linkage_service_id.clone(),
-                documents: vec![],
+                documents: vec![document_with_domain_linkage_service],
             })
             .then_expect_events(vec![ServiceEvent::DomainLinkageServiceCreated {
                 service_id: domain_linkage_service_id,
@@ -300,12 +302,37 @@ pub mod service_tests {
 
     #[rstest]
     #[serial_test::serial]
+    async fn test_delete_domain_linkage_service(
+        domain_linkage_service_id: String,
+        domain_linkage_service: DocumentService,
+        domain_linkage_resource: ServiceResource,
+    ) {
+        set_config().set_preferred_did_method(agent_shared::config::SupportedDidMethod::Web);
+
+        ServiceTestFramework::with(IdentityServices::default())
+            .given(vec![ServiceEvent::DomainLinkageServiceCreated {
+                service_id: domain_linkage_service_id.clone(),
+                status: Status::Created,
+                service: domain_linkage_service.clone(),
+                resource: domain_linkage_resource.clone(),
+            }])
+            .when(ServiceCommand::DeleteDomainLinkageService {
+                service_id: domain_linkage_service_id.clone(),
+            })
+            .then_expect_events(vec![ServiceEvent::DomainLinkageServiceDeleted {
+                service_id: domain_linkage_service_id,
+                status: Status::Deleted,
+                service: None,
+                resource: None,
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
     async fn test_create_linked_verifiable_presentation_service(
         linked_verifiable_presentation_service_id: String,
         linked_verifiable_presentation_service: DocumentService,
     ) {
-        set_config().set_preferred_did_method(agent_shared::config::SupportedDidMethod::Web);
-
         ServiceTestFramework::with(IdentityServices::default())
             .given_no_previous_events()
             .when(ServiceCommand::CreateLinkedVerifiablePresentationService {
@@ -327,6 +354,7 @@ pub mod test_utils {
     use agent_shared::config::config;
     use identity_core::{common::Url, convert::FromJson};
     use identity_document::service::{Service, ServiceEndpoint};
+    use identity_iota::document::CoreDocument;
     use rstest::*;
     use serde_json::json;
 
@@ -341,11 +369,14 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn domain_linkage_service(did_web_identifier: String, domain_linkage_service_id: String) -> DocumentService {
+    pub fn documents() -> Vec<CoreDocument> {
+        todo!();
+    }
+
+    #[fixture]
+    pub fn domain_linkage_service(domain_linkage_service_id: String) -> DocumentService {
         Service::builder(Default::default())
-            .id(format!("{did_web_identifier}#{domain_linkage_service_id}")
-                .parse()
-                .unwrap())
+            .id(format!("did:place:holder#{domain_linkage_service_id}").parse().unwrap())
             .type_("LinkedDomains")
             .service_endpoint(
                 ServiceEndpoint::from_json_value(json!({
@@ -359,17 +390,14 @@ pub mod test_utils {
 
     #[fixture]
     pub fn linked_verifiable_presentation_service(
-        did_web_identifier: String,
         linked_verifiable_presentation_service_id: String,
     ) -> DocumentService {
         let origin = config().url.origin().ascii_serialization();
 
         Service::builder(Default::default())
-            .id(
-                format!("{did_web_identifier}#{linked_verifiable_presentation_service_id}")
-                    .parse()
-                    .unwrap(),
-            )
+            .id(format!("did:place:holder#{linked_verifiable_presentation_service_id}")
+                .parse()
+                .unwrap())
             .type_("LinkedVerifiablePresentation")
             .service_endpoint(ServiceEndpoint::from(OrderedSet::from_iter(vec![format!(
                 "{origin}/linked-verifiable-presentations/presentation-1"
@@ -378,13 +406,6 @@ pub mod test_utils {
             .unwrap()])))
             .build()
             .unwrap()
-    }
-
-    #[fixture]
-    pub fn did_web_identifier() -> String {
-        let domain = config().url.domain().unwrap().to_string();
-
-        format!("did:web:{domain}")
     }
 
     #[fixture]

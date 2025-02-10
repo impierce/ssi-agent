@@ -1,9 +1,5 @@
 use super::{command::DocumentCommand, error::DocumentError, event::DocumentEvent};
 use crate::{services::IdentityServices, state::get_address};
-use agent_secret_manager::{
-    subject::{Algorithms, DocumentData},
-    ED25519_KEY_ID, ES256_KEY_ID, STRONGHOLD_PATH,
-};
 use agent_shared::config::SupportedDidMethod;
 use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported, SecretManagerConfig};
 use async_trait::async_trait;
@@ -29,7 +25,7 @@ use jsonwebtoken::Algorithm;
 use reqwest::{header::HeaderMap, Method};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, str::FromStr as _, sync::Arc};
 use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -186,19 +182,10 @@ impl Aggregate for Document {
                     }
                 };
 
-                did_methods.insert(
-                    &did_method,
-                    Algorithms {
-                        es256: Some(DocumentData {
-                            did: document.id().to_string(),
-                            verification_method_id: None,
-                        }),
-                        eddsa: Some(DocumentData {
-                            did: document.id().to_string(),
-                            verification_method_id: None,
-                        }),
-                    },
-                );
+                let controller = document.id().to_string();
+
+                did_methods.insert_did(&did_method, Algorithm::ES256, controller.clone());
+                did_methods.insert_did(&did_method, Algorithm::EdDSA, controller);
 
                 let status = Status::SignAndValidate;
 
@@ -225,20 +212,21 @@ impl Aggregate for Document {
 
                 let mut public_key_jwks = vec![];
 
+                let ed25519_key_id = KeyId::new(config().secret_manager.issuer_eddsa_key_id.clone());
+                let es256_key_id = KeyId::new(config().secret_manager.issuer_es256_key_id.clone());
+
                 for signing_algorithm in get_all_enabled_signing_algorithms_supported() {
                     match signing_algorithm {
                         Algorithm::EdDSA => {
                             let public_key_jwk: Jwk = stronghold_storage
-                                .get_ed25519_public_key(&KeyId::new(ED25519_KEY_ID))
+                                .get_ed25519_public_key(&ed25519_key_id)
                                 .await
                                 .unwrap();
                             public_key_jwks.push(public_key_jwk);
                         }
                         Algorithm::ES256 => {
-                            let public_key_jwk: Jwk = stronghold_storage
-                                .get_es256_public_key(&KeyId::new(ES256_KEY_ID))
-                                .await
-                                .unwrap();
+                            let public_key_jwk: Jwk =
+                                stronghold_storage.get_es256_public_key(&es256_key_id).await.unwrap();
                             public_key_jwks.push(public_key_jwk);
                         }
                         _ => return Err(UnsupportedSigningAlgorithmError(signing_algorithm)),
@@ -278,7 +266,7 @@ impl Aggregate for Document {
 
                     did_methods.insert_verification_method_id(
                         &did_method,
-                        &algorithm,
+                        Algorithm::from_str(&algorithm).expect("FIX THIS"),
                         &verification_method_id.to_string(),
                     );
                 }
@@ -292,19 +280,10 @@ impl Aggregate for Document {
                 let mut did_methods = services.subject.did_methods.lock().await;
 
                 if let Some(document) = &self.document {
-                    did_methods.insert(
-                        &did_method,
-                        Algorithms {
-                            es256: Some(DocumentData {
-                                did: document.id().to_string(),
-                                verification_method_id: None,
-                            }),
-                            eddsa: Some(DocumentData {
-                                did: document.id().to_string(),
-                                verification_method_id: None,
-                            }),
-                        },
-                    );
+                    let controller = document.id().to_string();
+
+                    did_methods.insert_did(&did_method, Algorithm::ES256, controller.clone());
+                    did_methods.insert_did(&did_method, Algorithm::EdDSA, controller);
                 }
 
                 Ok(vec![StatusSet {
@@ -397,11 +376,13 @@ impl Aggregate for Document {
                     .finish()
                     .map_err(|_| AliasOutputBuilderError)?;
 
+                let stronghold_path = config().secret_manager.stronghold_path.clone();
+
                 // Create a new secret manager backed by a Stronghold.
                 let secret_manager: SecretManager = SecretManager::Stronghold(
                     StrongholdSecretManager::builder()
                         .password(Password::from(password))
-                        .build(STRONGHOLD_PATH)
+                        .build(stronghold_path)
                         .map_err(|_| SecretManagerBuilderError)?,
                 );
 
@@ -460,7 +441,7 @@ impl Aggregate for Document {
     }
 }
 
-// For did:web
+// TODO: Can we remove this? It does not seem to be required: https://w3c-ccg.github.io/did-method-web/#key-material-and-document-handling
 pub fn get_properties(method_type: MethodType) -> BTreeMap<String, serde_json::Value> {
     let mut properties = BTreeMap::new();
     properties.insert(
@@ -482,6 +463,8 @@ pub fn get_properties(method_type: MethodType) -> BTreeMap<String, serde_json::V
 
 #[cfg(test)]
 pub mod document_tests {
+    use crate::state::DOMAIN_LINKAGE_SERVICE_ID;
+
     use super::test_utils::*;
     use super::*;
     use cqrs_es::test::TestFramework;
@@ -490,87 +473,215 @@ pub mod document_tests {
 
     type DocumentTestFramework = TestFramework<Document>;
 
-    // #[rstest]
-    // #[serial_test::serial]
-    // async fn test_create_document(document_id: String, #[future(awt)] document: CoreDocument) {
-    //     DocumentTestFramework::with(IdentityServices::default())
-    //         .given_no_previous_events()
-    //         .when(DocumentCommand::CreateDocument {
-    //             document_id: document_id.clone(),
-    //         })
-    //         .then_expect_events(vec![DocumentEvent::DocumentCreated {
-    //             document,
-    //             document_id,
-    //             status: Status::SignAndValidate,
-    //         }])
-    // }
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_document(did_method: SupportedDidMethod, document: CoreDocument) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given_no_previous_events()
+            .when(DocumentCommand::CreateDocument {
+                did_method: did_method.clone(),
+            })
+            .then_expect_events(vec![DocumentEvent::DocumentCreated {
+                document,
+                document_id: did_method.to_string(),
+                status: Status::SignAndValidate,
+            }])
+    }
 
-    // #[rstest]
-    // #[serial_test::serial]
-    // async fn test_add_service(
-    //     document_id: String,
-    //     #[future(awt)] document: CoreDocument,
-    //     domain_linkage_service: Service,
-    //     #[future(awt)] document_with_domain_linkage_service: CoreDocument,
-    // ) {
-    //     DocumentTestFramework::with(IdentityServices::default())
-    //         .given(vec![DocumentEvent::DocumentCreated {
-    //             document_id,
-    //             document,
-    //             status: Status::SignAndValidate,
-    //         }])
-    //         .when(DocumentCommand::AddService {
-    //             service: domain_linkage_service,
-    //             service_id: "FIX THIS".to_string(),
-    //         })
-    //         .then_expect_events(vec![DocumentEvent::ServiceAdded {
-    //             document: document_with_domain_linkage_service,
-    //         }])
-    // }
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_set_public_key_jwks(
+        did_method: SupportedDidMethod,
+        document: CoreDocument,
+        document_with_verification_method: CoreDocument,
+    ) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![DocumentEvent::DocumentCreated {
+                document,
+                document_id: did_method.to_string(),
+                status: Status::SignAndValidate,
+            }])
+            .when(DocumentCommand::SetPublicKeyJwks {
+                did_method: did_method.clone(),
+                public_key_jwks: vec![],
+            })
+            .then_expect_events(vec![DocumentEvent::PublicKeyJwksSet {
+                document_id: did_method.to_string(),
+                document: document_with_verification_method,
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_add_service(
+        did_method: SupportedDidMethod,
+        document: CoreDocument,
+        domain_linkage_service: Service,
+        document_with_verification_method: CoreDocument,
+        document_with_domain_linkage_service: CoreDocument,
+    ) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![
+                DocumentEvent::DocumentCreated {
+                    document_id: did_method.to_string(),
+                    document,
+                    status: Status::SignAndValidate,
+                },
+                DocumentEvent::PublicKeyJwksSet {
+                    document_id: did_method.to_string(),
+                    document: document_with_verification_method,
+                },
+            ])
+            .when(DocumentCommand::AddService {
+                service: domain_linkage_service,
+                service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
+            })
+            .then_expect_events(vec![DocumentEvent::ServiceAdded {
+                document_id: did_method.to_string(),
+                document: document_with_domain_linkage_service,
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_remove_service(
+        did_method: SupportedDidMethod,
+        document: CoreDocument,
+        document_with_verification_method: CoreDocument,
+        document_with_domain_linkage_service: CoreDocument,
+    ) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![
+                DocumentEvent::DocumentCreated {
+                    document_id: did_method.to_string(),
+                    document,
+                    status: Status::SignAndValidate,
+                },
+                DocumentEvent::PublicKeyJwksSet {
+                    document_id: did_method.to_string(),
+                    document: document_with_verification_method.clone(),
+                },
+                DocumentEvent::ServiceAdded {
+                    document_id: did_method.to_string(),
+                    document: document_with_domain_linkage_service,
+                },
+            ])
+            .when(DocumentCommand::RemoveService {
+                service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
+            })
+            .then_expect_events(vec![DocumentEvent::ServiceRemoved {
+                document_id: did_method.to_string(),
+                document: document_with_verification_method,
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_set_status(
+        did_method: SupportedDidMethod,
+        document: CoreDocument,
+        document_with_verification_method: CoreDocument,
+        document_with_domain_linkage_service: CoreDocument,
+    ) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![
+                DocumentEvent::DocumentCreated {
+                    document_id: did_method.to_string(),
+                    document,
+                    status: Status::SignAndValidate,
+                },
+                DocumentEvent::PublicKeyJwksSet {
+                    document_id: did_method.to_string(),
+                    document: document_with_verification_method.clone(),
+                },
+                DocumentEvent::ServiceAdded {
+                    document_id: did_method.to_string(),
+                    document: document_with_domain_linkage_service,
+                },
+                DocumentEvent::ServiceRemoved {
+                    document_id: did_method.to_string(),
+                    document: document_with_verification_method,
+                },
+            ])
+            .when(DocumentCommand::SetStatus {
+                did_method: did_method.clone(),
+                status: Status::Disabled,
+            })
+            .then_expect_events(vec![DocumentEvent::StatusSet {
+                document_id: did_method.to_string(),
+                status: Status::Disabled,
+            }])
+    }
 }
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
+    use super::get_properties;
+    use crate::state::DOMAIN_LINKAGE_SERVICE_ID;
+    use agent_shared::config::config;
     use agent_shared::config::SupportedDidMethod;
-    use agent_shared::{
-        config::{config, get_preferred_signing_algorithm},
-        from_jsonwebtoken_algorithm_to_jwsalgorithm,
-    };
     use identity_core::convert::FromJson;
+    use identity_did::CoreDID;
     use identity_document::{
         document::CoreDocument,
         service::{Service, ServiceEndpoint},
     };
+    use identity_iota::verification::jwk::Jwk;
+    use identity_iota::verification::{MethodData, MethodScope, MethodType, VerificationMethod};
     use rstest::*;
     use serde_json::json;
 
     #[fixture]
-    pub fn document_id() -> String {
-        SupportedDidMethod::Web.to_string()
+    pub fn did_method() -> SupportedDidMethod {
+        SupportedDidMethod::Web
     }
 
-    // #[fixture]
-    // pub async fn document(did_method: DidMethod) -> CoreDocument {
-    //     let mut secret_manager = secret_manager().await;
+    #[fixture]
+    pub fn document() -> CoreDocument {
+        let controller: CoreDID = "did:web:my-domain.example.org".parse().unwrap();
 
-    //     let method_specific_parameters = matches!(did_method, DidMethod::Web).then(|| MethodSpecificParameters::Web {
-    //         origin: config().url.origin(),
-    //     });
+        CoreDocument::builder(get_properties(MethodType::JSON_WEB_KEY_2020))
+            .id(controller.clone())
+            .build()
+            .unwrap()
+    }
 
-    //     secret_manager
-    //         .produce_document(
-    //             did_method,
-    //             method_specific_parameters,
-    //             from_jsonwebtoken_algorithm_to_jwsalgorithm(&get_preferred_signing_algorithm()),
-    //         )
-    //         .await
-    //         .unwrap()
-    // }
+    #[fixture]
+    pub fn document_with_verification_method(mut document: CoreDocument) -> CoreDocument {
+        let verification_method = VerificationMethod::builder(Default::default())
+            .id(
+                "did:web:my-domain.example.org#bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"
+                    .parse()
+                    .unwrap(),
+            )
+            .controller("did:web:my-domain.example.org".parse().unwrap())
+            .type_(MethodType::JSON_WEB_KEY_2020)
+            .data(MethodData::PublicKeyJwk(
+                Jwk::from_json_value(json!({
+                    "kty": "OKP",
+                    "alg": "EdDSA",
+                    "kid": "bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0",
+                    "crv": "Ed25519",
+                    "x": "GlnK9ePs802XxAglROQzoGurm9Qpv0IFPEbdMCILN_U"
+                }))
+                .unwrap(),
+            ))
+            .build()
+            .unwrap();
+
+        document
+            .insert_method(verification_method, MethodScope::VerificationMethod)
+            .unwrap();
+
+        document
+    }
 
     #[fixture]
     pub fn domain_linkage_service() -> Service {
         Service::builder(Default::default())
-            .id("did:test:123#linked_domain-service".parse().unwrap())
+            .id(format!("did:web:my-domain.example.org#{DOMAIN_LINKAGE_SERVICE_ID}")
+                .parse()
+                .unwrap())
             .type_("LinkedDomains")
             .service_endpoint(
                 ServiceEndpoint::from_json_value(json!({
@@ -582,28 +693,15 @@ pub mod test_utils {
             .unwrap()
     }
 
-    // #[fixture]
-    // pub async fn document_with_domain_linkage_service(
-    //     did_method: DidMethod,
-    //     domain_linkage_service: Service,
-    // ) -> CoreDocument {
-    //     let mut secret_manager = secret_manager().await;
+    #[fixture]
+    pub fn document_with_domain_linkage_service(
+        mut document_with_verification_method: CoreDocument,
+        domain_linkage_service: Service,
+    ) -> CoreDocument {
+        document_with_verification_method
+            .insert_service(domain_linkage_service)
+            .unwrap();
 
-    //     let method_specific_parameters = matches!(did_method, DidMethod::Web).then(|| MethodSpecificParameters::Web {
-    //         origin: config().url.origin(),
-    //     });
-
-    //     let mut document = secret_manager
-    //         .produce_document(
-    //             did_method,
-    //             method_specific_parameters,
-    //             from_jsonwebtoken_algorithm_to_jwsalgorithm(&get_preferred_signing_algorithm()),
-    //         )
-    //         .await
-    //         .unwrap();
-
-    //     document.insert_service(domain_linkage_service).unwrap();
-
-    //     document
-    // }
+        document_with_verification_method
+    }
 }

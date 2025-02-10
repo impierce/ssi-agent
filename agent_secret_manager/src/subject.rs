@@ -1,17 +1,26 @@
-use crate::{stronghold_storage, ED25519_KEY_ID, ES256_KEY_ID};
-use agent_shared::config::SupportedDidMethod;
+use crate::stronghold_storage;
+use agent_shared::config::{
+    config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, SupportedDidMethod,
+};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager_consumer::resolver::Resolver;
 use did_manager_identity_stronghold_ext::StrongholdExtStorage;
+use identity_iota::did::CoreDID;
 use identity_iota::storage::JwkStorage;
 use identity_iota::{did::DID, document::DIDUrlQuery, storage::KeyId, verification::jwk::JwkParams};
+use itertools::iproduct;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
+use serde_json::json;
+use ssi_dids::{DIDMethod, Source};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+
+// See specification: "Since did:jwk only contains a single key, the DID URL fragment identifier is always a fixed #0 value."
+const JWK_FRAGMENT: &str = "0";
 
 /// Reponsible for signing and verifying data.
 pub struct Subject {
@@ -21,9 +30,75 @@ pub struct Subject {
 
 impl Subject {
     pub async fn new() -> Self {
+        let stronghold_storage = stronghold_storage().await;
+        let mut did_methods = DidMethods::default();
+
+        let signing_algorithms = get_all_enabled_signing_algorithms_supported();
+        let non_updateable_did_methods = get_all_enabled_did_methods()
+            .clone()
+            .into_iter()
+            .filter(|method| !method.is_updateable())
+            .collect::<Vec<_>>();
+
+        let cartesian_product = iproduct!(non_updateable_did_methods.into_iter(), signing_algorithms.into_iter())
+            .map(|(did_method, signing_algorithm)| (did_method, signing_algorithm))
+            .collect::<Vec<_>>();
+
+        let ed25519_key_id = KeyId::new(config().secret_manager.issuer_eddsa_key_id.clone());
+        let es256_key_id = KeyId::new(config().secret_manager.issuer_es256_key_id.clone());
+
+        for (did_method, signing_algorithm) in cartesian_product {
+            let public_key_jwk = match signing_algorithm {
+                Algorithm::EdDSA => {
+                    let public_key_jwk = json!(stronghold_storage
+                        .get_ed25519_public_key(&ed25519_key_id)
+                        .await
+                        .expect("FIX THIS"));
+
+                    public_key_jwk
+                }
+                Algorithm::ES256 => {
+                    let public_key_jwk = json!(stronghold_storage
+                        .get_es256_public_key(&es256_key_id)
+                        .await
+                        .expect("FIX THIS"));
+
+                    public_key_jwk
+                }
+                _ => {
+                    todo!()
+                }
+            };
+
+            let jwk: ssi_jwk::JWK = serde_json::from_value(public_key_jwk.clone()).unwrap();
+
+            let (controller, verification_method_id) = match did_method {
+                SupportedDidMethod::Jwk => {
+                    let controller =
+                        CoreDID::parse(did_jwk_extern::DIDJWK.generate(&Source::Key(&jwk)).unwrap()).unwrap();
+                    let verification_method_id = format!("{controller}#{JWK_FRAGMENT}");
+
+                    (controller, verification_method_id)
+                }
+                SupportedDidMethod::Key => {
+                    let controller =
+                        CoreDID::parse(did_key_extern::DIDKey.generate(&Source::Key(&jwk)).unwrap()).unwrap();
+                    let verification_method_id = format!("{controller}#{}", controller.method_id());
+
+                    (controller, verification_method_id)
+                }
+                _ => {
+                    todo!()
+                }
+            };
+
+            did_methods.insert_did(&did_method, signing_algorithm, controller.to_string());
+            did_methods.insert_verification_method_id(&did_method, signing_algorithm, &verification_method_id);
+        }
+
         Self {
-            stronghold_storage: stronghold_storage().await,
-            did_methods: Default::default(),
+            stronghold_storage,
+            did_methods: Arc::new(Mutex::new(did_methods)),
         }
     }
 }
@@ -93,14 +168,14 @@ impl Sign for Subject {
     async fn sign(&self, message: &str, _subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
         let (key_id, public_key) = match algorithm {
             Algorithm::ES256 => {
-                let key_id = KeyId::new(ES256_KEY_ID);
-                let public_key = self.stronghold_storage.get_es256_public_key(&key_id).await?;
-                (key_id, public_key)
+                let es256_key_id = KeyId::new(config().secret_manager.issuer_es256_key_id.clone());
+                let public_key = self.stronghold_storage.get_es256_public_key(&es256_key_id).await?;
+                (es256_key_id, public_key)
             }
             Algorithm::EdDSA => {
-                let key_id = KeyId::new(ED25519_KEY_ID);
-                let public_key = self.stronghold_storage.get_ed25519_public_key(&key_id).await?;
-                (key_id, public_key)
+                let ed25519_key_id = KeyId::new(config().secret_manager.issuer_eddsa_key_id.clone());
+                let public_key = self.stronghold_storage.get_ed25519_public_key(&ed25519_key_id).await?;
+                (ed25519_key_id, public_key)
             }
             _ => return Err(anyhow!("Unsupported algorithm")),
         };
@@ -139,7 +214,7 @@ impl oid4vc_core::Subject for Subject {
 }
 
 /// Stores all the DIDs and their associated Verification Method IDs for each (enabled) DID method.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct DidMethods {
     pub did_iota: Algorithms,
     pub did_iota_smr: Algorithms,
@@ -150,17 +225,6 @@ pub struct DidMethods {
 }
 
 impl DidMethods {
-    pub fn insert(&mut self, method: &SupportedDidMethod, algorithms: Algorithms) {
-        match method {
-            SupportedDidMethod::Iota => self.did_iota = algorithms,
-            SupportedDidMethod::IotaSmr => self.did_iota_smr = algorithms,
-            SupportedDidMethod::IotaRms => self.did_iota_rms = algorithms,
-            SupportedDidMethod::Jwk => self.did_jwk = algorithms,
-            SupportedDidMethod::Key => self.did_key = algorithms,
-            SupportedDidMethod::Web => self.did_web = algorithms,
-        }
-    }
-
     pub fn get(&self, method: &SupportedDidMethod) -> &Algorithms {
         match method {
             SupportedDidMethod::Iota => &self.did_iota,
@@ -172,10 +236,37 @@ impl DidMethods {
         }
     }
 
+    pub fn insert_did(&mut self, method: &SupportedDidMethod, algorithm: Algorithm, did: String) {
+        let algorithms = match method {
+            SupportedDidMethod::Iota => &mut self.did_iota,
+            SupportedDidMethod::IotaSmr => &mut self.did_iota_smr,
+            SupportedDidMethod::IotaRms => &mut self.did_iota_rms,
+            SupportedDidMethod::Jwk => &mut self.did_jwk,
+            SupportedDidMethod::Key => &mut self.did_key,
+            SupportedDidMethod::Web => &mut self.did_web,
+        };
+
+        match algorithm {
+            Algorithm::ES256 => {
+                let _ = algorithms.es256.insert(DocumentData {
+                    did,
+                    verification_method_id: None,
+                });
+            }
+            Algorithm::EdDSA => {
+                let _ = algorithms.eddsa.insert(DocumentData {
+                    did,
+                    verification_method_id: None,
+                });
+            }
+            _ => {}
+        }
+    }
+
     pub fn insert_verification_method_id(
         &mut self,
         method: &SupportedDidMethod,
-        algorithm: &str,
+        algorithm: Algorithm,
         verification_method_id: &str,
     ) {
         let algorithms = match method {
@@ -188,12 +279,12 @@ impl DidMethods {
         };
 
         match algorithm {
-            "ES256" => {
+            Algorithm::ES256 => {
                 if let Some(document_data) = &mut algorithms.es256 {
                     document_data.verification_method_id = Some(verification_method_id.to_string());
                 }
             }
-            "EdDSA" => {
+            Algorithm::EdDSA => {
                 if let Some(document_data) = &mut algorithms.eddsa {
                     document_data.verification_method_id = Some(verification_method_id.to_string());
                 }
@@ -203,7 +294,7 @@ impl DidMethods {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Algorithms {
     pub es256: Option<DocumentData>,
     pub eddsa: Option<DocumentData>,
@@ -219,6 +310,7 @@ impl Algorithms {
     }
 }
 
+#[derive(Debug)]
 pub struct DocumentData {
     pub did: String,
     pub verification_method_id: Option<String>,
@@ -227,7 +319,9 @@ pub struct DocumentData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_shared::config::{set_config, SecretManagerConfig};
+    use agent_shared::config::{
+        default_issuer_eddsa_key_id, default_issuer_es256_key_id, set_config, SecretManagerConfig,
+    };
     use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED, ED25519};
 
     const ES256_SIGNED_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGVXpJMU5pSXNJbU55ZGlJNklsQXRNalUySWl3aWEybGtJam9pTkVGMVdXaFNRMk5HYkc0eWJuUm5VMTlxT1hCRlFtUkxkekl3VUhRdGJHRnFXVWh0V1RkQk1FMUdUU0lzSW10MGVTSTZJa1ZESWl3aWVDSTZJakpNV0dwT1JFOTZWM1J3WlZOWk0ydGlUbEkyWm14YVRVUjRZV2gxYXpKMlVXMWpkWFprUVRodk5EUWlMQ0o1SWpvaVpFRjJSVlpzV0UxSFVFdGFjMnRXV1RSWlZ6QnpPRUk0UzNZM2Myc3hZemt5VDA1WVJFcHZlRjlJY3lKOSMwIn0.eyJpc3MiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJzdWIiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJhdWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaVlrNDNiSEpaWVhOUlZrNDNMVUpZY0MxMFdFVldTR1l0YVhkTWRsVnRiWHByVUZsc2VHWlRWRkZvVlNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SW1odVkyNU5UM2sxU0dGWGJ6SmFTbmhCWW5sWU1GOW1NVTFHU1dsMlRrRmtUMjFXYjNSWGVWZG9ielFpTENKNUlqb2libE5wYkhwMllsTmFYMUp1VWpOU2RreHdkRWxITmpkVWJWVkVhR1ZQWVZGNlltczJhVFJmWDBkeVFTSjkiLCJleHAiOjE3MjMwMjkyMjUsImlhdCI6MTcyMzAyODYyNSwibm9uY2UiOiJ0aGlzIGlzIGEgbm9uY2UifQ.w202CZKOeGM9k35tysJylksBUGI3fvkOgsPPVrfXYZzurns7KF5plMiR_KHH4H_GpYg57Nf2JWa3YEcXGDTVdw";
@@ -236,6 +330,9 @@ mod tests {
     lazy_static::lazy_static! {
         static ref SECRET_MANAGER_CONFIG: SecretManagerConfig = SecretManagerConfig {
             stronghold_password: "sup3rSecr3t".to_string(),
+            stronghold_path: "/tmp/stronghold".to_string(),
+            issuer_eddsa_key_id: default_issuer_eddsa_key_id(),
+            issuer_es256_key_id: default_issuer_es256_key_id(),
         };
     }
 

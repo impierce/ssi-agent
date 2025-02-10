@@ -19,13 +19,20 @@ did_manager_identity_stronghold_ext = { git = "https://git@github.com/impierce/d
 anyhow = "1.0"
 async-trait = "0.1"
 base64.workspace = true
+did-jwk-extern = { version = "0.1.1", package = "did-jwk" }
+did-key-extern = { version = "0.2.2", package = "did-method-key" }
 futures.workspace = true
 identity_iota.workspace = true
 iota-sdk.workspace = true
+iota_stronghold = { version = "2.1" }
+itertools = "0.14"
 jsonwebtoken = "9.3"
 log = "0.4"
 oid4vc-core.workspace = true
 p256 = { version = "0.13", features = ["jwk"] }
+serde_json.workspace = true
+ssi-dids = "0.1.1"
+ssi-jwk = "0.1.2"
 tokio.workspace = true
 url.workspace = true
 

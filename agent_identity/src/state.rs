@@ -114,13 +114,7 @@ pub const VERIFIABLE_PRESENTATION_SERVICE_ID: &str = "linked-verifiable-presenta
 pub async fn initialize(state: &IdentityState) {
     info!("Initializing ...");
 
-    // Only consider updateable DID methods.
-    let did_methods = config()
-        .did_methods
-        .clone()
-        .into_iter()
-        .filter(|(did_method, _)| did_method.is_updateable())
-        .collect::<Vec<_>>();
+    let did_methods = config().did_methods.clone().into_iter().collect::<Vec<_>>();
 
     info!("DID Methods: {:?}", did_methods);
 
@@ -135,6 +129,7 @@ pub async fn initialize(state: &IdentityState) {
 
                 // Check whether the DID methods document already exists.
                 let command = match query_handler(&document_id, &state.query.document).await {
+                    // If the DID document exists, then the status needs to be updated.
                     Ok(Some(_document_exists)) => {
                         if *enabled {
                             DocumentCommand::SetStatus {
@@ -160,8 +155,6 @@ pub async fn initialize(state: &IdentityState) {
                     }
                 };
 
-                info!("Executing command now: {:#?}", command);
-
                 if command_handler(&document_id, &state.command.document, command)
                     .await
                     .is_err()
@@ -169,13 +162,9 @@ pub async fn initialize(state: &IdentityState) {
                     warn!("5: Failed to Set status `{did_method}`");
                 }
 
-                info!("C: here");
-
-                let public_key_jwks = vec![];
-
                 let command = DocumentCommand::SetPublicKeyJwks {
                     did_method: did_method.clone(),
-                    public_key_jwks,
+                    public_key_jwks: vec![],
                 };
 
                 if command_handler(&document_id, &state.command.document, command)
@@ -184,8 +173,6 @@ pub async fn initialize(state: &IdentityState) {
                 {
                     warn!("5: Failed to Set status `{did_method}`");
                 }
-
-                info!("D: here");
 
                 match query_handler(&document_id, &state.query.document).await {
                     Ok(Some(document)) => Ok(document),
@@ -246,27 +233,18 @@ pub async fn initialize(state: &IdentityState) {
                         .map(|document| async {
                             // Clone the variables into the async closure.
                             let document_id = document.document_id.clone();
-                            info!("document_id: {}", document_id);
                             let did_method = SupportedDidMethod::from_str(&document_id).unwrap();
                             let service = service.clone();
 
                             let command = match document.status {
-                                Status::Disabled => {
-                                    info!("I: Removing service: {document_id}");
-                                    DocumentCommand::RemoveService {
-                                        service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-                                    }
-                                }
-                                Status::SignAndValidate => {
-                                    info!("II: Adding service: {document_id}");
-                                    DocumentCommand::AddService {
-                                        service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-                                        service,
-                                    }
-                                }
+                                Status::Disabled => DocumentCommand::RemoveService {
+                                    service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
+                                },
+                                Status::SignAndValidate => DocumentCommand::AddService {
+                                    service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
+                                    service,
+                                },
                             };
-
-                            info!("III: here");
 
                             if command_handler(&document_id, &state.command.document, command)
                                 .await
@@ -322,8 +300,6 @@ pub async fn initialize(state: &IdentityState) {
         .await
         .expect("FIX THISS");
     }
-
-    info!("Publish all documents");
 
     try_join_all(
         // Loop through all DID methods.
