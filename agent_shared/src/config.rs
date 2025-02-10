@@ -153,12 +153,17 @@ pub enum ConnectionEvent {
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum DocumentEvent {
     DocumentCreated,
+    PublicKeyJwksSet,
+    StatusSet,
     ServiceAdded,
+    ServiceRemoved,
+    DocumentPublished,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum ServiceEvent {
     DomainLinkageServiceCreated,
+    DomainLinkageServiceDeleted,
     LinkedVerifiablePresentationServiceCreated,
 }
 

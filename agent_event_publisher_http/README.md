@@ -31,13 +31,18 @@ ConnectionAdded
 
 ```
 DocumentCreated
+PublicKeyJwksSet
+StatusSet
 ServiceAdded
+ServiceRemoved
+DocumentPublished
 ```
 
 #### `service`
 
 ```
 DomainLinkageServiceCreated
+DomainLinkageServiceDeleted
 LinkedVerifiablePresentationServiceCreated
 ```
 
