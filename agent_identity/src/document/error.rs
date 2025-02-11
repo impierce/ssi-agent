@@ -21,6 +21,8 @@ pub enum DocumentError {
     MissingKidError,
     #[error("Public Key Jwk is missing the required `alg` parameter")]
     MissingAlgError,
+    #[error("Key not found: {0}")]
+    MissingKeyError(String),
     #[error("Error while inserting Verification Method: {0}")]
     VerificationMethodInsertionError(String),
 

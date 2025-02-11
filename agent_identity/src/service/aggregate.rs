@@ -168,7 +168,7 @@ impl Aggregate for Service {
                     .type_("LinkedDomains")
                     .service_endpoint(service_endpoint)
                     .build()
-                    .expect("Failed to create DID Configuration Resource");
+                    .map_err(|err| ServiceBuilderError(err.to_string()))?;
 
                 Ok(vec![DomainLinkageServiceCreated {
                     service_id,
@@ -213,7 +213,7 @@ impl Aggregate for Service {
                     .type_("LinkedVerifiablePresentation")
                     .service_endpoint(service_endpoint)
                     .build()
-                    .expect("Failed to create DID Configuration Resource");
+                    .map_err(|err| ServiceBuilderError(err.to_string()))?;
 
                 Ok(vec![LinkedVerifiablePresentationServiceCreated {
                     service_id,
@@ -354,7 +354,6 @@ pub mod test_utils {
     use agent_shared::config::config;
     use identity_core::{common::Url, convert::FromJson};
     use identity_document::service::{Service, ServiceEndpoint};
-    use identity_iota::document::CoreDocument;
     use rstest::*;
     use serde_json::json;
 
@@ -366,11 +365,6 @@ pub mod test_utils {
     #[fixture]
     pub fn linked_verifiable_presentation_service_id() -> String {
         VERIFIABLE_PRESENTATION_SERVICE_ID.to_string()
-    }
-
-    #[fixture]
-    pub fn documents() -> Vec<CoreDocument> {
-        todo!();
     }
 
     #[fixture]

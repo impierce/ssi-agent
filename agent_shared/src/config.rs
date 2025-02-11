@@ -1,5 +1,5 @@
 use config::ConfigError;
-use identity_iota::did::CoreDID;
+use identity_iota::{did::CoreDID, storage::KeyId};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
@@ -79,21 +79,21 @@ pub struct SecretManagerConfig {
     pub stronghold_path: String,
     pub stronghold_password: String,
     #[serde(default = "default_issuer_eddsa_key_id")]
-    pub issuer_eddsa_key_id: String,
+    pub issuer_eddsa_key_id: KeyId,
     #[serde(default = "default_issuer_es256_key_id")]
-    pub issuer_es256_key_id: String,
+    pub issuer_es256_key_id: KeyId,
 }
 
 fn default_stronghold_path() -> String {
     STRONGHOLD_PATH.to_string()
 }
 
-pub fn default_issuer_eddsa_key_id() -> String {
-    ED25519_KEY_ID.to_string()
+pub fn default_issuer_eddsa_key_id() -> KeyId {
+    KeyId::new(ED25519_KEY_ID)
 }
 
-pub fn default_issuer_es256_key_id() -> String {
-    ES256_KEY_ID.to_string()
+pub fn default_issuer_es256_key_id() -> KeyId {
+    KeyId::new(ES256_KEY_ID)
 }
 
 #[derive(Debug, Deserialize, Clone)]

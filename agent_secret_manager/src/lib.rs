@@ -10,8 +10,8 @@ use log::info;
 pub mod service;
 pub mod subject;
 
-// TODO: find better solution for this
 pub async fn stronghold_storage() -> StrongholdExtStorage {
+    #[cfg(feature = "test_utils")]
     iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).unwrap();
 
     info!("Initializing Stronghold storage");
@@ -28,8 +28,8 @@ pub async fn stronghold_storage() -> StrongholdExtStorage {
 
     info!("Stronghold storage initialized");
 
-    let ed25519_key_id = KeyId::new(config().secret_manager.issuer_eddsa_key_id.clone());
-    let es256_key_id = KeyId::new(config().secret_manager.issuer_es256_key_id.clone());
+    let ed25519_key_id = config().secret_manager.issuer_eddsa_key_id.clone();
+    let es256_key_id = config().secret_manager.issuer_es256_key_id.clone();
 
     // Generate keys if they don't exist
     // TODO: currently `generate` will generate a 'static' key-ids for each keytype. In a future improvement we need to

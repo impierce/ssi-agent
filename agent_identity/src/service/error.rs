@@ -26,4 +26,6 @@ pub enum ServiceError {
     InvalidServiceEndpointError(String),
     #[error("Error producing document: {0}")]
     ProduceDocumentError(String),
+    #[error("Error building service: {0}")]
+    ServiceBuilderError(String),
 }

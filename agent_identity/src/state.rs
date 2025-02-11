@@ -8,7 +8,7 @@ use crate::{
     document::{aggregate::Document, views::DocumentView},
     service::{aggregate::Service, command::ServiceCommand, views::ServiceView},
 };
-use agent_shared::config::{config, SupportedDidMethod, ToggleOptions};
+use agent_shared::config::{config, ToggleOptions};
 use agent_shared::handlers::command_handler;
 use agent_shared::{application_state::CommandHandler, handlers::query_handler};
 use cqrs_es::persist::ViewRepository;
@@ -19,7 +19,6 @@ use iota_sdk::client::Client;
 use iota_sdk::crypto::keys::bip39;
 use iota_sdk::types::block::address::Bech32Address;
 use iota_sdk::types::block::address::Hrp;
-use std::str::FromStr;
 use std::sync::Arc;
 use tracing::{info, warn};
 
@@ -114,7 +113,13 @@ pub const VERIFIABLE_PRESENTATION_SERVICE_ID: &str = "linked-verifiable-presenta
 pub async fn initialize(state: &IdentityState) {
     info!("Initializing ...");
 
-    let did_methods = config().did_methods.clone().into_iter().collect::<Vec<_>>();
+    // Only consider updateable DID methods.
+    let did_methods = config()
+        .did_methods
+        .clone()
+        .into_iter()
+        .filter(|(did_method, _)| did_method.is_updateable())
+        .collect::<Vec<_>>();
 
     info!("DID Methods: {:?}", did_methods);
 
@@ -155,24 +160,14 @@ pub async fn initialize(state: &IdentityState) {
                     }
                 };
 
-                if command_handler(&document_id, &state.command.document, command)
-                    .await
-                    .is_err()
-                {
-                    warn!("5: Failed to Set status `{did_method}`");
-                }
+                let _ = command_handler(&document_id, &state.command.document, command).await;
 
                 let command = DocumentCommand::SetPublicKeyJwks {
                     did_method: did_method.clone(),
                     public_key_jwks: vec![],
                 };
 
-                if command_handler(&document_id, &state.command.document, command)
-                    .await
-                    .is_err()
-                {
-                    warn!("5: Failed to Set status `{did_method}`");
-                }
+                let _ = command_handler(&document_id, &state.command.document, command).await;
 
                 match query_handler(&document_id, &state.query.document).await {
                     Ok(Some(document)) => Ok(document),
@@ -211,12 +206,7 @@ pub async fn initialize(state: &IdentityState) {
             documents: enabled_updateable_documents,
         };
 
-        if command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command)
-            .await
-            .is_err()
-        {
-            warn!("Failed to create domain linkage service");
-        }
+        let _ = command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command).await;
 
         info!("Created domain linkage service");
 
@@ -226,14 +216,13 @@ pub async fn initialize(state: &IdentityState) {
             })) => {
                 info!("Found linked domains service: {service}");
 
-                try_join_all(
+                let _ = try_join_all(
                     // Loop through all DID methods.
                     documents
                         .iter()
                         .map(|document| async {
                             // Clone the variables into the async closure.
                             let document_id = document.document_id.clone();
-                            let did_method = SupportedDidMethod::from_str(&document_id).unwrap();
                             let service = service.clone();
 
                             let command = match document.status {
@@ -246,21 +235,13 @@ pub async fn initialize(state: &IdentityState) {
                                 },
                             };
 
-                            if command_handler(&document_id, &state.command.document, command)
-                                .await
-                                .is_err()
-                            {
-                                warn!("7: Failed to add service to document");
-                            }
-
-                            info!("8: Added service to document for `{}`", did_method);
+                            let _ = command_handler(&document_id, &state.command.document, command).await;
 
                             Ok::<(), ()>(())
                         })
                         .collect::<Vec<_>>(),
                 )
-                .await
-                .unwrap();
+                .await;
             }
             _ => {
                 warn!("Failed to retrieve linked domains service");
@@ -272,16 +253,11 @@ pub async fn initialize(state: &IdentityState) {
             service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
         };
 
-        if command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command)
-            .await
-            .is_err()
-        {
-            warn!("Failed to deleted domain linkage service");
-        }
+        let _ = command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command).await;
 
-        info!("Domain linkage service is disabled");
+        info!("Disabled Domain linkage service");
 
-        try_join_all(
+        let _ = try_join_all(
             // Loop through all DID methods.
             documents
                 .iter()
@@ -297,11 +273,10 @@ pub async fn initialize(state: &IdentityState) {
                 })
                 .collect::<Vec<_>>(),
         )
-        .await
-        .expect("FIX THISS");
+        .await;
     }
 
-    try_join_all(
+    let _ = try_join_all(
         // Loop through all DID methods.
         did_methods
             .iter()
@@ -315,22 +290,14 @@ pub async fn initialize(state: &IdentityState) {
                         did_method: did_method.clone(),
                     };
 
-                    info!("Publishing document for `{}`", did_method);
-
-                    if command_handler(&document_id, &state.command.document, command)
-                        .await
-                        .is_err()
-                    {
-                        warn!("9: Failed to publish DID Document for `{did_method}`");
-                    }
+                    let _ = command_handler(&document_id, &state.command.document, command).await;
                 }
 
-                info!("10: Published document for `{}`", did_method);
+                info!("Published document for `{}`", did_method);
 
                 Ok::<(), ()>(())
             })
             .collect::<Vec<_>>(),
     )
-    .await
-    .unwrap();
+    .await;
 }

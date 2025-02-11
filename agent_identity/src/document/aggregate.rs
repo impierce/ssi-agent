@@ -8,7 +8,6 @@ use identity_did::{CoreDID, DIDUrl, DID as _};
 use identity_document::document::CoreDocument;
 use identity_iota::{
     iota::{IotaClientExt as _, IotaDID, IotaDocument, IotaIdentityClientExt as _, NetworkName},
-    storage::KeyId,
     verification::{jwk::Jwk, MethodData, MethodScope, MethodType, VerificationMethod},
 };
 use iota_sdk::{
@@ -212,8 +211,8 @@ impl Aggregate for Document {
 
                 let mut public_key_jwks = vec![];
 
-                let ed25519_key_id = KeyId::new(config().secret_manager.issuer_eddsa_key_id.clone());
-                let es256_key_id = KeyId::new(config().secret_manager.issuer_es256_key_id.clone());
+                let ed25519_key_id = config().secret_manager.issuer_eddsa_key_id.clone();
+                let es256_key_id = config().secret_manager.issuer_es256_key_id.clone();
 
                 for signing_algorithm in get_all_enabled_signing_algorithms_supported() {
                     match signing_algorithm {
@@ -221,12 +220,14 @@ impl Aggregate for Document {
                             let public_key_jwk: Jwk = stronghold_storage
                                 .get_ed25519_public_key(&ed25519_key_id)
                                 .await
-                                .unwrap();
+                                .map_err(|err| MissingKeyError(err.to_string()))?;
                             public_key_jwks.push(public_key_jwk);
                         }
                         Algorithm::ES256 => {
-                            let public_key_jwk: Jwk =
-                                stronghold_storage.get_es256_public_key(&es256_key_id).await.unwrap();
+                            let public_key_jwk: Jwk = stronghold_storage
+                                .get_es256_public_key(&es256_key_id)
+                                .await
+                                .map_err(|err| MissingKeyError(err.to_string()))?;
                             public_key_jwks.push(public_key_jwk);
                         }
                         _ => return Err(UnsupportedSigningAlgorithmError(signing_algorithm)),
@@ -246,7 +247,11 @@ impl Aggregate for Document {
                 // Add the new Verification Methods to the Document.
                 for public_key_jwk in public_key_jwks {
                     let fragment = public_key_jwk.kid().ok_or(MissingKidError)?;
-                    let algorithm = public_key_jwk.alg().ok_or(MissingAlgError)?.to_string();
+
+                    let algorithm = public_key_jwk
+                        .alg()
+                        .and_then(|alg| Algorithm::from_str(alg).ok())
+                        .ok_or(MissingAlgError)?;
 
                     let verification_method_id = did
                         .to_url()
@@ -266,7 +271,7 @@ impl Aggregate for Document {
 
                     did_methods.insert_verification_method_id(
                         &did_method,
-                        Algorithm::from_str(&algorithm).expect("FIX THIS"),
+                        algorithm,
                         &verification_method_id.to_string(),
                     );
                 }
@@ -300,9 +305,11 @@ impl Aggregate for Document {
                 let subject_did = document.id();
 
                 // Set the service ID.
-                service
-                    .set_id(format!("{subject_did}#{service_id}").parse::<DIDUrl>().unwrap())
-                    .unwrap();
+                format!("{subject_did}#{service_id}")
+                    .parse::<DIDUrl>()
+                    .ok()
+                    .and_then(|service_id| service.set_id(service_id).ok())
+                    .ok_or_else(|| InvalidDidError(service_id.to_string()))?;
 
                 // Overwrite the service if it already exists.
                 document.remove_service(service.id());
@@ -319,7 +326,11 @@ impl Aggregate for Document {
 
                 let service_id = format!("{subject_did}#{service_id}");
 
-                document.remove_service(&service_id.parse::<DIDUrl>().map_err(|_| InvalidDidError(service_id))?);
+                document.remove_service(
+                    &service_id
+                        .parse::<DIDUrl>()
+                        .map_err(|err| InvalidDidError(err.to_string()))?,
+                );
 
                 Ok(vec![ServiceRemoved { document_id, document }])
             }

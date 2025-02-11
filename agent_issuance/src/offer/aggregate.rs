@@ -161,7 +161,7 @@ impl Aggregate for Offer {
                             c_nonce_expires_in: None,
                         },
                     }]),
-                    _ => todo!(),
+                    _ => Err(UnsupportedTokenRequestGrantTypeError),
                 }
             }
             VerifyCredentialRequest {

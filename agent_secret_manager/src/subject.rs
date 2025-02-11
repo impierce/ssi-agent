@@ -9,7 +9,7 @@ use did_manager_consumer::resolver::Resolver;
 use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use identity_iota::did::CoreDID;
 use identity_iota::storage::JwkStorage;
-use identity_iota::{did::DID, document::DIDUrlQuery, storage::KeyId, verification::jwk::JwkParams};
+use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
 use itertools::iproduct;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
@@ -29,6 +29,9 @@ pub struct Subject {
 }
 
 impl Subject {
+    // TODO: For now it is fine that this fail fast (through explicit panics) as it is a critical part of the system. In
+    // the future this functionality should be implemented as an actual Domain (through the cqrs-es framework).
+    // Create a new Subject.
     pub async fn new() -> Self {
         let stronghold_storage = stronghold_storage().await;
         let mut did_methods = DidMethods::default();
@@ -44,8 +47,8 @@ impl Subject {
             .map(|(did_method, signing_algorithm)| (did_method, signing_algorithm))
             .collect::<Vec<_>>();
 
-        let ed25519_key_id = KeyId::new(config().secret_manager.issuer_eddsa_key_id.clone());
-        let es256_key_id = KeyId::new(config().secret_manager.issuer_es256_key_id.clone());
+        let ed25519_key_id = config().secret_manager.issuer_eddsa_key_id.clone();
+        let es256_key_id = config().secret_manager.issuer_es256_key_id.clone();
 
         for (did_method, signing_algorithm) in cartesian_product {
             let public_key_jwk = match signing_algorithm {
@@ -53,7 +56,7 @@ impl Subject {
                     let public_key_jwk = json!(stronghold_storage
                         .get_ed25519_public_key(&ed25519_key_id)
                         .await
-                        .expect("FIX THIS"));
+                        .expect("Could not find EdDSA public key"));
 
                     public_key_jwk
                 }
@@ -61,12 +64,12 @@ impl Subject {
                     let public_key_jwk = json!(stronghold_storage
                         .get_es256_public_key(&es256_key_id)
                         .await
-                        .expect("FIX THIS"));
+                        .expect("Could not find ES256 public key"));
 
                     public_key_jwk
                 }
                 _ => {
-                    todo!()
+                    panic!("Unsuported algorithm");
                 }
             };
 
@@ -88,7 +91,7 @@ impl Subject {
                     (controller, verification_method_id)
                 }
                 _ => {
-                    todo!()
+                    panic!("Updateable DID method");
                 }
             };
 
@@ -168,12 +171,12 @@ impl Sign for Subject {
     async fn sign(&self, message: &str, _subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
         let (key_id, public_key) = match algorithm {
             Algorithm::ES256 => {
-                let es256_key_id = KeyId::new(config().secret_manager.issuer_es256_key_id.clone());
+                let es256_key_id = config().secret_manager.issuer_es256_key_id.clone();
                 let public_key = self.stronghold_storage.get_es256_public_key(&es256_key_id).await?;
                 (es256_key_id, public_key)
             }
             Algorithm::EdDSA => {
-                let ed25519_key_id = KeyId::new(config().secret_manager.issuer_eddsa_key_id.clone());
+                let ed25519_key_id = config().secret_manager.issuer_eddsa_key_id.clone();
                 let public_key = self.stronghold_storage.get_ed25519_public_key(&ed25519_key_id).await?;
                 (ed25519_key_id, public_key)
             }
