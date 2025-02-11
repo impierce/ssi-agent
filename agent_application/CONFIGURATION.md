@@ -40,8 +40,6 @@ All environment variables need to be prefixed with `UNICORE__` to prevent confli
 | `UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD` | The password to unlock the stronghold.            | -             | -                             |
 | `UNICORE__SECRET_MANAGER__ISSUER_EDDSA_KEY_ID` | The key ID of the EDDSA (Ed25519) key to be used. | -             | -                             |
 | `UNICORE__SECRET_MANAGER__ISSUER_ES256_KEY_ID` | The key ID of the ES256 key to be used.           | -             | -                             |
-| `UNICORE__SECRET_MANAGER__ISSUER_DID`          | The DID of the issuer.                            | -             | -                             |
-| `UNICORE__SECRET_MANAGER__ISSUER_FRAGMENT`     | The fragment to be used.                          | -             | -                             |
 
 ## Look and Feel
 

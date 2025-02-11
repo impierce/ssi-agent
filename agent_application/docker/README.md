@@ -39,17 +39,6 @@ docker compose up
 > [!NOTE]
 > In case you need a base bath (for example when running behind a reverse proxy), you can set the `UNICORE__BASE_PATH` to a value such as `ssi-agent`.
 
-## IOTA DIDs
-
-By default, UniCore uses the JWK DID Method to generate and manage DIDs. However, UniCore also supports the IOTA DID
-Method, which leverages the IOTA Tangle to store your DID document. To enable the IOTA DID Method, set these environment
-variables:
-
-```yaml
-UNICORE__SECRET_MANAGER__ISSUER_DID: <your-pre-existing-IOTA-DID>
-UNICORE__SECRET_MANAGER__ISSUER_FRAGMENT: <your-pre-existing-IOTA-DID-fragment>
-```
-
 ## Leveraging Just-in-Time Data Request Events
 
 UniCore facilitates dynamic integration with external systems through just-in-time data request events, dispatched seamlessly via an HTTP Event Publisher. This enables real-time data retrieval and on-demand generation, enhancing flexibility and efficiency in your SSI ecosystem.
