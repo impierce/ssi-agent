@@ -91,7 +91,7 @@ up`, or ensure that the variable is available in your environment.
 
 ### 6. Update the Docker Compose File
 
-Open the `compose.yaml` file in a text editor and update the `image` value for the `ssi-agent` service to `impiercetechnologies/ssi-agent:1.0.0-beta.9`.
+Open the `compose.yaml` file in a text editor and update the `image` value for the `ssi-agent` service to `impiercetechnologies/ssi-agent:1.0.0-beta.8` (or newer version).
 
 ```yaml
 ssi-agent: impiercetechnologies/ssi-agent:1.0.0-beta.9
