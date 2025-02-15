@@ -8,14 +8,17 @@ confidently confirm that the entity controlling the domain is the same one repre
 process is crucial for enhancing trust and ensuring secure interactions in SSI applications.
 
 :::note
-Not all DID methods are suitable for Domain Linkage. Only methods that allow updating DID Documents can support this
-mechanism.
+
+Not all DID methods are suitable for Domain Linkage.
+Only methods that allow updating DID Documents can support this mechanism.
+
 | DID method | Domain Linkage supported |
-| ---------- | ------------------------ |
-| `did:iota` | ✅                       |
-| `did:jwk` | ❌                        |
-| `did:key` | ❌                        |
-| `did:web` | ✅                        |
+| ---------- | :----------------------: |
+| `did:iota` |            ✅            |
+| `did:jwk`  |            ❌            |
+| `did:key`  |            ❌            |
+| `did:web`  |            ✅            |
+
 :::
 
 ## Enabling Domain Linkage in UniCore
