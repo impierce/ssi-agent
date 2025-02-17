@@ -35,6 +35,7 @@ When Domain Linkage is enabled, UniCore will generate and publish the necessary 
 create the appropriate DID Documents for the enabled DID methods.
 
 :::warning
+
 Because the DID Configuration resource must reside at the domain root (see [DID Configuration
 Spec](https://identity.foundation/specs/did-configuration/#resource_location)), Domain Linkage in UniCore will not work
 if the `UNICORE__URL` environment variable contains a path segment. For example, Domain Linkage will **not become active** for:
