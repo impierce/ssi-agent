@@ -16,9 +16,7 @@ use strum::VariantArray;
 use tracing::{debug, info};
 use url::Url;
 
-// TODO: the stronghold path does not need to be configured through the config file anymore. Is this static variable for
-// the stronghold path the right solution?
-static STRONGHOLD_PATH: &str = "./app/res/stronghold";
+static STRONGHOLD_PATH: &str = "./app/stronghold.dat";
 
 // TODO: Once we have a proper state implementation for `agent_secret_manager` we can make use of randomly generated Key
 // IDs. For now we need to make use of these static variables.

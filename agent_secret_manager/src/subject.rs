@@ -31,7 +31,7 @@ pub struct Subject {
 impl Subject {
     // TODO: For now it is fine that this fail fast (through explicit panics) as it is a critical part of the system. In
     // the future this functionality should be implemented as an actual Domain (through the cqrs-es framework).
-    // Create a new Subject.
+    /// Create a new Subject.
     pub async fn new() -> Self {
         let stronghold_storage = stronghold_storage().await;
         let mut did_methods = DidMethods::default();

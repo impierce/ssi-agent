@@ -19,10 +19,10 @@ For local development, it is recommended to use Docker Compose.
 
 ```yaml
 environment:
-  UNICORE__SECRET_MANAGER__STRONGHOLD_PATH: "/app/res/stronghold"
+  UNICORE__SECRET_MANAGER__STRONGHOLD_PATH: "/app/stronghold.dat"
 
 volumes:
-  - ../../agent_secret_manager/tests/res/test.stronghold:/app/res/stronghold
+  - ../../agent_secret_manager/tests/res/test.stronghold:/app/stronghold.dat
 ```
 
 3. _(optional)_ In case you are interested in the events that UniCore produces, you can configure a HTTP Event Publisher that sends

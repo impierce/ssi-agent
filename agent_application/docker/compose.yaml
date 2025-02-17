@@ -38,14 +38,14 @@ services:
       UNICORE__EVENT_STORE__CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo
       UNICORE__URL: ${UNICORE__URL}
 
-      # UNICORE__SECRET_MANAGER__STRONGHOLD_PATH: "/app/res/stronghold"
+      # UNICORE__SECRET_MANAGER__STRONGHOLD_PATH: "/app/stronghold.dat"
       # UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD: "secure_password"
 
       # Uncomment the following lines to use the DID method `did:iota:rms`
       # UNICORE__SECRET_MANAGER__ISSUER_KEY_ID: "9O66nzWqYYy1LmmiOudOlh2SMIaUWoTS"
     volumes:
       - ../../agent_application/config.yaml:/app/agent_application/config.yaml
-      # - ../../agent_secret_manager/tests/res/test.stronghold:/app/res/stronghold
+      # - ../../agent_secret_manager/tests/res/test.stronghold:/app/stronghold.dat
       # - ../../agent_verification/presentation_definitions:/app/agent_verification/presentation_definitions
       # TODO: Remove this. This is a workaround that ensures that the `agent_verification/presentation_definitions`
       # folder can be accessed by the agent from the `fn authorization_requests` endpoint.
