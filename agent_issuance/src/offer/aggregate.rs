@@ -8,7 +8,7 @@ use oid4vci::token_request::TokenRequest;
 use oid4vci::token_response::TokenResponse;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError::{self, *};
@@ -223,6 +223,8 @@ impl Aggregate for Offer {
 
     fn apply(&mut self, event: Self::Event) {
         use OfferEvent::*;
+
+        debug!("Applying event: {:?}", event);
 
         match event {
             CredentialOfferCreated {

@@ -9,7 +9,7 @@ use identity_credential::{credential::Jwt, presentation::JwtPresentationOptions}
 use jsonwebtoken::Header;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{debug, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Presentation {
@@ -115,6 +115,8 @@ impl Aggregate for Presentation {
 
     fn apply(&mut self, event: Self::Event) {
         use PresentationEvent::*;
+
+        debug!("Applying event: {:?}", event);
 
         match event {
             PresentationCreated {

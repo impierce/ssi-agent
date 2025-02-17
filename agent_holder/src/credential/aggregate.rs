@@ -8,7 +8,7 @@ use cqrs_es::Aggregate;
 use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{debug, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct Data {
@@ -69,6 +69,8 @@ impl Aggregate for Credential {
 
     fn apply(&mut self, event: Self::Event) {
         use CredentialEvent::*;
+
+        debug!("Applying event: {:?}", event);
 
         match event {
             CredentialAdded {

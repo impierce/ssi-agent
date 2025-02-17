@@ -4,7 +4,7 @@ use identity_core::common::{Timestamp, Url};
 use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::services::IdentityServices;
 
@@ -67,6 +67,8 @@ impl Aggregate for Connection {
 
     fn apply(&mut self, event: Self::Event) {
         use ConnectionEvent::*;
+
+        debug!("Applying event: {:?}", event);
 
         match event {
             ConnectionAdded {

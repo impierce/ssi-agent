@@ -19,7 +19,7 @@ use oid4vc_core::Sign as _;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{str::FromStr as _, sync::Arc};
-use tracing::info;
+use tracing::{debug, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub enum Status {
@@ -226,6 +226,8 @@ impl Aggregate for Service {
 
     fn apply(&mut self, event: Self::Event) {
         use ServiceEvent::*;
+
+        debug!("Applying event: {:?}", event);
 
         match event {
             DomainLinkageServiceCreated {

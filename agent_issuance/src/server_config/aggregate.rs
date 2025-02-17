@@ -10,7 +10,7 @@ use oid4vci::proof::KeyProofMetadata;
 use oid4vci::ProofType;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::error::ServerConfigError;
@@ -115,6 +115,8 @@ impl Aggregate for ServerConfig {
 
     fn apply(&mut self, event: Self::Event) {
         use ServerConfigEvent::*;
+
+        debug!("Applying event: {:?}", event);
 
         match event {
             ServerMetadataInitialized {

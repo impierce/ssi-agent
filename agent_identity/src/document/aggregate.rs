@@ -25,7 +25,7 @@ use reqwest::{header::HeaderMap, Method};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{collections::BTreeMap, str::FromStr as _, sync::Arc};
-use tracing::info;
+use tracing::{debug, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub enum Status {
@@ -414,6 +414,8 @@ impl Aggregate for Document {
 
     fn apply(&mut self, event: Self::Event) {
         use DocumentEvent::*;
+
+        debug!("Applying event: {:?}", event);
 
         match event {
             DocumentCreated {

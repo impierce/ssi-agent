@@ -22,7 +22,7 @@ use oid4vci::VerifiableCredentialJwt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{debug, info};
 use types_ob_v3::prelude::{
     AchievementCredential, AchievementCredentialBuilder, AchievementCredentialType, AchievementSubject, Profile,
     ProfileBuilder,
@@ -375,6 +375,8 @@ impl Aggregate for Credential {
 
     fn apply(&mut self, event: Self::Event) {
         use CredentialEvent::*;
+
+        debug!("Applying event: {:?}", event);
 
         match event {
             UnsignedCredentialCreated {

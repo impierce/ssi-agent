@@ -13,7 +13,7 @@ use oid4vc_core::{authorization_request::ByReference, scope::Scope};
 use oid4vp::{authorization_request::ClientIdScheme, Oid4vpParams};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{debug, info};
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct AuthorizationRequest {
@@ -177,6 +177,8 @@ impl Aggregate for AuthorizationRequest {
 
     fn apply(&mut self, event: Self::Event) {
         use AuthorizationRequestEvent::*;
+
+        debug!("Applying event: {:?}", event);
 
         match event {
             AuthorizationRequestCreated { authorization_request } => {
