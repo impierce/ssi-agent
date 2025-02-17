@@ -1,8 +1,5 @@
 use agent_identity::{
-    service::{
-        aggregate::{ServiceResource, Status},
-        views::ServiceView,
-    },
+    service::{aggregate::ServiceResource, views::ServiceView},
     state::{IdentityState, DOMAIN_LINKAGE_SERVICE_ID},
 };
 use agent_shared::handlers::query_handler;
@@ -17,10 +14,7 @@ use hyper::StatusCode;
 pub(crate) async fn did_configuration(State(state): State<IdentityState>) -> Response {
     // Get the DID Configuration Resource if it exists.
     match query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
-        Ok(Some(ServiceView {
-            status: Status::Deleted,
-            ..
-        })) => StatusCode::NOT_FOUND.into_response(),
+        Ok(Some(ServiceView { is_deleted: true, .. })) => StatusCode::NOT_FOUND.into_response(),
         Ok(Some(ServiceView {
             resource: Some(ServiceResource::DomainLinkage(domain_linkage_configuration)),
             ..

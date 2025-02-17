@@ -4,24 +4,24 @@ use identity_document::service::Service as DocumentService;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 
-use super::aggregate::{ServiceResource, Status};
+use super::aggregate::ServiceResource;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Derivative, Display)]
 #[derivative(PartialEq)]
 pub enum ServiceEvent {
     DomainLinkageServiceCreated {
         service_id: String,
-        status: Status,
         service: DocumentService,
         #[derivative(PartialEq = "ignore")]
         resource: ServiceResource,
+        is_deleted: bool,
     },
     DomainLinkageServiceDeleted {
         service_id: String,
-        status: Status,
         service: Option<DocumentService>,
         #[derivative(PartialEq = "ignore")]
         resource: Option<ServiceResource>,
+        is_deleted: bool,
     },
     LinkedVerifiablePresentationServiceCreated {
         service_id: String,

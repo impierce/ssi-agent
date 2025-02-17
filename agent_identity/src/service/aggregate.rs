@@ -21,13 +21,6 @@ use serde_json::json;
 use std::{str::FromStr as _, sync::Arc};
 use tracing::{debug, info};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
-pub enum Status {
-    #[default]
-    Created,
-    Deleted,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServiceResource {
     DomainLinkage(DomainLinkageConfiguration),
@@ -37,10 +30,10 @@ pub enum ServiceResource {
 pub struct Service {
     #[serde(rename = "id")]
     pub service_id: String,
-    pub status: Status,
     pub service: Option<DocumentService>,
     pub presentation_ids: Vec<String>,
     pub resource: Option<ServiceResource>,
+    pub is_deleted: bool,
 }
 
 #[async_trait]
@@ -172,16 +165,16 @@ impl Aggregate for Service {
 
                 Ok(vec![DomainLinkageServiceCreated {
                     service_id,
-                    status: Status::Created,
                     service,
                     resource: ServiceResource::DomainLinkage(domain_linkage_configuration),
+                    is_deleted: false,
                 }])
             }
             DeleteDomainLinkageService { service_id } => Ok(vec![DomainLinkageServiceDeleted {
                 service_id,
-                status: Status::Deleted,
                 service: None,
                 resource: None,
+                is_deleted: true,
             }]),
             CreateLinkedVerifiablePresentationService {
                 service_id,
@@ -232,25 +225,25 @@ impl Aggregate for Service {
         match event {
             DomainLinkageServiceCreated {
                 service_id,
-                status,
                 service,
                 resource,
+                is_deleted,
             } => {
                 self.service_id = service_id;
-                self.status = status;
                 self.service.replace(service);
                 self.resource.replace(resource);
+                self.is_deleted = is_deleted;
             }
             DomainLinkageServiceDeleted {
                 service_id,
-                status,
                 service,
                 resource,
+                is_deleted,
             } => {
                 self.service_id = service_id;
-                self.status = status;
                 self.service = service;
                 self.resource = resource;
+                self.is_deleted = is_deleted;
             }
             LinkedVerifiablePresentationServiceCreated {
                 service_id,
@@ -296,9 +289,9 @@ pub mod service_tests {
             })
             .then_expect_events(vec![ServiceEvent::DomainLinkageServiceCreated {
                 service_id: domain_linkage_service_id,
-                status: Status::Created,
                 service: domain_linkage_service,
                 resource: domain_linkage_resource,
+                is_deleted: false,
             }])
     }
 
@@ -314,18 +307,18 @@ pub mod service_tests {
         ServiceTestFramework::with(IdentityServices::default())
             .given(vec![ServiceEvent::DomainLinkageServiceCreated {
                 service_id: domain_linkage_service_id.clone(),
-                status: Status::Created,
                 service: domain_linkage_service.clone(),
                 resource: domain_linkage_resource.clone(),
+                is_deleted: false,
             }])
             .when(ServiceCommand::DeleteDomainLinkageService {
                 service_id: domain_linkage_service_id.clone(),
             })
             .then_expect_events(vec![ServiceEvent::DomainLinkageServiceDeleted {
                 service_id: domain_linkage_service_id,
-                status: Status::Deleted,
                 service: None,
                 resource: None,
+                is_deleted: true,
             }])
     }
 
