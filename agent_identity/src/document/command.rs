@@ -10,7 +10,7 @@ pub enum DocumentCommand {
     CreateDocument {
         did_method: SupportedDidMethod,
     },
-    SetPublicKeyJwks {
+    UpdatePublicKey {
         did_method: SupportedDidMethod,
         public_key_jwks: Vec<Jwk>,
     },

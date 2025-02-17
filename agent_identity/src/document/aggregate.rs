@@ -194,7 +194,7 @@ impl Aggregate for Document {
                     document,
                 }])
             }
-            SetPublicKeyJwks {
+            UpdatePublicKey {
                 did_method,
                 // TODO: decide whether the public keys should be suplied through the command or not.
                 public_key_jwks: _,
@@ -244,6 +244,8 @@ impl Aggregate for Document {
                     document.remove_method(&method_id);
                 }
 
+                let mut events = vec![];
+
                 // Add the new Verification Methods to the Document.
                 for public_key_jwk in public_key_jwks {
                     let fragment = public_key_jwk.kid().ok_or(MissingKidError)?;
@@ -274,12 +276,14 @@ impl Aggregate for Document {
                         algorithm,
                         &verification_method_id.to_string(),
                     );
+
+                    events.push(PublicKeyUpdated {
+                        document_id: did_method.to_string(),
+                        document: document.clone(),
+                    })
                 }
 
-                Ok(vec![PublicKeyJwksUpdated {
-                    document_id: did_method.to_string(),
-                    document,
-                }])
+                Ok(events)
             }
             UpdateDocumentStatus { did_method, status } => {
                 let mut did_methods = services.subject.did_methods.lock().await;
@@ -427,7 +431,7 @@ impl Aggregate for Document {
                 self.status = status;
                 self.document.replace(document);
             }
-            PublicKeyJwksUpdated { document_id, document } => {
+            PublicKeyUpdated { document_id, document } => {
                 self.document_id = document_id;
                 self.document.replace(document);
             }
@@ -514,11 +518,11 @@ pub mod document_tests {
                 document_id: did_method.to_string(),
                 status: Status::SignAndValidate,
             }])
-            .when(DocumentCommand::SetPublicKeyJwks {
+            .when(DocumentCommand::UpdatePublicKey {
                 did_method: did_method.clone(),
                 public_key_jwks: vec![],
             })
-            .then_expect_events(vec![DocumentEvent::PublicKeyJwksUpdated {
+            .then_expect_events(vec![DocumentEvent::PublicKeyUpdated {
                 document_id: did_method.to_string(),
                 document: document_with_verification_method,
             }])
@@ -540,7 +544,7 @@ pub mod document_tests {
                     document,
                     status: Status::SignAndValidate,
                 },
-                DocumentEvent::PublicKeyJwksUpdated {
+                DocumentEvent::PublicKeyUpdated {
                     document_id: did_method.to_string(),
                     document: document_with_verification_method,
                 },
@@ -570,7 +574,7 @@ pub mod document_tests {
                     document,
                     status: Status::SignAndValidate,
                 },
-                DocumentEvent::PublicKeyJwksUpdated {
+                DocumentEvent::PublicKeyUpdated {
                     document_id: did_method.to_string(),
                     document: document_with_verification_method.clone(),
                 },
@@ -603,7 +607,7 @@ pub mod document_tests {
                     document,
                     status: Status::SignAndValidate,
                 },
-                DocumentEvent::PublicKeyJwksUpdated {
+                DocumentEvent::PublicKeyUpdated {
                     document_id: did_method.to_string(),
                     document: document_with_verification_method.clone(),
                 },

@@ -179,7 +179,7 @@ pub enum ConnectionEvent {
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum DocumentEvent {
     DocumentCreated,
-    PublicKeyJwksUpdated,
+    PublicKeyUpdated,
     DocumentStatusUpdated,
     ServiceAdded,
     ServiceRemoved,
@@ -283,7 +283,7 @@ pub enum SupportedDidMethod {
     IotaRms,
 }
 
-/// (A subset of) DID method traits as defined here: https://identity.foundation/did-traits/
+/// (A subset of) DID method traits as defined here: https://github.com/decentralized-identity/did-traits/blob/v0.8.0/schemas/v0.8.0/traits.json
 impl SupportedDidMethod {
     pub fn is_updateable(&self) -> bool {
         match self {

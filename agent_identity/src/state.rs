@@ -162,7 +162,7 @@ pub async fn initialize(state: &IdentityState) {
 
                 let _ = command_handler(&document_id, &state.command.document, command).await;
 
-                let command = DocumentCommand::SetPublicKeyJwks {
+                let command = DocumentCommand::UpdatePublicKey {
                     did_method: did_method.clone(),
                     public_key_jwks: vec![],
                 };

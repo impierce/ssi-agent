@@ -11,7 +11,7 @@ pub enum DocumentEvent {
         status: Status,
         document: CoreDocument,
     },
-    PublicKeyJwksUpdated {
+    PublicKeyUpdated {
         document_id: String,
         document: CoreDocument,
     },
