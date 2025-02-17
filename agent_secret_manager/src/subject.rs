@@ -40,7 +40,7 @@ impl Subject {
         let non_updateable_did_methods = get_all_enabled_did_methods()
             .clone()
             .into_iter()
-            .filter(|method| !method.is_updateable())
+            .filter(|method| !method.supports_update())
             .collect::<Vec<_>>();
 
         let cartesian_product = iproduct!(non_updateable_did_methods.into_iter(), signing_algorithms.into_iter())

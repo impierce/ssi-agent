@@ -118,7 +118,7 @@ pub async fn initialize(state: &IdentityState) {
         .did_methods
         .clone()
         .into_iter()
-        .filter(|(did_method, _)| did_method.is_updateable())
+        .filter(|(did_method, _)| did_method.supports_update())
         .collect::<Vec<_>>();
 
     info!("DID Methods: {:?}", did_methods);
@@ -285,7 +285,7 @@ pub async fn initialize(state: &IdentityState) {
                 let did_method = did_method.clone();
                 let document_id = did_method.to_string();
 
-                if did_method.is_decentrally_hosted() {
+                if did_method.decentrally_hosted() {
                     let command = DocumentCommand::PublishDocument {
                         did_method: did_method.clone(),
                     };

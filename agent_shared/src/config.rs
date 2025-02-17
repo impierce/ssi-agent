@@ -283,9 +283,11 @@ pub enum SupportedDidMethod {
     IotaRms,
 }
 
-/// (A subset of) DID method traits as defined here: https://github.com/decentralized-identity/did-traits/blob/v0.8.0/schemas/v0.8.0/traits.json
+/// (A subset of) DID method traits. The methods follow a naming convention that expresses boolean predicates as verb
+/// phrases, as specified in the DID traits documentation:
+/// https://github.com/decentralized-identity/did-traits/blob/v0.8.0/schemas/v0.8.0/traits.json
 impl SupportedDidMethod {
-    pub fn is_updateable(&self) -> bool {
+    pub fn supports_update(&self) -> bool {
         match self {
             SupportedDidMethod::Web
             | SupportedDidMethod::Iota
@@ -295,7 +297,7 @@ impl SupportedDidMethod {
         }
     }
 
-    pub fn is_centrally_hosted(&self) -> bool {
+    pub fn hosted_centrally(&self) -> bool {
         match self {
             SupportedDidMethod::Jwk
             | SupportedDidMethod::Key
@@ -306,7 +308,7 @@ impl SupportedDidMethod {
         }
     }
 
-    pub fn is_decentrally_hosted(&self) -> bool {
+    pub fn decentrally_hosted(&self) -> bool {
         match self {
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => false,
             SupportedDidMethod::Iota | SupportedDidMethod::IotaSmr | SupportedDidMethod::IotaRms => true,
