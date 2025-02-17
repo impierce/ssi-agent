@@ -137,12 +137,12 @@ pub async fn initialize(state: &IdentityState) {
                     // If the DID document exists, then the status needs to be updated.
                     Ok(Some(_document_exists)) => {
                         if *enabled {
-                            DocumentCommand::SetStatus {
+                            DocumentCommand::UpdateDocumentStatus {
                                 did_method: did_method.clone(),
                                 status: Status::SignAndValidate,
                             }
                         } else {
-                            DocumentCommand::SetStatus {
+                            DocumentCommand::UpdateDocumentStatus {
                                 did_method: did_method.clone(),
                                 status: Status::Disabled,
                             }

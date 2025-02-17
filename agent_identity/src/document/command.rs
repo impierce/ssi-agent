@@ -14,7 +14,7 @@ pub enum DocumentCommand {
         did_method: SupportedDidMethod,
         public_key_jwks: Vec<Jwk>,
     },
-    SetStatus {
+    UpdateDocumentStatus {
         did_method: SupportedDidMethod,
         status: Status,
     },

@@ -281,7 +281,7 @@ impl Aggregate for Document {
                     document,
                 }])
             }
-            SetStatus { did_method, status } => {
+            UpdateDocumentStatus { did_method, status } => {
                 let mut did_methods = services.subject.did_methods.lock().await;
 
                 if let Some(document) = &self.document {
@@ -616,7 +616,7 @@ pub mod document_tests {
                     document: document_with_verification_method,
                 },
             ])
-            .when(DocumentCommand::SetStatus {
+            .when(DocumentCommand::UpdateDocumentStatus {
                 did_method: did_method.clone(),
                 status: Status::Disabled,
             })
