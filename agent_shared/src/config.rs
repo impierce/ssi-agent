@@ -180,7 +180,7 @@ pub enum ConnectionEvent {
 pub enum DocumentEvent {
     DocumentCreated,
     PublicKeyJwksSet,
-    StatusSet,
+    DocumentStatusUpdated,
     ServiceAdded,
     ServiceRemoved,
     DocumentPublished,

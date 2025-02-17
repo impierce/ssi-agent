@@ -15,7 +15,7 @@ pub enum DocumentEvent {
         document_id: String,
         document: CoreDocument,
     },
-    StatusSet {
+    DocumentStatusUpdated {
         document_id: String,
         status: Status,
     },

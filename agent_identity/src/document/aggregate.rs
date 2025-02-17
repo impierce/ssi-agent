@@ -291,7 +291,7 @@ impl Aggregate for Document {
                     did_methods.insert_did(&did_method, Algorithm::EdDSA, controller);
                 }
 
-                Ok(vec![StatusSet {
+                Ok(vec![DocumentStatusUpdated {
                     document_id: did_method.to_string(),
                     status,
                 }])
@@ -431,7 +431,7 @@ impl Aggregate for Document {
                 self.document_id = document_id;
                 self.document.replace(document);
             }
-            StatusSet { document_id, status } => {
+            DocumentStatusUpdated { document_id, status } => {
                 self.document_id = document_id;
                 self.status = status;
             }
@@ -620,7 +620,7 @@ pub mod document_tests {
                 did_method: did_method.clone(),
                 status: Status::Disabled,
             })
-            .then_expect_events(vec![DocumentEvent::StatusSet {
+            .then_expect_events(vec![DocumentEvent::DocumentStatusUpdated {
                 document_id: did_method.to_string(),
                 status: Status::Disabled,
             }])

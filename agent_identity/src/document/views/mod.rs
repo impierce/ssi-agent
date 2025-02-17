@@ -20,7 +20,7 @@ impl View<Document> for Document {
                 self.document_id.clone_from(document_id);
                 self.document.replace(document.clone());
             }
-            StatusSet { document_id, status } => {
+            DocumentStatusUpdated { document_id, status } => {
                 self.document_id.clone_from(document_id);
                 self.status.clone_from(status);
             }
