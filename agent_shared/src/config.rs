@@ -179,7 +179,7 @@ pub enum ConnectionEvent {
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum DocumentEvent {
     DocumentCreated,
-    PublicKeyJwksSet,
+    PublicKeyJwksUpdated,
     DocumentStatusUpdated,
     ServiceAdded,
     ServiceRemoved,

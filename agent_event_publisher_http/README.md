@@ -31,7 +31,7 @@ ConnectionAdded
 
 ```
 DocumentCreated
-PublicKeyJwksSet
+PublicKeyJwksUpdated
 DocumentStatusUpdated
 ServiceAdded
 ServiceRemoved

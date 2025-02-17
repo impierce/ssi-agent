@@ -276,7 +276,7 @@ impl Aggregate for Document {
                     );
                 }
 
-                Ok(vec![PublicKeyJwksSet {
+                Ok(vec![PublicKeyJwksUpdated {
                     document_id: did_method.to_string(),
                     document,
                 }])
@@ -427,7 +427,7 @@ impl Aggregate for Document {
                 self.status = status;
                 self.document.replace(document);
             }
-            PublicKeyJwksSet { document_id, document } => {
+            PublicKeyJwksUpdated { document_id, document } => {
                 self.document_id = document_id;
                 self.document.replace(document);
             }
@@ -518,7 +518,7 @@ pub mod document_tests {
                 did_method: did_method.clone(),
                 public_key_jwks: vec![],
             })
-            .then_expect_events(vec![DocumentEvent::PublicKeyJwksSet {
+            .then_expect_events(vec![DocumentEvent::PublicKeyJwksUpdated {
                 document_id: did_method.to_string(),
                 document: document_with_verification_method,
             }])
@@ -540,7 +540,7 @@ pub mod document_tests {
                     document,
                     status: Status::SignAndValidate,
                 },
-                DocumentEvent::PublicKeyJwksSet {
+                DocumentEvent::PublicKeyJwksUpdated {
                     document_id: did_method.to_string(),
                     document: document_with_verification_method,
                 },
@@ -570,7 +570,7 @@ pub mod document_tests {
                     document,
                     status: Status::SignAndValidate,
                 },
-                DocumentEvent::PublicKeyJwksSet {
+                DocumentEvent::PublicKeyJwksUpdated {
                     document_id: did_method.to_string(),
                     document: document_with_verification_method.clone(),
                 },
@@ -603,7 +603,7 @@ pub mod document_tests {
                     document,
                     status: Status::SignAndValidate,
                 },
-                DocumentEvent::PublicKeyJwksSet {
+                DocumentEvent::PublicKeyJwksUpdated {
                     document_id: did_method.to_string(),
                     document: document_with_verification_method.clone(),
                 },
