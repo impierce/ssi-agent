@@ -88,8 +88,8 @@ impl Aggregate for Document {
                             .await
                             .map_err(|err| SecretManagerInitializationError(err.to_string()))?;
 
-                        let ledger_sponsoring_service = config().ledger_sponsoring_service.clone().expect(
-                            "Ledger sponsoring service not configured. Please configure the `ledger_sponsoring_service` in the config file.",
+                        let ledger_sponsoring_service = config().external_services.clone().and_then(|external_services| external_services.clone().ledger_sponsoring).expect(
+                            "Ledger sponsoring service not configured. Please configure the `ledger_sponsoring` in the config file.",
                         );
                         let access_key = ledger_sponsoring_service.access_key;
                         let url = ledger_sponsoring_service.url;

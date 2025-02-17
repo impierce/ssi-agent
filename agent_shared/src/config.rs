@@ -34,7 +34,7 @@ pub struct ApplicationConfiguration {
     pub external_server_response_timeout_ms: Option<u64>,
     pub domain_linkage_enabled: bool,
     pub secret_manager: SecretManagerConfig,
-    pub ledger_sponsoring_service: Option<LedgerSponsoringService>,
+    pub external_services: Option<ExternalServices>,
     pub did_document_cache: Option<InMemoryCacheConfig>,
     pub credential_configurations: Vec<CredentialConfiguration>,
     pub signing_algorithms_supported: HashMap<jsonwebtoken::Algorithm, ToggleOptions>,
@@ -92,6 +92,11 @@ pub fn default_issuer_eddsa_key_id() -> KeyId {
 
 pub fn default_issuer_es256_key_id() -> KeyId {
     KeyId::new(ES256_KEY_ID)
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ExternalServices {
+    pub ledger_sponsoring: Option<LedgerSponsoringService>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
