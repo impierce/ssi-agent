@@ -29,8 +29,8 @@ impl View<AuthorizationRequest> for AuthorizationRequest {
                 self.id_token.replace(id_token.clone());
                 self.state.clone_from(state);
             }
-            OID4VPAuthorizationResponseVerified { vp_token, state } => {
-                self.vp_token.replace(vp_token.clone());
+            OID4VPAuthorizationResponseVerified { vp_tokens, state } => {
+                self.vp_tokens.replace(vp_tokens.clone());
                 self.state.clone_from(state);
             }
         }

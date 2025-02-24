@@ -3,7 +3,7 @@ use agent_shared::config::{config, get_all_enabled_did_methods, get_preferred_di
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{client_metadata::ClientMetadataResource, Subject};
 use oid4vc_manager::RelyingPartyManager;
-use oid4vp::ClaimFormatProperty;
+use oid4vp::{ClaimFormatDesignation, ClaimFormatProperty};
 use serde_json::json;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
@@ -58,7 +58,13 @@ impl Service for VerificationServices {
                     .map(|(c, _)| {
                         (
                             c.clone(),
-                            ClaimFormatProperty::Alg(signing_algorithms_supported.clone()),
+                            match c {
+                                ClaimFormatDesignation::VcSdJwt => ClaimFormatProperty::SdJwt {
+                                    sd_jwt_alg_values: signing_algorithms_supported.clone(),
+                                    kb_jwt_alg_values: vec![],
+                                },
+                                _ => ClaimFormatProperty::Alg(signing_algorithms_supported.clone()),
+                            },
                         )
                     })
                     .collect(),
