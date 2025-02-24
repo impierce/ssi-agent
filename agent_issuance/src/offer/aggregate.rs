@@ -505,6 +505,7 @@ pub mod tests {
     }
 
     #[rstest]
+    #[allow(clippy::too_many_arguments)]
     #[serial_test::serial]
     async fn test_create_credential_response(
         holder: &Arc<dyn Subject>,
