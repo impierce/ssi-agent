@@ -23,7 +23,7 @@ use itertools::iproduct;
 use jsonwebtoken::Algorithm;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::info;
 
 #[derive(Clone)]
 pub struct IdentityState {
@@ -117,13 +117,15 @@ pub const DOMAIN_LINKAGE_SERVICE_ID: &str = "linked-domain-service";
 pub const LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID: &str = "linked-verifiable-presentation-service";
 
 /// Initialize the identity state.
-pub async fn initialize(state: &IdentityState) {
+pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
     info!("Initializing the identity state ...");
 
-    initialize_documents(state).await;
-    initialize_domain_linkage(state).await;
-    initialize_linked_verifiable_presentations(state).await;
-    publish_decentrally_hosted_documents(state).await;
+    initialize_documents(state).await?;
+    initialize_domain_linkage(state).await?;
+    initialize_linked_verifiable_presentations(state).await?;
+    publish_decentrally_hosted_documents(state).await?;
+
+    Ok(())
 }
 
 /// Initializes or updates documents based on the current DID methods configuration.
@@ -143,10 +145,10 @@ pub async fn initialize(state: &IdentityState) {
 ///      one is generated.
 /// 4. For each generated document command, executing the command via `command_handler` and subsequently
 ///    updating the document's public keys.
-async fn initialize_documents(state: &IdentityState) {
+async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
     let did_methods_with_or_without_fixed_algorithm = get_did_methods_with_or_without_fixed_algorithm();
 
-    let all_documents = query_all_documents(state, |_| true).await;
+    let all_documents = query_all_documents(state, |_| true).await?;
 
     for ((did_method, ToggleOptions { enabled, .. }), with_fixed_algorithm) in
         did_methods_with_or_without_fixed_algorithm
@@ -189,16 +191,18 @@ async fn initialize_documents(state: &IdentityState) {
 
         // If a Document command was generated, then execute the command and update the Document's Public Keys.
         if let Some((document_id, command)) = document_id_and_command {
-            let _ = command_handler(&document_id, &state.command.document, command).await;
+            command_handler(&document_id, &state.command.document, command).await?;
 
             let command = DocumentCommand::UpdatePublicKeys {
                 document_id: document_id.clone(),
                 public_key_jwks: vec![],
             };
 
-            let _ = command_handler(&document_id, &state.command.document, command).await;
+            command_handler(&document_id, &state.command.document, command).await?;
         }
     }
+
+    Ok(())
 }
 
 /// Constructs pairs of configured DID methods with their associated signing algorithms.
@@ -250,12 +254,17 @@ fn get_did_methods_with_or_without_fixed_algorithm() -> Vec<((SupportedDidMethod
 /// 3. Service Deletion:
 ///    - If domain linkage is disabled or no update-supporting documents exist, the function sends a command
 ///      to disable the Domain Linkage Service.
-pub async fn initialize_domain_linkage(state: &IdentityState) {
+pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<()> {
     // Get all the Documents that are not disabled and support updates.
     let update_supporting_documents = query_all_documents(state, |(_, document)| {
-        document.status != Status::Disabled && document.did_method.as_ref().unwrap().supports_update()
+        document.status != Status::Disabled
+            && document
+                .did_method
+                .as_ref()
+                .map(SupportedDidMethod::supports_update)
+                .unwrap_or_default()
     })
-    .await;
+    .await?;
 
     // Check whether Domain Linkage are enabled and whether there are any enabled update supporting Documents.
     if config().domain_linkage_enabled && !update_supporting_documents.is_empty() {
@@ -273,15 +282,15 @@ pub async fn initialize_domain_linkage(state: &IdentityState) {
                 .collect(),
         };
 
-        let _ = command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command).await;
+        command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command).await?;
 
-        info!("Created domain linkage service");
+        info!("Created Linked Domain service");
 
         match query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
             Ok(Some(Service {
                 service: Some(service), ..
             })) => {
-                info!("Found linked domains service: {service}");
+                info!("Found Linked Domains service: {service}");
 
                 // Add the Domain Linkage service to all the enabled update supporting Documents.
                 for document_id in update_supporting_documents.keys() {
@@ -290,13 +299,10 @@ pub async fn initialize_domain_linkage(state: &IdentityState) {
                         service: service.clone(),
                     };
 
-                    let _ = command_handler(document_id, &state.command.document, command).await;
+                    command_handler(document_id, &state.command.document, command).await?;
                 }
             }
-            _ => {
-                warn!("Failed to retrieve linked domains service");
-                return;
-            }
+            _ => anyhow::bail!("Failed to retrieve Linked Domains service"),
         };
     } else {
         // If Domain Linkage is disabled and/or there are no enabled update supporting Documents, then disable the Domain Linkage Service.
@@ -304,14 +310,16 @@ pub async fn initialize_domain_linkage(state: &IdentityState) {
             service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
         };
 
-        let _ = command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command).await;
+        command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command).await?;
 
-        info!("Disabled Domain linkage service");
+        info!("Disabled Domain Linkage service");
     }
+
+    Ok(())
 }
 
 /// Initializes the Linked Verifiable Presentations service for DID Web Document.
-pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) {
+pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -> anyhow::Result<()> {
     // TODO: We currently only support Linked Verifiable Presentations for DID Web. In the future we should also support
     // it for other update supporting DID methods.
 
@@ -319,13 +327,13 @@ pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) {
     let did_web_document = query_all_documents(state, |(_, document)| {
         document.status != Status::Disabled && document.did_method == Some(SupportedDidMethod::Web)
     })
-    .await;
+    .await?;
 
     match query_handler(LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID, &state.query.service).await {
         Ok(Some(Service {
             service: Some(service), ..
         })) => {
-            info!("Found linked verifiable presentations service: {service}");
+            info!("Found Linked Verifiable Presentations service: {service}");
 
             // Add the Linked Verifiable Presentations service to the DID Web Document.
             for document_id in did_web_document.keys() {
@@ -334,13 +342,13 @@ pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) {
                     service: service.clone(),
                 };
 
-                let _ = command_handler(&document_id, &state.command.document, command).await;
+                command_handler(&document_id, &state.command.document, command).await?;
             }
         }
-        _ => {
-            return;
-        }
+        _ => anyhow::bail!("Failed to retrieve Linked Verifiable Presentations service"),
     };
+
+    Ok(())
 }
 
 /// Publishes all decentrally hosted documents.
@@ -348,15 +356,19 @@ pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) {
 /// This asynchronous function performs the following steps:
 ///
 /// 1. Query Documents: It retrieves all documents whose associated DID methods indicate they are
-///    hosted decentrally by filtering with the `hosted_decentrally()` predicate.
+///    hosted decentrally by filtering with the `SupportedDidMethod::hosted_decentrally` predicate.
 /// 2. Publish Documents: For each decentrally hosted document found, it sends a `PublishDocument`
 ///    command via the command handler to publish the document.
-pub async fn publish_decentrally_hosted_documents(state: &IdentityState) {
+pub async fn publish_decentrally_hosted_documents(state: &IdentityState) -> anyhow::Result<()> {
     // Get all the decentrally hosted Documents.
     let decentrally_hosted_documents = query_all_documents(state, |(_, document)| {
-        document.did_method.as_ref().unwrap().hosted_decentrally()
+        document
+            .did_method
+            .as_ref()
+            .map(SupportedDidMethod::hosted_decentrally)
+            .unwrap_or_default()
     })
-    .await;
+    .await?;
 
     // Publish each decentrally hosted Documents.
     for document_id in decentrally_hosted_documents.keys() {
@@ -364,8 +376,10 @@ pub async fn publish_decentrally_hosted_documents(state: &IdentityState) {
             document_id: document_id.clone(),
         };
 
-        let _ = command_handler(document_id, &state.command.document, command).await;
+        command_handler(document_id, &state.command.document, command).await?;
     }
+
+    Ok(())
 }
 
 /// Asynchronously retrieves all documents and filters them using the provided predicate.
@@ -376,13 +390,9 @@ pub async fn publish_decentrally_hosted_documents(state: &IdentityState) {
 async fn query_all_documents(
     state: &IdentityState,
     query: impl Fn(&(String, Document)) -> bool,
-) -> HashMap<String, Document> {
-    match query_handler("all_documents", &state.query.all_documents).await {
-        Ok(Some(AllDocumentsView { documents })) => documents.into_iter().filter(query).collect(),
-        Ok(None) => Default::default(),
-        _ => {
-            warn!("Failed to retrieve all documents");
-            return Default::default();
-        }
+) -> anyhow::Result<HashMap<String, Document>> {
+    match query_handler("all_documents", &state.query.all_documents).await? {
+        Some(AllDocumentsView { documents }) => Ok(documents.into_iter().filter(query).collect()),
+        None => Ok(Default::default()),
     }
 }

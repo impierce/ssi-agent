@@ -66,7 +66,7 @@ async fn main() -> io::Result<()> {
 
     info!("Application url: {}", url);
 
-    agent_identity::state::initialize(&identity_state).await;
+    agent_identity::state::initialize(&identity_state).await.unwrap();
     agent_issuance::state::initialize(&issuance_state, startup_commands(url.clone())).await;
 
     let health_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
