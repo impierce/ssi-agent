@@ -14,4 +14,6 @@ pub enum OfferError {
     InvalidProofError(String),
     #[error("Missing `iss` claim in `Proof`")]
     MissingProofIssuerError,
+    #[error("Invalid URL: {0}")]
+    InvalidUrlError(String),
 }

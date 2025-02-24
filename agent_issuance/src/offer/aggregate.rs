@@ -1,3 +1,4 @@
+use agent_shared::config::config;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use oid4vc_core::Validator;
@@ -9,6 +10,7 @@ use oid4vci::token_response::TokenResponse;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
+use url::Url;
 
 use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError::{self, *};
@@ -27,6 +29,7 @@ pub enum Status {
 pub struct Offer {
     #[serde(rename = "id")]
     pub offer_id: String,
+    pub credential_offer_uri: Option<CredentialOffer>,
     pub credential_offer: Option<CredentialOffer>,
     pub subject_id: Option<String>,
     pub credential_ids: Vec<String>,
@@ -88,8 +91,17 @@ impl Aggregate for Offer {
                     }),
                 }));
 
+                let credential_offer_uri = CredentialOffer::CredentialOfferUri(
+                    Url::parse(&format!(
+                        "{}/credential-offer/{}",
+                        credential_issuer_metadata.credential_issuer, offer_id
+                    ))
+                    .map_err(|e| InvalidUrlError(e.to_string()))?,
+                );
+
                 Ok(vec![CredentialOfferCreated {
                     offer_id,
+                    credential_offer_uri,
                     credential_offer,
                     pre_authorized_code,
                     access_token,
@@ -103,24 +115,42 @@ impl Aggregate for Offer {
                 offer_id,
                 credential_ids,
             }]),
-            CreateFormUrlEncodedCredentialOffer { offer_id } => Ok(vec![FormUrlEncodedCredentialOfferCreated {
-                offer_id,
-                form_url_encoded_credential_offer: self
-                    .credential_offer
-                    .as_ref()
-                    .ok_or(MissingCredentialOfferError)?
-                    .to_string(),
-                status: Status::Pending,
-            }]),
+            CreateFormUrlEncodedCredentialOffer { offer_id } => {
+                let credential_offer_by_value_enabled = config().credential_offer_by_value_enabled.unwrap_or_default();
+                Ok(vec![FormUrlEncodedCredentialOfferCreated {
+                    offer_id,
+                    form_url_encoded_credential_offer: if credential_offer_by_value_enabled {
+                        self.credential_offer
+                            .as_ref()
+                            .ok_or(MissingCredentialOfferError)?
+                            .to_string()
+                    } else {
+                        //this makes that by default, credenital_offer_uri is used.
+                        self.credential_offer_uri
+                            .as_ref()
+                            .ok_or(MissingCredentialOfferError)?
+                            .to_string()
+                    },
+                    status: Status::Pending,
+                }])
+            }
             SendCredentialOffer { offer_id, target_url } => {
-                // TODO: add to `service`?
                 let client = reqwest::Client::new();
 
-                let form_url_encoded_credential_offer = self
-                    .credential_offer
-                    .as_ref()
-                    .ok_or(MissingCredentialOfferError)?
-                    .to_string();
+                let credential_offer_by_value_enabled = config().credential_offer_by_value_enabled.unwrap_or_default();
+                let form_url_encoded_credential_offer = if credential_offer_by_value_enabled {
+                    // offer by/value is enabled, use credential_offer
+                    self.credential_offer
+                        .as_ref()
+                        .ok_or(MissingCredentialOfferError)?
+                        .to_string()
+                } else {
+                    // default: use credential_offer_uri
+                    self.credential_offer_uri
+                        .as_ref()
+                        .ok_or(MissingCredentialOfferError)?
+                        .to_string()
+                };
 
                 let target =
                     form_url_encoded_credential_offer.replace("openid-credential-offer://", target_url.as_str());
@@ -232,12 +262,14 @@ impl Aggregate for Offer {
                 pre_authorized_code,
                 access_token,
                 credential_offer,
+                credential_offer_uri,
                 status,
             } => {
                 self.offer_id = offer_id;
                 self.pre_authorized_code = pre_authorized_code;
                 self.access_token = access_token;
                 self.credential_offer.replace(credential_offer);
+                self.credential_offer_uri.replace(credential_offer_uri);
                 self.status = status;
             }
             CredentialsAdded {
@@ -301,6 +333,7 @@ pub mod tests {
         #[future(awt)] access_token: String,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         #[future(awt)] credential_offer: CredentialOffer,
+        #[future(awt)] credential_offer_uri: CredentialOffer,
     ) {
         OfferTestFramework::with(Service::default())
             .given_no_previous_events()
@@ -311,6 +344,7 @@ pub mod tests {
             .then_expect_events(vec![OfferEvent::CredentialOfferCreated {
                 offer_id: Default::default(),
                 credential_offer,
+                credential_offer_uri,
                 pre_authorized_code,
                 access_token,
                 status: Status::Created,
@@ -323,10 +357,12 @@ pub mod tests {
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] access_token: String,
         #[future(awt)] credential_offer: CredentialOffer,
+        #[future(awt)] credential_offer_uri: CredentialOffer,
     ) {
         OfferTestFramework::with(Service::default())
             .given(vec![OfferEvent::CredentialOfferCreated {
                 offer_id: Default::default(),
+                credential_offer_uri,
                 credential_offer,
                 pre_authorized_code,
                 access_token,
@@ -348,12 +384,14 @@ pub mod tests {
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] access_token: String,
         #[future(awt)] credential_offer: CredentialOffer,
+        #[future(awt)] credential_offer_uri: CredentialOffer,
         #[future(awt)] form_url_encoded_credential_offer: String,
     ) {
         OfferTestFramework::with(Service::default())
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
                     offer_id: Default::default(),
+                    credential_offer_uri,
                     credential_offer,
                     pre_authorized_code,
                     access_token,
@@ -380,6 +418,7 @@ pub mod tests {
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] access_token: String,
         #[future(awt)] credential_offer: CredentialOffer,
+        #[future(awt)] credential_offer_uri: CredentialOffer,
         #[future(awt)] form_url_encoded_credential_offer: String,
         #[future(awt)] token_request: TokenRequest,
         #[future(awt)] token_response: TokenResponse,
@@ -389,6 +428,7 @@ pub mod tests {
                 OfferEvent::CredentialOfferCreated {
                     offer_id: Default::default(),
                     credential_offer,
+                    credential_offer_uri,
                     pre_authorized_code,
                     access_token,
                     status: Status::Created,
@@ -421,6 +461,7 @@ pub mod tests {
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] access_token: String,
         #[future(awt)] credential_offer: CredentialOffer,
+        #[future(awt)] credential_offer_uri: CredentialOffer,
         #[future(awt)] form_url_encoded_credential_offer: String,
         #[future(awt)] token_response: TokenResponse,
         #[future(awt)] credential_request: CredentialRequest,
@@ -431,6 +472,7 @@ pub mod tests {
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
                     offer_id: Default::default(),
+                    credential_offer_uri,
                     credential_offer,
                     pre_authorized_code,
                     access_token,
@@ -469,6 +511,7 @@ pub mod tests {
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] access_token: String,
         #[future(awt)] credential_offer: CredentialOffer,
+        #[future(awt)] credential_offer_uri: CredentialOffer,
         #[future(awt)] form_url_encoded_credential_offer: String,
         #[future(awt)] token_response: TokenResponse,
         credential_response: CredentialResponse,
@@ -478,6 +521,7 @@ pub mod tests {
                 OfferEvent::CredentialOfferCreated {
                     offer_id: Default::default(),
                     credential_offer,
+                    credential_offer_uri,
                     pre_authorized_code,
                     access_token,
                     status: Status::Created,
@@ -607,8 +651,27 @@ pub mod test_utils {
     }
 
     #[fixture]
+    pub async fn credential_offer_uri(
+        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
+        offer_id: String,
+    ) -> CredentialOffer {
+        CredentialOffer::CredentialOfferUri(
+            Url::parse(&format!(
+                "{}/credential-offer/{}",
+                credential_issuer_metadata.credential_issuer, offer_id
+            ))
+            .expect("Failed to parse URL in test"),
+        )
+    }
+
+    #[fixture]
     pub async fn form_url_encoded_credential_offer(#[future(awt)] pre_authorized_code: String) -> String {
         format!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fexample.com%2F%22%2C%22credential_configuration_ids%22%3A%5B%22badge%22%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%7D%7D%7D")
+    }
+
+    #[fixture]
+    pub fn offer_id() -> String {
+        "offer_id".to_string()
     }
 
     #[fixture]
