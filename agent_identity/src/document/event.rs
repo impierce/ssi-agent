@@ -33,10 +33,6 @@ pub enum DocumentEvent {
         document_id: String,
         document: CoreDocument,
     },
-    ServiceRemoved {
-        document_id: String,
-        document: CoreDocument,
-    },
     DocumentPublished {
         document_id: String,
         updated_document: CoreDocument,

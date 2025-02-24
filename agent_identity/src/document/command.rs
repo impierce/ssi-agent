@@ -25,9 +25,6 @@ pub enum DocumentCommand {
         service_id: String,
         service: DocumentService,
     },
-    RemoveService {
-        service_id: String,
-    },
     PublishDocument {
         document_id: String,
     },

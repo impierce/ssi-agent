@@ -210,7 +210,8 @@ impl Aggregate for AuthorizationRequest {
 
 #[cfg(test)]
 pub mod tests {
-    use super::*;
+    use std::str::FromStr;
+
     use agent_secret_manager::service::Service as _;
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::set_config;
@@ -229,14 +230,16 @@ pub mod tests {
     use oid4vp::PresentationDefinition;
     use rstest::rstest;
     use serde_json::json;
-    use std::str::FromStr;
+
+    use super::*;
 
     type AuthorizationRequestTestFramework = TestFramework<AuthorizationRequest>;
 
     #[rstest]
     #[serial_test::serial]
     async fn test_create_authorization_request(
-        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
+        verifier_did_method: SupportedDidMethod,
     ) {
         set_config().set_preferred_did_method(verifier_did_method.clone());
 
@@ -274,7 +277,8 @@ pub mod tests {
     #[rstest]
     #[serial_test::serial]
     async fn test_sign_authorization_request_object(
-        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
+        verifier_did_method: SupportedDidMethod,
     ) {
         set_config().set_preferred_did_method(verifier_did_method.clone());
 
@@ -315,8 +319,10 @@ pub mod tests {
         // "id_token" represents the `SIOPv2` flow, and "vp_token" represents the `OID4VP` flow.
         #[values("id_token", "vp_token")] response_type: &str,
         // TODO: add `did:web`, check for other tests as well. Probably should be moved to E2E test.
-        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
-        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] provider_did_method: SupportedDidMethod,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
+        verifier_did_method: SupportedDidMethod,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
+        provider_did_method: SupportedDidMethod,
     ) {
         set_config().set_preferred_did_method(verifier_did_method.clone());
 

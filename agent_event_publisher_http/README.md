@@ -34,7 +34,6 @@ DocumentCreated
 PublicKeyUpdated
 DocumentStatusUpdated
 ServiceAdded
-ServiceRemoved
 DocumentPublished
 ```
 

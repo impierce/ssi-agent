@@ -153,32 +153,6 @@ impl Aggregate for Document {
             } => {
                 let stronghold_manager = &services.subject.stronghold_manager;
                 let stronghold_storage = &stronghold_manager.stronghold_storage;
-                // let ed25519_key_id = config().secret_manager.issuer_eddsa_key_id.clone();
-                // let es256_key_id = config().secret_manager.issuer_es256_key_id.clone();
-
-                // let public_key_jwk = match signing_algorithm {
-                //     Some(Algorithm::EdDSA) => {
-                //         let public_key_jwk = json!(stronghold_storage
-                //             .get_ed25519_public_key(&ed25519_key_id)
-                //             .await
-                //             .expect("Could not find EdDSA public key"));
-
-                //         Some(public_key_jwk)
-                //     }
-                //     Some(Algorithm::ES256) => {
-                //         let public_key_jwk = json!(stronghold_storage
-                //             .get_es256_public_key(&es256_key_id)
-                //             .await
-                //             .expect("Could not find ES256 public key"));
-
-                //         Some(public_key_jwk)
-                //     }
-                //     None => None,
-                //     _ => {
-                //         // FIX THIS
-                //         panic!("Unsuported algorithm");
-                //     }
-                // };
 
                 let document = match &did_method {
                     SupportedDidMethod::Iota | SupportedDidMethod::IotaSmr | SupportedDidMethod::IotaRms => {
@@ -205,41 +179,6 @@ impl Aggregate for Document {
 
                         info!("here 3");
                         info!("Address 1: {:?}", address);
-
-                        // {
-                        //     let ledger_sponsoring_service = config().external_services.clone().and_then(|external_services| external_services.clone().ledger_sponsoring).expect(
-                        //     "Ledger sponsoring service not configured. Please configure the `ledger_sponsoring` in the config file.",
-                        // );
-                        //     let access_key = ledger_sponsoring_service.access_key;
-                        //     let url = ledger_sponsoring_service.url;
-
-                        //     let client = reqwest::Client::new();
-
-                        //     let json = json!({
-                        //         "RequestSponsoring": {
-                        //             "access_key": access_key,
-                        //             "amount": 200000,
-                        //             "address": address
-                        //         }
-                        //     });
-
-                        //     // TODO: remove this once the ledger sponsoring service does not require authorization anymore.
-                        //     let authorization = ledger_sponsoring_service.authorization;
-                        //     let mut headers = HeaderMap::new();
-                        //     headers.insert("Authorization", authorization.parse().expect("Invalid authorization"));
-
-                        //     info!("Requesting funds for address: `{}`", address);
-
-                        //     let _ = client
-                        //         .request(Method::POST, url)
-                        //         .headers(headers)
-                        //         .json(&json)
-                        //         .send()
-                        //         .await;
-                        // }
-
-                        // TODO: poll the ledger until the address is sponsored.
-                        std::thread::sleep(std::time::Duration::from_secs(0));
 
                         let address: Address = *address;
                         info!("Address 2: {:?}", address);
@@ -434,21 +373,6 @@ impl Aggregate for Document {
 
                 Ok(vec![ServiceAdded { document_id, document }])
             }
-            RemoveService { service_id } => {
-                let document_id = self.document_id.clone();
-                let mut document = self.document.clone().ok_or(MissingDocumentError)?;
-                let subject_did = document.id();
-
-                let service_id = format!("{subject_did}#{service_id}");
-
-                document.remove_service(
-                    &service_id
-                        .parse::<DIDUrl>()
-                        .map_err(|err| InvalidDidError(err.to_string()))?,
-                );
-
-                Ok(vec![ServiceRemoved { document_id, document }])
-            }
             PublishDocument { document_id } => {
                 let SecretManagerConfig {
                     stronghold_password: password,
@@ -572,10 +496,6 @@ impl Aggregate for Document {
                 self.document_id = document_id;
                 self.document.replace(document);
             }
-            ServiceRemoved { document_id, document } => {
-                self.document_id = document_id;
-                self.document.replace(document);
-            }
             DocumentPublished {
                 document_id,
                 updated_document,
@@ -685,39 +605,6 @@ pub fn get_properties(method_type: MethodType) -> BTreeMap<String, serde_json::V
 //             .then_expect_events(vec![DocumentEvent::ServiceAdded {
 //                 document_id: did_method.to_string(),
 //                 document: document_with_domain_linkage_service,
-//             }])
-//     }
-
-//     #[rstest]
-//     #[serial_test::serial]
-//     async fn test_remove_service(
-//         did_method: SupportedDidMethod,
-//         document: CoreDocument,
-//         document_with_verification_method: CoreDocument,
-//         document_with_domain_linkage_service: CoreDocument,
-//     ) {
-//         DocumentTestFramework::with(IdentityServices::default())
-//             .given(vec![
-//                 DocumentEvent::DocumentCreated {
-//                     document_id: did_method.to_string(),
-//                     document,
-//                     status: Status::SignAndValidate,
-//                 },
-//                 DocumentEvent::PublicKeyUpdated {
-//                     document_id: did_method.to_string(),
-//                     document: document_with_verification_method.clone(),
-//                 },
-//                 DocumentEvent::ServiceAdded {
-//                     document_id: did_method.to_string(),
-//                     document: document_with_domain_linkage_service,
-//                 },
-//             ])
-//             .when(DocumentCommand::RemoveService {
-//                 service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-//             })
-//             .then_expect_events(vec![DocumentEvent::ServiceRemoved {
-//                 document_id: did_method.to_string(),
-//                 document: document_with_verification_method,
 //             }])
 //     }
 

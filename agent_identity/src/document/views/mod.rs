@@ -45,10 +45,6 @@ impl View<Document> for Document {
                 self.document_id.clone_from(document_id);
                 self.document.replace(document.clone());
             }
-            ServiceRemoved { document_id, document } => {
-                self.document_id.clone_from(document_id);
-                self.document.replace(document.clone());
-            }
             DocumentPublished {
                 document_id,
                 updated_document,
