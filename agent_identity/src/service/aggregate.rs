@@ -345,7 +345,7 @@ pub mod service_tests {
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::*;
-    use crate::state::{DOMAIN_LINKAGE_SERVICE_ID, VERIFIABLE_PRESENTATION_SERVICE_ID};
+    use crate::state::{DOMAIN_LINKAGE_SERVICE_ID, LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID};
     use agent_shared::config::config;
     use identity_core::{common::Url, convert::FromJson};
     use identity_document::service::{Service, ServiceEndpoint};
@@ -359,7 +359,7 @@ pub mod test_utils {
 
     #[fixture]
     pub fn linked_verifiable_presentation_service_id() -> String {
-        VERIFIABLE_PRESENTATION_SERVICE_ID.to_string()
+        LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.to_string()
     }
 
     #[fixture]

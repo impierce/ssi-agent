@@ -19,6 +19,7 @@ did_manager_identity_stronghold_ext = { git = "https://git@github.com/impierce/d
 anyhow = "1.0"
 async-trait = "0.1"
 base64.workspace = true
+bincode = "1.3"
 did-jwk-extern = { version = "0.1.1", package = "did-jwk" }
 did-key-extern = { version = "0.2.2", package = "did-method-key" }
 futures.workspace = true
@@ -30,6 +31,7 @@ jsonwebtoken = "9.3"
 log = "0.4"
 oid4vc-core.workspace = true
 p256 = { version = "0.13", features = ["jwk"] }
+serde.workspace = true
 serde_json.workspace = true
 ssi-dids = "0.1.1"
 ssi-jwk = "0.1.2"

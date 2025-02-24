@@ -1,6 +1,8 @@
 use super::aggregate::Status;
+use agent_shared::config::SupportedDidMethod;
 use cqrs_es::DomainEvent;
 use identity_document::document::CoreDocument;
+use jsonwebtoken::Algorithm;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 
@@ -8,8 +10,16 @@ use strum::Display;
 pub enum DocumentEvent {
     DocumentCreated {
         document_id: String,
+        did_method: SupportedDidMethod,
         status: Status,
         document: CoreDocument,
+        with_fixed_algorithm: Option<Algorithm>,
+    },
+    DocumentUpdated {
+        document_id: String,
+        status: Status,
+        document: CoreDocument,
+        with_fixed_algorithm: Option<Algorithm>,
     },
     PublicKeyUpdated {
         document_id: String,

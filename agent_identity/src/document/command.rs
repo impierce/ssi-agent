@@ -2,21 +2,24 @@ use super::aggregate::Status;
 use agent_shared::config::SupportedDidMethod;
 use identity_document::service::Service as DocumentService;
 use identity_iota::verification::jwk::Jwk;
+use jsonwebtoken::Algorithm;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum DocumentCommand {
     CreateDocument {
+        document_id: String,
         did_method: SupportedDidMethod,
-    },
-    UpdatePublicKey {
-        did_method: SupportedDidMethod,
-        public_key_jwks: Vec<Jwk>,
+        with_fixed_algorithm: Option<Algorithm>,
     },
     UpdateDocumentStatus {
-        did_method: SupportedDidMethod,
+        document_id: String,
         status: Status,
+    },
+    UpdatePublicKeys {
+        document_id: String,
+        public_key_jwks: Vec<Jwk>,
     },
     AddService {
         service_id: String,
@@ -26,6 +29,6 @@ pub enum DocumentCommand {
         service_id: String,
     },
     PublishDocument {
-        did_method: SupportedDidMethod,
+        document_id: String,
     },
 }

@@ -254,6 +254,7 @@ pub enum AuthorizationRequestEvent {
 #[derive(
     Debug,
     Deserialize,
+    Copy,
     Clone,
     Eq,
     PartialEq,
@@ -266,22 +267,22 @@ pub enum AuthorizationRequestEvent {
     VariantArray,
 )]
 pub enum SupportedDidMethod {
-    #[serde(alias = "did_jwk", rename = "did_jwk")]
+    #[serde(alias = "did_jwk", alias = "did:jwk", rename = "did_jwk")]
     #[strum(serialize = "did:jwk")]
     Jwk,
-    #[serde(alias = "did_key", rename = "did_key")]
+    #[serde(alias = "did_key", alias = "did:key", rename = "did_key")]
     #[strum(serialize = "did:key")]
     Key,
-    #[serde(alias = "did_web", rename = "did_web")]
+    #[serde(alias = "did_web", alias = "did:web", rename = "did_web")]
     #[strum(serialize = "did:web")]
     Web,
-    #[serde(alias = "did_iota", rename = "did_iota")]
+    #[serde(alias = "did_iota", alias = "did:iota", rename = "did_iota")]
     #[strum(serialize = "did:iota")]
     Iota,
-    #[serde(alias = "did_iota_smr", rename = "did_iota_smr")]
+    #[serde(alias = "did_iota_smr", alias = "did:iota:smr", rename = "did_iota_smr")]
     #[strum(serialize = "did:iota:smr")]
     IotaSmr,
-    #[serde(alias = "did_iota_rms", rename = "did_iota_rms")]
+    #[serde(alias = "did_iota_rms", alias = "did:iota:rms", rename = "did_iota_rms")]
     #[strum(serialize = "did:iota:rms")]
     IotaRms,
 }
@@ -311,7 +312,7 @@ impl SupportedDidMethod {
         }
     }
 
-    pub fn decentrally_hosted(&self) -> bool {
+    pub fn hosted_decentrally(&self) -> bool {
         match self {
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => false,
             SupportedDidMethod::Iota | SupportedDidMethod::IotaSmr | SupportedDidMethod::IotaRms => true,
@@ -319,9 +320,12 @@ impl SupportedDidMethod {
     }
 }
 
-static MAINNET_URL: &str = "https://api.stardust-mainnet.iotaledger.net";
-static SHIMMER_URL: &str = "https://api.shimmer.network";
-static TESTNET_URL: &str = "https://api.testnet.shimmer.network";
+const MAINNET_URL: &str = "https://api.stardust-mainnet.iotaledger.net";
+const SHIMMER_URL: &str = "https://api.shimmer.network";
+const TESTNET_URL: &str = "https://api.testnet.shimmer.network";
+
+// See specification: "Since did:jwk only contains a single key, the DID URL fragment identifier is always a fixed #0 value."
+const JWK_FRAGMENT: &str = "0";
 
 impl SupportedDidMethod {
     pub fn api_endpoint(&self) -> Option<&str> {
@@ -330,6 +334,17 @@ impl SupportedDidMethod {
             SupportedDidMethod::IotaSmr => Some(SHIMMER_URL),
             SupportedDidMethod::IotaRms => Some(TESTNET_URL),
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
+        }
+    }
+
+    pub fn fragment(&self) -> Option<&str> {
+        match self {
+            SupportedDidMethod::Jwk => Some(JWK_FRAGMENT),
+            SupportedDidMethod::Iota
+            | SupportedDidMethod::IotaSmr
+            | SupportedDidMethod::IotaRms
+            | SupportedDidMethod::Key
+            | SupportedDidMethod::Web => None,
         }
     }
 }

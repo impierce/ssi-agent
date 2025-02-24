@@ -1,14 +1,131 @@
-use agent_shared::config::config;
+use agent_shared::config::{config, SupportedDidMethod};
 use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use identity_iota::{
+    did::DIDUrl,
     storage::{JwkStorage, KeyId, KeyType},
-    verification::jws::JwsAlgorithm,
+    verification::{jwk::Jwk, jws::JwsAlgorithm},
 };
 use iota_sdk::client::secret::stronghold::StrongholdSecretManager;
+use iota_stronghold::{Client, KeyProvider, SnapshotPath, Stronghold};
+use jsonwebtoken::Algorithm;
 use log::info;
+use serde::Serialize;
 
 pub mod service;
 pub mod subject;
+
+pub struct StrongholdManager {
+    pub stronghold_storage: StrongholdExtStorage,
+    pub stronghold: Stronghold,
+    pub stronghold_client: Client,
+    pub snapshot_path: SnapshotPath,
+    pub key_provider: KeyProvider,
+}
+
+impl StrongholdManager {
+    pub async fn new() -> Self {
+        let stronghold_path = config().secret_manager.stronghold_path.clone();
+        let stronghold_password = config().secret_manager.stronghold_password.clone();
+
+        let snapshot_path = SnapshotPath::from_path(stronghold_path.clone());
+
+        let key_provider = KeyProvider::with_passphrase_hashed_blake2b(stronghold_password)
+            .expect("Failed to create a new Key Provider");
+
+        let stronghold = Stronghold::default();
+
+        let stronghold_client = stronghold
+            .load_client_from_snapshot(stronghold_path.as_str(), &key_provider, &snapshot_path)
+            .or_else(|_| stronghold.create_client(stronghold_path.as_str()))
+            .expect("Could not create a Stronghold Client");
+
+        let stronghold_storage = stronghold_storage().await;
+
+        Self {
+            stronghold_storage,
+            stronghold,
+            stronghold_client,
+            snapshot_path,
+            key_provider,
+        }
+    }
+
+    pub async fn get_public_key(&self, key_id: KeyId, algorithm: &Algorithm) -> anyhow::Result<Jwk> {
+        match algorithm {
+            Algorithm::EdDSA => {
+                let public_key_jwk = self
+                    .stronghold_storage
+                    .get_ed25519_public_key(&key_id)
+                    .await
+                    .expect("Could not find EdDSA public key");
+
+                Ok(public_key_jwk)
+            }
+            Algorithm::ES256 => {
+                let public_key_jwk = self
+                    .stronghold_storage
+                    .get_es256_public_key(&key_id)
+                    .await
+                    .expect("Could not find ES256 public key");
+
+                Ok(public_key_jwk)
+            }
+            _ => {
+                // FIX THIS
+                panic!("Unsuported algorithm");
+            }
+        }
+    }
+
+    pub fn insert(&self, key: StorageKey, value: DIDUrl) {
+        // FIX THIS
+        iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).unwrap();
+
+        self.stronghold_client
+            .store()
+            .insert(key.to_bytes().unwrap(), value.to_string().into_bytes(), None)
+            .unwrap();
+
+        self.stronghold
+            .commit_with_keyprovider(&self.snapshot_path, &self.key_provider)
+            .expect("stronghold could not commit");
+    }
+
+    pub fn get(&self, key: StorageKey) -> Option<DIDUrl> {
+        // FIX THIS
+        iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).unwrap();
+
+        // FIX THIS
+        DIDUrl::parse(
+            std::str::from_utf8(
+                &self
+                    .stronghold_client
+                    .store()
+                    .get(&key.to_bytes().unwrap())
+                    .unwrap()
+                    .unwrap(),
+            )
+            .unwrap(),
+        )
+        .ok()
+    }
+}
+
+#[derive(Serialize, Clone)]
+pub struct StorageKey {
+    pub did_method: SupportedDidMethod,
+    pub algorithm: Algorithm,
+}
+
+impl StorageKey {
+    pub fn new(did_method: SupportedDidMethod, algorithm: Algorithm) -> Self {
+        Self { did_method, algorithm }
+    }
+
+    pub fn to_bytes(&self) -> anyhow::Result<Vec<u8>> {
+        bincode::serialize(self).map_err(Into::into)
+    }
+}
 
 pub async fn stronghold_storage() -> StrongholdExtStorage {
     #[cfg(feature = "test_utils")]
