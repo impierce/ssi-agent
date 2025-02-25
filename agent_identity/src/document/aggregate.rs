@@ -617,8 +617,8 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn document_with_verification_method(mut document: CoreDocument) -> CoreDocument {
-        let verification_method = VerificationMethod::builder(Default::default())
+    pub fn verification_method() -> VerificationMethod {
+        VerificationMethod::builder(Default::default())
             .id(
                 "did:web:my-domain.example.org#bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"
                     .parse()
@@ -637,8 +637,14 @@ pub mod test_utils {
                 .unwrap(),
             ))
             .build()
-            .unwrap();
+            .unwrap()
+    }
 
+    #[fixture]
+    pub fn document_with_verification_method(
+        mut document: CoreDocument,
+        verification_method: VerificationMethod,
+    ) -> CoreDocument {
         document
             .insert_method(verification_method, MethodScope::VerificationMethod)
             .unwrap();

@@ -273,13 +273,17 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
             update_supporting_documents
         );
 
+        // Collect all Verification Methods from update-supporting documents.
+        let verification_methods = update_supporting_documents
+            .values()
+            .filter_map(|document| document.document.as_ref())
+            .flat_map(|core_document| core_document.methods(None).into_iter().cloned())
+            .collect();
+
         // Create the Domain Linkage Service.
         let command = ServiceCommand::CreateDomainLinkageService {
             service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-            documents: update_supporting_documents
-                .values()
-                .filter_map(|document| document.document.clone())
-                .collect(),
+            verification_methods,
         };
 
         command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command).await?;

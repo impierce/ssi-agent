@@ -1,4 +1,4 @@
-use identity_iota::document::CoreDocument;
+use identity_iota::verification::VerificationMethod;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -6,7 +6,7 @@ use serde::Deserialize;
 pub enum ServiceCommand {
     CreateDomainLinkageService {
         service_id: String,
-        documents: Vec<CoreDocument>,
+        verification_methods: Vec<VerificationMethod>,
     },
     DeleteDomainLinkageService {
         service_id: String,

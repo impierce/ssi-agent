@@ -55,7 +55,10 @@ impl Aggregate for Service {
         info!("Handling command: {:?}", command);
 
         match command {
-            CreateDomainLinkageService { service_id, documents } => {
+            CreateDomainLinkageService {
+                service_id,
+                verification_methods,
+            } => {
                 let subject = &services.subject;
 
                 let origin = config().url.origin();
@@ -81,61 +84,55 @@ impl Aggregate for Service {
 
                 let mut linked_dids = vec![];
 
-                // Iterate through all the documents
-                for core_document in documents.into_iter() {
-                    let subject_did = core_document.id().clone();
+                // For each Verification Method, create a new linked DID JWT token.
+                for verification_method in verification_methods {
+                    let subject_did = verification_method.id().did();
 
-                    // For each document, create a new linked DID JWT token for every Verification Method it contains.
-                    for verification_method in core_document.verification_method().iter() {
-                        let verification_method_id = verification_method.id();
-                        let fragment = verification_method_id
-                            .fragment()
-                            .ok_or_else(|| MissingVerificationMethodFragment(verification_method_id.to_string()))?;
-                        let alg = verification_method
-                            .data()
-                            .public_key_jwk()
-                            .and_then(|jwk| jwk.alg())
-                            .ok_or_else(|| MissingVerificationMethodAlgorithm(verification_method_id.to_string()))?;
-                        let algorithm = Algorithm::from_str(alg)
-                            .map_err(|_| UnsupportedVerificationMethodAlgorithm(alg.to_string()))?;
+                    let verification_method_id = verification_method.id();
+                    let alg = verification_method
+                        .data()
+                        .public_key_jwk()
+                        .and_then(|jwk| jwk.alg())
+                        .ok_or_else(|| MissingVerificationMethodAlgorithm(verification_method_id.to_string()))?;
+                    let algorithm = Algorithm::from_str(alg)
+                        .map_err(|_| UnsupportedVerificationMethodAlgorithm(alg.to_string()))?;
 
-                        let domain_linkage_credential = DomainLinkageCredentialBuilder::new()
-                            .issuer(subject_did.clone())
-                            .origin(origin.clone())
-                            .issuance_date(issuance_date)
-                            .expiration_date(expiration_date)
-                            .build()
-                            .map_err(|err| DomainLinkageCredentialBuilderError(err.to_string()))?
-                            .serialize_jwt(Default::default())
-                            .map_err(|err| SerializationError(err.to_string()))?;
+                    let domain_linkage_credential = DomainLinkageCredentialBuilder::new()
+                        .issuer(subject_did.clone())
+                        .origin(origin.clone())
+                        .issuance_date(issuance_date)
+                        .expiration_date(expiration_date)
+                        .build()
+                        .map_err(|err| DomainLinkageCredentialBuilderError(err.to_string()))?
+                        .serialize_jwt(Default::default())
+                        .map_err(|err| SerializationError(err.to_string()))?;
 
-                        // Compose JWT
-                        let header = Header {
-                            alg: algorithm,
-                            typ: None,
-                            kid: Some(format!("{subject_did}#{fragment}")),
-                            ..Default::default()
-                        };
+                    // Compose JWT
+                    let header = Header {
+                        alg: algorithm,
+                        typ: None,
+                        kid: Some(verification_method.id().to_string()),
+                        ..Default::default()
+                    };
 
-                        let linked_did = [
-                            URL_SAFE_NO_PAD.encode(
-                                header
-                                    .to_json_vec()
-                                    .map_err(|err| SerializationError(err.to_string()))?,
-                            ),
-                            URL_SAFE_NO_PAD.encode(domain_linkage_credential.as_bytes()),
-                        ]
-                        .join(".");
+                    let linked_did = [
+                        URL_SAFE_NO_PAD.encode(
+                            header
+                                .to_json_vec()
+                                .map_err(|err| SerializationError(err.to_string()))?,
+                        ),
+                        URL_SAFE_NO_PAD.encode(domain_linkage_credential.as_bytes()),
+                    ]
+                    .join(".");
 
-                        let proof_value = subject
-                            .sign(linked_did.as_str(), "placeholder", algorithm)
-                            .await
-                            .map_err(|err| SigningError(err.to_string()))?;
-                        let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
-                        let linked_did = [linked_did, signature].join(".");
+                    let proof_value = subject
+                        .sign(linked_did.as_str(), "placeholder", algorithm)
+                        .await
+                        .map_err(|err| SigningError(err.to_string()))?;
+                    let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
+                    let linked_did = [linked_did, signature].join(".");
 
-                        linked_dids.push(Jwt::from(linked_did))
-                    }
+                    linked_dids.push(Jwt::from(linked_did))
                 }
 
                 if linked_dids.is_empty() {
@@ -262,11 +259,11 @@ impl Aggregate for Service {
 pub mod service_tests {
     use super::test_utils::*;
     use super::*;
-    use crate::document::aggregate::test_utils::document_with_domain_linkage_service;
+    use crate::document::aggregate::test_utils::verification_method;
     use agent_shared::config::set_config;
     use cqrs_es::test::TestFramework;
     use identity_document::service::Service as DocumentService;
-    use identity_iota::document::CoreDocument;
+    use identity_iota::verification::VerificationMethod;
     use rstest::rstest;
 
     type ServiceTestFramework = TestFramework<Service>;
@@ -275,9 +272,9 @@ pub mod service_tests {
     #[serial_test::serial]
     async fn test_create_domain_linkage_service(
         domain_linkage_service_id: String,
+        verification_method: VerificationMethod,
         domain_linkage_service: DocumentService,
         domain_linkage_resource: ServiceResource,
-        document_with_domain_linkage_service: CoreDocument,
     ) {
         set_config().set_preferred_did_method(agent_shared::config::SupportedDidMethod::Web);
 
@@ -285,7 +282,7 @@ pub mod service_tests {
             .given_no_previous_events()
             .when(ServiceCommand::CreateDomainLinkageService {
                 service_id: domain_linkage_service_id.clone(),
-                documents: vec![document_with_domain_linkage_service],
+                verification_methods: vec![verification_method],
             })
             .then_expect_events(vec![ServiceEvent::DomainLinkageServiceCreated {
                 service_id: domain_linkage_service_id,
