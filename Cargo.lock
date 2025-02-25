@@ -286,6 +286,7 @@ dependencies = [
  "futures",
  "identity_iota",
  "identity_stronghold_ext",
+ "iota-sdk",
  "iota_stronghold",
  "itertools 0.14.0",
  "jsonwebtoken",
