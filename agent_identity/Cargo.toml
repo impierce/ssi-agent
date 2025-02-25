@@ -15,7 +15,6 @@ cqrs-es.workspace = true
 derivative.workspace = true
 did-jwk-extern = { version = "0.1.1", package = "did-jwk" }
 did-key-extern = { version = "0.2.2", package = "did-method-key" }
-futures.workspace = true
 identity_credential.workspace = true
 identity_core.workspace = true
 identity_did.workspace = true
@@ -26,7 +25,6 @@ itertools = "0.14"
 jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
 rand = "0.8"
-reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ssi-dids = "0.1.1"
@@ -40,6 +38,7 @@ urlencoding = "2.1"
 uuid.workspace = true
 
 # `test_utils` dependencies
+futures = { workspace = true, optional = true }
 rstest = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 
@@ -66,6 +65,7 @@ async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 
 [features]
 test_utils = [
+    "dep:futures",
     "dep:rstest",
     "dep:tokio",
 ]
