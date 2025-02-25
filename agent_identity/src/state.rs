@@ -329,24 +329,22 @@ pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -
     })
     .await?;
 
-    match query_handler(LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID, &state.query.service).await {
-        Ok(Some(Service {
-            service: Some(service), ..
-        })) => {
-            info!("Found Linked Verifiable Presentations service: {service}");
+    if let Some(Service {
+        service: Some(service), ..
+    }) = query_handler(LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID, &state.query.service).await?
+    {
+        info!("Found Linked Verifiable Presentations service: {service}");
 
-            // Add the Linked Verifiable Presentations service to the DID Web Document.
-            for document_id in did_web_document.keys() {
-                let command = DocumentCommand::AddService {
-                    service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-                    service: service.clone(),
-                };
+        // Add the Linked Verifiable Presentations service to the DID Web Document.
+        for document_id in did_web_document.keys() {
+            let command = DocumentCommand::AddService {
+                service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
+                service: service.clone(),
+            };
 
-                command_handler(&document_id, &state.command.document, command).await?;
-            }
+            command_handler(document_id, &state.command.document, command).await?;
         }
-        _ => anyhow::bail!("Failed to retrieve Linked Verifiable Presentations service"),
-    };
+    }
 
     Ok(())
 }

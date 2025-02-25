@@ -1,7 +1,7 @@
 use agent_shared::config::{config, SupportedDidMethod};
 use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use identity_iota::{
-    did::DIDUrl,
+    did::{CoreDID, DIDUrl},
     storage::{JwkStorage, KeyId, KeyType},
     verification::{jwk::Jwk, jws::JwsAlgorithm},
 };
@@ -77,13 +77,17 @@ impl StrongholdManager {
         }
     }
 
-    pub fn insert(&self, key: StorageKey, value: DIDUrl) {
+    pub fn insert_verification_method_id(&self, key: StorageKey, verification_method_id: DIDUrl) {
         // FIX THIS
         iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).unwrap();
 
         self.stronghold_client
             .store()
-            .insert(key.to_bytes().unwrap(), value.to_string().into_bytes(), None)
+            .insert(
+                key.to_bytes().unwrap(),
+                verification_method_id.to_string().into_bytes(),
+                None,
+            )
             .unwrap();
 
         self.stronghold
@@ -91,23 +95,40 @@ impl StrongholdManager {
             .expect("stronghold could not commit");
     }
 
-    pub fn get(&self, key: StorageKey) -> Option<DIDUrl> {
+    pub fn get_verification_method_id(&self, key: StorageKey) -> Option<DIDUrl> {
         // FIX THIS
-        iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).unwrap();
+        iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).ok()?;
 
+        // Convert the storage key to bytes.
+        let key_bytes = key.to_bytes().ok()?;
+
+        // Retrieve the stored data from the stronghold store.
+        let stored_bytes = self.stronghold_client.store().get(&key_bytes).ok()??;
+
+        // Convert the stored bytes into a UTF-8 string.
+        let s = std::str::from_utf8(&stored_bytes).ok()?;
+
+        // Parse the string as a DIDUrl and return it.
+        DIDUrl::parse(s).ok()
+    }
+
+    pub fn get_did(&self, did_method: SupportedDidMethod, algorithm: Algorithm) -> Option<CoreDID> {
         // FIX THIS
-        DIDUrl::parse(
-            std::str::from_utf8(
-                &self
-                    .stronghold_client
-                    .store()
-                    .get(&key.to_bytes().unwrap())
-                    .unwrap()
-                    .unwrap(),
-            )
-            .unwrap(),
-        )
-        .ok()
+        iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).ok()?;
+
+        // Iterate over candidates and return the stored bytes for the first successful lookup.
+        let stored_bytes = [algorithm, Algorithm::ES256, Algorithm::EdDSA]
+            .into_iter()
+            .find_map(|alg| {
+                let key_bytes = StorageKey::new(did_method, alg).to_bytes().ok()?;
+                self.stronghold_client.store().get(&key_bytes).ok()?.clone()
+            })?;
+
+        // Convert the retrieved bytes into a UTF-8 string.
+        let s = std::str::from_utf8(&stored_bytes).ok()?;
+
+        // Parse the string as a DID URL and return the embedded CoreDID.
+        DIDUrl::parse(s).ok().map(|url| url.did().clone())
     }
 }
 

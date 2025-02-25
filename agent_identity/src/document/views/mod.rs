@@ -17,18 +17,20 @@ impl View<Document> for Document {
                 with_fixed_algorithm: signing_algorithm,
             } => {
                 self.document_id = document_id.clone();
-                self.did_method.replace(did_method.clone());
+                self.did_method.replace(*did_method);
                 self.document.replace(document.clone());
                 self.status.clone_from(status);
                 self.with_fixed_algorithm.clone_from(signing_algorithm);
             }
             DocumentUpdated {
                 document_id,
+                did_method,
                 document,
                 status,
                 with_fixed_algorithm: signing_algorithm,
             } => {
                 self.document_id = document_id.clone();
+                self.did_method.replace(*did_method);
                 self.document.replace(document.clone());
                 self.status.clone_from(status);
                 self.with_fixed_algorithm.clone_from(signing_algorithm);

@@ -241,7 +241,7 @@ pub mod tests {
         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
         verifier_did_method: SupportedDidMethod,
     ) {
-        set_config().set_preferred_did_method(verifier_did_method.clone());
+        set_config().set_preferred_did_method(verifier_did_method);
 
         let verification_services = VerificationServices::default();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
@@ -280,7 +280,7 @@ pub mod tests {
         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
         verifier_did_method: SupportedDidMethod,
     ) {
-        set_config().set_preferred_did_method(verifier_did_method.clone());
+        set_config().set_preferred_did_method(verifier_did_method);
 
         let verification_services = VerificationServices::default();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
@@ -324,7 +324,7 @@ pub mod tests {
         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
         provider_did_method: SupportedDidMethod,
     ) {
-        set_config().set_preferred_did_method(verifier_did_method.clone());
+        set_config().set_preferred_did_method(verifier_did_method);
 
         let verification_services = VerificationServices::default();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();

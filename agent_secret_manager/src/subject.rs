@@ -81,7 +81,7 @@ impl Sign for Subject {
 
         let did = self
             .stronghold_manager
-            .get(StorageKey::new(method, algorithm))
+            .get_verification_method_id(StorageKey::new(method, algorithm))
             .unwrap()
             .to_string();
 
@@ -133,7 +133,7 @@ impl oid4vc_core::Subject for Subject {
 
         let did = self
             .stronghold_manager
-            .get(StorageKey::new(method, algorithm))
+            .get_verification_method_id(StorageKey::new(method, algorithm))
             .unwrap()
             .did()
             .to_string();

@@ -309,6 +309,9 @@ const MAINNET_URL: &str = "https://api.stardust-mainnet.iotaledger.net";
 const SHIMMER_URL: &str = "https://api.shimmer.network";
 const TESTNET_URL: &str = "https://api.testnet.shimmer.network";
 
+const IOTA_NETWORK: &str = "IOTA Network";
+const SHIMMER_NETWORK: &str = "Shimmer Network";
+
 // See specification: "Since did:jwk only contains a single key, the DID URL fragment identifier is always a fixed #0 value."
 const JWK_FRAGMENT: &str = "0";
 
@@ -318,6 +321,16 @@ impl SupportedDidMethod {
             SupportedDidMethod::Iota => Some(MAINNET_URL),
             SupportedDidMethod::IotaSmr => Some(SHIMMER_URL),
             SupportedDidMethod::IotaRms => Some(TESTNET_URL),
+            SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
+        }
+    }
+
+    pub fn network_name(&self) -> Option<&str> {
+        match self {
+            SupportedDidMethod::Iota => Some(IOTA_NETWORK),
+            SupportedDidMethod::IotaSmr => Some(SHIMMER_NETWORK),
+            // TODO: remove this method
+            SupportedDidMethod::IotaRms => None,
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
         }
     }
@@ -453,7 +466,7 @@ pub fn get_all_enabled_did_methods() -> Vec<SupportedDidMethod> {
         .did_methods
         .iter()
         .filter(|(_, v)| v.enabled)
-        .map(|(k, _)| k.clone())
+        .map(|(k, _)| *k)
         .collect();
 
     did_methods.sort();
@@ -484,7 +497,7 @@ pub fn get_preferred_did_method() -> SupportedDidMethod {
         .iter()
         .filter(|(_, v)| v.enabled)
         .filter(|(_, v)| v.preferred.unwrap_or(false))
-        .map(|(k, _)| k.clone())
+        .map(|(k, _)| *k)
         .collect::<Vec<SupportedDidMethod>>()
         .first()
         .cloned()
@@ -511,7 +524,7 @@ mod tests {
     #[test]
     fn all_supported_did_methods_can_be_converted_into_subject_syntax_type() {
         for variant in SupportedDidMethod::VARIANTS {
-            let _subject_syntax_type: SubjectSyntaxType = variant.clone().into();
+            let _subject_syntax_type: SubjectSyntaxType = (*variant).into();
         }
     }
 }
