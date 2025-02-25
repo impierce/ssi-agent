@@ -4,6 +4,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager_consumer::resolver::Resolver;
+use identity_iota::did::DIDUrl;
 use identity_iota::storage::JwkStorage;
 use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
 use jsonwebtoken::Algorithm;
@@ -36,14 +37,16 @@ impl Verify for Subject {
         let document = resolver
             .resolve(did_url.did().as_str())
             .await
-            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: {did_url}, error: {err}"))?;
+            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
 
         let verification_method = document
             .resolve_method(
                 DIDUrlQuery::from(&did_url),
                 Some(identity_iota::verification::MethodScope::VerificationMethod),
             )
-            .ok_or(anyhow!("Failed to resolve verification method for DID URL: {did_url}"))?;
+            .ok_or(anyhow!(
+                "Failed to resolve verification method for DID URL: `{did_url}`"
+            ))?;
 
         // Try decode from `MethodData` directly, else use public JWK params.
         verification_method.data().try_decode().or_else(|_| {
@@ -79,45 +82,32 @@ impl Sign for Subject {
     async fn key_id(&self, subject_syntax_type: &str, algorithm: Algorithm) -> Option<String> {
         let method = SupportedDidMethod::from_str(subject_syntax_type).ok()?;
 
-        let did = self
-            .stronghold_manager
+        self.stronghold_manager
             .get_verification_method_id(StorageKey::new(method, algorithm))
-            .unwrap()
-            .to_string();
-
-        Some(did)
+            .as_ref()
+            .map(ToString::to_string)
     }
 
     async fn sign(&self, message: &str, _subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
+        let stronghold_storage = &self.stronghold_manager.stronghold_storage;
         let (key_id, public_key) = match algorithm {
             Algorithm::ES256 => {
                 let es256_key_id = config().secret_manager.issuer_es256_key_id.clone();
-                let public_key = self
-                    .stronghold_manager
-                    .stronghold_storage
-                    .get_es256_public_key(&es256_key_id)
-                    .await?;
+                let public_key = stronghold_storage.get_es256_public_key(&es256_key_id).await?;
                 (es256_key_id, public_key)
             }
             Algorithm::EdDSA => {
                 let ed25519_key_id = config().secret_manager.issuer_eddsa_key_id.clone();
-                let public_key = self
-                    .stronghold_manager
-                    .stronghold_storage
-                    .get_ed25519_public_key(&ed25519_key_id)
-                    .await?;
+                let public_key = stronghold_storage.get_ed25519_public_key(&ed25519_key_id).await?;
                 (ed25519_key_id, public_key)
             }
             _ => return Err(anyhow!("Unsupported algorithm")),
         };
 
-        let signature = self
-            .stronghold_manager
-            .stronghold_storage
+        stronghold_storage
             .sign(&key_id, message.as_bytes(), &public_key)
-            .await?;
-
-        Ok(signature)
+            .await
+            .map_err(Into::into)
     }
 
     fn external_signer(&self) -> Option<Arc<dyn ExternalSign>> {
@@ -131,14 +121,12 @@ impl oid4vc_core::Subject for Subject {
         let method = SupportedDidMethod::from_str(subject_syntax_type)
             .map_err(|e| anyhow!("Failed to parse SupportedDidMethod from string: {}", e))?;
 
-        let did = self
-            .stronghold_manager
+        self.stronghold_manager
             .get_verification_method_id(StorageKey::new(method, algorithm))
-            .unwrap()
-            .did()
-            .to_string();
-
-        Ok(did)
+            .as_ref()
+            .map(DIDUrl::did)
+            .map(ToString::to_string)
+            .ok_or_else(|| anyhow!("Failed to get verification method ID"))
     }
 }
 

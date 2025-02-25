@@ -52,53 +52,26 @@ impl StrongholdManager {
 
     pub async fn get_public_key(&self, key_id: KeyId, algorithm: &Algorithm) -> anyhow::Result<Jwk> {
         match algorithm {
-            Algorithm::EdDSA => {
-                let public_key_jwk = self
-                    .stronghold_storage
-                    .get_ed25519_public_key(&key_id)
-                    .await
-                    .expect("Could not find EdDSA public key");
-
-                Ok(public_key_jwk)
-            }
-            Algorithm::ES256 => {
-                let public_key_jwk = self
-                    .stronghold_storage
-                    .get_es256_public_key(&key_id)
-                    .await
-                    .expect("Could not find ES256 public key");
-
-                Ok(public_key_jwk)
-            }
-            _ => {
-                // FIX THIS
-                panic!("Unsuported algorithm");
-            }
+            Algorithm::EdDSA => self.stronghold_storage.get_ed25519_public_key(&key_id).await,
+            Algorithm::ES256 => self.stronghold_storage.get_es256_public_key(&key_id).await,
+            _ => anyhow::bail!("Unsuported algorithm"),
         }
+        .map_err(Into::into)
     }
 
-    pub fn insert_verification_method_id(&self, key: StorageKey, verification_method_id: DIDUrl) {
-        // FIX THIS
-        iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).unwrap();
-
-        self.stronghold_client
-            .store()
-            .insert(
-                key.to_bytes().unwrap(),
-                verification_method_id.to_string().into_bytes(),
-                None,
-            )
-            .unwrap();
+    pub fn insert_verification_method_id(&self, key: StorageKey, verification_method_id: DIDUrl) -> anyhow::Result<()> {
+        self.stronghold_client.store().insert(
+            key.to_bytes().unwrap(),
+            verification_method_id.to_string().into_bytes(),
+            None,
+        )?;
 
         self.stronghold
             .commit_with_keyprovider(&self.snapshot_path, &self.key_provider)
-            .expect("stronghold could not commit");
+            .map_err(Into::into)
     }
 
     pub fn get_verification_method_id(&self, key: StorageKey) -> Option<DIDUrl> {
-        // FIX THIS
-        iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).ok()?;
-
         // Convert the storage key to bytes.
         let key_bytes = key.to_bytes().ok()?;
 
@@ -113,9 +86,6 @@ impl StrongholdManager {
     }
 
     pub fn get_did(&self, did_method: SupportedDidMethod, algorithm: Algorithm) -> Option<CoreDID> {
-        // FIX THIS
-        iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).ok()?;
-
         // Iterate over candidates and return the stored bytes for the first successful lookup.
         let stored_bytes = [algorithm, Algorithm::ES256, Algorithm::EdDSA]
             .into_iter()

@@ -268,10 +268,12 @@ impl Aggregate for Document {
                         VerificationMethod::new_from_jwk(did.clone(), public_key_jwk, did_method.fragment())
                             .map_err(|err| VerificationMethodBuilderError(err.to_string()))?;
 
-                    stronghold_manager.insert_verification_method_id(
-                        StorageKey::new(did_method, signing_algorithm),
-                        verification_method.id().clone(),
-                    );
+                    stronghold_manager
+                        .insert_verification_method_id(
+                            StorageKey::new(did_method, signing_algorithm),
+                            verification_method.id().clone(),
+                        )
+                        .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
 
                     document
                         .insert_method(verification_method, MethodScope::VerificationMethod)
