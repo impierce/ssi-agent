@@ -60,14 +60,6 @@ pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Js
         }
     };
 
-    let command = OfferCommand::CreateFormUrlEncodedCredentialOffer {
-        offer_id: offer_id.clone(),
-    };
-
-    if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-
     match query_handler(&offer_id, &state.query.offer).await {
         Ok(Some(OfferView {
             form_url_encoded_credential_offer,
