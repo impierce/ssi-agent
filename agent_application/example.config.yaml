@@ -78,5 +78,5 @@ did_document_cache:
 
 # Key configuration (temporary)
 secret_manager:
-  stronghold_password: "secure_password"
-  # stronghold_password_file: ""
+  stronghold_path: "/tmp/local.stronghold.dat"
+  # stronghold_password: "" <== Should be injected through the env variable `UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD`
