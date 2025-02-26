@@ -1,8 +1,8 @@
 use super::{command::DocumentCommand, error::DocumentError, event::DocumentEvent};
 use crate::{services::IdentityServices, state::get_wallet_address};
 use agent_secret_manager::StorageKey;
+use agent_shared::config::SupportedDidMethod;
 use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported};
-use agent_shared::config::{get_preferred_signing_algorithm, SupportedDidMethod};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_did::{CoreDID, DIDUrl};
@@ -261,38 +261,13 @@ impl Aggregate for Document {
 
                 let status = Status::SignAndValidate;
 
-                let event = match stronghold_manager.get_did(did_method, get_preferred_signing_algorithm()) {
-                    // Check if a controller already exists in Stronghold storage for the given DID method.
-                    // If a stored controller exists and its ID differs from the current document's ID, it indicates that an existing
-                    // DID controller is being overwritten. In this case, a warning is logged and a `DocumentUpdated` event is generated.
-                    // Note: Although `DocumentUpdated` triggers the same changes as `DocumentCreated`, it explicitly signals that
-                    // an existing controller was detected.
-                    //
-                    // TODO: Consider adding a configuration option that, when enabled, treats this situation as an error to
-                    // prevent accidental overwrites of existing controllers in Stronghold storage.
-                    Some(stored_controller) if stored_controller != *document.id() => {
-                        warn!(
-                            "Controller conflict: Existing controller `{stored_controller}` for DID method `{did_method}` will be replaced by new controller `{}`.",
-                        document.id());
-
-                        DocumentUpdated {
-                            document_id,
-                            did_method,
-                            status,
-                            document,
-                            with_fixed_algorithm,
-                        }
-                    }
-                    _ => DocumentCreated {
-                        document_id,
-                        did_method,
-                        status,
-                        document,
-                        with_fixed_algorithm,
-                    },
-                };
-
-                Ok(vec![event])
+                Ok(vec![DocumentCreated {
+                    document_id,
+                    did_method,
+                    status,
+                    document,
+                    with_fixed_algorithm,
+                }])
             }
             UpdatePublicKeys {
                 document_id,
@@ -443,19 +418,6 @@ impl Aggregate for Document {
 
         match event {
             DocumentCreated {
-                document_id,
-                did_method,
-                status,
-                document,
-                with_fixed_algorithm,
-            } => {
-                self.document_id = document_id;
-                self.did_method.replace(did_method);
-                self.status = status;
-                self.document.replace(document);
-                self.with_fixed_algorithm = with_fixed_algorithm;
-            }
-            DocumentUpdated {
                 document_id,
                 did_method,
                 status,

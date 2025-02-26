@@ -19,7 +19,6 @@ did_manager_identity_stronghold_ext = { git = "https://git@github.com/impierce/d
 anyhow = "1.0"
 async-trait = "0.1"
 base64.workspace = true
-bincode = "1.3"
 futures.workspace = true
 identity_iota.workspace = true
 iota-sdk.workspace = true

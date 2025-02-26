@@ -1,9 +1,7 @@
-use std::collections::HashMap;
-
 use agent_shared::config::{config, SupportedDidMethod};
 use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use identity_iota::{
-    did::{CoreDID, DIDUrl},
+    did::DIDUrl,
     storage::{JwkStorage, KeyId, KeyType},
     verification::{jwk::Jwk, jws::JwsAlgorithm},
 };
@@ -11,6 +9,7 @@ use iota_sdk::client::secret::stronghold::StrongholdSecretManager;
 use jsonwebtoken::Algorithm;
 use log::info;
 use serde::Serialize;
+use std::collections::HashMap;
 
 pub mod service;
 pub mod subject;
@@ -51,12 +50,6 @@ impl StrongholdManager {
     pub fn get_verification_method_id(&self, key: StorageKey) -> Option<DIDUrl> {
         self.verification_method_ids.get(&key).cloned()
     }
-
-    pub fn get_did(&self, did_method: SupportedDidMethod, algorithm: Algorithm) -> Option<CoreDID> {
-        self.verification_method_ids.iter().find_map(|(key, value)| {
-            (key.did_method == did_method && key.algorithm == algorithm).then_some(value.did().clone())
-        })
-    }
 }
 
 #[derive(Serialize, Clone, Eq, PartialEq, Hash)]
@@ -68,10 +61,6 @@ pub struct StorageKey {
 impl StorageKey {
     pub fn new(did_method: SupportedDidMethod, algorithm: Algorithm) -> Self {
         Self { did_method, algorithm }
-    }
-
-    pub fn to_bytes(&self) -> anyhow::Result<Vec<u8>> {
-        bincode::serialize(self).map_err(Into::into)
     }
 }
 

@@ -15,13 +15,6 @@ pub enum DocumentEvent {
         document: CoreDocument,
         with_fixed_algorithm: Option<Algorithm>,
     },
-    DocumentUpdated {
-        document_id: String,
-        did_method: SupportedDidMethod,
-        status: Status,
-        document: CoreDocument,
-        with_fixed_algorithm: Option<Algorithm>,
-    },
     PublicKeyUpdated {
         document_id: String,
         document: CoreDocument,
