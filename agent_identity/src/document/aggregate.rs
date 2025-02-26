@@ -13,7 +13,8 @@ use identity_iota::{
     verification::{MethodScope, MethodType, VerificationMethod},
 };
 use iota_sdk::client::api::input_selection::Error::MissingInputWithEd25519Address;
-use iota_sdk::client::error::Error::{InputAddressNotFound, InputSelection};
+use iota_sdk::client::error::Error::{Block, InputAddressNotFound, InputSelection};
+use iota_sdk::types::block::Error::InsufficientStorageDepositAmount;
 use iota_sdk::{
     client::Client,
     types::block::{
@@ -109,12 +110,20 @@ impl Aggregate for Document {
                             let controller = document.id().clone();
                             info!("Found an existing controller for DID method `{did_method}`: `{controller}`");
 
-                            // Create a new DID Document from skratch.
+                            // Create a new DID Document from scratch.
                             let document = IotaDocument::new_with_id(controller.clone());
+
+                            let rent_structure: RentStructure =
+                                iota_client.get_rent_structure().await.map_err(IotaClientError)?;
 
                             // Update the DID Document output with the latest state.
                             let alias_output: AliasOutput =
                                 iota_client.update_did_output(document).await.map_err(IotaClientError)?;
+
+                            let alias_output: AliasOutput = AliasOutputBuilder::from(&alias_output)
+                                .with_minimum_storage_deposit(rent_structure)
+                                .finish()
+                                .map_err(|err| AliasOutputBuilderError(err.to_string()))?;
 
                             // Publish the updated Alias Output and get the published DID document.
                             let test_publish_result = iota_client
@@ -138,6 +147,17 @@ impl Aggregate for Document {
                                             // that later on a new DID Document will be created using the current
                                             // wallet address.
                                             None
+                                        } else if let Block(InsufficientStorageDepositAmount { amount, required }) =
+                                            &**error
+                                        {
+                                            warn!(
+                                                "The current `{did_method}` DID `{controller}` has insufficient storage deposit amount: `{amount}`, \
+                                                required: `{required}`."
+                                                );
+                                            return Err(InsufficientDepositError(
+                                                network_name.to_string(),
+                                                wallet_address.to_string(),
+                                            ));
                                         } else {
                                             return Err(IotaClientError(test_publish_error));
                                         }

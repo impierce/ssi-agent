@@ -8,7 +8,6 @@ use identity_iota::{
 use iota_sdk::client::secret::stronghold::StrongholdSecretManager;
 use jsonwebtoken::Algorithm;
 use log::info;
-use serde::Serialize;
 use std::collections::HashMap;
 
 pub mod service;
@@ -52,7 +51,7 @@ impl StrongholdManager {
     }
 }
 
-#[derive(Serialize, Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct StorageKey {
     pub did_method: SupportedDidMethod,
     pub algorithm: Algorithm,
