@@ -10,7 +10,6 @@ use oid4vci::token_response::TokenResponse;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
-use url::Url;
 
 use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError::{self, *};

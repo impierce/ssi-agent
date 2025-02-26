@@ -283,7 +283,6 @@ mod tests {
 
             let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
 
-            set_config().credential_offer_by_value_enabled = Some(true);
             set_config().enable_event_publisher_http();
             set_config().set_event_publisher_http_target_url(target_url.clone());
             set_config().set_event_publisher_http_target_events(Events {
