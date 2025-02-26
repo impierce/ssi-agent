@@ -11,17 +11,18 @@ use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
 use std::str::FromStr;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// Reponsible for signing and verifying data.
 pub struct Subject {
-    pub stronghold_manager: StrongholdManager,
+    pub stronghold_manager: Arc<Mutex<StrongholdManager>>,
 }
 
 impl Subject {
     /// Create a new Subject.
     pub async fn new() -> Self {
         Self {
-            stronghold_manager: StrongholdManager::new().await,
+            stronghold_manager: Arc::new(Mutex::new(StrongholdManager::new().await)),
         }
     }
 }
@@ -83,13 +84,15 @@ impl Sign for Subject {
         let method = SupportedDidMethod::from_str(subject_syntax_type).ok()?;
 
         self.stronghold_manager
+            .lock()
+            .await
             .get_verification_method_id(StorageKey::new(method, algorithm))
             .as_ref()
             .map(ToString::to_string)
     }
 
     async fn sign(&self, message: &str, _subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
-        let stronghold_storage = &self.stronghold_manager.stronghold_storage;
+        let stronghold_storage = &self.stronghold_manager.lock().await.stronghold_storage;
         let (key_id, public_key) = match algorithm {
             Algorithm::ES256 => {
                 let es256_key_id = config().secret_manager.issuer_es256_key_id.clone();
@@ -122,6 +125,8 @@ impl oid4vc_core::Subject for Subject {
             .map_err(|e| anyhow!("Failed to parse SupportedDidMethod from string: {}", e))?;
 
         self.stronghold_manager
+            .lock()
+            .await
             .get_verification_method_id(StorageKey::new(method, algorithm))
             .as_ref()
             .map(DIDUrl::did)

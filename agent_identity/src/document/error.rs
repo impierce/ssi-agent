@@ -33,10 +33,10 @@ pub enum DocumentError {
     InvalidNodeEndpointError(String),
     #[error("Iota Client Builder error: {0}")]
     IotaClientBuilderError(String),
-    #[error("Missing required for method: {0}")]
+    #[error("Missing required network name for method: {0}")]
     MissingNetworkNameError(SupportedDidMethod),
-    #[error("Error while initializing a new {0} Address: {1}")]
-    AddressInitializationError(String, String),
+    #[error("Error while retrieving the Wallet Address: {0}")]
+    WalletAddressError(String),
     #[error("Iota Client error: {0}")]
     IotaClientError(#[from] identity_iota::iota::Error),
     #[error("Error while building the Alias Output: {0}")]

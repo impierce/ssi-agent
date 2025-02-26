@@ -83,7 +83,7 @@ impl Clone for Queries {
 
 /// Initializes the [`SecretManager`] with a new mnemonic, if necessary,
 /// and generates an address from the given [`SecretManager`].
-pub async fn get_address(client: &Client, secret_manager: &SecretManager) -> anyhow::Result<Bech32Address> {
+pub async fn get_wallet_address(client: &Client, secret_manager: &SecretManager) -> anyhow::Result<Bech32Address> {
     let random: [u8; 32] = rand::random();
     let mnemonic = bip39::wordlist::encode(random.as_ref(), &bip39::wordlist::ENGLISH)
         .map_err(|err| anyhow::anyhow!(format!("{err:?}")))?;

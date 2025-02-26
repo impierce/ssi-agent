@@ -1,5 +1,5 @@
 use super::{command::DocumentCommand, error::DocumentError, event::DocumentEvent};
-use crate::{services::IdentityServices, state::get_address};
+use crate::{services::IdentityServices, state::get_wallet_address};
 use agent_secret_manager::StorageKey;
 use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported};
 use agent_shared::config::{get_preferred_signing_algorithm, SupportedDidMethod};
@@ -7,10 +7,13 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_did::{CoreDID, DIDUrl};
 use identity_document::document::CoreDocument;
+use identity_iota::iota::Error::DIDUpdateError;
 use identity_iota::{
     iota::{IotaClientExt as _, IotaDocument, IotaIdentityClientExt as _},
     verification::{MethodScope, MethodType, VerificationMethod},
 };
+use iota_sdk::client::api::input_selection::Error::MissingInputWithEd25519Address;
+use iota_sdk::client::error::Error::{InputAddressNotFound, InputSelection};
 use iota_sdk::{
     client::Client,
     types::block::{
@@ -71,48 +74,92 @@ impl Aggregate for Document {
                 did_method,
                 with_fixed_algorithm,
             } => {
-                let stronghold_manager = &services.subject.stronghold_manager;
+                let stronghold_manager = &services.subject.stronghold_manager.lock().await;
                 let stronghold_storage = &stronghold_manager.stronghold_storage;
 
                 let document = match &did_method {
                     SupportedDidMethod::Iota | SupportedDidMethod::IotaSmr | SupportedDidMethod::IotaRms => {
-                        if let Some(controller) =
-                            stronghold_manager.get_did(did_method, get_preferred_signing_algorithm())
-                        {
+                        // The API endpoint of an IOTA node, e.g. Hornet.
+                        let api_endpoint = did_method
+                            .api_endpoint()
+                            .ok_or_else(|| InvalidNodeEndpointError("missing `api_endpoint`".to_string()))?;
+
+                        // Retrieve the network name associated with the DID method.
+                        let network_name = did_method.network_name().ok_or(MissingNetworkNameError(did_method))?;
+
+                        // Build a new IOTA client to interact with the IOTA ledger.
+                        let iota_client: Client = Client::builder()
+                            .with_node(api_endpoint)
+                            .map_err(|_| InvalidNodeEndpointError(api_endpoint.to_string()))?
+                            .finish()
+                            .await
+                            .map_err(|err| IotaClientBuilderError(err.to_string()))?;
+
+                        // Retrieve the current wallet address from the Stronghold storage.
+                        let wallet_address: Bech32Address =
+                            get_wallet_address(&iota_client, stronghold_storage.as_secret_manager())
+                                .await
+                                .map_err(|err| WalletAddressError(err.to_string()))?;
+
+                        info!("Current {network_name} Address: `{wallet_address}`");
+
+                        // Check if a DID Document already exists in the aggregate.
+                        // If so, attempt to publish it to validate that the current wallet address is in control of it.
+                        let document = if let Some(document) = self.document.clone().map(IotaDocument::from) {
+                            let controller = document.id().clone();
                             info!("Found an existing controller for DID method `{did_method}`: `{controller}`");
 
-                            CoreDocument::builder(Default::default())
-                                .id(controller)
-                                .build()
-                                .map_err(ProduceDocumentError)?
+                            // Create a new DID Document from skratch.
+                            let document = IotaDocument::new_with_id(controller.clone());
+
+                            // Update the DID Document output with the latest state.
+                            let alias_output: AliasOutput =
+                                iota_client.update_did_output(document).await.map_err(IotaClientError)?;
+
+                            // Publish the updated Alias Output and get the published DID document.
+                            let test_publish_result = iota_client
+                                .publish_did_output(stronghold_storage.as_secret_manager(), alias_output)
+                                .await
+                                .map(CoreDocument::from);
+
+                            match test_publish_result {
+                                // The current wallet address controls the existing DID Document.
+                                Ok(document) => Some(document),
+                                Err(test_publish_error) => match test_publish_error {
+                                    DIDUpdateError(_, Some(ref error)) => {
+                                        // This specific error signifies that the current wallet address is NOT in
+                                        // control of the DID Document found in the Aggregate.
+                                        if let InputAddressNotFound { address, .. } = &**error {
+                                            warn!(
+                                                "The current `{did_method}` DID `{controller}` is controlled by wallet address `{address}`, \
+                                                but the wallet address connected to the current Stronghold file on the {network_name} network is `{wallet_address}`."
+                                                );
+                                            // We don't return an error here. Instead we assign `None` to `document` so
+                                            // that later on a new DID Document will be created using the current
+                                            // wallet address.
+                                            None
+                                        } else {
+                                            return Err(IotaClientError(test_publish_error));
+                                        }
+                                    }
+                                    other_test_publish_error => return Err(IotaClientError(other_test_publish_error)),
+                                },
+                            }
                         } else {
+                            None
+                        };
+
+                        if let Some(document) = document {
+                            // Return the DID Document that was already stored in the Aggregate now we validated that
+                            // the current Stronghold storage is in control of it.
+                            document
+                        } else {
+                            // If there was no DID Document stored in the Aggregate yet, or the current Stronghold
+                            // storage is not in control of it, then we create a completely new controler and DID Document.
                             info!("Creating a new controller for DID method `{did_method}`");
 
-                            let network_name = did_method.network_name().ok_or(MissingNetworkNameError(did_method))?;
-
-                            // The API endpoint of an IOTA node, e.g. Hornet.
-                            let api_endpoint = did_method
-                                .api_endpoint()
-                                .ok_or_else(|| InvalidNodeEndpointError("missing `api_endpoint`".to_string()))?;
-
-                            // Create a new client to interact with the IOTA ledger.
-                            let iota_client: Client = Client::builder()
-                                .with_node(api_endpoint)
-                                .map_err(|_| InvalidNodeEndpointError(api_endpoint.to_string()))?
-                                .finish()
-                                .await
-                                .map_err(|err| IotaClientBuilderError(err.to_string()))?;
-
-                            let wallet_address: Bech32Address =
-                                get_address(&iota_client, stronghold_storage.as_secret_manager())
-                                    .await
-                                    .map_err(|err| {
-                                        AddressInitializationError(network_name.to_string(), err.to_string())
-                                    })?;
-
-                            info!("Created new {network_name} Address: `{wallet_address}`");
-
-                            let document: IotaDocument =
+                            // Create a new 'blanc' DID Document.
+                            let document =
                                 IotaDocument::new(&iota_client.network_name().await.map_err(IotaClientError)?);
 
                             // Construct an Alias Output containing the DID document, with the wallet address
@@ -123,14 +170,26 @@ impl Aggregate for Document {
                                 .map_err(IotaClientError)?;
 
                             // Publish the Alias Output and get the published DID document.
-                            CoreDocument::from(
-                                iota_client
-                                    .publish_did_output(stronghold_storage.as_secret_manager(), alias_output)
-                                    .await
-                                    .map_err(|_| {
-                                        InsufficientDepositError(network_name.to_string(), wallet_address.to_string())
-                                    })?,
-                            )
+                            let publish_result = iota_client
+                                .publish_did_output(stronghold_storage.as_secret_manager(), alias_output)
+                                .await
+                                .map(CoreDocument::from);
+
+                            match publish_result {
+                                // Creating and publishing the new DID Document was successful.
+                                Ok(document) => document,
+                                // This error indicates that the Wallet Address does not have sufficient funds and
+                                // therefore we need to throw an explixit `InsufficientDepositError` error message.
+                                Err(DIDUpdateError(_, Some(error)))
+                                    if matches!(*error, InputSelection(MissingInputWithEd25519Address)) =>
+                                {
+                                    return Err(InsufficientDepositError(
+                                        network_name.to_string(),
+                                        wallet_address.to_string(),
+                                    ));
+                                }
+                                Err(other_error) => return Err(IotaClientError(other_error)),
+                            }
                         }
                     }
                     SupportedDidMethod::Web => {
@@ -245,7 +304,7 @@ impl Aggregate for Document {
 
                 let did_method = self.did_method.ok_or(MissingDidMethodError)?;
 
-                let stronghold_manager = &services.subject.stronghold_manager;
+                let stronghold_manager = &mut services.subject.stronghold_manager.lock().await;
 
                 let mut events = vec![];
                 for signing_algorithm in self
@@ -359,11 +418,11 @@ impl Aggregate for Document {
                     .finish()
                     .map_err(|err| AliasOutputBuilderError(err.to_string()))?;
 
-                let stronghold_manager = &services.subject.stronghold_manager;
+                let stronghold_manager = &services.subject.stronghold_manager.lock().await;
                 let stronghold_storage = &stronghold_manager.stronghold_storage;
 
                 // Publish the updated Alias Output.
-                let updated_document: CoreDocument = iota_client
+                let updated_document = iota_client
                     .publish_did_output(stronghold_storage.as_secret_manager(), alias_output)
                     .await
                     .map(CoreDocument::from)
