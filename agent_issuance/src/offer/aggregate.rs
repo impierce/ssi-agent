@@ -288,6 +288,7 @@ impl Aggregate for Offer {
 }
 
 #[cfg(test)]
+#[allow(unused_imports)]
 pub mod tests {
     use super::test_utils::*;
     use crate::{
@@ -374,6 +375,7 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[allow(clippy::too_many_arguments)]
     async fn test_create_token_response(
         offer_id: String,
         #[future(awt)] pre_authorized_code: String,
