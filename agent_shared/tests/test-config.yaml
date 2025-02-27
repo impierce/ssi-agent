@@ -57,6 +57,6 @@ credential_configurations:
           alt_text: UniCore Logo
 
 secret_manager:
-  stronghold_path: "../agent_secret_manager/tests/res/selv.stronghold"
+  stronghold_path: "../agent_secret_manager/tests/res/test.stronghold.dat"
   stronghold_password: "VNvRtH4tKyWwvJDpL6Vuc2aoLiKAecGQ"
   issuer_eddsa_key_id: "UVDxWhG2rB39FkaR7I27mHeUNrGtUgcr"
