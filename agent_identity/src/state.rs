@@ -386,12 +386,13 @@ pub async fn publish_decentrally_hosted_documents(state: &IdentityState) -> anyh
     Ok(())
 }
 
+// TODO: Make this function generic and move it to a shared module.
 /// Asynchronously retrieves all documents and filters them using the provided predicate.
 ///
 /// This function uses the query handler to fetch all documents from the underlying data source,
 /// then applies the specified predicate to each `(String, Document)` pair. Only those documents
 /// for which the predicate returns `true` are included in the returned `HashMap`.
-async fn query_all_documents(
+pub async fn query_all_documents(
     state: &IdentityState,
     query: impl Fn(&(String, Document)) -> bool,
 ) -> anyhow::Result<HashMap<String, Document>> {
