@@ -1,7 +1,7 @@
 pub mod send;
 
 use agent_issuance::{
-    offer::{command::OfferCommand, views::OfferView},
+    offer::{aggregate::Offer, command::OfferCommand, views::OfferView},
     server_config::queries::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
@@ -12,6 +12,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use hyper::header;
+use oid4vci::credential_offer::CredentialOffer;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_json::Value;
@@ -99,7 +100,10 @@ pub(crate) async fn offer(State(state): State<IssuanceState>, Path(offer_id): Pa
 #[axum_macros::debug_handler]
 pub(crate) async fn credential_offer_uri(State(state): State<IssuanceState>, Path(offer_id): Path<String>) -> Response {
     match query_handler(&offer_id, &state.query.offer).await {
-        Ok(Some(offer_view)) => (StatusCode::OK, Json(offer_view.credential_offer)).into_response(),
+        Ok(Some(Offer {
+            credential_offer: Some(CredentialOffer::CredentialOffer(credential_offer_parameters)),
+            ..
+        })) => (StatusCode::OK, Json(credential_offer_parameters)).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }

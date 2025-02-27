@@ -14,7 +14,6 @@ use tracing::info;
 use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError::{self, *};
 use crate::offer::event::OfferEvent;
-use crate::server_config::aggregate::test_utils::credential_issuer_metadata;
 use crate::services::IssuanceServices;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -639,7 +638,6 @@ pub mod test_utils {
     pub fn offer_id() -> String {
         "offer_id".to_string()
     }
-
     #[fixture]
     pub async fn token_request(#[future(awt)] pre_authorized_code: String) -> TokenRequest {
         TokenRequest::PreAuthorizedCode {
