@@ -413,7 +413,6 @@ pub mod credential_tests {
     use super::test_utils::*;
     use super::*;
 
-    use agent_secret_manager::service::Service;
     use jsonwebtoken::Algorithm;
 
     use rstest::rstest;
@@ -423,7 +422,9 @@ pub mod credential_tests {
 
     use crate::credential::aggregate::Credential;
     use crate::credential::event::CredentialEvent;
-    use crate::offer::aggregate::test_utils::SUBJECT_KEY_DID;
+    use crate::offer::aggregate::test_utils::holder;
+    use agent_secret_manager::service::Service;
+    use oid4vc_core::Subject;
 
     type CredentialTestFramework = TestFramework<Credential>;
 
@@ -439,7 +440,7 @@ pub mod credential_tests {
         UNSIGNED_W3C_VC_CREDENTIAL.clone()
     )]
     #[serial_test::serial]
-    fn test_create_unsigned_credential(
+    async fn test_create_unsigned_credential(
         #[case] credential_subject: serde_json::Value,
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
         #[case] unsigned_credential: serde_json::Value,
@@ -477,6 +478,7 @@ pub mod credential_tests {
     )]
     #[serial_test::serial]
     async fn test_sign_credential(
+        #[future(awt)] holder: Arc<dyn Subject>,
         #[case] unsigned_credential: serde_json::Value,
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
         #[case] verifiable_credential_jwt: String,
@@ -492,7 +494,7 @@ pub mod credential_tests {
             }])
             .when(CredentialCommand::SignCredential {
                 credential_id: credential_id.clone(),
-                subject_id: SUBJECT_KEY_DID.identifier("did:key", Algorithm::EdDSA).await.unwrap(),
+                subject_id: holder.identifier("did:key", Algorithm::EdDSA).await.unwrap(),
                 overwrite: false,
             })
             .then_expect_events(vec![CredentialEvent::CredentialSigned {

@@ -361,12 +361,8 @@ pub mod tests {
         did_method: &str,
         authorization_request: &GenericAuthorizationRequest,
     ) -> GenericAuthorizationResponse {
-        let provider_manager = ProviderManager::new(
-            Arc::new(futures::executor::block_on(async { Subject::new().await })),
-            vec![did_method],
-            vec![Algorithm::EdDSA],
-        )
-        .unwrap();
+        let provider_manager =
+            ProviderManager::new(Arc::new(Subject::default()), vec![did_method], vec![Algorithm::EdDSA]).unwrap();
 
         let default_did_method = provider_manager.default_subject_syntax_types()[0].to_string();
 
@@ -535,7 +531,7 @@ pub mod tests {
     }
 
     lazy_static! {
-        pub static ref VERIFIER: Subject = futures::executor::block_on(async { Subject::new().await });
+        pub static ref VERIFIER: Subject = Subject::default();
         pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
         pub static ref PRESENTATION_DEFINITION: PresentationDefinition = serde_json::from_value(json!(
             {

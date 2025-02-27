@@ -118,7 +118,7 @@ pub mod credential_tests {
 
     #[rstest]
     #[serial_test::serial]
-    fn test_add_credential(holder_credential_id: String, received_offer_id: String) {
+    async fn test_add_credential(holder_credential_id: String, received_offer_id: String) {
         CredentialTestFramework::with(Service::default())
             .given_no_previous_events()
             .when(CredentialCommand::AddCredential {

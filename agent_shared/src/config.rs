@@ -16,7 +16,7 @@ use strum::VariantArray;
 use tracing::{debug, info};
 use url::Url;
 
-static STRONGHOLD_PATH: &str = "./app/stronghold.dat";
+static STRONGHOLD_PATH: &str = "./stronghold.dat";
 
 // TODO: Once we have a proper state implementation for `agent_secret_manager` we can make use of randomly generated Key
 // IDs. For now we need to make use of these static variables.

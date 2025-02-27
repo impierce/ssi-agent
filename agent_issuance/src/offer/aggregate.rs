@@ -417,7 +417,7 @@ pub mod tests {
     #[rstest]
     #[serial_test::serial]
     async fn test_verify_credential_response(
-        holder: &Arc<dyn Subject>,
+        #[future(awt)] holder: Arc<dyn Subject>,
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] access_token: String,
         #[future(awt)] credential_offer: CredentialOffer,
@@ -465,7 +465,7 @@ pub mod tests {
     #[rstest]
     #[serial_test::serial]
     async fn test_create_credential_response(
-        holder: &Arc<dyn Subject>,
+        #[future(awt)] holder: Arc<dyn Subject>,
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] access_token: String,
         #[future(awt)] credential_offer: CredentialOffer,
@@ -518,10 +518,8 @@ pub mod test_utils {
     use crate::{
         credential::aggregate::test_utils::OPENBADGE_VERIFIABLE_CREDENTIAL_JWT, server_config::aggregate::test_utils::*,
     };
-    use agent_secret_manager::service::Service;
     use agent_shared::generate_random_string;
     use jsonwebtoken::Algorithm;
-    use lazy_static::lazy_static;
     use oid4vc_core::Subject;
     use oid4vci::{
         credential_format_profiles::{
@@ -535,10 +533,6 @@ pub mod test_utils {
     pub use rstest::*;
     use serde_json::json;
     use url::Url;
-
-    lazy_static! {
-        pub static ref SUBJECT_KEY_DID: Arc<dyn oid4vc_core::Subject> = IssuanceServices::default().issuer.clone();
-    }
 
     static PRE_AUTHORIZED_CODE: OnceCell<String> = OnceCell::new();
     static ACCESS_TOKEN: OnceCell<String> = OnceCell::new();
@@ -579,9 +573,8 @@ pub mod test_utils {
     }
 
     #[fixture]
-    #[once]
-    pub fn holder() -> Arc<dyn oid4vc_core::Subject> {
-        SUBJECT_KEY_DID.clone()
+    pub async fn holder() -> Arc<dyn oid4vc_core::Subject> {
+        Arc::new(agent_secret_manager::subject::Subject::default())
     }
 
     #[fixture]
@@ -635,7 +628,7 @@ pub mod test_utils {
     #[fixture]
     pub async fn credential_request(
         #[future(awt)] c_nonce: String,
-        holder: &Arc<dyn Subject>,
+        #[future(awt)] holder: Arc<dyn Subject>,
         static_issuer_url: &Url,
     ) -> CredentialRequest {
         CredentialRequest {

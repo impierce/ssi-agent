@@ -110,7 +110,7 @@ pub mod tests {
             .unwrap();
 
         let provider_manager =
-            ProviderManager::new(Arc::new(Subject::new().await), vec!["did:key"], vec![Algorithm::EdDSA]).unwrap();
+            ProviderManager::new(Arc::new(Subject::default()), vec!["did:key"], vec![Algorithm::EdDSA]).unwrap();
         let authorization_response = provider_manager
             .generate_response(&authorization_request, Default::default())
             .await

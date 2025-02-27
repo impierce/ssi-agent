@@ -1,11 +1,11 @@
 use super::{command::DocumentCommand, error::DocumentError, event::DocumentEvent};
 use crate::{services::IdentityServices, state::get_wallet_address};
-use agent_secret_manager::StorageKey;
+use agent_secret_manager::subject::StorageKey;
 use agent_shared::config::SupportedDidMethod;
 use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use identity_did::{CoreDID, DIDUrl};
+use identity_did::{CoreDID, DIDUrl, DID as _};
 use identity_document::document::CoreDocument;
 use identity_iota::iota::Error::DIDUpdateError;
 use identity_iota::{
@@ -75,11 +75,11 @@ impl Aggregate for Document {
                 did_method,
                 with_fixed_algorithm,
             } => {
-                let stronghold_manager = &services.subject.stronghold_manager.lock().await;
-                let stronghold_storage = &stronghold_manager.stronghold_storage;
+                let subject = &services.subject;
+                let stronghold_storage = &subject.stronghold_storage;
 
                 let document = match &did_method {
-                    SupportedDidMethod::Iota | SupportedDidMethod::IotaSmr | SupportedDidMethod::IotaRms => {
+                    SupportedDidMethod::Iota | SupportedDidMethod::IotaSmr => {
                         // The API endpoint of an IOTA node, e.g. Hornet.
                         let api_endpoint = did_method
                             .api_endpoint()
@@ -256,7 +256,7 @@ impl Aggregate for Document {
                         };
 
                         // Retrieve the public key from Stronghold.
-                        let public_key_jwk = stronghold_manager
+                        let public_key_jwk = subject
                             .get_public_key(key_id.clone(), &algorithm)
                             .await
                             .map_err(|err| MissingKeyError(err.to_string()))?;
@@ -299,7 +299,7 @@ impl Aggregate for Document {
 
                 let did_method = self.did_method.ok_or(MissingDidMethodError)?;
 
-                let stronghold_manager = &mut services.subject.stronghold_manager.lock().await;
+                let subject = &services.subject;
 
                 let mut events = vec![];
                 for signing_algorithm in self
@@ -313,20 +313,26 @@ impl Aggregate for Document {
                         algorithm => return Err(UnsupportedSigningAlgorithmError(algorithm)),
                     };
 
-                    let public_key_jwk = stronghold_manager
+                    let public_key_jwk = subject
                         .get_public_key(key_id, &signing_algorithm)
                         .await
                         .map_err(|err| MissingKeyError(err.to_string()))?;
 
-                    let verification_method =
-                        VerificationMethod::new_from_jwk(did.clone(), public_key_jwk, did_method.fragment())
-                            .map_err(|err| VerificationMethodBuilderError(err.to_string()))?;
+                    let verification_method = VerificationMethod::new_from_jwk(
+                        did.clone(),
+                        public_key_jwk,
+                        (did_method == SupportedDidMethod::Key)
+                            .then_some(did.method_id())
+                            .or(did_method.fragment()),
+                    )
+                    .map_err(|err| VerificationMethodBuilderError(err.to_string()))?;
 
-                    stronghold_manager
+                    subject
                         .insert_verification_method_id(
                             StorageKey::new(did_method, signing_algorithm),
                             verification_method.id().clone(),
                         )
+                        .await
                         .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
 
                     document
@@ -413,8 +419,7 @@ impl Aggregate for Document {
                     .finish()
                     .map_err(|err| AliasOutputBuilderError(err.to_string()))?;
 
-                let stronghold_manager = &services.subject.stronghold_manager.lock().await;
-                let stronghold_storage = &stronghold_manager.stronghold_storage;
+                let stronghold_storage = &services.subject.stronghold_storage;
 
                 // Publish the updated Alias Output.
                 let updated_document = iota_client

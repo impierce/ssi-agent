@@ -9,10 +9,6 @@ pub trait Service {
     where
         Self: Sized,
     {
-        use crate::subject::Subject;
-
-        Arc::new(Self::new(Arc::new(futures::executor::block_on(async {
-            Subject::new().await
-        }))))
+        Arc::new(Self::new(Arc::new(crate::subject::Subject::default())))
     }
 }
