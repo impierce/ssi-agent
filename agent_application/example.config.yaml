@@ -14,8 +14,6 @@ did_methods:
     preferred: true
   did_key:
     enabled: true
-  did_iota_rms:
-    enabled: false
   did_web:
     enabled: false
 

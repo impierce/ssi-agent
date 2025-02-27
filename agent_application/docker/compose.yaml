@@ -41,8 +41,6 @@ services:
       # UNICORE__SECRET_MANAGER__STRONGHOLD_PATH: "/app/stronghold.dat"
       # UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD: "secure_password"
 
-      # Uncomment the following lines to use the DID method `did:iota:rms`
-      # UNICORE__SECRET_MANAGER__ISSUER_KEY_ID: "9O66nzWqYYy1LmmiOudOlh2SMIaUWoTS"
     volumes:
       - ../../agent_application/config.yaml:/app/agent_application/config.yaml
       # - ../../agent_secret_manager/tests/res/test.stronghold:/app/stronghold.dat

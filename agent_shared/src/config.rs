@@ -267,9 +267,6 @@ pub enum SupportedDidMethod {
     #[serde(alias = "did_iota_smr", alias = "did:iota:smr", rename = "did_iota_smr")]
     #[strum(serialize = "did:iota:smr")]
     IotaSmr,
-    #[serde(alias = "did_iota_rms", alias = "did:iota:rms", rename = "did_iota_rms")]
-    #[strum(serialize = "did:iota:rms")]
-    IotaRms,
 }
 
 /// (A subset of) DID method traits. The methods follow a naming convention that expresses boolean predicates as verb
@@ -278,10 +275,7 @@ pub enum SupportedDidMethod {
 impl SupportedDidMethod {
     pub fn supports_update(&self) -> bool {
         match self {
-            SupportedDidMethod::Web
-            | SupportedDidMethod::Iota
-            | SupportedDidMethod::IotaSmr
-            | SupportedDidMethod::IotaRms => true,
+            SupportedDidMethod::Web | SupportedDidMethod::Iota | SupportedDidMethod::IotaSmr => true,
             SupportedDidMethod::Jwk | SupportedDidMethod::Key => false,
         }
     }
@@ -291,8 +285,7 @@ impl SupportedDidMethod {
             SupportedDidMethod::Jwk
             | SupportedDidMethod::Key
             | SupportedDidMethod::Iota
-            | SupportedDidMethod::IotaSmr
-            | SupportedDidMethod::IotaRms => false,
+            | SupportedDidMethod::IotaSmr => false,
             SupportedDidMethod::Web => true,
         }
     }
@@ -300,14 +293,13 @@ impl SupportedDidMethod {
     pub fn hosted_decentrally(&self) -> bool {
         match self {
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => false,
-            SupportedDidMethod::Iota | SupportedDidMethod::IotaSmr | SupportedDidMethod::IotaRms => true,
+            SupportedDidMethod::Iota | SupportedDidMethod::IotaSmr => true,
         }
     }
 }
 
 const MAINNET_URL: &str = "https://api.stardust-mainnet.iotaledger.net";
 const SHIMMER_URL: &str = "https://api.shimmer.network";
-const TESTNET_URL: &str = "https://api.testnet.shimmer.network";
 
 const IOTA_NETWORK: &str = "IOTA Network";
 const SHIMMER_NETWORK: &str = "Shimmer Network";
@@ -320,7 +312,6 @@ impl SupportedDidMethod {
         match self {
             SupportedDidMethod::Iota => Some(MAINNET_URL),
             SupportedDidMethod::IotaSmr => Some(SHIMMER_URL),
-            SupportedDidMethod::IotaRms => Some(TESTNET_URL),
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
         }
     }
@@ -329,8 +320,6 @@ impl SupportedDidMethod {
         match self {
             SupportedDidMethod::Iota => Some(IOTA_NETWORK),
             SupportedDidMethod::IotaSmr => Some(SHIMMER_NETWORK),
-            // TODO: remove this method
-            SupportedDidMethod::IotaRms => None,
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
         }
     }
@@ -340,7 +329,6 @@ impl SupportedDidMethod {
             SupportedDidMethod::Jwk => Some(JWK_FRAGMENT),
             SupportedDidMethod::Iota
             | SupportedDidMethod::IotaSmr
-            | SupportedDidMethod::IotaRms
             | SupportedDidMethod::Key
             | SupportedDidMethod::Web => None,
         }
