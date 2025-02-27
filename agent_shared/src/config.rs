@@ -57,7 +57,7 @@ pub struct EventStoreConfig {
     pub connection_string: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum EventStoreType {
     InMemory,
@@ -380,6 +380,19 @@ impl ApplicationConfiguration {
             // configuration.
             info!("Configuration loaded successfully");
             debug!("{:#?}", config);
+
+            if config.event_store.type_ == EventStoreType::InMemory {
+                for did_method in &[SupportedDidMethod::Iota, SupportedDidMethod::IotaSmr] {
+                    if config
+                        .did_methods
+                        .get(did_method)
+                        .map(|options| options.enabled)
+                        .unwrap_or_default()
+                    {
+                        panic!("`{did_method}` cannot be enabled when using the `in_memory` event store");
+                    }
+                }
+            }
         })
     }
 
