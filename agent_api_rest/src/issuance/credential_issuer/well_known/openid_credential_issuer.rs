@@ -88,11 +88,7 @@ mod tests {
                                 .into(),
                         }),
                         scope: None,
-                        cryptographic_binding_methods_supported: vec![
-                            "did:iota:rms".to_string(),
-                            "did:jwk".to_string(),
-                            "did:key".to_string()
-                        ],
+                        cryptographic_binding_methods_supported: vec!["did:jwk".to_string(), "did:key".to_string()],
                         credential_signing_alg_values_supported: vec!["EdDSA".to_string()],
                         proof_types_supported: HashMap::from_iter([(
                             ProofType::Jwt,

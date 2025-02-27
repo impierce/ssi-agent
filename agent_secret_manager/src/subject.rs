@@ -159,8 +159,6 @@ mod tests {
             stronghold_password: "sup3rSecr3t".to_string(),
             issuer_eddsa_key_id: Some("ed25519-0".to_string()),
             issuer_es256_key_id: Some("es256-0".to_string()),
-            issuer_did: Some("did:foo:bar".to_string()),
-            issuer_fragment: Some("0".to_string()),
         };
     }
 
