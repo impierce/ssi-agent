@@ -119,6 +119,7 @@ pub mod tests {
     };
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
     use agent_secret_manager::service::Service;
+    use agent_shared::config::set_config;
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -130,7 +131,7 @@ pub mod tests {
     use std::str::FromStr;
     use tower::Service as _;
 
-    pub async fn offers(app: &mut Router) -> String {
+    pub async fn offers(app: &mut Router) -> Option<String> {
         let response = app
             .call(
                 Request::builder()
@@ -157,27 +158,37 @@ pub mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: String = String::from_utf8(body.to_vec()).unwrap();
 
-        if let CredentialOffer::CredentialOffer(credential_offer) = CredentialOffer::from_str(&body).unwrap() {
-            let CredentialOfferParameters {
-                grants:
-                    Some(Grants {
-                        pre_authorized_code:
-                            Some(PreAuthorizedCode {
-                                pre_authorized_code, ..
-                            }),
-                        ..
-                    }),
-                ..
-            } = *credential_offer
-            else {
-                unreachable!()
-            };
-            pre_authorized_code
-        } else {
-            unreachable!()
+        match CredentialOffer::from_str(&body).unwrap() {
+            CredentialOffer::CredentialOffer(credential_offer) => {
+                let CredentialOfferParameters {
+                    grants:
+                        Some(Grants {
+                            pre_authorized_code:
+                                Some(PreAuthorizedCode {
+                                    pre_authorized_code, ..
+                                }),
+                            ..
+                        }),
+                    ..
+                } = *credential_offer
+                else {
+                    unreachable!()
+                };
+
+                Some(pre_authorized_code)
+            }
+            CredentialOffer::CredentialOfferUri(credential_offer_uri) => {
+                assert_eq!(
+                    credential_offer_uri,
+                    url::Url::parse(&format!("https://example.com/credential-offer/{OFFER_ID}")).unwrap()
+                );
+
+                None
+            }
         }
     }
 
+    #[serial_test::serial]
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_offers_endpoint() {
@@ -188,5 +199,20 @@ pub mod tests {
 
         credentials(&mut app).await;
         let _pre_authorized_code = offers(&mut app).await;
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn test_offers_endpoint_by_reference() {
+        set_config().credential_offer_by_value_enabled = Some(false);
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
+        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
+
+        let mut app = router(issuance_state);
+
+        credentials(&mut app).await;
+        let _pre_authorized_code = offers(&mut app).await;
+        set_config().credential_offer_by_value_enabled = Some(true);
     }
 }

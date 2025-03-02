@@ -73,7 +73,11 @@ pub mod tests {
     use oid4vci::token_response::TokenResponse;
     use tower::Service as _;
 
-    pub async fn token(app: &mut Router, pre_authorized_code: String) -> String {
+    pub async fn token(app: &mut Router, pre_authorized_code: Option<String>) -> Option<String> {
+        let pre_authorized_code = match pre_authorized_code {
+            Some(code) => code,
+            None => return None,
+        };
         let response = app
             .call(
                 Request::builder()
@@ -100,19 +104,20 @@ pub mod tests {
         assert_eq!(token_response.token_type, "bearer");
         assert!(token_response.c_nonce.is_some());
 
-        token_response.access_token
+        Some(token_response.access_token)
     }
 
+    #[serial_test::serial]
     #[tokio::test]
     async fn test_token_endpoint() {
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
-
         let mut app = router(issuance_state);
 
         credentials(&mut app).await;
-        let pre_authorized_code = offers(&mut app).await;
+        let pre_authorized_code: String = offers(&mut app).await.unwrap();
 
-        let _access_token = token(&mut app, pre_authorized_code).await;
+        let _access_token = token(&mut app, Some(pre_authorized_code)).await;
+        assert!(_access_token.is_some());
     }
 }

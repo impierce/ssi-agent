@@ -319,6 +319,7 @@ mod tests {
         let pre_authorized_code = offers(&mut app).await;
 
         let access_token = token(&mut app, pre_authorized_code).await;
+        let access_token_value = access_token.unwrap_or_else(|| panic!("No access token available"));
 
         let response = app
             .oneshot(
@@ -326,7 +327,7 @@ mod tests {
                     .method(http::Method::POST)
                     .uri("/openid4vci/credential")
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-                    .header(http::header::AUTHORIZATION, format!("Bearer {}", access_token))
+                    .header(http::header::AUTHORIZATION, format!("Bearer {}", access_token_value))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "format": "jwt_vc_json",
