@@ -1,12 +1,165 @@
+use agent_holder::credential::aggregate::Credential as HolderCredential;
+use agent_holder::credential::queries::all_credentials::AllHolderCredentialsView;
+use agent_holder::offer::aggregate::Offer as ReceivedOffer;
+use agent_holder::offer::queries::all_offers::AllReceivedOffersView;
+use agent_holder::presentation::aggregate::Presentation;
+use agent_holder::presentation::views::all_presentations::AllPresentationsView;
+use agent_holder::services::HolderServices;
+use agent_holder::state::HolderState;
+use agent_identity::connection::views::all_connections::AllConnectionsView;
+use agent_identity::document::views::all_documents::AllDocumentsView;
+use agent_identity::service::views::all_services::AllServicesView;
+use agent_identity::services::IdentityServices;
+use agent_identity::state::IdentityState;
 use agent_identity::{connection::aggregate::Connection, document::aggregate::Document, service::aggregate::Service};
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
+use agent_shared::application_state::Command;
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
-use cqrs_es::Query;
+use agent_verification::authorization_request::views::all_authorization_requests::AllAuthorizationRequestsView;
+use agent_verification::services::VerificationServices;
+use agent_verification::state::VerificationState;
+use cqrs_es::persist::ViewRepository;
+use cqrs_es::{Aggregate, Query, View};
+use std::sync::Arc;
 
 pub mod in_memory;
 pub mod postgres;
+
+pub trait EventStore {
+    fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
+        identity_services: A::Services,
+        event_publishers: Vec<Box<dyn Query<A>>>,
+    ) -> impl std::future::Future<
+        Output = (
+            Arc<dyn Command<A> + Send + Sync>,
+            Arc<dyn ViewRepository<V, A>>,
+            Arc<dyn ViewRepository<AV, A>>,
+        ),
+    > + Send
+    where
+        <A as Aggregate>::Command: Send + Sync;
+}
+
+pub async fn identity_state<ES: EventStore>(
+    services: Arc<IdentityServices>,
+    event_publishers: Vec<Box<dyn EventPublisher>>,
+) -> IdentityState {
+    // Partition the event_publishers into the different aggregates.
+    let Partitions {
+        connection_event_publishers,
+        document_event_publishers,
+        service_event_publishers,
+        ..
+    } = partition_event_publishers(event_publishers);
+
+    let (connection_command_handler, connection, all_connections) = ES::commands_and_queries::<
+        Connection,
+        Connection,
+        AllConnectionsView,
+    >(services.clone(), connection_event_publishers)
+    .await;
+    let (document_command_handler, document, all_documents) =
+        ES::commands_and_queries::<Document, Document, AllDocumentsView>(services.clone(), document_event_publishers)
+            .await;
+    let (service_command_handler, service, all_services) =
+        ES::commands_and_queries::<Service, Service, AllServicesView>(services.clone(), service_event_publishers).await;
+
+    IdentityState {
+        command: agent_identity::state::CommandHandlers {
+            connection: connection_command_handler,
+            document: document_command_handler,
+            service: service_command_handler,
+        },
+        query: agent_identity::state::ViewRepositories {
+            connection,
+            all_connections,
+            document,
+            all_documents,
+            service,
+            all_services,
+        },
+    }
+}
+
+pub async fn verification_state<ES: EventStore>(
+    services: Arc<VerificationServices>,
+    event_publishers: Vec<Box<dyn EventPublisher>>,
+) -> VerificationState {
+    // Partition the event_publishers into the different aggregates.
+    let Partitions {
+        authorization_request_event_publishers,
+        ..
+    } = partition_event_publishers(event_publishers);
+
+    let (authorization_request_command_handler, authorization_request, all_authorization_requests) =
+        ES::commands_and_queries::<AuthorizationRequest, AuthorizationRequest, AllAuthorizationRequestsView>(
+            services.clone(),
+            authorization_request_event_publishers,
+        )
+        .await;
+
+    VerificationState {
+        command: agent_verification::state::CommandHandlers {
+            authorization_request: authorization_request_command_handler,
+        },
+        query: agent_verification::state::ViewRepositories {
+            authorization_request,
+            all_authorization_requests,
+        },
+    }
+}
+
+pub async fn holder_state<ES: EventStore>(
+    services: Arc<HolderServices>,
+    event_publishers: Vec<Box<dyn EventPublisher>>,
+) -> HolderState {
+    // Partition the event_publishers into the different aggregates.
+    let Partitions {
+        holder_credential_event_publishers: holder_credential_publisher,
+        presentation_event_publishers,
+        received_offer_event_publishers,
+        ..
+    } = partition_event_publishers(event_publishers);
+
+    let (holder_credential_command_handler, holder_credential, all_holder_credential) =
+        ES::commands_and_queries::<HolderCredential, HolderCredential, AllHolderCredentialsView>(
+            services.clone(),
+            holder_credential_publisher,
+        )
+        .await;
+
+    let (presentation_command_handler, presentation, all_presentations) =
+        ES::commands_and_queries::<Presentation, Presentation, AllPresentationsView>(
+            services.clone(),
+            presentation_event_publishers,
+        )
+        .await;
+
+    let (received_offer_command_handler, received_offer, all_received_offers) =
+        ES::commands_and_queries::<ReceivedOffer, ReceivedOffer, AllReceivedOffersView>(
+            services.clone(),
+            received_offer_event_publishers,
+        )
+        .await;
+
+    HolderState {
+        command: agent_holder::state::CommandHandlers {
+            credential: holder_credential_command_handler,
+            presentation: presentation_command_handler,
+            offer: received_offer_command_handler,
+        },
+        query: agent_holder::state::ViewRepositories {
+            holder_credential,
+            all_holder_credentials: all_holder_credential,
+            presentation,
+            all_presentations,
+            received_offer,
+            all_received_offers,
+        },
+    }
+}
 
 pub type ConnectionEventPublisher = Box<dyn Query<Connection>>;
 pub type DocumentEventPublisher = Box<dyn Query<Document>>;
