@@ -20,14 +20,64 @@ use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use agent_verification::authorization_request::views::all_authorization_requests::AllAuthorizationRequestsView;
 use agent_verification::services::VerificationServices;
 use agent_verification::state::VerificationState;
+use async_trait::async_trait;
 use cqrs_es::persist::ViewRepository;
-use cqrs_es::{Aggregate, Query, View};
+use cqrs_es::{Aggregate, CqrsFramework, EventStore, Query, View};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub mod in_memory;
 pub mod postgres;
 
-pub trait EventStore {
+pub struct AggregateHandler<A, ES>
+where
+    A: Aggregate,
+    ES: EventStore<A> + Send + Sync + 'static,
+{
+    pub cqrs: CqrsFramework<A, ES>,
+}
+
+#[async_trait]
+impl<A, ES> Command<A> for AggregateHandler<A, ES>
+where
+    A: Aggregate,
+    ES: EventStore<A>,
+    <ES as EventStore<A>>::AC: Send,
+    <A as Aggregate>::Command: Send,
+{
+    async fn execute_with_metadata(
+        &self,
+        aggregate_id: &str,
+        command: A::Command,
+        metadata: HashMap<String, String>,
+    ) -> Result<(), cqrs_es::AggregateError<A::Error>> {
+        self.cqrs.execute_with_metadata(aggregate_id, command, metadata).await
+    }
+}
+
+impl<A, ES> AggregateHandler<A, ES>
+where
+    A: Aggregate,
+    ES: EventStore<A>,
+    <A as Aggregate>::Command: Send,
+{
+    fn append_query<Q>(self, query: Q) -> Self
+    where
+        Q: Query<A> + 'static,
+    {
+        Self {
+            cqrs: self.cqrs.append_query(Box::new(query)),
+        }
+    }
+
+    fn append_event_publisher(self, query: Box<dyn Query<A>>) -> Self {
+        Self {
+            cqrs: self.cqrs.append_query(query),
+        }
+    }
+}
+
+pub trait EventStoreTemp {
     fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
         identity_services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
@@ -42,7 +92,7 @@ pub trait EventStore {
         <A as Aggregate>::Command: Send + Sync;
 }
 
-pub async fn identity_state<ES: EventStore>(
+pub async fn identity_state<ES: EventStoreTemp>(
     services: Arc<IdentityServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> IdentityState {
@@ -83,7 +133,7 @@ pub async fn identity_state<ES: EventStore>(
     }
 }
 
-pub async fn verification_state<ES: EventStore>(
+pub async fn verification_state<ES: EventStoreTemp>(
     services: Arc<VerificationServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> VerificationState {
@@ -111,7 +161,7 @@ pub async fn verification_state<ES: EventStore>(
     }
 }
 
-pub async fn holder_state<ES: EventStore>(
+pub async fn holder_state<ES: EventStoreTemp>(
     services: Arc<HolderServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> HolderState {

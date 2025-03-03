@@ -1,4 +1,4 @@
-use crate::{partition_event_publishers, EventPublisher, EventStore, Partitions};
+use crate::{partition_event_publishers, AggregateHandler, EventPublisher, EventStoreTemp, Partitions};
 use agent_issuance::{
     offer::queries::{access_token::AccessTokenQuery, pre_authorized_code::PreAuthorizedCodeQuery},
     services::IssuanceServices,
@@ -8,36 +8,13 @@ use agent_issuance::{
 use agent_shared::{
     application_state::Command, config::config, custom_queries::ListAllQuery, generic_query::generic_query,
 };
-use async_trait::async_trait;
+use cqrs_es::persist::PersistedEventStore;
 use cqrs_es::{persist::ViewRepository, Aggregate, Query, View};
-use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
+use postgres_es::{default_postgress_pool, PostgresEventRepository, PostgresViewRepository};
 use sqlx::Pool;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
-pub struct AggregateHandler<A>
-where
-    A: Aggregate,
-{
-    pub cqrs: PostgresCqrs<A>,
-}
-
-#[async_trait]
-impl<A> Command<A> for AggregateHandler<A>
-where
-    A: Aggregate + 'static,
-    <A as Aggregate>::Command: Send + Sync,
-{
-    async fn execute_with_metadata(
-        &self,
-        aggregate_id: &str,
-        command: A::Command,
-        metadata: HashMap<String, String>,
-    ) -> Result<(), cqrs_es::AggregateError<A::Error>> {
-        self.cqrs.execute_with_metadata(aggregate_id, command, metadata).await
-    }
-}
-
-impl<A> AggregateHandler<A>
+impl<A> AggregateHandler<A, PersistedEventStore<PostgresEventRepository, A>>
 where
     A: Aggregate,
 {
@@ -46,26 +23,11 @@ where
             cqrs: postgres_es::postgres_cqrs(pool, vec![], services),
         }
     }
-
-    fn append_query<Q>(self, query: Q) -> Self
-    where
-        Q: Query<A> + 'static,
-    {
-        Self {
-            cqrs: self.cqrs.append_query(Box::new(query)),
-        }
-    }
-
-    fn append_event_publisher(self, query: Box<dyn Query<A>>) -> Self {
-        Self {
-            cqrs: self.cqrs.append_query(query),
-        }
-    }
 }
 
 pub struct Postgres;
 
-impl EventStore for Postgres {
+impl EventStoreTemp for Postgres {
     async fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
         services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
@@ -82,7 +44,7 @@ impl EventStore for Postgres {
         );
         let pool = default_postgress_pool(&connection_string).await;
 
-        let all_aggregates_name = format!("all_{}", A::aggregate_type());
+        let all_aggregates_name = format!("all_{}s", A::aggregate_type());
 
         // Initialize the postgres repositories.
         let aggregate: Arc<PostgresViewRepository<V, A>> =

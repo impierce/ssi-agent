@@ -1,4 +1,4 @@
-use crate::{partition_event_publishers, EventPublisher, EventStore, Partitions};
+use crate::{partition_event_publishers, AggregateHandler, EventPublisher, EventStoreTemp, Partitions};
 use agent_issuance::{
     offer::{
         aggregate::Offer,
@@ -63,30 +63,7 @@ where
     }
 }
 
-struct AggregateHandler<A>
-where
-    A: Aggregate,
-{
-    pub cqrs: CqrsFramework<A, MemStore<A>>,
-}
-
-#[async_trait]
-impl<A> Command<A> for AggregateHandler<A>
-where
-    A: Aggregate,
-    <A as Aggregate>::Command: Send,
-{
-    async fn execute_with_metadata(
-        &self,
-        aggregate_id: &str,
-        command: A::Command,
-        metadata: HashMap<String, String>,
-    ) -> Result<(), cqrs_es::AggregateError<A::Error>> {
-        self.cqrs.execute_with_metadata(aggregate_id, command, metadata).await
-    }
-}
-
-impl<A> AggregateHandler<A>
+impl<A> AggregateHandler<A, MemStore<A>>
 where
     A: Aggregate,
     <A as Aggregate>::Command: Send,
@@ -96,26 +73,11 @@ where
             cqrs: CqrsFramework::new(MemStore::default(), vec![], services),
         }
     }
-
-    fn append_query<Q>(self, query: Q) -> Self
-    where
-        Q: Query<A> + 'static,
-    {
-        Self {
-            cqrs: self.cqrs.append_query(Box::new(query)),
-        }
-    }
-
-    fn append_event_publisher(self, query: Box<dyn Query<A>>) -> Self {
-        Self {
-            cqrs: self.cqrs.append_query(query),
-        }
-    }
 }
 
 pub struct InMemory;
 
-impl EventStore for InMemory {
+impl EventStoreTemp for InMemory {
     async fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
         services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
@@ -127,7 +89,7 @@ impl EventStore for InMemory {
     where
         <A as Aggregate>::Command: Send + Sync,
     {
-        let all_aggregates_name = format!("all_{}", A::aggregate_type());
+        let all_aggregates_name = format!("all_{}s", A::aggregate_type());
 
         // Initialize the in-memory repositories.
         let aggregate: Arc<MemRepository<V, A>> = Arc::new(MemRepository::default());
