@@ -103,7 +103,6 @@ impl Aggregate for Offer {
                 let form_url_encoded_credential_offer = if credential_offer_by_value_enabled {
                     credential_offer.to_string()
                 } else {
-                    //this makes that by default, credenital_offer_uri is used.
                     credential_offer_uri.to_string()
                 };
 
@@ -130,7 +129,6 @@ impl Aggregate for Offer {
                 offer_id,
                 credential_ids,
             }]),
-
             SendCredentialOffer { offer_id, target_url } => {
                 let client = reqwest::Client::new();
                 let target = self
