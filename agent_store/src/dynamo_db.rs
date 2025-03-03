@@ -1,4 +1,4 @@
-use crate::{partition_event_publishers, EventPublisher, EventStore, Partitions};
+use crate::{partition_event_publishers, AggregateHandler, EventPublisher, EventStoreTemp, Partitions};
 use agent_issuance::{
     offer::queries::{access_token::AccessTokenQuery, pre_authorized_code::PreAuthorizedCodeQuery},
     services::IssuanceServices,
@@ -6,39 +6,18 @@ use agent_issuance::{
     SimpleLoggingQuery,
 };
 use agent_shared::{application_state::Command, custom_queries::ListAllQuery, generic_query::generic_query};
-use async_trait::async_trait;
 use aws_sdk_dynamodb::{
     config::{Credentials, Region},
     Client, Config,
 };
-use cqrs_es::{persist::ViewRepository, Aggregate, Query, View};
-use dynamo_es::{DynamoCqrs, DynamoViewRepository};
-use std::{collections::HashMap, sync::Arc};
+use cqrs_es::{
+    persist::{PersistedEventStore, ViewRepository},
+    Aggregate, Query, View,
+};
+use dynamo_es::{DynamoEventRepository, DynamoViewRepository};
+use std::sync::Arc;
 
-pub struct AggregateHandler<A>
-where
-    A: Aggregate,
-{
-    pub cqrs: DynamoCqrs<A>,
-}
-
-#[async_trait]
-impl<A> Command<A> for AggregateHandler<A>
-where
-    A: Aggregate + 'static,
-    <A as Aggregate>::Command: Send + Sync,
-{
-    async fn execute_with_metadata(
-        &self,
-        aggregate_id: &str,
-        command: A::Command,
-        metadata: HashMap<String, String>,
-    ) -> Result<(), cqrs_es::AggregateError<A::Error>> {
-        self.cqrs.execute_with_metadata(aggregate_id, command, metadata).await
-    }
-}
-
-impl<A> AggregateHandler<A>
+impl<A> AggregateHandler<A, PersistedEventStore<DynamoEventRepository, A>>
 where
     A: Aggregate,
 {
@@ -47,26 +26,11 @@ where
             cqrs: dynamo_es::dynamodb_cqrs(client, vec![], services),
         }
     }
-
-    fn append_query<Q>(self, query: Q) -> Self
-    where
-        Q: Query<A> + 'static,
-    {
-        Self {
-            cqrs: self.cqrs.append_query(Box::new(query)),
-        }
-    }
-
-    fn append_event_publisher(self, query: Box<dyn Query<A>>) -> Self {
-        Self {
-            cqrs: self.cqrs.append_query(query),
-        }
-    }
 }
 
 pub struct DynamoDB;
 
-impl EventStore for DynamoDB {
+impl EventStoreTemp for DynamoDB {
     async fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
         services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
