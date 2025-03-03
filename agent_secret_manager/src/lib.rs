@@ -1,4 +1,4 @@
-use agent_shared::config::{config, get_all_enabled_did_methods, SecretManagerConfig};
+use agent_shared::config::{config, SecretManagerConfig};
 use did_manager::{InMemoryCache, SecretManager};
 use log::info;
 
@@ -12,8 +12,6 @@ pub async fn secret_manager() -> SecretManager {
         stronghold_password: password,
         issuer_eddsa_key_id,
         issuer_es256_key_id,
-        issuer_did,
-        issuer_fragment,
     } = config().secret_manager.clone();
 
     info!("{:?}", config().secret_manager);
@@ -28,19 +26,6 @@ pub async fn secret_manager() -> SecretManager {
 
     if let Some(issuer_es256_key_id) = issuer_es256_key_id {
         builder = builder.with_es256_key(&issuer_es256_key_id);
-    }
-
-    // If `did:iota:rms` is enabled, further values are required.
-    if get_all_enabled_did_methods().contains(&agent_shared::config::SupportedDidMethod::IotaRms) {
-        builder =
-            builder
-                .with_did(
-                    &issuer_did
-                        .expect("`You have enabled did:iota:rms, which requires a known DID. Please provide the value through the config or environment variable.`"),
-                )
-                .with_fragment(&issuer_fragment.expect(
-                    "`You have enabled did:iota:rms, which requires the fragment identifier of the key to be used. Please provide the value through the config or environment variable.`",
-                ));
     }
 
     if let Some(did_document_cache) = config().did_document_cache.clone() {
