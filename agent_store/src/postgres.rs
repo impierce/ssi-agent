@@ -53,15 +53,12 @@ impl EventStoreTemp for Postgres {
             Arc::new(PostgresViewRepository::<AV, A>::new(&all_aggregates_name, pool.clone()));
 
         (
-            Arc::new(
-                event_publishers.into_iter().fold(
-                    AggregateHandler::new(pool.clone(), services)
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(aggregate.clone()))
-                        .append_query(ListAllQuery::new(all_aggregates.clone(), &all_aggregates_name)),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
+            Arc::new(AggregateHandler::new(pool, services).with_parameters(
+                aggregate.clone(),
+                all_aggregates.clone(),
+                event_publishers,
+                &all_aggregates_name,
+            )),
             aggregate,
             all_aggregates,
         )

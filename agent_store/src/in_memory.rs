@@ -96,15 +96,12 @@ impl EventStoreTemp for InMemory {
         let all_aggregates: Arc<MemRepository<AV, A>> = Arc::new(MemRepository::default());
 
         (
-            Arc::new(
-                event_publishers.into_iter().fold(
-                    AggregateHandler::new(services)
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(aggregate.clone()))
-                        .append_query(ListAllQuery::new(all_aggregates.clone(), &all_aggregates_name)),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
+            Arc::new(AggregateHandler::new(services).with_parameters(
+                aggregate.clone(),
+                all_aggregates.clone(),
+                event_publishers,
+                &all_aggregates_name,
+            )),
             aggregate,
             all_aggregates,
         )

@@ -12,10 +12,13 @@ use agent_identity::service::views::all_services::AllServicesView;
 use agent_identity::services::IdentityServices;
 use agent_identity::state::IdentityState;
 use agent_identity::{connection::aggregate::Connection, document::aggregate::Document, service::aggregate::Service};
+use agent_issuance::SimpleLoggingQuery;
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
 use agent_shared::application_state::Command;
+use agent_shared::custom_queries::ListAllQuery;
+use agent_shared::generic_query::generic_query;
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use agent_verification::authorization_request::views::all_authorization_requests::AllAuthorizationRequestsView;
 use agent_verification::services::VerificationServices;
@@ -57,7 +60,7 @@ where
 
 impl<A, ES> AggregateHandler<A, ES>
 where
-    A: Aggregate,
+    A: Aggregate + 'static,
     ES: EventStore<A>,
     <A as Aggregate>::Command: Send,
 {
@@ -74,6 +77,27 @@ where
         Self {
             cqrs: self.cqrs.append_query(query),
         }
+    }
+
+    fn with_parameters<V, AV, VR1, VR2>(
+        self,
+        aggregate: Arc<VR1>,
+        all_aggregates: Arc<VR2>,
+        event_publishers: Vec<Box<dyn Query<A>>>,
+        all_aggregates_name: &str,
+    ) -> Self
+    where
+        V: View<A> + 'static,
+        AV: View<A> + 'static,
+        VR1: ViewRepository<V, A> + 'static,
+        VR2: ViewRepository<AV, A> + 'static,
+    {
+        event_publishers.into_iter().fold(
+            self.append_query(SimpleLoggingQuery {})
+                .append_query(generic_query(aggregate.clone()))
+                .append_query(ListAllQuery::new(all_aggregates.clone(), &all_aggregates_name)),
+            |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
+        )
     }
 }
 
