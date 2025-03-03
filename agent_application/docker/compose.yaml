@@ -13,23 +13,34 @@ services:
       POSTGRES_PASSWORD: demo_pass
     volumes:
       - "./db:/docker-entrypoint-initdb.d"
-  pg-admin:
-    image: dpage/pgadmin4
-    restart: always
+  cqrs-dynamodb-db:
+    container_name: cqrs-dynamodb-db
+    image: amazon/dynamodb-local:latest
     ports:
-      - 5433:80
+      - 8000:8000
+    command: "-jar DynamoDBLocal.jar -sharedDb"
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.org
-      PGADMIN_DEFAULT_PASSWORD: admin
-    volumes:
-      - "./db/pgadmin4/servers.json:/pgadmin4/servers.json"
-    depends_on:
-      - cqrs-postgres-db
+      AWS_ACCESS_KEY_ID: "TESTAWSID"
+      AWS_SECRET_ACCESS_KEY: "TESTAWSKEY"
+      AWS_DEFAULT_REGION: "eu-west-2"
+  # pg-admin:
+  #   image: dpage/pgadmin4
+  #   restart: always
+  #   ports:
+  #     - 5433:80
+  #   environment:
+  #     PGADMIN_DEFAULT_EMAIL: admin@example.org
+  #     PGADMIN_DEFAULT_PASSWORD: admin
+  #   volumes:
+  #     - "./db/pgadmin4/servers.json:/pgadmin4/servers.json"
+  #   depends_on:
+  #     - cqrs-postgres-db
   ssi-agent:
-    image: impiercetechnologies/ssi-agent:1.0.0-beta.8
-    # build:
-    #   context: ../..
-    #   dockerfile: ./agent_application/docker/Dockerfile
+    # image: impiercetechnologies/ssi-agent:1.0.0-beta.8
+    build:
+      context: ../..
+      dockerfile: ./agent_application/docker/Dockerfile
+    # entrypoint: /bin/sh -c "apt-get update && apt-get install -y ca-certificates && update-ca-certificates"
     ports:
       - 3033:3033
     environment:

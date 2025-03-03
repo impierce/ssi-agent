@@ -29,6 +29,7 @@ use cqrs_es::{Aggregate, CqrsFramework, EventStore, Query, View};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+pub mod dynamo_db;
 pub mod in_memory;
 pub mod postgres;
 

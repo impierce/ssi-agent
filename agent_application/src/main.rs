@@ -11,6 +11,7 @@ use agent_issuance::services::IssuanceServices;
 use agent_secret_manager::{service::Service as _, subject::Subject};
 use agent_shared::config::{config, EventStoreType};
 use agent_store::{
+    dynamo_db::{self, DynamoDB},
     in_memory::{self, InMemory},
     postgres::{self, Postgres},
     EventPublisher,
@@ -40,6 +41,12 @@ async fn main() -> io::Result<()> {
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
     let (identity_state, issuance_state, holder_state, verification_state) = match config().event_store.type_ {
+        EventStoreType::DynamoDb => (
+            agent_store::identity_state::<DynamoDB>(identity_services, identity_event_publishers).await,
+            dynamo_db::issuance_state(issuance_services, issuance_event_publishers).await,
+            agent_store::holder_state::<DynamoDB>(holder_services, holder_event_publishers).await,
+            agent_store::verification_state::<DynamoDB>(verification_services, verification_event_publishers).await,
+        ),
         EventStoreType::Postgres => (
             agent_store::identity_state::<Postgres>(identity_services, identity_event_publishers).await,
             postgres::issuance_state(issuance_services, issuance_event_publishers).await,

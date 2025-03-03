@@ -12,7 +12,9 @@ agent_shared = { path = "../agent_shared" }
 agent_verification = { path = "../agent_verification" }
 
 async-trait = "0.1"
+aws-sdk-dynamodb = "1.66"
 cqrs-es.workspace = true
+dynamo-es = "0.4.12"
 postgres-es = "0.4.12"
 serde_json.workspace = true
 sqlx = { version = "0.8", features = [
