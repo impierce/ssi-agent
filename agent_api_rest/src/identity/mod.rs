@@ -1,13 +1,16 @@
 pub mod connections;
+pub mod documents;
 pub mod services;
 pub mod well_known;
 
+use crate::identity::documents::get_documents;
 use agent_identity::state::IdentityState;
 use axum::{
     routing::{get, post},
     Router,
 };
 use connections::{get_connection, get_connections, post_connections};
+use documents::get_document;
 use services::{linked_vp::linked_vp, service, services};
 use well_known::{did::did, did_configuration::did_configuration};
 
@@ -20,6 +23,8 @@ pub fn router(identity_state: IdentityState) -> Router {
             Router::new()
                 .route("/connections", get(get_connections).post(post_connections))
                 .route("/connections/:connection_id", get(get_connection))
+                .route("/documents", get(get_documents))
+                .route("/documents/:document_id", get(get_document))
                 .route("/services", get(services))
                 .route("/services/:service_id", get(service))
                 .route("/services/linked-vp", post(linked_vp)),
