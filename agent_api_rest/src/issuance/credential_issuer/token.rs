@@ -73,11 +73,12 @@ pub mod tests {
     use oid4vci::token_response::TokenResponse;
     use tower::Service as _;
 
-    pub async fn token(app: &mut Router, pre_authorized_code: Option<String>) -> Option<String> {
+    pub async fn token(app: &mut Router, pre_authorized_code: Option<String>) -> String {
         let pre_authorized_code = match pre_authorized_code {
             Some(code) => code,
-            None => return None,
+            None => return "".to_string(),
         };
+
         let response = app
             .call(
                 Request::builder()
@@ -103,8 +104,7 @@ pub mod tests {
         let token_response: TokenResponse = serde_json::from_slice(&body).unwrap();
         assert_eq!(token_response.token_type, "bearer");
         assert!(token_response.c_nonce.is_some());
-
-        Some(token_response.access_token)
+        token_response.access_token
     }
 
     #[serial_test::serial]
@@ -118,6 +118,5 @@ pub mod tests {
         let pre_authorized_code: String = offers(&mut app).await.unwrap();
 
         let _access_token = token(&mut app, Some(pre_authorized_code)).await;
-        assert!(_access_token.is_some());
     }
 }
