@@ -27,16 +27,11 @@ pub(crate) async fn get_documents(
         Ok(Some(all_documents_view)) => {
             let filtered_documents: Vec<_> = all_documents_view
                 .documents
-                .iter()
-                .filter_map(|(_, doc)| {
-                    let method_match = did_method
+                .values()
+                .filter(|document| {
+                    did_method
                         .as_ref()
-                        .map_or(true, |method| doc.did_method.as_ref() == Some(method));
-                    if method_match {
-                        Some(doc.clone())
-                    } else {
-                        None
-                    }
+                        .map_or(true, |method| document.did_method.as_ref() == Some(method))
                 })
                 .collect();
 

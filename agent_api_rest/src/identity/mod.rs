@@ -2,15 +2,13 @@ pub mod connections;
 pub mod documents;
 pub mod services;
 pub mod well_known;
-
-use crate::identity::documents::get_documents;
 use agent_identity::state::IdentityState;
 use axum::{
     routing::{get, post},
     Router,
 };
 use connections::{get_connection, get_connections, post_connections};
-use documents::get_document;
+use documents::{get_document, get_documents};
 use services::{linked_vp::linked_vp, service, services};
 use well_known::{did::did, did_configuration::did_configuration};
 

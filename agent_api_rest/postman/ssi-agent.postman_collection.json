@@ -1648,14 +1648,14 @@
 								"method": "GET",
 								"header": [],
 								"url": {
-									"raw": "{{HOST}}/v0/documents/4cf0f658-0713-4c19-a7ac-82583381ec47",
+									"raw": "{{HOST}}/v0/documents/{{DOCUMENT_ID}}",
 									"host": [
 										"{{HOST}}"
 									],
 									"path": [
 										"v0",
 										"documents",
-										"4cf0f658-0713-4c19-a7ac-82583381ec47"
+										"{{DOCUMENT_ID}}"
 									]
 								}
 							},
