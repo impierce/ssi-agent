@@ -73,12 +73,7 @@ pub mod tests {
     use oid4vci::token_response::TokenResponse;
     use tower::Service as _;
 
-    pub async fn token(app: &mut Router, pre_authorized_code: Option<String>) -> String {
-        let pre_authorized_code = match pre_authorized_code {
-            Some(code) => code,
-            None => return "".to_string(),
-        };
-
+    pub async fn token(app: &mut Router, pre_authorized_code: String) -> String {
         let response = app
             .call(
                 Request::builder()
@@ -117,6 +112,6 @@ pub mod tests {
         credentials(&mut app).await;
         let pre_authorized_code: String = offers(&mut app).await.unwrap();
 
-        let _access_token = token(&mut app, Some(pre_authorized_code)).await;
+        let _access_token = token(&mut app, pre_authorized_code).await;
     }
 }
