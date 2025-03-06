@@ -108,7 +108,6 @@ pub(crate) async fn get_connections(
                             .map_or(true, |domain| connection.domain.as_ref() == Some(domain))
                         && did.as_ref().map_or(true, |did| connection.dids.contains(did))
                 })
-                .cloned()
                 .collect();
             (StatusCode::OK, Json(filtered_connections)).into_response()
         }
