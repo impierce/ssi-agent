@@ -366,8 +366,10 @@ dependencies = [
  "agent_verification",
  "async-trait",
  "aws-sdk-dynamodb",
+ "aws-smithy-runtime",
  "cqrs-es",
  "dynamo-es",
+ "hyper-rustls 0.24.2",
  "postgres-es",
  "serde_json",
  "sqlx",
@@ -3597,6 +3599,7 @@ dependencies = [
  "rustls-native-certs",
  "tokio",
  "tokio-rustls 0.24.1",
+ "webpki-roots 0.25.4",
 ]
 
 [[package]]

@@ -8,7 +8,7 @@ aws dynamodb create-table \
         AttributeName=AggregateTypeAndId,AttributeType=S \
         AttributeName=AggregateIdSequence,AttributeType=N \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name connection \
@@ -17,7 +17,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name all_connections \
@@ -26,7 +26,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name document \
@@ -35,7 +35,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name all_documents \
@@ -44,7 +44,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name service \
@@ -53,7 +53,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name all_services \
@@ -62,7 +62,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name offer \
@@ -71,7 +71,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name all_offers \
@@ -80,7 +80,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name pre_authorized_code \
@@ -89,7 +89,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name access_token \
@@ -98,7 +98,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name credential \
@@ -107,7 +107,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name all_credentials \
@@ -116,7 +116,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name server_config \
@@ -125,7 +125,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name received_offer \
@@ -134,7 +134,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name all_received_offers \
@@ -143,7 +143,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name holder_credential \
@@ -152,7 +152,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name presentation \
@@ -161,7 +161,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name all_presentations \
@@ -170,7 +170,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name all_holder_credentials \
@@ -179,7 +179,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name authorization_request \
@@ -188,7 +188,7 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000
 
 aws dynamodb create-table \
   --table-name all_authorization_requests \
@@ -197,4 +197,4 @@ aws dynamodb create-table \
   --attribute-definitions \
         AttributeName=ViewId,AttributeType=S \
   --billing-mode PAY_PER_REQUEST \
-  --endpoint-url http://localhost:8000
+  --endpoint-url http://cqrs-dynamodb-db:8000

@@ -1,18 +1,18 @@
 name: ssi-agent
 
 services:
-  cqrs-postgres-db:
-    container_name: cqrs-postgres-db
-    image: postgres
-    restart: always
-    ports:
-      - 5432:5432
-    environment:
-      POSTGRES_DB: demo
-      POSTGRES_USER: demo_user
-      POSTGRES_PASSWORD: demo_pass
-    volumes:
-      - "./db:/docker-entrypoint-initdb.d"
+  # cqrs-postgres-db:
+  #   container_name: cqrs-postgres-db
+  #   image: postgres
+  #   restart: always
+  #   ports:
+  #     - 5432:5432
+  #   environment:
+  #     POSTGRES_DB: demo
+  #     POSTGRES_USER: demo_user
+  #     POSTGRES_PASSWORD: demo_pass
+  #   volumes:
+  #     - "./db/init.sql:/docker-entrypoint-initdb.d"
   cqrs-dynamodb-db:
     container_name: cqrs-dynamodb-db
     image: amazon/dynamodb-local:latest
@@ -22,7 +22,39 @@ services:
     environment:
       AWS_ACCESS_KEY_ID: "TESTAWSID"
       AWS_SECRET_ACCESS_KEY: "TESTAWSKEY"
-      AWS_DEFAULT_REGION: "eu-west-2"
+      AWS_DEFAULT_REGION: "eu-central-1"
+  cqrs-dynamodb-init:
+    image: amazon/aws-cli
+    depends_on:
+      - cqrs-dynamodb-db
+    volumes:
+      - "./db/create_tables.sh:/create_tables.sh"
+    environment:
+      AWS_ACCESS_KEY_ID: "TESTAWSID"
+      AWS_SECRET_ACCESS_KEY: "TESTAWSKEY"
+      AWS_DEFAULT_REGION: "eu-central-1"
+    entrypoint: >
+      sh -c "until aws dynamodb list-tables --endpoint-url http://cqrs-dynamodb-db:8000; do sleep 1; done &&
+             chmod +x /create_tables.sh &&
+             /create_tables.sh"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "aws",
+          "dynamodb",
+          "list-tables",
+          "--endpoint-url",
+          "http://cqrs-dynamodb-db:8000",
+          "--query",
+          "contains(TableNames, 'all_authorization_requests')",
+          "--output",
+          "text",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
   # pg-admin:
   #   image: dpage/pgadmin4
   #   restart: always
@@ -40,17 +72,22 @@ services:
     build:
       context: ../..
       dockerfile: ./agent_application/docker/Dockerfile
-    # entrypoint: /bin/sh -c "apt-get update && apt-get install -y ca-certificates && update-ca-certificates"
+    command: sh -c "apt-get update && apt-get install -y ca-certificates && exec ./target/release/agent_application"
     ports:
       - 3033:3033
+    depends_on:
+      cqrs-dynamodb-init:
+        condition: service_healthy
     environment:
       UNICORE__PROFILE: development
       UNICORE__APPLICATION_URL: ${UNICORE__APPLICATION_URL}
+      UNICORE__LOG_FORMAT: text
+      UNICORE__EVENT_STORE__TYPE: dynamo_db
       UNICORE__EVENT_STORE__CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo
       UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD: "secure_password"
 
     volumes:
-      - ../example.config.yaml:/app/config.yaml
+      - ../../agent_application/config.yaml:/app/agent_application/config.yaml
       # - ../../agent_secret_manager/tests/res/test.stronghold:/app/stronghold.dat
       # - ../../agent_verification/presentation_definitions:/app/agent_verification/presentation_definitions
       # TODO: Remove this. This is a workaround that ensures that the `agent_verification/presentation_definitions`

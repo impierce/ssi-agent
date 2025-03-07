@@ -42,16 +42,30 @@ impl EventStoreTemp for DynamoDB {
     where
         <A as Aggregate>::Command: Send + Sync,
     {
+        use aws_smithy_runtime::client::http::hyper_014::HyperClientBuilder;
+
+        // Create a connector that will be used to establish TLS connections
+        let tls_connector = hyper_rustls::HttpsConnectorBuilder::new()
+            .with_webpki_roots()
+            .https_only()
+            .enable_http1()
+            .enable_http2()
+            .build();
+
+        // Create a hyper-based HTTP client that uses this TLS connector.
+        let http_client = HyperClientBuilder::new().build(tls_connector);
+
         let credentials = Credentials::new("TESTAWSID", "TESTAWSKEY", None, None, "");
         let config = Config::builder()
             .behavior_version_latest()
-            .region(Region::new("us-west-2"))
-            .endpoint_url("http://localhost:8000")
+            .region(Region::new("eu-central-1"))
+            .endpoint_url("http://cqrs-dynamodb-db:8000")
             .credentials_provider(credentials)
+            .http_client(http_client)
             .build();
         let client = Client::from_conf(config);
 
-        let all_aggregates_name = format!("all_{}", A::aggregate_type());
+        let all_aggregates_name = format!("all_{}s", A::aggregate_type());
 
         // Initialize the postgres repositories.
         let aggregate: Arc<DynamoViewRepository<V, A>> =
