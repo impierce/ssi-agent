@@ -1,6 +1,6 @@
 #![allow(clippy::await_holding_lock)]
 
-mod meta;
+mod metadata;
 mod probes;
 
 use agent_api_rest::{app, ApplicationState};
@@ -79,15 +79,15 @@ async fn main() -> io::Result<()> {
         verification_state: Some(verification_state),
     });
 
-    let meta_state = meta::MetaState {
+    let metadata_state = metadata::MetadataState {
         startup_instant: std::time::Instant::now(),
     };
 
-    let meta_router = axum::Router::new()
-        .route("/version", axum::routing::get(meta::version::version))
-        .route("/v0/info", axum::routing::get(meta::info::info))
-        .with_state(meta_state);
-    let app = meta_router.merge(app);
+    let metadata_router = axum::Router::new()
+        .route("/version", axum::routing::get(metadata::version::version))
+        .route("/info", axum::routing::get(metadata::info::info))
+        .with_state(metadata_state);
+    let app = metadata_router.merge(app);
 
     let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
     let app = probes_router.merge(app);

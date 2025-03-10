@@ -2,7 +2,7 @@ use axum::{extract::State, Json};
 use chrono::TimeDelta;
 use serde::Serialize;
 
-use super::MetaState;
+use super::MetadataState;
 
 #[derive(Serialize)]
 pub struct Info {
@@ -14,7 +14,7 @@ pub struct Info {
 }
 
 /// A simple liveness probe following application monitoring conventions.
-pub async fn info(State(state): State<MetaState>) -> Json<Info> {
+pub async fn info(State(state): State<MetadataState>) -> Json<Info> {
     let time_delta = TimeDelta::seconds(state.startup_instant.elapsed().as_secs() as i64);
     let uptime_human_readable = format!(
         "{} days, {:02}:{:02}:{:02}",
