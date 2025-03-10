@@ -21,7 +21,7 @@ pub(crate) async fn get_documents(
     State(state): State<IdentityState>,
     Form(GetDocumentsEndpoint { did_method }): Form<GetDocumentsEndpoint>,
 ) -> Response {
-    info!("Request Params - did_method: {did_method:?}");
+    debug!("Request Params - did_method: {did_method:?}");
 
     match query_handler("all_documents", &state.query.all_documents).await {
         Ok(Some(all_documents_view)) => {
