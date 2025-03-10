@@ -1,10 +1,11 @@
 use cqrs_es::DomainEvent;
 use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
+use strum::Display;
 
 use super::aggregate::Data;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
 pub enum CredentialEvent {
     CredentialAdded {
         holder_credential_id: String,
@@ -16,12 +17,7 @@ pub enum CredentialEvent {
 
 impl DomainEvent for CredentialEvent {
     fn event_type(&self) -> String {
-        use CredentialEvent::*;
-
-        let event_type: &str = match self {
-            CredentialAdded { .. } => "CredentialAdded",
-        };
-        event_type.to_string()
+        self.to_string()
     }
 
     fn event_version(&self) -> String {

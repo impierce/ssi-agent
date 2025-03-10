@@ -6,8 +6,9 @@ use oid4vci::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use strum::Display;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
 pub enum OfferEvent {
     CredentialOfferReceived {
         received_offer_id: String,
@@ -35,16 +36,7 @@ pub enum OfferEvent {
 
 impl DomainEvent for OfferEvent {
     fn event_type(&self) -> String {
-        use OfferEvent::*;
-
-        let event_type: &str = match self {
-            CredentialOfferReceived { .. } => "CredentialOfferReceived",
-            CredentialOfferAccepted { .. } => "CredentialOfferAccepted",
-            TokenResponseReceived { .. } => "AccessTokenReceived",
-            CredentialResponseReceived { .. } => "CredentialResponseReceived",
-            CredentialOfferRejected { .. } => "CredentialOfferRejected",
-        };
-        event_type.to_string()
+        self.to_string()
     }
 
     fn event_version(&self) -> String {

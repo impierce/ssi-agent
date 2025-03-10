@@ -24,6 +24,7 @@ pub struct ApplicationConfiguration {
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
     pub external_server_response_timeout_ms: Option<u64>,
     pub domain_linkage_enabled: bool,
+    pub credential_offer_by_value_enabled: Option<bool>,
     pub secret_manager: SecretManagerConfig,
     pub did_document_cache: Option<InMemoryCacheConfig>,
     pub credential_configurations: Vec<CredentialConfiguration>,
@@ -67,8 +68,6 @@ pub struct SecretManagerConfig {
     pub stronghold_password: String,
     pub issuer_eddsa_key_id: Option<String>,
     pub issuer_es256_key_id: Option<String>,
-    pub issuer_did: Option<String>,
-    pub issuer_fragment: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -240,9 +239,6 @@ pub enum SupportedDidMethod {
     #[serde(alias = "did_iota_smr", rename = "did_iota_smr")]
     #[strum(serialize = "did:iota:smr")]
     IotaSmr,
-    #[serde(alias = "did_iota_rms", rename = "did_iota_rms")]
-    #[strum(serialize = "did:iota:rms")]
-    IotaRms,
 }
 
 impl From<SupportedDidMethod> for SubjectSyntaxType {

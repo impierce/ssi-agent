@@ -180,6 +180,8 @@ dependencies = [
  "serde",
  "serde_json",
  "serial_test",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "thiserror",
  "tokio",
  "tower",
@@ -222,6 +224,8 @@ dependencies = [
  "serde",
  "serde_json",
  "serial_test",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "thiserror",
  "tokio",
  "tower",
@@ -255,6 +259,8 @@ dependencies = [
  "serde",
  "serde_json",
  "serial_test",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "thiserror",
  "tracing",
  "tracing-test",
@@ -357,6 +363,8 @@ dependencies = [
  "serde_json",
  "serial_test",
  "siopv2",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "thiserror",
  "tokio",
  "tracing",
@@ -883,11 +891,10 @@ dependencies = [
 
 [[package]]
 name = "axum-macros"
-version = "0.4.1"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00c055ee2d014ae5981ce1016374e8213682aa14d9bf40e48ab48b5f3ef20eaa"
+checksum = "57d123550fa8d071b7255cb0cc04dc302baa6c8c4a79f55701552684d8399bce"
 dependencies = [
- "heck 0.4.1",
  "proc-macro2",
  "quote",
  "syn 2.0.67",
