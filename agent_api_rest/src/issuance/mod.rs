@@ -2,6 +2,8 @@ pub mod credential_issuer;
 pub mod credentials;
 pub mod offers;
 
+pub mod error;
+
 use agent_issuance::state::IssuanceState;
 use axum::routing::get;
 use axum::{routing::post, Router};
@@ -24,9 +26,9 @@ pub fn router(issuance_state: IssuanceState) -> Router {
             API_VERSION,
             Router::new()
                 .route("/credentials", post(credentials).get(all_credentials))
-                .route("/credentials/:credential_id", get(credentials::credential))
+                .route("/credentials/{credential_id}", get(credentials::credential))
                 .route("/offers", post(offers).get(all_offers))
-                .route("/offers/:offer_id", get(offer))
+                .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send", post(send)),
         )
         .route(

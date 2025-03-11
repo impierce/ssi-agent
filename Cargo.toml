@@ -26,7 +26,7 @@ oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = 
 oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "c2de2e7" }
 
 async-trait = "0.1"
-axum = { version = "0.7", features = ["tracing"] }
+axum = { version = "0.8", features = ["tracing"] }
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 cqrs-es = "0.4.2"

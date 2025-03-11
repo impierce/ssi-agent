@@ -1,60 +1,56 @@
+use crate::{
+    error::IntoApiErrorExt,
+    handlers::{command_handler, query_handler},
+};
 use agent_holder::{
     credential::command::CredentialCommand,
     offer::{aggregate::OfferCredential, command::OfferCommand, queries::ReceivedOfferView},
     state::HolderState,
 };
-use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
     Json,
 };
+use http_api_problem::ApiError;
 use hyper::StatusCode;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn accept(State(state): State<HolderState>, Path(received_offer_id): Path<String>) -> Response {
+pub(crate) async fn accept(
+    State(state): State<HolderState>,
+    Path(received_offer_id): Path<String>,
+) -> Result<Response, ApiError> {
     // TODO: General note that also applies to other endpoints: currently we are using Application Layer logic in the
     // REST API. This is not ideal and should be changed. The REST API should only be responsible for handling HTTP
     // Requests and Responses.
     // Furthermore, the Application Layer (not implemented yet) should be kept very thin as well. See: https://github.com/impierce/ssi-agent/issues/114
 
     // Accept the Credential Offer if it exists
-    match query_handler(&received_offer_id, &state.query.received_offer).await {
-        Ok(Some(ReceivedOfferView { .. })) => {
-            let command = OfferCommand::AcceptCredentialOffer {
-                received_offer_id: received_offer_id.clone(),
-            };
+    let received_offer_view = query_handler(&received_offer_id, &state.query.received_offer)
+        .await?
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Not Found")
+                .message("The requested resource could not be found.")
+                .finish()
+        })?;
 
-            if command_handler(&received_offer_id, &state.command.offer, command)
-                .await
-                .is_err()
-            {
-                // TODO: add better Error responses. This needs to be done properly in all endpoints once
-                // https://github.com/impierce/openid4vc/issues/78 is fixed.
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        }
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+    let command = OfferCommand::AcceptCredentialOffer {
+        received_offer_id: received_offer_id.clone(),
+    };
+
+    command_handler(&received_offer_id, &state.command.offer, command).await?;
 
     let command = OfferCommand::SendCredentialRequest {
         received_offer_id: received_offer_id.clone(),
     };
 
     // Send the Credential Request
-    if command_handler(&received_offer_id, &state.command.offer, command)
-        .await
-        .is_err()
-    {
-        // TODO: add better Error responses. This needs to be done properly in all endpoints once
-        // https://github.com/impierce/openid4vc/issues/78 is fixed.
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
+    command_handler(&received_offer_id, &state.command.offer, command).await?;
 
-    let credentials = match query_handler(&received_offer_id, &state.query.received_offer).await {
-        Ok(Some(ReceivedOfferView { credentials, .. })) => credentials,
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    let credentials = match query_handler(&received_offer_id, &state.query.received_offer).await? {
+        Some(ReceivedOfferView { credentials, .. }) => credentials,
+        _ => return todo!(),
     };
 
     for OfferCredential {
@@ -69,17 +65,16 @@ pub(crate) async fn accept(State(state): State<HolderState>, Path(received_offer
         };
 
         // Add the Credential to the state.
-        if command_handler(&holder_credential_id, &state.command.credential, command)
-            .await
-            .is_err()
-        {
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        command_handler(&holder_credential_id, &state.command.credential, command).await?;
     }
 
-    match query_handler(&received_offer_id, &state.query.received_offer).await {
-        Ok(Some(received_offer_view)) => (StatusCode::OK, Json(received_offer_view)).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+    query_handler(&received_offer_id, &state.query.received_offer)
+        .await?
+        .map(|received_offer_view| (StatusCode::CREATED, Json(received_offer_view)).into_response())
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::CONFLICT)
+                .title("Optimistic Lock Error")
+                .message("An optimistic lock error occurred while committing an aggregate.")
+                .finish()
+        })
 }

@@ -1,21 +1,20 @@
 pub mod send;
 
+use crate::handlers::{command_handler, query_handler};
 use agent_issuance::{
     offer::{command::OfferCommand, views::OfferView},
     server_config::queries::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
-use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use http_api_problem::ApiError;
 use hyper::header;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use serde_json::Value;
-use tracing::info;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -24,61 +23,49 @@ pub struct OffersEndpointRequest {
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Json<Value>) -> Response {
-    info!("Request Body: {}", payload);
-
-    let Ok(OffersEndpointRequest { offer_id }) = serde_json::from_value(payload) else {
-        return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
-    };
-
+pub(crate) async fn offers(
+    State(state): State<IssuanceState>,
+    Json(payload): Json<OffersEndpointRequest>,
+) -> Result<Response, ApiError> {
     // Get the `CredentialIssuerMetadata` from the `ServerConfigView`.
-    let credential_issuer_metadata = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
-        Ok(Some(ServerConfigView {
+    let credential_issuer_metadata = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
+        Some(ServerConfigView {
             credential_issuer_metadata: Some(credential_issuer_metadata),
             ..
-        })) => Box::new(credential_issuer_metadata),
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        }) => Box::new(credential_issuer_metadata),
+        _ => return todo!(),
     };
 
     // Create an offer if it does not exist yet.
-    match query_handler(&offer_id, &state.query.offer).await {
-        Ok(Some(_)) => {}
+    match query_handler(&payload.offer_id, &state.query.offer).await? {
+        Some(_) => {}
         _ => {
-            if command_handler(
-                &offer_id,
-                &state.command.offer,
-                OfferCommand::CreateCredentialOffer {
-                    offer_id: offer_id.clone(),
-                    credential_issuer_metadata,
-                },
-            )
-            .await
-            .is_err()
-            {
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
+            let command = OfferCommand::CreateCredentialOffer {
+                offer_id: payload.offer_id.clone(),
+                credential_issuer_metadata,
+            };
+
+            command_handler(&payload.offer_id, &state.command.offer, command).await?
         }
     };
 
     let command = OfferCommand::CreateFormUrlEncodedCredentialOffer {
-        offer_id: offer_id.clone(),
+        offer_id: payload.offer_id.clone(),
     };
 
-    if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
+    command_handler(&payload.offer_id, &state.command.offer, command).await?;
 
-    match query_handler(&offer_id, &state.query.offer).await {
-        Ok(Some(OfferView {
+    match query_handler(&payload.offer_id, &state.query.offer).await? {
+        Some(OfferView {
             form_url_encoded_credential_offer,
             ..
-        })) => (
+        }) => Ok((
             StatusCode::OK,
             [(header::CONTENT_TYPE, "application/x-www-form-urlencoded")],
             form_url_encoded_credential_offer,
         )
-            .into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            .into_response()),
+        _ => todo!(),
     }
 }
 

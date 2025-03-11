@@ -1,11 +1,12 @@
+use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_identity::{connection::command::ConnectionCommand, state::IdentityState};
-use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
     Form, Json,
 };
+use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
 use identity_core::common::Url;
 use identity_did::DIDUrl;
@@ -29,51 +30,32 @@ pub struct PostConnectionsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn post_connections(
     State(state): State<IdentityState>,
-    Json(payload): Json<serde_json::Value>,
-) -> Response {
-    // TODO: implement a body consuming extractor that logs the body so that we don't need to log it in each handler.
-    // This way we can also immediately deserialize the body here into a typed struct instead of deserializing into a
-    // `serde_json::Value` first. See:
-    // https://github.com/tokio-rs/axum/blob/main/examples/consume-body-in-extractor-or-middleware/src/main.rs
-    info!("Request Body: {}", payload);
-
-    let Ok(PostConnectionsEndpointRequest {
-        alias,
-        domain,
-        dids,
-        credential_offer_endpoint,
-    }) = serde_json::from_value(payload)
-    else {
-        return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
-    };
-
+    Json(payload): Json<PostConnectionsEndpointRequest>,
+) -> Result<Response, ApiError> {
     let connection_id = uuid::Uuid::new_v4().to_string();
 
     let command = ConnectionCommand::AddConnection {
         connection_id: connection_id.clone(),
-        alias,
-        domain,
-        dids,
-        credential_offer_endpoint,
+        alias: payload.alias,
+        domain: payload.domain,
+        dids: payload.dids,
+        credential_offer_endpoint: payload.credential_offer_endpoint,
     };
 
-    if command_handler(&connection_id, &state.command.connection, command)
-        .await
-        .is_err()
-    {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
+    command_handler(&connection_id, &state.command.connection, command).await?;
 
     // Return the connection.
-    match query_handler(&connection_id, &state.query.connection).await {
-        Ok(Some(connection)) => (
-            StatusCode::CREATED,
-            [(header::LOCATION, &format!("{API_VERSION}/connections/{connection_id}"))],
-            Json(connection),
-        )
-            .into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+    query_handler(&connection_id, &state.query.connection)
+        .await?
+        .map(|connection_view| {
+            (
+                StatusCode::CREATED,
+                [(header::LOCATION, &format!("{API_VERSION}/connections/{connection_id}"))],
+                Json(connection_view),
+            )
+                .into_response()
+        })
+        .ok_or_else(|| todo!())
 }
 
 #[derive(Deserialize, Serialize)]
@@ -91,11 +73,12 @@ pub struct GetConnectionsEndpointRequest {
 pub(crate) async fn get_connections(
     State(state): State<IdentityState>,
     Form(GetConnectionsEndpointRequest { alias, domain, did }): Form<GetConnectionsEndpointRequest>,
-) -> Response {
+) -> Result<Response, ApiError> {
     info!("Request Params - alias: {alias:?}, domain: {domain:?}, did: {did:?}");
 
-    match query_handler("all_connections", &state.query.all_connections).await {
-        Ok(Some(all_connections_view)) => {
+    let filtered_connections = query_handler("all_connections", &state.query.all_connections)
+        .await?
+        .map(|all_connections_view| {
             let filtered_connections: Vec<_> = all_connections_view
                 .connections
                 .into_iter()
@@ -111,18 +94,20 @@ pub(crate) async fn get_connections(
                 })
                 .collect();
 
-            (StatusCode::OK, Json(filtered_connections)).into_response()
-        }
-        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+            filtered_connections
+        })
+        .unwrap_or_default();
+
+    Ok((StatusCode::OK, Json(filtered_connections)).into_response())
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn get_connection(State(state): State<IdentityState>, Path(connection_id): Path<String>) -> Response {
-    match query_handler(&connection_id, &state.query.connection).await {
-        Ok(Some(connection_view)) => (StatusCode::OK, Json(connection_view)).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+pub(crate) async fn get_connection(
+    State(state): State<IdentityState>,
+    Path(connection_id): Path<String>,
+) -> Result<Response, ApiError> {
+    query_handler(&connection_id, &state.query.connection)
+        .await?
+        .map(|connection_view| (StatusCode::CREATED, Json(connection_view)).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }

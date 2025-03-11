@@ -51,7 +51,6 @@ agent_secret_manager = { path = "../agent_secret_manager", features = ["test_uti
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
 
-axum.workspace = true
 lazy_static.workspace = true
 mime.workspace = true
 names = { version = "0.14", default-features = false }

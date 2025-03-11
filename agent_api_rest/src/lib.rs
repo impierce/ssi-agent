@@ -3,6 +3,9 @@ pub mod identity;
 pub mod issuance;
 pub mod verification;
 
+pub mod error;
+pub mod handlers;
+
 use agent_holder::state::HolderState;
 use agent_identity::state::IdentityState;
 use agent_issuance::state::IssuanceState;
@@ -32,8 +35,8 @@ pub fn app(
     }: ApplicationState,
 ) -> Router {
     let app = Router::new()
-        .nest(
-            &get_base_path().unwrap_or_default(),
+        .merge(
+            // &get_base_path().unwrap_or_default(),
             Router::new()
                 .merge(identity_state.map(identity::router).unwrap_or_default())
                 .merge(issuance_state.map(issuance::router).unwrap_or_default())

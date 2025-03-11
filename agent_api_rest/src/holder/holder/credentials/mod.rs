@@ -1,27 +1,23 @@
+use crate::handlers::{command_handler, query_handler};
 use agent_holder::{credential::command::CredentialCommand, state::HolderState};
-use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
     Json,
 };
+use http_api_problem::ApiError;
 use hyper::StatusCode;
 use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use tracing::info;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn credentials(State(state): State<HolderState>) -> Response {
-    match query_handler("all_holder_credentials", &state.query.all_holder_credentials).await {
-        Ok(Some(all_credentials_view)) => {
-            let all_credentials = all_credentials_view.credentials.into_values().collect::<Vec<_>>();
+pub(crate) async fn credentials(State(state): State<HolderState>) -> Result<Response, ApiError> {
+    let all_credentials = query_handler("all_holder_credentials", &state.query.all_holder_credentials)
+        .await?
+        .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
+        .unwrap_or_default();
 
-            (StatusCode::OK, Json(all_credentials)).into_response()
-        }
-        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+    Ok((StatusCode::OK, Json(all_credentials)).into_response())
 }
 
 #[derive(Deserialize, Serialize)]
@@ -31,40 +27,38 @@ pub struct HolderCredentialsEndpointRequest {
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn post_credentials(State(state): State<HolderState>, Json(payload): Json<Value>) -> Response {
-    info!("Request Body: {}", payload);
-
-    let Ok(HolderCredentialsEndpointRequest { credential }) = serde_json::from_value(payload) else {
-        return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
-    };
-
+pub(crate) async fn post_credentials(
+    State(state): State<HolderState>,
+    Json(payload): Json<HolderCredentialsEndpointRequest>,
+) -> Result<Response, ApiError> {
     let holder_credential_id = uuid::Uuid::new_v4().to_string();
 
     let command = CredentialCommand::AddCredential {
         holder_credential_id: holder_credential_id.clone(),
         received_offer_id: None,
-        credential,
+        credential: payload.credential,
     };
 
-    // Add the credential.
-    if command_handler(&holder_credential_id, &state.command.credential, command)
-        .await
-        .is_err()
-    {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
+    command_handler(&holder_credential_id, &state.command.credential, command).await?;
 
-    match query_handler(&holder_credential_id, &state.query.holder_credential).await {
-        Ok(Some(holder_credential_view)) => (StatusCode::OK, Json(holder_credential_view)).into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+    query_handler(&holder_credential_id, &state.query.holder_credential)
+        .await?
+        .map(|holder_credential_view| (StatusCode::CREATED, Json(holder_credential_view)).into_response())
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::CONFLICT)
+                .title("Optimistic Lock Error")
+                .message("An optimistic lock error occurred while committing an aggregate.")
+                .finish()
+        })
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn credential(State(state): State<HolderState>, Path(holder_credential_id): Path<String>) -> Response {
-    match query_handler(&holder_credential_id, &state.query.holder_credential).await {
-        Ok(Some(holder_credential_view)) => (StatusCode::OK, Json(holder_credential_view)).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+pub(crate) async fn credential(
+    State(state): State<HolderState>,
+    Path(holder_credential_id): Path<String>,
+) -> Result<Response, ApiError> {
+    query_handler(&holder_credential_id, &state.query.holder_credential)
+        .await?
+        .map(|holder_credential_view| (StatusCode::OK, Json(holder_credential_view)).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
