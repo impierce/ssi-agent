@@ -30,7 +30,7 @@ pub async fn info(State(state): State<MetadataState>) -> Json<Info> {
     let info = Info {
         version: APP_VERSION.map(|s| s.to_string()),
         git_commit_hash: GIT_COMMIT_HASH.map(|s| s.to_string().chars().take(7).collect()),
-        release_channel: std::env::var("UNICORE__APP_RELEASE_CHANNEL").ok(),
+        release_channel: APP_RELEASE_CHANNEL.map(|s| s.to_string()),
         docker_build_timestamp: DOCKER_BUILD_TIMESTAMP.map(|s| s.to_string()),
         uptime: uptime_human_readable,
     };
