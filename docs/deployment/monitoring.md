@@ -1,6 +1,6 @@
 # Monitoring
 
-UniCore offers a variety of monitoring options to ensure a healthy deployment and performant operation.
+UniCore offers a variety of monitoring options to ensure a healthy deployment and successful operations.
 
 ## Probes
 
