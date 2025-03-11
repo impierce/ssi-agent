@@ -3,8 +3,9 @@ use chrono::TimeDelta;
 use serde::Serialize;
 use serde_with::skip_serializing_none;
 
-use crate::metadata::values::{APP_VERSION, DOCKER_BUILD_TIMESTAMP, GIT_COMMIT_HASH};
 use crate::metadata::MetadataState;
+
+include!(concat!(env!("OUT_DIR"), "/metadata.rs"));
 
 #[skip_serializing_none]
 #[derive(Serialize)]

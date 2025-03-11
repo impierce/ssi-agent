@@ -2,7 +2,7 @@ use axum::Json;
 use serde::Serialize;
 use serde_with::skip_serializing_none;
 
-use crate::metadata::values::{APP_VERSION, GIT_COMMIT_HASH};
+include!(concat!(env!("OUT_DIR"), "/metadata.rs"));
 
 #[skip_serializing_none]
 #[derive(Serialize)]

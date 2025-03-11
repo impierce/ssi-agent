@@ -1,5 +1,4 @@
 pub mod info;
-pub mod values;
 pub mod version;
 
 #[derive(Clone)]
