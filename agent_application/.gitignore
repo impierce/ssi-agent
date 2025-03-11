@@ -1,2 +1,4 @@
+/src/metadata/values.rs
+
 *config.yaml
 !example.config.yaml

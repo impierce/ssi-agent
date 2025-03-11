@@ -56,8 +56,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           build-args: |
+            DOCKER_BUILD_TIMESTAMP=${{ steps.meta.outputs.labels['org.opencontainers.image.created'] }}
             APP_VERSION=${{ steps.meta.outputs.version }}
-            GIT_COMMIT_HASH=${{ github.sha }}
+            GIT_COMMIT_HASH=${{ steps.meta.outputs.labels['org.opencontainers.image.revision'] }}
 
       - name: Export digest
         run: |

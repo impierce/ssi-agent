@@ -1,15 +1,18 @@
 use axum::{extract::State, Json};
 use chrono::TimeDelta;
 use serde::Serialize;
+use serde_with::skip_serializing_none;
 
-use super::MetadataState;
+use crate::metadata::values::{APP_VERSION, DOCKER_BUILD_TIMESTAMP, GIT_COMMIT_HASH};
+use crate::metadata::MetadataState;
 
+#[skip_serializing_none]
 #[derive(Serialize)]
 pub struct Info {
-    version: String,
-    git_commit_hash: String,
-    release_channel: String, // tbd: stable/latest (main), next, beta, canary (alpha)
-    docker_build_timestamp: String,
+    version: Option<String>,
+    git_commit_hash: Option<String>,
+    release_channel: Option<String>, // tbd: stable/latest (main), next, beta, canary (alpha)
+    docker_build_timestamp: Option<String>,
     uptime: String,
 }
 
@@ -24,11 +27,10 @@ pub async fn info(State(state): State<MetadataState>) -> Json<Info> {
         time_delta.num_seconds() % 60
     );
     let info = Info {
-        version: std::env::var("UNICORE__APP_VERSION").unwrap_or_else(|_| "unknown".to_string()),
-        git_commit_hash: std::env::var("UNICORE__APP_GIT_COMMIT_HASH").unwrap_or_else(|_| "unknown".to_string()),
-        release_channel: std::env::var("UNICORE__APP_RELEASE_CHANNEL").unwrap_or_else(|_| "unknown".to_string()),
-        docker_build_timestamp: std::env::var("UNICORE__APP_DOCKER_BUILD_DATE")
-            .unwrap_or_else(|_| "unknown".to_string()),
+        version: APP_VERSION.map(|s| s.to_string()),
+        git_commit_hash: GIT_COMMIT_HASH.map(|s| s.to_string()),
+        release_channel: std::env::var("UNICORE__APP_RELEASE_CHANNEL").ok(),
+        docker_build_timestamp: DOCKER_BUILD_TIMESTAMP.map(|s| s.to_string()),
         uptime: uptime_human_readable,
     };
     Json(info)
