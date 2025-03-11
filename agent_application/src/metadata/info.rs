@@ -10,14 +10,19 @@ include!(concat!(env!("OUT_DIR"), "/metadata.rs"));
 #[skip_serializing_none]
 #[derive(Serialize)]
 pub struct Info {
+    /// The version of the application.
     version: Option<String>,
+    /// The git commit hash from which the application was built.
     git_commit_hash: Option<String>,
-    release_channel: Option<String>, // TODO: stable/latest (main), next, beta, canary (alpha)
+    /// The release channel of the application. Possible values are: `stable`, `next`, `beta`, `canary`.
+    release_channel: Option<String>, // TODO: mapping ok? stable/latest (main), next, beta, canary (alpha)
+    /// The timestamp when the Docker image was built.
     docker_build_timestamp: Option<String>,
+    /// The current uptime of the application in a human-friendly format.
     uptime: String,
 }
 
-/// Returns the `version`, application uptime and a few more metadata values.
+/// Returns the `version`, application `uptime` among other build metadata.
 pub async fn info(State(state): State<MetadataState>) -> Json<Info> {
     let time_delta = TimeDelta::seconds(state.startup_instant.elapsed().as_secs() as i64);
     let uptime_human_readable = format!(

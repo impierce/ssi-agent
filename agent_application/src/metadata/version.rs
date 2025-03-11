@@ -7,7 +7,9 @@ include!(concat!(env!("OUT_DIR"), "/metadata.rs"));
 #[skip_serializing_none]
 #[derive(Serialize)]
 pub struct Version {
+    /// The current version of the application.
     version: Option<String>,
+    /// The git commit hash from which the application was built.
     git_commit_hash: Option<String>,
 }
 
