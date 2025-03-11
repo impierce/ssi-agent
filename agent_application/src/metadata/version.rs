@@ -17,7 +17,7 @@ pub struct Version {
 pub async fn version() -> Json<Version> {
     let version = Version {
         version: APP_VERSION.map(|s| s.to_string()),
-        git_commit_hash: GIT_COMMIT_HASH.map(|s| s.to_string()),
+        git_commit_hash: GIT_COMMIT_HASH.map(|s| s.to_string().chars().take(7).collect()),
     };
     Json(version)
 }
