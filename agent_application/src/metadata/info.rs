@@ -12,7 +12,7 @@ include!(concat!(env!("OUT_DIR"), "/metadata.rs"));
 pub struct Info {
     version: Option<String>,
     git_commit_hash: Option<String>,
-    release_channel: Option<String>, // tbd: stable/latest (main), next, beta, canary (alpha)
+    release_channel: Option<String>, // TODO: stable/latest (main), next, beta, canary (alpha)
     docker_build_timestamp: Option<String>,
     uptime: String,
 }
@@ -29,7 +29,7 @@ pub async fn info(State(state): State<MetadataState>) -> Json<Info> {
     );
     let info = Info {
         version: APP_VERSION.map(|s| s.to_string()),
-        git_commit_hash: GIT_COMMIT_HASH.map(|s| s.to_string()),
+        git_commit_hash: GIT_COMMIT_HASH.map(|s| s.to_string().chars().take(7).collect()),
         release_channel: std::env::var("UNICORE__APP_RELEASE_CHANNEL").ok(),
         docker_build_timestamp: DOCKER_BUILD_TIMESTAMP.map(|s| s.to_string()),
         uptime: uptime_human_readable,
