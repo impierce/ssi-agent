@@ -23,11 +23,13 @@ fn main() -> io::Result<()> {
         "pub const GIT_COMMIT_HASH: Option<&str> = {:?};",
         git_commit_hash
     )?;
+    writeln!(writer, "#[allow(dead_code)]")?;
     writeln!(
         writer,
         "pub const DOCKER_BUILD_TIMESTAMP: Option<&str> = {:?};",
         docker_build_timestamp
     )?;
+    writeln!(writer, "#[allow(dead_code)]")?;
     writeln!(
         writer,
         "pub const APP_RELEASE_CHANNEL: Option<&str> = {:?};",
