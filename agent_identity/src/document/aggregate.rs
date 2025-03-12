@@ -175,7 +175,7 @@ impl Aggregate for Document {
                             document
                         } else {
                             // If there was no DID Document stored in the Aggregate yet, or the current Stronghold
-                            // storage is not in control of it, then we create a completely new controler and DID Document.
+                            // storage is not in control of it, then we create a completely new controller and DID Document.
                             info!("Creating a new controller for DID method `{did_method}`");
 
                             // Create a new 'blanc' DID Document.
