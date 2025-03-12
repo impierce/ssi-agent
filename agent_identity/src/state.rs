@@ -170,7 +170,7 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
             // If the DID method is enabled, then create the Document regardless of whether it alraedy exists or not.
             document if enabled => {
                 let document_id = document
-                    // Extract the `document_id` from the Documument if it exists.
+                    // Extract the `document_id` from the Document if it exists.
                     .map(|document| document.document_id.clone())
                     // Otherwise, generate a new `document_id`.
                     .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
