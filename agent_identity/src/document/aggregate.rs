@@ -430,7 +430,7 @@ impl Aggregate for Document {
 
                 Ok(vec![DocumentPublished {
                     document_id,
-                    updated_document,
+                    document: updated_document,
                 }])
             }
         }
@@ -467,12 +467,9 @@ impl Aggregate for Document {
                 self.document_id = document_id;
                 self.document.replace(document);
             }
-            DocumentPublished {
-                document_id,
-                updated_document,
-            } => {
+            DocumentPublished { document_id, document } => {
                 self.document_id = document_id;
-                self.document.replace(updated_document);
+                self.document.replace(document);
             }
         }
     }
