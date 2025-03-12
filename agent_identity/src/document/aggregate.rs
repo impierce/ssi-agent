@@ -178,7 +178,7 @@ impl Aggregate for Document {
                             // storage is not in control of it, then we create a completely new controller and DID Document.
                             info!("Creating a new controller for DID method `{did_method}`");
 
-                            // Create a new 'blanc' DID Document.
+                            // Create a new 'blank' DID Document.
                             let document =
                                 IotaDocument::new(&iota_client.network_name().await.map_err(IotaClientError)?);
 
