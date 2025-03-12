@@ -266,7 +266,7 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
     })
     .await?;
 
-    // Check whether Domain Linkage are enabled and whether there are any enabled update supporting Documents.
+    // Check whether Domain Linkage is enabled and whether there are any enabled update-supporting Documents.
     if config().domain_linkage_enabled && !update_supporting_documents.is_empty() {
         info!(
             "Creating domain linkage service with documents: {:?}",
