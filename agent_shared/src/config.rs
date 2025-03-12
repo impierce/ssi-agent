@@ -1,5 +1,5 @@
 use config::ConfigError;
-use identity_iota::{did::CoreDID, storage::KeyId};
+use identity_iota::storage::KeyId;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
