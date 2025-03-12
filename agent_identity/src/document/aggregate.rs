@@ -290,8 +290,7 @@ impl Aggregate for Document {
                 }])
             }
             UpdatePublicKeys {
-                document_id,
-                // TODO: decide whether the public keys should be suplied through the command or not.
+                // TODO: decide whether the public keys should be supplied through the command or not.
                 public_key_jwks: _,
             } => {
                 let mut document = self.document.clone().ok_or(MissingDocumentError)?;
@@ -340,14 +339,17 @@ impl Aggregate for Document {
                         .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
 
                     events.push(PublicKeyUpdated {
-                        document_id: document_id.clone(),
+                        document_id: self.document_id.clone(),
                         document: document.clone(),
                     })
                 }
 
                 Ok(events)
             }
-            UpdateDocumentStatus { document_id, status } => Ok(vec![DocumentStatusUpdated { document_id, status }]),
+            UpdateDocumentStatus { status } => Ok(vec![DocumentStatusUpdated {
+                document_id: self.document_id.clone(),
+                status,
+            }]),
             AddService {
                 service_id,
                 mut service,
@@ -371,7 +373,7 @@ impl Aggregate for Document {
 
                 Ok(vec![ServiceAdded { document_id, document }])
             }
-            PublishDocument { document_id } => {
+            PublishDocument => {
                 // The API endpoint of an IOTA node, e.g. Hornet.
                 let api_endpoint = self
                     .did_method
@@ -429,7 +431,7 @@ impl Aggregate for Document {
                     .map_err(IotaClientError)?;
 
                 Ok(vec![DocumentPublished {
-                    document_id,
+                    document_id: self.document_id.clone(),
                     document: updated_document,
                 }])
             }
@@ -543,7 +545,6 @@ pub mod document_tests {
                 with_fixed_algorithm: None,
             }])
             .when(DocumentCommand::UpdatePublicKeys {
-                document_id: document_id.clone(),
                 public_key_jwks: vec![],
             })
             .then_expect_events(vec![DocumentEvent::PublicKeyUpdated {
@@ -614,7 +615,6 @@ pub mod document_tests {
                 },
             ])
             .when(DocumentCommand::UpdateDocumentStatus {
-                document_id: document_id.clone(),
                 status: Status::Disabled,
             })
             .then_expect_events(vec![DocumentEvent::DocumentStatusUpdated {
