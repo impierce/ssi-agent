@@ -316,9 +316,9 @@ mod tests {
             credentials(&mut app).await;
         }
 
-        let pre_authorized_code = offers(&mut app).await;
+        let pre_authorized_code = offers(&mut app).await.unwrap();
 
-        let access_token = token(&mut app, pre_authorized_code).await;
+        let access_token: String = token(&mut app, pre_authorized_code).await;
 
         let response = app
             .oneshot(
