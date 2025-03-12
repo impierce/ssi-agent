@@ -89,19 +89,18 @@ pub mod tests {
         let token_response: TokenResponse = serde_json::from_slice(&body).unwrap();
         assert_eq!(token_response.token_type, "bearer");
         assert!(token_response.c_nonce.is_some());
-
         token_response.access_token
     }
 
+    #[serial_test::serial]
     #[tokio::test]
     async fn test_token_endpoint() {
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
-
         let mut app = router(issuance_state);
 
         credentials(&mut app).await;
-        let pre_authorized_code = offers(&mut app).await;
+        let pre_authorized_code: String = offers(&mut app).await.unwrap();
 
         let _access_token = token(&mut app, pre_authorized_code).await;
     }

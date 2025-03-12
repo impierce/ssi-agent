@@ -233,19 +233,13 @@
 							"script": {
 								"exec": [
 									"const credential_offer = responseBody;",
-									"",
 									"const decodedString = decodeURIComponent(credential_offer);",
-									"",
-									"// Split the string on the first '=' character and take the second item",
 									"const [, secondItem] = decodedString.split('=', 2);",
+									"var credential_offer_uri = JSON.parse(secondItem);",
 									"",
-									"var jsonObject = JSON.parse(secondItem);",
-									"const pre_authorized_code = jsonObject.grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']['pre-authorized_code'];",
-									"",
-									"if(pre_authorized_code){",
-									"    pm.collectionVariables.set(\"PRE_AUTHORIZED_CODE\",pre_authorized_code)",
-									"}",
-									""
+									"if(credential_offer_uri){",
+									" pm.collectionVariables.set(\"CREDENTIAL_OFFER_URI\", credential_offer_uri)",
+									"}"
 								],
 								"type": "text/javascript",
 								"packages": {}
@@ -254,8 +248,11 @@
 						{
 							"listen": "prerequest",
 							"script": {
-								"exec": [],
-								"type": "text/javascript"
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
 							}
 						}
 					],
@@ -376,6 +373,36 @@
 		{
 			"name": "oid4vci",
 			"item": [
+				{
+					"name": "Get Credential Offer",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"const pre_authorized_code = jsonData.grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']['pre-authorized_code'];",
+									"if(pre_authorized_code){",
+									" pm.collectionVariables.set(\"PRE_AUTHORIZED_CODE\", pre_authorized_code)",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{CREDENTIAL_OFFER_URI}}",
+							"host": [
+								"{{CREDENTIAL_OFFER_URI}}"
+							]
+						}
+					},
+					"response": []
+				},
 				{
 					"name": "oauth-authorization-server",
 					"event": [
@@ -1662,6 +1689,11 @@
 		},
 		{
 			"key": "CONNECTION_ID",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "CREDENTIAL_OFFER_URI",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		}

@@ -70,10 +70,6 @@ credential_configurations:
           uri: https://www.impierce.com/external/impierce-logo.png
           alt_text: UniCore Logo
 
-did_document_cache:
-  enabled: false
-  ttl: 5000
-
 # Key configuration (temporary)
 secret_manager:
   stronghold_path: "/tmp/local.stronghold.dat"
