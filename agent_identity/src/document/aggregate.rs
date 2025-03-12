@@ -126,12 +126,12 @@ impl Aggregate for Document {
                                 .map_err(|err| AliasOutputBuilderError(err.to_string()))?;
 
                             // Publish the updated Alias Output and get the published DID document.
-                            let test_publish_result = iota_client
+                            let publish_result = iota_client
                                 .publish_did_output(stronghold_storage.as_secret_manager(), alias_output)
                                 .await
                                 .map(CoreDocument::from);
 
-                            match test_publish_result {
+                            match publish_result {
                                 // The current wallet address controls the existing DID Document.
                                 Ok(document) => Some(document),
                                 Err(test_publish_error) => match test_publish_error {
