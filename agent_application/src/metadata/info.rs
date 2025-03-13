@@ -32,11 +32,18 @@ pub async fn info(State(state): State<MetadataState>) -> Json<Info> {
         time_delta.num_minutes() % 60,
         time_delta.num_seconds() % 60
     );
+    // Trim, filter out empty values, then convert to Option<String>.
     let info = Info {
-        version: APP_VERSION.map(|s| s.to_string()),
-        git_commit_hash: GIT_COMMIT_HASH.map(|s| s.to_string().chars().take(7).collect()),
-        release_channel: APP_RELEASE_CHANNEL.map(|s| s.to_string()),
-        docker_build_timestamp: DOCKER_BUILD_TIMESTAMP.map(|s| s.to_string()),
+        version: APP_VERSION.filter(|s| !s.trim().is_empty()).map(|s| s.to_string()),
+        git_commit_hash: GIT_COMMIT_HASH
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.to_string().chars().take(7).collect()),
+        release_channel: APP_RELEASE_CHANNEL
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.to_string()),
+        docker_build_timestamp: DOCKER_BUILD_TIMESTAMP
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.to_string()),
         uptime: uptime_human_readable,
     };
     Json(info)
