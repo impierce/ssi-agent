@@ -8,7 +8,7 @@ use agent_event_publisher_http::EventPublisherHttp;
 use agent_holder::services::HolderServices;
 use agent_identity::services::IdentityServices;
 use agent_issuance::{services::IssuanceServices, startup_commands::startup_commands};
-use agent_secret_manager::{secret_manager, service::Service as _, subject::Subject};
+use agent_secret_manager::{service::Service as _, subject::Subject};
 use agent_shared::config::{config, LogFormat};
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
@@ -29,9 +29,7 @@ async fn main() -> io::Result<()> {
         LogFormat::Text => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
     }
 
-    let subject = Arc::new(Subject {
-        secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
-    });
+    let subject = Arc::new(Subject::new().await);
 
     let identity_services = Arc::new(IdentityServices::new(subject.clone()));
     let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
@@ -69,7 +67,7 @@ async fn main() -> io::Result<()> {
 
     info!("Application url: {}", url);
 
-    agent_identity::state::initialize(&identity_state).await;
+    agent_identity::state::initialize(&identity_state).await.unwrap();
     agent_issuance::state::initialize(&issuance_state, startup_commands(url.clone())).await;
 
     let app = app(ApplicationState {

@@ -70,14 +70,7 @@ credential_configurations:
           uri: https://www.impierce.com/external/impierce-logo.png
           alt_text: UniCore Logo
 
-did_document_cache:
-  enabled: false
-  ttl: 5000
-
 # Key configuration (temporary)
 secret_manager:
-  stronghold_path: "/tmp/local.stronghold"
+  stronghold_path: "/tmp/local.stronghold.dat"
   # stronghold_password: "" <== Should be injected through the env variable `UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD`
-  # stronghold_password_file: ""
-  # issuer_eddsa_key_id: "ed25519-0"
-  issuer_es256_key_id: "es256-0"

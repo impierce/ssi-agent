@@ -17,12 +17,8 @@ impl IdentityServices {
     where
         Self: Sized,
     {
-        use agent_secret_manager::secret_manager;
-
         Arc::new(Self::new(Arc::new(futures::executor::block_on(async {
-            Subject {
-                secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
-            }
+            Subject::new().await
         }))))
     }
 }

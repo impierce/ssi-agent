@@ -81,7 +81,7 @@ pub const SERVER_CONFIG_ID: &str = "SERVER-CONFIG-001";
 
 /// Initialize the application state by executing the startup commands.
 pub async fn initialize(state: &IssuanceState, startup_commands: Vec<ServerConfigCommand>) {
-    info!("Initializing ...");
+    info!("Initializing the issuance state ...");
 
     for command in startup_commands {
         let command_string = format!("{:?}", command).split(' ').next().unwrap().to_string();

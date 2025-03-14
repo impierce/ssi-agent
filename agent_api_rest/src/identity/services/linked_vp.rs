@@ -1,15 +1,15 @@
 use agent_identity::{
-    document::command::DocumentCommand,
+    document::{aggregate::Status, command::DocumentCommand},
     service::{aggregate::Service, command::ServiceCommand},
-    state::IdentityState,
+    state::{query_all_documents, IdentityState},
 };
+use agent_shared::config::SupportedDidMethod;
 use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
     Json,
 };
-use did_manager::DidMethod;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -51,18 +51,36 @@ pub(crate) async fn linked_vp(State(state): State<IdentityState>, Json(payload):
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
+    // Query the DID Web Document to obtain the `document_id`.
+    let document_id = if let Some(document_id) = query_all_documents(&state, |(_, document)| {
+        document.status != Status::Disabled && document.did_method == Some(SupportedDidMethod::Web)
+    })
+    .await
+    .ok()
+    .and_then(|did_web_document| {
+        did_web_document
+            .keys()
+            .next()
+            .map(|document_id| document_id.to_string())
+    }) {
+        document_id
+    } else {
+        return StatusCode::PRECONDITION_FAILED.into_response();
+    };
+
     let command = DocumentCommand::AddService {
+        service_id,
         service: linked_verifiable_presentation_service,
     };
 
-    if command_handler(&DidMethod::Web.to_string(), &state.command.document, command)
+    if command_handler(&document_id, &state.command.document, command)
         .await
         .is_err()
     {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    match query_handler(&DidMethod::Web.to_string(), &state.query.document).await {
+    match query_handler(&document_id, &state.query.document).await {
         Ok(Some(document)) => (StatusCode::OK, Json(document)).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }

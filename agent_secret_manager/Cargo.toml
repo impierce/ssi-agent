@@ -7,17 +7,28 @@ rust-version.workspace = true
 [dependencies]
 agent_shared = { path = "../agent_shared" }
 
+# TODO: Fully remove `did_manager`.
+# - The `producer` module has already been eliminated.
+# - In the `consumer` module, only the `Resolver` struct is still in use.
+# - All components of the `identity_stronghold_ext` module are still active.
+#
+# Future work: Migrate the remaining functionality into UniCore.
+did_manager_consumer = { git = "https://git@github.com/impierce/did-manager.git", tag = "v1.0.0-beta.4", package = "consumer" }
+did_manager_identity_stronghold_ext = { git = "https://git@github.com/impierce/did-manager.git", tag = "v1.0.0-beta.4", package = "identity_stronghold_ext" }
+
 anyhow = "1.0"
 async-trait = "0.1"
 base64.workspace = true
-did_manager.workspace = true
 futures.workspace = true
 identity_iota.workspace = true
+iota-sdk.workspace = true
+iota_stronghold = { version = "2.1" }
+itertools = "0.14"
 jsonwebtoken = "9.3"
 log = "0.4"
 oid4vc-core.workspace = true
 p256 = { version = "0.13", features = ["jwk"] }
-serde_json = "1.0"
+serde.workspace = true
 tokio.workspace = true
 url.workspace = true
 

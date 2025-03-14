@@ -14,6 +14,14 @@ pub enum ServiceEvent {
         service: DocumentService,
         #[derivative(PartialEq = "ignore")]
         resource: ServiceResource,
+        is_deleted: bool,
+    },
+    DomainLinkageServiceDeleted {
+        service_id: String,
+        service: Option<DocumentService>,
+        #[derivative(PartialEq = "ignore")]
+        resource: Option<ServiceResource>,
+        is_deleted: bool,
     },
     LinkedVerifiablePresentationServiceCreated {
         service_id: String,

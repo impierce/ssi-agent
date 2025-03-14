@@ -26,7 +26,7 @@ services:
     depends_on:
       - cqrs-postgres-db
   ssi-agent:
-    image: impiercetechnologies/ssi-agent:837870c
+    image: impiercetechnologies/ssi-agent:1.0.0-beta.8
     # build:
     #   context: ../..
     #   dockerfile: ./agent_application/docker/Dockerfile
@@ -38,12 +38,12 @@ services:
       UNICORE__EVENT_STORE__CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo
       UNICORE__URL: ${UNICORE__URL}
 
-      UNICORE__SECRET_MANAGER__STRONGHOLD_PATH: "/app/res/stronghold"
+      UNICORE__SECRET_MANAGER__STRONGHOLD_PATH: "/app/stronghold.dat"
       UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD: "secure_password"
 
     volumes:
       - ../../agent_application/config.yaml:/app/agent_application/config.yaml
-      # - ../../agent_secret_manager/tests/res/test.stronghold:/app/res/stronghold
+      # - ../../agent_secret_manager/tests/res/test.stronghold:/app/stronghold.dat
       # - ../../agent_verification/presentation_definitions:/app/agent_verification/presentation_definitions
       # TODO: Remove this. This is a workaround that ensures that the `agent_verification/presentation_definitions`
       # folder can be accessed by the agent from the `fn authorization_requests` endpoint.
