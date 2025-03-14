@@ -18,6 +18,7 @@ use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json
 };
 use oid4vci::credential_format_profiles::{CredentialFormats, Parameters};
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
+use oid4vci::notification_request::NotificationRequest;
 use oid4vci::VerifiableCredentialJwt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -72,10 +73,12 @@ mod never_as_str {
 pub struct Credential {
     #[serde(rename = "id")]
     pub credential_id: String,
+    pub notification_id: Option<String>,
     pub data: Option<Data>,
     pub credential_configuration: CredentialConfigurationsSupportedObject,
     pub signed: Option<serde_json::Value>,
     pub status: Status,
+    pub holder_notifications: Vec<NotificationRequest>,
 }
 
 #[async_trait]
@@ -201,10 +204,13 @@ impl Aggregate for Credential {
                                 let mut raw = json!(credential);
                                 raw["type"] = json!(type_);
 
+                                let notification_id = agent_shared::generate_random_string();
+
                                 return Ok(vec![UnsignedCredentialCreated {
                                     credential_id,
                                     data: Data { raw },
                                     credential_configuration,
+                                    notification_id: Some(notification_id),
                                 }]);
                             }
                             "AchievementCredential" | "OpenBadgeCredential" => {
@@ -245,8 +251,10 @@ impl Aggregate for Credential {
                                 let credential: AchievementCredential =
                                     builder.try_into().map_err(InvalidVerifiableCredentialError)?;
 
+                                let notification_id = agent_shared::generate_random_string();
                                 return Ok(vec![UnsignedCredentialCreated {
                                     credential_id,
+                                    notification_id: Some(notification_id),
                                     data: Data { raw: json!(credential) },
                                     credential_configuration,
                                 }]);
@@ -259,13 +267,18 @@ impl Aggregate for Credential {
                 }
                 _ => Err(UnsupportedCredentialFormat),
             },
+
             CreateSignedCredential {
                 credential_id,
                 signed_credential,
-            } => Ok(vec![SignedCredentialCreated {
-                credential_id,
-                signed_credential,
-            }]),
+            } => {
+                let notification_id = agent_shared::generate_random_string();
+                Ok(vec![SignedCredentialCreated {
+                    credential_id,
+                    signed_credential,
+                    notification_id: Some(notification_id),
+                }])
+            }
             SignCredential {
                 credential_id,
                 subject_id,
@@ -370,6 +383,13 @@ impl Aggregate for Credential {
                     status: Status::Issued,
                 }])
             }
+            AddNotification {
+                credential_id,
+                notification,
+            } => Ok(vec![CredentialEvent::NotificationReceived {
+                credential_id,
+                notification,
+            }]),
         }
     }
 
@@ -383,17 +403,21 @@ impl Aggregate for Credential {
                 credential_id,
                 data,
                 credential_configuration,
+                notification_id,
             } => {
                 self.credential_id = credential_id;
                 self.data.replace(data);
                 self.credential_configuration = *credential_configuration;
+                self.notification_id = notification_id;
             }
             SignedCredentialCreated {
                 credential_id,
                 signed_credential,
+                notification_id,
             } => {
                 self.credential_id = credential_id;
                 self.signed.replace(signed_credential);
+                self.notification_id = notification_id;
             }
             CredentialSigned {
                 credential_id,
@@ -403,6 +427,13 @@ impl Aggregate for Credential {
                 self.credential_id = credential_id;
                 self.signed.replace(signed_credential);
                 self.status = status;
+            }
+            NotificationReceived {
+                credential_id,
+                notification,
+            } => {
+                self.credential_id = credential_id;
+                self.holder_notifications.push(notification);
             }
         }
     }
@@ -446,6 +477,8 @@ pub mod credential_tests {
         #[case] unsigned_credential: serde_json::Value,
         credential_id: String,
     ) {
+        let notification_id = agent_shared::generate_random_string();
+
         CredentialTestFramework::with(Service::default())
             .given_no_previous_events()
             .when(CredentialCommand::CreateUnsignedCredential {
@@ -461,6 +494,7 @@ pub mod credential_tests {
                 data: Data {
                     raw: unsigned_credential,
                 },
+                notification_id: Some(notification_id.clone()),
                 credential_configuration: Box::new(credential_configuration),
             }])
     }
@@ -491,6 +525,7 @@ pub mod credential_tests {
                     raw: unsigned_credential,
                 },
                 credential_configuration: Box::new(credential_configuration),
+                notification_id: None,
             }])
             .when(CredentialCommand::SignCredential {
                 credential_id: credential_id.clone(),

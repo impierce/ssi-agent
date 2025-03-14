@@ -17,6 +17,7 @@ use axum::{
 };
 use axum_auth::AuthBearer;
 use oid4vci::credential_request::CredentialRequest;
+use oid4vci::notification_request::NotificationRequest;
 use serde_json::json;
 use tokio::time::sleep;
 use tracing::{error, info};
@@ -109,9 +110,11 @@ pub(crate) async fn credential(
             StatusCode::INTERNAL_SERVER_ERROR.into_response();
         };
 
+        let _notification_id = agent_shared::generate_random_string();
         let signed_credential = match query_handler(&credential_id, &state.query.credential).await {
             Ok(Some(CredentialView {
                 signed: Some(signed_credential),
+                notification_id: _,
                 ..
             })) => signed_credential,
             _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
@@ -138,6 +141,49 @@ pub(crate) async fn credential(
         })) => (StatusCode::OK, Json(credential_response)).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
+}
+
+pub async fn notification(
+    State(state): State<IssuanceState>,
+    AuthBearer(access_token): AuthBearer,
+    Json(notification_request): Json<NotificationRequest>,
+) -> Response {
+    info!("Notification Request: {}", json!(notification_request));
+
+    let _offer_id = match query_handler(&access_token, &state.query.access_token).await {
+        Ok(Some(AccessTokenView { offer_id })) => offer_id,
+        _ => return StatusCode::UNAUTHORIZED.into_response(),
+    };
+    let credentials = match query_handler("all_credentials", &state.query.all_credentials).await {
+        Ok(Some(all_credentials)) => all_credentials.credentials,
+        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+    let credential_id = credentials
+        .iter()
+        .find(|entry| entry.1.notification_id.as_ref() == Some(&notification_request.notification_id))
+        .map(|entry| entry.0.clone());
+
+    let credential_id = match credential_id {
+        Some(id) => id,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "invalid_notification_id" })),
+            )
+                .into_response();
+        }
+    };
+
+    let command = CredentialCommand::AddNotification {
+        credential_id: credential_id.clone(),
+        notification: notification_request,
+    };
+
+    if let Err(e) = command_handler(&credential_id, &state.command.credential, command).await {
+        error!("Failed to add notification: {}", e);
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+    StatusCode::NO_CONTENT.into_response()
 }
 
 #[cfg(test)]
@@ -361,13 +407,7 @@ mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(
-            body,
-            json!({
-                    "credential": CREDENTIAL_JWT
-                }
-            )
-        );
+        assert_eq!(body.get("credential"), Some(&json!(CREDENTIAL_JWT)));
 
         if let Some(external_server) = external_server {
             // Assert that the event was dispatched to the target URL.

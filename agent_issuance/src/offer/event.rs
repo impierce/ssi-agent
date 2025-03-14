@@ -42,6 +42,7 @@ pub enum OfferEvent {
         offer_id: String,
         credential_response: CredentialResponse,
         status: Status,
+        notification_id: Option<String>,
     },
 }
 

@@ -40,6 +40,7 @@ pub enum OfferCommand {
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_request: CredentialRequest,
     },
+
     CreateCredentialResponse {
         offer_id: String,
         signed_credentials: Vec<serde_json::Value>,

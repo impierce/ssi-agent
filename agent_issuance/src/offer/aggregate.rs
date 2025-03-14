@@ -201,20 +201,22 @@ impl Aggregate for Offer {
                 mut signed_credentials,
             } => {
                 // TODO: support batch credentials.
+                let notification_id = agent_shared::generate_random_string();
                 let signed_credential = signed_credentials.pop().ok_or(MissingCredentialError)?;
-
                 let credential_response = CredentialResponse {
                     credential: CredentialResponseType::Immediate {
                         credential: signed_credential,
-                        notification_id: None,
+                        notification_id: Some(notification_id.clone()),
                     },
                     c_nonce: None,
                     c_nonce_expires_in: None,
+                    notification_id: None,
                 };
 
                 Ok(vec![CredentialResponseCreated {
                     offer_id,
                     credential_response,
+                    notification_id: Some(notification_id),
                     status: Status::Issued,
                 }])
             }
@@ -507,6 +509,7 @@ pub mod tests {
             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
                 offer_id: Default::default(),
                 credential_response,
+                notification_id: None,
                 status: Status::Issued,
             }]);
     }
@@ -668,6 +671,7 @@ pub mod test_utils {
             },
             c_nonce: None,
             c_nonce_expires_in: None,
+            notification_id: None,
         }
     }
 }
