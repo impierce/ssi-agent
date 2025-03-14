@@ -164,21 +164,13 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
             }) if !enabled => Some((
                 document_id.clone(),
                 DocumentCommand::UpdateDocumentStatus {
-<<<<<<< HEAD
-                    document_id: document_id.clone(),
-=======
->>>>>>> beta
                     status: Status::Disabled,
                 },
             )),
             // If the DID method is enabled, then create the Document regardless of whether it alraedy exists or not.
             document if enabled => {
                 let document_id = document
-<<<<<<< HEAD
-                    // Extract the `document_id` from the Documument if it exists.
-=======
                     // Extract the `document_id` from the Document if it exists.
->>>>>>> beta
                     .map(|document| document.document_id.clone())
                     // Otherwise, generate a new `document_id`.
                     .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
@@ -202,10 +194,6 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
 
             if enabled {
                 let command = DocumentCommand::UpdatePublicKeys {
-<<<<<<< HEAD
-                    document_id: document_id.clone(),
-=======
->>>>>>> beta
                     public_key_jwks: vec![],
                 };
 
@@ -278,11 +266,7 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
     })
     .await?;
 
-<<<<<<< HEAD
-    // Check whether Domain Linkage are enabled and whether there are any enabled update supporting Documents.
-=======
     // Check whether Domain Linkage is enabled and whether there are any enabled update-supporting Documents.
->>>>>>> beta
     if config().domain_linkage_enabled && !update_supporting_documents.is_empty() {
         info!(
             "Creating domain linkage service with documents: {:?}",
@@ -390,15 +374,7 @@ pub async fn publish_decentrally_hosted_documents(state: &IdentityState) -> anyh
 
     // Publish each decentrally hosted Documents.
     for document_id in decentrally_hosted_documents.keys() {
-<<<<<<< HEAD
-        let command = DocumentCommand::PublishDocument {
-            document_id: document_id.clone(),
-        };
-
-        command_handler(document_id, &state.command.document, command).await?;
-=======
         command_handler(document_id, &state.command.document, DocumentCommand::PublishDocument).await?;
->>>>>>> beta
     }
 
     Ok(())

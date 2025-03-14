@@ -2,6 +2,7 @@ pub mod connections;
 pub mod documents;
 pub mod services;
 pub mod well_known;
+
 use agent_identity::state::IdentityState;
 use axum::{
     routing::{get, post},

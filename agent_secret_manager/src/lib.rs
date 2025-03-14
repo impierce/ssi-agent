@@ -65,11 +65,7 @@ pub async fn generate(
 ) -> anyhow::Result<KeyId> {
     let key_id = stronghold_ext_storage.generate(key_type.clone(), alg).await?.key_id;
 
-<<<<<<< HEAD
-    info!("Generated new {key_type} key with key ID {key_id}");
-=======
     info!("Generated new `{key_type}` key with key ID `{key_id}`");
->>>>>>> beta
 
     Ok(key_id)
 }

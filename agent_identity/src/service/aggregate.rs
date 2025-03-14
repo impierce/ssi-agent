@@ -126,12 +126,9 @@ impl Aggregate for Service {
                     .join(".");
 
                     let proof_value = subject
-<<<<<<< HEAD
-=======
                         // TODO: Currently UniCore always uses the same keys for signing regardless of the DID method.
                         // Once we implement DID method-specific keys, then we should supply the appropriate
                         // `subject_syntax_type` here instead of this `placeholder` value.
->>>>>>> beta
                         .sign(linked_did.as_str(), "placeholder", algorithm)
                         .await
                         .map_err(|err| SigningError(err.to_string()))?;

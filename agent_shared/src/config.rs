@@ -1,9 +1,5 @@
 use config::ConfigError;
-<<<<<<< HEAD
-use identity_iota::{did::CoreDID, storage::KeyId};
-=======
 use identity_iota::storage::KeyId;
->>>>>>> beta
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
@@ -83,21 +79,6 @@ pub struct SecretManagerConfig {
     pub issuer_eddsa_key_id: KeyId,
     #[serde(default = "default_issuer_es256_key_id")]
     pub issuer_es256_key_id: KeyId,
-<<<<<<< HEAD
-}
-
-fn default_stronghold_path() -> String {
-    STRONGHOLD_PATH.to_string()
-}
-
-pub fn default_issuer_eddsa_key_id() -> KeyId {
-    KeyId::new(ED25519_KEY_ID)
-}
-
-pub fn default_issuer_es256_key_id() -> KeyId {
-    KeyId::new(ES256_KEY_ID)
-=======
->>>>>>> beta
 }
 
 fn default_stronghold_path() -> String {

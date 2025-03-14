@@ -417,10 +417,7 @@ pub mod tests {
     #[rstest]
     #[serial_test::serial]
     async fn test_verify_credential_response(
-<<<<<<< HEAD
-=======
         offer_id: String,
->>>>>>> beta
         #[future(awt)] holder: Arc<dyn Subject>,
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] access_token: String,
@@ -472,10 +469,7 @@ pub mod tests {
     #[allow(clippy::too_many_arguments)]
     #[serial_test::serial]
     async fn test_create_credential_response(
-<<<<<<< HEAD
-=======
         offer_id: String,
->>>>>>> beta
         #[future(awt)] holder: Arc<dyn Subject>,
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] access_token: String,

@@ -36,11 +36,7 @@ impl View<Document> for Document {
             }
             DocumentPublished {
                 document_id,
-<<<<<<< HEAD
-                updated_document,
-=======
                 document: updated_document,
->>>>>>> beta
             } => {
                 self.document_id.clone_from(document_id);
                 self.document.replace(updated_document.clone());

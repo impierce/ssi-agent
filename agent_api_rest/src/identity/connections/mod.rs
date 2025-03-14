@@ -109,12 +109,14 @@ pub(crate) async fn get_connections(
                         && did.as_ref().map_or(true, |did| connection.dids.contains(did))
                 })
                 .collect();
+
             (StatusCode::OK, Json(filtered_connections)).into_response()
         }
         Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
+
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connection(State(state): State<IdentityState>, Path(connection_id): Path<String>) -> Response {
     match query_handler(&connection_id, &state.query.connection).await {
