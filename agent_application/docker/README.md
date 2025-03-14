@@ -19,10 +19,10 @@ For local development, it is recommended to use Docker Compose.
 
 ```yaml
 environment:
-  UNICORE__SECRET_MANAGER__STRONGHOLD_PATH: "/app/res/stronghold"
+  UNICORE__SECRET_MANAGER__STRONGHOLD_PATH: "/app/stronghold.dat"
 
 volumes:
-  - ../../agent_secret_manager/tests/res/test.stronghold:/app/res/stronghold
+  - ../../agent_secret_manager/tests/res/test.stronghold:/app/stronghold.dat
 ```
 
 3. _(optional)_ In case you are interested in the events that UniCore produces, you can configure a HTTP Event Publisher that sends
@@ -38,17 +38,6 @@ docker compose up
 
 > [!NOTE]
 > In case you need a base bath (for example when running behind a reverse proxy), you can set the `UNICORE__BASE_PATH` to a value such as `ssi-agent`.
-
-## IOTA DIDs
-
-By default, UniCore uses the JWK DID Method to generate and manage DIDs. However, UniCore also supports the IOTA DID
-Method, which leverages the IOTA Tangle to store your DID document. To enable the IOTA DID Method, set these environment
-variables:
-
-```yaml
-UNICORE__SECRET_MANAGER__ISSUER_DID: <your-pre-existing-IOTA-DID>
-UNICORE__SECRET_MANAGER__ISSUER_FRAGMENT: <your-pre-existing-IOTA-DID-fragment>
-```
 
 ## Leveraging Just-in-Time Data Request Events
 

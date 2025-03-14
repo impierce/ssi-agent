@@ -13,7 +13,7 @@ use oid4vc_core::{authorization_request::ByReference, scope::Scope};
 use oid4vp::{authorization_request::ClientIdScheme, Oid4vpParams};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{debug, info};
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct AuthorizationRequest {
@@ -178,7 +178,7 @@ impl Aggregate for AuthorizationRequest {
     fn apply(&mut self, event: Self::Event) {
         use AuthorizationRequestEvent::*;
 
-        info!("Applying event: {:?}", event);
+        debug!("Applying event: {:?}", event);
 
         match event {
             AuthorizationRequestCreated { authorization_request } => {
@@ -212,7 +212,6 @@ impl Aggregate for AuthorizationRequest {
 pub mod tests {
     use std::str::FromStr;
 
-    use agent_secret_manager::secret_manager;
     use agent_secret_manager::service::Service as _;
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::set_config;
@@ -241,7 +240,7 @@ pub mod tests {
     async fn test_create_authorization_request(
         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
     ) {
-        set_config().set_preferred_did_method(verifier_did_method.clone());
+        set_config().set_preferred_did_method(verifier_did_method);
 
         let verification_services = VerificationServices::default();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
@@ -279,7 +278,7 @@ pub mod tests {
     async fn test_sign_authorization_request_object(
         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
     ) {
-        set_config().set_preferred_did_method(verifier_did_method.clone());
+        set_config().set_preferred_did_method(verifier_did_method);
 
         let verification_services = VerificationServices::default();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
@@ -321,7 +320,7 @@ pub mod tests {
         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] provider_did_method: SupportedDidMethod,
     ) {
-        set_config().set_preferred_did_method(verifier_did_method.clone());
+        set_config().set_preferred_did_method(verifier_did_method);
 
         let verification_services = VerificationServices::default();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
@@ -362,16 +361,8 @@ pub mod tests {
         did_method: &str,
         authorization_request: &GenericAuthorizationRequest,
     ) -> GenericAuthorizationResponse {
-        let provider_manager = ProviderManager::new(
-            Arc::new(futures::executor::block_on(async {
-                Subject {
-                    secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
-                }
-            })),
-            vec![did_method],
-            vec![Algorithm::EdDSA],
-        )
-        .unwrap();
+        let provider_manager =
+            ProviderManager::new(Arc::new(Subject::default()), vec![did_method], vec![Algorithm::EdDSA]).unwrap();
 
         let default_did_method = provider_manager.default_subject_syntax_types()[0].to_string();
 
@@ -540,11 +531,7 @@ pub mod tests {
     }
 
     lazy_static! {
-        pub static ref VERIFIER: Subject = futures::executor::block_on(async {
-            Subject {
-                secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
-            }
-        });
+        pub static ref VERIFIER: Subject = Subject::default();
         pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
         pub static ref PRESENTATION_DEFINITION: PresentationDefinition = serde_json::from_value(json!(
             {

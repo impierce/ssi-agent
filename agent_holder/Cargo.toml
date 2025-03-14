@@ -37,7 +37,6 @@ agent_store = { path = "../agent_store" }
 
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 axum.workspace = true
-did_manager.workspace = true
 lazy_static.workspace = true
 mime.workspace = true
 names = { version = "0.14", default-features = false }

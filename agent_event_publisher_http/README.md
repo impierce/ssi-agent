@@ -31,13 +31,17 @@ ConnectionAdded
 
 ```
 DocumentCreated
+PublicKeyUpdated
+DocumentStatusUpdated
 ServiceAdded
+DocumentPublished
 ```
 
 #### `service`
 
 ```
 DomainLinkageServiceCreated
+DomainLinkageServiceDeleted
 LinkedVerifiablePresentationServiceCreated
 ```
 

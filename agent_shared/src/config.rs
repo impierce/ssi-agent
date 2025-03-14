@@ -1,10 +1,12 @@
 use config::ConfigError;
-use identity_iota::did::CoreDID;
+use identity_iota::storage::KeyId;
+use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
 use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use serde_with::{skip_serializing_none, SerializeDisplay};
 use std::{
     collections::HashMap,
@@ -13,6 +15,13 @@ use std::{
 use strum::VariantArray;
 use tracing::{debug, info};
 use url::Url;
+
+static STRONGHOLD_PATH: &str = "./stronghold.dat";
+
+// TODO: Once we have a proper state implementation for `agent_secret_manager` we can make use of randomly generated Key
+// IDs. For now we need to make use of these static variables.
+static ED25519_KEY_ID: &str = "ed25519-0";
+static ES256_KEY_ID: &str = "es256-0";
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ApplicationConfiguration {
@@ -26,7 +35,6 @@ pub struct ApplicationConfiguration {
     pub domain_linkage_enabled: bool,
     pub credential_offer_by_value_enabled: Option<bool>,
     pub secret_manager: SecretManagerConfig,
-    pub did_document_cache: Option<InMemoryCacheConfig>,
     pub credential_configurations: Vec<CredentialConfiguration>,
     pub signing_algorithms_supported: HashMap<jsonwebtoken::Algorithm, ToggleOptions>,
     pub display: Vec<Display>,
@@ -49,7 +57,7 @@ pub struct EventStoreConfig {
     pub connection_string: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum EventStoreType {
     InMemory,
@@ -64,17 +72,25 @@ pub struct EventStorePostgresConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct SecretManagerConfig {
+    #[serde(default = "default_stronghold_path")]
     pub stronghold_path: String,
     pub stronghold_password: String,
-    pub issuer_eddsa_key_id: Option<String>,
-    pub issuer_es256_key_id: Option<String>,
+    #[serde(default = "default_issuer_eddsa_key_id")]
+    pub issuer_eddsa_key_id: KeyId,
+    #[serde(default = "default_issuer_es256_key_id")]
+    pub issuer_es256_key_id: KeyId,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct InMemoryCacheConfig {
-    pub enabled: bool,
-    pub include: Option<Vec<CoreDID>>,
-    pub ttl: Option<u64>,
+fn default_stronghold_path() -> String {
+    STRONGHOLD_PATH.to_string()
+}
+
+pub fn default_issuer_eddsa_key_id() -> KeyId {
+    KeyId::new(ED25519_KEY_ID)
+}
+
+pub fn default_issuer_es256_key_id() -> KeyId {
+    KeyId::new(ES256_KEY_ID)
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -145,12 +161,16 @@ pub enum ConnectionEvent {
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum DocumentEvent {
     DocumentCreated,
+    PublicKeyUpdated,
+    DocumentStatusUpdated,
     ServiceAdded,
+    DocumentPublished,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum ServiceEvent {
     DomainLinkageServiceCreated,
+    DomainLinkageServiceDeleted,
     LinkedVerifiablePresentationServiceCreated,
 }
 
@@ -212,6 +232,7 @@ pub enum AuthorizationRequestEvent {
 #[derive(
     Debug,
     Deserialize,
+    Copy,
     Clone,
     Eq,
     PartialEq,
@@ -224,21 +245,87 @@ pub enum AuthorizationRequestEvent {
     VariantArray,
 )]
 pub enum SupportedDidMethod {
-    #[serde(alias = "did_jwk", rename = "did_jwk")]
+    #[serde(alias = "did_jwk", alias = "did:jwk", rename = "did_jwk")]
     #[strum(serialize = "did:jwk")]
     Jwk,
-    #[serde(alias = "did_key", rename = "did_key")]
+    #[serde(alias = "did_key", alias = "did:key", rename = "did_key")]
     #[strum(serialize = "did:key")]
     Key,
-    #[serde(alias = "did_web", rename = "did_web")]
+    #[serde(alias = "did_web", alias = "did:web", rename = "did_web")]
     #[strum(serialize = "did:web")]
     Web,
-    #[serde(alias = "did_iota", rename = "did_iota")]
+    #[serde(alias = "did_iota", alias = "did:iota", rename = "did_iota")]
     #[strum(serialize = "did:iota")]
     Iota,
-    #[serde(alias = "did_iota_smr", rename = "did_iota_smr")]
+    #[serde(alias = "did_iota_smr", alias = "did:iota:smr", rename = "did_iota_smr")]
     #[strum(serialize = "did:iota:smr")]
     IotaSmr,
+}
+
+/// (A subset of) DID method traits. The methods follow a naming convention that expresses boolean predicates as verb
+/// phrases, as specified in the DID traits documentation:
+/// https://github.com/decentralized-identity/did-traits/blob/v0.8.0/schemas/v0.8.0/traits.json
+impl SupportedDidMethod {
+    pub fn supports_update(&self) -> bool {
+        match self {
+            SupportedDidMethod::Web | SupportedDidMethod::Iota | SupportedDidMethod::IotaSmr => true,
+            SupportedDidMethod::Jwk | SupportedDidMethod::Key => false,
+        }
+    }
+
+    pub fn hosted_centrally(&self) -> bool {
+        match self {
+            SupportedDidMethod::Jwk
+            | SupportedDidMethod::Key
+            | SupportedDidMethod::Iota
+            | SupportedDidMethod::IotaSmr => false,
+            SupportedDidMethod::Web => true,
+        }
+    }
+
+    pub fn hosted_decentrally(&self) -> bool {
+        match self {
+            SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => false,
+            SupportedDidMethod::Iota | SupportedDidMethod::IotaSmr => true,
+        }
+    }
+}
+
+const MAINNET_URL: &str = "https://api.stardust-mainnet.iotaledger.net";
+const SHIMMER_URL: &str = "https://api.shimmer.network";
+
+const IOTA_NETWORK: &str = "IOTA Network";
+const SHIMMER_NETWORK: &str = "Shimmer Network";
+
+// See specification: "Since did:jwk only contains a single key, the DID URL fragment identifier is always a fixed #0 value."
+const JWK_FRAGMENT: &str = "0";
+
+impl SupportedDidMethod {
+    pub fn api_endpoint(&self) -> Option<&str> {
+        match self {
+            SupportedDidMethod::Iota => Some(MAINNET_URL),
+            SupportedDidMethod::IotaSmr => Some(SHIMMER_URL),
+            SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
+        }
+    }
+
+    pub fn network_name(&self) -> Option<&str> {
+        match self {
+            SupportedDidMethod::Iota => Some(IOTA_NETWORK),
+            SupportedDidMethod::IotaSmr => Some(SHIMMER_NETWORK),
+            SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
+        }
+    }
+
+    pub fn fragment(&self) -> Option<&str> {
+        match self {
+            SupportedDidMethod::Jwk => Some(JWK_FRAGMENT),
+            SupportedDidMethod::Iota
+            | SupportedDidMethod::IotaSmr
+            | SupportedDidMethod::Key
+            | SupportedDidMethod::Web => None,
+        }
+    }
 }
 
 impl From<SupportedDidMethod> for SubjectSyntaxType {
@@ -286,6 +373,19 @@ impl ApplicationConfiguration {
             // configuration.
             info!("Configuration loaded successfully");
             debug!("{:#?}", config);
+
+            if config.event_store.type_ == EventStoreType::InMemory {
+                for did_method in &[SupportedDidMethod::Iota, SupportedDidMethod::IotaSmr] {
+                    if config
+                        .did_methods
+                        .get(did_method)
+                        .map(|options| options.enabled)
+                        .unwrap_or_default()
+                    {
+                        panic!("`{did_method}` cannot be enabled when using the `in_memory` event store");
+                    }
+                }
+            }
         })
     }
 
@@ -360,12 +460,28 @@ pub fn get_all_enabled_did_methods() -> Vec<SupportedDidMethod> {
         .did_methods
         .iter()
         .filter(|(_, v)| v.enabled)
-        .map(|(k, _)| k.clone())
+        .map(|(k, _)| *k)
         .collect();
 
     did_methods.sort();
 
     did_methods
+}
+
+// TODO: should fail when none is enabled
+pub fn get_all_enabled_signing_algorithms_supported() -> Vec<Algorithm> {
+    let mut signing_algorithms_supported: Vec<_> = config()
+        .signing_algorithms_supported
+        .iter()
+        .filter(|(_, v)| v.enabled)
+        .map(|(k, _)| *k)
+        .collect();
+
+    // `jsonwebtoken::Algorithm` does not implement `Display` so we need to serialize it through `serde_json` first in
+    // order to sort.
+    signing_algorithms_supported.sort_by(|a, b| json!(a).as_str().cmp(&json!(b).as_str()));
+
+    signing_algorithms_supported
 }
 
 // TODO: should fail when there's more than one result
@@ -375,7 +491,7 @@ pub fn get_preferred_did_method() -> SupportedDidMethod {
         .iter()
         .filter(|(_, v)| v.enabled)
         .filter(|(_, v)| v.preferred.unwrap_or(false))
-        .map(|(k, _)| k.clone())
+        .map(|(k, _)| *k)
         .collect::<Vec<SupportedDidMethod>>()
         .first()
         .cloned()
@@ -402,7 +518,7 @@ mod tests {
     #[test]
     fn all_supported_did_methods_can_be_converted_into_subject_syntax_type() {
         for variant in SupportedDidMethod::VARIANTS {
-            let _subject_syntax_type: SubjectSyntaxType = variant.clone().into();
+            let _subject_syntax_type: SubjectSyntaxType = (*variant).into();
         }
     }
 }

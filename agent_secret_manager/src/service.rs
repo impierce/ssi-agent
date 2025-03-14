@@ -9,12 +9,6 @@ pub trait Service {
     where
         Self: Sized,
     {
-        use crate::{secret_manager, subject::Subject};
-
-        Arc::new(Self::new(Arc::new(futures::executor::block_on(async {
-            Subject {
-                secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
-            }
-        }))))
+        Arc::new(Self::new(Arc::new(crate::subject::Subject::default())))
     }
 }

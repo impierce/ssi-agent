@@ -33,7 +33,6 @@ agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_verification = { path = ".", features = ["test_utils"] }
 
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
-did_manager.workspace = true
 identity_core.workspace = true
 identity_credential.workspace = true
 lazy_static.workspace = true

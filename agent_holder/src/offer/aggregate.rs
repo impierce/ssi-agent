@@ -13,7 +13,7 @@ use oid4vci::token_response::TokenResponse;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum Status {
@@ -251,7 +251,7 @@ impl Aggregate for Offer {
     fn apply(&mut self, event: Self::Event) {
         use OfferEvent::*;
 
-        info!("Applying event: {:?}", event);
+        debug!("Applying event: {:?}", event);
 
         match event {
             CredentialOfferReceived {

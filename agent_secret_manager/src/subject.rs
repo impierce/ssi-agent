@@ -1,33 +1,121 @@
-use agent_shared::{config::config, from_jsonwebtoken_algorithm_to_jwsalgorithm};
+use crate::stronghold_storage;
+use agent_shared::config::{config, SupportedDidMethod};
+use anyhow::anyhow;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use did_manager::{DidMethod, Resolver, SecretManager};
+use did_manager_consumer::resolver::Resolver;
+use did_manager_identity_stronghold_ext::StrongholdExtStorage;
+use identity_iota::did::DIDUrl;
+use identity_iota::storage::{JwkStorage, KeyId};
+use identity_iota::verification::jwk::Jwk;
 use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
+use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Reponsible for signing and verifying data.
 pub struct Subject {
-    pub secret_manager: Arc<Mutex<SecretManager>>,
+    pub stronghold_storage: StrongholdExtStorage,
+    pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DIDUrl>>>,
+}
+
+impl Subject {
+    /// Create a new Subject.
+    pub async fn new() -> Self {
+        let stronghold_storage = stronghold_storage().await;
+
+        Self {
+            stronghold_storage,
+            verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    pub async fn get_public_key(&self, key_id: KeyId, algorithm: &Algorithm) -> anyhow::Result<Jwk> {
+        match algorithm {
+            Algorithm::EdDSA => self.stronghold_storage.get_ed25519_public_key(&key_id).await,
+            Algorithm::ES256 => self.stronghold_storage.get_es256_public_key(&key_id).await,
+            _ => anyhow::bail!("Unsuported algorithm"),
+        }
+        .map_err(Into::into)
+    }
+
+    pub async fn insert_verification_method_id(
+        &self,
+        key: StorageKey,
+        verification_method_id: DIDUrl,
+    ) -> anyhow::Result<()> {
+        self.verification_method_ids
+            .lock()
+            .await
+            .insert(key, verification_method_id);
+        Ok(())
+    }
+
+    pub async fn get_verification_method_id(&self, key: StorageKey) -> Option<DIDUrl> {
+        self.verification_method_ids.lock().await.get(&key).cloned()
+    }
+}
+
+/// This module contains implementations for `Subject` for testing purposes.
+/// It is only available when the `test_utils` feature is enabled.
+#[cfg(feature = "test_utils")]
+mod default_subject {
+    use super::*;
+
+    impl Subject {
+        const DID_KEY_EDDSA_VERIFICATION_METHOD_ID: &str =
+            "did:key:z6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt#z6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt";
+        const DID_JWK_EDDSA_VERIFICATION_METHOD_ID: &str =
+            "did:jwk:eyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ#0";
+    }
+
+    // This `Default` implementation for `Subject` returns a new `Subject` with the Verification Method IDs already preloaded.
+    impl Default for Subject {
+        fn default() -> Self {
+            futures::executor::block_on(async {
+                let stronghold_storage = stronghold_storage().await;
+
+                let verification_method_ids = Arc::new(Mutex::new(HashMap::from_iter(vec![
+                    (
+                        StorageKey::new(SupportedDidMethod::Key, Algorithm::EdDSA),
+                        Self::DID_KEY_EDDSA_VERIFICATION_METHOD_ID.parse().unwrap(),
+                    ),
+                    (
+                        StorageKey::new(SupportedDidMethod::Jwk, Algorithm::EdDSA),
+                        Self::DID_JWK_EDDSA_VERIFICATION_METHOD_ID.parse().unwrap(),
+                    ),
+                ])));
+
+                Self {
+                    stronghold_storage,
+                    verification_method_ids,
+                }
+            })
+        }
+    }
 }
 
 #[async_trait]
 impl Verify for Subject {
     async fn public_key(&self, did_url: &str) -> anyhow::Result<Vec<u8>> {
-        let did_url = identity_iota::did::DIDUrl::parse(did_url).unwrap();
+        let did_url =
+            identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
 
         let resolver = Resolver::new().await;
 
-        let document = resolver.resolve(did_url.did().as_str()).await.unwrap();
+        let document = resolver
+            .resolve(did_url.did().as_str())
+            .await
+            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
 
         let verification_method = document
-            .resolve_method(
-                DIDUrlQuery::from(&did_url),
-                Some(identity_iota::verification::MethodScope::VerificationMethod),
-            )
-            .unwrap();
+            .resolve_method(DIDUrlQuery::from(&did_url), None)
+            .ok_or(anyhow!(
+                "Failed to resolve verification method for DID URL: `{did_url}`"
+            ))?;
 
         // Try decode from `MethodData` directly, else use public JWK params.
         verification_method.data().try_decode().or_else(|_| {
@@ -53,55 +141,42 @@ impl Verify for Subject {
                     }
                     _ => None,
                 })
-                .ok_or(anyhow::anyhow!("Failed to decode public key for DID URL: {}", did_url))
+                .ok_or(anyhow!("Failed to decode public key for DID URL: `{did_url}`"))
         })
     }
 }
 
 #[async_trait]
 impl Sign for Subject {
-    async fn key_id(&self, subject_syntax_type: &str, _algorithm: Algorithm) -> Option<String> {
-        let method: DidMethod = serde_json::from_str(&format!("{subject_syntax_type:?}")).ok()?;
+    async fn key_id(&self, subject_syntax_type: &str, algorithm: Algorithm) -> Option<String> {
+        let method = SupportedDidMethod::from_str(subject_syntax_type).ok()?;
 
-        let mut secret_manager = self.secret_manager.lock().await;
-        if method == DidMethod::Web {
-            return secret_manager
-                .produce_document(
-                    method,
-                    Some(did_manager::MethodSpecificParameters::Web { origin: origin() }),
-                    from_jsonwebtoken_algorithm_to_jwsalgorithm(
-                        &agent_shared::config::get_preferred_signing_algorithm(),
-                    ),
-                )
-                .await
-                .ok()
-                .and_then(|document| document.verification_method().first().cloned())
-                .map(|first| first.id().to_string());
-        }
-
-        // TODO: refactor: https://github.com/impierce/ssi-agent/pull/31#discussion_r1634590990
-
-        secret_manager
-            .produce_document(
-                method,
-                None,
-                from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
-            )
+        self.get_verification_method_id(StorageKey::new(method, algorithm))
             .await
-            .ok()
-            .and_then(|document| document.verification_method().first().cloned())
-            .map(|first| first.id().to_string())
+            .as_ref()
+            .map(ToString::to_string)
     }
 
-    async fn sign(&self, message: &str, _subject_syntax_type: &str, _algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
-        let secret_manager = self.secret_manager.lock().await;
+    async fn sign(&self, message: &str, _subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
+        let stronghold_storage = &self.stronghold_storage;
+        let (key_id, public_key) = match algorithm {
+            Algorithm::ES256 => {
+                let es256_key_id = config().secret_manager.issuer_es256_key_id.clone();
+                let public_key = stronghold_storage.get_es256_public_key(&es256_key_id).await?;
+                (es256_key_id, public_key)
+            }
+            Algorithm::EdDSA => {
+                let ed25519_key_id = config().secret_manager.issuer_eddsa_key_id.clone();
+                let public_key = stronghold_storage.get_ed25519_public_key(&ed25519_key_id).await?;
+                (ed25519_key_id, public_key)
+            }
+            _ => return Err(anyhow!("Unsupported algorithm")),
+        };
 
-        Ok(secret_manager
-            .sign(
-                message.as_bytes(),
-                from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
-            )
-            .await?)
+        stronghold_storage
+            .sign(&key_id, message.as_bytes(), &public_key)
+            .await
+            .map_err(Into::into)
     }
 
     fn external_signer(&self) -> Option<Arc<dyn ExternalSign>> {
@@ -111,43 +186,37 @@ impl Sign for Subject {
 
 #[async_trait]
 impl oid4vc_core::Subject for Subject {
-    async fn identifier(&self, subject_syntax_type: &str, _algorithm: Algorithm) -> anyhow::Result<String> {
-        let method: DidMethod = serde_json::from_str(&format!("{subject_syntax_type:?}"))?;
+    async fn identifier(&self, subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<String> {
+        let method = SupportedDidMethod::from_str(subject_syntax_type)
+            .map_err(|e| anyhow!("Failed to parse SupportedDidMethod from string: {}", e))?;
 
-        let mut secret_manager = self.secret_manager.lock().await;
-
-        if method == DidMethod::Web {
-            return Ok(secret_manager
-                .produce_document(
-                    method,
-                    Some(did_manager::MethodSpecificParameters::Web { origin: origin() }),
-                    from_jsonwebtoken_algorithm_to_jwsalgorithm(
-                        &agent_shared::config::get_preferred_signing_algorithm(),
-                    ),
-                )
-                .await
-                .map(|document| document.id().to_string())?);
-        }
-
-        Ok(secret_manager
-            .produce_document(
-                method,
-                None,
-                from_jsonwebtoken_algorithm_to_jwsalgorithm(&agent_shared::config::get_preferred_signing_algorithm()),
-            )
+        self.get_verification_method_id(StorageKey::new(method, algorithm))
             .await
-            .map(|document| document.id().to_string())?)
+            .as_ref()
+            .map(DIDUrl::did)
+            .map(ToString::to_string)
+            .ok_or_else(|| anyhow!("Failed to get verification method ID"))
     }
 }
 
-fn origin() -> url::Origin {
-    config().url.origin()
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct StorageKey {
+    pub did_method: SupportedDidMethod,
+    pub algorithm: Algorithm,
+}
+
+impl StorageKey {
+    pub fn new(did_method: SupportedDidMethod, algorithm: Algorithm) -> Self {
+        Self { did_method, algorithm }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_shared::config::{set_config, SecretManagerConfig};
+    use agent_shared::config::{
+        default_issuer_eddsa_key_id, default_issuer_es256_key_id, set_config, SecretManagerConfig,
+    };
     use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED, ED25519};
 
     const ES256_SIGNED_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGVXpJMU5pSXNJbU55ZGlJNklsQXRNalUySWl3aWEybGtJam9pTkVGMVdXaFNRMk5HYkc0eWJuUm5VMTlxT1hCRlFtUkxkekl3VUhRdGJHRnFXVWh0V1RkQk1FMUdUU0lzSW10MGVTSTZJa1ZESWl3aWVDSTZJakpNV0dwT1JFOTZWM1J3WlZOWk0ydGlUbEkyWm14YVRVUjRZV2gxYXpKMlVXMWpkWFprUVRodk5EUWlMQ0o1SWpvaVpFRjJSVlpzV0UxSFVFdGFjMnRXV1RSWlZ6QnpPRUk0UzNZM2Myc3hZemt5VDA1WVJFcHZlRjlJY3lKOSMwIn0.eyJpc3MiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJzdWIiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJhdWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaVlrNDNiSEpaWVhOUlZrNDNMVUpZY0MxMFdFVldTR1l0YVhkTWRsVnRiWHByVUZsc2VHWlRWRkZvVlNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SW1odVkyNU5UM2sxU0dGWGJ6SmFTbmhCWW5sWU1GOW1NVTFHU1dsMlRrRmtUMjFXYjNSWGVWZG9ielFpTENKNUlqb2libE5wYkhwMllsTmFYMUp1VWpOU2RreHdkRWxITmpkVWJWVkVhR1ZQWVZGNlltczJhVFJmWDBkeVFTSjkiLCJleHAiOjE3MjMwMjkyMjUsImlhdCI6MTcyMzAyODYyNSwibm9uY2UiOiJ0aGlzIGlzIGEgbm9uY2UifQ.w202CZKOeGM9k35tysJylksBUGI3fvkOgsPPVrfXYZzurns7KF5plMiR_KHH4H_GpYg57Nf2JWa3YEcXGDTVdw";
@@ -155,10 +224,10 @@ mod tests {
 
     lazy_static::lazy_static! {
         static ref SECRET_MANAGER_CONFIG: SecretManagerConfig = SecretManagerConfig {
-            stronghold_path: "../agent_secret_manager/tests/res/all_slots.stronghold".to_string(),
             stronghold_password: "sup3rSecr3t".to_string(),
-            issuer_eddsa_key_id: Some("ed25519-0".to_string()),
-            issuer_es256_key_id: Some("es256-0".to_string()),
+            stronghold_path: "/tmp/stronghold".to_string(),
+            issuer_eddsa_key_id: default_issuer_eddsa_key_id(),
+            issuer_es256_key_id: default_issuer_es256_key_id(),
         };
     }
 
@@ -166,9 +235,7 @@ mod tests {
     async fn es256_signed_jwt_successfully_verified() {
         set_config().set_secret_manager_config(SECRET_MANAGER_CONFIG.clone());
 
-        let subject = Arc::new(Subject {
-            secret_manager: Arc::new(Mutex::new(crate::secret_manager().await)),
-        });
+        let subject = Arc::new(Subject::default());
 
         let mut split = ES256_SIGNED_JWT.rsplitn(2, '.');
         let (signature, message) = (split.next().unwrap(), split.next().unwrap());
@@ -188,9 +255,7 @@ mod tests {
     async fn eddsa_signed_jwt_successfully_verified() {
         set_config().set_secret_manager_config(SECRET_MANAGER_CONFIG.clone());
 
-        let subject = Arc::new(Subject {
-            secret_manager: Arc::new(Mutex::new(crate::secret_manager().await)),
-        });
+        let subject = Arc::new(Subject::default());
 
         let mut split = EDDSA_SIGNED_JWT.rsplitn(2, '.');
         let (signature, message) = (split.next().unwrap(), split.next().unwrap());

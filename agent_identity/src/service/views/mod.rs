@@ -13,10 +13,23 @@ impl View<Service> for Service {
                 service_id,
                 service,
                 resource,
+                is_deleted,
             } => {
                 self.service_id.clone_from(service_id);
                 self.service.replace(service.clone());
                 self.resource.replace(resource.clone());
+                self.is_deleted.clone_from(is_deleted);
+            }
+            DomainLinkageServiceDeleted {
+                service_id,
+                service,
+                resource,
+                is_deleted,
+            } => {
+                self.service_id.clone_from(service_id);
+                self.service.clone_from(service);
+                self.resource.clone_from(resource);
+                self.is_deleted.clone_from(is_deleted);
             }
             LinkedVerifiablePresentationServiceCreated {
                 service_id,

@@ -79,10 +79,12 @@ pub async fn identity_state(
     let connection = Arc::new(PostgresViewRepository::new("connection", pool.clone()));
     let all_connections = Arc::new(PostgresViewRepository::new("all_connections", pool.clone()));
     let document = Arc::new(PostgresViewRepository::new("document", pool.clone()));
+    let all_documents = Arc::new(PostgresViewRepository::new("all_documents", pool.clone()));
     let service = Arc::new(PostgresViewRepository::new("service", pool.clone()));
     let all_services = Arc::new(PostgresViewRepository::new("all_services", pool.clone()));
 
     let all_connections_query = ListAllQuery::new(all_connections.clone(), "all_connections");
+    let all_documents_query = ListAllQuery::new(all_documents.clone(), "all_documents");
     let all_services_query = ListAllQuery::new(all_services.clone(), "all_services");
 
     // Partition the event_publishers into the different aggregates.
@@ -108,7 +110,8 @@ pub async fn identity_state(
                 document_event_publishers.into_iter().fold(
                     AggregateHandler::new(pool.clone(), identity_services.clone())
                         .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(document.clone())),
+                        .append_query(generic_query(document.clone()))
+                        .append_query(all_documents_query),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
@@ -126,6 +129,7 @@ pub async fn identity_state(
             connection,
             all_connections,
             document,
+            all_documents,
             service,
             all_services,
         },

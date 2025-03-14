@@ -64,7 +64,7 @@ pub mod tests {
         authorization_requests::tests::authorization_requests, relying_party::request::tests::request, router,
     };
     use agent_event_publisher_http::EventPublisherHttp;
-    use agent_secret_manager::{secret_manager, service::Service, subject::Subject};
+    use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{set_config, Events};
     use agent_store::{in_memory, EventPublisher};
     use axum::{
@@ -109,14 +109,8 @@ pub mod tests {
             .build()
             .unwrap();
 
-        let provider_manager = ProviderManager::new(
-            Arc::new(Subject {
-                secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
-            }),
-            vec!["did:key"],
-            vec![Algorithm::EdDSA],
-        )
-        .unwrap();
+        let provider_manager =
+            ProviderManager::new(Arc::new(Subject::default()), vec!["did:key"], vec![Algorithm::EdDSA]).unwrap();
         let authorization_response = provider_manager
             .generate_response(&authorization_request, Default::default())
             .await
