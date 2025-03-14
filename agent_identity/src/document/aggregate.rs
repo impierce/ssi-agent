@@ -126,12 +126,20 @@ impl Aggregate for Document {
                                 .map_err(|err| AliasOutputBuilderError(err.to_string()))?;
 
                             // Publish the updated Alias Output and get the published DID document.
+<<<<<<< HEAD
                             let test_publish_result = iota_client
+=======
+                            let publish_result = iota_client
+>>>>>>> beta
                                 .publish_did_output(stronghold_storage.as_secret_manager(), alias_output)
                                 .await
                                 .map(CoreDocument::from);
 
+<<<<<<< HEAD
                             match test_publish_result {
+=======
+                            match publish_result {
+>>>>>>> beta
                                 // The current wallet address controls the existing DID Document.
                                 Ok(document) => Some(document),
                                 Err(test_publish_error) => match test_publish_error {
@@ -175,10 +183,17 @@ impl Aggregate for Document {
                             document
                         } else {
                             // If there was no DID Document stored in the Aggregate yet, or the current Stronghold
+<<<<<<< HEAD
                             // storage is not in control of it, then we create a completely new controler and DID Document.
                             info!("Creating a new controller for DID method `{did_method}`");
 
                             // Create a new 'blanc' DID Document.
+=======
+                            // storage is not in control of it, then we create a completely new controller and DID Document.
+                            info!("Creating a new controller for DID method `{did_method}`");
+
+                            // Create a new 'blank' DID Document.
+>>>>>>> beta
                             let document =
                                 IotaDocument::new(&iota_client.network_name().await.map_err(IotaClientError)?);
 
@@ -290,8 +305,12 @@ impl Aggregate for Document {
                 }])
             }
             UpdatePublicKeys {
+<<<<<<< HEAD
                 document_id,
                 // TODO: decide whether the public keys should be suplied through the command or not.
+=======
+                // TODO: decide whether the public keys should be supplied through the command or not.
+>>>>>>> beta
                 public_key_jwks: _,
             } => {
                 let mut document = self.document.clone().ok_or(MissingDocumentError)?;
@@ -340,14 +359,25 @@ impl Aggregate for Document {
                         .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
 
                     events.push(PublicKeyUpdated {
+<<<<<<< HEAD
                         document_id: document_id.clone(),
+=======
+                        document_id: self.document_id.clone(),
+>>>>>>> beta
                         document: document.clone(),
                     })
                 }
 
                 Ok(events)
             }
+<<<<<<< HEAD
             UpdateDocumentStatus { document_id, status } => Ok(vec![DocumentStatusUpdated { document_id, status }]),
+=======
+            UpdateDocumentStatus { status } => Ok(vec![DocumentStatusUpdated {
+                document_id: self.document_id.clone(),
+                status,
+            }]),
+>>>>>>> beta
             AddService {
                 service_id,
                 mut service,
@@ -371,7 +401,11 @@ impl Aggregate for Document {
 
                 Ok(vec![ServiceAdded { document_id, document }])
             }
+<<<<<<< HEAD
             PublishDocument { document_id } => {
+=======
+            PublishDocument => {
+>>>>>>> beta
                 // The API endpoint of an IOTA node, e.g. Hornet.
                 let api_endpoint = self
                     .did_method
@@ -429,8 +463,13 @@ impl Aggregate for Document {
                     .map_err(IotaClientError)?;
 
                 Ok(vec![DocumentPublished {
+<<<<<<< HEAD
                     document_id,
                     updated_document,
+=======
+                    document_id: self.document_id.clone(),
+                    document: updated_document,
+>>>>>>> beta
                 }])
             }
         }
@@ -465,6 +504,13 @@ impl Aggregate for Document {
             }
             ServiceAdded { document_id, document } => {
                 self.document_id = document_id;
+<<<<<<< HEAD
+=======
+                self.document.replace(document);
+            }
+            DocumentPublished { document_id, document } => {
+                self.document_id = document_id;
+>>>>>>> beta
                 self.document.replace(document);
             }
             DocumentPublished {
@@ -546,7 +592,10 @@ pub mod document_tests {
                 with_fixed_algorithm: None,
             }])
             .when(DocumentCommand::UpdatePublicKeys {
+<<<<<<< HEAD
                 document_id: document_id.clone(),
+=======
+>>>>>>> beta
                 public_key_jwks: vec![],
             })
             .then_expect_events(vec![DocumentEvent::PublicKeyUpdated {
@@ -617,7 +666,10 @@ pub mod document_tests {
                 },
             ])
             .when(DocumentCommand::UpdateDocumentStatus {
+<<<<<<< HEAD
                 document_id: document_id.clone(),
+=======
+>>>>>>> beta
                 status: Status::Disabled,
             })
             .then_expect_events(vec![DocumentEvent::DocumentStatusUpdated {

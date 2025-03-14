@@ -1,5 +1,9 @@
 use config::ConfigError;
+<<<<<<< HEAD
 use identity_iota::{did::CoreDID, storage::KeyId};
+=======
+use identity_iota::storage::KeyId;
+>>>>>>> beta
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
@@ -33,8 +37,8 @@ pub struct ApplicationConfiguration {
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
     pub external_server_response_timeout_ms: Option<u64>,
     pub domain_linkage_enabled: bool,
+    pub credential_offer_by_value_enabled: Option<bool>,
     pub secret_manager: SecretManagerConfig,
-    pub did_document_cache: Option<InMemoryCacheConfig>,
     pub credential_configurations: Vec<CredentialConfiguration>,
     pub signing_algorithms_supported: HashMap<jsonwebtoken::Algorithm, ToggleOptions>,
     pub display: Vec<Display>,
@@ -79,6 +83,7 @@ pub struct SecretManagerConfig {
     pub issuer_eddsa_key_id: KeyId,
     #[serde(default = "default_issuer_es256_key_id")]
     pub issuer_es256_key_id: KeyId,
+<<<<<<< HEAD
 }
 
 fn default_stronghold_path() -> String {
@@ -91,13 +96,20 @@ pub fn default_issuer_eddsa_key_id() -> KeyId {
 
 pub fn default_issuer_es256_key_id() -> KeyId {
     KeyId::new(ES256_KEY_ID)
+=======
+>>>>>>> beta
 }
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct InMemoryCacheConfig {
-    pub enabled: bool,
-    pub include: Option<Vec<CoreDID>>,
-    pub ttl: Option<u64>,
+fn default_stronghold_path() -> String {
+    STRONGHOLD_PATH.to_string()
+}
+
+pub fn default_issuer_eddsa_key_id() -> KeyId {
+    KeyId::new(ED25519_KEY_ID)
+}
+
+pub fn default_issuer_es256_key_id() -> KeyId {
+    KeyId::new(ES256_KEY_ID)
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

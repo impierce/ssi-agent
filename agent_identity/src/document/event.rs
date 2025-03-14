@@ -29,7 +29,11 @@ pub enum DocumentEvent {
     },
     DocumentPublished {
         document_id: String,
+<<<<<<< HEAD
         updated_document: CoreDocument,
+=======
+        document: CoreDocument,
+>>>>>>> beta
     },
 }
 

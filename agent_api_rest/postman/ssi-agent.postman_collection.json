@@ -1797,10 +1797,13 @@
 			"key": "CREDENTIAL_OFFER_URI",
 			"value": "INITIAL_VALUE",
 			"type": "string"
+<<<<<<< HEAD
 		},
 		{
 			"key": "DOCUMENT_ID",
 			"value": ""
+=======
+>>>>>>> beta
 		}
 	]
 }

@@ -16,4 +16,9 @@ pub enum OfferError {
     MissingProofIssuerError,
     #[error("Grant Type `authorization_code` is not supported")]
     UnsupportedTokenRequestGrantTypeError,
+<<<<<<< HEAD
+=======
+    #[error("Invalid URL: {0}")]
+    InvalidUrlError(String),
+>>>>>>> beta
 }

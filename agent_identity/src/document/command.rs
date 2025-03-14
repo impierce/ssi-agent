@@ -14,18 +14,28 @@ pub enum DocumentCommand {
         with_fixed_algorithm: Option<Algorithm>,
     },
     UpdateDocumentStatus {
+<<<<<<< HEAD
         document_id: String,
         status: Status,
     },
     UpdatePublicKeys {
         document_id: String,
+=======
+        status: Status,
+    },
+    UpdatePublicKeys {
+>>>>>>> beta
         public_key_jwks: Vec<Jwk>,
     },
     AddService {
         service_id: String,
         service: DocumentService,
     },
+<<<<<<< HEAD
     PublishDocument {
         document_id: String,
     },
+=======
+    PublishDocument,
+>>>>>>> beta
 }

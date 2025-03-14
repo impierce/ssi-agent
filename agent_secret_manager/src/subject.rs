@@ -141,7 +141,11 @@ impl Verify for Subject {
                     }
                     _ => None,
                 })
+<<<<<<< HEAD
                 .ok_or(anyhow!("Failed to decode public key for DID URL: {did_url}"))
+=======
+                .ok_or(anyhow!("Failed to decode public key for DID URL: `{did_url}`"))
+>>>>>>> beta
         })
     }
 }
