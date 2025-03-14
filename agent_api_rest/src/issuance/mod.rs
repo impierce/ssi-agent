@@ -6,7 +6,7 @@ use agent_issuance::state::IssuanceState;
 use axum::routing::get;
 use axum::{routing::post, Router};
 use credentials::all_credentials;
-use offers::{all_offers, offer};
+use offers::{all_offers, credential_offer_uri, offer};
 
 use crate::issuance::{
     credential_issuer::{
@@ -36,5 +36,6 @@ pub fn router(issuance_state: IssuanceState) -> Router {
         .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
         .route("/auth/token", post(token))
         .route("/openid4vci/credential", post(credential))
+        .route("/credential-offer/:offer_id", get(credential_offer_uri))
         .with_state(issuance_state)
 }

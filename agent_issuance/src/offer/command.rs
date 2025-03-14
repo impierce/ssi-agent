@@ -26,10 +26,6 @@ pub enum OfferCommand {
     },
 
     // OpenID4VCI Pre-Authorized Code Flow
-    // TODO: add option for credential_offer_uri (by reference)
-    CreateFormUrlEncodedCredentialOffer {
-        offer_id: String,
-    },
     CreateTokenResponse {
         offer_id: String,
         token_request: TokenRequest,
