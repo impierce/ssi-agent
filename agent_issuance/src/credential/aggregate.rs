@@ -114,6 +114,11 @@ impl Aggregate for Credential {
                         },
                 }) => {
                     #[cfg(feature = "test_utils")]
+                    let notification_id = test_utils::notification_id();
+                    #[cfg(not(feature = "test_utils"))]
+                    let notification_id = agent_shared::generate_random_string();
+
+                    #[cfg(feature = "test_utils")]
                     let issuance_date = "2010-01-01T00:00:00Z".to_string();
                     #[cfg(not(feature = "test_utils"))]
                     let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
@@ -204,8 +209,6 @@ impl Aggregate for Credential {
                                 let mut raw = json!(credential);
                                 raw["type"] = json!(type_);
 
-                                let notification_id = agent_shared::generate_random_string();
-
                                 return Ok(vec![UnsignedCredentialCreated {
                                     credential_id,
                                     data: Data { raw },
@@ -272,7 +275,11 @@ impl Aggregate for Credential {
                 credential_id,
                 signed_credential,
             } => {
+                #[cfg(feature = "test_utils")]
+                let notification_id = test_utils::notification_id();
+                #[cfg(not(feature = "test_utils"))]
                 let notification_id = agent_shared::generate_random_string();
+
                 Ok(vec![SignedCredentialCreated {
                     credential_id,
                     signed_credential,
@@ -476,9 +483,8 @@ pub mod credential_tests {
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
         #[case] unsigned_credential: serde_json::Value,
         credential_id: String,
+        notification_id: String,
     ) {
-        let notification_id = agent_shared::generate_random_string();
-
         CredentialTestFramework::with(Service::default())
             .given_no_previous_events()
             .when(CredentialCommand::CreateUnsignedCredential {
@@ -567,6 +573,11 @@ pub mod test_utils {
     use rstest::fixture;
     use serde_json::json;
     use std::collections::HashMap;
+
+    #[fixture]
+    pub fn notification_id() -> String {
+        "notification_id".to_string()
+    }
 
     pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJPcGVuQmFkZ2VDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJuYW1lIjoiVGVhbXdvcmsgQmFkZ2UiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwidHlwZSI6WyJBY2hpZXZlbWVudFN1YmplY3QiXSwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEiOnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY29nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNvZ25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbnQuIiwibmFtZSI6IlRlYW13b3JrIn19fX0.GBbACSRxM_nBdhWqntrVaMA78ftPR0fO0sHM1v5sYMIJUWCrOamo9EN_67nAHuvwl_og6EVz36o1we7U9M6oCA";
 
