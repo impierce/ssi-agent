@@ -211,22 +211,23 @@ impl Aggregate for Offer {
                 mut signed_credentials,
             } => {
                 // TODO: support batch credentials.
-                let notification_id = agent_shared::generate_random_string();
-                let signed_credential = signed_credentials.pop().ok_or(MissingCredentialError)?;
+                let (signed_credential, notification_id) = signed_credentials.pop().ok_or(MissingCredentialError)?;
+                // let signed_credential = signed_credentials.pop().ok_or(MissingCredentialError)?.0;
+                // let notification_id = signed_credentials.pop().ok_or(MissingCredentialError)?.1;
                 let credential_response = CredentialResponse {
                     credential: CredentialResponseType::Immediate {
                         credential: signed_credential,
-                        notification_id: Some(notification_id.clone()),
+                        notification_id: notification_id.clone(),
                     },
                     c_nonce: None,
                     c_nonce_expires_in: None,
-                    notification_id: None,
+                    notification_id: notification_id.clone(),
                 };
 
                 Ok(vec![CredentialResponseCreated {
                     offer_id,
                     credential_response,
-                    notification_id: Some(notification_id),
+                    notification_id,
                     status: Status::Issued,
                 }])
             }
@@ -290,6 +291,7 @@ impl Aggregate for Offer {
 #[allow(unused_imports)]
 pub mod tests {
     use super::test_utils::*;
+    use crate::credential::aggregate::test_utils::notification_id;
     use crate::{
         credential::aggregate::test_utils::OPENBADGE_VERIFIABLE_CREDENTIAL_JWT, offer,
         server_config::aggregate::test_utils::*,
@@ -480,6 +482,7 @@ pub mod tests {
         #[future(awt)] form_url_encoded_credential_offer: String,
         #[future(awt)] token_response: TokenResponse,
         credential_response: CredentialResponse,
+        notification_id: String,
     ) {
         OfferTestFramework::with(Service::default())
             .given(vec![
@@ -511,12 +514,15 @@ pub mod tests {
             ])
             .when(OfferCommand::CreateCredentialResponse {
                 offer_id: offer_id.clone(),
-                signed_credentials: vec![json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT)],
+                signed_credentials: vec![(
+                    json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT),
+                    Some(notification_id.clone()),
+                )],
             })
             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
                 offer_id: offer_id.clone(),
                 credential_response,
-                notification_id: None,
+                notification_id: Some(notification_id),
                 status: Status::Issued,
             }]);
     }
@@ -525,6 +531,7 @@ pub mod tests {
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     pub use super::*;
+    use crate::credential::aggregate::test_utils::notification_id;
     use crate::{
         credential::aggregate::test_utils::OPENBADGE_VERIFIABLE_CREDENTIAL_JWT, server_config::aggregate::test_utils::*,
     };
@@ -688,15 +695,15 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn credential_response() -> CredentialResponse {
+    pub fn credential_response(notification_id: String) -> CredentialResponse {
         CredentialResponse {
             credential: CredentialResponseType::Immediate {
                 credential: json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string()),
-                notification_id: None,
+                notification_id: Some(notification_id.clone()),
             },
             c_nonce: None,
             c_nonce_expires_in: None,
-            notification_id: None,
+            notification_id: Some(notification_id),
         }
     }
 }

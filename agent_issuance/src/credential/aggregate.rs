@@ -254,7 +254,6 @@ impl Aggregate for Credential {
                                 let credential: AchievementCredential =
                                     builder.try_into().map_err(InvalidVerifiableCredentialError)?;
 
-                                let notification_id = agent_shared::generate_random_string();
                                 return Ok(vec![UnsignedCredentialCreated {
                                     credential_id,
                                     notification_id: Some(notification_id),

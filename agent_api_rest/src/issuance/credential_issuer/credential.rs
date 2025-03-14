@@ -110,13 +110,12 @@ pub(crate) async fn credential(
             StatusCode::INTERNAL_SERVER_ERROR.into_response();
         };
 
-        let _notification_id = agent_shared::generate_random_string();
         let signed_credential = match query_handler(&credential_id, &state.query.credential).await {
             Ok(Some(CredentialView {
                 signed: Some(signed_credential),
-                notification_id: _,
+                notification_id,
                 ..
-            })) => signed_credential,
+            })) => (signed_credential, notification_id),
             _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         };
 

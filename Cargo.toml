@@ -19,7 +19,8 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
-siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "eb274a2" }
+# siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "eb274a2" }
+siopv2 = { path = "../openid4vc/siopv2" }
 oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "eb274a2" }
 oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "eb274a2" }
 oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "eb274a2" }

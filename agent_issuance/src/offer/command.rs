@@ -39,6 +39,6 @@ pub enum OfferCommand {
 
     CreateCredentialResponse {
         offer_id: String,
-        signed_credentials: Vec<serde_json::Value>,
+        signed_credentials: Vec<(serde_json::Value, Option<String>)>,
     },
 }
