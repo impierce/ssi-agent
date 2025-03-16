@@ -5,22 +5,27 @@ use hyper::StatusCode;
 
 impl IntoApiErrorExt for AuthorizationRequestError {
     fn into_api_error(self) -> ApiError {
-        let status = match self {
-            // Errors during creation or signing are internal failures.
-            AuthorizationRequestError::AuthorizationRequestBuilderError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            AuthorizationRequestError::MissingAuthorizationRequest => StatusCode::INTERNAL_SERVER_ERROR,
-            AuthorizationRequestError::AuthorizationRequestSigningError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            // If the response provided by the client is invalid, that's a client error.
-            AuthorizationRequestError::InvalidSIOPv2AuthorizationResponse(_) => StatusCode::BAD_REQUEST,
-            AuthorizationRequestError::InvalidOID4VPAuthorizationResponse(_) => StatusCode::BAD_REQUEST,
-            // Unsupported parameters indicate a feature not yet implemented.
-            AuthorizationRequestError::UnsupportedJwtParameterError => StatusCode::NOT_IMPLEMENTED,
-        };
+        use AuthorizationRequestError::*;
 
-        ApiError::builder(status)
-            .title("Authorization Request Error")
-            .message(self.to_string())
-            .source(self)
-            .finish()
+        match self {
+            AuthorizationRequestBuilderError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#authorization-request-builder-error")
+                .title("Authorization Request Builder Error")
+                .source(self)
+                .finish(),
+            MissingAuthorizationRequest => ApiError::builder(StatusCode::BAD_REQUEST)
+                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#missing-authorization-request")
+                .title("Missing Authorization Request")
+                .source(self)
+                .finish(),
+            AuthorizationRequestSigningError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#authorization-request-signing-error")
+                .title("Authorization Request Signing Error")
+                .source(self)
+                .finish(),
+            InvalidSIOPv2AuthorizationResponse(_) => todo!("specification API?"),
+            InvalidOID4VPAuthorizationResponse(_) => todo!("specification API?"),
+            UnsupportedAuthorizationResponseParameterError => todo!("specification API?"),
+        }
     }
 }

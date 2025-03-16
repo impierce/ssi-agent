@@ -1,9 +1,9 @@
+use super::query_credential_issuer_metadata;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_issuance::{
-    credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data, views::CredentialView},
+    credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data},
     offer::command::OfferCommand,
-    server_config::queries::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
 use axum::{
@@ -13,7 +13,6 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::header;
-use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -50,50 +49,52 @@ pub(crate) async fn credentials(
         expires_at,
     }): Json<CredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    if !(credential.is_object() || credential.is_string()) {
-        todo!();
-        // return (StatusCode::BAD_REQUEST, "credential must be an object or a string").into_response();
-    }
-
     let credential_id = uuid::Uuid::new_v4().to_string();
 
-    let credential_configuration = Box::new(
-        match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
-            Some(ServerConfigView {
-                credential_issuer_metadata:
-                    Some(CredentialIssuerMetadata {
-                        credential_configurations_supported,
-                        ..
-                    }),
-                ..
-            }) => {
-                if let Some(credential_configuration) =
-                    credential_configurations_supported.get(&credential_configuration_id)
-                {
-                    credential_configuration.clone()
-                } else {
-                    todo!()
-                    // return (
-                    //     StatusCode::NOT_FOUND,
-                    //     format!("No Credential Configuration found with id: `{credential_configuration_id}`"),
-                    // )
-                    //     .into_response();
-                }
-            }
-            _ => return todo!(),
-        },
-    );
-
     let command = if is_signed {
+        // For a signed credential, ensure that the credential is a string.
+        if !credential.is_string() {
+            return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Credential Type")
+                .message("For signed credentials, the credential must be a string.")
+                .finish());
+        }
+
         CredentialCommand::CreateSignedCredential {
             credential_id: credential_id.clone(),
             signed_credential: credential,
         }
     } else {
+        // For an unsigned credential, ensure that the credential is an object.
+        if !credential.is_object() {
+            return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Credential Type")
+                .message("For unsigned credentials, the credential must be an object.")
+                .finish());
+        }
+
+        let credential_configuration = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+            .await?
+            .and_then(|server_config_view| server_config_view.credential_issuer_metadata)
+            .and_then(|credential_issuer_metadata| {
+                credential_issuer_metadata
+                    .credential_configurations_supported
+                    .get(&credential_configuration_id)
+                    .cloned()
+            })
+            .ok_or_else(|| {
+                ApiError::builder(StatusCode::NOT_FOUND)
+                    .title("No Credential Configuration Found")
+                    .message(format!(
+                        "No Credential Configuration found with id: `{credential_configuration_id}`"
+                    ))
+                    .finish()
+            })?;
+
         CredentialCommand::CreateUnsignedCredential {
             credential_id: credential_id.clone(),
             data: Data { raw: credential },
-            credential_configuration,
+            credential_configuration: Box::new(credential_configuration),
             expires_at,
         }
     };
@@ -101,26 +102,16 @@ pub(crate) async fn credentials(
     // Create an unsigned/signed credential.
     command_handler(&credential_id, &state.command.credential, command).await?;
 
-    // Get the `CredentialIssuerMetadata` from the `ServerConfigView`.
-    let credential_issuer_metadata = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
-        Some(ServerConfigView {
-            credential_issuer_metadata: Some(credential_issuer_metadata),
-            ..
-        }) => Box::new(credential_issuer_metadata),
-        _ => todo!(),
-    };
-
     // Create an offer if it does not exist yet.
-    match query_handler(&offer_id, &state.query.offer).await {
-        Ok(Some(_)) => {}
-        _ => {
-            let command = OfferCommand::CreateCredentialOffer {
-                offer_id: offer_id.clone(),
-                credential_issuer_metadata,
-            };
+    if query_handler(&offer_id, &state.query.offer).await?.is_none() {
+        let credential_issuer_metadata = query_credential_issuer_metadata(&state).await?;
 
-            command_handler(&offer_id, &state.command.offer, command).await?;
-        }
+        let command = OfferCommand::CreateCredentialOffer {
+            offer_id: offer_id.clone(),
+            credential_issuer_metadata: Box::new(credential_issuer_metadata),
+        };
+
+        command_handler(&offer_id, &state.command.offer, command).await?
     };
 
     let command = OfferCommand::AddCredentials {
@@ -132,18 +123,23 @@ pub(crate) async fn credentials(
     command_handler(&offer_id, &state.command.offer, command).await?;
 
     // Return the credential.
-    match query_handler(&credential_id, &state.query.credential).await? {
-        Some(CredentialView {
-            data: Some(Data { raw }),
-            ..
-        }) => Ok((
-            StatusCode::CREATED,
-            [(header::LOCATION, &format!("{API_VERSION}/credentials/{credential_id}"))],
-            Json(raw),
-        )
-            .into_response()),
-        _ => todo!(),
-    }
+    query_handler(&credential_id, &state.query.credential)
+        .await?
+        .and_then(|credential_view| credential_view.data)
+        .map(|data| {
+            (
+                StatusCode::CREATED,
+                [(header::LOCATION, &format!("{API_VERSION}/credentials/{credential_id}"))],
+                Json(data.raw),
+            )
+                .into_response()
+        })
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Invariant Violation")
+                .message("Credential not found after creation. This indicates an unexpected system failure that should never happen.")
+                .finish()
+        })
 }
 
 #[axum_macros::debug_handler]

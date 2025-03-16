@@ -1,11 +1,8 @@
 pub mod send;
 
+use super::query_credential_issuer_metadata;
 use crate::handlers::{command_handler, query_handler};
-use agent_issuance::{
-    offer::{aggregate::Offer, command::OfferCommand, views::OfferView},
-    server_config::queries::ServerConfigView,
-    state::{IssuanceState, SERVER_CONFIG_ID},
-};
+use agent_issuance::{offer::command::OfferCommand, state::IssuanceState};
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -13,9 +10,7 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::header;
-use oid4vci::credential_offer::CredentialOffer;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,82 +21,58 @@ pub struct OffersEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(
     State(state): State<IssuanceState>,
-    Json(payload): Json<OffersEndpointRequest>,
+    Json(OffersEndpointRequest { offer_id }): Json<OffersEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    // Get the `CredentialIssuerMetadata` from the `ServerConfigView`.
-    let credential_issuer_metadata = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
-        Some(ServerConfigView {
-            credential_issuer_metadata: Some(credential_issuer_metadata),
-            ..
-        }) => Box::new(credential_issuer_metadata),
-        _ => return todo!(),
-    };
-
     // Create an offer if it does not exist yet.
-    match query_handler(&payload.offer_id, &state.query.offer).await? {
-        Some(_) => {}
-        _ => {
-            let command = OfferCommand::CreateCredentialOffer {
-                offer_id: payload.offer_id.clone(),
-                credential_issuer_metadata,
-            };
+    if query_handler(&offer_id, &state.query.offer).await?.is_none() {
+        let credential_issuer_metadata = query_credential_issuer_metadata(&state).await?;
 
-            command_handler(&payload.offer_id, &state.command.offer, command).await?
-        }
+        let command = OfferCommand::CreateCredentialOffer {
+            offer_id: offer_id.clone(),
+            credential_issuer_metadata: Box::new(credential_issuer_metadata),
+        };
+
+        command_handler(&offer_id, &state.command.offer, command).await?
     };
 
-    let command = OfferCommand::CreateFormUrlEncodedCredentialOffer {
-        offer_id: payload.offer_id.clone(),
-    };
-
-    command_handler(&payload.offer_id, &state.command.offer, command).await?;
-
-    match query_handler(&payload.offer_id, &state.query.offer).await? {
-        Some(OfferView {
-            form_url_encoded_credential_offer,
-            ..
-        }) => Ok((
-            StatusCode::OK,
-            [(header::CONTENT_TYPE, "application/x-www-form-urlencoded")],
-            form_url_encoded_credential_offer,
-        )
-            .into_response()),
-        _ => todo!(),
-    }
+    query_handler(&offer_id, &state.query.offer)
+        .await?
+        .and_then(|offer_view| offer_view.form_url_encoded_credential_offer)
+        .map(|form_url_encoded_credential_offer| {
+            (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "application/x-www-form-urlencoded")],
+                form_url_encoded_credential_offer,
+            )
+                .into_response()
+        })
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Invariant Violation")
+                .message("Offer not found after creation. This indicates an unexpected system failure that should never happen.")
+                .finish()
+        })
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn all_offers(State(state): State<IssuanceState>) -> Response {
-    match query_handler("all_offers", &state.query.all_offers).await {
-        Ok(Some(all_offers_view)) => {
-            let all_offers = all_offers_view.offers.into_values().collect::<Vec<_>>();
+pub(crate) async fn all_offers(State(state): State<IssuanceState>) -> Result<Response, ApiError> {
+    let all_offers = query_handler("all_offers", &state.query.all_offers)
+        .await?
+        .map(|all_offers_view| all_offers_view.offers.into_values().collect::<Vec<_>>())
+        .unwrap_or_default();
 
-            (StatusCode::OK, Json(all_offers)).into_response()
-        }
-        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+    Ok((StatusCode::OK, Json(all_offers)).into_response())
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn offer(State(state): State<IssuanceState>, Path(offer_id): Path<String>) -> Response {
-    match query_handler(&offer_id, &state.query.offer).await {
-        Ok(Some(offer_view)) => (StatusCode::OK, Json(offer_view)).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
-}
-
-#[axum_macros::debug_handler]
-pub(crate) async fn credential_offer_uri(State(state): State<IssuanceState>, Path(offer_id): Path<String>) -> Response {
-    match query_handler(&offer_id, &state.query.offer).await {
-        Ok(Some(Offer {
-            credential_offer: Some(CredentialOffer::CredentialOffer(credential_offer_parameters)),
-            ..
-        })) => (StatusCode::OK, Json(credential_offer_parameters)).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+pub(crate) async fn offer(
+    State(state): State<IssuanceState>,
+    Path(offer_id): Path<String>,
+) -> Result<Response, ApiError> {
+    query_handler(&offer_id, &state.query.offer)
+        .await?
+        .map(|offer_view| (StatusCode::OK, Json(offer_view)).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[cfg(test)]
@@ -175,7 +146,7 @@ pub mod tests {
             CredentialOffer::CredentialOfferUri(credential_offer_uri) => {
                 assert_eq!(
                     credential_offer_uri,
-                    url::Url::parse(&format!("https://example.com/credential-offer/{OFFER_ID}")).unwrap()
+                    url::Url::parse(&format!("https://example.com/openid4vci/credential-offer/{OFFER_ID}")).unwrap()
                 );
 
                 None

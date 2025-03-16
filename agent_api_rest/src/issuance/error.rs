@@ -7,45 +7,66 @@ use hyper::StatusCode;
 
 impl IntoApiErrorExt for CredentialError {
     fn into_api_error(self) -> ApiError {
-        let status = match self {
-            CredentialError::InvalidCredentialError => StatusCode::BAD_REQUEST,
-            CredentialError::UnsupportedCredentialFormat => StatusCode::NOT_IMPLEMENTED,
-            CredentialError::MissingCredentialSubjectError => StatusCode::BAD_REQUEST,
-            CredentialError::InvalidCredentialSubjectError(_) => StatusCode::BAD_REQUEST,
-            CredentialError::InvalidVerifiableCredentialError(_) => StatusCode::BAD_REQUEST,
-            CredentialError::MissingCredentialDataError => StatusCode::BAD_REQUEST,
-            CredentialError::InvalidExpirationDateError => StatusCode::BAD_REQUEST,
-        };
+        use CredentialError::*;
 
-        ApiError::builder(status)
-            .title("Credential Error")
-            .message(self.to_string())
-            .source(self)
-            .finish()
+        match self {
+            UnsupportedCredentialFormat => ApiError::builder(StatusCode::NOT_IMPLEMENTED)
+                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#unsupported-credential-format")
+                .title("Unsupported Credential Format")
+                .source(self)
+                .finish(),
+            UnsupportedCredentialType => ApiError::builder(StatusCode::NOT_IMPLEMENTED)
+                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#unsupported-credential-type")
+                .title("Unsupported Credential Type")
+                .source(self)
+                .finish(),
+            InvalidCredentialSubjectError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#invalid-credential-subject")
+                .title("Invalid Credential Subject")
+                .source(self)
+                .finish(),
+            InvalidIdentifierError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#invalid-identifier")
+                .type_url("www.google.com")
+                .title("Invalid Identifier")
+                .source(self)
+                .finish(),
+            MissingCredentialDataError => todo!("specification API?"),
+            InvalidExpirationDateError => ApiError::builder(StatusCode::BAD_REQUEST)
+                .type_url("www.google.com")
+                .title("Invalid Expiration Date")
+                .source(self)
+                .finish(),
+        }
     }
 }
 
 impl IntoApiErrorExt for OfferError {
     fn into_api_error(self) -> ApiError {
-        let status = match self {
-            // The client did not supply a required offer or credential.
-            OfferError::MissingCredentialOfferError => StatusCode::BAD_REQUEST,
-            OfferError::MissingCredentialError => StatusCode::BAD_REQUEST,
-            // Issues with the proof provided by the client.
-            OfferError::MissingProofError => StatusCode::BAD_REQUEST,
-            OfferError::InvalidProofError(_) => StatusCode::BAD_REQUEST,
-            OfferError::MissingProofIssuerError => StatusCode::BAD_REQUEST,
-            // If sending the offer to the target URL fails, that's a server-side issue.
-            OfferError::SendCredentialOfferError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            // This error indicates a feature that is not supported.
-            OfferError::UnsupportedTokenRequestGrantTypeError => StatusCode::NOT_IMPLEMENTED,
-        };
+        use OfferError::*;
 
-        ApiError::builder(status)
-            .title("Offer Error")
-            .message(self.to_string())
-            .source(self)
-            .finish()
+        match self {
+            MissingCredentialOfferError => ApiError::builder(StatusCode::BAD_REQUEST)
+                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#missing-credential-offer")
+                .title("Missing Credential Offer")
+                .source(self)
+                .finish(),
+            SendCredentialOfferError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#send-credential-offer-error")
+                .title("Send Credential Offer Error")
+                .source(self)
+                .finish(),
+            MissingCredentialError => ApiError::builder(StatusCode::BAD_REQUEST)
+                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#missing-credential")
+                .title("Missing Credential")
+                .source(self)
+                .finish(),
+            MissingProofError => todo!("specification API?"),
+            InvalidProofError(_) => todo!("specification API?"),
+            MissingProofIssuerError => todo!("specification API?"),
+            UnsupportedTokenRequestGrantTypeError => todo!("specification API?"),
+            InvalidCredentialOfferUriError(_) => todo!("can never happen?"),
+        }
     }
 }
 

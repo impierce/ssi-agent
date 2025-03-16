@@ -88,9 +88,10 @@ dependencies = [
  "oid4vc-manager",
  "oid4vci",
  "oid4vp",
+ "paste",
  "rstest",
  "serde",
- "serde_json",
+ "serde_json_path_to_error",
  "serde_urlencoded",
  "serde_yaml",
  "serial_test",
@@ -143,7 +144,7 @@ dependencies = [
  "reqwest 0.12.5",
  "rustls 0.23.10",
  "serde",
- "serde_json",
+ "serde_json_path_to_error",
  "serde_with 3.8.1",
  "tokio",
  "tracing",
@@ -177,7 +178,7 @@ dependencies = [
  "reqwest 0.12.5",
  "rstest",
  "serde",
- "serde_json",
+ "serde_json_path_to_error",
  "serial_test",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -225,7 +226,7 @@ dependencies = [
  "reqwest 0.12.5",
  "rstest",
  "serde",
- "serde_json",
+ "serde_json_path_to_error",
  "serial_test",
  "ssi-dids 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ssi-jwk 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -264,7 +265,7 @@ dependencies = [
  "reqwest 0.12.5",
  "rstest",
  "serde",
- "serde_json",
+ "serde_json_path_to_error",
  "serial_test",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -320,7 +321,7 @@ dependencies = [
  "rand 0.8.5",
  "reqwest 0.12.5",
  "serde",
- "serde_json",
+ "serde_json_path_to_error",
  "serde_with 3.8.1",
  "strum 0.26.3",
  "thiserror",
@@ -341,7 +342,7 @@ dependencies = [
  "async-trait",
  "cqrs-es",
  "postgres-es",
- "serde_json",
+ "serde_json_path_to_error",
  "sqlx",
  "tokio",
 ]
@@ -370,7 +371,7 @@ dependencies = [
  "reqwest 0.12.5",
  "rstest",
  "serde",
- "serde_json",
+ "serde_json_path_to_error",
  "serial_test",
  "siopv2",
  "strum 0.26.3",
@@ -6450,6 +6451,17 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "serde_json_path_to_error"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7f2c2432eb04d880635fbf5d45cd5e619aeca7d4aff62cc1699671512db7d53"
+dependencies = [
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
 ]
 
 [[package]]

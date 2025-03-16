@@ -1,7 +1,4 @@
-use crate::{
-    error::IntoApiErrorExt,
-    handlers::{command_handler, query_handler},
-};
+use crate::handlers::{command_handler, query_handler};
 use agent_holder::{
     credential::command::CredentialCommand,
     offer::{aggregate::OfferCredential, command::OfferCommand, queries::ReceivedOfferView},
@@ -25,8 +22,8 @@ pub(crate) async fn accept(
     // Requests and Responses.
     // Furthermore, the Application Layer (not implemented yet) should be kept very thin as well. See: https://github.com/impierce/ssi-agent/issues/114
 
-    // Accept the Credential Offer if it exists
-    let received_offer_view = query_handler(&received_offer_id, &state.query.received_offer)
+    // Check if the Credential Offer exists.
+    query_handler(&received_offer_id, &state.query.received_offer)
         .await?
         .ok_or_else(|| {
             ApiError::builder(StatusCode::NOT_FOUND)
@@ -39,6 +36,7 @@ pub(crate) async fn accept(
         received_offer_id: received_offer_id.clone(),
     };
 
+    // Accept the Credential Offer
     command_handler(&received_offer_id, &state.command.offer, command).await?;
 
     let command = OfferCommand::SendCredentialRequest {
