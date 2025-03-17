@@ -1,8 +1,4 @@
-# Problem Details
-
-This Problem Details documentation page provides a comprehensive reference for all error responses used throughout UniCore's API, following the [RFC 7807 standard](https://datatracker.ietf.org/doc/html/rfc7807). Each entry outlines the specific error type, a brief title and description, associated HTTP status codes, and a pointer to additional documentation for further insights. Whether you’re developing an integration or troubleshooting issues, this guide is designed to offer clear, consistent, and actionable error information to help you quickly identify and resolve problems.
-
-## Issuance
+# Issuance
 
 UniCore can be used for creating and issuing Verifiable Credentials based on defined configurations and client
 requests. This process involves validating input data, applying the correct credential formats and types, and signing or
@@ -10,7 +6,7 @@ encoding the credentials for issuance. The errors documented in this section rel
 encountered during credential issuance, such as misconfigured credential configurations, invalid data in the credential
 subject, or missing required elements.
 
-### Unsupported Credential Format
+## Unsupported Credential Format
 
 <!-- TODO: We can eliminate this error type by creating a UniCore-specific `CredentialFormats` enum that only contains formats that are currently supported by UniCore. This would basically mean that an error would occur during startup (while constructing the `ApplicationConfig`) when an unsupported format is configured instead of during runtime. -->
 
@@ -19,7 +15,7 @@ subject, or missing required elements.
 This error is raised when UniCore encounters a credential configuration that specifies a format it cannot process. This
 typically occurs when the credential configuration’s `format` does not match any of the supported formats.
 
-#### Resolution
+### Resolution
 
 Currently
 UniCore only supports the `jwt_vc_json` format. This configuration needs to be set through the
@@ -34,12 +30,12 @@ credential_configurations:
         - VerifiableCredential
 ```
 
-### Unsupported Credential Type
+## Unsupported Credential Type
 
 This error is raised when UniCore encounters a credential type that is not recognized or supported by the current
 implementation. In practice, it means that none of the credential types provided in the configuration match any of the types UniCore is configured to process. For example, supported types might include `VerifiableCreential`, `AchievementCredential`, or `OpenBadgeCredential`.
 
-#### Resolution
+### Resolution
 
 <!-- TODO: We need a dedicated documentation page explaining Credential Configurations and link to it here. Related issue: https://github.com/impierce/ssi-agent/issues/136 -->
 
@@ -92,11 +88,11 @@ credential_configurations:
         - MyCustomCredential
 ```
 
-### Invalid Credential Subject
+## Invalid Credential Subject
 
 This error occurs when the `credentialSubject` provided during credential creation does not adhere to the expected format or schema. In other words, the data representing the credential's subject is either malformed, missing required properties, or contains values that fail to meet the validation criteria for the specified credential type.
 
-#### Resolution
+### Resolution
 
 <!-- TODO: link to API reference -->
 
@@ -104,11 +100,11 @@ While the `credentialSubject` is generally a JSON object that can contain arbitr
 
 To resolve this error, ensure that the `credentialSubject` conforms exactly to the expected structure as defined in the credential configuration corresponding to the submitted `credentialConfigurationId`.
 
-### Invalid Identifier Error
+## Invalid Identifier Error
 
 This error indicates that the identifier provided in the credential data is invalid. It is raised when the `id` field is missing or its value cannot be parsed as a valid URI.
 
-#### Resolution
+### Resolution
 
 <!-- TODO: link to API reference -->
 
@@ -136,13 +132,13 @@ credentials it is required.
 }
 ```
 
-### Invalid Expiration Date
+## Invalid Expiration Date
 
 <!-- TODO: link to API reference -->
 
 This error occurs when the `expiresAt` value provided for the credential is invalid. It is typically triggered when the expiration date exceeds the maximum allowed value (`9999-12-31T23:59:59Z`) or when it does not conform to the expected date-time format.
 
-#### Resolution
+### Resolution
 
 Ensure that the `expiresAt` value is a valid date-time string and falls within the acceptable range (up to `9999-12-31T23:59:59Z`). If the credential should not expire, you may also set `expiresAt` to `"never"`, although providing an explicit expiration date is generally recommended.
 
@@ -153,98 +149,23 @@ credential does not expire.
 
 :::
 
-### Missing Credential Offer
+## Missing Credential Offer
 
 This error occurs when UniCore cannot locate a Credential Offer for the provided `offerId`. It typically indicates that an operation is being attempted on a Credential Offer that has not been created or is otherwise unavailable.
 
-#### Resolution
+### Resolution
 
 Verify that a Credential Offer with the specified `offerId` exists before proceeding. If the Credential Offer is missing, create it using the `POST /v0/offers` endpoint.
 
 <!-- TODO: Add link to Reference API -->
 
-### Send Credential Offer Error
+## Send Credential Offer Error
 
 This error is raised when UniCore fails to send the Credential Offer to the specified target URL. It is triggered
 when the HTTP request does not complete successfully.
 
-#### Resolution
+### Resolution
 
 Check the target URL and ensure that it is reachable and correctly configured to receive the Credential Offer.
 
 <!-- TODO: Add OpenID4VCI error responses -->
-
-## Verification
-
-UniCore’s verification process is responsible for generating Authorization Requests and validating received Verifiable
-Presentations. This involves constructing and signing the Authorization Requests. The errors documented in this section relate to possible failure scenarios encountered during the verification process, such as missing or invalid Authorization Requests, errors in signing the Authorization Request, or issues with the Authorization Request Builder.
-
-### Authorization Request Builder Error
-
-This error indicates that UniCore failed to construct an Authorization Request. This error should never occur and when
-it does, this indicates a bug in UniCore.
-
-#### Resolution
-
-This error is not caused by incorrect client input but reflects a flaw in the internal processing of the Authorization Request. If you encounter this error, please report it to the development team along with any relevant logs and context, so that the issue can be investigated and resolved.
-
-### Missing Authorization Request
-
-This error is raised when UniCore attempts to sign an Authorization Request but finds that none exists. In other words,
-the expected Authorization Request was not created or persisted before the signing process was initiated.
-
-#### Resolution
-
-This error is not caused by incorrect client input but reflects a flaw in the internal processing of the Authorization Request. If you encounter this error, please report it to the development team along with any relevant logs and context, so that the issue can be investigated and resolved.
-
-### Authorization Request Signing Error
-
-This error is raised when the system fails to sign an Authorization Request.
-
-#### Resolution
-
-This error is not caused by incorrect client input but reflects a flaw in the internal processing of the Authorization
-Request. If you encounter this error, please report it to the development team along with any relevant logs and context,
-so that the issue can be investigated and resolved.
-
-## Persistence
-
-UniCore's persistence layer is responsible for storing and retrieving the system's state and events. The following errors may be encountered during persistence operations:
-
-### Aggregate Conflict
-
-This error is raised when a command is rejected due to an aggregate conflict, often caused by optimistic locking
-failures or concurrent modifications. The system returns a `503 Service Unavailable` error, indicating that the server
-is temporarily unable to process the request—possibly due to overload.
-
-#### Resolution
-
-Retry the operation after a brief wait. If the problem persists, investigate system load and database performance to address potential concurrency or performance issues.
-
-### Database Connection Error
-
-This error occurs when the system is unable to establish a connection with the database during persistence operations.
-It can be caused by network issues, misconfigured database settings, or downtime on the database server.
-
-#### Resolution
-
-Verify the database connection settings and ensure that the database server is operational. Consult system logs for additional details to diagnose and resolve connection issues.
-
-### Deserialization Error
-
-This error is raised when the system fails to deserialize events from the event store. Typically, this occurs due to a
-schema mismatch—often resulting from changes in the event format without supporting data migration.
-
-#### Resolution
-
-Because data migration is currently not supported in UniCore, the only resolution is to reset the event store by wiping the existing data.
-
-### Unexpected Error
-
-This error represents an unforeseen issue during persistence operations that does not fall under the other specific
-categories.
-
-#### Resolution
-
-Examine the error details and system logs to identify the root cause. This error typically signals a bug or an unhandled
-scenario in the persistence logic that should be addressed by the UniCore development team.
