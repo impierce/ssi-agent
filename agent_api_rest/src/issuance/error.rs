@@ -1,4 +1,5 @@
 use crate::error::IntoApiErrorExt;
+use crate::DOCUMENTATION_URL;
 use agent_issuance::{
     credential::error::CredentialError, offer::error::OfferError, server_config::error::ServerConfigError,
 };
@@ -11,28 +12,32 @@ impl IntoApiErrorExt for CredentialError {
 
         match self {
             UnsupportedCredentialFormat => ApiError::builder(StatusCode::NOT_IMPLEMENTED)
-                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#unsupported-credential-format")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details#unsupported-credential-format"
+                ))
                 .title("Unsupported Credential Format")
                 .source(self)
                 .finish(),
             UnsupportedCredentialType => ApiError::builder(StatusCode::NOT_IMPLEMENTED)
-                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#unsupported-credential-type")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details#unsupported-credential-type"
+                ))
                 .title("Unsupported Credential Type")
                 .source(self)
                 .finish(),
             InvalidCredentialSubjectError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
-                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#invalid-credential-subject")
+                .type_url(format!("{DOCUMENTATION_URL}problem-details#invalid-credential-subject"))
                 .title("Invalid Credential Subject")
                 .source(self)
                 .finish(),
             InvalidIdentifierError => ApiError::builder(StatusCode::BAD_REQUEST)
-                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#invalid-identifier")
+                .type_url(format!("{DOCUMENTATION_URL}problem-details#invalid-identifier"))
                 .title("Invalid Identifier")
                 .source(self)
                 .finish(),
             MissingCredentialDataError => todo!("specification API?"),
             InvalidExpirationDateError => ApiError::builder(StatusCode::BAD_REQUEST)
-                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#invalid-expiration-date")
+                .type_url(format!("{DOCUMENTATION_URL}problem-details#invalid-expiration-date"))
                 .title("Invalid Expiration Date")
                 .source(self)
                 .finish(),
@@ -46,20 +51,18 @@ impl IntoApiErrorExt for OfferError {
 
         match self {
             MissingCredentialOfferError => ApiError::builder(StatusCode::BAD_REQUEST)
-                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#missing-credential-offer")
+                .type_url(format!("{DOCUMENTATION_URL}problem-details#missing-credential-offer"))
                 .title("Missing Credential Offer")
                 .source(self)
                 .finish(),
             SendCredentialOfferError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#send-credential-offer-error")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details#send-credential-offer-error"
+                ))
                 .title("Send Credential Offer Error")
                 .source(self)
                 .finish(),
-            MissingCredentialError => ApiError::builder(StatusCode::BAD_REQUEST)
-                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#missing-credential")
-                .title("Missing Credential")
-                .source(self)
-                .finish(),
+            MissingCredentialError => todo!("specification API?"),
             MissingProofError => todo!("specification API?"),
             InvalidProofError(_) => todo!("specification API?"),
             MissingProofIssuerError => todo!("specification API?"),

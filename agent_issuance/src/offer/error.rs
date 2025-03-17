@@ -2,10 +2,10 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum OfferError {
-    #[error("Credential Offer is missing")]
+    #[error("Credential Offer is does not exist")]
     MissingCredentialOfferError,
-    #[error("Something went wrong while trying to send the Credential Offer to the `target_url`: {0}")]
-    SendCredentialOfferError(#[from] reqwest::Error),
+    #[error("Failed to send the Credential Offer to the `target_url`: {0}")]
+    SendCredentialOfferError(#[source] reqwest::Error),
     #[error("Credential is missing")]
     MissingCredentialError,
     #[error("Missing `Proof` in Credential Request")]
@@ -17,5 +17,5 @@ pub enum OfferError {
     #[error("Grant Type `authorization_code` is not supported")]
     UnsupportedTokenRequestGrantTypeError,
     #[error("Invalid `credential_offer_uri`: {0}")]
-    InvalidCredentialOfferUriError(#[from] url::ParseError),
+    InvalidCredentialOfferUriError(#[source] url::ParseError),
 }

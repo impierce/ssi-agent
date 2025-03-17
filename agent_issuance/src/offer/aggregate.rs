@@ -94,7 +94,8 @@ impl Aggregate for Offer {
                     credential_issuer_metadata
                         .credential_issuer
                         .join("openid4vci/")
-                        .and_then(|url| url.join("credential-offer/").and_then(|url| url.join(&offer_id)))?,
+                        .and_then(|url| url.join("credential-offer/").and_then(|url| url.join(&offer_id)))
+                        .map_err(InvalidCredentialOfferUriError)?,
                 );
 
                 let credential_offer_by_value_enabled = config().credential_offer_by_value_enabled.unwrap_or_default();
@@ -138,7 +139,12 @@ impl Aggregate for Offer {
 
                 info!("Sending credential offer to: {}", target);
 
-                client.get(target).send().await?;
+                client
+                    .get(target)
+                    .send()
+                    .await
+                    .and_then(|response| response.error_for_status())
+                    .map_err(SendCredentialOfferError)?;
 
                 Ok(vec![CredentialOfferSent {
                     offer_id,

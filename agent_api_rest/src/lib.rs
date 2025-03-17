@@ -17,6 +17,7 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{info, info_span, Span};
 
 pub const API_VERSION: &str = "/v0";
+pub const DOCUMENTATION_URL: &str = "https://docs-git-docs-problem-details-impierce.vercel.app/unicore/";
 
 #[derive(Default)]
 pub struct ApplicationState {

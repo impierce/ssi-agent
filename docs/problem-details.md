@@ -4,6 +4,12 @@ This Problem Details documentation page provides a comprehensive reference for a
 
 ## Issuance
 
+UniCore can be used for creating and issuing Verifiable Credentials based on defined configurations and client
+requests. This process involves validating input data, applying the correct credential formats and types, and signing or
+encoding the credentials for issuance. The errors documented in this section relate to possible failure scenarios
+encountered during credential issuance, such as misconfigured credential configurations, invalid data in the credential
+subject, or missing required elements.
+
 ### Unsupported Credential Format
 
 <!-- TODO: We can eliminate this error type by creating a UniCore-specific `CredentialFormats` enum that only contains formats that are currently supported by UniCore. This would basically mean that an error would occur during startup (while constructing the `ApplicationConfig`) when an unsupported format is configured instead of during runtime. -->
@@ -30,8 +36,8 @@ credential_configurations:
 
 ### Unsupported Credential Type
 
-This error is raised when the system encounters a credential type that is not recognized or supported by the current
-implementation. In practice, it means that none of the credential types provided in the configuration match any of the types the system is configured to process. For example, supported types might include `VerifiableCreential`, `AchievementCredential`, or `OpenBadgeCredential`.
+This error is raised when UniCore encounters a credential type that is not recognized or supported by the current
+implementation. In practice, it means that none of the credential types provided in the configuration match any of the types UniCore is configured to process. For example, supported types might include `VerifiableCreential`, `AchievementCredential`, or `OpenBadgeCredential`.
 
 #### Resolution
 
@@ -96,7 +102,7 @@ This error occurs when the `credentialSubject` provided during credential creati
 
 While the `credentialSubject` is generally a JSON object that can contain arbitrary data, specific credential types may impose stricter requirements on its structure and content. For example, **OpenBadgeV3** credentials require a more defined schema (see [OpenBadgeV3 Achievement Credential Specification](https://www.imsglobal.org/spec/ob/v3p0#achievementcredential)).
 
-To resolve this error, ensure that the `credentialSubject` conforms exactly to the expected structure as defined in the credential configuration corresponding to the submitted `credential_configuration_id`.
+To resolve this error, ensure that the `credentialSubject` conforms exactly to the expected structure as defined in the credential configuration corresponding to the submitted `credentialConfigurationId`.
 
 ### Invalid Identifier Error
 
@@ -147,20 +153,76 @@ credential does not expire.
 
 :::
 
+### Missing Credential Offer
+
+This error occurs when UniCore cannot locate a Credential Offer for the provided `offerId`. It typically indicates that an operation is being attempted on a Credential Offer that has not been created or is otherwise unavailable.
+
+#### Resolution
+
+Verify that a Credential Offer with the specified `offerId` exists before proceeding. If the Credential Offer is missing, create it using the `POST /v0/offers` endpoint.
+
+<!-- TODO: Add link to Reference API -->
+
+### Send Credential Offer Error
+
+This error is raised when UniCore fails to send the Credential Offer to the specified target URL. It is triggered
+when the HTTP request does not complete successfully.
+
+#### Resolution
+
+Check the target URL and ensure that it is reachable and correctly configured to receive the Credential Offer.
+
+<!-- TODO: Add OpenID4VCI error responses -->
+
 ## Verification
+
+UniCore’s verification process is responsible for generating Authorization Requests and validating received Verifiable
+Presentations. This involves constructing and signing the Authorization Requests. The errors documented in this section relate to possible failure scenarios encountered during the verification process, such as missing or invalid Authorization Requests, errors in signing the Authorization Request, or issues with the Authorization Request Builder.
 
 ### Authorization Request Builder Error
 
-foo bar
+This error indicates that UniCore failed to construct an Authorization Request. This error should never occur and when
+it does, this indicates a bug in UniCore.
+
+#### Resolution
+
+This error is not caused by incorrect client input but reflects a flaw in the internal processing of the Authorization Request. If you encounter this error, please report it to the development team along with any relevant logs and context, so that the issue can be investigated and resolved.
 
 ### Missing Authorization Request
 
-foo bar
+This error is raised when UniCore attempts to sign an Authorization Request but finds that none exists. In other words,
+the expected Authorization Request was not created or persisted before the signing process was initiated.
+
+#### Resolution
+
+This error is not caused by incorrect client input but reflects a flaw in the internal processing of the Authorization Request. If you encounter this error, please report it to the development team along with any relevant logs and context, so that the issue can be investigated and resolved.
 
 ### Authorization Request Signing Error
 
+This error is raised when the system fails to sign an Authorization Request.
+
+#### Resolution
+
+This error is not caused by incorrect client input but reflects a flaw in the internal processing of the Authorization
+Request. If you encounter this error, please report it to the development team along with any relevant logs and context,
+so that the issue can be investigated and resolved.
+
+## Persistence
+
+<!-- TODO: Add description -->
+
+### Service Unavailable
+
 foo bar
 
-```
+### Database Connection Error
 
-```
+foo bar
+
+### Deserialization Error
+
+foo bar
+
+### Unexpected Error
+
+foo bar
