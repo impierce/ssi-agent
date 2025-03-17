@@ -13,31 +13,37 @@ impl IntoApiErrorExt for CredentialError {
         match self {
             UnsupportedCredentialFormat => ApiError::builder(StatusCode::NOT_IMPLEMENTED)
                 .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details#unsupported-credential-format"
+                    "{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-format"
                 ))
                 .title("Unsupported Credential Format")
                 .source(self)
                 .finish(),
             UnsupportedCredentialType => ApiError::builder(StatusCode::NOT_IMPLEMENTED)
                 .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details#unsupported-credential-type"
+                    "{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-type"
                 ))
                 .title("Unsupported Credential Type")
                 .source(self)
                 .finish(),
             InvalidCredentialSubjectError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
-                .type_url(format!("{DOCUMENTATION_URL}problem-details#invalid-credential-subject"))
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/issuance#invalid-credential-subject"
+                ))
                 .title("Invalid Credential Subject")
                 .source(self)
                 .finish(),
             InvalidIdentifierError => ApiError::builder(StatusCode::BAD_REQUEST)
-                .type_url(format!("{DOCUMENTATION_URL}problem-details#invalid-identifier"))
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/issuance#invalid-identifier"
+                ))
                 .title("Invalid Identifier")
                 .source(self)
                 .finish(),
             MissingCredentialDataError => todo!("specification API?"),
             InvalidExpirationDateError => ApiError::builder(StatusCode::BAD_REQUEST)
-                .type_url(format!("{DOCUMENTATION_URL}problem-details#invalid-expiration-date"))
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/issuance#invalid-expiration-date"
+                ))
                 .title("Invalid Expiration Date")
                 .source(self)
                 .finish(),

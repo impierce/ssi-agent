@@ -11,21 +11,21 @@ impl IntoApiErrorExt for AuthorizationRequestError {
         match self {
             AuthorizationRequestBuilderError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details#authorization-request-builder-error"
+                    "{DOCUMENTATION_URL}problem-details/verification#authorization-request-builder-error"
                 ))
                 .title("Authorization Request Builder Error")
                 .source(self)
                 .finish(),
             MissingAuthorizationRequest => ApiError::builder(StatusCode::BAD_REQUEST)
                 .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details#missing-authorization-request"
+                    "{DOCUMENTATION_URL}problem-details/verification#missing-authorization-request"
                 ))
                 .title("Missing Authorization Request")
                 .source(self)
                 .finish(),
             AuthorizationRequestSigningError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details#authorization-request-signing-error"
+                    "{DOCUMENTATION_URL}problem-details/verification#authorization-request-signing-error"
                 ))
                 .title("Authorization Request Signing Error")
                 .source(self)
