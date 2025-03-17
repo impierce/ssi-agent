@@ -25,7 +25,7 @@ impl IntoApiErrorExt for CredentialError {
                 .title("Invalid Credential Subject")
                 .source(self)
                 .finish(),
-            InvalidIdentifierError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+            InvalidIdentifierError => ApiError::builder(StatusCode::BAD_REQUEST)
                 .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#invalid-identifier")
                 .title("Invalid Identifier")
                 .source(self)

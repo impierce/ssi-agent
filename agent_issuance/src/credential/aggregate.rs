@@ -144,15 +144,15 @@ impl Aggregate for Credential {
 
                     let mut credential_types: Vec<String> = type_.clone();
 
-                    let id = data.raw.get("id").map_or(Ok(None), |id| {
-                        id.as_str()
-                            .ok_or_else(|| InvalidIdentifierError("Invalid format: `id` must be a string".to_string()))
-                            .and_then(|id_str| {
-                                Url::parse(id_str).map(Some).map_err(|_| {
-                                    InvalidIdentifierError(format!("Could not parse `id` as URL: `{id_str}`"))
-                                })
-                            })
-                    })?;
+                    let id = data
+                        .raw
+                        .get("id")
+                        .map(|id| {
+                            id.as_str()
+                                .and_then(|id_str| Url::parse(id_str).ok())
+                                .ok_or_else(|| InvalidIdentifierError)
+                        })
+                        .transpose()?;
 
                     let credential_subject = identity_credential::credential::Subject::from_json_value(
                         data.raw["credentialSubject"].clone(),
@@ -236,8 +236,7 @@ impl Aggregate for Credential {
                                     builder
                                 };
 
-                                let builder =
-                                    builder.id(id.ok_or_else(|| InvalidIdentifierError("`null`".to_string()))?);
+                                let builder = builder.id(id.ok_or_else(|| InvalidIdentifierError)?);
 
                                 let credential: AchievementCredential =
                                     builder.try_into().map_err(InvalidCredentialSubjectError)?;
@@ -514,6 +513,7 @@ pub mod credential_tests {
         }
     }
 }
+
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::*;
