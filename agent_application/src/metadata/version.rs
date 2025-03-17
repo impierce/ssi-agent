@@ -21,9 +21,13 @@ pub async fn version() -> Json<Version> {
 
 pub fn version_inner() -> Version {
     Version {
-        version: APP_VERSION.filter(|s| !s.trim().is_empty()).map(|s| s.to_string()),
+        version: APP_VERSION
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string()),
         git_commit_hash: GIT_COMMIT_HASH
-            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
             .map(|s| s.to_string().chars().take(7).collect()),
     }
 }

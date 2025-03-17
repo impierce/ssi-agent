@@ -35,10 +35,12 @@ pub async fn info(State(state): State<MetadataState>) -> Json<Info> {
     let info = Info {
         version: version_inner(),
         release_channel: APP_RELEASE_CHANNEL
-            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
             .map(|s| s.to_string()),
         docker_build_timestamp: DOCKER_BUILD_TIMESTAMP
-            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
             .map(|s| s.to_string()),
         uptime: uptime_human_readable,
     };
