@@ -81,16 +81,15 @@ pub(crate) async fn get_connections(
         .map(|all_connections_view| {
             let filtered_connections: Vec<_> = all_connections_view
                 .connections
-                .into_iter()
-                .filter_map(|(_, connection)| {
-                    (alias
+                .values()
+                .filter(|connection| {
+                    alias
                         .as_ref()
                         .map_or(true, |alias| connection.alias.as_ref() == Some(alias))
                         && domain
                             .as_ref()
                             .map_or(true, |domain| connection.domain.as_ref() == Some(domain))
-                        && did.as_ref().map_or(true, |did| connection.dids.contains(did)))
-                    .then_some(connection)
+                        && did.as_ref().map_or(true, |did| connection.dids.contains(did))
                 })
                 .collect();
 

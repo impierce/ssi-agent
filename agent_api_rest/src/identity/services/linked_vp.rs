@@ -59,6 +59,23 @@ pub(crate) async fn linked_vp(
         todo!();
     };
 
+    // Query the DID Web Document to obtain the `document_id`.
+    let document_id = if let Some(document_id) = query_all_documents(&state, |(_, document)| {
+        document.status != Status::Disabled && document.did_method == Some(SupportedDidMethod::Web)
+    })
+    .await
+    .ok()
+    .and_then(|did_web_document| {
+        did_web_document
+            .keys()
+            .next()
+            .map(|document_id| document_id.to_string())
+    }) {
+        document_id
+    } else {
+        return StatusCode::PRECONDITION_FAILED.into_response();
+    };
+
     let command = DocumentCommand::AddService {
         service_id,
         service: linked_verifiable_presentation_service,
