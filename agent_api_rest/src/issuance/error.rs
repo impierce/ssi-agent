@@ -27,13 +27,12 @@ impl IntoApiErrorExt for CredentialError {
                 .finish(),
             InvalidIdentifierError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#invalid-identifier")
-                .type_url("www.google.com")
                 .title("Invalid Identifier")
                 .source(self)
                 .finish(),
             MissingCredentialDataError => todo!("specification API?"),
             InvalidExpirationDateError => ApiError::builder(StatusCode::BAD_REQUEST)
-                .type_url("www.google.com")
+                .type_url("https://docs-git-docs-problem-details-impierce.vercel.app/unicore/problem-details#invalid-expiration-date")
                 .title("Invalid Expiration Date")
                 .source(self)
                 .finish(),
