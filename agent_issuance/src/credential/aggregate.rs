@@ -150,7 +150,7 @@ impl Aggregate for Credential {
                         .map(|id| {
                             id.as_str()
                                 .and_then(|id_str| Url::parse(id_str).ok())
-                                .ok_or_else(|| InvalidIdentifierError)
+                                .ok_or(InvalidIdentifierError)
                         })
                         .transpose()?;
 
@@ -236,7 +236,7 @@ impl Aggregate for Credential {
                                     builder
                                 };
 
-                                let builder = builder.id(id.ok_or_else(|| InvalidIdentifierError)?);
+                                let builder = builder.id(id.ok_or(InvalidIdentifierError)?);
 
                                 let credential: AchievementCredential =
                                     builder.try_into().map_err(InvalidCredentialSubjectError)?;

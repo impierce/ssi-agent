@@ -160,7 +160,7 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri(&format!("{API_VERSION}/authorization_requests"))
+                    .uri(format!("{API_VERSION}/authorization_requests"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
                     .unwrap(),
