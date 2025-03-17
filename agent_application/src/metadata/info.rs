@@ -3,6 +3,7 @@ use chrono::TimeDelta;
 use serde::Serialize;
 use serde_with::skip_serializing_none;
 
+use crate::metadata::version::{version_inner, Version};
 use crate::metadata::MetadataState;
 
 include!(concat!(env!("OUT_DIR"), "/metadata.rs"));
@@ -10,10 +11,8 @@ include!(concat!(env!("OUT_DIR"), "/metadata.rs"));
 #[skip_serializing_none]
 #[derive(Serialize)]
 pub struct Info {
-    /// The version of the application.
-    version: Option<String>,
-    /// The git commit hash from which the application was built.
-    git_commit_hash: Option<String>,
+    #[serde(flatten)]
+    version: Version,
     /// The release channel of the application. Possible values are: `stable`, `next`, `beta`, `canary`.
     release_channel: Option<String>, // TODO: mapping ok? stable/latest (main), next, beta, canary (alpha)
     /// The timestamp when the Docker image was built.
@@ -34,10 +33,7 @@ pub async fn info(State(state): State<MetadataState>) -> Json<Info> {
     );
     // Trim, filter out empty values, then convert to Option<String>.
     let info = Info {
-        version: APP_VERSION.filter(|s| !s.trim().is_empty()).map(|s| s.to_string()),
-        git_commit_hash: GIT_COMMIT_HASH
-            .filter(|s| !s.trim().is_empty())
-            .map(|s| s.to_string().chars().take(7).collect()),
+        version: version_inner(),
         release_channel: APP_RELEASE_CHANNEL
             .filter(|s| !s.trim().is_empty())
             .map(|s| s.to_string()),
