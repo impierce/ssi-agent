@@ -204,6 +204,7 @@ dependencies = [
  "anyhow",
  "async-std",
  "async-trait",
+ "axum 0.8.1",
  "base64 0.22.1",
  "cqrs-es",
  "derivative",

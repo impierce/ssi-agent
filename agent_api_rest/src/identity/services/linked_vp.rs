@@ -73,7 +73,7 @@ pub(crate) async fn linked_vp(
     }) {
         document_id
     } else {
-        return StatusCode::PRECONDITION_FAILED.into_response();
+        todo!();
     };
 
     let command = DocumentCommand::AddService {

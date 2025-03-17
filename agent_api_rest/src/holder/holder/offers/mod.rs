@@ -38,6 +38,6 @@ pub(crate) async fn offer(
 ) -> Result<Response, ApiError> {
     query_handler(&received_offer_id, &state.query.received_offer)
         .await?
-        .map(|received_offer_view| (StatusCode::CREATED, Json(received_offer_view)).into_response())
+        .map(|received_offer_view| (StatusCode::OK, Json(received_offer_view)).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }

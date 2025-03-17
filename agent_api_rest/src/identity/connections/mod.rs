@@ -81,7 +81,7 @@ pub(crate) async fn get_connections(
         .map(|all_connections_view| {
             let filtered_connections: Vec<_> = all_connections_view
                 .connections
-                .values()
+                .into_values()
                 .filter(|connection| {
                     alias
                         .as_ref()
@@ -107,6 +107,6 @@ pub(crate) async fn get_connection(
 ) -> Result<Response, ApiError> {
     query_handler(&connection_id, &state.query.connection)
         .await?
-        .map(|connection_view| (StatusCode::CREATED, Json(connection_view)).into_response())
+        .map(|connection_view| (StatusCode::OK, Json(connection_view)).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }

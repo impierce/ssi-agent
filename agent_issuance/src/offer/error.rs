@@ -18,6 +18,4 @@ pub enum OfferError {
     UnsupportedTokenRequestGrantTypeError,
     #[error("Invalid `credential_offer_uri`: {0}")]
     InvalidCredentialOfferUriError(#[source] url::ParseError),
-    #[error("Invalid URL: {0}")]
-    InvalidUrlError(String),
 }

@@ -30,7 +30,7 @@ pub(crate) async fn presentation(
 ) -> Result<Response, ApiError> {
     query_handler(&presentation_id, &state.query.presentation)
         .await?
-        .map(|presentation_view| (StatusCode::CREATED, Json(presentation_view)).into_response())
+        .map(|presentation_view| (StatusCode::OK, Json(presentation_view)).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
