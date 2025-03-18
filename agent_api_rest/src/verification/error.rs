@@ -41,3 +41,28 @@ impl IntoApiErrorExt for AuthorizationRequestError {
         }
     }
 }
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use crate::error::tests::into_json_value;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn verification_errors_successfully_convert_to_problem_details() {
+        assert_eq!(
+            into_json_value(
+                AuthorizationRequestError::MissingAuthorizationRequest
+                    .into_api_error()
+                    .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/verification#missing-authorization-request"),
+                "title": "Missing Authorization Request",
+                "status": 400,
+                "detail": "Missing Authorization Request error"
+            }),
+        );
+    }
+}

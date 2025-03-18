@@ -10,7 +10,7 @@ pub enum ErrorWrapper<T: std::error::Error> {
     PersistenceError(PersistenceError),
 }
 
-impl<T: std::error::Error + crate::error::IntoApiErrorExt> http_api_problem::IntoApiError for ErrorWrapper<T>
+impl<T: std::error::Error + IntoApiErrorExt> http_api_problem::IntoApiError for ErrorWrapper<T>
 where
     T: Send + Sync + 'static,
 {
@@ -76,42 +76,71 @@ pub mod tests {
     use axum::response::Response;
     use serde_json::json;
 
-    async fn into_json_value(response: Response) -> serde_json::Value {
+    pub async fn into_json_value(response: Response) -> serde_json::Value {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         serde_json::from_slice(&body).unwrap()
     }
 
     #[tokio::test]
-    async fn test() {
-        let api_error: ApiError = PersistenceError::OptimisticLockError.into_api_error();
-
-        let test = into_json_value(api_error.into_axum_response()).await;
-
+    async fn persistence_errors_successfully_convert_to_problem_details() {
         assert_eq!(
+            into_json_value(
+                PersistenceError::OptimisticLockError
+                    .into_api_error()
+                    .into_axum_response()
+            )
+            .await,
             json!({
-                "type": "https://httpstatuses.com/503",
-                "title": "Service Unavailable",
+                "type": format!("{DOCUMENTATION_URL}problem-details/persistence#aggregate-conflict"),
+                "title": "Aggregate Conflict",
                 "status": 503,
                 "detail": "The server is currently unable to handle the request due to temporary overloading or maintenance. Please try again later."
             }),
-            test
+        );
+
+        assert_eq!(
+            into_json_value(
+                PersistenceError::ConnectionError("A problem occurred while connecting to the database".into())
+                    .into_api_error()
+                    .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/persistence#database-connection-error"),
+                "title": "Database Connection Error",
+                "status": 500,
+                "detail": "A problem occurred while connecting to the database"
+            }),
+        );
+
+        assert_eq!(
+            into_json_value(
+                PersistenceError::DeserializationError("A problem occurred while deserializing the data".into())
+                    .into_api_error()
+                    .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/persistence#deserialization-error"),
+                "title": "Deserialization Error",
+                "status": 500,
+                "detail": "The system failed to deserialize events from the event store due to a schema mismatch. Data migration is not supported; therefore, the only resolution is to reset the event store by wiping the existing data."
+            }),
+        );
+
+        assert_eq!(
+            into_json_value(
+                PersistenceError::UnknownError("An unexpected error occurred".into())
+                    .into_api_error()
+                    .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/persistence#unexpected-error"),
+                "title": "Unexpected Error",
+                "status": 500,
+                "detail": "An unexpected error occurred"
+            }),
         );
     }
 }
-
-// # Errors
-
-// - API Errors (can never panic)
-
-//   - UniCore API Errors
-//     - Persistence Layer Errors
-//     - Client Errors
-//     - Third-Party Errors
-//   - Specification Errors
-//     - Persistence Layer Errors
-//     - OpenID4VC API Errors
-//     - Domain Linkage Errors
-//     - Linked Verifiable Presentation Errors
-
-// - Configuration Errors (may panic)
-//   - Persistence Layer Errors

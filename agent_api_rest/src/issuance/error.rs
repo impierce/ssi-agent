@@ -103,3 +103,88 @@ impl IntoApiErrorExt for ServerConfigError {
         match self {}
     }
 }
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use crate::error::tests::into_json_value;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn issuance_errors_successfully_convert_to_problem_details() {
+        assert_eq!(
+            into_json_value(
+                CredentialError::UnsupportedCredentialFormat
+                    .into_api_error()
+                    .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-format"),
+                "title": "Unsupported Credential Format",
+                "status": 500,
+                "detail": "This Credential format it not supported"
+            }),
+        );
+
+        assert_eq!(
+            into_json_value(
+                CredentialError::UnsupportedCredentialType
+                    .into_api_error()
+                    .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-type"),
+                "title": "Unsupported Credential Type",
+                "status": 500,
+                "detail": "This Credential type it not supported"
+            }),
+        );
+
+        assert_eq!(
+            into_json_value(
+                CredentialError::InvalidIdentifierError
+                    .into_api_error()
+                    .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/issuance#invalid-identifier"),
+                "title": "Invalid Identifier",
+                "status": 400,
+                "detail": "The `id` value could not be parsed to a valid URI"
+            }),
+        );
+
+        assert_eq!(
+            into_json_value(
+                CredentialError::InvalidExpirationDateError
+                    .into_api_error()
+                    .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/issuance#invalid-expiration-date"),
+                "title": "Invalid Expiration Date",
+                "status": 400,
+                "detail": "Invalid expiration data: The expiration date must not exceed `9999-12-31T23:59:59Z`. Please provide a valid date within the supported range."
+            }),
+        );
+
+        assert_eq!(
+            into_json_value(
+                OfferError::MissingCredentialOfferError
+                    .into_api_error()
+                    .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/issuance#missing-credential-offer"),
+                "title": "Missing Credential Offer",
+                "status": 400,
+                "detail": "Credential Offer is does not exist"
+            }),
+        );
+    }
+}
