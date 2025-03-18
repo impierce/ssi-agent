@@ -13,22 +13,17 @@ use hyper::StatusCode;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(State(state): State<HolderState>) -> Result<Response, ApiError> {
-    query_handler("all_received_offers", &state.query.all_received_offers)
+    let all_received_offers = query_handler("all_received_offers", &state.query.all_received_offers)
         .await?
         .map(|all_received_offers_view| {
-            let all_received_offers = all_received_offers_view
+            all_received_offers_view
                 .received_offers
                 .into_values()
-                .collect::<Vec<_>>();
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
 
-            (StatusCode::OK, Json(all_received_offers)).into_response()
-        })
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::CONFLICT)
-                .title("Optimistic Lock Error")
-                .message("An optimistic lock error occurred while committing an aggregate.")
-                .finish()
-        })
+    Ok((StatusCode::OK, Json(all_received_offers)).into_response())
 }
 
 #[axum_macros::debug_handler]

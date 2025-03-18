@@ -43,7 +43,8 @@ pub(crate) async fn accept(
 
     let credentials = match query_handler(&received_offer_id, &state.query.received_offer).await? {
         Some(ReceivedOfferView { credentials, .. }) => credentials,
-        _ => return todo!(),
+        // TODO: this *should* be an impossible error, what should we return here?
+        _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
     };
 
     for OfferCredential {
@@ -64,10 +65,6 @@ pub(crate) async fn accept(
     query_handler(&received_offer_id, &state.query.received_offer)
         .await?
         .map(|received_offer_view| (StatusCode::CREATED, Json(received_offer_view)).into_response())
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::CONFLICT)
-                .title("Optimistic Lock Error")
-                .message("An optimistic lock error occurred while committing an aggregate.")
-                .finish()
-        })
+        // TODO: this *should* be an impossible error, what should we return here?
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }

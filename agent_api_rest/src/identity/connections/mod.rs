@@ -11,8 +11,7 @@ use hyper::{header, StatusCode};
 use identity_core::common::Url;
 use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use tracing::info;
+use tracing::debug;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,16 +29,21 @@ pub struct PostConnectionsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn post_connections(
     State(state): State<IdentityState>,
-    Json(payload): Json<PostConnectionsEndpointRequest>,
+    Json(PostConnectionsEndpointRequest {
+        alias,
+        domain,
+        dids,
+        credential_offer_endpoint,
+    }): Json<PostConnectionsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let connection_id = uuid::Uuid::new_v4().to_string();
 
     let command = ConnectionCommand::AddConnection {
         connection_id: connection_id.clone(),
-        alias: payload.alias,
-        domain: payload.domain,
-        dids: payload.dids,
-        credential_offer_endpoint: payload.credential_offer_endpoint,
+        alias,
+        domain,
+        dids,
+        credential_offer_endpoint,
     };
 
     command_handler(&connection_id, &state.command.connection, command).await?;
@@ -55,7 +59,8 @@ pub(crate) async fn post_connections(
             )
                 .into_response()
         })
-        .ok_or_else(|| todo!())
+        // TODO: this *should* be an impossible error, what should we return here?
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize)]
@@ -74,7 +79,7 @@ pub(crate) async fn get_connections(
     State(state): State<IdentityState>,
     Form(GetConnectionsEndpointRequest { alias, domain, did }): Form<GetConnectionsEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    info!("Request Params - alias: {alias:?}, domain: {domain:?}, did: {did:?}");
+    debug!("Request Params - alias: {alias:?}, domain: {domain:?}, did: {did:?}");
 
     let filtered_connections = query_handler("all_connections", &state.query.all_connections)
         .await?

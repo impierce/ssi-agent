@@ -15,12 +15,11 @@ use hyper::StatusCode;
 pub(crate) async fn did_configuration(State(state): State<IdentityState>) -> Result<Response, ApiError> {
     // Get the DID Configuration Resource if it exists.
     match query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await? {
-        Some(ServiceView { is_deleted: true, .. }) => Err(ApiError::new(StatusCode::NOT_FOUND)),
         Some(ServiceView {
+            is_deleted: false,
             resource: Some(ServiceResource::DomainLinkage(domain_linkage_configuration)),
             ..
         }) => Ok((StatusCode::OK, Json(domain_linkage_configuration)).into_response()),
-        None => Err(ApiError::new(StatusCode::NOT_FOUND)),
-        _ => todo!(),
+        _ => Err(ApiError::new(StatusCode::NOT_FOUND)),
     }
 }

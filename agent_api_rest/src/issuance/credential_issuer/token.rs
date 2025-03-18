@@ -20,13 +20,13 @@ pub(crate) async fn token(
         TokenRequest::PreAuthorizedCode {
             pre_authorized_code, ..
         } => pre_authorized_code,
-        _ => return todo!(),
+        _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
     };
 
     // Use the `pre_authorized_code` to get the `offer_id` from the `PreAuthorizedCodeView`.
     let offer_id = query_handler(pre_authorized_code, &state.query.pre_authorized_code)
         .await?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?
+        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED))?
         .offer_id;
 
     let command = OfferCommand::CreateTokenResponse {
@@ -42,7 +42,7 @@ pub(crate) async fn token(
         .await?
         .and_then(|offer_view| offer_view.token_response)
         .map(|token_response| (StatusCode::OK, Json(token_response)).into_response())
-        .ok_or_else(|| todo!())
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[cfg(test)]

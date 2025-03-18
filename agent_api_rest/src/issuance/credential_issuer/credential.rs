@@ -33,7 +33,7 @@ pub(crate) async fn credential(
     // Use the `access_token` to get the `offer_id` from the `AccessTokenView`.
     let offer_id = query_handler(&access_token, &state.query.access_token)
         .await?
-        .ok_or_else(|| ApiError::new(StatusCode::OK))?
+        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED))?
         .offer_id;
 
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
@@ -74,7 +74,7 @@ pub(crate) async fn credential(
                     sleep(Duration::from_millis(POLLING_INTERVAL_MS)).await;
                 } else {
                     error!("timeout failure");
-                    todo!();
+                    return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR));
                 }
             }
             Some(OfferView {
@@ -83,7 +83,7 @@ pub(crate) async fn credential(
                 ..
             }) => break (credential_ids, subject_id),
             _ => {
-                todo!();
+                return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR));
             }
         }
     };
@@ -104,7 +104,7 @@ pub(crate) async fn credential(
                 signed: Some(signed_credential),
                 ..
             }) => signed_credential,
-            _ => todo!(),
+            _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
         };
 
         signed_credentials.push(signed_credential);

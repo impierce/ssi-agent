@@ -1,8 +1,10 @@
 pub mod send;
 
-use super::query_credential_issuer_metadata;
 use crate::handlers::{command_handler, query_handler};
-use agent_issuance::{offer::command::OfferCommand, state::IssuanceState};
+use agent_issuance::{
+    offer::command::OfferCommand,
+    state::{IssuanceState, SERVER_CONFIG_ID},
+};
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -10,7 +12,19 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::header;
+use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
+
+pub(crate) async fn query_credential_issuer_metadata(
+    state: &IssuanceState,
+) -> Result<CredentialIssuerMetadata, ApiError> {
+    // Get the `CredentialIssuerMetadata` from the `ServerConfigView`.
+    query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+        .await?
+        .and_then(|server_config_view| server_config_view.credential_issuer_metadata)
+        // TODO: this *should* be an impossible error, what should we return here?
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+}
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,12 +60,8 @@ pub(crate) async fn offers(
             )
                 .into_response()
         })
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Invariant Violation")
-                .message("Offer not found after creation. This indicates an unexpected system failure that should never happen.")
-                .finish()
-        })
+        // TODO: this *should* be an impossible error, what should we return here?
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[axum_macros::debug_handler]

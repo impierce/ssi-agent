@@ -1,4 +1,3 @@
-use super::query_credential_issuer_metadata;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_issuance::{
@@ -15,6 +14,8 @@ use http_api_problem::ApiError;
 use hyper::header;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+use super::offers::query_credential_issuer_metadata;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(

@@ -44,12 +44,8 @@ pub(crate) async fn post_credentials(
     query_handler(&holder_credential_id, &state.query.holder_credential)
         .await?
         .map(|holder_credential_view| (StatusCode::CREATED, Json(holder_credential_view)).into_response())
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::CONFLICT)
-                .title("Optimistic Lock Error")
-                .message("An optimistic lock error occurred while committing an aggregate.")
-                .finish()
-        })
+        // TODO: this *should* be an impossible error, what should we return here?
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[axum_macros::debug_handler]

@@ -1,5 +1,5 @@
 use crate::handlers::query_handler;
-use agent_identity::state::IdentityState;
+use agent_identity::{document::aggregate::Status, state::IdentityState};
 use agent_shared::config::SupportedDidMethod;
 use axum::{
     extract::State,
@@ -16,7 +16,7 @@ pub(crate) async fn did(State(state): State<IdentityState>) -> Result<Response, 
         .and_then(|all_documents_view| {
             all_documents_view.documents.into_values().find_map(|document| {
                 document.document.and_then(|core_document| {
-                    (document.did_method == Some(SupportedDidMethod::Web))
+                    (document.status != Status::Disabled && document.did_method == Some(SupportedDidMethod::Web))
                         .then_some((StatusCode::OK, Json(core_document)).into_response())
                 })
             })

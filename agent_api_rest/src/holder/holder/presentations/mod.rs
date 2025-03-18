@@ -43,12 +43,12 @@ pub struct PresentationsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn post_presentations(
     State(state): State<HolderState>,
-    Json(payload): Json<PresentationsEndpointRequest>,
+    Json(PresentationsEndpointRequest { credential_ids }): Json<PresentationsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let mut credentials = vec![];
 
     // Get all the credentials.
-    for credential_id in payload.credential_ids {
+    for credential_id in credential_ids {
         match query_handler(&credential_id, &state.query.holder_credential).await? {
             Some(HolderCredentialView {
                 signed: Some(credential),
@@ -56,7 +56,7 @@ pub(crate) async fn post_presentations(
             }) => {
                 credentials.push(credential);
             }
-            _ => return todo!(),
+            _ => return Err(ApiError::new(StatusCode::NOT_FOUND)),
         }
     }
 
@@ -73,10 +73,6 @@ pub(crate) async fn post_presentations(
     query_handler(&presentation_id, &state.query.presentation)
         .await?
         .map(|presentation_view| (StatusCode::CREATED, Json(presentation_view)).into_response())
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::CONFLICT)
-                .title("Optimistic Lock Error")
-                .message("An optimistic lock error occurred while committing an aggregate.")
-                .finish()
-        })
+        // TODO: this *should* be an impossible error, what should we return here?
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }

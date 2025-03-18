@@ -22,7 +22,6 @@ pub(crate) async fn presentation_signed(
             signed_presentation.as_str().to_string(),
         )
             .into_response()),
-        None => Err(ApiError::new(StatusCode::NOT_FOUND)),
-        _ => todo!(),
+        _ => Err(ApiError::new(StatusCode::NOT_FOUND)),
     }
 }
