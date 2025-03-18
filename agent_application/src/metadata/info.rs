@@ -8,9 +8,12 @@ use crate::metadata::MetadataState;
 
 include!(concat!(env!("OUT_DIR"), "/metadata.rs"));
 
+const APP_NAME: &str = "UniCore";
+
 #[skip_serializing_none]
 #[derive(Serialize)]
 pub struct Info {
+    app: String,
     #[serde(flatten)]
     version: Version,
     /// The release channel of the application. Possible values are: `stable`, `next`, `beta`, `canary`.
@@ -33,6 +36,7 @@ pub async fn info(State(state): State<MetadataState>) -> Json<Info> {
     );
     // Trim, filter out empty values, then convert to Option<String>.
     let info = Info {
+        app: APP_NAME.to_string(),
         version: version_inner(),
         release_channel: APP_RELEASE_CHANNEL
             .map(|s| s.trim())
