@@ -11,8 +11,18 @@ use agent_identity::state::IdentityState;
 use agent_issuance::state::IssuanceState;
 use agent_shared::{config::config, ConfigError};
 use agent_verification::state::VerificationState;
-use axum::{body::Bytes, extract::MatchedPath, http::Request, response::Response, Router};
+use axum::{
+    body::{Body, Bytes},
+    extract::{MatchedPath, Request},
+    middleware,
+    middleware::Next,
+    response::{IntoResponse, Response},
+    Router,
+};
+use http_body_util::BodyExt as _;
+use hyper::StatusCode;
 use std::time::Duration;
+use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{info, info_span, Span};
 
@@ -44,28 +54,32 @@ pub fn app(
                 .merge(holder_state.map(holder::router).unwrap_or_default())
                 .merge(verification_state.map(verification::router).unwrap_or_default()),
         )
-        // Trace layer
+        // Trace layers
         .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(|request: &Request<_>| {
-                    let path = request.extensions().get::<MatchedPath>().map(MatchedPath::as_str);
-                    info_span!(
-                        "HTTP Request ",
-                        method = ?request.method(),
-                        path,
-                    )
-                })
-                .on_request(|request: &Request<_>, _span: &Span| {
-                    info!("Received request");
-                    info!("Request Headers: {:?}", request.headers());
-                })
-                .on_response(|response: &Response, _latency: Duration, _span: &Span| {
-                    info!("Returning {}", response.status());
-                    info!("Response Headers: {:?}", response.headers());
-                })
-                .on_body_chunk(|chunk: &Bytes, _latency: Duration, _span: &Span| {
-                    info!("Response Body: {}", std::str::from_utf8(chunk).unwrap());
-                }),
+            ServiceBuilder::new()
+                .layer(
+                    TraceLayer::new_for_http()
+                        .make_span_with(|request: &Request<_>| {
+                            let path = request.extensions().get::<MatchedPath>().map(MatchedPath::as_str);
+                            info_span!(
+                                "HTTP Request ",
+                                method = ?request.method(),
+                                path,
+                            )
+                        })
+                        .on_request(|request: &Request<_>, _span: &Span| {
+                            info!("Received request");
+                            info!("Request Headers: {:?}", request.headers());
+                        })
+                        .on_response(|response: &Response, _latency: Duration, _span: &Span| {
+                            info!("Returning {}", response.status());
+                            info!("Response Headers: {:?}", response.headers());
+                        })
+                        .on_body_chunk(|chunk: &Bytes, _latency: Duration, _span: &Span| {
+                            info!("Response Body: {}", std::str::from_utf8(chunk).unwrap());
+                        }),
+                )
+                .layer(middleware::from_fn(log_request_body)),
         );
 
     // CORS
@@ -99,6 +113,31 @@ fn get_base_path() -> Result<String, ConfigError> {
 
             format!("/{}", base_path)
         })
+}
+
+// middleware that shows how to consume the request body upfront
+async fn log_request_body(request: Request, next: Next) -> Result<impl IntoResponse, Response> {
+    let request = buffer_request_body(request).await?;
+
+    Ok(next.run(request).await)
+}
+
+// Buffer the request body so it can be logged.
+async fn buffer_request_body(request: Request) -> Result<Request, Response> {
+    let (parts, body) = request.into_parts();
+
+    // Convert the request body into bytes.
+    let bytes = body
+        .collect()
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response())?
+        .to_bytes();
+
+    let _ = serde_json::from_slice(&bytes)
+        .and_then(|json_value: serde_json::Value| serde_json::to_string_pretty(&json_value))
+        .map(|pretty_json| info!("Request Body: {}", pretty_json));
+
+    Ok(Request::from_parts(parts, Body::from(bytes)))
 }
 
 #[cfg(test)]

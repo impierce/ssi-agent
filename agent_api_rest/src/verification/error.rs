@@ -9,6 +9,7 @@ impl IntoApiErrorExt for AuthorizationRequestError {
         use AuthorizationRequestError::*;
 
         match self {
+            // UniCore API Problem Details
             AuthorizationRequestBuilderError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/verification#authorization-request-builder-error"
@@ -30,9 +31,13 @@ impl IntoApiErrorExt for AuthorizationRequestError {
                 .title("Authorization Request Signing Error")
                 .source(self)
                 .finish(),
-            InvalidSIOPv2AuthorizationResponse(_) => todo!("specification API?"),
-            InvalidOID4VPAuthorizationResponse(_) => todo!("specification API?"),
-            UnsupportedAuthorizationResponseParameterError => todo!("specification API?"),
+
+            // Public API Errors
+
+            // `/redirect` endpoint
+            InvalidSIOPv2AuthorizationResponse(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            InvalidOID4VPAuthorizationResponse(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            UnsupportedAuthorizationResponseParameterError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }

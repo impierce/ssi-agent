@@ -10,7 +10,7 @@ subject, or missing required elements.
 
 <!-- TODO: We can eliminate this error type by creating a UniCore-specific `CredentialFormats` enum that only contains formats that are currently supported by UniCore. This would basically mean that an error would occur during startup (while constructing the `ApplicationConfig`) when an unsupported format is configured instead of during runtime. -->
 
-<!-- TODO: Once issue https://github.com/impierce/ssi-agent/issues/136 is fixed this error type can problably be removed because the credential configuration can be done during startup (from configuration) or during creating CredentialConfiguration aggregate instances through the API -->
+<!-- TODO: Once issue https://github.com/impierce/ssi-agent/issues/136 is fixed this error type can probalably be removed because the credential configuration can be done during startup (from configuration) or during creating CredentialConfiguration aggregate instances through the API -->
 
 This error is raised when UniCore encounters a credential configuration that specifies a format it cannot process. This
 typically occurs when the credential configuration’s `format` does not match any of the supported formats.
@@ -33,13 +33,13 @@ credential_configurations:
 ## Unsupported Credential Type
 
 This error is raised when UniCore encounters a credential type that is not recognized or supported by the current
-implementation. In practice, it means that none of the credential types provided in the configuration match any of the types UniCore is configured to process. For example, supported types might include `VerifiableCreential`, `AchievementCredential`, or `OpenBadgeCredential`.
+implementation. In practice, it means that none of the credential types provided in the configuration match any of the types UniCore is configured to process. For example, supported types might include `VerifiableCredential`, `AchievementCredential`, or `OpenBadgeCredential`.
 
 ### Resolution
 
 <!-- TODO: We need a dedicated documentation page explaining Credential Configurations and link to it here. Related issue: https://github.com/impierce/ssi-agent/issues/136 -->
 
-<!-- TODO: Once issue https://github.com/impierce/ssi-agent/issues/136 is fixed this error type can problably be removed because the credential configuration can be done during startup (from configuration) or during creating CredentialConfiguration aggregate instances through the API -->
+<!-- TODO: Once issue https://github.com/impierce/ssi-agent/issues/136 is fixed this error type can probalably be removed because the credential configuration can be done during startup (from configuration) or during creating CredentialConfiguration aggregate instances through the API -->
 
 UniCore supports three primary credential models:
 
@@ -168,4 +168,12 @@ when the HTTP request does not complete successfully.
 
 Check the target URL and ensure that it is reachable and correctly configured to receive the Credential Offer.
 
-<!-- TODO: Add OpenID4VCI error responses -->
+## Invalid Credential Offer URI
+
+This error is raised when UniCore fails to construct a valid URI to the Credential Offer ednpoint. It occurs during the process of joining the credential issuer’s base URL with required path segments and the `offerId`, and indicates that the resulting URI is malformed or invalid.
+
+### Resolution
+
+This error is not caused by incorrect client input but reflects a flaw in the internal processing of the Authorization
+Request. If you encounter this error, please report it to the development team along with any relevant logs and context,
+so that the issue can be investigated and resolved.

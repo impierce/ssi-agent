@@ -25,12 +25,7 @@ pub(crate) async fn accept(
     // Check if the Credential Offer exists.
     query_handler(&received_offer_id, &state.query.received_offer)
         .await?
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::NOT_FOUND)
-                .title("Not Found")
-                .message("The requested resource could not be found.")
-                .finish()
-        })?;
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
 
     let command = OfferCommand::AcceptCredentialOffer {
         received_offer_id: received_offer_id.clone(),

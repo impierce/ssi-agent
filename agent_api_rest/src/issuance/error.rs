@@ -11,14 +11,15 @@ impl IntoApiErrorExt for CredentialError {
         use CredentialError::*;
 
         match self {
-            UnsupportedCredentialFormat => ApiError::builder(StatusCode::NOT_IMPLEMENTED)
+            // UniCore API Problem Details
+            UnsupportedCredentialFormat => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-format"
                 ))
                 .title("Unsupported Credential Format")
                 .source(self)
                 .finish(),
-            UnsupportedCredentialType => ApiError::builder(StatusCode::NOT_IMPLEMENTED)
+            UnsupportedCredentialType => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-type"
                 ))
@@ -39,7 +40,6 @@ impl IntoApiErrorExt for CredentialError {
                 .title("Invalid Identifier")
                 .source(self)
                 .finish(),
-            MissingCredentialDataError => todo!("specification API?"),
             InvalidExpirationDateError => ApiError::builder(StatusCode::BAD_REQUEST)
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/issuance#invalid-expiration-date"
@@ -47,6 +47,11 @@ impl IntoApiErrorExt for CredentialError {
                 .title("Invalid Expiration Date")
                 .source(self)
                 .finish(),
+
+            // Public API Errors
+
+            // `/openid4vci/credential` endpoint
+            MissingCredentialDataError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
@@ -56,24 +61,39 @@ impl IntoApiErrorExt for OfferError {
         use OfferError::*;
 
         match self {
+            // UniCore API Problem Details
             MissingCredentialOfferError => ApiError::builder(StatusCode::BAD_REQUEST)
-                .type_url(format!("{DOCUMENTATION_URL}problem-details#missing-credential-offer"))
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/issuance#missing-credential-offer"
+                ))
                 .title("Missing Credential Offer")
                 .source(self)
                 .finish(),
             SendCredentialOfferError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details#send-credential-offer-error"
+                    "{DOCUMENTATION_URL}problem-details/issuance#send-credential-offer-error"
                 ))
                 .title("Send Credential Offer Error")
                 .source(self)
                 .finish(),
-            MissingCredentialError => todo!("specification API?"),
-            MissingProofError => todo!("specification API?"),
-            InvalidProofError(_) => todo!("specification API?"),
-            MissingProofIssuerError => todo!("specification API?"),
-            UnsupportedTokenRequestGrantTypeError => todo!("specification API?"),
-            InvalidCredentialOfferUriError(_) => todo!("can never happen?"),
+            InvalidCredentialOfferUriError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/issuance#invalid-credential-offer-uri"
+                ))
+                .title("Invalid Credential Offer URI")
+                .source(self)
+                .finish(),
+
+            // Public API Errors
+
+            // `/auth/token` endpoint
+            UnsupportedTokenRequestGrantTypeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+
+            // `/openid4vci/credential` endpoint
+            MissingCredentialError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            MissingProofError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            InvalidProofError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            MissingProofIssuerError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
