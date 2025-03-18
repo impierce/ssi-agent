@@ -82,6 +82,16 @@ pub fn app(
                 .layer(middleware::from_fn(log_request_body)),
         );
 
+    let base_path = get_base_path().unwrap_or_default();
+
+    // Note: since version 0.8 axum does not allow nesting routers with an empty base path. We must explicitly check
+    // for an empty base path before nesting.
+    let app = if base_path.is_empty() {
+        app
+    } else {
+        Router::new().nest(&base_path, app)
+    };
+
     // CORS
     if config().cors_enabled.unwrap_or(false) {
         info!("CORS (permissive) enabled for all routes");
