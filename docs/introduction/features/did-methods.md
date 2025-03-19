@@ -6,10 +6,10 @@ A decentralized identifier (DID) serves as a pointer to a corresponding DID Docu
 
 ## DID Methods supported in UniCore
 
-- **did:key**
-- **did:jwk**
-- **did:web**
-- **did:iota**
+- **[did:key](https://w3c-ccg.github.io/did-key-spec/)**
+- **[did:jwk](https://github.com/quartzjer/did-jwk/blob/main/spec.md)**
+- **[did:web](https://w3c-ccg.github.io/did-method-web/)**
+- **[did:iota](https://wiki.iota.org/identity.rs/explanations/decentralized-identifiers/)**
 
 ### Self-contained DID Methods
 
@@ -19,7 +19,7 @@ needing to query an external service. Although these DID Methods are very simple
 
 - **Immutable Key Information:** Once created, the embedded key cannot be updated. This poses a challenge if you need to rotate keys or update cryptographic parameters due to evolving security standards.
 - **Limited Flexibility:** Self-contained DID Methods don't allow any updates to the corresponding DID Document. This
-  means you cannot easily extend or modify the associated data after the DID is created, limiting adaptability in
+  means it is not possible to extend or modify the associated data after the DID is created, limiting adaptability in
   dynamic environments. Features like **Domain Linkage** and **Linked Verifiable Presentations** are therefore not possible.
 
 In contrast, DID Methods like **did:web** and **did:iota** are more flexible and extensible. They allow you to store the
@@ -28,7 +28,7 @@ the DID Document independently of the DID itself, providing more flexibility and
 
 ### Web-hosted vs. Ledger-based DID Methods
 
-The **did:web** method leverages established web infrastructure by hosting DID Documents on domains, which results in human-readable identifiers and seamless integration with existing DNS and HTTPS systems. This approach offers familiarity and ease of use for many applications. In contrast, the **did:iota** method anchors its DID Documents on the IOTA Tangle, a distributed ledger that provides additional benefits aligned with self-sovereign identity (SSI) principles.
+The **did:web** method leverages established web infrastructure by hosting DID Documents as JSON files on web domains, which results in human-readable identifiers and seamless integration with existing DNS and HTTPS systems. This approach offers familiarity and ease of use for many applications. In contrast, the **did:iota** method anchors its DID Documents on the IOTA Tangle, a distributed ledger that provides additional benefits aligned with self-sovereign identity (SSI) principles.
 
 - **Enhanced Decentralization and Autonomy:** **did:iota** reduces reliance on centralized web hosting and DNS services, giving users and organizations greater control over their digital identities.
 - **Robust Security Through Distributed Trust:** The trustless verification process of distributed ledgers offers strong security benefits. This model allows for independent verification of identity data, complementing the straightforward approach of did:web with an extra layer of security.
