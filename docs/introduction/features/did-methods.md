@@ -20,11 +20,20 @@ needing to query an external service. Although these DID Methods are very simple
 - **Immutable Key Information:** Once created, the embedded key cannot be updated. This poses a challenge if you need to rotate keys or update cryptographic parameters due to evolving security standards.
 - **Limited Flexibility:** Self-contained DID Methods don't allow any updates to the corresponding DID Document. This
   means it is not possible to extend or modify the associated data after the DID is created, limiting adaptability in
-  dynamic environments. Features like **Domain Linkage** and **Linked Verifiable Presentations** are therefore not possible.
+  dynamic environments. Features like **Domain Linkage** and **Linked Verifiable Presentations** are therefore not
+  possible.
+
+Due to these limitations, **did:key** and **did:jwk** should **not** be used as primary signing methods in production environments. While they are convenient for quickly generating decentralized identifiers and verifying signed data, their **inability to rotate keys** or update DID Documents makes them unsuitable for long-term credential issuance or organizational use. Instead, production systems should rely on more **extensible DID Methods** like **did:web** or **did:iota**, which provide better flexibility, key management, and integration capabilities.
 
 In contrast, DID Methods like **did:web** and **did:iota** are more flexible and extensible. They allow you to store the
 DID Document in a separate location, such as a web server or a distributed ledger. This separation enables you to update
 the DID Document independently of the DID itself, providing more flexibility and control over the associated data.
+
+:::note
+
+Although **did:key** and **did:jwk** are useful for immediate and self-contained DID resolution, they **should not be used as preferred DID Methods in production** due to their inability to support key rotation and document updates. However, UniCore **will continue to support verification** of externally signed data using these methods.
+
+:::
 
 ### Web-hosted vs. Ledger-based DID Methods
 
@@ -70,18 +79,3 @@ signing_algorithms_supported:
   eddsa:
     enabled: true
 ```
-
-:::info
-
-Domain Linkage can be enabled by setting `domain_linkage_enabled` to `true`. This feature applies only to
-non-self-contained DID Methods. For more information about this feature, see [Domain
-Linkage](/docs/unicore/deployment/domain-linkage.md).
-
-:::
-
-:::info
-
-Signing algorithms can be enabled and disabled by setting the `signing_algorithms_supported` property. The `preferred`
-property indicates the default signing algorithm used by UniCore.
-
-:::
