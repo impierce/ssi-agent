@@ -1,9 +1,9 @@
 {
 	"info": {
-		"_postman_id": "3b1e6396-3bf7-43aa-bc3b-21056fb21dfa",
+		"_postman_id": "0bcb74f7-c53e-42fc-96a9-b146b3396280",
 		"name": "ssi-agent",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "24972330"
+		"_exporter_id": "41786572"
 	},
 	"item": [
 		{
@@ -542,6 +542,53 @@
 							"path": [
 								"openid4vci",
 								"credential"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "notification",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204 No Content\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"notification_id\": \"{{NOTIFICATION_ID}}\",\n  \"event\": \"credential_accepted\",\n  \"event_description\": \"User accepted the credential in wallet\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/openid4vci/notification",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"openid4vci",
+								"notification"
 							]
 						}
 					},
@@ -1149,442 +1196,543 @@
 			"name": "Identity",
 			"item": [
 				{
-					"name": "Create a new Connection",
-					"event": [
+					"name": "Connections",
+					"item": [
 						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
-						},
-						{
-							"listen": "prerequest",
-							"script": {
-								"exec": [
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"alias\": \"My Connection\",\n    \"domain\": \"http://example.org\",\n    \"dids\": [\"did:example:123\"],\n    \"credentialOfferEndpoint\": \"{{HOST}}/openid4vci/offers\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{HOST}}/v0/connections",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"v0",
-								"connections"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "List all Connections",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"const jsonData = JSON.parse(responseBody);",
-									"",
-									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-									"    const lastItem = jsonData[jsonData.length - 1];",
-									"",
-									"    if (lastItem && typeof lastItem === 'object') {",
-									"        const connectionId = lastItem.id;",
-									"",
-									"        if (connectionId) {",
-									"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
-									"        }",
-									"    }",
-									"}",
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
-						},
-						{
-							"listen": "prerequest",
-							"script": {
-								"exec": [
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/v0/connections",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"v0",
-								"connections"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Query Connection by Alias",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"const jsonData = JSON.parse(responseBody);",
-									"",
-									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-									"    const lastItem = jsonData[jsonData.length - 1];",
-									"",
-									"    if (lastItem && typeof lastItem === 'object') {",
-									"        const connectionId = lastItem.id;",
-									"",
-									"        if (connectionId) {",
-									"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
-									"        }",
-									"    }",
-									"}",
-									""
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/v0/connections?alias=My+Connection",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"v0",
-								"connections"
-							],
-							"query": [
+							"name": "Create a new Connection",
+							"event": [
 								{
-									"key": "alias",
-									"value": "My+Connection"
-								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Query Connection by DID",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"const jsonData = JSON.parse(responseBody);",
-									"",
-									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-									"    const lastItem = jsonData[jsonData.length - 1];",
-									"",
-									"    if (lastItem && typeof lastItem === 'object') {",
-									"        const connectionId = lastItem.id;",
-									"",
-									"        if (connectionId) {",
-									"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
-									"        }",
-									"    }",
-									"}",
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
-						},
-						{
-							"listen": "prerequest",
-							"script": {
-								"exec": [
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/v0/connections?did=did:example:123",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"v0",
-								"connections"
-							],
-							"query": [
+									"listen": "test",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								},
 								{
-									"key": "did",
-									"value": "did:example:123"
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
 								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Query Connection by Domain",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"const jsonData = JSON.parse(responseBody);",
-									"",
-									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-									"    const lastItem = jsonData[jsonData.length - 1];",
-									"",
-									"    if (lastItem && typeof lastItem === 'object') {",
-									"        const connectionId = lastItem.id;",
-									"",
-									"        if (connectionId) {",
-									"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
-									"        }",
-									"    }",
-									"}",
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
+							],
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"alias\": \"My Connection\",\n    \"domain\": \"http://example.org\",\n    \"dids\": [\"did:example:123\"],\n    \"credentialOfferEndpoint\": \"{{HOST}}/openid4vci/offers\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{HOST}}/v0/connections",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"connections"
+									]
+								}
+							},
+							"response": []
 						},
 						{
-							"listen": "prerequest",
-							"script": {
-								"exec": [
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/v0/connections?domain=http://example.org",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"v0",
-								"connections"
-							],
-							"query": [
+							"name": "List all Connections",
+							"event": [
 								{
-									"key": "domain",
-									"value": "http://example.org"
-								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Connection by ID",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
-						},
-						{
-							"listen": "prerequest",
-							"script": {
-								"exec": [
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
-						}
-					],
-					"protocolProfileBehavior": {
-						"disableBodyPruning": true
-					},
-					"request": {
-						"method": "GET",
-						"header": [],
-						"body": {
-							"mode": "formdata",
-							"formdata": [
+									"listen": "test",
+									"script": {
+										"exec": [
+											"const jsonData = JSON.parse(responseBody);",
+											"",
+											"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+											"    const lastItem = jsonData[jsonData.length - 1];",
+											"",
+											"    if (lastItem && typeof lastItem === 'object') {",
+											"        const connectionId = lastItem.id;",
+											"",
+											"        if (connectionId) {",
+											"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+											"        }",
+											"    }",
+											"}",
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								},
 								{
-									"key": "test",
-									"value": "test-value",
-									"type": "text"
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
 								}
-							]
-						},
-						"url": {
-							"raw": "{{HOST}}/v0/connections/{{CONNECTION_ID}}",
-							"host": [
-								"{{HOST}}"
 							],
-							"path": [
-								"v0",
-								"connections",
-								"{{CONNECTION_ID}}"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Create new Linked Verifiable Presentation Service",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"presentationIds\": [\"{{PRESENTATION_ID}}\"]\n}",
-							"options": {
-								"raw": {
-									"language": "json"
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{HOST}}/v0/connections",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"connections"
+									]
 								}
-							}
-						},
-						"url": {
-							"raw": "{{HOST}}/v0/services/linked-vp",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"v0",
-								"services",
-								"linked-vp"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "All Services",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"const jsonData = JSON.parse(responseBody);",
-									"",
-									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-									"    const lastItem = jsonData[jsonData.length - 1];",
-									"",
-									"    if (lastItem && typeof lastItem === 'object') {",
-									"        const serviceId = lastItem.id;",
-									"",
-									"        if (serviceId) {",
-									"            pm.collectionVariables.set(\"SERVICE_ID\", serviceId);",
-									"        }",
-									"    }",
-									"}",
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
+							},
+							"response": []
 						},
 						{
-							"listen": "prerequest",
-							"script": {
-								"exec": [],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/v0/services",
-							"host": [
-								"{{HOST}}"
+							"name": "Query Connection by DID",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"const jsonData = JSON.parse(responseBody);",
+											"",
+											"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+											"    const lastItem = jsonData[jsonData.length - 1];",
+											"",
+											"    if (lastItem && typeof lastItem === 'object') {",
+											"        const connectionId = lastItem.id;",
+											"",
+											"        if (connectionId) {",
+											"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+											"        }",
+											"    }",
+											"}",
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
 							],
-							"path": [
-								"v0",
-								"services"
-							]
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{HOST}}/v0/connections?did=did:example:123",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"connections"
+									],
+									"query": [
+										{
+											"key": "did",
+											"value": "did:example:123"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Query Connection by Alias",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"const jsonData = JSON.parse(responseBody);",
+											"",
+											"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+											"    const lastItem = jsonData[jsonData.length - 1];",
+											"",
+											"    if (lastItem && typeof lastItem === 'object') {",
+											"        const connectionId = lastItem.id;",
+											"",
+											"        if (connectionId) {",
+											"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+											"        }",
+											"    }",
+											"}",
+											""
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{HOST}}/v0/connections?alias=My+Connection",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"connections"
+									],
+									"query": [
+										{
+											"key": "alias",
+											"value": "My+Connection"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Query Connection by Domain",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"const jsonData = JSON.parse(responseBody);",
+											"",
+											"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+											"    const lastItem = jsonData[jsonData.length - 1];",
+											"",
+											"    if (lastItem && typeof lastItem === 'object') {",
+											"        const connectionId = lastItem.id;",
+											"",
+											"        if (connectionId) {",
+											"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+											"        }",
+											"    }",
+											"}",
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{HOST}}/v0/connections?domain=http://example.org",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"connections"
+									],
+									"query": [
+										{
+											"key": "domain",
+											"value": "http://example.org"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Connection by ID",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"method": "GET",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "test",
+											"value": "test-value",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{HOST}}/v0/connections/{{CONNECTION_ID}}",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"connections",
+										"{{CONNECTION_ID}}"
+									]
+								}
+							},
+							"response": []
 						}
-					},
-					"response": []
+					]
 				},
 				{
-					"name": "Service by ID",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/v0/services/{{SERVICE_ID}}",
-							"host": [
-								"{{HOST}}"
+					"name": "Services",
+					"item": [
+						{
+							"name": "Create new Linked Verifiable Presentation Service",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"presentationIds\": [\"{{PRESENTATION_ID}}\"]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{HOST}}/v0/services/linked-vp",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"services",
+										"linked-vp"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "All Services",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"const jsonData = JSON.parse(responseBody);",
+											"",
+											"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+											"    const lastItem = jsonData[jsonData.length - 1];",
+											"",
+											"    if (lastItem && typeof lastItem === 'object') {",
+											"        const serviceId = lastItem.id;",
+											"",
+											"        if (serviceId) {",
+											"            pm.collectionVariables.set(\"SERVICE_ID\", serviceId);",
+											"        }",
+											"    }",
+											"}",
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"exec": [],
+										"type": "text/javascript"
+									}
+								}
 							],
-							"path": [
-								"v0",
-								"services",
-								"{{SERVICE_ID}}"
-							]
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{HOST}}/v0/services",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"services"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Service by ID",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{HOST}}/v0/services/{{SERVICE_ID}}",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"services",
+										"{{SERVICE_ID}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Linked Verifiable Presentation Service",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{HOST}}/v0/services/linked-verifiable-presentation-service",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"services",
+										"linked-verifiable-presentation-service"
+									]
+								}
+							},
+							"response": []
 						}
-					},
-					"response": []
+					]
 				},
 				{
-					"name": "Linked Verifiable Presentation Service",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/v0/services/linked-verifiable-presentation-service",
-							"host": [
-								"{{HOST}}"
+					"name": "Documents",
+					"item": [
+						{
+							"name": "List all Documents",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"const jsonData = JSON.parse(responseBody);",
+											"",
+											"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+											"    const lastItem = jsonData[jsonData.length - 1];",
+											"",
+											"    if (lastItem && typeof lastItem === 'object') {",
+											"        const documentId = lastItem.id;",
+											"",
+											"        if (documentId) {",
+											"            pm.collectionVariables.set(\"DOCUMENT_ID\", documentId);",
+											"        }",
+											"    }",
+											"}",
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
 							],
-							"path": [
-								"v0",
-								"services",
-								"linked-verifiable-presentation-service"
-							]
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{HOST}}/v0/documents",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"documents"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Document by ID",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{HOST}}/v0/documents/4cf0f658-0713-4c19-a7ac-82583381ec47",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"documents",
+										"4cf0f658-0713-4c19-a7ac-82583381ec47"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Query Document by DID Method",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{HOST}}/v0/documents?did_method=did:jwk",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"documents"
+									],
+									"query": [
+										{
+											"key": "did_method",
+											"value": "did:jwk"
+										}
+									]
+								}
+							},
+							"response": []
 						}
-					},
-					"response": []
+					]
 				}
 			]
 		},
@@ -1694,6 +1842,15 @@
 		},
 		{
 			"key": "CREDENTIAL_OFFER_URI",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "DOCUMENT_ID",
+			"value": ""
+		},
+		{
+			"key": "NOTIFICATION_ID",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		}
