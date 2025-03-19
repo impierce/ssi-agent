@@ -6,10 +6,16 @@ A decentralized identifier (DID) serves as a pointer to a corresponding DID Docu
 
 ## DID Methods supported in UniCore
 
-- **[did:key](https://w3c-ccg.github.io/did-key-spec/)**
-- **[did:jwk](https://github.com/quartzjer/did-jwk/blob/main/spec.md)**
-- **[did:web](https://w3c-ccg.github.io/did-method-web/)**
-- **[did:iota](https://wiki.iota.org/identity.rs/explanations/decentralized-identifiers/)**
+| DID Method                                                                                | Development |              | Production |              |
+| ----------------------------------------------------------------------------------------- | :---------: | :----------: | :--------: | :----------: |
+|                                                                                           |   Signing   | Verification |  Signing   | Verification |
+| **[did:key](https://w3c-ccg.github.io/did-key-spec/)**                                    |     ✅      |      ✅      |     ❌     |      ✅      |
+| **[did:jwk](https://github.com/quartzjer/did-jwk/blob/main/spec.md)**                     |     ✅      |      ✅      |     ❌     |      ✅      |
+| **[did:web](https://w3c-ccg.github.io/did-method-web/)**                                  |     ✅      |      ✅      |     ✅     |      ✅      |
+| **[did:iota](https://wiki.iota.org/identity.rs/explanations/decentralized-identifiers/)** |     ✅      |      ✅      |     ✅     |      ✅      |
+
+✅ = Supported  
+❌ = Not recommended
 
 ### Self-contained DID Methods
 
