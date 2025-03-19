@@ -1708,6 +1708,40 @@
 						}
 					},
 					"response": []
+				},
+				{
+					"name": "Show version",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/version",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"version"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Show info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/info",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"info"
+							]
+						}
+					},
+					"response": []
 				}
 			]
 		}
