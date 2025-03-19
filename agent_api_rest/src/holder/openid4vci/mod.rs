@@ -16,8 +16,6 @@ pub(crate) async fn offers_params(
     State(state): State<HolderState>,
     Form(payload): Form<serde_json::Value>,
 ) -> Result<Response, ApiError> {
-    info!("Request Body: {}", payload);
-
     let credential_offer_result: Result<CredentialOffer, _> =
         if let Some(credential_offer) = payload.get("credential_offer").and_then(Value::as_str) {
             format!("openid-credential-offer://?credential_offer={credential_offer}")

@@ -24,7 +24,7 @@ use hyper::StatusCode;
 use std::time::Duration;
 use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
-use tracing::{info, info_span, Span};
+use tracing::{debug, info, info_span, Span};
 
 pub const API_VERSION: &str = "/v0";
 pub const DOCUMENTATION_URL: &str = "https://docs-git-docs-problem-details-impierce.vercel.app/unicore/";
@@ -46,14 +46,10 @@ pub fn app(
     }: ApplicationState,
 ) -> Router {
     let app = Router::new()
-        .merge(
-            // &get_base_path().unwrap_or_default(),
-            Router::new()
-                .merge(identity_state.map(identity::router).unwrap_or_default())
-                .merge(issuance_state.map(issuance::router).unwrap_or_default())
-                .merge(holder_state.map(holder::router).unwrap_or_default())
-                .merge(verification_state.map(verification::router).unwrap_or_default()),
-        )
+        .merge(identity_state.map(identity::router).unwrap_or_default())
+        .merge(issuance_state.map(issuance::router).unwrap_or_default())
+        .merge(holder_state.map(holder::router).unwrap_or_default())
+        .merge(verification_state.map(verification::router).unwrap_or_default())
         // Trace layers
         .layer(
             ServiceBuilder::new()
@@ -125,7 +121,7 @@ fn get_base_path() -> Result<String, ConfigError> {
         })
 }
 
-// middleware that shows how to consume the request body upfront
+// This middleware logs the request body before passing it on.
 async fn log_request_body(request: Request, next: Next) -> Result<impl IntoResponse, Response> {
     let request = buffer_request_body(request).await?;
 
@@ -136,11 +132,13 @@ async fn log_request_body(request: Request, next: Next) -> Result<impl IntoRespo
 async fn buffer_request_body(request: Request) -> Result<Request, Response> {
     let (parts, body) = request.into_parts();
 
+    debug!("Path segments and query string: `{}`", parts.uri);
+
     // Convert the request body into bytes.
     let bytes = body
         .collect()
         .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response())?
+        .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()).into_response())?
         .to_bytes();
 
     let _ = serde_json::from_slice(&bytes)
