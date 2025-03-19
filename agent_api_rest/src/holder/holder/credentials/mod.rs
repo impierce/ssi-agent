@@ -29,14 +29,14 @@ pub struct HolderCredentialsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn post_credentials(
     State(state): State<HolderState>,
-    Json(payload): Json<HolderCredentialsEndpointRequest>,
+    Json(HolderCredentialsEndpointRequest { credential }): Json<HolderCredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let holder_credential_id = uuid::Uuid::new_v4().to_string();
 
     let command = CredentialCommand::AddCredential {
         holder_credential_id: holder_credential_id.clone(),
         received_offer_id: None,
-        credential: payload.credential,
+        credential,
     };
 
     command_handler(&holder_credential_id, &state.command.credential, command).await?;

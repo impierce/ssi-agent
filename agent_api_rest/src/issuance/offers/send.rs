@@ -20,15 +20,15 @@ pub struct SendOfferEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn send(
     State(state): State<IssuanceState>,
-    Json(payload): Json<SendOfferEndpointRequest>,
+    Json(SendOfferEndpointRequest { offer_id, target_url }): Json<SendOfferEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let command = OfferCommand::SendCredentialOffer {
-        offer_id: payload.offer_id.clone(),
-        target_url: payload.target_url,
+        offer_id: offer_id.clone(),
+        target_url,
     };
 
     // Send the Credential Offer to the `target_url`.
-    command_handler(&payload.offer_id, &state.command.offer, command).await?;
+    command_handler(&offer_id, &state.command.offer, command).await?;
 
     Ok(StatusCode::OK.into_response())
 }
