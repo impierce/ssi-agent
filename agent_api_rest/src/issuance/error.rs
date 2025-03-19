@@ -12,7 +12,7 @@ impl IntoApiErrorExt for CredentialError {
 
         match self {
             // UniCore API Problem Details
-            UnsupportedCredentialFormat => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            UnsupportedCredentialFormat(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-format"
                 ))
@@ -114,7 +114,7 @@ pub mod tests {
     async fn issuance_errors_successfully_convert_to_problem_details() {
         assert_eq!(
             into_json_value(
-                CredentialError::UnsupportedCredentialFormat
+                CredentialError::UnsupportedCredentialFormat(serde_json::json!("unsupported_format"))
                     .into_api_error()
                     .into_axum_response()
             )
@@ -123,7 +123,7 @@ pub mod tests {
                 "type": format!("{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-format"),
                 "title": "Unsupported Credential Format",
                 "status": 500,
-                "detail": "This Credential format it not supported"
+                "detail": "Credential format not supported: `\"unsupported_format\"`"
             }),
         );
 
@@ -138,7 +138,7 @@ pub mod tests {
                 "type": format!("{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-type"),
                 "title": "Unsupported Credential Type",
                 "status": 500,
-                "detail": "This Credential type it not supported"
+                "detail": "This Credential type is not supported"
             }),
         );
 

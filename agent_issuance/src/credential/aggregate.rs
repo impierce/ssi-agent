@@ -253,7 +253,9 @@ impl Aggregate for Credential {
 
                     Err(UnsupportedCredentialType)
                 }
-                _ => Err(UnsupportedCredentialFormat),
+                _ => Err(UnsupportedCredentialFormat(serde_json::json!(
+                    credential_configuration.credential_format
+                ))),
             },
             CreateSignedCredential {
                 credential_id,
