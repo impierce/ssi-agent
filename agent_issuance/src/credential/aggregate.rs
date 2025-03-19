@@ -211,10 +211,10 @@ impl Aggregate for Credential {
                                     .map(ToString::to_string)
                                     .unwrap_or("OpenBadge Credential".to_string());
 
-                                let credential_subject =
-                                    serde_json::from_value::<AchievementSubject>(json!(credential_subject))
-                                        // TODO: use more explicit error
-                                        .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
+                                let credential_subject = serde_json_path_to_error::from_value::<AchievementSubject>(
+                                    json!(credential_subject),
+                                )
+                                .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
 
                                 let builder = AchievementCredentialBuilder::default()
                                     .context(vec![
