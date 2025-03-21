@@ -8,9 +8,13 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
-use oid4vci::notification_request::NotificationRequest;
+use oid4vci::{errors::NotificationError, notification_request::NotificationRequest};
+//use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::{error, info};
+
+/// The HTTP response MUST use the HTTP status code 400 (Bad Request) and set the content type to application/json.
+/// Please Reference: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-13.html#name-notification-error-response
 
 #[axum_macros::debug_handler]
 pub async fn notification(
@@ -22,12 +26,21 @@ pub async fn notification(
 
     let _offer_id = match query_handler(&access_token, &state.query.access_token).await {
         Ok(Some(AccessTokenView { offer_id })) => offer_id,
-        _ => return StatusCode::UNAUTHORIZED.into_response(),
+        _ => {
+            let error = NotificationError::InvalidToken;
+            let body = Json(json!({
+                "error": error.to_string(),
+                "error_description": error.to_string(),
+            }));
+            return (StatusCode::UNAUTHORIZED, body).into_response();
+        }
     };
+
     let credentials = match query_handler("all_credentials", &state.query.all_credentials).await {
         Ok(Some(all_credentials)) => all_credentials.credentials,
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
+
     let credential_id = credentials
         .iter()
         .find(|entry| entry.1.notification_id.as_ref() == Some(&notification_request.notification_id))
@@ -36,11 +49,12 @@ pub async fn notification(
     let credential_id = match credential_id {
         Some(id) => id,
         None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"error": "invalid_notification_id" })),
-            )
-                .into_response();
+            let error = NotificationError::InvalidNotificationId;
+            let body = Json(json!({
+                "error": error.to_string(),
+                "error_description": error.to_string(),
+            }));
+            return (StatusCode::BAD_REQUEST, body).into_response();
         }
     };
 

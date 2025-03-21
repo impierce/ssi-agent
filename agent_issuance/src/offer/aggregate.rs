@@ -217,7 +217,6 @@ impl Aggregate for Offer {
                 let credential_response = CredentialResponse {
                     credential: CredentialResponseType::Immediate {
                         credential: signed_credential,
-                        notification_id: notification_id.clone(),
                     },
                     c_nonce: None,
                     c_nonce_expires_in: None,
@@ -699,7 +698,6 @@ pub mod test_utils {
         CredentialResponse {
             credential: CredentialResponseType::Immediate {
                 credential: json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string()),
-                notification_id: Some(notification_id.clone()),
             },
             c_nonce: None,
             c_nonce_expires_in: None,
