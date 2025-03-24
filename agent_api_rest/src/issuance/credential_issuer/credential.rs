@@ -16,7 +16,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
-use oid4vci::credential_request::CredentialRequest;
+use oid4vci::{credential_request::CredentialRequest, errors::CredentialRequestError};
 use serde_json::json;
 use tokio::time::sleep;
 use tracing::{error, info};
@@ -29,7 +29,6 @@ pub(crate) async fn credential(
     State(state): State<IssuanceState>,
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
-    // TODO: implement official oid4vci error response. This TODO is also in the `token` endpoint.
 ) -> Response {
     info!("Request Body: {}", json!(credential_request));
 
@@ -38,7 +37,6 @@ pub(crate) async fn credential(
         Ok(Some(AccessTokenView { offer_id })) => offer_id,
         _ => return StatusCode::UNAUTHORIZED.into_response(),
     };
-
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
     let (credential_issuer_metadata, authorization_server_metadata) =
         match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
@@ -61,9 +59,8 @@ pub(crate) async fn credential(
 
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
     if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
-        StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
-
+        return CredentialRequestError::InvalidProof.into_response();
+    }
     let timeout = config()
         .external_server_response_timeout_ms
         .unwrap_or(DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS);

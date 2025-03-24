@@ -27,12 +27,7 @@ pub async fn notification(
     let _offer_id = match query_handler(&access_token, &state.query.access_token).await {
         Ok(Some(AccessTokenView { offer_id })) => offer_id,
         _ => {
-            let error = NotificationError::InvalidToken;
-            let body = Json(json!({
-                "error": error.to_string(),
-                "error_description": error.to_string(),
-            }));
-            return (StatusCode::UNAUTHORIZED, body).into_response();
+            return NotificationError::InvalidToken.into_response();
         }
     };
 
@@ -49,12 +44,7 @@ pub async fn notification(
     let credential_id = match credential_id {
         Some(id) => id,
         None => {
-            let error = NotificationError::InvalidNotificationId;
-            let body = Json(json!({
-                "error": error.to_string(),
-                "error_description": error.to_string(),
-            }));
-            return (StatusCode::BAD_REQUEST, body).into_response();
+            return NotificationError::InvalidNotificationId.into_response();
         }
     };
 
