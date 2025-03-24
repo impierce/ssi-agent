@@ -17,7 +17,7 @@ impl IntoApiErrorExt for AuthorizationRequestError {
                 ))
                 .source(self)
                 .finish(),
-            MissingAuthorizationRequest => ApiError::builder(StatusCode::BAD_REQUEST)
+            MissingAuthorizationRequest => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Unexpected Error")
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
