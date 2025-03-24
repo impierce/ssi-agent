@@ -63,7 +63,7 @@ where
                 .finish(),
             AggregateError::UnexpectedError(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Unexpected Error")
-                .type_url(format!("{DOCUMENTATION_URL}problem-details/persistence#unexpected-error"))
+                .type_url(format!("{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"))
                 .source_in_a_box(error)
                 .finish(),
         }
@@ -136,7 +136,7 @@ pub mod tests {
             )
             .await,
             json!({
-                "type": format!("{DOCUMENTATION_URL}problem-details/persistence#unexpected-error"),
+                "type": format!("{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"),
                 "title": "Unexpected Error",
                 "status": 500,
                 "detail": "An unexpected error occurred"

@@ -11,23 +11,23 @@ impl IntoApiErrorExt for AuthorizationRequestError {
         match self {
             // UniCore API Problem Details
             AuthorizationRequestBuilderError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Authorization Request Builder Error")
+                .title("Unexpected Error")
                 .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details/verification#authorization-request-builder-error"
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
                 ))
                 .source(self)
                 .finish(),
             MissingAuthorizationRequest => ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Missing Authorization Request")
+                .title("Unexpected Error")
                 .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details/verification#missing-authorization-request"
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
                 ))
                 .source(self)
                 .finish(),
             AuthorizationRequestSigningError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Authorization Request Signing Error")
+                .title("Unexpected Error")
                 .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details/verification#authorization-request-signing-error"
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
                 ))
                 .source(self)
                 .finish(),
@@ -58,8 +58,8 @@ pub mod tests {
             )
             .await,
             json!({
-                "type": format!("{DOCUMENTATION_URL}problem-details/verification#missing-authorization-request"),
-                "title": "Missing Authorization Request",
+                "type": format!("{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"),
+                "title": "Unexpected Error",
                 "status": 400,
                 "detail": "Missing Authorization Request error"
             }),

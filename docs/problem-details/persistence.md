@@ -29,13 +29,3 @@ schema mismatch—often resulting from changes in the event format without suppo
 ### Resolution
 
 Because data migration is currently not supported in UniCore, the only resolution is to reset the event store by wiping the existing data.
-
-## Unexpected Error
-
-This error represents an unforeseen issue during persistence operations that does not fall under the other specific
-categories.
-
-### Resolution
-
-Examine the error details and system logs to identify the root cause. This error typically signals a bug or an unhandled
-scenario in the persistence logic that should be addressed by the UniCore development team.

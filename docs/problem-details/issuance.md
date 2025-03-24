@@ -6,7 +6,7 @@ encoding the credentials for issuance. The errors documented in this section rel
 encountered during credential issuance, such as misconfigured credential configurations, invalid data in the credential
 subject, or missing required elements.
 
-### Invalid Credential Type
+## Invalid Credential Type
 
 This error is raised when the credential provided in the request does not match the expected type based on its signed status. Specifically:
 
@@ -15,18 +15,18 @@ This error is raised when the credential provided in the request does not match 
 
 If the credential's type does not meet these requirements, the API returns a `400 Bad Request` error.
 
-#### Resolution
+### Resolution
 
 - For signed credentials, ensure that the credential value is a valid JWT containing a properly signed verifiable credential.
 - For unsigned credentials, verify that the credential value is a well-formed JSON object with all the necessary fields for credential issuance.
 
 Review your request payload to confirm that the credential type aligns with these expectations.
 
-### No Credential Configuration Found
+## No Credential Configuration Found
 
 This error is raised when the system cannot find a credential configuration that matches the provided `credentialConfigurationId`. This indicates that either the specified configuration does not exist or it has not been properly set up in the server's settings.
 
-#### Resolution
+### Resolution
 
 - **Verify the Identifier:**  
   Ensure that the `credentialConfigurationId` in your request is correct.
@@ -195,13 +195,3 @@ when the HTTP request does not complete successfully.
 ### Resolution
 
 Check the target URL and ensure that it is reachable and correctly configured to receive the Credential Offer.
-
-## Invalid Credential Offer URI
-
-This error is raised when UniCore fails to construct a valid URI to the Credential Offer ednpoint. It occurs during the process of joining the credential issuer’s base URL with required path segments and the `offerId`, and indicates that the resulting URI is malformed or invalid.
-
-### Resolution
-
-This error is not caused by incorrect client input but reflects a flaw in the internal processing of the Authorization
-Request. If you encounter this error, please report it to the development team along with any relevant logs and context,
-so that the issue can be investigated and resolved.

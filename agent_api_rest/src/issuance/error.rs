@@ -77,9 +77,9 @@ impl IntoApiErrorExt for OfferError {
                 .source(self)
                 .finish(),
             InvalidCredentialOfferUriError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Invalid Credential Offer URI")
+                .title("Unexpected Error")
                 .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details/issuance#invalid-credential-offer-uri"
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
                 ))
                 .source(self)
                 .finish(),
