@@ -19,7 +19,8 @@ pub(crate) async fn redirect(
     let authorization_request_id = if let Some(state) = authorization_response.state() {
         state.clone()
     } else {
-        todo!();
+        // TODO: Return a standardized error response.
+        return Err(ApiError::new(StatusCode::BAD_REQUEST));
     };
 
     // Retrieve the authorization request.
