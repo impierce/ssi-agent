@@ -2,7 +2,7 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum OfferError {
-    #[error("Credential Offer is does not exist")]
+    #[error("Credential Offer does not exist")]
     MissingCredentialOfferError,
     #[error("Failed to send the Credential Offer to the `target_url`: {0}")]
     SendCredentialOfferError(#[source] reqwest::Error),

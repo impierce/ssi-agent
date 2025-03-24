@@ -183,7 +183,7 @@ pub mod tests {
                 "type": format!("{DOCUMENTATION_URL}problem-details/issuance#missing-credential-offer"),
                 "title": "Missing Credential Offer",
                 "status": 400,
-                "detail": "Credential Offer is does not exist"
+                "detail": "Credential Offer does not exist"
             }),
         );
     }
