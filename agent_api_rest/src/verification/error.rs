@@ -60,7 +60,7 @@ pub mod tests {
             json!({
                 "type": format!("{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"),
                 "title": "Unexpected Error",
-                "status": 400,
+                "status": 500,
                 "detail": "Missing Authorization Request error"
             }),
         );
