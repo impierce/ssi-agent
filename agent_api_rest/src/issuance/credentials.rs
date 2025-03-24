@@ -1,5 +1,7 @@
+use super::offers::query_credential_issuer_metadata;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
+use crate::DOCUMENTATION_URL;
 use agent_issuance::{
     credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data},
     offer::command::OfferCommand,
@@ -14,8 +16,6 @@ use http_api_problem::ApiError;
 use hyper::header;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-use super::offers::query_credential_issuer_metadata;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
@@ -57,6 +57,9 @@ pub(crate) async fn credentials(
         if !credential.is_string() {
             return Err(ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Credential Type")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/issuance#invalid-credential-type"
+                ))
                 .message("For signed credentials, the credential must be a string.")
                 .finish());
         }
@@ -70,6 +73,9 @@ pub(crate) async fn credentials(
         if !credential.is_object() {
             return Err(ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Credential Type")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/issuance#invalid-credential-type"
+                ))
                 .message("For unsigned credentials, the credential must be an object.")
                 .finish());
         }

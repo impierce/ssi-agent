@@ -6,6 +6,22 @@ encoding the credentials for issuance. The errors documented in this section rel
 encountered during credential issuance, such as misconfigured credential configurations, invalid data in the credential
 subject, or missing required elements.
 
+### Invalid Credential Type
+
+This error is raised when the credential provided in the request does not match the expected type based on its signed status. Specifically:
+
+- **Signed Credentials:** The credential must be provided as a string representing a verifiable credential signed as a JWT.
+- **Unsigned Credentials:** The credential must be provided as a JSON object.
+
+If the credential's type does not meet these requirements, the API returns a `400 Bad Request` error.
+
+#### Resolution
+
+- For signed credentials, ensure that the credential value is a valid JWT containing a properly signed verifiable credential.
+- For unsigned credentials, verify that the credential value is a well-formed JSON object with all the necessary fields for credential issuance.
+
+Review your request payload to confirm that the credential type aligns with these expectations.
+
 ## Unsupported Credential Format
 
 <!-- TODO: We can eliminate this error type by creating a UniCore-specific `CredentialFormats` enum that only contains formats that are currently supported by UniCore. This would basically mean that an error would occur during startup (while constructing the `ApplicationConfig`) when an unsupported format is configured instead of during runtime. -->
