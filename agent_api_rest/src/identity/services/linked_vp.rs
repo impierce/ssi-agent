@@ -1,19 +1,18 @@
+use crate::handlers::{command_handler, query_handler};
 use agent_identity::{
     document::{aggregate::Status, command::DocumentCommand},
     service::{aggregate::Service, command::ServiceCommand},
-    state::{query_all_documents, IdentityState},
+    state::IdentityState,
 };
 use agent_shared::config::SupportedDidMethod;
-use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
     Json,
 };
+use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use tracing::info;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,66 +21,50 @@ pub struct LinkedVPEndpointRequest {
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn linked_vp(State(state): State<IdentityState>, Json(payload): Json<Value>) -> Response {
-    info!("Request Body: {}", payload);
-
-    let Ok(LinkedVPEndpointRequest { presentation_ids }) = serde_json::from_value(payload) else {
-        return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
-    };
-
+pub(crate) async fn linked_vp(
+    State(state): State<IdentityState>,
+    Json(LinkedVPEndpointRequest { presentation_ids }): Json<LinkedVPEndpointRequest>,
+) -> Result<Response, ApiError> {
     let service_id = "linked-verifiable-presentation-service".to_string();
+
     let command = ServiceCommand::CreateLinkedVerifiablePresentationService {
         service_id: service_id.clone(),
         presentation_ids,
     };
 
     // Create a linked verifiable presentation service.
-    if command_handler(&service_id, &state.command.service, command)
-        .await
-        .is_err()
-    {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
+    command_handler(&service_id, &state.command.service, command).await?;
 
-    let linked_verifiable_presentation_service = match query_handler(&service_id, &state.query.service).await {
-        Ok(Some(Service {
+    let linked_verifiable_presentation_service = match query_handler(&service_id, &state.query.service).await? {
+        Some(Service {
             service: Some(linked_verifiable_presentation_service),
             ..
-        })) => linked_verifiable_presentation_service,
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        }) => linked_verifiable_presentation_service,
+        // TODO: this *should* be an impossible error, what should we return here?
+        _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
     };
 
     // Query the DID Web Document to obtain the `document_id`.
-    let document_id = if let Some(document_id) = query_all_documents(&state, |(_, document)| {
-        document.status != Status::Disabled && document.did_method == Some(SupportedDidMethod::Web)
-    })
-    .await
-    .ok()
-    .and_then(|did_web_document| {
-        did_web_document
-            .keys()
-            .next()
-            .map(|document_id| document_id.to_string())
-    }) {
-        document_id
-    } else {
-        return StatusCode::PRECONDITION_FAILED.into_response();
-    };
+    let document_id = query_handler("all_documents", &state.query.all_documents)
+        .await?
+        .and_then(|all_documents_view| {
+            all_documents_view.documents.into_values().find_map(|document| {
+                (document.status != Status::Disabled && document.did_method == Some(SupportedDidMethod::Web))
+                    .then_some(document.document_id)
+            })
+        })
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
 
     let command = DocumentCommand::AddService {
         service_id,
         service: linked_verifiable_presentation_service,
     };
 
-    if command_handler(&document_id, &state.command.document, command)
-        .await
-        .is_err()
-    {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
+    command_handler(&document_id, &state.command.document, command).await?;
 
-    match query_handler(&document_id, &state.query.document).await {
-        Ok(Some(document)) => (StatusCode::OK, Json(document)).into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+    query_handler(&document_id, &state.query.document)
+        .await?
+        .map(|document_view| (StatusCode::OK, Json(document_view)).into_response())
+        // TODO: this *should* be an impossible error, what should we return here?
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }

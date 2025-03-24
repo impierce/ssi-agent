@@ -1,39 +1,33 @@
-use agent_issuance::{
-    offer::{command::OfferCommand, queries::pre_authorized_code::PreAuthorizedCodeView, views::OfferView},
-    state::IssuanceState,
-};
-use agent_shared::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, query_handler};
+use agent_issuance::{offer::command::OfferCommand, state::IssuanceState};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Form,
 };
+use http_api_problem::ApiError;
 use oid4vci::token_request::TokenRequest;
-use serde_json::json;
-use tracing::info;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn token(
     State(state): State<IssuanceState>,
     Form(token_request): Form<TokenRequest>,
     // TODO: implement official oid4vci error response. This TODO is also in the `credential` endpoint.
-) -> Response {
-    info!("Request Body: {}", json!(token_request));
-
+) -> Result<Response, ApiError> {
     // Get the `pre_authorized_code` from the `TokenRequest`.
     let pre_authorized_code = match &token_request {
         TokenRequest::PreAuthorizedCode {
             pre_authorized_code, ..
         } => pre_authorized_code,
-        _ => return StatusCode::BAD_REQUEST.into_response(),
+        _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
     };
 
     // Use the `pre_authorized_code` to get the `offer_id` from the `PreAuthorizedCodeView`.
-    let offer_id = match query_handler(pre_authorized_code, &state.query.pre_authorized_code).await {
-        Ok(Some(PreAuthorizedCodeView { offer_id })) => offer_id,
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
+    let offer_id = query_handler(pre_authorized_code, &state.query.pre_authorized_code)
+        .await?
+        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED))?
+        .offer_id;
 
     let command = OfferCommand::CreateTokenResponse {
         offer_id: offer_id.clone(),
@@ -41,18 +35,14 @@ pub(crate) async fn token(
     };
 
     // Create a `TokenResponse` using the `offer_id` and `token_request`.
-    if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
+    command_handler(&offer_id, &state.command.offer, command).await?;
 
     // Use the `offer_id` to get the `token_response` from the `OfferView`.
-    match query_handler(&offer_id, &state.query.offer).await {
-        Ok(Some(OfferView {
-            token_response: Some(token_response),
-            ..
-        })) => (StatusCode::OK, Json(token_response)).into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+    query_handler(&offer_id, &state.query.offer)
+        .await?
+        .and_then(|offer_view| offer_view.token_response)
+        .map(|token_response| (StatusCode::OK, Json(token_response)).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[cfg(test)]

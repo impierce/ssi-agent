@@ -2,24 +2,23 @@ use std::time::{Duration, Instant};
 
 use agent_issuance::{
     credential::{command::CredentialCommand, views::CredentialView},
-    offer::{command::OfferCommand, queries::access_token::AccessTokenView, views::OfferView},
+    offer::{command::OfferCommand, views::OfferView},
     server_config::queries::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
-use agent_shared::{
-    config::config,
-    handlers::{command_handler, query_handler},
-};
+use agent_shared::config::config;
 use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
+use http_api_problem::ApiError;
 use oid4vci::credential_request::CredentialRequest;
-use serde_json::json;
 use tokio::time::sleep;
-use tracing::{error, info};
+use tracing::error;
+
+use crate::handlers::{command_handler, query_handler};
 
 const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
 const POLLING_INTERVAL_MS: u64 = 100;
@@ -30,26 +29,24 @@ pub(crate) async fn credential(
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
     // TODO: implement official oid4vci error response. This TODO is also in the `token` endpoint.
-) -> Response {
-    info!("Request Body: {}", json!(credential_request));
-
+) -> Result<Response, ApiError> {
     // Use the `access_token` to get the `offer_id` from the `AccessTokenView`.
-    let offer_id = match query_handler(&access_token, &state.query.access_token).await {
-        Ok(Some(AccessTokenView { offer_id })) => offer_id,
-        _ => return StatusCode::UNAUTHORIZED.into_response(),
-    };
+    let offer_id = query_handler(&access_token, &state.query.access_token)
+        .await?
+        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED))?
+        .offer_id;
 
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
     let (credential_issuer_metadata, authorization_server_metadata) =
-        match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
-            Ok(Some(ServerConfigView {
+        match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
+            Some(ServerConfigView {
                 credential_issuer_metadata: Some(credential_issuer_metadata),
                 authorization_server_metadata,
-            })) => (
+            }) => (
                 Box::new(credential_issuer_metadata),
                 Box::new(authorization_server_metadata),
             ),
-            _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
         };
 
     let command = OfferCommand::VerifyCredentialRequest {
@@ -60,9 +57,7 @@ pub(crate) async fn credential(
     };
 
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
-    if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
-        StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
+    command_handler(&offer_id, &state.command.offer, command).await?;
 
     let timeout = config()
         .external_server_response_timeout_ms
@@ -72,23 +67,23 @@ pub(crate) async fn credential(
     // TODO: replace this polling solution with a call to the `TxChannelRegistry` as described here: https://github.com/impierce/ssi-agent/issues/75
     // Use the `offer_id` to get the `credential_ids` and `subject_id` from the `OfferView`.
     let (credential_ids, subject_id) = loop {
-        match query_handler(&offer_id, &state.query.offer).await {
+        match query_handler(&offer_id, &state.query.offer).await? {
             // When the Offer does not include the credential id's yet, wait for the external server to provide them.
-            Ok(Some(OfferView { credential_ids, .. })) if credential_ids.is_empty() => {
+            Some(OfferView { credential_ids, .. }) if credential_ids.is_empty() => {
                 if start_time.elapsed().as_millis() <= timeout.into() {
                     sleep(Duration::from_millis(POLLING_INTERVAL_MS)).await;
                 } else {
                     error!("timeout failure");
-                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR));
                 }
             }
-            Ok(Some(OfferView {
+            Some(OfferView {
                 credential_ids,
                 subject_id: Some(subject_id),
                 ..
-            })) => break (credential_ids, subject_id),
+            }) => break (credential_ids, subject_id),
             _ => {
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR));
             }
         }
     };
@@ -102,19 +97,14 @@ pub(crate) async fn credential(
             overwrite: false,
         };
 
-        if command_handler(&credential_id, &state.command.credential, command)
-            .await
-            .is_err()
-        {
-            StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        };
+        command_handler(&credential_id, &state.command.credential, command).await?;
 
-        let signed_credential = match query_handler(&credential_id, &state.query.credential).await {
-            Ok(Some(CredentialView {
+        let signed_credential = match query_handler(&credential_id, &state.query.credential).await? {
+            Some(CredentialView {
                 signed: Some(signed_credential),
                 ..
-            })) => signed_credential,
-            _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            }) => signed_credential,
+            _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
         };
 
         signed_credentials.push(signed_credential);
@@ -126,18 +116,14 @@ pub(crate) async fn credential(
     };
 
     // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
-    if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
-        StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
+    command_handler(&offer_id, &state.command.offer, command).await?;
 
     // Use the `offer_id` to get the `credential_response` from the `OfferView`.
-    match query_handler(&offer_id, &state.query.offer).await {
-        Ok(Some(OfferView {
-            credential_response: Some(credential_response),
-            ..
-        })) => (StatusCode::OK, Json(credential_response)).into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+    query_handler(&offer_id, &state.query.offer)
+        .await?
+        .and_then(|offer_view| offer_view.credential_response)
+        .map(|credential_response| (StatusCode::OK, Json(credential_response)).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[cfg(test)]
@@ -242,7 +228,7 @@ mod tests {
                                     .oneshot(
                                         Request::builder()
                                             .method(http::Method::POST)
-                                            .uri(&format!("{API_VERSION}/credentials"))
+                                            .uri(format!("{API_VERSION}/credentials"))
                                             .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                                             .body(Body::from(
                                                 serde_json::to_vec(&credentials_endpoint_request).unwrap(),

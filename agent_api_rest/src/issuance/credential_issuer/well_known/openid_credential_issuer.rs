@@ -1,23 +1,23 @@
+use crate::handlers::query_handler;
 use agent_issuance::{
     server_config::queries::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
-use agent_shared::handlers::query_handler;
 use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use http_api_problem::ApiError;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn openid_credential_issuer(State(state): State<IssuanceState>) -> Response {
-    match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
-        Ok(Some(ServerConfigView {
+pub(crate) async fn openid_credential_issuer(State(state): State<IssuanceState>) -> Result<Response, ApiError> {
+    match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
+        Some(ServerConfigView {
             credential_issuer_metadata: Some(credential_issuer_metadata),
             ..
-        })) => (StatusCode::OK, Json(credential_issuer_metadata)).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        }) => Ok((StatusCode::OK, Json(credential_issuer_metadata)).into_response()),
+        _ => Err(ApiError::new(StatusCode::NOT_FOUND)),
     }
 }
 

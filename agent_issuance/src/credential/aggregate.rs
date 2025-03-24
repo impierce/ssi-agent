@@ -144,30 +144,25 @@ impl Aggregate for Credential {
 
                     let mut credential_types: Vec<String> = type_.clone();
 
-                    let credential_subject_json =
-                        data.raw.get("credentialSubject").ok_or(MissingCredentialSubjectError)?;
+                    let id = data
+                        .raw
+                        .get("id")
+                        .map(|id| {
+                            id.as_str()
+                                .and_then(|id_str| Url::parse(id_str).ok())
+                                .ok_or(InvalidIdentifierError)
+                        })
+                        .transpose()?;
 
-                    let id = data.raw.get("id").map_or(Ok(None), |id| {
-                        id.as_str()
-                            .ok_or_else(|| {
-                                InvalidVerifiableCredentialError("Invalid format: `id` must be a string".to_string())
-                            })
-                            .and_then(|id_str| {
-                                Url::parse(id_str).map(Some).map_err(|_| {
-                                    InvalidVerifiableCredentialError(format!("Could not parse `id` as URL: `{id_str}`"))
-                                })
-                            })
-                    })?;
+                    let credential_subject = identity_credential::credential::Subject::from_json_value(
+                        data.raw["credentialSubject"].clone(),
+                    )
+                    .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
 
                     // Loop through all the items in the `type` array in reverse until we find a match.
-                    while let Some(credential_format) = credential_types.pop() {
-                        match credential_format.as_str() {
+                    while let Some(credential_type) = credential_types.pop() {
+                        match credential_type.as_str() {
                             "VerifiableCredential" => {
-                                let subject = identity_credential::credential::Subject::from_json_value(
-                                    credential_subject_json.clone(),
-                                )
-                                .map_err(|e| InvalidVerifiableCredentialError(e.to_string()))?;
-
                                 let issuer = match serde_json::from_value::<Issuer>(json!({
                                     "id": issuer.id,
                                     "name": issuer.name,
@@ -178,7 +173,7 @@ impl Aggregate for Credential {
 
                                 let builder = W3CVerifiableCredentialBuilder::default()
                                     .issuer(issuer)
-                                    .subject(subject)
+                                    .subject(credential_subject)
                                     .issuance_date(issuance_date);
 
                                 let builder = if let Some(expiration_date) = expiration_date {
@@ -195,7 +190,7 @@ impl Aggregate for Credential {
 
                                 let credential: W3CVerifiableCredential = builder
                                     .build()
-                                    .map_err(|e| InvalidVerifiableCredentialError(e.to_string()))?;
+                                    .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
 
                                 // Set the type to the original credential configuration type.
                                 let mut raw = json!(credential);
@@ -216,9 +211,10 @@ impl Aggregate for Credential {
                                     .map(ToString::to_string)
                                     .unwrap_or("OpenBadge Credential".to_string());
 
-                                let credential_subject =
-                                    serde_json::from_value::<AchievementSubject>(credential_subject_json.clone())
-                                        .map_err(|e| InvalidVerifiableCredentialError(e.to_string()))?;
+                                let credential_subject = serde_json_path_to_error::from_value::<AchievementSubject>(
+                                    json!(credential_subject),
+                                )
+                                .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
 
                                 let builder = AchievementCredentialBuilder::default()
                                     .context(vec![
@@ -227,7 +223,7 @@ impl Aggregate for Credential {
                                     ])
                                     .type_(AchievementCredentialType::from(vec![
                                         "VerifiableCredential",
-                                        &credential_format,
+                                        &credential_type,
                                     ]))
                                     .name(name)
                                     .issuer(issuer)
@@ -240,10 +236,10 @@ impl Aggregate for Credential {
                                     builder
                                 };
 
-                                let builder = if let Some(id) = id { builder.id(id) } else { builder };
+                                let builder = builder.id(id.ok_or(InvalidIdentifierError)?);
 
                                 let credential: AchievementCredential =
-                                    builder.try_into().map_err(InvalidVerifiableCredentialError)?;
+                                    builder.try_into().map_err(InvalidCredentialSubjectError)?;
 
                                 return Ok(vec![UnsignedCredentialCreated {
                                     credential_id,
@@ -255,9 +251,11 @@ impl Aggregate for Credential {
                         }
                     }
 
-                    Err(UnsupportedCredentialFormat)
+                    Err(UnsupportedCredentialType)
                 }
-                _ => Err(UnsupportedCredentialFormat),
+                _ => Err(UnsupportedCredentialFormat(serde_json::json!(
+                    credential_configuration.credential_format
+                ))),
             },
             CreateSignedCredential {
                 credential_id,
@@ -517,6 +515,7 @@ pub mod credential_tests {
         }
     }
 }
+
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::*;

@@ -57,6 +57,8 @@ impl Aggregate for AuthorizationRequest {
                     .unwrap();
 
                 let url = &config().url;
+
+                // TODO: ensure that URLs like these are validated during configuration.
                 let request_uri = format!("{url}request/{state}").parse().unwrap();
                 let redirect_uri = format!("{url}redirect").parse::<url::Url>().unwrap();
 
@@ -162,7 +164,7 @@ impl Aggregate for AuthorizationRequest {
 
                         let vp_token = match oid4vp_authorization_response.extension.oid4vp_parameters {
                             Oid4vpParams::Params { vp_token, .. } => vp_token,
-                            Oid4vpParams::Jwt { .. } => return Err(UnsupportedJwtParameterError),
+                            Oid4vpParams::Jwt { .. } => return Err(UnsupportedAuthorizationResponseParameterError),
                         };
 
                         Ok(vec![OID4VPAuthorizationResponseVerified {
