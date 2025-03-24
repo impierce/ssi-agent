@@ -92,6 +92,9 @@ pub(crate) async fn credentials(
             .ok_or_else(|| {
                 ApiError::builder(StatusCode::NOT_FOUND)
                     .title("No Credential Configuration Found")
+                    .type_url(format!(
+                        "{DOCUMENTATION_URL}problem-details/issuance#no-credential-configuration-found"
+                    ))
                     .message(format!(
                         "No Credential Configuration found with id: `{credential_configuration_id}`"
                     ))

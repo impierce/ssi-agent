@@ -22,6 +22,18 @@ If the credential's type does not meet these requirements, the API returns a `40
 
 Review your request payload to confirm that the credential type aligns with these expectations.
 
+### No Credential Configuration Found
+
+This error is raised when the system cannot find a credential configuration that matches the provided `credentialConfigurationId`. This indicates that either the specified configuration does not exist or it has not been properly set up in the server's settings.
+
+#### Resolution
+
+- **Verify the Identifier:**  
+  Ensure that the `credentialConfigurationId` in your request is correct.
+
+- **Review Server Configuration:**  
+  Verify that the desired credential configuration is defined in the `credential_configurations` section of your `config.yaml` file. Ensure that the `credentialConfigurationId` provided in your request exactly matches the `credential_configuration_id` of the intended configuration.
+
 ## Unsupported Credential Format
 
 <!-- TODO: We can eliminate this error type by creating a UniCore-specific `CredentialFormats` enum that only contains formats that are currently supported by UniCore. This would basically mean that an error would occur during startup (while constructing the `ApplicationConfig`) when an unsupported format is configured instead of during runtime. -->
