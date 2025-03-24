@@ -71,7 +71,7 @@ implementation. In practice, it means that none of the credential types provided
 
 UniCore supports three primary credential models:
 
-- **Generic [W3C Verifiable Credentials](https://www.w3.org/TR/vc-data-model/)**
+- **Generic [W3C Verifiable Credentials Data Model v1.1](https://www.w3.org/TR/vc-data-model/)**
 - **[Open Badges 3.0](https://www.imsglobal.org/spec/ob/v3p0)**
 - **Custom W3C Verifiable Credentials**
 
