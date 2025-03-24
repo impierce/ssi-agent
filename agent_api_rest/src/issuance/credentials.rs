@@ -135,12 +135,7 @@ pub(crate) async fn credentials(
             )
                 .into_response()
         })
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Invariant Violation")
-                .message("Credential not found after creation. This indicates an unexpected system failure that should never happen.")
-                .finish()
-        })
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[axum_macros::debug_handler]

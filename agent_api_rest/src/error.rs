@@ -62,8 +62,8 @@ where
                 .source_in_a_box(error)
                 .finish(),
             AggregateError::UnexpectedError(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .type_url(format!("{DOCUMENTATION_URL}problem-details/persistence#unexpected-error"))
                 .title("Unexpected Error")
+                .type_url(format!("{DOCUMENTATION_URL}problem-details/persistence#unexpected-error"))
                 .source_in_a_box(error)
                 .finish(),
         }

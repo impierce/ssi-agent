@@ -13,38 +13,38 @@ impl IntoApiErrorExt for CredentialError {
         match self {
             // UniCore API Problem Details
             UnsupportedCredentialFormat(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Unsupported Credential Format")
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-format"
                 ))
-                .title("Unsupported Credential Format")
                 .source(self)
                 .finish(),
             UnsupportedCredentialType => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Unsupported Credential Type")
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-type"
                 ))
-                .title("Unsupported Credential Type")
                 .source(self)
                 .finish(),
             InvalidCredentialSubjectError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Credential Subject")
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/issuance#invalid-credential-subject"
                 ))
-                .title("Invalid Credential Subject")
                 .source(self)
                 .finish(),
             InvalidIdentifierError => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Identifier")
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/issuance#invalid-identifier"
                 ))
-                .title("Invalid Identifier")
                 .source(self)
                 .finish(),
             InvalidExpirationDateError => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Expiration Date")
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/issuance#invalid-expiration-date"
                 ))
-                .title("Invalid Expiration Date")
                 .source(self)
                 .finish(),
 
@@ -63,24 +63,24 @@ impl IntoApiErrorExt for OfferError {
         match self {
             // UniCore API Problem Details
             MissingCredentialOfferError => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Missing Credential Offer")
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/issuance#missing-credential-offer"
                 ))
-                .title("Missing Credential Offer")
                 .source(self)
                 .finish(),
             SendCredentialOfferError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Send Credential Offer Error")
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/issuance#send-credential-offer-error"
                 ))
-                .title("Send Credential Offer Error")
                 .source(self)
                 .finish(),
             InvalidCredentialOfferUriError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Invalid Credential Offer URI")
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/issuance#invalid-credential-offer-uri"
                 ))
-                .title("Invalid Credential Offer URI")
                 .source(self)
                 .finish(),
 
