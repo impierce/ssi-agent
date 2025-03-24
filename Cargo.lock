@@ -88,7 +88,6 @@ dependencies = [
  "oid4vc-manager",
  "oid4vci",
  "oid4vp",
- "paste",
  "rstest",
  "serde",
  "serde_json",

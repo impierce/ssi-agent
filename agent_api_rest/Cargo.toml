@@ -25,7 +25,6 @@ identity_did.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true
-paste = "1.0"
 serde.workspace = true
 serde_json.workspace = true
 siopv2.workspace = true
