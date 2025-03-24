@@ -28,8 +28,7 @@ use tracing::{debug, info, info_span, Span};
 
 pub const API_VERSION: &str = "/v0";
 
-// TODO: change this to `pub const DOCUMENTATION_URL: &str = "https://beta.docs.impierce.com/unicore/";`
-pub const DOCUMENTATION_URL: &str = "https://docs-git-docs-problem-details-impierce.vercel.app/unicore/";
+pub const DOCUMENTATION_URL: &str = "https://beta.docs.impierce.com/unicore/";
 
 #[derive(Default)]
 pub struct ApplicationState {
