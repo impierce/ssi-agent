@@ -6,8 +6,9 @@ rust-version.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+base64.workspace = true
 chrono.workspace = true
-config = { version = "0.14" }
+config = { version = "0.15" }
 cqrs-es.workspace = true
 dotenvy = { version = "0.15" }
 http-serde = "2.1"
@@ -23,6 +24,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 serde.workspace = true
 serde_json.workspace = true
 serde_with = "3.0"
+serde_yaml.workspace = true
 strum = { version = "0.26", features = ["derive"] }
 thiserror.workspace = true
 time = { version = "0.3" }

@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use config::ConfigError;
 use identity_iota::storage::KeyId;
 use jsonwebtoken::Algorithm;
@@ -5,16 +6,20 @@ use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
 use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::Lazy;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::{skip_serializing_none, SerializeDisplay};
 use std::{
     collections::HashMap,
+    io::Write,
     sync::{RwLock, RwLockReadGuard},
 };
 use strum::VariantArray;
 use tracing::{debug, info};
 use url::Url;
+
+use crate::profile::ApplicationProfile;
 
 static STRONGHOLD_PATH: &str = "./stronghold.dat";
 
@@ -23,11 +28,11 @@ static STRONGHOLD_PATH: &str = "./stronghold.dat";
 static ED25519_KEY_ID: &str = "ed25519-0";
 static ES256_KEY_ID: &str = "es256-0";
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct ApplicationConfiguration {
     pub log_format: LogFormat,
     pub event_store: EventStoreConfig,
-    pub url: Url,
+    pub url: Option<Url>,
     pub base_path: Option<String>,
     pub cors_enabled: Option<bool>,
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
@@ -42,7 +47,16 @@ pub struct ApplicationConfiguration {
     pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
 }
 
-#[derive(Debug, Deserialize, Clone, Default)]
+// impl Default for ApplicationConfiguration {
+//     fn default() -> Self {
+//         match ApplicationProfile::load() {
+//             ApplicationProfile::Production => ApplicationConfiguration { .. },
+//             ApplicationProfile::Development => ApplicationConfiguration {},
+//         }
+//     }
+// }
+
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LogFormat {
     #[default]
@@ -50,18 +64,19 @@ pub enum LogFormat {
     Text,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct EventStoreConfig {
     #[serde(rename = "type")]
     pub type_: EventStoreType,
     pub connection_string: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Clone, Eq, PartialEq, Default, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EventStoreType {
     InMemory,
     // Postgres(EventStorePostgresConfig), // <== TODO: "config-rs" panics with "unreachable code", other solution?
+    #[default]
     Postgres,
 }
 
@@ -70,27 +85,23 @@ pub struct EventStorePostgresConfig {
     pub connection_string: String,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct SecretManagerConfig {
-    #[serde(default = "default_stronghold_path")]
     pub stronghold_path: String,
-    pub stronghold_password: String,
-    #[serde(default = "default_issuer_eddsa_key_id")]
+    pub stronghold_password: Option<String>,
     pub issuer_eddsa_key_id: KeyId,
-    #[serde(default = "default_issuer_es256_key_id")]
     pub issuer_es256_key_id: KeyId,
 }
 
-fn default_stronghold_path() -> String {
-    STRONGHOLD_PATH.to_string()
-}
-
-pub fn default_issuer_eddsa_key_id() -> KeyId {
-    KeyId::new(ED25519_KEY_ID)
-}
-
-pub fn default_issuer_es256_key_id() -> KeyId {
-    KeyId::new(ES256_KEY_ID)
+impl Default for SecretManagerConfig {
+    fn default() -> Self {
+        SecretManagerConfig {
+            stronghold_path: STRONGHOLD_PATH.to_string(),
+            stronghold_password: None,
+            issuer_eddsa_key_id: KeyId::new(ED25519_KEY_ID),
+            issuer_es256_key_id: KeyId::new(ES256_KEY_ID),
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -117,12 +128,12 @@ pub struct Display {
     pub logo: Option<Logo>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct EventPublishers {
     pub http: Option<EventPublisherHttp>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct EventPublisherHttp {
     pub enabled: bool,
     pub target_url: String,
@@ -131,7 +142,7 @@ pub struct EventPublisherHttp {
     pub events: Events,
 }
 
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct Events {
     #[serde(default)]
     pub connection: Vec<ConnectionEvent>,
@@ -335,7 +346,7 @@ impl From<SupportedDidMethod> for SubjectSyntaxType {
 }
 
 /// Generic options that add an "enabled" field and a "preferred" field (optional) to a configuration.
-#[derive(Debug, Deserialize, Default, Clone)]
+#[derive(Debug, Deserialize, Default, Clone, Serialize)]
 pub struct ToggleOptions {
     pub enabled: bool,
     pub preferred: Option<bool>,
@@ -343,6 +354,14 @@ pub struct ToggleOptions {
 
 pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> =
     Lazy::new(|| RwLock::new(ApplicationConfiguration::new().unwrap()));
+
+/// All values that can be explicitly provisioned.
+/// TODO: Should this be the largest struct as everything should be provisionable?
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct ProvisionedApplicationConfiguration {
+    pub log_format: Option<LogFormat>,
+    pub secret_manager: Option<SecretManagerConfig>,
+}
 
 impl ApplicationConfiguration {
     pub fn new() -> Result<Self, ConfigError> {
@@ -354,39 +373,101 @@ impl ApplicationConfiguration {
 
         println!("Current directory: {:?}", std::env::current_dir().unwrap());
 
-        let config = if cfg!(feature = "test_utils") {
+        let mut default_config = ApplicationConfiguration::default();
+
+        match ApplicationProfile::load() {
+            ApplicationProfile::Development => {
+                default_config.log_format = LogFormat::Text;
+                default_config.event_store.type_ = EventStoreType::InMemory;
+
+                // If no Stronghold password is provided, a random password is generated.
+                let random_bytes: [u8; 16] = rand::thread_rng().gen();
+                default_config.secret_manager.stronghold_password = Some(URL_SAFE_NO_PAD.encode(&random_bytes));
+                println!(
+                    "\n====================\n\n  A new Stronghold password was generated!\n\n  {}\n\n====================\n",
+                    default_config.secret_manager.stronghold_password.clone().unwrap()
+                );
+
+                default_config.url = Some(Url::parse("http://localhost:3033").unwrap());
+                default_config.did_methods.insert(
+                    SupportedDidMethod::Jwk,
+                    ToggleOptions {
+                        enabled: true,
+                        preferred: Some(true),
+                    },
+                );
+                println!("Development profile loaded");
+            }
+            _ => {}
+        }
+
+        println!("==== default_config ====");
+        println!("{:?}", default_config);
+
+        let mut file = std::fs::File::create("agent_application/default-config.yaml").unwrap();
+        // file.write_all(serde_json::to_string_pretty(&default_config).unwrap().as_bytes())
+        //     .unwrap();
+        file.write_all(serde_yaml::to_string(&default_config).unwrap().as_bytes())
+            .unwrap();
+
+        let provisioned_config = if cfg!(feature = "test_utils") {
             config::Config::builder()
                 .add_source(config::File::with_name("../agent_shared/tests/test-config.yaml"))
                 // TODO: other prefix for tests
                 .add_source(config::Environment::with_prefix("TEST_UNICORE").separator("__"))
                 .build()?
         } else {
-            config::Config::builder()
-                .add_source(config::File::with_name("agent_application/config.yaml"))
-                .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
-                .build()?
+            let mut builder = config::Config::builder();
+            let config_file_path =
+                std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| "agent_application/config.yaml".to_string());
+            if std::path::Path::new(&config_file_path).exists() {
+                builder = builder.add_source(config::File::with_name(&config_file_path));
+            }
+            builder = builder.add_source(config::Environment::with_prefix("UNICORE").separator("__"));
+            builder.build()?
         };
 
-        config.try_deserialize().inspect(|config: &ApplicationConfiguration| {
-            // TODO: this won't be logged either because `tracing_subscriber` is not initialized yet at this point. To
-            // fix this we can consider obtaining the `log_format` from the config file prior to loading the complete
-            // configuration.
-            info!("Configuration loaded successfully");
-            debug!("{:#?}", config);
+        println!("==== provisioned_config ====");
+        println!("{:?}", provisioned_config);
 
-            if config.event_store.type_ == EventStoreType::InMemory {
-                for did_method in &[SupportedDidMethod::Iota, SupportedDidMethod::IotaSmr] {
-                    if config
-                        .did_methods
-                        .get(did_method)
-                        .map(|options| options.enabled)
-                        .unwrap_or_default()
-                    {
-                        panic!("`{did_method}` cannot be enabled when using the `in_memory` event store");
-                    }
-                }
-            }
-        })
+        let provisioned_config_parsed: ProvisionedApplicationConfiguration =
+            provisioned_config.clone().try_deserialize()?;
+        println!("==== provisioned_config (parsed) ====");
+        println!("{:#?}", provisioned_config_parsed);
+
+        let mut merged_config = default_config;
+        merged_config.log_format = provisioned_config_parsed.log_format.unwrap_or(merged_config.log_format);
+        merged_config.secret_manager.stronghold_password = provisioned_config_parsed
+            .secret_manager
+            .and_then(|config| config.stronghold_password);
+
+        println!("==== merged_config ====");
+        println!("{:?}", merged_config);
+
+        return Ok(merged_config);
+
+        // provisioned_config
+        //     .try_deserialize()
+        //     .inspect(|config: &ApplicationConfiguration| {
+        //         // TODO: this won't be logged either because `tracing_subscriber` is not initialized yet at this point. To
+        //         // fix this we can consider obtaining the `log_format` from the config file prior to loading the complete
+        //         // configuration.
+        //         info!("Configuration loaded successfully");
+        //         debug!("{:#?}", config);
+
+        //         if config.event_store.type_ == EventStoreType::InMemory {
+        //             for did_method in &[SupportedDidMethod::Iota, SupportedDidMethod::IotaSmr] {
+        //                 if config
+        //                     .did_methods
+        //                     .get(did_method)
+        //                     .map(|options| options.enabled)
+        //                     .unwrap_or_default()
+        //                 {
+        //                     panic!("`{did_method}` cannot be enabled when using the `in_memory` event store");
+        //                 }
+        //             }
+        //         }
+        //     })
     }
 
     pub fn set_preferred_did_method(&mut self, preferred_did_method: SupportedDidMethod) {

@@ -16,7 +16,11 @@ pub async fn stronghold_storage() -> StrongholdExtStorage {
 
     info!("Initializing Stronghold storage");
 
-    let stronghold_password = config().secret_manager.stronghold_password.clone();
+    let stronghold_password = config()
+        .secret_manager
+        .stronghold_password
+        .clone()
+        .expect("Stronghold password not set");
     let stronghold_path = config().secret_manager.stronghold_path.clone();
 
     info!("Stronghold path: {stronghold_path}");

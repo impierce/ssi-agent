@@ -63,7 +63,7 @@ async fn main() -> io::Result<()> {
 
     info!("{:?}", config());
 
-    let url = &config().url;
+    let url = &config().url.clone().expect("TODO: should never be None");
 
     info!("Application url: {}", url);
 

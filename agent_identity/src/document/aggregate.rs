@@ -213,7 +213,7 @@ impl Aggregate for Document {
                         }
                     }
                     SupportedDidMethod::Web => {
-                        let origin = config().url.origin();
+                        let origin = config().url.clone().expect("TODO: should never be None").origin();
 
                         info!("Origin: {}", &origin.ascii_serialization());
 

@@ -123,7 +123,7 @@ impl Aggregate for Credential {
                         .clone();
 
                     let issuer: Profile = ProfileBuilder::default()
-                        .id(config().url.clone())
+                        .id(config().url.clone().expect("TODO: should never be None"))
                         .type_("Profile")
                         .name(name)
                         .try_into()
