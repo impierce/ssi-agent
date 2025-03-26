@@ -15,9 +15,11 @@ agent_shared = { path = "../agent_shared" }
 agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification" }
 
+anyhow = "1.0"
 axum.workspace = true
 chrono.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 serde_with.workspace = true
 tokio.workspace = true
 tracing.workspace = true

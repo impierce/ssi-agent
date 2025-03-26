@@ -84,6 +84,8 @@ async fn main() -> io::Result<()> {
     let metadata_router = axum::Router::new()
         .route("/version", axum::routing::get(metadata::version::version))
         .route("/info", axum::routing::get(metadata::info::info))
+        // TODO: abbreviate to "/config"?
+        .route("/configuration", axum::routing::get(metadata::config::app_config))
         .with_state(metadata_state);
     let app = metadata_router.merge(app);
 
@@ -91,7 +93,7 @@ async fn main() -> io::Result<()> {
     let app = probes_router.merge(app);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await?;
-    info!("listening on {}", listener.local_addr()?);
+    info!("HTTP API available at http://{}", listener.local_addr()?);
     axum::serve(listener, app).await?;
 
     Ok(())

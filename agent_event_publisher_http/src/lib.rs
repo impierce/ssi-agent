@@ -36,7 +36,11 @@ pub struct EventPublisherHttp {
 
 impl EventPublisherHttp {
     pub fn load() -> anyhow::Result<Self> {
-        let event_publisher_http = config().event_publishers.clone().unwrap().http.unwrap();
+        let event_publisher_http = config()
+            .event_publishers
+            .clone()
+            .and_then(|event_publishers| event_publishers.http.map(|http| http))
+            .unwrap_or_default();
 
         // If it's not enabled, return an empty event publisher.
         if !event_publisher_http.enabled {

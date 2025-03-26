@@ -3,7 +3,13 @@ use config::ConfigError;
 use identity_iota::storage::KeyId;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
-use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
+use oid4vci::credential_format_profiles::{
+    w3c_verifiable_credentials::{
+        jwt_vc_json::{CredentialDefinition, JwtVcJson, JwtVcJsonParameters},
+        CredentialSubject,
+    },
+    CredentialFormats, Parameters, WithParameters,
+};
 use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -14,6 +20,7 @@ use std::{
     collections::HashMap,
     io::Write,
     sync::{RwLock, RwLockReadGuard},
+    vec,
 };
 use strum::VariantArray;
 use tracing::{debug, info};
@@ -28,6 +35,7 @@ static STRONGHOLD_PATH: &str = "./stronghold.dat";
 static ED25519_KEY_ID: &str = "ed25519-0";
 static ES256_KEY_ID: &str = "es256-0";
 
+#[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct ApplicationConfiguration {
     pub log_format: LogFormat,
@@ -64,10 +72,12 @@ pub enum LogFormat {
     Text,
 }
 
+#[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct EventStoreConfig {
     #[serde(rename = "type")]
     pub type_: EventStoreType,
+    #[serde(serialize_with = "redact")]
     pub connection_string: Option<String>,
 }
 
@@ -88,6 +98,7 @@ pub struct EventStorePostgresConfig {
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct SecretManagerConfig {
     pub stronghold_path: String,
+    #[serde(serialize_with = "redact")]
     pub stronghold_password: Option<String>,
     pub issuer_eddsa_key_id: KeyId,
     pub issuer_es256_key_id: KeyId,
@@ -133,7 +144,7 @@ pub struct EventPublishers {
     pub http: Option<EventPublisherHttp>,
 }
 
-#[derive(Debug, Deserialize, Clone, Serialize)]
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct EventPublisherHttp {
     pub enabled: bool,
     pub target_url: String,
@@ -346,6 +357,7 @@ impl From<SupportedDidMethod> for SubjectSyntaxType {
 }
 
 /// Generic options that add an "enabled" field and a "preferred" field (optional) to a configuration.
+#[skip_serializing_none]
 #[derive(Debug, Deserialize, Default, Clone, Serialize)]
 pub struct ToggleOptions {
     pub enabled: bool,
@@ -396,6 +408,37 @@ impl ApplicationConfiguration {
                         preferred: Some(true),
                     },
                 );
+                default_config.did_methods.insert(
+                    SupportedDidMethod::Key,
+                    ToggleOptions {
+                        enabled: true,
+                        preferred: None,
+                    },
+                );
+                default_config.display.push(Display {
+                    name: "UniCore".to_string(),
+                    locale: None,
+                    logo: None,
+                });
+                default_config.credential_configurations.push(CredentialConfiguration {
+                    credential_configuration_id: "001".to_string(),
+                    credential_format_with_parameters: CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
+                        parameters: JwtVcJsonParameters {
+                            credential_definition: CredentialDefinition {
+                                type_: vec!["VerifiableCredential".to_string()],
+                                credential_subject: CredentialSubject::default(),
+                            },
+                            order: None,
+                        },
+                    }),
+                    display: vec![serde_json::to_value(Display {
+                        name: "My Verifiable Credential".to_string(),
+                        locale: None,
+                        logo: None,
+                    })
+                    .unwrap()],
+                });
+
                 println!("Development profile loaded");
             }
             _ => {}
@@ -404,12 +447,15 @@ impl ApplicationConfiguration {
         println!("==== default_config ====");
         println!("{:?}", default_config);
 
-        let mut file = std::fs::File::create("agent_application/default-config.yaml").unwrap();
+        let mut file = std::fs::File::create("agent_application/config.yaml").unwrap();
         // file.write_all(serde_json::to_string_pretty(&default_config).unwrap().as_bytes())
         //     .unwrap();
+        file.write_all("# THIS FILE WAS GENERATED. ANY CHANGES WILL BE OVERWRITTEN!\n".as_bytes())
+            .unwrap();
         file.write_all(serde_yaml::to_string(&default_config).unwrap().as_bytes())
             .unwrap();
 
+        // TODO: extracted to "load_raw_config()"
         let provisioned_config = if cfg!(feature = "test_utils") {
             config::Config::builder()
                 .add_source(config::File::with_name("../agent_shared/tests/test-config.yaml"))
@@ -524,6 +570,28 @@ impl ApplicationConfiguration {
     }
 }
 
+/// Loads provisioned configuration from a yaml file and environment variables.
+pub fn load_raw_config() -> Result<config::Config, config::ConfigError> {
+    let provisioned_config = if cfg!(feature = "test_utils") {
+        config::Config::builder()
+            .add_source(config::File::with_name("../agent_shared/tests/test-config.yaml"))
+            // TODO: other prefix for tests
+            .add_source(config::Environment::with_prefix("TEST_UNICORE").separator("__"))
+            .build()?
+    } else {
+        let mut builder = config::Config::builder();
+        let config_file_path =
+            std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| "agent_application/foo.config.yaml".to_string());
+        if std::path::Path::new(&config_file_path).exists() {
+            builder = builder.add_source(config::File::with_name(&config_file_path));
+        }
+        builder = builder.add_source(config::Environment::with_prefix("UNICORE").separator("__"));
+        builder.build()?
+    };
+
+    Ok(provisioned_config)
+}
+
 /// Returns the application configuration or loads it, if it hasn't been loaded already.
 pub fn config<'a>() -> RwLockReadGuard<'a, ApplicationConfiguration> {
     CONFIG.read().unwrap()
@@ -590,6 +658,14 @@ pub fn get_preferred_signing_algorithm() -> jsonwebtoken::Algorithm {
         .first()
         .cloned()
         .expect("Please set a signing algorithm as `preferred` in the configuration")
+}
+
+/// Serializes the passed `String` into the value `"<REDACTED>"` to prevent leaking secrets.
+fn redact<S>(_: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str("<REDACTED>")
 }
 
 #[cfg(test)]

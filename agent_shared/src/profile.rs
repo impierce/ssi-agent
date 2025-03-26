@@ -1,8 +1,10 @@
+use serde::Serialize;
 use std::env;
 use std::str::FromStr;
 use strum::{Display, EnumString};
 
-#[derive(Debug, Display, EnumString)]
+#[derive(Debug, Display, EnumString, Serialize)]
+#[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum ApplicationProfile {
     Production,

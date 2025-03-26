@@ -1,3 +1,4 @@
+use agent_shared::profile::ApplicationProfile;
 use axum::{extract::State, Json};
 use chrono::TimeDelta;
 use serde::Serialize;
@@ -14,6 +15,7 @@ const APP_NAME: &str = "UniCore";
 #[derive(Serialize)]
 pub struct Info {
     app: String,
+    profile: ApplicationProfile,
     #[serde(flatten)]
     version: Version,
     /// The release channel of the application. Possible values are: `stable`, `next`, `beta`, `canary`.
@@ -25,6 +27,7 @@ pub struct Info {
 }
 
 /// Returns the `version`, application `uptime` among other build metadata.
+// #[axum_macros::debug_handler]
 pub async fn info(State(state): State<MetadataState>) -> Json<Info> {
     let time_delta = TimeDelta::seconds(state.startup_instant.elapsed().as_secs() as i64);
     let uptime_human_readable = format!(
@@ -37,6 +40,7 @@ pub async fn info(State(state): State<MetadataState>) -> Json<Info> {
     // Trim, filter out empty values, then convert to Option<String>.
     let info = Info {
         app: APP_NAME.to_string(),
+        profile: ApplicationProfile::load(),
         version: version_inner(),
         release_channel: APP_RELEASE_CHANNEL
             .map(|s| s.trim())
