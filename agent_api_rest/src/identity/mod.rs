@@ -3,6 +3,8 @@ pub mod documents;
 pub mod services;
 pub mod well_known;
 
+pub mod error;
+
 use agent_identity::state::IdentityState;
 use axum::{
     routing::{get, post},
@@ -21,11 +23,11 @@ pub fn router(identity_state: IdentityState) -> Router {
             API_VERSION,
             Router::new()
                 .route("/connections", get(get_connections).post(post_connections))
-                .route("/connections/:connection_id", get(get_connection))
+                .route("/connections/{connection_id}", get(get_connection))
                 .route("/documents", get(get_documents))
-                .route("/documents/:document_id", get(get_document))
+                .route("/documents/{document_id}", get(get_document))
                 .route("/services", get(services))
-                .route("/services/:service_id", get(service))
+                .route("/services/{service_id}", get(service))
                 .route("/services/linked-vp", post(linked_vp)),
         )
         .route("/.well-known/did.json", get(did))

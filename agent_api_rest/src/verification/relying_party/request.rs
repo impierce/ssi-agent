@@ -1,10 +1,11 @@
-use agent_shared::handlers::query_handler;
-use agent_verification::{authorization_request::views::AuthorizationRequestView, state::VerificationState};
+use crate::handlers::query_handler;
+use agent_verification::state::VerificationState;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use http_api_problem::ApiError;
 use hyper::header;
 
 /// Instead of directly embedding the Authorization Request into a QR-code or deeplink, the `Relying Party` can embed a
@@ -14,20 +15,19 @@ use hyper::header;
 pub(crate) async fn request(
     State(verification_state): State<VerificationState>,
     Path(request_id): Path<String>,
-) -> Response {
-    match query_handler(&request_id, &verification_state.query.authorization_request).await {
-        Ok(Some(AuthorizationRequestView {
-            signed_authorization_request_object: Some(signed_authorization_request_object),
-            ..
-        })) => (
-            StatusCode::OK,
-            [(header::CONTENT_TYPE, "application/oauth-authz-req+jwt")],
-            signed_authorization_request_object,
-        )
-            .into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+) -> Result<Response, ApiError> {
+    query_handler(&request_id, &verification_state.query.authorization_request)
+        .await?
+        .and_then(|authorization_request_view| authorization_request_view.signed_authorization_request_object)
+        .map(|signed_authorization_request_object| {
+            (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "application/oauth-authz-req+jwt")],
+                signed_authorization_request_object,
+            )
+                .into_response()
+        })
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[cfg(test)]

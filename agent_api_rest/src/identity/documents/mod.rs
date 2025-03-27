@@ -1,14 +1,14 @@
+use crate::handlers::query_handler;
 use agent_identity::state::IdentityState;
 use agent_shared::config::SupportedDidMethod;
-use agent_shared::handlers::query_handler;
 use axum::{
     extract::{Form, Path, State},
     response::{IntoResponse, Response},
     Json,
 };
+use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use tracing::debug;
 
 #[derive(Deserialize, Serialize)]
@@ -20,14 +20,15 @@ pub struct GetDocumentsEndpoint {
 pub(crate) async fn get_documents(
     State(state): State<IdentityState>,
     Form(GetDocumentsEndpoint { did_method }): Form<GetDocumentsEndpoint>,
-) -> Response {
+) -> Result<Response, ApiError> {
     debug!("Request Params - did_method: {did_method:?}");
 
-    match query_handler("all_documents", &state.query.all_documents).await {
-        Ok(Some(all_documents_view)) => {
+    let filtered_documents = query_handler("all_documents", &state.query.all_documents)
+        .await?
+        .map(|all_documents_view| {
             let filtered_documents: Vec<_> = all_documents_view
                 .documents
-                .values()
+                .into_values()
                 .filter(|document| {
                     did_method
                         .as_ref()
@@ -35,18 +36,20 @@ pub(crate) async fn get_documents(
                 })
                 .collect();
 
-            (StatusCode::OK, Json(filtered_documents)).into_response()
-        }
-        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+            filtered_documents
+        })
+        .unwrap_or_default();
+
+    Ok((StatusCode::OK, Json(filtered_documents)).into_response())
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn get_document(State(state): State<IdentityState>, Path(document_id): Path<String>) -> Response {
-    match query_handler(&document_id, &state.query.document).await {
-        Ok(Some(document)) => (StatusCode::OK, Json(document)).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+pub(crate) async fn get_document(
+    State(state): State<IdentityState>,
+    Path(document_id): Path<String>,
+) -> Result<Response, ApiError> {
+    query_handler(&document_id, &state.query.document)
+        .await?
+        .map(|document_view| (StatusCode::OK, Json(document_view)).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }

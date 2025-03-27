@@ -37,7 +37,7 @@ impl View<Offer> for Offer {
                 ..
             } => {
                 self.form_url_encoded_credential_offer
-                    .clone_from(form_url_encoded_credential_offer);
+                    .replace(form_url_encoded_credential_offer.clone());
                 self.status.clone_from(status);
             }
             CredentialOfferSent { status, .. } => {

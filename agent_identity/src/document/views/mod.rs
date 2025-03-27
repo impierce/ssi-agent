@@ -34,12 +34,9 @@ impl View<Document> for Document {
                 self.document_id.clone_from(document_id);
                 self.document.replace(document.clone());
             }
-            DocumentPublished {
-                document_id,
-                document: updated_document,
-            } => {
+            DocumentPublished { document_id, document } => {
                 self.document_id.clone_from(document_id);
-                self.document.replace(updated_document.clone());
+                self.document.replace(document.clone());
             }
         }
     }

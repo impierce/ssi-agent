@@ -32,7 +32,7 @@ pub struct Offer {
     pub credential_offer: Option<CredentialOffer>,
     pub subject_id: Option<String>,
     pub credential_ids: Vec<String>,
-    pub form_url_encoded_credential_offer: String,
+    pub form_url_encoded_credential_offer: Option<String>,
     pub pre_authorized_code: String,
     pub token_response: Option<TokenResponse>,
     pub access_token: String,
@@ -93,9 +93,9 @@ impl Aggregate for Offer {
                 let credential_offer_uri = CredentialOffer::CredentialOfferUri(
                     credential_issuer_metadata
                         .credential_issuer
-                        .join("credential-offer/")
-                        .and_then(|url| url.join(&offer_id))
-                        .map_err(|e| InvalidUrlError(e.to_string()))?,
+                        .join("openid4vci/")
+                        .and_then(|url| url.join("credential-offer/").and_then(|url| url.join(&offer_id)))
+                        .map_err(InvalidCredentialOfferUriError)?,
                 );
 
                 let credential_offer_by_value_enabled = config().credential_offer_by_value_enabled.unwrap_or_default();
@@ -133,6 +133,8 @@ impl Aggregate for Offer {
                 let client = reqwest::Client::new();
                 let target = self
                     .form_url_encoded_credential_offer
+                    .as_ref()
+                    .ok_or_else(|| MissingCredentialOfferError)?
                     .replace("openid-credential-offer://", target_url.as_str());
 
                 info!("Sending credential offer to: {}", target);
@@ -141,7 +143,8 @@ impl Aggregate for Offer {
                     .get(target)
                     .send()
                     .await
-                    .map_err(|e| SendCredentialOfferError(e.to_string()))?;
+                    .and_then(|response| response.error_for_status())
+                    .map_err(SendCredentialOfferError)?;
 
                 Ok(vec![CredentialOfferSent {
                     offer_id,
@@ -267,7 +270,8 @@ impl Aggregate for Offer {
                 status,
             } => {
                 self.offer_id = offer_id;
-                self.form_url_encoded_credential_offer = form_url_encoded_credential_offer;
+                self.form_url_encoded_credential_offer
+                    .replace(form_url_encoded_credential_offer);
                 self.status = status;
             }
             CredentialOfferSent { .. } => {}
@@ -623,8 +627,8 @@ pub mod test_utils {
         CredentialOffer::CredentialOfferUri(
             credential_issuer_metadata
                 .credential_issuer
-                .join("credential-offer/")
-                .and_then(|url| url.join(&offer_id))
+                .join("openid4vci/")
+                .and_then(|url| url.join("credential-offer/").and_then(|url| url.join(&offer_id)))
                 .expect("Failed to parse URL in test"),
         )
     }
