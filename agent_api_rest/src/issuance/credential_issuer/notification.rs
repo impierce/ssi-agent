@@ -59,3 +59,45 @@ pub async fn notification(
     }
     StatusCode::NO_CONTENT.into_response()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::issuance::credential_issuer::credential::tests::credential;
+    use crate::issuance::router;
+    use crate::tests::BASE_URL;
+    use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use agent_secret_manager::service::Service;
+    use agent_store::in_memory;
+    use axum::{body::Body, http::Request};
+    use oid4vci::notification_request::NotificationEvent;
+    use serde_json;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn test_valid_notification_request() {
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
+        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
+        let mut app = router(issuance_state);
+
+        let (access_token, notification_id) = credential(&mut app).await;
+
+        let request = Request::builder()
+            .uri("/openid4vci/notification")
+            .method("POST")
+            .header("Authorization", format!("Bearer {}", access_token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                serde_json::to_string(&NotificationRequest {
+                    notification_id,
+                    event: NotificationEvent::CredentialAccepted,
+                    event_description: None,
+                })
+                .unwrap(),
+            ))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+}

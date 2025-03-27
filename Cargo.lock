@@ -73,6 +73,7 @@ dependencies = [
  "axum 0.7.5",
  "axum-auth 0.7.0",
  "axum-macros",
+ "cqrs-es",
  "futures",
  "http-api-problem",
  "hyper 1.4.1",

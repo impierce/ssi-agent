@@ -15,6 +15,7 @@ agent_verification = { path = "../agent_verification" }
 axum.workspace = true
 axum-auth = "0.7"
 axum-macros = "0.4"
+cqrs-es = "0.4.2"
 http-api-problem = "0.57"
 hyper = { version = "1.2" }
 identity_core.workspace = true
@@ -53,5 +54,6 @@ serde_urlencoded = "0.7"
 serde_yaml.workspace = true
 serial_test = "3.0"
 tower.workspace = true
+tower-http.workspace = true
 tracing-test.workspace = true
 wiremock.workspace = true
