@@ -1,9 +1,9 @@
 {
 	"info": {
-		"_postman_id": "0bcb74f7-c53e-42fc-96a9-b146b3396280",
+		"_postman_id": "d50320fe-7e72-4e02-a358-20a4f9303d9e",
 		"name": "ssi-agent",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "41786572"
+		"_exporter_id": "30650915"
 	},
 	"item": [
 		{
@@ -1738,6 +1738,48 @@
 							],
 							"path": [
 								"info"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Show configuration",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/configuration",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"configuration"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Show configuration (provisioned)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/configuration?provisioned=true",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"configuration"
+							],
+							"query": [
+								{
+									"key": "provisioned",
+									"value": "true"
+								}
 							]
 						}
 					},

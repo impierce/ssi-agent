@@ -27,7 +27,6 @@ pub struct Info {
 }
 
 /// Returns the `version`, application `uptime` among other build metadata.
-// #[axum_macros::debug_handler]
 pub async fn info(State(state): State<MetadataState>) -> Json<Info> {
     let time_delta = TimeDelta::seconds(state.startup_instant.elapsed().as_secs() as i64);
     let uptime_human_readable = format!(

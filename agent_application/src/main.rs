@@ -85,7 +85,7 @@ async fn main() -> io::Result<()> {
         .route("/version", axum::routing::get(metadata::version::version))
         .route("/info", axum::routing::get(metadata::info::info))
         // TODO: abbreviate to "/config"?
-        .route("/configuration", axum::routing::get(metadata::config::app_config))
+        .route("/v0/configuration", axum::routing::get(metadata::config::app_config))
         .with_state(metadata_state);
     let app = metadata_router.merge(app);
 

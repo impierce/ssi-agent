@@ -10,7 +10,6 @@ pub struct QueryParams {
     provisioned: Option<bool>,
 }
 
-// #[axum_macros::debug_handler]
 pub async fn app_config(params: Query<QueryParams>) -> impl IntoResponse {
     debug!("Query params: {:?}", params);
 
