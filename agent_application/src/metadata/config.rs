@@ -3,6 +3,8 @@ use axum::{extract::Query, response::IntoResponse, Json};
 use serde::Deserialize;
 use tracing::debug;
 
+/// The query parameter `provisioned` can be used to filter the returned config values for only the ones that were explicitly provided.
+/// Default configuration values are not returned, which is useful to detect which configuration values can be changed during runtime (e.g. when building a UI).
 #[derive(Deserialize, Debug)]
 pub struct QueryParams {
     provisioned: Option<bool>,
