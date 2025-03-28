@@ -1,5 +1,9 @@
+mod defaults;
+mod provisioned;
+
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use config::ConfigError;
+use defaults::{apply_development_defaults, check_production_readiness};
 use identity_iota::storage::KeyId;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
@@ -12,6 +16,7 @@ use oid4vci::credential_format_profiles::{
 };
 use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::Lazy;
+use provisioned::ProvisionedApplicationConfiguration;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -27,6 +32,8 @@ use tracing::{debug, info};
 use url::Url;
 
 use crate::profile::ApplicationProfile;
+// Re-export
+pub use provisioned::load_provisioned_config;
 
 static STRONGHOLD_PATH: &str = "./stronghold.dat";
 
@@ -367,14 +374,6 @@ pub struct ToggleOptions {
 pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> =
     Lazy::new(|| RwLock::new(ApplicationConfiguration::new().unwrap()));
 
-/// All values that can be explicitly provisioned.
-/// TODO: Should this be the largest struct as everything should be provisionable?
-#[derive(Debug, Deserialize, Clone, Default)]
-pub struct ProvisionedApplicationConfiguration {
-    pub log_format: Option<LogFormat>,
-    pub secret_manager: Option<SecretManagerConfig>,
-}
-
 impl ApplicationConfiguration {
     pub fn new() -> Result<Self, ConfigError> {
         dotenvy::dotenv().ok();
@@ -387,67 +386,20 @@ impl ApplicationConfiguration {
 
         let mut default_config = ApplicationConfiguration::default();
 
-        match ApplicationProfile::load() {
+        let application_profile = ApplicationProfile::load();
+
+        match application_profile {
             ApplicationProfile::Development => {
-                default_config.log_format = LogFormat::Text;
-                default_config.event_store.type_ = EventStoreType::InMemory;
-
-                // If no Stronghold password is provided, a random password is generated.
-                let random_bytes: [u8; 16] = rand::thread_rng().gen();
-                default_config.secret_manager.stronghold_password = Some(URL_SAFE_NO_PAD.encode(&random_bytes));
-                println!(
-                    "\n====================\n\n  A new Stronghold password was generated!\n\n  {}\n\n====================\n",
-                    default_config.secret_manager.stronghold_password.clone().unwrap()
-                );
-
-                default_config.url = Some(Url::parse("http://localhost:3033").unwrap());
-                default_config.did_methods.insert(
-                    SupportedDidMethod::Jwk,
-                    ToggleOptions {
-                        enabled: true,
-                        preferred: Some(true),
-                    },
-                );
-                default_config.did_methods.insert(
-                    SupportedDidMethod::Key,
-                    ToggleOptions {
-                        enabled: true,
-                        preferred: None,
-                    },
-                );
-                default_config.display.push(Display {
-                    name: "UniCore".to_string(),
-                    locale: None,
-                    logo: None,
-                });
-                default_config.credential_configurations.push(CredentialConfiguration {
-                    credential_configuration_id: "001".to_string(),
-                    credential_format_with_parameters: CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
-                        parameters: JwtVcJsonParameters {
-                            credential_definition: CredentialDefinition {
-                                type_: vec!["VerifiableCredential".to_string()],
-                                credential_subject: CredentialSubject::default(),
-                            },
-                            order: None,
-                        },
-                    }),
-                    display: vec![serde_json::to_value(Display {
-                        name: "My Verifiable Credential".to_string(),
-                        locale: None,
-                        logo: None,
-                    })
-                    .unwrap()],
-                });
-
+                default_config = apply_development_defaults(default_config);
                 println!("Development profile loaded");
             }
-            _ => {}
+            ApplicationProfile::Production => {}
         }
 
         println!("==== default_config ====");
         println!("{:?}", default_config);
 
-        let mut file = std::fs::File::create("agent_application/config.yaml").unwrap();
+        let mut file = std::fs::File::create("agent_application/default.config.yaml").unwrap();
         // file.write_all(serde_json::to_string_pretty(&default_config).unwrap().as_bytes())
         //     .unwrap();
         file.write_all("# THIS FILE WAS GENERATED. ANY CHANGES WILL BE OVERWRITTEN!\n".as_bytes())
@@ -455,42 +407,28 @@ impl ApplicationConfiguration {
         file.write_all(serde_yaml::to_string(&default_config).unwrap().as_bytes())
             .unwrap();
 
-        // TODO: extracted to "load_raw_config()"
-        let provisioned_config = if cfg!(feature = "test_utils") {
-            config::Config::builder()
-                .add_source(config::File::with_name("../agent_shared/tests/test-config.yaml"))
-                // TODO: other prefix for tests
-                .add_source(config::Environment::with_prefix("TEST_UNICORE").separator("__"))
-                .build()?
-        } else {
-            let mut builder = config::Config::builder();
-            let config_file_path =
-                std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| "agent_application/config.yaml".to_string());
-            if std::path::Path::new(&config_file_path).exists() {
-                builder = builder.add_source(config::File::with_name(&config_file_path));
-            }
-            builder = builder.add_source(config::Environment::with_prefix("UNICORE").separator("__"));
-            builder.build()?
-        };
+        let provisioned_config = load_provisioned_config()?;
 
         println!("==== provisioned_config ====");
         println!("{:?}", provisioned_config);
 
-        let provisioned_config_parsed: ProvisionedApplicationConfiguration =
-            provisioned_config.clone().try_deserialize()?;
-        println!("==== provisioned_config (parsed) ====");
-        println!("{:#?}", provisioned_config_parsed);
+        // let provisioned_config_parsed: provisioned::ProvisionedApplicationConfiguration =
+        //     provisioned_config.clone().try_deserialize()?;
+        // println!("==== provisioned_config (parsed) ====");
+        // println!("{:#?}", provisioned_config_parsed);
 
-        let mut merged_config = default_config;
-        merged_config.log_format = provisioned_config_parsed.log_format.unwrap_or(merged_config.log_format);
-        merged_config.secret_manager.stronghold_password = provisioned_config_parsed
-            .secret_manager
-            .and_then(|config| config.stronghold_password);
-
+        let merged_config = default_config.merge(provisioned_config);
         println!("==== merged_config ====");
         println!("{:?}", merged_config);
 
+        match application_profile {
+            ApplicationProfile::Production => check_production_readiness(merged_config.clone()),
+            _ => {}
+        }
+
         return Ok(merged_config);
+
+        // TODO: include this logic again
 
         // provisioned_config
         //     .try_deserialize()
@@ -514,6 +452,14 @@ impl ApplicationConfiguration {
         //             }
         //         }
         //     })
+    }
+
+    pub fn merge(&mut self, provisioned_config: ProvisionedApplicationConfiguration) -> Self {
+        self.log_format = provisioned_config.log_format.unwrap_or(self.clone().log_format);
+        self.secret_manager.stronghold_password = provisioned_config
+            .secret_manager
+            .and_then(|config| config.stronghold_password);
+        self.clone()
     }
 
     pub fn set_preferred_did_method(&mut self, preferred_did_method: SupportedDidMethod) {
@@ -570,27 +516,32 @@ impl ApplicationConfiguration {
     }
 }
 
-/// Loads provisioned configuration from a yaml file and environment variables.
-pub fn load_raw_config() -> Result<config::Config, config::ConfigError> {
-    let provisioned_config = if cfg!(feature = "test_utils") {
-        config::Config::builder()
-            .add_source(config::File::with_name("../agent_shared/tests/test-config.yaml"))
-            // TODO: other prefix for tests
-            .add_source(config::Environment::with_prefix("TEST_UNICORE").separator("__"))
-            .build()?
-    } else {
-        let mut builder = config::Config::builder();
-        let config_file_path =
-            std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| "agent_application/foo.config.yaml".to_string());
-        if std::path::Path::new(&config_file_path).exists() {
-            builder = builder.add_source(config::File::with_name(&config_file_path));
-        }
-        builder = builder.add_source(config::Environment::with_prefix("UNICORE").separator("__"));
-        builder.build()?
-    };
+// ApplicationConfiguration::from(provisioned_config)
+// default_config.merge(provisioned_config)
 
-    Ok(provisioned_config)
-}
+// impl From<ProvisionedApplicationConfiguration> for ApplicationConfiguration {
+//     fn from(provisioned_config: ProvisionedApplicationConfiguration) -> Self {
+//         let mut default_config = ApplicationConfiguration::default();
+
+//         match ApplicationProfile::load() {
+//             ApplicationProfile::Development => {
+//                 default_config = apply_development_defaults(default_config);
+//                 println!("Development profile loaded");
+//             }
+//             ApplicationProfile::Production => {}
+//         }
+
+//         let mut merged_config = default_config;
+
+//         // overwrite default values with provisioned values
+//         merged_config.log_format = provisioned_config.log_format.unwrap_or(merged_config.log_format);
+//         merged_config.secret_manager.stronghold_password = provisioned_config
+//             .secret_manager
+//             .and_then(|config| config.stronghold_password);
+
+//         merged_config
+//     }
+// }
 
 /// Returns the application configuration or loads it, if it hasn't been loaded already.
 pub fn config<'a>() -> RwLockReadGuard<'a, ApplicationConfiguration> {
@@ -661,11 +612,12 @@ pub fn get_preferred_signing_algorithm() -> jsonwebtoken::Algorithm {
 }
 
 /// Serializes the passed `String` into the value `"<REDACTED>"` to prevent leaking secrets.
-fn redact<S>(_: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
+pub(crate) fn redact<S>(str: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
-    serializer.serialize_str("<REDACTED>")
+    str.as_ref().map(|_| "<REDACTED>".to_string()).serialize(serializer)
+    // serializer.serialize_str("<REDACTED>")
 }
 
 #[cfg(test)]
@@ -677,5 +629,27 @@ mod tests {
         for variant in SupportedDidMethod::VARIANTS {
             let _subject_syntax_type: SubjectSyntaxType = (*variant).into();
         }
+    }
+
+    #[test]
+    fn test_redact_custom_serializer_overwrites_value() {
+        let value = EventStoreConfig {
+            type_: EventStoreType::Postgres,
+            connection_string: Some("postgres://localhost:5432".to_string()),
+        };
+
+        let json = serde_json::to_value(&value).unwrap();
+        assert_eq!(json, json!({"type": "postgres", "connection_string": "<REDACTED>"}));
+    }
+
+    #[test]
+    fn test_redact_custom_serializer_ignores_none() {
+        let value = EventStoreConfig {
+            type_: EventStoreType::InMemory,
+            connection_string: None,
+        };
+
+        let json = serde_json::to_value(&value).unwrap();
+        assert_eq!(json, json!({"type": "in_memory"}));
     }
 }
