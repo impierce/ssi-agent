@@ -28,6 +28,7 @@ pub struct ApplicationConfiguration {
     pub log_format: LogFormat,
     pub event_store: EventStoreConfig,
     pub url: Url,
+    #[serde(default)]
     pub openid4vci_endpoints: OpenID4VCIUrls,
     pub base_path: Option<String>,
     pub cors_enabled: Option<bool>,
