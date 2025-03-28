@@ -29,7 +29,7 @@ pub struct ApplicationConfiguration {
     pub event_store: EventStoreConfig,
     pub url: Url,
     #[serde(default)]
-    pub openid4vci_endpoints: OpenID4VCIUrls,
+    pub openid4vci_endpoints: OpenID4VCIEndpoints,
     pub base_path: Option<String>,
     pub cors_enabled: Option<bool>,
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
@@ -45,7 +45,7 @@ pub struct ApplicationConfiguration {
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
-pub struct OpenID4VCIUrls {
+pub struct OpenID4VCIEndpoints {
     pub token_endpoint: Option<Url>,
     pub credential_endpoint: Option<Url>,
 }
