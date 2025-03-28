@@ -28,6 +28,7 @@ pub struct ApplicationConfiguration {
     pub log_format: LogFormat,
     pub event_store: EventStoreConfig,
     pub url: Url,
+    pub openid4vci_endpoints: OpenID4VCIUrls,
     pub base_path: Option<String>,
     pub cors_enabled: Option<bool>,
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
@@ -40,6 +41,12 @@ pub struct ApplicationConfiguration {
     pub display: Vec<Display>,
     pub event_publishers: Option<EventPublishers>,
     pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct OpenID4VCIUrls {
+    pub token_endpoint: Option<Url>,
+    pub credential_endpoint: Option<Url>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
