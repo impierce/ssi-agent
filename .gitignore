@@ -3,6 +3,8 @@
 **/Cargo.lock
 !Cargo.lock
 
+debug/
+
 **/*.env
 !**/.env.example
 

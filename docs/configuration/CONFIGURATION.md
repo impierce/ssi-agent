@@ -1,9 +1,13 @@
 # Configuration
 
-UniCore can be configured using a configuration file or via environment variables. UniCore looks for a `config.yaml` file in the application root folder on startup. An example file can be found in [example.config.yaml](agent_application/example.config.yaml). Using a config file gives a better overview over the configuration, while environment variables are commonly used to inject sensitive values or set deployment-specific values in a CI.
+UniCore can be configured using a configuration file or via environment variables.
+
+## Configuration file
+
+By default, UniCore looks for a `config.yaml` file in the application root folder on startup. A path to a different config file can be specified using the `UNICORE__CONFIG_FILE` environment variable. An example config file can be found in [example.config.yaml](agent_application/example.config.yaml). Using a config file generally gives a better overview over the configuration, while environment variables are commonly used to inject sensitive values or set deployment-specific values in a CI.
 
 :::info
-Environment variables **override** values specified in the configuration file.
+Environment variables **override** values specified in the configuration file. This allows you to define a base configuration in the file and override specific values using environment variables.
 :::
 
 :::note
@@ -12,7 +16,29 @@ All environment variables need to be prefixed with `UNICORE__` to prevent confli
 
 ## Default and provisioned values
 
-UniCore uses a sensible default configuration to reduce initial setup friction. If you override any of the default values by supplying your own values via a config file or environment variables, your values are treated as **provisioned** config values. Provisioned values cannot be changed during runtime to ensure consistency across deployments and restarts.
+UniCore uses a sensible default configuration to reduce initial setup friction. If you override any of the default values by supplying your own values via a config file or environment variables, those values are treated as **provisioned** config values. Provisioned values cannot be changed during runtime to ensure consistency across deployments and restarts.
+
+## Configuration values
+
+Find the full list of UniCore's configuration options below.
+
+| Environment variable  | Config key   | Description                   | Default value | Accepted values |
+| --------------------- | ------------ | ----------------------------- | ------------- | --------------- |
+| `UNICORE__LOG_FORMAT` | `log_format` | The format of the log output. | `json`        | `json`, `text`  |
+
+### Log format
+
+The format of the log output.
+
+#### Key
+
+- `UNICORE__LOG_FORMAT` _(environment variable)_
+- `log_format` _(config.yaml)_
+
+#### Values
+
+- `json` _(default)_
+- `text`
 
 ## General
 

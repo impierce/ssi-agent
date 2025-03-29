@@ -401,7 +401,9 @@ impl ApplicationConfiguration {
         println!("==== default_config ====");
         println!("{:?}", default_config);
 
-        let mut file = std::fs::File::create("agent_application/default.config.yaml").unwrap();
+        // TODO: remove?
+        std::fs::create_dir("./debug").ok();
+        let mut file = std::fs::File::create("./debug/default.config.yaml").unwrap();
         // file.write_all(serde_json::to_string_pretty(&default_config).unwrap().as_bytes())
         //     .unwrap();
         file.write_all("# THIS FILE WAS GENERATED. ANY CHANGES WILL BE OVERWRITTEN!\n".as_bytes())
@@ -427,6 +429,16 @@ impl ApplicationConfiguration {
             ApplicationProfile::Production => check_production_readiness(merged_config.clone()),
             _ => {}
         }
+
+        // TODO: remove?
+        std::fs::create_dir("./debug").ok();
+        let mut file = std::fs::File::create("./debug/config.yaml").unwrap();
+        // file.write_all(serde_json::to_string_pretty(&default_config).unwrap().as_bytes())
+        //     .unwrap();
+        file.write_all("# THIS FILE WAS GENERATED. ANY CHANGES WILL BE OVERWRITTEN!\n".as_bytes())
+            .unwrap();
+        file.write_all(serde_yaml::to_string(&merged_config).unwrap().as_bytes())
+            .unwrap();
 
         return Ok(merged_config);
 

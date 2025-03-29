@@ -29,8 +29,7 @@ pub struct ProvisionedApplicationConfiguration {
 /// Loads provisioned configuration from a yaml file and environment variables.
 pub fn load_provisioned_config() -> Result<ProvisionedApplicationConfiguration, config::ConfigError> {
     let mut builder = config::Config::builder();
-    let config_file_path =
-        std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| "agent_application/config.yaml".to_string());
+    let config_file_path = std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| "./config.yaml".to_string());
     if std::path::Path::new(&config_file_path).exists() {
         builder = builder.add_source(config::File::with_name(&config_file_path));
     }
