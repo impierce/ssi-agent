@@ -12,7 +12,7 @@ All environment variables need to be prefixed with `UNICORE__` to prevent confli
 
 ## Default and provisioned values
 
-UniCore uses a sensible default configuration to reduce initial setup friction. If you override any of the default values by supplying your own values via a config file or environment variables, your values are treated as **provisioned** config values. That means that they cannot be changed during runtime to ensure consistency across deployments and restarts.
+UniCore uses a sensible default configuration to reduce initial setup friction. If you override any of the default values by supplying your own values via a config file or environment variables, your values are treated as **provisioned** config values. Provisioned values cannot be changed during runtime to ensure consistency across deployments and restarts.
 
 ## General
 

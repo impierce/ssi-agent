@@ -15,7 +15,6 @@ use crate::config::{
 };
 
 pub(crate) fn apply_development_defaults(mut config: ApplicationConfiguration) -> ApplicationConfiguration {
-    config.log_format = LogFormat::Text;
     config.event_store.type_ = EventStoreType::InMemory;
 
     // If no Stronghold password is provided, a random password is generated.
@@ -64,6 +63,34 @@ pub(crate) fn apply_development_defaults(mut config: ApplicationConfiguration) -
         })
         .unwrap()],
     });
+
+    config
+}
+
+pub(crate) fn apply_production_defaults(mut config: ApplicationConfiguration) -> ApplicationConfiguration {
+    config.domain_linkage_enabled = true;
+
+    config.did_methods.insert(
+        SupportedDidMethod::Jwk,
+        ToggleOptions {
+            enabled: false,
+            preferred: None,
+        },
+    );
+    config.did_methods.insert(
+        SupportedDidMethod::Key,
+        ToggleOptions {
+            enabled: false,
+            preferred: None,
+        },
+    );
+    config.did_methods.insert(
+        SupportedDidMethod::Web,
+        ToggleOptions {
+            enabled: true,
+            preferred: Some(true),
+        },
+    );
 
     config
 }

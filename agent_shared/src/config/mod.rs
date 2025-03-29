@@ -3,7 +3,7 @@ mod provisioned;
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use config::ConfigError;
-use defaults::{apply_development_defaults, check_production_readiness};
+use defaults::{apply_development_defaults, apply_production_defaults, check_production_readiness};
 use identity_iota::storage::KeyId;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
@@ -49,7 +49,7 @@ pub struct ApplicationConfiguration {
     pub event_store: EventStoreConfig,
     pub url: Option<Url>,
     pub base_path: Option<String>,
-    pub cors_enabled: Option<bool>,
+    pub cors_enabled: bool,
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
     pub external_server_response_timeout_ms: Option<u64>,
     pub domain_linkage_enabled: bool,
@@ -393,7 +393,9 @@ impl ApplicationConfiguration {
                 default_config = apply_development_defaults(default_config);
                 println!("Development profile loaded");
             }
-            ApplicationProfile::Production => {}
+            ApplicationProfile::Production => {
+                default_config = apply_production_defaults(default_config);
+            }
         }
 
         println!("==== default_config ====");
@@ -651,5 +653,28 @@ mod tests {
 
         let json = serde_json::to_value(&value).unwrap();
         assert_eq!(json, json!({"type": "in_memory"}));
+    }
+
+    #[test]
+    fn provisioned_config_successfully_merged_into_default_config() {
+        let mut default_config = ApplicationConfiguration::default();
+        let mut provisioned_config = ProvisionedApplicationConfiguration::default();
+        provisioned_config.log_format = Some(LogFormat::Text);
+        provisioned_config.secret_manager = Some(provisioned::SecretManagerConfig {
+            stronghold_password: Some("password".to_string()),
+            ..Default::default()
+        });
+
+        let merged_config = default_config.merge(provisioned_config);
+
+        assert_eq!(
+            serde_json::to_value(&merged_config).unwrap(),
+            json!({
+                "log_format": "text",
+                "secret_manager": {
+                    "stronghold_password": "password"
+                }
+            })
+        );
     }
 }

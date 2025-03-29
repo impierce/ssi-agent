@@ -90,7 +90,7 @@ pub fn app(
     };
 
     // CORS
-    if config().cors_enabled.unwrap_or(false) {
+    if config().cors_enabled {
         info!("CORS (permissive) enabled for all routes");
         app.layer(CorsLayer::permissive())
     } else {
