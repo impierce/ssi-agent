@@ -40,7 +40,8 @@ pub fn load_provisioned_config() -> Result<ProvisionedApplicationConfiguration, 
     config.try_deserialize::<ProvisionedApplicationConfiguration>()
 }
 
-#[derive(Debug, Deserialize, Clone, Serialize)]
+#[skip_serializing_none]
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct SecretManagerConfig {
     pub stronghold_path: Option<String>,
     #[serde(serialize_with = "redact")]
@@ -49,6 +50,7 @@ pub struct SecretManagerConfig {
     pub issuer_es256_key_id: Option<KeyId>,
 }
 
+#[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct EventStoreConfig {
     #[serde(rename = "type")]

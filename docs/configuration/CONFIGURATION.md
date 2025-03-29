@@ -1,6 +1,6 @@
 # Configuration
 
-A configuration file is used to configure UniCore. It is expected to be present in `agent_application/config.yaml`. An example can be found in [example.config.yaml](example.config.yaml). Values can also be set through the environment, preferably used to inject sensitive values or environment-specific values.
+UniCore can be configured using a configuration file or via environment variables. UniCore looks for a `config.yaml` file in the application root folder on startup. An example file can be found in [example.config.yaml](agent_application/example.config.yaml). Using a config file gives a better overview over the configuration, while environment variables are commonly used to inject sensitive values or set deployment-specific values in a CI.
 
 :::info
 Environment variables **override** values specified in the configuration file.
@@ -9,6 +9,10 @@ Environment variables **override** values specified in the configuration file.
 :::note
 All environment variables need to be prefixed with `UNICORE__` to prevent conflicts with other unrelated variables.
 :::
+
+## Default and provisioned values
+
+UniCore uses a sensible default configuration to reduce initial setup friction. If you override any of the default values by supplying your own values via a config file or environment variables, your values are treated as **provisioned** config values. That means that they cannot be changed during runtime to ensure consistency across deployments and restarts.
 
 ## General
 
