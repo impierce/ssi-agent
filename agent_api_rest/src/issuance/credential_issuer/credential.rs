@@ -255,7 +255,7 @@ mod tests {
     #[case::with_external_server(true, false, 0)]
     #[case::with_external_server_and_self_signed_credential(true, true, 0)]
     #[should_panic(expected = "assertion `left == right` failed\n  left: 500\n right: 200")]
-    #[case::should_panic_due_to_timout(true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100)]
+    #[case::should_panic_due_to_timeout(true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100)]
     #[serial_test::serial]
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
