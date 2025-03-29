@@ -20,7 +20,11 @@ UniCore uses a sensible default configuration to reduce initial setup friction. 
 
 ## Runtime configuration
 
-Changing the configuration at runtime through the API is currently not supported, but will be possible in the near future.
+:::info
+
+Changing the configuration at runtime via the API is currently **not supported**, but will be possible in the near future.
+
+:::
 
 ## Inspecting the current configuration
 
@@ -29,6 +33,24 @@ UniCore serves its configuration at the `/v0/configuration` endpoint. Sensitive 
 ## Configuration values
 
 Find the full list of UniCore's configuration options below.
+
+### Port
+
+The port UniCore's HTTP server listens on.
+
+| Environment variable | `config.yaml` |
+| -------------------- | ------------- |
+| `UNICORE__PORT`      | `port`        |
+
+#### Values
+
+- `3033` _(default)_
+
+#### Example
+
+```yaml
+port: 1337
+```
 
 ### Log format
 

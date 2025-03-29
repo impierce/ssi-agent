@@ -45,6 +45,7 @@ static ES256_KEY_ID: &str = "es256-0";
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct ApplicationConfiguration {
+    pub port: Option<u16>,
     pub log_format: LogFormat,
     pub event_store: EventStoreConfig,
     pub url: Option<Url>,
@@ -469,6 +470,7 @@ impl ApplicationConfiguration {
     }
 
     pub fn merge(&mut self, provisioned_config: ProvisionedApplicationConfiguration) -> Self {
+        self.port = provisioned_config.port.and_then(|port| Some(port));
         self.log_format = provisioned_config.log_format.unwrap_or(self.clone().log_format);
         self.secret_manager.stronghold_password = provisioned_config
             .secret_manager

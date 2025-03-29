@@ -92,7 +92,9 @@ async fn main() -> io::Result<()> {
     let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
     let app = probes_router.merge(app);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await?;
+    let port = config().port.unwrap_or(3033);
+
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
     info!("HTTP API available at http://{}", listener.local_addr()?);
     axum::serve(listener, app).await?;
 

@@ -9,6 +9,7 @@ use crate::config::{redact, EventStoreType, LogFormat};
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct ProvisionedApplicationConfiguration {
+    pub port: Option<u16>,
     pub log_format: Option<LogFormat>,
     pub event_store: Option<EventStoreConfig>,
     pub url: Option<Url>,
