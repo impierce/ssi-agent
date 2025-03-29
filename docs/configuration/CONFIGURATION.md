@@ -18,6 +18,14 @@ All environment variables need to be prefixed with `UNICORE__` to prevent confli
 
 UniCore uses a sensible default configuration to reduce initial setup friction. If you override any of the default values by supplying your own values via a config file or environment variables, those values are treated as **provisioned** config values. Provisioned values cannot be changed during runtime to ensure consistency across deployments and restarts.
 
+## Runtime configuration
+
+Changing the configuration at runtime through the API is currently not supported, but will be possible in the near future.
+
+## Inspecting the current configuration
+
+UniCore serves its configuration at the `/v0/configuration` endpoint. Sensitive values are redacted. In case you're interested in all provisioned values, a `?provisioned=true` query parameter can be added to the URL.
+
 ## Configuration values
 
 Find the full list of UniCore's configuration options below.
@@ -34,6 +42,40 @@ The format of the log output.
 
 - `json` _(default)_
 - `text`
+
+#### Example
+
+```yaml
+log_format: text
+```
+
+### Event store
+
+The event store is used to persist events and serves as UniCore's persistence layer.
+
+| Environment variable                      | `config.yaml`                   |
+| ----------------------------------------- | ------------------------------- |
+| `UNICORE__EVENT_STORE__TYPE`              | `event_store.type`              |
+| `UNICORE__EVENT_STORE__CONNECTION_STRING` | `event_store.connection_string` |
+
+#### Values
+
+##### `type`
+
+- `postgres` _(default)_
+- `in_memory`
+
+##### `connection_string`
+
+Only required when `type` is `postgres`.
+
+#### Example
+
+```yaml
+event_store:
+  type: postgres
+  connection_string: postgresql://user:password@database:5432/demo
+```
 
 ## General
 
