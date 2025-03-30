@@ -3,7 +3,6 @@ mod provisioned;
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use config::ConfigError;
-use defaults::{apply_development_defaults, apply_production_defaults, check_production_readiness};
 use identity_iota::storage::KeyId;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
@@ -391,11 +390,11 @@ impl ApplicationConfiguration {
 
         match application_profile {
             ApplicationProfile::Development => {
-                default_config = apply_development_defaults(default_config);
+                default_config.apply_development_defaults();
                 println!("Development profile loaded");
             }
             ApplicationProfile::Production => {
-                default_config = apply_production_defaults(default_config);
+                default_config.apply_production_defaults();
             }
         }
 
@@ -427,7 +426,7 @@ impl ApplicationConfiguration {
         println!("{:?}", merged_config);
 
         match application_profile {
-            ApplicationProfile::Production => check_production_readiness(merged_config.clone()),
+            ApplicationProfile::Production => merged_config.validate(),
             _ => {}
         }
 
@@ -472,10 +471,35 @@ impl ApplicationConfiguration {
     pub fn merge(&mut self, provisioned_config: ProvisionedApplicationConfiguration) -> Self {
         self.port = provisioned_config.port.and_then(|port| Some(port));
         self.log_format = provisioned_config.log_format.unwrap_or(self.clone().log_format);
+        // self.event_store = provisioned_config.event_store.unwrap_or(self.clone().event_store);
+        self.url = provisioned_config.url.or(self.url.clone());
+        self.base_path = provisioned_config.base_path.or(self.base_path.clone());
+        self.cors_enabled = provisioned_config.cors_enabled.unwrap_or(self.cors_enabled);
+        // self.did_methods = provisioned_config.did_methods.unwrap_or(self.did_methods.clone());
+        self.external_server_response_timeout_ms = provisioned_config
+            .external_server_response_timeout_ms
+            .or(self.external_server_response_timeout_ms.clone());
+        self.domain_linkage_enabled = provisioned_config
+            .domain_linkage_enabled
+            .unwrap_or(self.domain_linkage_enabled);
+        self.credential_offer_by_value_enabled = provisioned_config
+            .credential_offer_by_value_enabled
+            .or(self.credential_offer_by_value_enabled.clone());
         self.secret_manager.stronghold_password = provisioned_config
             .secret_manager
             .and_then(|config| config.stronghold_password);
         self.clone()
+    }
+
+    /// Validates the configuration for production readiness (enforce restrictions).
+    pub fn validate(&self) {
+        if self.secret_manager.stronghold_password.is_none()
+            || self.secret_manager.stronghold_password.as_ref().unwrap().is_empty()
+        {
+            panic!("Stronghold password must be provided.");
+        }
+        // TODO: check password policy ...
+        // Disallow `in_memory` in production?
     }
 
     pub fn set_preferred_did_method(&mut self, preferred_did_method: SupportedDidMethod) {
@@ -640,6 +664,8 @@ where
 mod tests {
     use super::*;
 
+    use provisioned::EventStoreConfig;
+
     #[test]
     fn all_supported_did_methods_can_be_converted_into_subject_syntax_type() {
         for variant in SupportedDidMethod::VARIANTS {
@@ -650,7 +676,7 @@ mod tests {
     #[test]
     fn test_redact_custom_serializer_overwrites_value() {
         let value = EventStoreConfig {
-            type_: EventStoreType::Postgres,
+            type_: Some(EventStoreType::Postgres),
             connection_string: Some("postgres://localhost:5432".to_string()),
         };
 
@@ -661,7 +687,7 @@ mod tests {
     #[test]
     fn test_redact_custom_serializer_ignores_none() {
         let value = EventStoreConfig {
-            type_: EventStoreType::InMemory,
+            type_: Some(EventStoreType::InMemory),
             connection_string: None,
         };
 
@@ -672,12 +698,20 @@ mod tests {
     #[test]
     fn provisioned_config_successfully_merged_into_default_config() {
         let mut default_config = ApplicationConfiguration::default();
-        let mut provisioned_config = ProvisionedApplicationConfiguration::default();
-        provisioned_config.log_format = Some(LogFormat::Text);
-        provisioned_config.secret_manager = Some(provisioned::SecretManagerConfig {
-            stronghold_password: Some("password".to_string()),
+        default_config.apply_development_defaults();
+
+        println!("{}", serde_json::to_string_pretty(&default_config).unwrap());
+
+        let provisioned_config = ProvisionedApplicationConfiguration {
+            log_format: Some(LogFormat::Text),
+            event_store: Some(EventStoreConfig {
+                type_: Some(EventStoreType::InMemory),
+                connection_string: None,
+            }),
+            cors_enabled: Some(true),
+            domain_linkage_enabled: Some(true),
             ..Default::default()
-        });
+        };
 
         let merged_config = default_config.merge(provisioned_config);
 
@@ -690,5 +724,18 @@ mod tests {
                 }
             })
         );
+    }
+
+    #[test]
+    fn test_validate_production_config() {
+        let mut config = ApplicationConfiguration::default();
+        config.apply_production_defaults();
+
+        // Valid configuration
+        config.validate();
+
+        // Invalid configuration
+        config.secret_manager.stronghold_password = None;
+        assert!(std::panic::catch_unwind(|| config.validate()).is_err());
     }
 }

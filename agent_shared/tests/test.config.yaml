@@ -1,25 +1,30 @@
-log_format: "text"
+log_format: text
+
 event_store:
-  type: "in_memory"
-url: "https://my-domain.example.org"
+  type: in_memory
+
+url: https://my-domain.example.test
+
+cors_enabled: false
 
 did_methods:
-  did_jwk:
-    enabled: true
-    # preferred: true
-  did_key:
+  did:jwk:
     enabled: true
     preferred: true
-  did_web:
+  did:key:
+    enabled: true
+    preferred: false
+  did:web:
     enabled: false
 
 domain_linkage_enabled: false
+
 credential_offer_by_value_enabled: true
 
 signing_algorithms_supported:
   eddsa:
-    preferred: true
     enabled: true
+    preferred: true
 
 vp_formats:
   jwt_vc_json:
@@ -29,19 +34,19 @@ vp_formats:
 
 event_publishers:
   http:
-    enabled: false
-    target_url: "http://localhost"
+    enabled: true
+    target_url: https://service.example.test:8291/events
     headers:
       Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
     events:
-      server_config: []
       credential: [UnsignedCredentialCreated, CredentialSigned]
+      server_config: []
 
 display:
   - name: UniCore
     locale: en
     logo:
-      uri: "https://impierce.com/images/favicon/apple-touch-icon.png"
+      uri: https://www.impierce.com/external/impierce-icon.png
       alt_text: UniCore Logo
 
 credential_configurations:
@@ -54,10 +59,10 @@ credential_configurations:
       - name: Verifiable Credential
         locale: en
         logo:
-          uri: https://impierce.com/images/logo-blue.png
+          uri: https://www.impierce.com/external/impierce-logo.png
           alt_text: UniCore Logo
 
 secret_manager:
-  stronghold_path: "../agent_secret_manager/tests/res/test.stronghold.dat"
-  stronghold_password: "VNvRtH4tKyWwvJDpL6Vuc2aoLiKAecGQ"
-  issuer_eddsa_key_id: "UVDxWhG2rB39FkaR7I27mHeUNrGtUgcr"
+  stronghold_path: ../agent_secret_manager/tests/res/test.stronghold.dat
+  stronghold_password: VNvRtH4tKyWwvJDpL6Vuc2aoLiKAecGQ
+  issuer_eddsa_key_id: UVDxWhG2rB39FkaR7I27mHeUNrGtUgcr

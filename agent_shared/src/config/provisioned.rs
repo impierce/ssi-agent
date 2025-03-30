@@ -1,6 +1,8 @@
 use identity_iota::storage::KeyId;
+use oid4vp::ClaimFormatDesignation;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
+use std::collections::HashMap;
 use url::Url;
 
 use crate::config::{redact, EventStoreType, LogFormat};
@@ -24,7 +26,7 @@ pub struct ProvisionedApplicationConfiguration {
     // pub signing_algorithms_supported: HashMap<jsonwebtoken::Algorithm, ToggleOptions>,
     // pub display: Vec<Display>,
     // pub event_publishers: Option<EventPublishers>,
-    // pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
+    pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
 }
 
 /// Loads provisioned configuration from a yaml file and environment variables.
@@ -57,6 +59,13 @@ pub struct EventStoreConfig {
     pub type_: Option<EventStoreType>,
     #[serde(serialize_with = "redact")]
     pub connection_string: Option<String>, // TODO: consider making this "env-only", not via config file
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
+pub struct ToggleOptions {
+    pub enabled: Option<bool>,
+    pub preferred: Option<bool>,
 }
 
 #[cfg(test)]
@@ -103,7 +112,18 @@ mod tests {
 
             let serialized = serde_json::to_value(&config).unwrap();
 
-            assert_eq!(serialized, json!({}));
+            assert_eq!(
+                serialized,
+                json!({
+                    "log_format": "text",
+                    "event_store": {
+                        "type": "in_memory"
+                    },
+                    "url": "https://my-domain.example.test/",
+                    "cors_enabled": false,
+                    "domain_linkage_enabled": false
+                })
+            );
         });
     }
 

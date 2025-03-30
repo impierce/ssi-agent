@@ -14,94 +14,96 @@ use crate::config::{
     ToggleOptions,
 };
 
-pub(crate) fn apply_development_defaults(mut config: ApplicationConfiguration) -> ApplicationConfiguration {
-    config.event_store.type_ = EventStoreType::InMemory;
+impl ApplicationConfiguration {
+    pub fn apply_development_defaults(&mut self) -> Self {
+        self.event_store.type_ = EventStoreType::InMemory;
 
-    // If no Stronghold password is provided, a random password is generated.
-    let random_bytes: [u8; 16] = rand::thread_rng().gen();
-    config.secret_manager.stronghold_password = Some(URL_SAFE_NO_PAD.encode(&random_bytes));
-    println!(
-        "\n====================\n\n  A new Stronghold password was generated!\n\n  {}\n\n====================\n",
-        config.secret_manager.stronghold_password.clone().unwrap()
-    );
+        // If no Stronghold password is provided, a random password is generated.
+        let random_bytes: [u8; 16] = rand::thread_rng().gen();
+        self.secret_manager.stronghold_password = Some(URL_SAFE_NO_PAD.encode(&random_bytes));
+        println!(
+            "\n====================\n\n  A new Stronghold password was generated!\n\n  {}\n\n====================\n",
+            self.secret_manager.stronghold_password.clone().unwrap()
+        );
 
-    config.url = Some(Url::parse("http://localhost:3033").unwrap());
-    config.did_methods.insert(
-        SupportedDidMethod::Jwk,
-        ToggleOptions {
-            enabled: true,
-            preferred: Some(true),
-        },
-    );
-    config.did_methods.insert(
-        SupportedDidMethod::Key,
-        ToggleOptions {
-            enabled: true,
-            preferred: None,
-        },
-    );
-    config.display.push(Display {
-        name: "UniCore".to_string(),
-        locale: None,
-        logo: None,
-    });
-    config.credential_configurations.push(CredentialConfiguration {
-        credential_configuration_id: "001".to_string(),
-        credential_format_with_parameters: CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
-            parameters: JwtVcJsonParameters {
-                credential_definition: CredentialDefinition {
-                    type_: vec!["VerifiableCredential".to_string()],
-                    credential_subject: CredentialSubject::default(),
-                },
-                order: None,
+        self.url = Some(Url::parse("http://localhost:3033").unwrap());
+        self.did_methods.insert(
+            SupportedDidMethod::Jwk,
+            ToggleOptions {
+                enabled: true,
+                preferred: Some(true),
             },
-        }),
-        display: vec![serde_json::to_value(Display {
-            name: "My Verifiable Credential".to_string(),
+        );
+        self.did_methods.insert(
+            SupportedDidMethod::Key,
+            ToggleOptions {
+                enabled: true,
+                preferred: None,
+            },
+        );
+        self.display.push(Display {
+            name: "UniCore".to_string(),
             locale: None,
             logo: None,
-        })
-        .unwrap()],
-    });
+        });
+        self.credential_configurations.push(CredentialConfiguration {
+            credential_configuration_id: "001".to_string(),
+            credential_format_with_parameters: CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
+                parameters: JwtVcJsonParameters {
+                    credential_definition: CredentialDefinition {
+                        type_: vec!["VerifiableCredential".to_string()],
+                        credential_subject: CredentialSubject::default(),
+                    },
+                    order: None,
+                },
+            }),
+            display: vec![serde_json::to_value(Display {
+                name: "My Verifiable Credential".to_string(),
+                locale: None,
+                logo: None,
+            })
+            .unwrap()],
+        });
 
-    config
-}
-
-pub(crate) fn apply_production_defaults(mut config: ApplicationConfiguration) -> ApplicationConfiguration {
-    config.domain_linkage_enabled = true;
-
-    config.did_methods.insert(
-        SupportedDidMethod::Jwk,
-        ToggleOptions {
-            enabled: false,
-            preferred: None,
-        },
-    );
-    config.did_methods.insert(
-        SupportedDidMethod::Key,
-        ToggleOptions {
-            enabled: false,
-            preferred: None,
-        },
-    );
-    config.did_methods.insert(
-        SupportedDidMethod::Web,
-        ToggleOptions {
-            enabled: true,
-            preferred: Some(true),
-        },
-    );
-
-    config
-}
-
-/// Checks if the application configuration follows production-ready restrictions.
-pub(crate) fn check_production_readiness(config: ApplicationConfiguration) {
-    if config.secret_manager.stronghold_password.is_none()
-        || config.secret_manager.stronghold_password.as_ref().unwrap().is_empty()
-    {
-        panic!("Stronghold password must be provided.");
+        self.clone()
     }
-    // TODO: check password policy ...
-    // Disallow `in_memory` in production?
+
+    pub fn apply_production_defaults(&mut self) -> Self {
+        self.domain_linkage_enabled = true;
+
+        self.did_methods.insert(
+            SupportedDidMethod::Jwk,
+            ToggleOptions {
+                enabled: false,
+                preferred: None,
+            },
+        );
+        self.did_methods.insert(
+            SupportedDidMethod::Key,
+            ToggleOptions {
+                enabled: false,
+                preferred: None,
+            },
+        );
+        self.did_methods.insert(
+            SupportedDidMethod::Web,
+            ToggleOptions {
+                enabled: true,
+                preferred: Some(true),
+            },
+        );
+
+        self.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_development_config() {}
+
+    #[test]
+    fn test_production_config() {}
 }
