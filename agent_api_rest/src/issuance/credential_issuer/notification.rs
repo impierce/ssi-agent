@@ -10,7 +10,6 @@ use axum::{
 
 use axum_auth::AuthBearer;
 use oid4vci::{errors::NotificationError, notification_request::NotificationRequest};
-//use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::{error, info};
 
