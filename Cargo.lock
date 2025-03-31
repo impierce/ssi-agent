@@ -2137,11 +2137,11 @@ dependencies = [
 [[package]]
 name = "dif-presentation-exchange"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=89a2d87#89a2d8713c259a9cb51f910ecf3db7ed52c24458"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8a7447#b8a744790985580fcc8f39661d0ff7d78d7eb988"
 dependencies = [
  "getset",
  "jsonpath_lib",
- "jsonschema",
+ "jsonschema 0.17.1",
  "jsonwebtoken",
  "serde",
  "serde_json",
@@ -2484,6 +2484,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fancy-regex"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "531e46835a22af56d1e3b66f04844bed63158bc094a628bec1d321d9b4c44bf2"
+dependencies = [
+ "bit-set",
+ "regex-automata 0.4.7",
+ "regex-syntax 0.8.4",
+]
+
+[[package]]
 name = "fastrand"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2610,6 +2621,16 @@ name = "fraction"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3027ae1df8d41b4bed2241c8fdad4acc1e7af60c8e17743534b545e77182d678"
+dependencies = [
+ "lazy_static",
+ "num",
+]
+
+[[package]]
+name = "fraction"
+version = "0.15.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f158e3ff0a1b334408dc9fb811cd99b446986f4d8b741bb08f9df1604085ae7"
 dependencies = [
  "lazy_static",
  "num",
@@ -3376,14 +3397,18 @@ dependencies = [
  "anyhow",
  "async-trait",
  "flate2",
+ "futures",
  "identity_core",
  "identity_did",
  "identity_document",
  "identity_verification",
  "indexmap 2.5.0",
  "itertools 0.11.0",
+ "jsonschema 0.19.1",
  "once_cell",
  "roaring",
+ "sd-jwt-payload 0.2.1",
+ "sd-jwt-payload 0.3.0",
  "serde",
  "serde-aux",
  "serde_json",
@@ -4040,6 +4065,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "json-pointer"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fe841b94e719a482213cee19dd04927cf412f26d8dc84c5a446c081e49c2997"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "json-proof-token"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4118,8 +4152,8 @@ dependencies = [
  "base64 0.21.7",
  "bytecount",
  "clap 4.5.7",
- "fancy-regex",
- "fraction",
+ "fancy-regex 0.11.0",
+ "fraction 0.13.1",
  "getrandom 0.2.15",
  "iso8601",
  "itoa",
@@ -4135,6 +4169,34 @@ dependencies = [
  "time",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "jsonschema"
+version = "0.19.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14a655181740aa66dfcb182daca1bc8109fda5c7c0399c4f30dcb155ab0d32a6"
+dependencies = [
+ "ahash 0.8.11",
+ "anyhow",
+ "base64 0.22.1",
+ "bytecount",
+ "fancy-regex 0.13.0",
+ "fraction 0.15.3",
+ "getrandom 0.2.15",
+ "iso8601",
+ "itoa",
+ "memchr",
+ "num-cmp",
+ "once_cell",
+ "parking_lot 0.12.3",
+ "percent-encoding",
+ "regex",
+ "serde",
+ "serde_json",
+ "time",
+ "url",
+ "uuid-simd",
 ]
 
 [[package]]
@@ -4828,7 +4890,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=89a2d87#89a2d8713c259a9cb51f910ecf3db7ed52c24458"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8a7447#b8a744790985580fcc8f39661d0ff7d78d7eb988"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4852,7 +4914,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=89a2d87#89a2d8713c259a9cb51f910ecf3db7ed52c24458"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8a7447#b8a744790985580fcc8f39661d0ff7d78d7eb988"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4884,10 +4946,10 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=89a2d87#89a2d8713c259a9cb51f910ecf3db7ed52c24458"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8a7447#b8a744790985580fcc8f39661d0ff7d78d7eb988"
 dependencies = [
  "anyhow",
- "axum 0.7.5",
+ "axum 0.8.1",
  "derivative",
  "dif-presentation-exchange",
  "getset",
@@ -4909,7 +4971,7 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=89a2d87#89a2d8713c259a9cb51f910ecf3db7ed52c24458"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8a7447#b8a744790985580fcc8f39661d0ff7d78d7eb988"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4966,6 +5028,12 @@ name = "os_str_bytes"
 version = "6.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2355d85b9a3786f481747ced0e0ff2ba35213a1f9bd406ed906554d7af805a1"
+
+[[package]]
+name = "outref"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a80800c0488c3a21695ea981a54918fbb37abf04f4d0720c453632255e2ff0e"
 
 [[package]]
 name = "overload"
@@ -6334,6 +6402,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "sd-jwt-payload"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f96560f8ef0ef51808661b53f49e640cf854d64339d204c33fec3528d9451da7"
+dependencies = [
+ "iota-crypto",
+ "itertools 0.12.1",
+ "json-pointer",
+ "multibase 0.9.1",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "serde_with 3.8.1",
+ "strum 0.26.3",
+ "thiserror",
+]
+
+[[package]]
+name = "sd-jwt-payload"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c080b34b6f70cd590f5611cc7e37024eaaa52391d93a9cc85960f2f1d8c69927"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "indexmap 2.5.0",
+ "iota-crypto",
+ "itertools 0.12.1",
+ "json-pointer",
+ "multibase 0.9.1",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "serde_with 3.8.1",
+ "strum 0.26.3",
+ "thiserror",
+]
+
+[[package]]
 name = "sdd"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6761,7 +6868,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=89a2d87#89a2d8713c259a9cb51f910ecf3db7ed52c24458"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8a7447#b8a744790985580fcc8f39661d0ff7d78d7eb988"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8226,6 +8333,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "uuid-simd"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23b082222b4f6619906941c17eb2297fff4c2fb96cb60164170522942a200bd8"
+dependencies = [
+ "outref",
+ "uuid",
+ "vsimd",
+]
+
+[[package]]
 name = "valuable"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8248,6 +8366,12 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
+
+[[package]]
+name = "vsimd"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c3082ca00d5a5ef149bb8b555a72ae84c9c59f7250f013ac822ac2e49b19c64"
 
 [[package]]
 name = "waker-fn"

@@ -2,11 +2,12 @@ use agent_issuance::{
     credential::command::CredentialCommand, offer::queries::access_token::AccessTokenView, state::IssuanceState,
 };
 use agent_shared::handlers::{command_handler, query_handler};
+use axum::response::{IntoResponse, Response};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
-    response::{IntoResponse, Response},
 };
+
 use axum_auth::AuthBearer;
 use oid4vci::{errors::NotificationError, notification_request::NotificationRequest};
 //use serde::{Deserialize, Serialize};

@@ -34,7 +34,7 @@ pub(crate) async fn credential(
         .await?
         .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED))?
         .offer_id;
-  
+
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
     let (credential_issuer_metadata, authorization_server_metadata) =
         match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
@@ -104,7 +104,7 @@ pub(crate) async fn credential(
                 signed: Some(signed_credential),
                 notification_id,
                 ..
-            }) => signed_credential,
+            }) => (signed_credential, notification_id),
             _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
         };
 
