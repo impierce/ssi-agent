@@ -1,22 +1,14 @@
 mod defaults;
 mod provisioned;
 
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use config::ConfigError;
 use identity_iota::storage::KeyId;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
-use oid4vci::credential_format_profiles::{
-    w3c_verifiable_credentials::{
-        jwt_vc_json::{CredentialDefinition, JwtVcJson, JwtVcJsonParameters},
-        CredentialSubject,
-    },
-    CredentialFormats, Parameters, WithParameters,
-};
+use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
 use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::Lazy;
 use provisioned::ProvisionedApplicationConfiguration;
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::{skip_serializing_none, SerializeDisplay};
@@ -24,13 +16,12 @@ use std::{
     collections::HashMap,
     io::Write,
     sync::{RwLock, RwLockReadGuard},
-    vec,
 };
 use strum::VariantArray;
 use tracing::{debug, info};
 use url::Url;
 
-use crate::profile::ApplicationProfile;
+use crate::{error::SharedError, profile::ApplicationProfile};
 // Re-export
 pub use provisioned::load_provisioned_config;
 
@@ -426,7 +417,9 @@ impl ApplicationConfiguration {
         println!("{:?}", merged_config);
 
         match application_profile {
-            ApplicationProfile::Production => merged_config.validate(),
+            ApplicationProfile::Production => merged_config
+                .validate()
+                .map_err(|e| ConfigError::Message(e.to_string()))?,
             _ => {}
         }
 
@@ -491,15 +484,18 @@ impl ApplicationConfiguration {
         self.clone()
     }
 
-    /// Validates the configuration for production readiness (enforce restrictions).
-    pub fn validate(&self) {
+    /// Validates whether the configuration is suitable for production (enforce restrictions).
+    pub fn validate(&self) -> Result<(), SharedError> {
         if self.secret_manager.stronghold_password.is_none()
             || self.secret_manager.stronghold_password.as_ref().unwrap().is_empty()
         {
-            panic!("Stronghold password must be provided.");
+            return Err(SharedError::ConfigurationNotSuitableForProduction(
+                "Stronghold password must be provided".to_string(),
+            ));
         }
         // TODO: check password policy ...
         // Disallow `in_memory` in production?
+        Ok(())
     }
 
     pub fn set_preferred_did_method(&mut self, preferred_did_method: SupportedDidMethod) {
@@ -731,8 +727,10 @@ mod tests {
         let mut config = ApplicationConfiguration::default();
         config.apply_production_defaults();
 
-        // Valid configuration
-        config.validate();
+        // Validate configuration
+        let result = config.validate();
+
+        assert!(result.is_ok());
 
         // Invalid configuration
         config.secret_manager.stronghold_password = None;

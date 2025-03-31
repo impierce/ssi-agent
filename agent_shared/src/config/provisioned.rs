@@ -1,11 +1,13 @@
 use identity_iota::storage::KeyId;
+use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
 use oid4vp::ClaimFormatDesignation;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use std::collections::HashMap;
+use tracing::{info, warn};
 use url::Url;
 
-use crate::config::{redact, EventStoreType, LogFormat};
+use crate::config::{redact, EventStoreType, LogFormat, Logo, SupportedDidMethod};
 
 /// Provisioned configuration values are immutable and protected against runtime modifications.
 #[skip_serializing_none]
@@ -17,16 +19,16 @@ pub struct ProvisionedApplicationConfiguration {
     pub url: Option<Url>,
     pub base_path: Option<String>,
     pub cors_enabled: Option<bool>,
-    // pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
+    pub did_methods: Option<HashMap<SupportedDidMethod, ToggleOptions>>,
     pub external_server_response_timeout_ms: Option<u64>,
     pub domain_linkage_enabled: Option<bool>,
     pub credential_offer_by_value_enabled: Option<bool>,
     pub secret_manager: Option<SecretManagerConfig>,
-    // pub credential_configurations: Vec<CredentialConfiguration>,
-    // pub signing_algorithms_supported: HashMap<jsonwebtoken::Algorithm, ToggleOptions>,
-    // pub display: Vec<Display>,
+    pub credential_configurations: Option<Vec<CredentialConfiguration>>, // TODO: pay attention to index when merging provisioned and runtime credential_configurations!
+    // pub signing_algorithms_supported: Option<HashMap<jsonwebtoken::Algorithm, ToggleOptions>>,
+    pub display: Option<Vec<Display>>,
     // pub event_publishers: Option<EventPublishers>,
-    pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
+    pub vp_formats: Option<HashMap<ClaimFormatDesignation, ToggleOptions>>,
 }
 
 /// Loads provisioned configuration from a yaml file and environment variables.
@@ -35,6 +37,11 @@ pub fn load_provisioned_config() -> Result<ProvisionedApplicationConfiguration, 
     let config_file_path = std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| "./config.yaml".to_string());
     if std::path::Path::new(&config_file_path).exists() {
         builder = builder.add_source(config::File::with_name(&config_file_path));
+        println!("Loaded config file: {}", config_file_path);
+        info!("Loaded config file: {}", config_file_path);
+    } else {
+        println!("Config file not found: {}", config_file_path);
+        warn!("Config file not found: {}", config_file_path);
     }
     builder = builder.add_source(config::Environment::with_prefix("UNICORE").separator("__"));
     let config = builder.build()?;
@@ -68,6 +75,24 @@ pub struct ToggleOptions {
     pub preferred: Option<bool>,
 }
 
+#[skip_serializing_none]
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
+pub struct Display {
+    pub name: Option<String>,
+    pub locale: Option<String>,
+    pub logo: Option<Logo>,
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
+pub struct CredentialConfiguration {
+    pub credential_configuration_id: Option<String>,
+    #[serde(flatten)]
+    pub credential_format_with_parameters: Option<CredentialFormats<WithParameters>>,
+    #[serde(default)]
+    pub display: Option<Vec<serde_json::Value>>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -75,7 +100,7 @@ mod tests {
     use serde_json::json;
     use serial_test::serial;
 
-    static CONFIG_FILE: &str = "../agent_shared/tests/test.config.yaml";
+    static CONFIG_FILE: &str = "./tests/test.config.yaml";
 
     #[test]
     #[serial]
@@ -112,16 +137,80 @@ mod tests {
 
             let serialized = serde_json::to_value(&config).unwrap();
 
+            println!("{}", serde_json::to_string_pretty(&serialized).unwrap());
+
             assert_eq!(
                 serialized,
                 json!({
-                    "log_format": "text",
+                    "port": 1337,
+                    "log_format": "json",
                     "event_store": {
-                        "type": "in_memory"
+                        "type": "postgres",
+                        "connection_string": "<REDACTED>"
                     },
                     "url": "https://my-domain.example.test/",
-                    "cors_enabled": false,
-                    "domain_linkage_enabled": false
+                    "base_path": "/base/path",
+                    "cors_enabled": true,
+                    "did_methods": {
+                        "did:web": {
+                            "enabled": false
+                        },
+                        "did:jwk": {
+                            "enabled": true,
+                            "preferred": true
+                        },
+                        "did:key": {
+                            "enabled": true,
+                            "preferred": false
+                        }
+                    },
+                    "external_server_response_timeout_ms": 250,
+                    "domain_linkage_enabled": true,
+                    "credential_offer_by_value_enabled": true,
+                    "secret_manager": {
+                        "stronghold_path": "../agent_secret_manager/tests/res/test.stronghold.dat",
+                        "stronghold_password": "<REDACTED>",
+                        "issuer_eddsa_key_id": "UVDxWhG2rB39FkaR7I27mHeUNrGtUgcr"
+                    },
+                    "credential_configurations": [
+                        {
+                            "credential_configuration_id": "w3c_vc_credential",
+                            "format": "jwt_vc_json",
+                            "credential_definition": {
+                                "type": [
+                                    "VerifiableCredential"
+                                ]
+                            },
+                            "display": [
+                                {
+                                    "locale": "en",
+                                    "name": "Verifiable Credential",
+                                    "logo": {
+                                        "alt_text": "UniCore Logo",
+                                        "uri": "https://www.impierce.com/external/impierce-logo.png"
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    "display": [
+                        {
+                            "name": "UniCore",
+                            "locale": "en",
+                            "logo": {
+                                "uri": "https://www.impierce.com/external/impierce-icon.png",
+                                "alt_text": "UniCore Logo"
+                            }
+                        }
+                    ],
+                    "vp_formats": {
+                        "jwt_vc_json": {
+                            "enabled": true
+                        },
+                        "jwt_vp_json": {
+                            "enabled": true
+                        }
+                    }
                 })
             );
         });

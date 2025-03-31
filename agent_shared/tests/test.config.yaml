@@ -1,23 +1,32 @@
-log_format: text
+# All possible configuration values should be included to achieve a high test coverage
+
+log_format: json
 
 event_store:
-  type: in_memory
+  type: postgres
+  connection_string: TODO
 
 url: https://my-domain.example.test
 
-cors_enabled: false
+port: 1337
+
+base_path: /base/path
+
+cors_enabled: true
+
+external_server_response_timeout_ms: 250
 
 did_methods:
-  did:jwk:
+  did_jwk:
     enabled: true
     preferred: true
-  did:key:
+  did_key:
     enabled: true
     preferred: false
-  did:web:
+  did_web:
     enabled: false
 
-domain_linkage_enabled: false
+domain_linkage_enabled: true
 
 credential_offer_by_value_enabled: true
 
@@ -50,7 +59,7 @@ display:
       alt_text: UniCore Logo
 
 credential_configurations:
-  - credential_configuration_id: badge
+  - credential_configuration_id: w3c_vc_credential
     format: jwt_vc_json
     credential_definition:
       type:
