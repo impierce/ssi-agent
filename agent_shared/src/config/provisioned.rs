@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use tracing::{info, warn};
 use url::Url;
 
-use crate::config::{redact, EventStoreType, LogFormat, Logo, SupportedDidMethod};
+use crate::config::{redact, EventStoreType, Events, LogFormat, Logo, SupportedDidMethod};
 
 /// Provisioned configuration values are immutable and protected against runtime modifications.
 #[skip_serializing_none]
@@ -27,7 +27,7 @@ pub struct ProvisionedApplicationConfiguration {
     pub credential_configurations: Option<Vec<CredentialConfiguration>>, // TODO: pay attention to index when merging provisioned and runtime credential_configurations!
     // pub signing_algorithms_supported: Option<HashMap<jsonwebtoken::Algorithm, ToggleOptions>>,
     pub display: Option<Vec<Display>>,
-    // pub event_publishers: Option<EventPublishers>,
+    pub event_publishers: Option<EventPublishers>,
     pub vp_formats: Option<HashMap<ClaimFormatDesignation, ToggleOptions>>,
 }
 
@@ -91,6 +91,22 @@ pub struct CredentialConfiguration {
     pub credential_format_with_parameters: Option<CredentialFormats<WithParameters>>,
     #[serde(default)]
     pub display: Option<Vec<serde_json::Value>>,
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
+pub struct EventPublishers {
+    pub http: Option<EventPublisherHttp>,
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
+pub struct EventPublisherHttp {
+    pub enabled: Option<bool>,
+    pub target_url: Option<String>,
+    #[serde(with = "http_serde::option::header_map", default)]
+    pub headers: Option<reqwest::header::HeaderMap>,
+    pub events: Option<Events>,
 }
 
 #[cfg(test)]
@@ -203,6 +219,21 @@ mod tests {
                             }
                         }
                     ],
+                    "event_publishers": {
+                        "http": {
+                            "enabled": true,
+                            "target_url": "https://service.example.test:8291/events",
+                            "headers": {
+                                "authorization": "Basic YWxhZGRpbjpvcGVuc2VzYW1l"
+                            },
+                            "events": {
+                                "credential": [
+                                    "UnsignedCredentialCreated",
+                                    "CredentialSigned"
+                                ]
+                            }
+                        }
+                    },
                     "vp_formats": {
                         "jwt_vc_json": {
                             "enabled": true

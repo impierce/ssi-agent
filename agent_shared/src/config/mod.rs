@@ -153,23 +153,23 @@ pub struct EventPublisherHttp {
 
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct Events {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub connection: Vec<ConnectionEvent>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub document: Vec<DocumentEvent>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub service: Vec<ServiceEvent>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub server_config: Vec<ServerConfigEvent>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub credential: Vec<CredentialEvent>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub offer: Vec<OfferEvent>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub holder_credential: Vec<HolderCredentialEvent>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub received_offer: Vec<ReceivedOfferEvent>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub authorization_request: Vec<AuthorizationRequestEvent>,
 }
 
