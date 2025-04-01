@@ -6,7 +6,7 @@ use crate::{
     },
     services::VerificationServices,
 };
-use agent_shared::config::{config, get_preferred_signing_algorithm};
+use agent_shared::config::{get_preferred_signing_algorithm, get_public_url};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use oid4vc_core::{authorization_request::ByReference, scope::Scope};
@@ -56,11 +56,11 @@ impl Aggregate for AuthorizationRequest {
                     .await
                     .unwrap();
 
-                let url = &config().url;
+                let public_url = get_public_url();
 
                 // TODO: ensure that URLs like these are validated during configuration.
-                let request_uri = format!("{url}request/{state}").parse().unwrap();
-                let redirect_uri = format!("{url}redirect").parse::<url::Url>().unwrap();
+                let request_uri = public_url.join("request/").and_then(|url| url.join(&state)).unwrap();
+                let redirect_uri = public_url.join("redirect").unwrap();
 
                 let authorization_request = Box::new(if let Some(presentation_definition) = presentation_definition {
                     GenericAuthorizationRequest::OID4VP(Box::new(

@@ -9,7 +9,7 @@ pub mod handlers;
 use agent_holder::state::HolderState;
 use agent_identity::state::IdentityState;
 use agent_issuance::state::IssuanceState;
-use agent_shared::{config::config, ConfigError};
+use agent_shared::config::{config, get_application_base_path};
 use agent_verification::state::VerificationState;
 use axum::{
     body::{Body, Bytes},
@@ -79,14 +79,15 @@ pub fn app(
                 .layer(middleware::from_fn(log_request_body)),
         );
 
-    let base_path = get_base_path().unwrap_or_default();
+    let application_base_path = get_application_base_path().unwrap_or_default();
 
     // Note: since version 0.8 axum does not allow nesting routers with an empty base path. We must explicitly check
     // for an empty base path before nesting.
-    let app = if base_path.is_empty() {
+    let app = if application_base_path.is_empty() {
         app
     } else {
-        Router::new().nest(&base_path, app)
+        // TODO: This breaks Domain Linkage. We need to fix this.
+        Router::new().nest(&application_base_path, app)
     };
 
     // CORS
@@ -96,30 +97,6 @@ pub fn app(
     } else {
         app
     }
-}
-
-fn get_base_path() -> Result<String, ConfigError> {
-    config()
-        .base_path
-        .clone()
-        .ok_or_else(|| ConfigError::NotFound("No configuration for `base_path` found".to_string()))
-        .map(|mut base_path| {
-            if base_path.starts_with('/') {
-                base_path.remove(0);
-            }
-
-            if base_path.ends_with('/') {
-                base_path.pop();
-            }
-
-            if base_path.is_empty() {
-                panic!("UNICORE__BASE_PATH can't be empty, remove or set path");
-            }
-
-            info!("Base path: {:?}", base_path);
-
-            format!("/{}", base_path)
-        })
 }
 
 // This middleware logs the request body before passing it on.
@@ -206,9 +183,9 @@ mod tests {
 
     #[tokio::test]
     #[should_panic]
-    async fn test_base_path_routes() {
+    async fn test_application_base_path_routes() {
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
-        std::env::set_var("UNICORE__BASE_PATH", "unicore");
+        std::env::set_var("UNICORE__APPLICATION_BASE_PATH", "unicore");
         let router = app(ApplicationState {
             issuance_state: Some(issuance_state),
             ..Default::default()

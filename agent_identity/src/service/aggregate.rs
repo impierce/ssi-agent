@@ -1,6 +1,6 @@
 use super::{command::ServiceCommand, error::ServiceError, event::ServiceEvent};
 use crate::services::IdentityServices;
-use agent_shared::config::config;
+use agent_shared::config::get_public_url;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::Aggregate;
@@ -61,7 +61,7 @@ impl Aggregate for Service {
             } => {
                 let subject = &services.subject;
 
-                let origin = config().url.origin();
+                let origin = get_public_url().origin();
                 let origin = identity_core::common::Url::parse(origin.ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
@@ -180,7 +180,7 @@ impl Aggregate for Service {
                 service_id,
                 presentation_ids,
             } => {
-                let origin = identity_core::common::Url::parse(config().url.origin().ascii_serialization())
+                let origin = identity_core::common::Url::parse(get_public_url().origin().ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
                 let service_endpoint = ServiceEndpoint::from(OrderedSet::from_iter(
@@ -346,7 +346,6 @@ pub mod service_tests {
 pub mod test_utils {
     use super::*;
     use crate::state::{DOMAIN_LINKAGE_SERVICE_ID, LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID};
-    use agent_shared::config::config;
     use identity_core::{common::Url, convert::FromJson};
     use identity_document::service::{Service, ServiceEndpoint};
     use rstest::*;
@@ -369,7 +368,7 @@ pub mod test_utils {
             .type_("LinkedDomains")
             .service_endpoint(
                 ServiceEndpoint::from_json_value(json!({
-                    "origins": [config().url],
+                    "origins": [get_public_url()],
                 }))
                 .unwrap(),
             )
@@ -381,7 +380,7 @@ pub mod test_utils {
     pub fn linked_verifiable_presentation_service(
         linked_verifiable_presentation_service_id: String,
     ) -> DocumentService {
-        let origin = config().url.origin().ascii_serialization();
+        let origin = get_public_url().origin().ascii_serialization();
 
         Service::builder(Default::default())
             .id(format!("did:place:holder#{linked_verifiable_presentation_service_id}")

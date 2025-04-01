@@ -11,7 +11,7 @@ pub fn startup_commands(host: url::Url) -> Vec<ServerConfigCommand> {
     vec![load_server_metadata(host), create_credentials_supported()]
 }
 
-pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
+pub fn load_server_metadata(public_url: url::Url) -> ServerConfigCommand {
     let display = config().display.first().map(|display| {
         let display = serde_json::to_value(display).unwrap();
         vec![display]
@@ -19,13 +19,13 @@ pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
 
     ServerConfigCommand::InitializeServerMetadata {
         authorization_server_metadata: Box::new(AuthorizationServerMetadata {
-            issuer: base_url.clone(),
-            token_endpoint: Some(base_url.append_path_segment("auth/token")),
+            issuer: public_url.clone(),
+            token_endpoint: Some(public_url.append_path_segment("auth/token")),
             ..Default::default()
         }),
         credential_issuer_metadata: Box::new(CredentialIssuerMetadata {
-            credential_issuer: base_url.clone(),
-            credential_endpoint: base_url.append_path_segment("openid4vci/credential"),
+            credential_issuer: public_url.clone(),
+            credential_endpoint: public_url.append_path_segment("openid4vci/credential"),
             display,
             ..Default::default()
         }),

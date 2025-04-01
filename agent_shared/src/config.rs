@@ -27,8 +27,9 @@ static ES256_KEY_ID: &str = "es256-0";
 pub struct ApplicationConfiguration {
     pub log_format: LogFormat,
     pub event_store: EventStoreConfig,
-    pub url: Url,
-    pub base_path: Option<String>,
+    pub application_url: Url,
+    pub application_base_path: Option<String>,
+    pub public_url: Option<Url>,
     pub cors_enabled: Option<bool>,
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
     pub external_server_response_timeout_ms: Option<u64>,
@@ -509,6 +510,41 @@ pub fn get_preferred_signing_algorithm() -> jsonwebtoken::Algorithm {
         .first()
         .cloned()
         .expect("Please set a signing algorithm as `preferred` in the configuration")
+}
+
+/// Returns the public URL if it is set, otherwise the application URL.
+pub fn get_public_url() -> Url {
+    config().public_url.clone().unwrap_or_else(|| {
+        get_application_base_path()
+            .ok()
+            .as_ref()
+            .and_then(|base_path| config().application_url.join(base_path).ok())
+            .unwrap_or_else(|| config().application_url.clone())
+    })
+}
+
+pub fn get_application_base_path() -> Result<String, ConfigError> {
+    config()
+        .application_base_path
+        .clone()
+        .ok_or_else(|| ConfigError::NotFound("No configuration for `application_base_path` found".to_string()))
+        .map(|mut application_base_path| {
+            if application_base_path.starts_with('/') {
+                application_base_path.remove(0);
+            }
+
+            if application_base_path.ends_with('/') {
+                application_base_path.pop();
+            }
+
+            if application_base_path.is_empty() {
+                panic!("UNICORE__APPLICATION_BASE_PATH can't be empty, remove or set path");
+            }
+
+            info!("Application base path: {:?}", application_base_path);
+
+            format!("/{}/", application_base_path)
+        })
 }
 
 #[cfg(test)]

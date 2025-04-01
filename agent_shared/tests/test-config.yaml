@@ -1,7 +1,7 @@
 log_format: "text"
 event_store:
   type: "in_memory"
-url: "https://my-domain.example.org"
+application_url: "https://my-domain.example.org"
 
 did_methods:
   did_jwk:
