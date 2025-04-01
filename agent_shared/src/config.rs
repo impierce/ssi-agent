@@ -29,7 +29,7 @@ pub struct ApplicationConfiguration {
     pub event_store: EventStoreConfig,
     pub application_url: Url,
     pub application_base_path: Option<String>,
-    #[serde(deserialize_with = "deserialize_public_url")]
+    #[serde(default, deserialize_with = "deserialize_public_url")]
     pub public_url: Option<Url>,
     pub cors_enabled: Option<bool>,
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
