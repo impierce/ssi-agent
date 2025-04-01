@@ -493,15 +493,31 @@ impl ApplicationConfiguration {
         self.credential_offer_by_value_enabled = provisioned_config
             .credential_offer_by_value_enabled
             .or(self.credential_offer_by_value_enabled.clone());
-        // TODO: all values of secret_manager should be merged, not only password
-        self.secret_manager.stronghold_password = provisioned_config
+        self.secret_manager = provisioned_config
             .secret_manager
-            .and_then(|config| config.stronghold_password);
+            .map(|config| config.into())
+            .unwrap_or(self.clone().secret_manager);
         // self.credential_configurations = provisioned_config.credential_configurations;
         self.signing_algorithms_supported = provisioned_config
             .signing_algorithms_supported
             .map(|map| map.into_iter().map(|(alg, options)| (alg, options.into())).collect())
             .unwrap_or(self.signing_algorithms_supported.clone());
+        self.display = provisioned_config
+            .display
+            .map(|vec_display| vec_display.into_iter().map(|display| display.into()).collect())
+            .unwrap_or(self.display.clone());
+        self.event_publishers = provisioned_config
+            .event_publishers
+            .map(|publishers| publishers.into())
+            .or(self.event_publishers.clone());
+        self.vp_formats = provisioned_config
+            .vp_formats
+            .map(|map| {
+                map.into_iter()
+                    .map(|(claim_format_designation, options)| (claim_format_designation, options.into()))
+                    .collect()
+            })
+            .unwrap_or(self.vp_formats.clone());
         self.clone()
     }
 

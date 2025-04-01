@@ -7,7 +7,9 @@ use std::collections::HashMap;
 use tracing::{info, warn};
 use url::Url;
 
-use crate::config::{redact, EventStoreType, Events, LogFormat, Logo, SupportedDidMethod};
+use crate::config::{
+    redact, EventStoreType, Events, LogFormat, Logo, SupportedDidMethod, ED25519_KEY_ID, ES256_KEY_ID,
+};
 
 /// Provisioned configuration values are immutable and protected against runtime modifications.
 #[skip_serializing_none]
@@ -70,16 +72,16 @@ pub struct SecretManagerConfig {
     pub issuer_es256_key_id: Option<KeyId>,
 }
 
-// impl Into<crate::config::SecretManagerConfig> for SecretManagerConfig {
-//     fn into(self) -> crate::config::SecretManagerConfig {
-//         crate::config::SecretManagerConfig {
-//             stronghold_path: self.stronghold_path,
-//             stronghold_password: self.stronghold_password,
-//             issuer_eddsa_key_id: self.issuer_eddsa_key_id,
-//             issuer_es256_key_id: self.issuer_es256_key_id,
-//         }
-//     }
-// }
+impl Into<crate::config::SecretManagerConfig> for SecretManagerConfig {
+    fn into(self) -> crate::config::SecretManagerConfig {
+        crate::config::SecretManagerConfig {
+            stronghold_path: self.stronghold_path.unwrap_or_default(),
+            stronghold_password: self.stronghold_password,
+            issuer_eddsa_key_id: self.issuer_eddsa_key_id.unwrap_or(KeyId::new(ED25519_KEY_ID)),
+            issuer_es256_key_id: self.issuer_es256_key_id.unwrap_or(KeyId::new(ES256_KEY_ID)),
+        }
+    }
+}
 
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
@@ -123,6 +125,16 @@ pub struct Display {
     pub logo: Option<Logo>,
 }
 
+impl Into<crate::config::Display> for Display {
+    fn into(self) -> crate::config::Display {
+        crate::config::Display {
+            name: self.name.unwrap_or_default(),
+            locale: self.locale,
+            logo: self.logo,
+        }
+    }
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct CredentialConfiguration {
@@ -139,6 +151,14 @@ pub struct EventPublishers {
     pub http: Option<EventPublisherHttp>,
 }
 
+impl Into<crate::config::EventPublishers> for EventPublishers {
+    fn into(self) -> crate::config::EventPublishers {
+        crate::config::EventPublishers {
+            http: self.http.map(Into::into),
+        }
+    }
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct EventPublisherHttp {
@@ -147,6 +167,17 @@ pub struct EventPublisherHttp {
     #[serde(with = "http_serde::option::header_map", default)]
     pub headers: Option<reqwest::header::HeaderMap>,
     pub events: Option<Events>,
+}
+
+impl Into<crate::config::EventPublisherHttp> for EventPublisherHttp {
+    fn into(self) -> crate::config::EventPublisherHttp {
+        crate::config::EventPublisherHttp {
+            enabled: self.enabled.unwrap_or_default(),
+            target_url: self.target_url.unwrap_or_default(),
+            headers: self.headers,
+            events: self.events.unwrap_or_default().into(),
+        }
+    }
 }
 
 #[cfg(test)]
