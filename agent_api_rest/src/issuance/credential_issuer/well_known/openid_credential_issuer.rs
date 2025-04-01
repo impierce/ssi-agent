@@ -75,7 +75,7 @@ mod tests {
                 credential_issuer: BASE_URL.clone(),
                 credential_endpoint: BASE_URL.append_path_segment("openid4vci/credential"),
                 credential_configurations_supported: vec![(
-                    "badge".to_string(),
+                    "001".to_string(),
                     CredentialConfigurationsSupportedObject {
                         credential_format: CredentialFormats::JwtVcJson(Parameters {
                             parameters: (

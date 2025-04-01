@@ -41,15 +41,20 @@ pub struct ApplicationConfiguration {
     pub url: Option<Url>,
     pub base_path: Option<String>,
     pub cors_enabled: bool,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
     pub external_server_response_timeout_ms: Option<u64>,
     pub domain_linkage_enabled: bool,
     pub credential_offer_by_value_enabled: Option<bool>,
     pub secret_manager: SecretManagerConfig,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub credential_configurations: Vec<CredentialConfiguration>,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub signing_algorithms_supported: HashMap<jsonwebtoken::Algorithm, ToggleOptions>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub display: Vec<Display>,
     pub event_publishers: Option<EventPublishers>,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
 }
 
@@ -464,11 +469,21 @@ impl ApplicationConfiguration {
     pub fn merge(&mut self, provisioned_config: ProvisionedApplicationConfiguration) -> Self {
         self.port = provisioned_config.port.and_then(|port| Some(port));
         self.log_format = provisioned_config.log_format.unwrap_or(self.clone().log_format);
-        // self.event_store = provisioned_config.event_store.unwrap_or(self.clone().event_store);
+        self.event_store = provisioned_config
+            .event_store
+            .map(|config| config.into())
+            .unwrap_or(self.clone().event_store);
         self.url = provisioned_config.url.or(self.url.clone());
         self.base_path = provisioned_config.base_path.or(self.base_path.clone());
         self.cors_enabled = provisioned_config.cors_enabled.unwrap_or(self.cors_enabled);
-        // self.did_methods = provisioned_config.did_methods.unwrap_or(self.did_methods.clone());
+        self.did_methods = provisioned_config
+            .did_methods
+            .map(|map| {
+                map.into_iter()
+                    .map(|(method, options)| (method, options.into()))
+                    .collect()
+            })
+            .unwrap_or(self.did_methods.clone());
         self.external_server_response_timeout_ms = provisioned_config
             .external_server_response_timeout_ms
             .or(self.external_server_response_timeout_ms.clone());
@@ -478,9 +493,15 @@ impl ApplicationConfiguration {
         self.credential_offer_by_value_enabled = provisioned_config
             .credential_offer_by_value_enabled
             .or(self.credential_offer_by_value_enabled.clone());
+        // TODO: all values of secret_manager should be merged, not only password
         self.secret_manager.stronghold_password = provisioned_config
             .secret_manager
             .and_then(|config| config.stronghold_password);
+        // self.credential_configurations = provisioned_config.credential_configurations;
+        self.signing_algorithms_supported = provisioned_config
+            .signing_algorithms_supported
+            .map(|map| map.into_iter().map(|(alg, options)| (alg, options.into())).collect())
+            .unwrap_or(self.signing_algorithms_supported.clone());
         self.clone()
     }
 
@@ -653,7 +674,6 @@ where
     S: serde::Serializer,
 {
     str.as_ref().map(|_| "<REDACTED>".to_string()).serialize(serializer)
-    // serializer.serialize_str("<REDACTED>")
 }
 
 #[cfg(test)]
@@ -694,7 +714,6 @@ mod tests {
     #[test]
     fn provisioned_config_successfully_merged_into_default_config() {
         let mut default_config = ApplicationConfiguration::default();
-        default_config.apply_development_defaults();
 
         println!("{}", serde_json::to_string_pretty(&default_config).unwrap());
 
@@ -706,6 +725,10 @@ mod tests {
             }),
             cors_enabled: Some(true),
             domain_linkage_enabled: Some(true),
+            secret_manager: Some(provisioned::SecretManagerConfig {
+                stronghold_password: Some("sup3rSecr3t".to_string()),
+                ..Default::default()
+            }),
             ..Default::default()
         };
 
@@ -715,8 +738,16 @@ mod tests {
             serde_json::to_value(&merged_config).unwrap(),
             json!({
                 "log_format": "text",
+                "event_store": {
+                    "type": "in_memory"
+                },
+                "cors_enabled": true,
+                "domain_linkage_enabled": true,
                 "secret_manager": {
-                    "stronghold_password": "password"
+                    "stronghold_path": "./stronghold.dat",
+                    "stronghold_password": "<REDACTED>",
+                    "issuer_eddsa_key_id": "ed25519-0",
+                    "issuer_es256_key_id": "es256-0"
                 }
             })
         );

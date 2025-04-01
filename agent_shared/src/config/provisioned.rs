@@ -34,7 +34,12 @@ pub struct ProvisionedApplicationConfiguration {
 /// Loads provisioned configuration from a yaml file and environment variables.
 pub fn load_provisioned_config() -> Result<ProvisionedApplicationConfiguration, config::ConfigError> {
     let mut builder = config::Config::builder();
-    let config_file_path = std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| "./config.yaml".to_string());
+    let config_file_path = if cfg!(feature = "test_utils") {
+        "../agent_shared/tests/test.config.yaml".to_string()
+    } else {
+        std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| "./config.yaml".to_string())
+    };
+
     if std::path::Path::new(&config_file_path).exists() {
         builder = builder.add_source(config::File::with_name(&config_file_path));
         println!("Loaded config file: {}", config_file_path);
@@ -43,7 +48,13 @@ pub fn load_provisioned_config() -> Result<ProvisionedApplicationConfiguration, 
         println!("Config file not found: {}", config_file_path);
         warn!("Config file not found: {}", config_file_path);
     }
-    builder = builder.add_source(config::Environment::with_prefix("UNICORE").separator("__"));
+
+    if cfg!(feature = "test_utils") {
+        builder = builder.add_source(config::Environment::with_prefix("TEST_UNICORE").separator("__"))
+    } else {
+        builder = builder.add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+    };
+
     let config = builder.build()?;
 
     config.try_deserialize::<ProvisionedApplicationConfiguration>()
@@ -59,6 +70,17 @@ pub struct SecretManagerConfig {
     pub issuer_es256_key_id: Option<KeyId>,
 }
 
+// impl Into<crate::config::SecretManagerConfig> for SecretManagerConfig {
+//     fn into(self) -> crate::config::SecretManagerConfig {
+//         crate::config::SecretManagerConfig {
+//             stronghold_path: self.stronghold_path,
+//             stronghold_password: self.stronghold_password,
+//             issuer_eddsa_key_id: self.issuer_eddsa_key_id,
+//             issuer_es256_key_id: self.issuer_es256_key_id,
+//         }
+//     }
+// }
+
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct EventStoreConfig {
@@ -68,11 +90,29 @@ pub struct EventStoreConfig {
     pub connection_string: Option<String>, // TODO: consider making this "env-only", not via config file
 }
 
+impl Into<crate::config::EventStoreConfig> for EventStoreConfig {
+    fn into(self) -> crate::config::EventStoreConfig {
+        crate::config::EventStoreConfig {
+            type_: self.type_.unwrap_or_default(),
+            connection_string: self.connection_string,
+        }
+    }
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct ToggleOptions {
     pub enabled: Option<bool>,
     pub preferred: Option<bool>,
+}
+
+impl Into<crate::config::ToggleOptions> for ToggleOptions {
+    fn into(self) -> crate::config::ToggleOptions {
+        crate::config::ToggleOptions {
+            enabled: self.enabled.unwrap_or_default(),
+            preferred: self.preferred,
+        }
+    }
 }
 
 #[skip_serializing_none]

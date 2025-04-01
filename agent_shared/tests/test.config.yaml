@@ -6,7 +6,7 @@ event_store:
   type: postgres
   connection_string: TODO
 
-url: https://my-domain.example.test
+url: https://my-domain.example.org
 
 port: 1337
 
@@ -19,12 +19,12 @@ external_server_response_timeout_ms: 250
 did_methods:
   did_jwk:
     enabled: true
-    preferred: true
+    preferred: false
   did_key:
     enabled: true
-    preferred: false
+    preferred: true
   did_web:
-    enabled: false
+    enabled: true
 
 domain_linkage_enabled: true
 
