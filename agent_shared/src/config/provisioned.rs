@@ -1,4 +1,4 @@
-use identity_iota::storage::KeyId;
+use identity_iota::{core::ToJson, storage::KeyId};
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
 use oid4vp::ClaimFormatDesignation;
 use serde::{Deserialize, Serialize};
@@ -25,7 +25,7 @@ pub struct ProvisionedApplicationConfiguration {
     pub credential_offer_by_value_enabled: Option<bool>,
     pub secret_manager: Option<SecretManagerConfig>,
     pub credential_configurations: Option<Vec<CredentialConfiguration>>, // TODO: pay attention to index when merging provisioned and runtime credential_configurations!
-    // pub signing_algorithms_supported: Option<HashMap<jsonwebtoken::Algorithm, ToggleOptions>>,
+    pub signing_algorithms_supported: Option<HashMap<jsonwebtoken::Algorithm, ToggleOptions>>,
     pub display: Option<Vec<Display>>,
     pub event_publishers: Option<EventPublishers>,
     pub vp_formats: Option<HashMap<ClaimFormatDesignation, ToggleOptions>>,

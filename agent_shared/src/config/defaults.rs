@@ -7,11 +7,11 @@ use oid4vci::credential_format_profiles::{
     CredentialFormats, Parameters,
 };
 use rand::Rng;
+use std::str::FromStr;
 use url::Url;
 
 use crate::config::{
-    ApplicationConfiguration, CredentialConfiguration, Display, EventStoreType, LogFormat, SupportedDidMethod,
-    ToggleOptions,
+    ApplicationConfiguration, CredentialConfiguration, Display, EventStoreType, Logo, SupportedDidMethod, ToggleOptions,
 };
 
 impl ApplicationConfiguration {
@@ -43,8 +43,11 @@ impl ApplicationConfiguration {
         );
         self.display.push(Display {
             name: "UniCore".to_string(),
-            locale: None,
-            logo: None,
+            locale: Some("en".to_string()),
+            logo: Some(Logo {
+                uri: Some(Url::from_str("https://www.impierce.com/external/impierce-icon.png").unwrap()),
+                alt_text: Some("Impierce Icon".to_string()),
+            }),
         });
         self.credential_configurations.push(CredentialConfiguration {
             credential_configuration_id: "001".to_string(),
@@ -58,9 +61,12 @@ impl ApplicationConfiguration {
                 },
             }),
             display: vec![serde_json::to_value(Display {
-                name: "My Verifiable Credential".to_string(),
-                locale: None,
-                logo: None,
+                name: "Verifiable Credential".to_string(),
+                locale: Some("en".to_string()),
+                logo: Some(Logo {
+                    uri: Some(Url::from_str("https://www.impierce.com/external/impierce-logo.png").unwrap()),
+                    alt_text: Some("Impierce Logo".to_string()),
+                }),
             })
             .unwrap()],
         });

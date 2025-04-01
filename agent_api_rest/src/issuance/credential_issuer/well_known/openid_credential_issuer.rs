@@ -100,8 +100,8 @@ mod tests {
                             "name": "Verifiable Credential",
                             "locale": "en",
                             "logo": {
-                                "uri": "https://impierce.com/images/logo-blue.png",
-                                "alt_text": "UniCore Logo"
+                                "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                "alt_text": "Impierce Logo"
                             }
                         })],
                     }
@@ -112,8 +112,8 @@ mod tests {
                     "name": "UniCore",
                     "locale": "en",
                     "logo": {
-                        "uri": "https://impierce.com/images/favicon/apple-touch-icon.png",
-                        "alt_text": "UniCore Logo"
+                        "uri": "https://www.impierce.com/external/impierce-icon.png",
+                        "alt_text": "Impierce Icon"
                     }
                 })]),
                 ..Default::default()

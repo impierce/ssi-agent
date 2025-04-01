@@ -24,7 +24,7 @@ did_methods:
     enabled: true
     preferred: true
   did_web:
-    enabled: true
+    enabled: false
 
 domain_linkage_enabled: true
 
@@ -56,7 +56,7 @@ display:
     locale: en
     logo:
       uri: https://www.impierce.com/external/impierce-icon.png
-      alt_text: UniCore Logo
+      alt_text: Impierce Icon
 
 credential_configurations:
   - credential_configuration_id: w3c_vc_credential
@@ -69,7 +69,7 @@ credential_configurations:
         locale: en
         logo:
           uri: https://www.impierce.com/external/impierce-logo.png
-          alt_text: UniCore Logo
+          alt_text: Impierce Logo
 
 secret_manager:
   stronghold_path: ../agent_secret_manager/tests/res/test.stronghold.dat
