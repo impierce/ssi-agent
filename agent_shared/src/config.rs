@@ -29,6 +29,7 @@ pub struct ApplicationConfiguration {
     pub event_store: EventStoreConfig,
     pub application_url: Url,
     pub application_base_path: Option<String>,
+    #[serde(deserialize_with = "deserialize_public_url")]
     pub public_url: Option<Url>,
     pub cors_enabled: Option<bool>,
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
@@ -41,6 +42,25 @@ pub struct ApplicationConfiguration {
     pub display: Vec<Display>,
     pub event_publishers: Option<EventPublishers>,
     pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
+}
+
+fn deserialize_public_url<'de, D>(deserializer: D) -> Result<Option<Url>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let public_url_string: Option<String> = Option::deserialize(deserializer)?;
+    public_url_string
+        .map(|public_url_string| {
+            let mut public_url = public_url_string.parse::<Url>().map_err(serde::de::Error::custom)?;
+            public_url
+                .path_segments_mut()
+                .map_err(|_| serde::de::Error::custom("Failed to parse URL path segments"))?
+                .pop_if_empty()
+                .push("");
+
+            Ok(public_url)
+        })
+        .transpose()
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
