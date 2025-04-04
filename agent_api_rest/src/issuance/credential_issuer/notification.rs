@@ -13,7 +13,7 @@ use serde_json::json;
 use tracing::{error, info};
 
 /// The HTTP response MUST use the HTTP status code 400 (Bad Request) and set the content type to application/json.
-/// Please Reference: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-13.html#name-notification-error-response
+/// Reference: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-13.html#name-notification-error-response
 
 #[axum_macros::debug_handler]
 pub async fn notification(
