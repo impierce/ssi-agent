@@ -75,6 +75,7 @@ dependencies = [
  "axum-macros",
  "cqrs-es",
  "futures",
+ "http 1.3.1",
  "http-api-problem",
  "http-body-util",
  "hyper 1.4.1",
@@ -818,7 +819,7 @@ dependencies = [
  "bytes",
  "form_urlencoded",
  "futures-util",
- "http 1.2.0",
+ "http 1.3.1",
  "http-body 1.0.0",
  "http-body-util",
  "hyper 1.4.1",
@@ -862,7 +863,7 @@ checksum = "93495037c01c639b198ecb926b58f7f1c0d61ae663edcd61b2dd679f2a0bffe6"
 dependencies = [
  "axum-core 0.5.0",
  "base64 0.22.1",
- "http 1.2.0",
+ "http 1.3.1",
 ]
 
 [[package]]
@@ -890,7 +891,7 @@ checksum = "df1362f362fd16024ae199c1970ce98f9661bf5ef94b9808fee734bc3698b733"
 dependencies = [
  "bytes",
  "futures-util",
- "http 1.2.0",
+ "http 1.3.1",
  "http-body 1.0.0",
  "http-body-util",
  "mime",
@@ -2137,7 +2138,7 @@ dependencies = [
 [[package]]
 name = "dif-presentation-exchange"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8a7447#b8a744790985580fcc8f39661d0ff7d78d7eb988"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8e5a70#b8e5a70e30c6a812c937ffd11b5cba12a0956407"
 dependencies = [
  "getset",
  "jsonpath_lib",
@@ -2955,7 +2956,7 @@ dependencies = [
  "fnv",
  "futures-core",
  "futures-sink",
- "http 1.2.0",
+ "http 1.3.1",
  "indexmap 2.5.0",
  "slab",
  "tokio",
@@ -3146,9 +3147,9 @@ dependencies = [
 
 [[package]]
 name = "http"
-version = "1.2.0"
+version = "1.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f16ca2af56261c99fba8bac40a10251ce8188205a4c448fbb745a2e4daa76fea"
+checksum = "f4a85d31aea989eead29a3aaf9e1115a180df8282431156e533de47660892565"
 dependencies = [
  "bytes",
  "fnv",
@@ -3162,7 +3163,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "000bed434eb9b5dfb8ea5ed904f02ffc63aa0ac7ac034d480dc24fbb97b748d8"
 dependencies = [
  "axum-core 0.5.0",
- "http 1.2.0",
+ "http 1.3.1",
  "http-api-problem-derive",
  "serde",
  "serde_json",
@@ -3195,7 +3196,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1cac85db508abc24a2e48553ba12a996e87244a0395ce011e62b37158745d643"
 dependencies = [
  "bytes",
- "http 1.2.0",
+ "http 1.3.1",
 ]
 
 [[package]]
@@ -3206,7 +3207,7 @@ checksum = "793429d76616a256bcb62c2a2ec2bed781c8307e797e2598c50010f2bee2544f"
 dependencies = [
  "bytes",
  "futures-util",
- "http 1.2.0",
+ "http 1.3.1",
  "http-body 1.0.0",
  "pin-project-lite",
 ]
@@ -3223,7 +3224,7 @@ version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f056c8559e3757392c8d091e796416e4649d8e49e88b8d76df6c002f05027fd"
 dependencies = [
- "http 1.2.0",
+ "http 1.3.1",
  "serde",
 ]
 
@@ -3279,7 +3280,7 @@ dependencies = [
  "futures-channel",
  "futures-util",
  "h2 0.4.5",
- "http 1.2.0",
+ "http 1.3.1",
  "http-body 1.0.0",
  "httparse",
  "httpdate",
@@ -3311,7 +3312,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ee4be2c948921a1a5320b629c4193916ed787a7f7f293fd3f7f5a6c9de74155"
 dependencies = [
  "futures-util",
- "http 1.2.0",
+ "http 1.3.1",
  "hyper 1.4.1",
  "hyper-util",
  "rustls 0.23.10",
@@ -3331,7 +3332,7 @@ dependencies = [
  "bytes",
  "futures-channel",
  "futures-util",
- "http 1.2.0",
+ "http 1.3.1",
  "http-body 1.0.0",
  "hyper 1.4.1",
  "pin-project-lite",
@@ -4890,7 +4891,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8a7447#b8a744790985580fcc8f39661d0ff7d78d7eb988"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8e5a70#b8e5a70e30c6a812c937ffd11b5cba12a0956407"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4914,7 +4915,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8a7447#b8a744790985580fcc8f39661d0ff7d78d7eb988"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8e5a70#b8e5a70e30c6a812c937ffd11b5cba12a0956407"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4946,13 +4947,13 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8a7447#b8a744790985580fcc8f39661d0ff7d78d7eb988"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8e5a70#b8e5a70e30c6a812c937ffd11b5cba12a0956407"
 dependencies = [
  "anyhow",
- "axum 0.8.1",
  "derivative",
  "dif-presentation-exchange",
  "getset",
+ "http 1.3.1",
  "jsonwebtoken",
  "lazy_static",
  "oid4vc-core",
@@ -4964,6 +4965,8 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "serde_with 3.8.1",
+ "strum 0.27.1",
+ "strum_macros 0.27.1",
  "thiserror",
  "tokio",
 ]
@@ -4971,7 +4974,7 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8a7447#b8a744790985580fcc8f39661d0ff7d78d7eb988"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8e5a70#b8e5a70e30c6a812c937ffd11b5cba12a0956407"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5914,7 +5917,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-util",
- "http 1.2.0",
+ "http 1.3.1",
  "http-body 1.0.0",
  "http-body-util",
  "hyper 1.4.1",
@@ -6869,7 +6872,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8a7447#b8a744790985580fcc8f39661d0ff7d78d7eb988"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8e5a70#b8e5a70e30c6a812c937ffd11b5cba12a0956407"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7569,6 +7572,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "strum"
+version = "0.27.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f64def088c51c9510a8579e3c5d67c65349dcf755e5479ad3d010aa6454e2c32"
+
+[[package]]
 name = "strum_macros"
 version = "0.25.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7586,6 +7595,19 @@ name = "strum_macros"
 version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.67",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.27.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c77a8c5abcaf0f9ce05d62342b7d298c346515365c36b673df4ebe3ced01fde8"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -7990,7 +8012,7 @@ checksum = "8437150ab6bbc8c5f0f519e3d5ed4aa883a83dd4cdd3d1b21f9482936046cb97"
 dependencies = [
  "bitflags 2.5.0",
  "bytes",
- "http 1.2.0",
+ "http 1.3.1",
  "http-body 1.0.0",
  "pin-project-lite",
  "tower-layer",
@@ -8794,7 +8816,7 @@ dependencies = [
  "base64 0.21.7",
  "deadpool",
  "futures",
- "http 1.2.0",
+ "http 1.3.1",
  "http-body-util",
  "hyper 1.4.1",
  "hyper-util",

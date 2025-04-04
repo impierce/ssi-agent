@@ -7,9 +7,8 @@ use axum::{
     extract::{Json, State},
     http::StatusCode,
 };
-
 use axum_auth::AuthBearer;
-use oid4vci::{errors::NotificationError, notification_request::NotificationRequest};
+use oid4vci::notification_request::NotificationRequest;
 use serde_json::json;
 use tracing::{error, info};
 
@@ -27,7 +26,7 @@ pub async fn notification(
     let _offer_id = match query_handler(&access_token, &state.query.access_token).await {
         Ok(Some(AccessTokenView { offer_id })) => offer_id,
         _ => {
-            return NotificationError::InvalidToken.into_response();
+            return StatusCode::BAD_REQUEST.into_response();
         }
     };
 
@@ -44,7 +43,7 @@ pub async fn notification(
     let credential_id = match credential_id {
         Some(id) => id,
         None => {
-            return NotificationError::InvalidNotificationId.into_response();
+            return StatusCode::BAD_REQUEST.into_response();
         }
     };
 
