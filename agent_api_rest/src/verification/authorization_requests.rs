@@ -182,7 +182,7 @@ pub mod tests {
             .unwrap()
             .to_string();
 
-        let state = get_request_endpoint.split('/').last().unwrap().to_string();
+        let state = get_request_endpoint.split('/').next_back().unwrap().to_string();
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let form_url_encoded_authorization_request: String = String::from_utf8(body.to_vec()).unwrap();

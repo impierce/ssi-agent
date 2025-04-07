@@ -31,6 +31,8 @@ pub struct ApplicationConfiguration {
     pub application_base_path: Option<String>,
     #[serde(default, deserialize_with = "deserialize_public_url")]
     pub public_url: Option<Url>,
+    #[serde(default)]
+    pub openid4vci_endpoints: OpenID4VCIEndpoints,
     pub cors_enabled: Option<bool>,
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
     pub external_server_response_timeout_ms: Option<u64>,
@@ -61,6 +63,13 @@ where
             Ok(public_url)
         })
         .transpose()
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct OpenID4VCIEndpoints {
+    pub token_endpoint: Option<Url>,
+    pub credential_endpoint: Option<Url>,
+    pub credential_offer_uri: Option<Url>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]

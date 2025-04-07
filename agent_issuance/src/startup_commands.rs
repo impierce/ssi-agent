@@ -17,15 +17,27 @@ pub fn load_server_metadata(public_url: url::Url) -> ServerConfigCommand {
         vec![display]
     });
 
+    let token_endpoint = config()
+        .openid4vci_endpoints
+        .token_endpoint
+        .clone()
+        .or_else(|| Some(public_url.clone().append_path_segment("auth/token")));
+
+    let credential_endpoint = config()
+        .openid4vci_endpoints
+        .credential_endpoint
+        .clone()
+        .unwrap_or_else(|| public_url.clone().append_path_segment("openid4vci/credential"));
+
     ServerConfigCommand::InitializeServerMetadata {
         authorization_server_metadata: Box::new(AuthorizationServerMetadata {
             issuer: public_url.clone(),
-            token_endpoint: Some(public_url.append_path_segment("auth/token")),
+            token_endpoint,
             ..Default::default()
         }),
         credential_issuer_metadata: Box::new(CredentialIssuerMetadata {
             credential_issuer: public_url.clone(),
-            credential_endpoint: public_url.append_path_segment("openid4vci/credential"),
+            credential_endpoint,
             display,
             ..Default::default()
         }),

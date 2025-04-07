@@ -90,13 +90,21 @@ impl Aggregate for Offer {
                     }),
                 }));
 
-                let credential_offer_uri = CredentialOffer::CredentialOfferUri(
-                    credential_issuer_metadata
-                        .credential_issuer
-                        .join("openid4vci/")
-                        .and_then(|url| url.join("credential-offer/").and_then(|url| url.join(&offer_id)))
-                        .map_err(InvalidCredentialOfferUriError)?,
-                );
+                let credential_offer_uri = config()
+                    .openid4vci_endpoints
+                    .credential_offer_uri
+                    .clone()
+                    .or_else(|| {
+                        credential_issuer_metadata
+                            .credential_issuer
+                            .join("openid4vci/")
+                            .and_then(|url| url.join("credential-offer/"))
+                            .ok()
+                    })
+                    .and_then(|url| url.join(&offer_id).ok())
+                    .unwrap();
+
+                let credential_offer_uri = CredentialOffer::CredentialOfferUri(credential_offer_uri);
 
                 let credential_offer_by_value_enabled = config().credential_offer_by_value_enabled.unwrap_or_default();
 
