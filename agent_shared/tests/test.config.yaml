@@ -4,7 +4,7 @@ log_format: json
 
 event_store:
   type: postgres
-  connection_string: TODO
+  # connection_string: <defined in .env.test>
 
 url: https://my-domain.example.org
 
@@ -59,7 +59,7 @@ display:
       alt_text: Impierce Icon
 
 credential_configurations:
-  - credential_configuration_id: w3c_vc_credential
+  - credential_configuration_id: "001"
     format: jwt_vc_json
     credential_definition:
       type:
@@ -73,5 +73,5 @@ credential_configurations:
 
 secret_manager:
   stronghold_path: ../agent_secret_manager/tests/res/test.stronghold.dat
-  stronghold_password: VNvRtH4tKyWwvJDpL6Vuc2aoLiKAecGQ
+  # stronghold_password: <defined in .env.test>
   issuer_eddsa_key_id: UVDxWhG2rB39FkaR7I27mHeUNrGtUgcr

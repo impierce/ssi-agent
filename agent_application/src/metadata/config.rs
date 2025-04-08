@@ -14,8 +14,8 @@ pub async fn app_config(params: Query<QueryParams>) -> impl IntoResponse {
     debug!("Query params: {:?}", params);
 
     if params.provisioned.unwrap_or(false) {
-        // If "provisioned", then show if the value was provisioned (true/false) for each field in the returned config.
-        // This helps implementers to understand which values they can change and which ones are immutable.
+        // When "provisioned" query parameter, then only show all values that have been actively set via the config.
+        // This helps implementers to understand which values can be changed during runtime and which ones are immutable.
         let provisioned_config = load_provisioned_config().unwrap();
         Json(serde_json::to_value(provisioned_config).unwrap())
     } else {

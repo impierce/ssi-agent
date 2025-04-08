@@ -9,3 +9,5 @@ debug/
 !**/.env.example
 
 .DS_Store
+
+stronghold.dat

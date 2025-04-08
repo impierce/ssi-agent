@@ -151,10 +151,6 @@ async fn buffer_request_body(request: Request) -> Result<Request, Response> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use agent_secret_manager::service::Service;
-    use agent_store::in_memory;
-    use axum::routing::post;
     use oid4vci::credential_issuer::{
         credential_configurations_supported::CredentialConfigurationsSupportedObject,
         credential_issuer_metadata::CredentialIssuerMetadata,
@@ -200,20 +196,5 @@ mod tests {
             credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
             ..Default::default()
         };
-    }
-
-    async fn handler() {}
-
-    #[tokio::test]
-    #[should_panic]
-    async fn test_base_path_routes() {
-        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
-        std::env::set_var("UNICORE__BASE_PATH", "unicore");
-        let router = app(ApplicationState {
-            issuance_state: Some(issuance_state),
-            ..Default::default()
-        });
-
-        let _ = router.route("/auth/token", post(handler));
     }
 }

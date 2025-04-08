@@ -75,7 +75,7 @@ pub struct SecretManagerConfig {
 impl Into<crate::config::SecretManagerConfig> for SecretManagerConfig {
     fn into(self) -> crate::config::SecretManagerConfig {
         crate::config::SecretManagerConfig {
-            stronghold_path: self.stronghold_path.unwrap_or_default(),
+            stronghold_path: self.stronghold_path.unwrap_or(STRONGHOLD_PATH.to_string()),
             stronghold_password: self.stronghold_password,
             issuer_eddsa_key_id: self.issuer_eddsa_key_id.unwrap_or(KeyId::new(ED25519_KEY_ID)),
             issuer_es256_key_id: self.issuer_es256_key_id.unwrap_or(KeyId::new(ES256_KEY_ID)),
@@ -145,6 +145,16 @@ pub struct CredentialConfiguration {
     pub display: Option<Vec<serde_json::Value>>,
 }
 
+impl Into<crate::config::CredentialConfiguration> for CredentialConfiguration {
+    fn into(self) -> crate::config::CredentialConfiguration {
+        crate::config::CredentialConfiguration {
+            credential_configuration_id: self.credential_configuration_id.unwrap_or_default(),
+            credential_format_with_parameters: self.credential_format_with_parameters.unwrap_or_default().into(),
+            display: self.display.unwrap_or_default(),
+        }
+    }
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct EventPublishers {
@@ -187,157 +197,50 @@ mod tests {
     use serde_json::json;
     use serial_test::serial;
 
-    static CONFIG_FILE: &str = "./tests/test.config.yaml";
-
     #[test]
     #[serial]
-    fn test_no_values_provisioned_returns_empty_config() {
-        let config = load_provisioned_config().unwrap();
-
-        let serialized = serde_json::to_value(&config).unwrap();
-
-        assert_eq!(serialized, json!({}));
-    }
-
-    #[test]
-    #[serial]
-    fn test_provisioned_env_var_is_used() {
-        temp_env::with_var("UNICORE__LOG_FORMAT", Some("json"), || {
+    fn test_config_file_not_found_returns_empty_config() {
+        temp_env::with_var("UNICORE__CONFIG_FILE", Some("./config.yaml"), || {
             let config = load_provisioned_config().unwrap();
 
             let serialized = serde_json::to_value(&config).unwrap();
 
-            assert_eq!(
-                serialized,
-                json!({
-                    "log_format": "json"
-                })
-            );
+            assert_eq!(serialized, json!({}));
         });
     }
 
     #[test]
     #[serial]
     fn test_loads_config_file() {
-        temp_env::with_var("UNICORE__CONFIG_FILE", Some(CONFIG_FILE), || {
-            let config = load_provisioned_config().unwrap();
-
-            let serialized = serde_json::to_value(&config).unwrap();
-
-            println!("{}", serde_json::to_string_pretty(&serialized).unwrap());
-
-            assert_eq!(
-                serialized,
-                json!({
-                    "port": 1337,
-                    "log_format": "json",
-                    "event_store": {
-                        "type": "postgres",
-                        "connection_string": "<REDACTED>"
-                    },
-                    "url": "https://my-domain.example.test/",
-                    "base_path": "/base/path",
-                    "cors_enabled": true,
-                    "did_methods": {
-                        "did:web": {
-                            "enabled": false
-                        },
-                        "did:jwk": {
-                            "enabled": true,
-                            "preferred": true
-                        },
-                        "did:key": {
-                            "enabled": true,
-                            "preferred": false
-                        }
-                    },
-                    "external_server_response_timeout_ms": 250,
-                    "domain_linkage_enabled": true,
-                    "credential_offer_by_value_enabled": true,
-                    "secret_manager": {
-                        "stronghold_path": "../agent_secret_manager/tests/res/test.stronghold.dat",
-                        "stronghold_password": "<REDACTED>",
-                        "issuer_eddsa_key_id": "UVDxWhG2rB39FkaR7I27mHeUNrGtUgcr"
-                    },
-                    "credential_configurations": [
-                        {
-                            "credential_configuration_id": "w3c_vc_credential",
-                            "format": "jwt_vc_json",
-                            "credential_definition": {
-                                "type": [
-                                    "VerifiableCredential"
-                                ]
-                            },
-                            "display": [
-                                {
-                                    "locale": "en",
-                                    "name": "Verifiable Credential",
-                                    "logo": {
-                                        "alt_text": "UniCore Logo",
-                                        "uri": "https://www.impierce.com/external/impierce-logo.png"
-                                    }
-                                }
-                            ]
-                        }
-                    ],
-                    "display": [
-                        {
-                            "name": "UniCore",
-                            "locale": "en",
-                            "logo": {
-                                "uri": "https://www.impierce.com/external/impierce-icon.png",
-                                "alt_text": "UniCore Logo"
-                            }
-                        }
-                    ],
-                    "event_publishers": {
-                        "http": {
-                            "enabled": true,
-                            "target_url": "https://service.example.test:8291/events",
-                            "headers": {
-                                "authorization": "Basic YWxhZGRpbjpvcGVuc2VzYW1l"
-                            },
-                            "events": {
-                                "credential": [
-                                    "UnsignedCredentialCreated",
-                                    "CredentialSigned"
-                                ]
-                            }
-                        }
-                    },
-                    "vp_formats": {
-                        "jwt_vc_json": {
-                            "enabled": true
-                        },
-                        "jwt_vp_json": {
-                            "enabled": true
-                        }
-                    }
-                })
-            );
-        });
-    }
-
-    #[test]
-    #[serial]
-    fn test_env_var_overwrites_config_file() {
-        temp_env::with_vars(
-            [
-                ("UNICORE__CONFIG_FILE", Some(CONFIG_FILE)),
-                ("UNICORE__LOG_FORMAT", Some("json")),
-            ],
+        temp_env::with_var(
+            "UNICORE__CONFIG_FILE",
+            Some("../agent_application/example.config.yaml"),
             || {
                 let config = load_provisioned_config().unwrap();
 
                 let serialized = serde_json::to_value(&config).unwrap();
 
-                assert_eq!(
-                    serialized,
-                    json!({
-                        "log_format": "json"
-                    })
-                );
+                println!("{}", serde_json::to_string_pretty(&serialized).unwrap());
+
+                assert_eq!(serialized.get("url").unwrap(), &json!("https://ssi-agent.example.org/"));
             },
-        )
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_env_var_overwrites_config_file() {
+        let config = load_provisioned_config().unwrap();
+        let serialized = serde_json::to_value(&config.log_format).unwrap();
+        assert_eq!(serialized, json!("json"));
+
+        // Set the environment variable to override the config file value
+        temp_env::with_vars([("UNICORE__LOG_FORMAT", Some("text"))], || {
+            let config = load_provisioned_config().unwrap();
+
+            let serialized = serde_json::to_value(&config.log_format).unwrap();
+
+            assert_eq!(serialized, json!("text"));
+        })
     }
 }

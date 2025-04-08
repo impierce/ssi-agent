@@ -594,8 +594,8 @@ pub mod test_utils {
                     "locale": "en",
                     "name": "Verifiable Credential",
                     "logo": {
-                        "uri": "https://impierce.com/images/logo-blue.png",
-                        "alt_text": "UniCore Logo",
+                        "uri": "https://www.impierce.com/external/impierce-logo.png",
+                        "alt_text": "Impierce Logo",
                     }
                 })],
                 ..Default::default()

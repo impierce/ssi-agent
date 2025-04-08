@@ -466,7 +466,7 @@ impl ApplicationConfiguration {
         //     })
     }
 
-    pub fn merge(&mut self, provisioned_config: ProvisionedApplicationConfiguration) -> Self {
+    fn merge(&mut self, provisioned_config: ProvisionedApplicationConfiguration) -> Self {
         self.port = provisioned_config.port.and_then(|port| Some(port));
         self.log_format = provisioned_config.log_format.unwrap_or(self.clone().log_format);
         self.event_store = provisioned_config
@@ -497,7 +497,15 @@ impl ApplicationConfiguration {
             .secret_manager
             .map(|config| config.into())
             .unwrap_or(self.clone().secret_manager);
-        // self.credential_configurations = provisioned_config.credential_configurations;
+        self.credential_configurations = provisioned_config
+            .credential_configurations
+            .map(|configs| {
+                configs
+                    .into_iter()
+                    .map(|config| config.into())
+                    .collect::<Vec<CredentialConfiguration>>()
+            })
+            .unwrap_or(self.credential_configurations.clone());
         self.signing_algorithms_supported = provisioned_config
             .signing_algorithms_supported
             .map(|map| map.into_iter().map(|(alg, options)| (alg, options.into())).collect())
@@ -527,11 +535,34 @@ impl ApplicationConfiguration {
             || self.secret_manager.stronghold_password.as_ref().unwrap().is_empty()
         {
             return Err(SharedError::ConfigurationNotSuitableForProduction(
-                "Stronghold password must be provided".to_string(),
+                "Stronghold password missing".to_string(),
             ));
         }
-        // TODO: check password policy ...
-        // Disallow `in_memory` in production?
+
+        if std::env::var("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD")
+            .ok()
+            .is_none()
+        {
+            return Err(SharedError::ConfigurationNotSuitableForProduction(
+                "Stronghold password must be provided as environment variable".to_string(),
+            ));
+        }
+
+        self.secret_manager.stronghold_password.as_ref().map(|password| {
+            if password.len() < 12 {
+                return Err(SharedError::ConfigurationNotSuitableForProduction(
+                    "Stronghold password must be at least 12 characters long".to_string(),
+                ));
+            }
+            Ok(())
+        });
+
+        if self.event_store.type_ == EventStoreType::InMemory {
+            return Err(SharedError::ConfigurationNotSuitableForProduction(
+                "In-memory event store is not suitable for production".to_string(),
+            ));
+        }
+
         Ok(())
     }
 

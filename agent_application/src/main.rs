@@ -95,7 +95,7 @@ async fn main() -> io::Result<()> {
     let port = config().port.unwrap_or(3033);
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
-    info!("HTTP API available at http://{}", listener.local_addr()?);
+    info!("HTTP API served at http://{}", listener.local_addr()?);
     axum::serve(listener, app).await?;
 
     Ok(())

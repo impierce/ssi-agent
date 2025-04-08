@@ -176,7 +176,7 @@ pub mod server_config_tests {
             }])
             .when(ServerConfigCommand::AddCredentialConfiguration {
                 credential_configuration: CredentialConfiguration {
-                    credential_configuration_id: "badge".to_string(),
+                    credential_configuration_id: "001".to_string(),
                     credential_format_with_parameters: CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
                         parameters: w3c_verifiable_credentials::jwt_vc_json::JwtVcJsonParameters {
                             credential_definition: w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition {
@@ -190,8 +190,8 @@ pub mod server_config_tests {
                         "name": "Verifiable Credential",
                         "locale": "en",
                         "logo": {
-                            "uri": "https://impierce.com/images/logo-blue.png",
-                            "alt_text": "UniCore Logo"
+                            "uri": "https://www.impierce.com/external/impierce-logo.png",
+                            "alt_text": "Impierce Logo"
                         }
                     })],
                 },
@@ -218,7 +218,7 @@ pub mod test_utils {
 
     #[fixture]
     pub fn credential_configurations_supported() -> HashMap<String, CredentialConfigurationsSupportedObject> {
-        HashMap::from_iter(vec![("badge".to_string(), W3C_VC_CREDENTIAL_CONFIGURATION.clone())])
+        HashMap::from_iter(vec![("001".to_string(), W3C_VC_CREDENTIAL_CONFIGURATION.clone())])
     }
 
     #[fixture]
