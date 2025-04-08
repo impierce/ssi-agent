@@ -18,7 +18,7 @@ use std::{
     sync::{RwLock, RwLockReadGuard},
 };
 use strum::VariantArray;
-use tracing::{debug, info};
+use tracing::info;
 use url::Url;
 
 use crate::{error::SharedError, profile::ApplicationProfile};
@@ -548,18 +548,17 @@ impl ApplicationConfiguration {
             ));
         }
 
-        self.secret_manager.stronghold_password.as_ref().map(|password| {
-            if password.len() < 12 {
-                return Err(SharedError::ConfigurationNotSuitableForProduction(
-                    "Stronghold password must be at least 12 characters long".to_string(),
-                ));
-            }
-            Ok(())
-        });
+        // Password policy
+        // TODO: refine
+        if self.secret_manager.stronghold_password.as_ref().unwrap().len() < 12 {
+            return Err(SharedError::ConfigurationNotSuitableForProduction(
+                "Stronghold password must be at least 12 characters long".to_string(),
+            ));
+        }
 
         if self.event_store.type_ == EventStoreType::InMemory {
             return Err(SharedError::ConfigurationNotSuitableForProduction(
-                "In-memory event store is not suitable for production".to_string(),
+                "Events persisted in-memory would be lost after restart".to_string(),
             ));
         }
 
@@ -728,6 +727,7 @@ mod tests {
     use super::*;
 
     use provisioned::EventStoreConfig;
+    use serial_test::serial;
 
     #[test]
     fn all_supported_did_methods_can_be_converted_into_subject_syntax_type() {
@@ -801,17 +801,71 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_production_config() {
-        let mut config = ApplicationConfiguration::default();
-        config.apply_production_defaults();
+    #[serial]
+    fn test_validate_production_config_without_stronghold_password_fails() {
+        // let mut config = ApplicationConfiguration::default();
+        // config.apply_production_defaults();
+        temp_env::with_vars(
+            [
+                ("UNICORE__CONFIG_FILE", Some("./config.yaml")),
+                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("")),
+            ],
+            || {
+                let config = ApplicationConfiguration::new();
 
-        // Validate configuration
-        let result = config.validate();
+                assert_eq!(
+                    config.unwrap_err().to_string(),
+                    "Configuration is not suitable for production: Stronghold password missing"
+                );
 
-        assert!(result.is_ok());
+                // Validate configuration
+                // let result = config.validate().inspect_err(|e| {
+                //     println!("{}", e);
+                // });
 
-        // Invalid configuration
-        config.secret_manager.stronghold_password = None;
-        assert!(std::panic::catch_unwind(|| config.validate()).is_err());
+                // Invalid configuration
+                // config.secret_manager.stronghold_password = None;
+                // assert!(std::panic::catch_unwind(|| config.validate()).is_err());
+            },
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_validate_production_config_when_disrespecting_password_policy_fails() {
+        temp_env::with_vars(
+            [
+                ("UNICORE__CONFIG_FILE", Some("./config.yaml")),
+                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("too_short")),
+            ],
+            || {
+                let config = ApplicationConfiguration::new();
+
+                assert_eq!(
+                    config.unwrap_err().to_string(),
+                    "Configuration is not suitable for production: Stronghold password must be at least 12 characters long"
+                );
+            },
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_validate_production_config_disallow_in_memory_persistence() {
+        temp_env::with_vars(
+            [
+                ("UNICORE__CONFIG_FILE", Some("./config.yaml")),
+                // ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("too_short")),
+                ("UNICORE__EVENT_STORE__TYPE", Some("in_memory")),
+            ],
+            || {
+                let config = ApplicationConfiguration::new();
+
+                assert_eq!(
+                    config.unwrap_err().to_string(),
+                    "Configuration is not suitable for production: Events persisted in-memory would be lost after restart"
+                );
+            },
+        );
     }
 }

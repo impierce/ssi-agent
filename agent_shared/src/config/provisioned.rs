@@ -246,7 +246,7 @@ mod tests {
         assert_eq!(serialized, json!("json"));
 
         // Set the environment variable to override the config file value
-        temp_env::with_vars([("UNICORE__LOG_FORMAT", Some("text"))], || {
+        temp_env::with_var("UNICORE__LOG_FORMAT", Some("text"), || {
             let config = load_provisioned_config().unwrap();
 
             let serialized = serde_json::to_value(&config.log_format).unwrap();
