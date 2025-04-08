@@ -3,9 +3,14 @@ use crate::DOCUMENTATION_URL;
 use agent_issuance::{
     credential::error::CredentialError, offer::error::OfferError, server_config::error::ServerConfigError,
 };
+use axum::{response::IntoResponse, response::Response, Json};
 use http_api_problem::ApiError;
 use hyper::StatusCode;
-
+use oid4vci::errors::{
+    AuthorizationErrorResponse, BatchCredentialErrorResponse, CredentialErrorResponse, DeferredCredentialErrorResponse,
+    ErrorStatusCode, NotificationErrorResponse, OID4VCError, TokenErrorResponse,
+};
+/// use std::os::macos::raw::stat;
 impl IntoApiErrorExt for CredentialError {
     fn into_api_error(self) -> ApiError {
         use CredentialError::*;
@@ -102,6 +107,37 @@ impl IntoApiErrorExt for ServerConfigError {
     fn into_api_error(self) -> ApiError {
         match self {}
     }
+}
+/// - OID4VCI Error Responses
+pub fn authorization_error(error: AuthorizationErrorResponse) -> Response {
+    let error: OID4VCError<AuthorizationErrorResponse> = OID4VCError::new(error);
+    let status = error.error.status_code();
+    (status, Json(error)).into_response()
+}
+pub fn token_error(error: TokenErrorResponse) -> Response {
+    let error = OID4VCError::new(error);
+    let status = error.error.status_code();
+    (status, Json(error)).into_response()
+}
+pub fn credential_error(error: CredentialErrorResponse) -> Response {
+    let error = OID4VCError::new(error);
+    let status = error.error.status_code();
+    (status, Json(error)).into_response()
+}
+pub fn batch_credential_error(error: BatchCredentialErrorResponse) -> Response {
+    let error = OID4VCError::new(error);
+    let status = error.error.status_code();
+    (status, Json(error)).into_response()
+}
+pub fn deferred_credential_error(error: DeferredCredentialErrorResponse) -> Response {
+    let error = OID4VCError::new(error);
+    let status = error.error.status_code();
+    (status, Json(error)).into_response()
+}
+pub fn notification_error(error: NotificationErrorResponse) -> Response {
+    let error = OID4VCError::new(error);
+    let status = error.error.status_code();
+    (status, Json(error)).into_response()
 }
 
 #[cfg(test)]

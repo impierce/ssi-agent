@@ -2138,7 +2138,7 @@ dependencies = [
 [[package]]
 name = "dif-presentation-exchange"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8e5a70#b8e5a70e30c6a812c937ffd11b5cba12a0956407"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=882c7b1#882c7b117ed7c33f4215d18d0b87bf5e866153ac"
 dependencies = [
  "getset",
  "jsonpath_lib",
@@ -4891,7 +4891,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8e5a70#b8e5a70e30c6a812c937ffd11b5cba12a0956407"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=882c7b1#882c7b117ed7c33f4215d18d0b87bf5e866153ac"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4915,7 +4915,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8e5a70#b8e5a70e30c6a812c937ffd11b5cba12a0956407"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=882c7b1#882c7b117ed7c33f4215d18d0b87bf5e866153ac"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4947,7 +4947,7 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8e5a70#b8e5a70e30c6a812c937ffd11b5cba12a0956407"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=882c7b1#882c7b117ed7c33f4215d18d0b87bf5e866153ac"
 dependencies = [
  "anyhow",
  "derivative",
@@ -4965,8 +4965,6 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "serde_with 3.8.1",
- "strum 0.27.1",
- "strum_macros 0.27.1",
  "thiserror",
  "tokio",
 ]
@@ -4974,7 +4972,7 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8e5a70#b8e5a70e30c6a812c937ffd11b5cba12a0956407"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=882c7b1#882c7b117ed7c33f4215d18d0b87bf5e866153ac"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6872,7 +6870,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=b8e5a70#b8e5a70e30c6a812c937ffd11b5cba12a0956407"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=882c7b1#882c7b117ed7c33f4215d18d0b87bf5e866153ac"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7572,12 +7570,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "strum"
-version = "0.27.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f64def088c51c9510a8579e3c5d67c65349dcf755e5479ad3d010aa6454e2c32"
-
-[[package]]
 name = "strum_macros"
 version = "0.25.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7595,19 +7587,6 @@ name = "strum_macros"
 version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
-dependencies = [
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "rustversion",
- "syn 2.0.67",
-]
-
-[[package]]
-name = "strum_macros"
-version = "0.27.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c77a8c5abcaf0f9ce05d62342b7d298c346515365c36b673df4ebe3ced01fde8"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
