@@ -8,7 +8,7 @@ use tracing::{info, warn};
 use url::Url;
 
 use crate::config::{
-    redact, EventStoreType, Events, LogFormat, Logo, SupportedDidMethod, ED25519_KEY_ID, ES256_KEY_ID,
+    redact, EventStoreType, Events, LogFormat, Logo, SupportedDidMethod, ED25519_KEY_ID, ES256_KEY_ID, STRONGHOLD_PATH,
 };
 
 /// Provisioned configuration values are immutable and protected against runtime modifications.
@@ -36,11 +36,19 @@ pub struct ProvisionedApplicationConfiguration {
 /// Loads provisioned configuration from a yaml file and environment variables.
 pub fn load_provisioned_config() -> Result<ProvisionedApplicationConfiguration, config::ConfigError> {
     let mut builder = config::Config::builder();
-    let config_file_path = if cfg!(feature = "test_utils") {
-        "../agent_shared/tests/test.config.yaml".to_string()
-    } else {
-        std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| "./config.yaml".to_string())
-    };
+
+    // Load the appropriate .env file
+    if cfg!(feature = "test_utils") {
+        dotenvy::from_filename("../.env.test").ok();
+    }
+
+    let config_file_path = std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| {
+        if cfg!(feature = "test_utils") {
+            "../agent_shared/tests/test.config.yaml".to_string()
+        } else {
+            "./config.yaml".to_string()
+        }
+    });
 
     if std::path::Path::new(&config_file_path).exists() {
         builder = builder.add_source(config::File::with_name(&config_file_path));
@@ -51,11 +59,7 @@ pub fn load_provisioned_config() -> Result<ProvisionedApplicationConfiguration, 
         warn!("Config file not found: {}", config_file_path);
     }
 
-    if cfg!(feature = "test_utils") {
-        builder = builder.add_source(config::Environment::with_prefix("TEST_UNICORE").separator("__"))
-    } else {
-        builder = builder.add_source(config::Environment::with_prefix("UNICORE").separator("__"))
-    };
+    builder = builder.add_source(config::Environment::with_prefix("UNICORE").separator("__"));
 
     let config = builder.build()?;
 
@@ -199,13 +203,20 @@ mod tests {
 
     #[test]
     #[serial]
-    fn test_config_file_not_found_returns_empty_config() {
+    fn test_config_file_not_found_only_includes_provisioned_env_vars() {
         temp_env::with_var("UNICORE__CONFIG_FILE", Some("./config.yaml"), || {
             let config = load_provisioned_config().unwrap();
 
             let serialized = serde_json::to_value(&config).unwrap();
 
-            assert_eq!(serialized, json!({}));
+            assert_eq!(
+                serialized,
+                json!({
+                    "secret_manager": {
+                        "stronghold_password": "<REDACTED>"
+                    },
+                })
+            );
         });
     }
 
