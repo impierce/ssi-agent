@@ -10,4 +10,4 @@ debug/
 
 .DS_Store
 
-stronghold.dat
+**/stronghold.dat

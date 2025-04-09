@@ -1,4 +1,4 @@
-use agent_shared::config::config;
+use agent_shared::{config::config, profile::ApplicationProfile};
 use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use identity_iota::{
     storage::{JwkStorage, KeyId, KeyType},
@@ -13,6 +13,13 @@ pub mod subject;
 pub async fn stronghold_storage() -> StrongholdExtStorage {
     #[cfg(feature = "test_utils")]
     iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).unwrap();
+
+    match ApplicationProfile::load() {
+        ApplicationProfile::Development => {
+            iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).unwrap();
+        }
+        _ => {}
+    }
 
     info!("Initializing Stronghold storage");
 
