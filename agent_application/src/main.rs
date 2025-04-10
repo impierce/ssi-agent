@@ -63,7 +63,7 @@ async fn main() -> io::Result<()> {
 
     info!("{:?}", config());
 
-    let url = &config().url.clone().expect("TODO: should never be None");
+    let url = &config().url.clone().expect("Unexpected error: UniCore URL not set");
 
     info!("Application url: {}", url);
 
@@ -84,8 +84,7 @@ async fn main() -> io::Result<()> {
     let metadata_router = axum::Router::new()
         .route("/version", axum::routing::get(metadata::version::version))
         .route("/info", axum::routing::get(metadata::info::info))
-        // TODO: abbreviate to "/config"?
-        .route("/v0/configuration", axum::routing::get(metadata::config::app_config))
+        .route("/v0/configuration", axum::routing::get(metadata::config::configuration))
         .with_state(metadata_state);
     let app = metadata_router.merge(app);
 

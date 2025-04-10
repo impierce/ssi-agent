@@ -542,6 +542,18 @@ impl ApplicationConfiguration {
             ));
         }
 
+        if self.event_store.connection_string.is_none() {
+            return Err(SharedError::ConfigurationNotSuitableForProduction(
+                "Event store connection string must be provided".to_string(),
+            ));
+        }
+
+        if self.url.is_none() {
+            return Err(SharedError::ConfigurationNotSuitableForProduction(
+                "UniCore URL must be provided".to_string(),
+            ));
+        }
+
         Ok(())
     }
 
@@ -754,30 +766,22 @@ mod tests {
     #[test]
     #[serial]
     fn test_validate_production_config_without_stronghold_password_fails() {
-        temp_env::with_vars(
-            [
-                ("UNICORE__CONFIG_FILE", Some("./config.yaml")),
-                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("")),
-            ],
-            || {
-                let config = ApplicationConfiguration::new();
+        temp_env::with_var("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some(""), || {
+            let config = ApplicationConfiguration::new();
 
-                assert_eq!(
-                    config.unwrap_err().to_string(),
-                    "Configuration is not suitable for production: Stronghold password missing"
-                );
-            },
-        );
+            assert_eq!(
+                config.unwrap_err().to_string(),
+                "Configuration is not suitable for production: Stronghold password missing"
+            );
+        });
     }
 
     #[test]
     #[serial]
     fn test_validate_production_config_when_disrespecting_password_policy_fails() {
-        temp_env::with_vars(
-            [
-                ("UNICORE__CONFIG_FILE", Some("./config.yaml")),
-                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("too_short")),
-            ],
+        temp_env::with_var(
+            "UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD",
+            Some("too_short"),
             || {
                 let config = ApplicationConfiguration::new();
 
@@ -792,17 +796,41 @@ mod tests {
     #[test]
     #[serial]
     fn test_validate_production_config_disallows_in_memory_persistence() {
+        temp_env::with_var("UNICORE__EVENT_STORE__TYPE", Some("in_memory"), || {
+            let config = ApplicationConfiguration::new();
+
+            assert_eq!(
+                config.unwrap_err().to_string(),
+                "Configuration is not suitable for production: Events persisted in-memory would be lost on restart"
+            );
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn test_validate_production_config_requires_database_connection_string() {
+        let config = ApplicationConfiguration::new();
+
+        assert_eq!(
+            config.unwrap_err().to_string(),
+            "Configuration is not suitable for production: Event store connection string must be provided"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_validate_production_config_requires_explicit_url() {
         temp_env::with_vars(
             [
                 ("UNICORE__CONFIG_FILE", Some("./config.yaml")),
-                ("UNICORE__EVENT_STORE__TYPE", Some("in_memory")),
+                ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("postgresql://test")),
             ],
             || {
                 let config = ApplicationConfiguration::new();
 
                 assert_eq!(
                     config.unwrap_err().to_string(),
-                    "Configuration is not suitable for production: Events persisted in-memory would be lost on restart"
+                    "Configuration is not suitable for production: UniCore URL must be provided"
                 );
             },
         );

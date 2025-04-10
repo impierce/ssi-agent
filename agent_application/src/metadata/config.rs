@@ -10,11 +10,11 @@ pub struct QueryParams {
     provisioned: Option<bool>,
 }
 
-pub async fn app_config(params: Query<QueryParams>) -> impl IntoResponse {
+pub async fn configuration(params: Query<QueryParams>) -> impl IntoResponse {
     debug!("Query params: {:?}", params);
 
     if params.provisioned.unwrap_or(false) {
-        // When "provisioned" query parameter, then only show all values that have been actively set via the config.
+        // When "provisioned" query parameter is present and set to "true", then only the values are returned that have been _actively_ configured.
         // This helps implementers to understand which values can be changed during runtime and which ones are immutable.
         let provisioned_config = load_provisioned_config().unwrap();
         Json(serde_json::to_value(provisioned_config).unwrap())

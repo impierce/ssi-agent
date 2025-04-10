@@ -56,7 +56,7 @@ impl Aggregate for AuthorizationRequest {
                     .await
                     .unwrap();
 
-                let url = &config().url.clone().expect("TODO: should never be None");
+                let url = &config().url.clone().expect("Unexpected error: UniCore URL not set");
 
                 // TODO: ensure that URLs like these are validated during configuration.
                 let request_uri = format!("{url}request/{state}").parse().unwrap();

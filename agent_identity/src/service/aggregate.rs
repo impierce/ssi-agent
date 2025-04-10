@@ -61,7 +61,11 @@ impl Aggregate for Service {
             } => {
                 let subject = &services.subject;
 
-                let origin = config().url.clone().expect("TODO: should never be None").origin();
+                let origin = config()
+                    .url
+                    .clone()
+                    .expect("Unexpected error: UniCore URL not set")
+                    .origin();
                 let origin = identity_core::common::Url::parse(origin.ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
@@ -184,7 +188,7 @@ impl Aggregate for Service {
                     config()
                         .url
                         .clone()
-                        .expect("TODO: should never be None")
+                        .expect("Unexpected error: UniCore URL not set")
                         .origin()
                         .ascii_serialization(),
                 )
@@ -391,7 +395,7 @@ pub mod test_utils {
         let origin = config()
             .url
             .clone()
-            .expect("TODO: should never be None")
+            .expect("Unexpected error: UniCore URL not set")
             .origin()
             .ascii_serialization();
 
