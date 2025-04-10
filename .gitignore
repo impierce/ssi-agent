@@ -11,3 +11,4 @@ debug/
 .DS_Store
 
 **/stronghold.dat
+config.yaml

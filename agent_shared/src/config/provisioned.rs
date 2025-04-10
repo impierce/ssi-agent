@@ -1,4 +1,4 @@
-use identity_iota::{core::ToJson, storage::KeyId};
+use identity_iota::storage::KeyId;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
 use oid4vp::ClaimFormatDesignation;
 use serde::{Deserialize, Serialize};
@@ -42,7 +42,7 @@ pub fn load_provisioned_config() -> Result<ProvisionedApplicationConfiguration, 
         dotenvy::from_filename("../.env.test").ok();
     }
 
-    let config_file_path = std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| {
+    let config_file_path_str = std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| {
         if cfg!(feature = "test_utils") {
             "../agent_shared/tests/test.config.yaml".to_string()
         } else {
@@ -50,13 +50,15 @@ pub fn load_provisioned_config() -> Result<ProvisionedApplicationConfiguration, 
         }
     });
 
-    if std::path::Path::new(&config_file_path).exists() {
-        builder = builder.add_source(config::File::with_name(&config_file_path));
-        println!("Loaded config file: {}", config_file_path);
-        info!("Loaded config file: {}", config_file_path);
+    let config_file_path = std::path::Path::new(&config_file_path_str);
+
+    if config_file_path.exists() {
+        builder = builder.add_source(config::File::with_name(&config_file_path_str));
+        println!("Loaded config file: `{}`", config_file_path.display());
+        info!("Loaded config file: `{}`", config_file_path.display());
     } else {
-        println!("Config file not found: {}", config_file_path);
-        warn!("Config file not found: {}", config_file_path);
+        println!("Config file not found: `{}`", config_file_path.display());
+        warn!("Config file not found: `{}`", config_file_path.display());
     }
 
     builder = builder.add_source(config::Environment::with_prefix("UNICORE").separator("__"));
@@ -230,8 +232,6 @@ mod tests {
                 let config = load_provisioned_config().unwrap();
 
                 let serialized = serde_json::to_value(&config).unwrap();
-
-                println!("{}", serde_json::to_string_pretty(&serialized).unwrap());
 
                 assert_eq!(serialized.get("url").unwrap(), &json!("https://ssi-agent.example.org/"));
             },

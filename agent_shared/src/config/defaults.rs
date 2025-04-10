@@ -18,15 +18,25 @@ impl ApplicationConfiguration {
     pub fn apply_development_defaults(&mut self) -> Self {
         self.event_store.type_ = EventStoreType::InMemory;
 
-        self.secret_manager.stronghold_path = "./debug/stronghold.dat".to_string();
-
-        // If no Stronghold password is provided, a random password is generated.
-        if self.secret_manager.stronghold_password.is_none() {
-            let random_bytes: [u8; 16] = rand::thread_rng().gen();
-            self.secret_manager.stronghold_password = Some(URL_SAFE_NO_PAD.encode(&random_bytes));
+        // If no Stronghold password is provided, a new random password is generated.
+        // Since the `ApplicationConfiguration` only holds default values at this point, we check the environment variable.
+        if std::env::var("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD")
+            .ok()
+            .is_none()
+        {
+            let random_bytes: [u8; 32] = rand::thread_rng().gen();
+            let stronghold_password = URL_SAFE_NO_PAD.encode(&random_bytes)[..24].to_string();
+            self.secret_manager.stronghold_password = Some(stronghold_password.clone());
             println!(
-                "\n====================\n\n  A new Stronghold password was generated!\n\n  {}\n\n====================\n",
-                self.secret_manager.stronghold_password.clone().unwrap()
+                r#"
+            ################################################
+            #                                              #
+            #   A new Stronghold password was generated!   #
+            #                                              #
+            #           {stronghold_password}           #
+            #                                              #
+            ################################################
+            "#
             );
         };
 
@@ -119,8 +129,8 @@ mod tests {
         // Use in-memory event store (no dependency on a database)
         assert_eq!(config.event_store.type_, EventStoreType::InMemory);
 
-        // Stronghold file is in a temporary directory
-        assert_eq!(config.secret_manager.stronghold_path, "./debug/stronghold.dat");
+        // Stronghold file is in the default directory
+        assert_eq!(config.secret_manager.stronghold_path, "./stronghold.dat");
 
         // A password is set
         assert!(config.secret_manager.stronghold_password.is_some());

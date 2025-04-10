@@ -18,7 +18,7 @@ use std::{
     sync::{RwLock, RwLockReadGuard},
 };
 use strum::VariantArray;
-use tracing::info;
+use tracing::{debug, info};
 use url::Url;
 
 use crate::{error::SharedError, profile::ApplicationProfile};
@@ -378,49 +378,29 @@ impl ApplicationConfiguration {
         info!("Environment variables loaded.");
         info!("Loading application configuration ...");
 
-        println!("Current directory: {:?}", std::env::current_dir().unwrap());
+        debug!("Current directory: {:?}", std::env::current_dir().unwrap());
 
         let mut default_config = ApplicationConfiguration::default();
 
         let application_profile = ApplicationProfile::load();
 
+        // Apply default values to the empty configuration according to the application profile.
         match application_profile {
             ApplicationProfile::Development => {
                 default_config.apply_development_defaults();
                 println!("Development profile loaded");
+                info!("Development profile loaded");
             }
             ApplicationProfile::Production => {
                 default_config.apply_production_defaults();
             }
         }
 
-        println!("==== default_config ====");
-        println!("{:?}", default_config);
-
-        // TODO: remove?
-        std::fs::create_dir("./debug").ok();
-        let mut file = std::fs::File::create("./debug/default.config.yaml").unwrap();
-        // file.write_all(serde_json::to_string_pretty(&default_config).unwrap().as_bytes())
-        //     .unwrap();
-        file.write_all("# THIS FILE WAS GENERATED. ANY CHANGES WILL BE OVERWRITTEN!\n".as_bytes())
-            .unwrap();
-        file.write_all(serde_yaml::to_string(&default_config).unwrap().as_bytes())
-            .unwrap();
-
         let provisioned_config = load_provisioned_config()?;
 
-        println!("==== provisioned_config ====");
-        println!("{:?}", provisioned_config);
-
-        // let provisioned_config_parsed: provisioned::ProvisionedApplicationConfiguration =
-        //     provisioned_config.clone().try_deserialize()?;
-        // println!("==== provisioned_config (parsed) ====");
-        // println!("{:#?}", provisioned_config_parsed);
-
         let merged_config = default_config.merge(provisioned_config);
-        println!("==== merged_config ====");
-        println!("{:?}", merged_config);
 
+        // If the application is running in production mode, the configuration is validated.
         match application_profile {
             ApplicationProfile::Production => merged_config
                 .validate()
@@ -428,15 +408,15 @@ impl ApplicationConfiguration {
             _ => {}
         }
 
-        // TODO: remove?
-        std::fs::create_dir("./debug").ok();
-        let mut file = std::fs::File::create("./debug/config.yaml").unwrap();
-        // file.write_all(serde_json::to_string_pretty(&default_config).unwrap().as_bytes())
-        //     .unwrap();
-        file.write_all("# THIS FILE WAS GENERATED. ANY CHANGES WILL BE OVERWRITTEN!\n".as_bytes())
-            .unwrap();
-        file.write_all(serde_yaml::to_string(&merged_config).unwrap().as_bytes())
-            .unwrap();
+        // Log final configuration
+        if cfg!(debug_assertions) {
+            std::fs::create_dir("./debug").ok();
+            let mut file = std::fs::File::create("./debug/config.yaml").unwrap();
+            file.write_all("# THIS FILE WAS GENERATED. ANY CHANGES WILL BE OVERWRITTEN!\n".as_bytes())
+                .unwrap();
+            file.write_all(serde_yaml::to_string(&merged_config).unwrap().as_bytes())
+                .unwrap();
+        }
 
         return Ok(merged_config);
 
@@ -558,7 +538,7 @@ impl ApplicationConfiguration {
 
         if self.event_store.type_ == EventStoreType::InMemory {
             return Err(SharedError::ConfigurationNotSuitableForProduction(
-                "Events persisted in-memory would be lost after restart".to_string(),
+                "Events persisted in-memory would be lost on restart".to_string(),
             ));
         }
 
@@ -618,33 +598,6 @@ impl ApplicationConfiguration {
         self.secret_manager = config;
     }
 }
-
-// ApplicationConfiguration::from(provisioned_config)
-// default_config.merge(provisioned_config)
-
-// impl From<ProvisionedApplicationConfiguration> for ApplicationConfiguration {
-//     fn from(provisioned_config: ProvisionedApplicationConfiguration) -> Self {
-//         let mut default_config = ApplicationConfiguration::default();
-
-//         match ApplicationProfile::load() {
-//             ApplicationProfile::Development => {
-//                 default_config = apply_development_defaults(default_config);
-//                 println!("Development profile loaded");
-//             }
-//             ApplicationProfile::Production => {}
-//         }
-
-//         let mut merged_config = default_config;
-
-//         // overwrite default values with provisioned values
-//         merged_config.log_format = provisioned_config.log_format.unwrap_or(merged_config.log_format);
-//         merged_config.secret_manager.stronghold_password = provisioned_config
-//             .secret_manager
-//             .and_then(|config| config.stronghold_password);
-
-//         merged_config
-//     }
-// }
 
 /// Returns the application configuration or loads it, if it hasn't been loaded already.
 pub fn config<'a>() -> RwLockReadGuard<'a, ApplicationConfiguration> {
@@ -762,8 +715,6 @@ mod tests {
     fn provisioned_config_successfully_merged_into_default_config() {
         let mut default_config = ApplicationConfiguration::default();
 
-        println!("{}", serde_json::to_string_pretty(&default_config).unwrap());
-
         let provisioned_config = ProvisionedApplicationConfiguration {
             log_format: Some(LogFormat::Text),
             event_store: Some(EventStoreConfig {
@@ -803,8 +754,6 @@ mod tests {
     #[test]
     #[serial]
     fn test_validate_production_config_without_stronghold_password_fails() {
-        // let mut config = ApplicationConfiguration::default();
-        // config.apply_production_defaults();
         temp_env::with_vars(
             [
                 ("UNICORE__CONFIG_FILE", Some("./config.yaml")),
@@ -817,15 +766,6 @@ mod tests {
                     config.unwrap_err().to_string(),
                     "Configuration is not suitable for production: Stronghold password missing"
                 );
-
-                // Validate configuration
-                // let result = config.validate().inspect_err(|e| {
-                //     println!("{}", e);
-                // });
-
-                // Invalid configuration
-                // config.secret_manager.stronghold_password = None;
-                // assert!(std::panic::catch_unwind(|| config.validate()).is_err());
             },
         );
     }
@@ -851,11 +791,10 @@ mod tests {
 
     #[test]
     #[serial]
-    fn test_validate_production_config_disallow_in_memory_persistence() {
+    fn test_validate_production_config_disallows_in_memory_persistence() {
         temp_env::with_vars(
             [
                 ("UNICORE__CONFIG_FILE", Some("./config.yaml")),
-                // ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("too_short")),
                 ("UNICORE__EVENT_STORE__TYPE", Some("in_memory")),
             ],
             || {
@@ -863,7 +802,7 @@ mod tests {
 
                 assert_eq!(
                     config.unwrap_err().to_string(),
-                    "Configuration is not suitable for production: Events persisted in-memory would be lost after restart"
+                    "Configuration is not suitable for production: Events persisted in-memory would be lost on restart"
                 );
             },
         );
