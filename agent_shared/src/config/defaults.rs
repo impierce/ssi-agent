@@ -29,13 +29,13 @@ impl ApplicationConfiguration {
             self.secret_manager.stronghold_password = Some(stronghold_password.clone());
             println!(
                 r#"
-            ################################################
-            #                                              #
-            #   A new Stronghold password was generated!   #
-            #                                              #
-            #           {stronghold_password}           #
-            #                                              #
-            ################################################
+            #####################################################
+            #                                                   #
+            #   A new Stronghold password has been generated!   #
+            #                                                   #
+            #             {stronghold_password}              #
+            #                                                   #
+            #####################################################
             "#
             );
         };
@@ -122,7 +122,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_development_config() {
+    fn test_development_default_config() {
         let mut config = ApplicationConfiguration::default();
         config.apply_development_defaults();
 
@@ -135,7 +135,7 @@ mod tests {
         // A password is set
         assert!(config.secret_manager.stronghold_password.is_some());
 
-        // The URL points to localhost
+        // The UniCore URL points to localhost
         assert_eq!(config.url, Some(Url::parse("http://localhost:3033").unwrap()));
 
         // Enable centrally hosted DID methods
