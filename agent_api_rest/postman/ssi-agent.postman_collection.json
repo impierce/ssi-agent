@@ -1744,7 +1744,7 @@
 					"response": []
 				},
 				{
-					"name": "Show configuration",
+					"name": "Show full configuration",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -1762,7 +1762,7 @@
 					"response": []
 				},
 				{
-					"name": "Show configuration (provisioned)",
+					"name": "Show provisioned configuration",
 					"request": {
 						"method": "GET",
 						"header": [],
