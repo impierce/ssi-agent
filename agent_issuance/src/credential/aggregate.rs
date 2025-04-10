@@ -219,7 +219,7 @@ impl Aggregate for Credential {
                                 let builder = AchievementCredentialBuilder::default()
                                     .context(vec![
                                         "https://www.w3.org/2018/credentials/v1",
-                                        "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json",
+                                        "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json",
                                     ])
                                     .type_(AchievementCredentialType::from(vec![
                                         "VerifiableCredential",
@@ -632,7 +632,7 @@ pub mod test_utils {
         pub static ref UNSIGNED_OPENBADGE_CREDENTIAL: serde_json::Value = json!({
           "@context": [
             "https://www.w3.org/2018/credentials/v1",
-            "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
+            "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json"
           ],
           "id": "https://example.com/credentials/3527",
           "type": ["VerifiableCredential", "OpenBadgeCredential"],
