@@ -15,10 +15,14 @@ use axum::{
 use axum_auth::AuthBearer;
 use http_api_problem::ApiError;
 use oid4vci::credential_request::CredentialRequest;
+use oid4vci::errors::CredentialErrorResponse;
 use tokio::time::sleep;
 use tracing::error;
 
-use crate::handlers::{command_handler, query_handler};
+use crate::{
+    handlers::{command_handler, query_handler},
+    issuance::error::credential_error_to_api_error,
+};
 
 const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
 const POLLING_INTERVAL_MS: u64 = 100;
@@ -30,10 +34,11 @@ pub(crate) async fn credential(
     Json(credential_request): Json<CredentialRequest>,
 ) -> Result<Response, ApiError> {
     // Use the `access_token` to get the `offer_id` from the `AccessTokenView`.
-    let offer_id = query_handler(&access_token, &state.query.access_token)
-        .await?
-        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED))?
-        .offer_id;
+    let token_result = query_handler(&access_token, &state.query.access_token).await?;
+    if token_result.is_none() {
+        return Err(credential_error_to_api_error(CredentialErrorResponse::InvalidToken));
+    }
+    let offer_id = token_result.unwrap().offer_id;
 
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
     let (credential_issuer_metadata, authorization_server_metadata) =
@@ -56,7 +61,6 @@ pub(crate) async fn credential(
     };
 
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
-
     command_handler(&offer_id, &state.command.offer, command).await?;
 
     let timeout = config()

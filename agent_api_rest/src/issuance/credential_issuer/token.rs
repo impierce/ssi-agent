@@ -1,4 +1,5 @@
 use crate::handlers::{command_handler, query_handler};
+use crate::issuance::error::token_error_to_api_error;
 use agent_issuance::{offer::command::OfferCommand, state::IssuanceState};
 use axum::{
     extract::{Json, State},
@@ -7,6 +8,7 @@ use axum::{
     Form,
 };
 use http_api_problem::ApiError;
+use oid4vci::errors::TokenErrorResponse;
 use oid4vci::token_request::TokenRequest;
 
 #[axum_macros::debug_handler]
@@ -20,13 +22,13 @@ pub(crate) async fn token(
         TokenRequest::PreAuthorizedCode {
             pre_authorized_code, ..
         } => pre_authorized_code,
-        _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
+        _ => return Err(token_error_to_api_error(TokenErrorResponse::InvalidGrant)),
     };
 
     // Use the `pre_authorized_code` to get the `offer_id` from the `PreAuthorizedCodeView`.
     let offer_id = query_handler(pre_authorized_code, &state.query.pre_authorized_code)
         .await?
-        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED))?
+        .ok_or_else(|| token_error_to_api_error(TokenErrorResponse::InvalidGrant))?
         .offer_id;
 
     let command = OfferCommand::CreateTokenResponse {
