@@ -1,0 +1,137 @@
+{
+  "credentialSchema": [
+    {
+      "id": "http://data.europa.eu/snb/model/ap/edc-generic-full",
+      "type": "ShaclValidator2017"
+    },
+    {
+      "id": "https://api-pilot.ebsi.eu/trusted-schemas-registry/v3/schemas/0x7ff3bc76bd5e37b3d29721b8698646a722a24a4f4ab0a0ba63d4bbbe0ef9758d",
+      "type": "JsonSchema"
+    }
+  ],
+  "credentialSubject": {
+    "id": "did:key:afsdlkj34134",
+    "type": "Person",
+    "identifier": [
+      {
+        "id": "urn:epass:identifier:2",
+        "type": "Identifier",
+        "notation": "75541452",
+        "schemeName": "Student ID"
+      }
+    ],
+    "givenName": {
+      "en": [
+        "David"
+      ]
+    },
+    "familyName": {
+      "en": [
+        "Smith"
+      ]
+    },
+    "fullName": {
+      "en": [
+        "David Smith"
+      ]
+    },
+    "hasClaim": [
+      {
+        "id": "urn:epass:learningAchievement:1",
+        "type": "LearningAchievement",
+        "awardedBy": {
+          "id": "urn:epass:awardingProcess:1",
+          "type": "AwardingProcess",
+          "awardingBody": [
+            {
+              "id": "urn:epass:org:1",
+              "type": "Organisation",
+              "location": [
+                {
+                  "id": "urn:epass:location:1",
+                  "type": "Location",
+                  "address": [
+                    {
+                      "id": "urn:epass:address:1",
+                      "type": "Address",
+                      "countryCode": {
+                        "id": "http://publications.europa.eu/resource/authority/country/ESP",
+                        "type": "Concept",
+                        "inScheme": {
+                          "id": "http://publications.europa.eu/resource/authority/country",
+                          "type": "ConceptScheme"
+                        },
+                        "prefLabel": {
+                          "en": [
+                            "Spain"
+                          ]
+                        },
+                        "notation": "country"
+                      },
+                      "fullAddress": {
+                        "id": "urn:epass:note:1",
+                        "type": "Note",
+                        "noteLiteral": {
+                          "en": [
+                            "The University Address"
+                          ]
+                        }
+                      }
+                    }
+                  ],
+                  "description": {
+                    "en": [
+                      "Address"
+                    ]
+                  }
+                }
+              ],
+              "legalName": {
+                "en": [
+                  "Universidad Pontificia Comillas (Universidad de la Iglesia Católica)"
+                ]
+              },
+              "registration": {
+                "id": "urn:epass:legalIdentifier:2",
+                "type": "LegalIdentifier",
+                "notation": "1234567",
+                "spatial": {
+                  "id": "http://publications.europa.eu/resource/authority/country/ESP",
+                  "type": "Concept",
+                  "inScheme": {
+                    "id": "http://publications.europa.eu/resource/authority/country",
+                    "type": "ConceptScheme"
+                  },
+                  "prefLabel": {
+                    "en": [
+                      "Spain"
+                    ]
+                  },
+                  "notation": "country"
+                }
+              }
+            }
+          ],
+          "awardingDate": "2019-09-11T00:00:00+02:00"
+        },
+        "title": {
+          "en": [
+            "Máster Universitario en Asuntos Internacionales: Economía, Política y Derecho por la Universidad Pontificia Comillas"
+          ]
+        },
+        "specifiedBy": {
+          "id": "urn:epass:learningAchievementSpec:1",
+          "type": "LearningAchievementSpecification",
+          "title": {
+            "en": [
+              "Máster Universitario en Asuntos Internacionales: Economía, Política y Derecho por la Universidad Pontificia Comillas"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "issuanceDate": "2024-03-26T16:01:37+01:00",
+  "awardedDate": "2022-03-04T00:00:00+01:00",
+  "expirationDate": "2023-03-04T00:00:00+01:00"
+}

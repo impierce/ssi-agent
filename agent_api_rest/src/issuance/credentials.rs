@@ -187,9 +187,28 @@ pub mod tests {
         http::{self, Request},
         Router,
     };
+    use credential_converter::backend::headless_cli::{run_headless, Args};
+    use credential_converter::state::AppState;
     use lazy_static::lazy_static;
     use serde_json::json;
     use tower::Service as _;
+
+    #[test]
+    fn test_cred_conv() {
+        println!("current working directory: {:?}", std::env::current_dir());
+
+        let mut app_state = AppState::default();
+        let mut args = Args {
+            input_file: Some("src/issuance/converter/elm_example.json".to_string()),
+            input_directory: None,
+            output_file: Some("src/issuance/converter/output_example.json".to_string()),
+            output_directory: None,
+            conversion: Some(credential_converter::state::Mapping::ELMToOBv3),
+            mapping_file: Some("src/issuance/converter/mapping_example.json".to_string()),
+        };
+
+        run_headless(&mut args, &mut app_state);
+    }
 
     lazy_static! {
         pub static ref CREDENTIAL_SUBJECT: serde_json::Value = json!({

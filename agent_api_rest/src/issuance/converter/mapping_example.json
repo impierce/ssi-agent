@@ -1,0 +1,244 @@
+[
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.credentialSchema"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.credentialSchema"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.credentialStatus"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.credentialStatus"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.credentialSubject"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.credentialSubject"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.Evidence"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.evidence"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.issuanceDate"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.issuanceDate"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.Issuer"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.issuer"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.Proof"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.proof"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.termsOfUse"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.termsOfUse"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.validFrom"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.awardedDate"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.validUntil"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.expirationDate"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.refreshService"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.refreshService"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.credentialSchema"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.credentialSchema"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.credentialStatus"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.credentialStatus"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.credentialSubject"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.credentialSubject"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.Evidence"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.evidence"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.issuanceDate"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.issuanceDate"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.Issuer"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.issuer"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.Proof"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.proof"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.termsOfUse"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.termsOfUse"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.validFrom"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.awardedDate"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.validUntil"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.expirationDate"
+      }
+    },
+    {
+      "type_": "copy",
+      "source": {
+        "format": "ELM",
+        "path": "$.refreshService"
+      },
+      "destination": {
+        "format": "OBv3",
+        "path": "$.refreshService"
+      }
+    }
+  ]
