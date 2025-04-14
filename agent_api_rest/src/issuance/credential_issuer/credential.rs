@@ -56,7 +56,6 @@ pub(crate) async fn credential(
     };
 
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
-
     command_handler(&offer_id, &state.command.offer, command).await?;
 
     let timeout = config()

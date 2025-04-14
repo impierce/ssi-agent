@@ -10,7 +10,6 @@ use oid4vci::errors::{
     AuthorizationErrorResponse, BatchCredentialErrorResponse, CredentialErrorResponse, DeferredCredentialErrorResponse,
     ErrorStatusCode, NotificationErrorResponse, OID4VCError, TokenErrorResponse,
 };
-/// use std::os::macos::raw::stat;
 impl IntoApiErrorExt for CredentialError {
     fn into_api_error(self) -> ApiError {
         use CredentialError::*;
