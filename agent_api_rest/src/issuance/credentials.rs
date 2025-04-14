@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::API_VERSION;
 use agent_issuance::{
     credential::{command::CredentialCommand, entity::Data, queries::CredentialView},
@@ -10,6 +12,10 @@ use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
+};
+use credential_converter::{
+    backend::{desm_mapping::apply_desm_mapping, repository::Repository},
+    state::{AppState, Mapping},
 };
 use hyper::header;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
@@ -40,6 +46,9 @@ pub struct CredentialsEndpointRequest {
     #[serde(default)]
     pub is_signed: bool,
     pub credential_configuration_id: String,
+    // The string is the mapping_data, either "DESM" as used in the credential-converter repo or a raw json string compliant to the mapping file format.
+    // The mapping is the conversion, either "DESMToOBv3" or "ELMToOBv3" as used in the credential-converter repo.
+    pub conversion_args: Option<(String, Mapping)>,
 }
 
 #[axum_macros::debug_handler]
@@ -51,9 +60,10 @@ pub(crate) async fn credentials(
 
     let Ok(CredentialsEndpointRequest {
         offer_id,
-        credential: data,
+        credential: mut data,
         is_signed,
         credential_configuration_id,
+        conversion_args,
     }) = serde_json::from_value(payload)
     else {
         return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
@@ -61,6 +71,31 @@ pub(crate) async fn credentials(
 
     if !(data.is_object() || data.is_string()) {
         return (StatusCode::BAD_REQUEST, "credential must be an object or a string").into_response();
+    }
+
+    if let Some((mapping_data, conversion)) = conversion_args {
+        let mut state = AppState {
+            mapping: conversion,
+            ..Default::default()
+        };
+
+        state.repository = Repository::from(HashMap::from_iter(vec![
+            (
+                conversion.input_format().to_string(),
+                serde_json::from_value(data.clone()).unwrap(),
+            ),
+            (conversion.output_format().to_string(), json!({})),
+        ]));
+
+        if mapping_data == "DESM" {
+            apply_desm_mapping(&mut state);
+
+            let converted_data = state.repository.get_mut(&conversion.output_format()).unwrap();
+            info!("Converted data: {}", converted_data);
+
+            data = converted_data.clone();
+        }
+        // TODO: This endpoint should also have the fn to enter your own mapping data as with the actual cred-converter.
     }
 
     let credential_id = uuid::Uuid::new_v4().to_string();
@@ -207,7 +242,7 @@ pub mod tests {
             mapping_file: Some("src/issuance/converter/mapping_example.json".to_string()),
         };
 
-        run_headless(&mut args, &mut app_state);
+        let _ = run_headless(&mut args, &mut app_state);
     }
 
     lazy_static! {
