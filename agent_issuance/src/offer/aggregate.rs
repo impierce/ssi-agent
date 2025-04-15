@@ -215,12 +215,10 @@ impl Aggregate for Offer {
             } => {
                 // TODO: support batch credentials.
                 let (signed_credential, notification_id) = signed_credentials.pop().ok_or(MissingCredentialError)?;
-                // let signed_credential = signed_credentials.pop().ok_or(MissingCredentialError)?.0;
-                // let notification_id = signed_credentials.pop().ok_or(MissingCredentialError)?.1;
                 let credential_response = CredentialResponse {
                     credential: CredentialResponseType::Immediate {
                         credential: signed_credential,
-                        notification_id: notification_id.clone(),
+                        notification_id: notification_id,
                     },
                     c_nonce: None,
                     c_nonce_expires_in: None,
@@ -229,7 +227,6 @@ impl Aggregate for Offer {
                 Ok(vec![CredentialResponseCreated {
                     offer_id,
                     credential_response,
-                    notification_id,
                     status: Status::Issued,
                 }])
             }
@@ -525,7 +522,6 @@ pub mod tests {
             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
                 offer_id: offer_id.clone(),
                 credential_response,
-                notification_id: Some(notification_id),
                 status: Status::Issued,
             }]);
     }

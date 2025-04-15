@@ -15,7 +15,6 @@ use serde_json::json;
 use tracing::{error, info};
 /// The HTTP response MUST use the HTTP status code 400 (Bad Request) and set the content type to application/json.
 /// Reference: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-13.html#name-notification-error-response
-
 #[axum_macros::debug_handler]
 pub async fn notification(
     State(state): State<IssuanceState>,
@@ -44,10 +43,11 @@ pub async fn notification(
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
-    let credential_id = credentials
-        .iter()
-        .find(|entry| entry.1.notification_id.as_ref() == Some(&notification_request.notification_id))
-        .map(|entry| entry.0.clone());
+    let credential_id = credentials.iter().find_map(|(credential_id, credential)| {
+        let is_matching_notification =
+            credential.notification_id.as_ref() == Some(&notification_request.notification_id);
+        is_matching_notification.then_some(credential_id.clone())
+    });
 
     let credential_id = match credential_id {
         Some(id) => id,
