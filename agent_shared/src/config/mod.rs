@@ -58,15 +58,6 @@ pub struct ApplicationConfiguration {
     pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
 }
 
-// impl Default for ApplicationConfiguration {
-//     fn default() -> Self {
-//         match ApplicationProfile::load() {
-//             ApplicationProfile::Production => ApplicationConfiguration { .. },
-//             ApplicationProfile::Development => ApplicationConfiguration {},
-//         }
-//     }
-// }
-
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LogFormat {

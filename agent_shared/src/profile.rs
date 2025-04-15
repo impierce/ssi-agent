@@ -19,10 +19,3 @@ impl ApplicationProfile {
             .unwrap_or(ApplicationProfile::Production)
     }
 }
-
-// impl Default for ApplicationProfile {
-//     fn default() -> Self {
-//         let profile_str = env::var("UNICORE__PROFILE").unwrap_or_else(|_| "production".to_string());
-//         ApplicationProfile::from_str(&profile_str).unwrap_or(ApplicationProfile::Production)
-//     }
-// }
