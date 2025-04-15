@@ -517,6 +517,23 @@
 				},
 				{
 					"name": "credential",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (jsonData.notification_id) {",
+									"    pm.collectionVariables.set(\"NOTIFICATION_ID\", jsonData.notification_id);",
+									"    console.log(\"Notification ID saved: \" + jsonData.notification_id);",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -542,6 +559,55 @@
 							"path": [
 								"openid4vci",
 								"credential"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "notification",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204 No Content\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"notification_id\": \"{{NOTIFICATION_ID}}\",\n  \"event\": \"credential_accepted\",\n  \"event_description\": \"User accepted the credential in wallet\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/openid4vci/notification",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"openid4vci",
+								"notification"
 							]
 						}
 					},
@@ -1834,6 +1900,16 @@
 		},
 		{
 			"key": "DOCUMENT_ID",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "NOTIFICATION_ID",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "SERVICE_ID",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		}
