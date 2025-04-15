@@ -14,7 +14,9 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use credential_converter::{
-    backend::{desm_mapping::apply_desm_mapping, repository::Repository},
+    backend::{
+        desm_mapping::apply_desm_mapping, init_conversion::enter_fixed_context_type_values, repository::Repository,
+    },
     state::{AppState, Mapping},
 };
 use hyper::header;
@@ -60,7 +62,7 @@ pub(crate) async fn credentials(
 
     let Ok(CredentialsEndpointRequest {
         offer_id,
-        credential: mut data,
+        credential: data,
         is_signed,
         credential_configuration_id,
         conversion_args,
@@ -71,31 +73,6 @@ pub(crate) async fn credentials(
 
     if !(data.is_object() || data.is_string()) {
         return (StatusCode::BAD_REQUEST, "credential must be an object or a string").into_response();
-    }
-
-    if let Some((mapping_data, conversion)) = conversion_args {
-        let mut state = AppState {
-            mapping: conversion,
-            ..Default::default()
-        };
-
-        state.repository = Repository::from(HashMap::from_iter(vec![
-            (
-                conversion.input_format().to_string(),
-                serde_json::from_value(data.clone()).unwrap(),
-            ),
-            (conversion.output_format().to_string(), json!({})),
-        ]));
-
-        if mapping_data == "DESM" {
-            apply_desm_mapping(&mut state);
-
-            let converted_data = state.repository.get_mut(&conversion.output_format()).unwrap();
-            info!("Converted data: {}", converted_data);
-
-            data = converted_data.clone();
-        }
-        // TODO: This endpoint should also have the fn to enter your own mapping data as with the actual cred-converter.
     }
 
     let credential_id = uuid::Uuid::new_v4().to_string();
@@ -187,14 +164,42 @@ pub(crate) async fn credentials(
     // Return the credential.
     match query_handler(&credential_id, &state.query.credential).await {
         Ok(Some(CredentialView {
-            data: Some(Data { raw }),
+            data: Some(Data { mut raw }),
             ..
-        })) => (
-            StatusCode::CREATED,
-            [(header::LOCATION, &format!("{API_VERSION}/credentials/{credential_id}"))],
-            Json(raw),
-        )
-            .into_response(),
+        })) => {
+            if let Some((mapping_data, conversion)) = conversion_args {
+                let mut state = AppState {
+                    mapping: conversion,
+                    ..Default::default()
+                };
+
+                state.repository = Repository::from(HashMap::from_iter(vec![
+                    (
+                        conversion.input_format().to_string(),
+                        serde_json::from_value(raw.clone()).unwrap(),
+                    ),
+                    (conversion.output_format().to_string(), json!({})),
+                ]));
+
+                if mapping_data == "DESM" {
+                    apply_desm_mapping(&mut state);
+                    enter_fixed_context_type_values(&mut state);
+
+                    let converted_raw = state.repository.get_mut(&conversion.output_format()).unwrap();
+                    info!("Converted: {}\nTo: {}", raw, converted_raw);
+
+                    raw = converted_raw.clone();
+                }
+                // TODO: This endpoint should also have the fn to enter your own mapping data as with the actual cred-converter.
+            }
+
+            (
+                StatusCode::CREATED,
+                [(header::LOCATION, &format!("{API_VERSION}/credentials/{credential_id}"))],
+                Json(raw),
+            )
+                .into_response()
+        }
         _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
@@ -230,8 +235,6 @@ pub mod tests {
 
     #[test]
     fn test_cred_conv() {
-        println!("current working directory: {:?}", std::env::current_dir());
-
         let mut app_state = AppState::default();
         let mut args = Args {
             input_file: Some("src/issuance/converter/elm_example.json".to_string()),
