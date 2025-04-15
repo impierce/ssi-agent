@@ -51,6 +51,7 @@ LinkedVerifiablePresentationServiceCreated
 UnsignedCredentialCreated
 SignedCredentialCreated
 CredentialSigned
+NotificationReceived
 ```
 
 #### `offer`

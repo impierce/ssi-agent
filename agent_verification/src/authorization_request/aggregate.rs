@@ -229,6 +229,7 @@ pub mod tests {
     use oid4vc_manager::ProviderManager;
     use oid4vci::VerifiableCredentialJwt;
     use oid4vp::oid4vp::AuthorizationResponseInput;
+    use oid4vp::oid4vp::PresentationInputType;
     use oid4vp::PresentationDefinition;
     use rstest::rstest;
     use serde_json::json;
@@ -416,6 +417,7 @@ pub mod tests {
 
                 // Create presentation submission using the presentation definition and the verifiable credential.
                 let presentation_submission = create_presentation_submission(
+                    "temporary_string".to_string(),
                     &PRESENTATION_DEFINITION,
                     &[serde_json::to_value(&verifiable_credential).unwrap()],
                 )
@@ -433,7 +435,9 @@ pub mod tests {
                         .generate_response(
                             oid4vp_authorization_request,
                             AuthorizationResponseInput {
-                                verifiable_presentation,
+                                verifiable_presentation_input: PresentationInputType::Presentation(
+                                    verifiable_presentation,
+                                ),
                                 presentation_submission,
                             },
                         )

@@ -28,7 +28,6 @@ pub(crate) async fn credential(
     State(state): State<IssuanceState>,
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
-    // TODO: implement official oid4vci error response. This TODO is also in the `token` endpoint.
 ) -> Result<Response, ApiError> {
     // Use the `access_token` to get the `offer_id` from the `AccessTokenView`.
     let offer_id = query_handler(&access_token, &state.query.access_token)
@@ -102,8 +101,9 @@ pub(crate) async fn credential(
         let signed_credential = match query_handler(&credential_id, &state.query.credential).await? {
             Some(CredentialView {
                 signed: Some(signed_credential),
+                notification_id,
                 ..
-            }) => signed_credential,
+            }) => (signed_credential, notification_id),
             _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
         };
 
@@ -127,7 +127,7 @@ pub(crate) async fn credential(
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use crate::issuance::credentials::tests::credentials;
     use crate::issuance::router;
@@ -347,17 +347,57 @@ mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(
-            body,
-            json!({
-                    "credential": CREDENTIAL_JWT
-                }
-            )
-        );
+        assert_eq!(body.get("credential"), Some(&json!(CREDENTIAL_JWT)));
 
         if let Some(external_server) = external_server {
             // Assert that the event was dispatched to the target URL.
             assert!(external_server.received_requests().await.unwrap().len() == 1);
         }
+    }
+    #[cfg(test)]
+    pub async fn credential(app: &mut Router) -> (String, String) {
+        credentials(app).await;
+        let pre_authorized_code = offers(app).await.unwrap();
+        let access_token: String = token(app, pre_authorized_code).await;
+
+        let request_body = json!({
+            "format": "jwt_vc_json",
+            "credential_definition": {
+                "type": [
+                    "VerifiableCredential",
+                    "OpenBadgeCredential"
+                ]
+            },
+            "proof": {
+                "proof_type": "jwt",
+                "jwt": "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBY\
+                                tgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"
+            }
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/openid4vci/credential")
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .header(http::header::AUTHORIZATION, format!("Bearer {}", access_token))
+                    .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body_value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(body_value.get("credential"), Some(&json!(CREDENTIAL_JWT)));
+
+        let notification_id = body_value
+            .get("notification_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+
+        (access_token, notification_id.to_string())
     }
 }

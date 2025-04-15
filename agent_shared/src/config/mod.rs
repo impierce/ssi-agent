@@ -201,6 +201,7 @@ pub enum CredentialEvent {
     UnsignedCredentialCreated,
     SignedCredentialCreated,
     CredentialSigned,
+    NotificationReceived,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]

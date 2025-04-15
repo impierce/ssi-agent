@@ -6,7 +6,8 @@ pub mod error;
 
 use crate::issuance::{
     credential_issuer::{
-        credential::credential, token::token, well_known::oauth_authorization_server::oauth_authorization_server,
+        credential::credential, notification::notification, token::token,
+        well_known::oauth_authorization_server::oauth_authorization_server,
         well_known::openid_credential_issuer::openid_credential_issuer,
     },
     credentials::credentials,
@@ -38,6 +39,7 @@ pub fn router(issuance_state: IssuanceState) -> Router {
         .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
         .route("/auth/token", post(token))
         .route("/openid4vci/credential", post(credential))
+        .route("/openid4vci/notification", post(notification))
         .route("/openid4vci/credential-offer/{offer_id}", get(credential_offer_uri))
         .with_state(issuance_state)
 }
