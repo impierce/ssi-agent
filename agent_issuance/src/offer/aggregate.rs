@@ -218,7 +218,7 @@ impl Aggregate for Offer {
                 let credential_response = CredentialResponse {
                     credential: CredentialResponseType::Immediate {
                         credential: signed_credential,
-                        notification_id: notification_id,
+                        notification_id,
                     },
                     c_nonce: None,
                     c_nonce_expires_in: None,
