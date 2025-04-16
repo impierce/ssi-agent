@@ -49,7 +49,7 @@ pub struct CredentialsEndpointRequest {
     pub is_signed: bool,
     pub credential_configuration_id: String,
     // The string is the mapping_data, either "DESM" as used in the credential-converter repo or a raw json string compliant to the mapping file format.
-    // The mapping is the conversion, either "DESMToOBv3" or "ELMToOBv3" as used in the credential-converter repo.
+    // The mapping is the conversion, either "OBv3ToELM" or "ELMToOBv3" as used in the credential-converter repo.
     pub conversion_args: Option<(String, Mapping)>,
 }
 

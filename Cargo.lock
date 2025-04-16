@@ -1575,7 +1575,7 @@ dependencies = [
 [[package]]
 name = "credential_converter"
 version = "0.1.0"
-source = "git+https://github.com/impierce/credential-converter?rev=0461327#0461327354515fbbe70de55d7076dc99a7053340"
+source = "git+https://github.com/impierce/credential-converter?rev=b98e784#b98e784ad2c0fe7098a145826758c1a1d67d26f6"
 dependencies = [
  "anyhow",
  "clap 4.5.7",

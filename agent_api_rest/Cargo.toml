@@ -28,7 +28,7 @@ tracing-subscriber.workspace = true
 url.workspace = true
 uuid.workspace = true
 
-credential_converter = { git = "https://github.com/impierce/credential-converter", rev = "0461327"}
+credential_converter = { git = "https://github.com/impierce/credential-converter", rev = "b98e784"}
 
 [dev-dependencies]
 agent_event_publisher_http = { path = "../agent_event_publisher_http", features = ["test_utils"] }
