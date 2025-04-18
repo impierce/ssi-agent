@@ -317,6 +317,7 @@ dependencies = [
  "chrono",
  "config",
  "cqrs-es",
+ "derive_more 2.0.1",
  "dotenvy",
  "http-serde",
  "identity_iota",
@@ -325,6 +326,7 @@ dependencies = [
  "oid4vci",
  "oid4vp",
  "once_cell",
+ "paste",
  "rand 0.8.5",
  "reqwest 0.12.5",
  "serde",
@@ -1509,6 +1511,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "convert_case"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb402b8d4c85569410425650ce3eddc7d698ed96d39a73f941b08fb63082f1e7"
+dependencies = [
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1966,6 +1977,28 @@ dependencies = [
  "quote",
  "rustc_version",
  "syn 2.0.67",
+]
+
+[[package]]
+name = "derive_more"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "093242cf7570c207c83073cf82f79706fe7b8317e98620a47d5be7c3d8497678"
+dependencies = [
+ "derive_more-impl",
+]
+
+[[package]]
+name = "derive_more-impl"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bda628edc44c4bb645fbe0f758797143e4e07926f7ebf4e9bdfbd3d2ce621df3"
+dependencies = [
+ "convert_case 0.7.1",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.67",
+ "unicode-xid",
 ]
 
 [[package]]
@@ -3747,7 +3780,7 @@ dependencies = [
  "bech32",
  "bitflags 2.5.0",
  "bytemuck",
- "derive_more",
+ "derive_more 0.99.18",
  "futures",
  "getset",
  "gloo-timers 0.3.0",
@@ -4901,7 +4934,7 @@ dependencies = [
  "async-trait",
  "base64-url",
  "derivative",
- "derive_more",
+ "derive_more 0.99.18",
  "did_url",
  "ed25519-dalek 2.1.1",
  "getset",
@@ -6880,7 +6913,7 @@ dependencies = [
  "async-trait",
  "base64-url",
  "chrono",
- "derive_more",
+ "derive_more 0.99.18",
  "did_url",
  "futures",
  "getset",
@@ -8253,6 +8286,12 @@ name = "unicode-width"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0336d538f7abc86d282a4189614dfaa90810dfc2c6f6427eaf88e16311dd225d"
+
+[[package]]
+name = "unicode-xid"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
 name = "unicode_categories"

@@ -18,7 +18,7 @@ use std::{
     sync::{RwLock, RwLockReadGuard},
 };
 use strum::VariantArray;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use url::Url;
 
 use crate::{error::SharedError, profile::ApplicationProfile};
@@ -32,7 +32,11 @@ static STRONGHOLD_PATH: &str = "./stronghold.dat";
 static ED25519_KEY_ID: &str = "ed25519-0";
 static ES256_KEY_ID: &str = "es256-0";
 
-#[skip_serializing_none]
+#[serde_with::apply(
+    Option => #[serde(skip_serializing_if = "Option::is_none")],
+    Vec => #[serde(skip_serializing_if = "Vec::is_empty")],
+    HashMap => #[serde(skip_serializing_if = "HashMap::is_empty")]
+)]
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct ApplicationConfiguration {
     pub port: Option<u16>,
@@ -41,20 +45,15 @@ pub struct ApplicationConfiguration {
     pub url: Option<Url>,
     pub base_path: Option<String>,
     pub cors_enabled: bool,
-    #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
     pub external_server_response_timeout_ms: Option<u64>,
     pub domain_linkage_enabled: bool,
     pub credential_offer_by_value_enabled: Option<bool>,
     pub secret_manager: SecretManagerConfig,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub credential_configurations: Vec<CredentialConfiguration>,
-    #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub signing_algorithms_supported: HashMap<jsonwebtoken::Algorithm, ToggleOptions>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub display: Vec<Display>,
     pub event_publishers: Option<EventPublishers>,
-    #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
 }
 
@@ -133,7 +132,7 @@ pub struct Display {
     pub logo: Option<Logo>,
 }
 
-#[derive(Debug, Deserialize, Clone, Serialize)]
+#[derive(Debug, Deserialize, Clone, Serialize, Default)]
 pub struct EventPublishers {
     pub http: Option<EventPublisherHttp>,
 }
@@ -825,6 +824,428 @@ mod tests {
                     "Configuration is not suitable for production: UniCore URL must be provided"
                 );
             },
+        );
+    }
+}
+
+#[cfg(test)]
+mod new_application_configuration_tests {
+    use super::*;
+
+    /// The `ConfigImpl` trait defines a contract for configuration types that can be used with the `Config` wrapper.
+    /// It provides methods for loading, creating, and managing configuration values, including defaults and provisioned values.
+    pub trait ConfigImpl: std::ops::Deref
+    where
+        Self: Sized,
+        Self::Target: serde::de::DeserializeOwned + Serialize,
+    {
+        /// The name of the configuration field, used for serialization and deserialization.
+        const NAME: &str;
+
+        /// Creates an instance of the configuration type from its inner value.
+        fn from_inner(inner: Self::Target) -> Self;
+
+        /// Creates a provisioned `Config` instance from the inner value.
+        /// Marks the configuration as provisioned.
+        fn from_provisioned(inner: Self::Target) -> Config<Self> {
+            Config {
+                provisioned: true,
+                inner: Self::from_inner(inner),
+            }
+        }
+
+        /// Loads the provisioned configuration from the provided configuration source.
+        /// Returns `Ok(Some(Config<Self>))` if the configuration is found and valid, or `Ok(None)` if not found.
+        fn load_provisioned_config(provisioned_config: &config::Config) -> Result<Option<Config<Self>>, SharedError> {
+            if let Ok(value) = provisioned_config.get::<config::Value>(Self::NAME) {
+                println!("Found provisioned value for {}: {:?}", Self::NAME, value);
+                let inner = value
+                    .try_deserialize::<Self::Target>()
+                    // If the value is not found, return an error.
+                    .map_err(|e| SharedError::ConfigurationNotSuitableForProduction(e.to_string()))?;
+
+                Ok(Some(Self::from_provisioned(inner)))
+            } else {
+                // If the value is not found, return None.
+                // This is not an error, as the configuration may not be required or may have a default value.
+                Ok(None)
+            }
+        }
+
+        /// Provides the default value for the configuration in a development environment.
+        /// Returns `None` if no default is defined.
+        fn development_default() -> Option<Self::Target> {
+            None
+        }
+
+        /// Provides the default value for the configuration in a production environment.
+        /// Returns `None` if no default is defined.
+        fn production_default() -> Option<Self::Target> {
+            None
+        }
+
+        fn default() -> Option<Self::Target> {
+            None
+        }
+
+        /// Loads the configuration by first attempting to load a provisioned value.
+        /// If no provisioned value is found, it falls back to the default value based on the application profile.
+        /// Returns an error if neither a provisioned value nor a default value is available.
+        fn load(
+            provisioned_config: &config::Config,
+            application_profile: &ApplicationProfile,
+        ) -> Result<Config<Self>, SharedError> {
+            // Load the provisioned value if it exists.
+            let provisioned_value: Option<Config<Self>> = Self::load_provisioned_config(provisioned_config)?;
+
+            provisioned_value
+                .or_else(|| {
+                    // If no provisioned value is found, use the default value.
+                    let inner = match application_profile {
+                        ApplicationProfile::Development => Self::development_default(),
+                        ApplicationProfile::Production => Self::production_default(),
+                    }
+                    .or_else(|| Self::default());
+
+                    inner.map(|inner| Config {
+                        provisioned: false,
+                        inner: Self::from_inner(inner),
+                    })
+                })
+                .ok_or_else(|| {
+                    SharedError::ConfigurationNotSuitableForProduction(format!(
+                        "No default value found for the configuration: {}",
+                        Self::NAME
+                    ))
+                })
+        }
+    }
+
+    #[skip_serializing_none]
+    #[derive(Debug, Clone, Serialize, Deserialize, derive_more::Deref)]
+    pub struct Config<T: ConfigImpl>
+    where
+        T::Target: serde::de::DeserializeOwned + Serialize,
+    {
+        #[serde(skip)]
+        pub provisioned: bool,
+        #[deref]
+        #[serde(flatten)]
+        pub inner: T,
+    }
+
+    impl<T: ConfigImpl> Config<T>
+    where
+        T::Target: serde::de::DeserializeOwned + Serialize,
+    {
+        pub fn get(&self) -> &T::Target {
+            &*self.inner
+        }
+    }
+
+    pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> =
+        Lazy::new(|| RwLock::new(ApplicationConfiguration::load().unwrap()));
+
+    pub fn config() -> RwLockReadGuard<'static, ApplicationConfiguration> {
+        CONFIG.read().unwrap()
+    }
+
+    #[skip_serializing_none]
+    #[serde_with::apply(
+        Config<_> => #[serde(flatten)]
+    )]
+    #[derive(Debug, Deserialize, Clone, Serialize)]
+    pub struct ApplicationConfiguration {
+        pub port: Config<Port>,
+        pub log_format: Config<LogFormat>,
+        pub event_store: Config<EventStore>,
+        pub application_url: Config<ApplicationUrl>,
+        pub base_path: Config<BasePath>,
+        pub cors_enabled: Config<CorsEnabled>,
+        pub did_methods: Config<DidMethods>,
+        pub external_server_response_timeout_ms: Config<ExternalServerResponseTimeoutMs>,
+        pub domain_linkage_enabled: Config<DomainLinkageEnabled>,
+        pub credential_offer_by_value_enabled: Config<CredentialOfferByValueEnabled>,
+        pub secret_manager: Config<SecretManager>,
+        pub credential_configurations: Config<CredentialConfigurations>,
+        pub signing_algorithms_supported: Config<SigningAlgorithmsSupported>,
+        pub display: Config<Display>,
+        pub event_publishers: Config<EventPublishers>,
+        pub vp_formats: Config<VpFormats>,
+    }
+
+    impl ApplicationConfiguration {
+        pub fn load() -> Result<Self, SharedError> {
+            let application_profile = &ApplicationProfile::load();
+
+            let mut builder = config::Config::builder();
+
+            // // Load the appropriate .env file
+            // if cfg!(feature = "test_utils") {
+            //     dotenvy::from_filename("../.env.test").ok();
+            // }
+
+            let config_file_path_str = std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| {
+                if cfg!(feature = "test_utils") {
+                    "../agent_shared/tests/test.config.yaml".to_string()
+                } else {
+                    "./config.yaml".to_string()
+                }
+            });
+
+            let config_file_path = std::path::Path::new(&config_file_path_str);
+
+            if config_file_path.exists() {
+                builder = builder.add_source(config::File::with_name(&config_file_path_str));
+                println!("Loaded config file: `{}`", config_file_path.display());
+                info!("Loaded config file: `{}`", config_file_path.display());
+            } else {
+                println!("Config file not found: `{}`", config_file_path.display());
+                warn!("Config file not found: `{}`", config_file_path.display());
+            }
+
+            builder = builder.add_source(config::Environment::with_prefix("UNICORE").separator("__"));
+
+            let provisioned_config = &builder.build().unwrap();
+
+            let config: ApplicationConfiguration = ApplicationConfiguration {
+                port: Port::load(provisioned_config, application_profile)?,
+                log_format: LogFormat::load(provisioned_config, application_profile)?,
+                event_store: EventStore::load(provisioned_config, application_profile)?,
+                application_url: ApplicationUrl::load(provisioned_config, application_profile)?,
+                base_path: BasePath::load(provisioned_config, application_profile)?,
+                cors_enabled: CorsEnabled::load(provisioned_config, application_profile)?,
+                did_methods: DidMethods::load(provisioned_config, application_profile)?,
+                external_server_response_timeout_ms: ExternalServerResponseTimeoutMs::load(
+                    provisioned_config,
+                    application_profile,
+                )?,
+                domain_linkage_enabled: DomainLinkageEnabled::load(provisioned_config, application_profile)?,
+                credential_offer_by_value_enabled: CredentialOfferByValueEnabled::load(
+                    provisioned_config,
+                    application_profile,
+                )?,
+                secret_manager: SecretManager::load(provisioned_config, application_profile)?,
+                credential_configurations: CredentialConfigurations::load(provisioned_config, application_profile)?,
+                signing_algorithms_supported: SigningAlgorithmsSupported::load(
+                    provisioned_config,
+                    application_profile,
+                )?,
+                display: Display::load(provisioned_config, application_profile)?,
+                event_publishers: EventPublishers::load(provisioned_config, application_profile)?,
+                vp_formats: VpFormats::load(provisioned_config, application_profile)?,
+            };
+
+            Ok(config)
+        }
+
+        fn to_provisioned_config(&self) -> serde_json::Value {
+            let mut provisioned_config = json!({});
+
+            if self.application_url.provisioned {
+                provisioned_config["application_url"] = serde_json::to_value(&*self.application_url.get()).unwrap();
+            }
+            if self.base_path.provisioned {
+                provisioned_config["base_path"] = serde_json::to_value(&*self.base_path.get()).unwrap();
+            }
+            if self.did_methods.provisioned {
+                provisioned_config["did_methods"] = serde_json::to_value(&*self.did_methods.get()).unwrap();
+            }
+
+            provisioned_config
+        }
+    }
+    use paste::paste;
+    macro_rules! some_or_none {
+        () => {
+            None
+        };
+        ($entity:expr) => {
+            Some($entity)
+        };
+    }
+
+    macro_rules! impl_config {
+        ($name:ident: $type_:ty $(, default: $default_fn:expr)? $(, development_default: $development_default_fn:expr)? $(, production_default: $production_default_fn:expr)?) => {
+            paste! {
+                #[skip_serializing_none]
+                #[derive(Debug, Deserialize, Clone, Serialize, derive_more::Deref)]
+                pub struct [<$name:camel>] {
+                    pub $name: $type_,
+                }
+
+                impl ConfigImpl for [<$name:camel>] {
+                    const NAME: &str = stringify!($name);
+
+                    fn from_inner($name: Self::Target) -> Self {
+                        [<$name:camel>] { $name }
+                    }
+
+                    $(
+                        fn default() -> Option<Self::Target> { Some($default_fn) }
+                    )?
+
+                    $(
+                        fn development_default() -> Option<Self::Target> { Some($development_default_fn) }
+                    )?
+
+                    $(
+                        fn production_default() -> Option<Self::Target> { Some($production_default_fn) }
+                    )?
+                }
+            }
+        };
+    }
+
+    impl_config!(port: Option<u16>,
+        default: None,
+        development_default: Some(3033)
+    );
+    impl_config!(log_format: crate::config::LogFormat, default: crate::config::LogFormat::Json);
+    impl_config!(event_store: EventStoreConfig,
+        development_default: EventStoreConfig {
+            type_: EventStoreType::InMemory,
+            connection_string: None
+        }
+    );
+    impl_config!(application_url: Url,
+        development_default: Url::parse("http://localhost:3033").unwrap()
+    );
+    impl_config!(base_path: Option<String>, default: None);
+    impl_config!(cors_enabled: bool, default: false);
+    impl_config!(did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
+        default: HashMap::default(),
+        development_default: {
+                let mut did_methods = HashMap::new();
+
+                did_methods.insert(
+                    SupportedDidMethod::Jwk,
+                    ToggleOptions {
+                        enabled: true,
+                        preferred: Some(true),
+                    },
+                );
+                did_methods.insert(
+                    SupportedDidMethod::Key,
+                    ToggleOptions {
+                        enabled: true,
+                        preferred: None,
+                    },
+                );
+
+                did_methods
+            },
+
+            production_default: {
+                let mut did_methods = HashMap::new();
+
+                did_methods.insert(
+                    SupportedDidMethod::Jwk,
+                    ToggleOptions {
+                        enabled: false,
+                        preferred: None,
+                    },
+                );
+                did_methods.insert(
+                    SupportedDidMethod::Key,
+                    ToggleOptions {
+                        enabled: false,
+                        preferred: None,
+                    },
+                );
+                did_methods.insert(
+                    SupportedDidMethod::Web,
+                    ToggleOptions {
+                        enabled: true,
+                        preferred: Some(true),
+                    },
+                );
+
+                did_methods
+            }
+    );
+    impl_config!(external_server_response_timeout_ms: u64,
+        default: 2000
+    );
+    impl_config!(domain_linkage_enabled: bool,
+        default: false,
+        production_default: true
+    );
+    impl_config!(credential_offer_by_value_enabled: bool, default: false);
+    // FIXME: this need to be very thoroughly checked
+    impl_config!(secret_manager: SecretManagerConfig,
+        development_default: {
+            if std::env::var("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD")
+                .ok()
+                .is_none() {
+                    let random_bytes: [u8; 32] = rand::thread_rng().gen();
+                    let stronghold_password = URL_SAFE_NO_PAD.encode(&random_bytes)[..24].to_string();
+
+                    SecretManagerConfig {
+                        stronghold_path: STRONGHOLD_PATH.to_string(),
+                        stronghold_password: Some(stronghold_password.clone()),
+                        issuer_eddsa_key_id: KeyId::new(ED25519_KEY_ID),
+                        issuer_es256_key_id: KeyId::new(ES256_KEY_ID),
+                    }
+            } else {
+                SecretManagerConfig::default()
+            }
+        }
+    );
+    impl_config!(credential_configurations: Vec<CredentialConfiguration>, default: Vec::default());
+    impl_config!(signing_algorithms_supported: HashMap<Algorithm, ToggleOptions>, default: HashMap::default());
+    impl_config!(display: Vec<crate::config::Display>,
+        default: Vec::default(),
+        development_default: {
+            vec![
+                crate::config::Display {
+                    name: "UniCore".to_string(),
+                    locale: Some("en".to_string()),
+                    logo: Some(Logo {
+                        uri: Some(Url::parse("https://www.impierce.com/external/impierce-icon.png").unwrap()),
+                        alt_text: Some("Impierce Icon".to_string()),
+                    }),
+                }
+            ]
+        }
+    );
+    impl_config!(event_publishers: crate::config::EventPublishers, default: crate::config::EventPublishers::default());
+    impl_config!(vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
+        default: {
+            let mut vp_formats = HashMap::new();
+            vp_formats.insert(
+                ClaimFormatDesignation::JwtVcJson,
+                ToggleOptions {
+                    enabled: true,
+                    preferred: Some(true),
+                },
+            );
+            vp_formats.insert(
+                ClaimFormatDesignation::JwtVpJson,
+                ToggleOptions {
+                    enabled: true,
+                    preferred: None,
+                },
+            );
+            vp_formats
+        }
+    );
+
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+    use rand::Rng;
+
+    #[test]
+    fn test_application_configuration_idea() {
+        let config = config().clone();
+        println!("{}", serde_json::to_string_pretty(&config).unwrap());
+
+        println!("URL: {}", config.application_url.get());
+
+        let provisioned_config = config.to_provisioned_config();
+
+        println!(
+            "Provisioned config: {}",
+            serde_json::to_string_pretty(&provisioned_config).unwrap()
         );
     }
 }
