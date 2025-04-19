@@ -829,6 +829,184 @@ mod tests {
 }
 
 #[cfg(test)]
+pub mod new_application_configuration_tests2 {
+    use super::*;
+    use config_macro::ConfigImpl;
+
+    #[derive(Debug, Deserialize, Clone, Serialize, ConfigImpl)]
+    pub struct ApplicationConfiguration {
+        #[config_impl(default = "None", development_default = "Some(3033)")]
+        pub port: Option<u16>,
+    }
+
+    impl ApplicationConfiguration {
+        pub fn load() -> Result<Self, SharedError> {
+            let application_profile = &ApplicationProfile::load();
+
+            let mut builder = config::Config::builder();
+
+            // // Load the appropriate .env file
+            // if cfg!(feature = "test_utils") {
+            //     dotenvy::from_filename("../.env.test").ok();
+            // }
+
+            let config_file_path_str = std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| {
+                if cfg!(feature = "test_utils") {
+                    "../agent_shared/tests/test.config.yaml".to_string()
+                } else {
+                    "./config.yaml".to_string()
+                }
+            });
+
+            let config_file_path = std::path::Path::new(&config_file_path_str);
+
+            if config_file_path.exists() {
+                builder = builder.add_source(config::File::with_name(&config_file_path_str));
+                println!("Loaded config file: `{}`", config_file_path.display());
+                info!("Loaded config file: `{}`", config_file_path.display());
+            } else {
+                println!("Config file not found: `{}`", config_file_path.display());
+                warn!("Config file not found: `{}`", config_file_path.display());
+            }
+
+            builder = builder.add_source(config::Environment::with_prefix("UNICORE").separator("__"));
+
+            let provisioned_config = &builder.build().unwrap();
+
+            let config: ApplicationConfiguration = ApplicationConfiguration {
+                port: **Port::load(provisioned_config, application_profile).unwrap(),
+            };
+
+            Ok(config)
+        }
+    }
+
+    #[test]
+    fn test_example_4321() {
+        let config = config().clone();
+        println!("{}", serde_json::to_string_pretty(&config).unwrap());
+    }
+
+    /// The `ConfigImpl` trait defines a contract for configuration types that can be used with the `Config` wrapper.
+    /// It provides methods for loading, creating, and managing configuration values, including defaults and provisioned values.
+    pub trait ConfigImpl: std::ops::Deref
+    where
+        Self: Sized,
+        Self::Target: serde::de::DeserializeOwned + Serialize,
+    {
+        /// The name of the configuration field, used for serialization and deserialization.
+        const NAME: &str;
+
+        /// Creates an instance of the configuration type from its inner value.
+        fn from_inner(inner: Self::Target) -> Self;
+
+        /// Creates a provisioned `Config` instance from the inner value.
+        /// Marks the configuration as provisioned.
+        fn from_provisioned(inner: Self::Target) -> Config<Self> {
+            Config {
+                provisioned: true,
+                inner: Self::from_inner(inner),
+            }
+        }
+
+        /// Loads the provisioned configuration from the provided configuration source.
+        /// Returns `Ok(Some(Config<Self>))` if the configuration is found and valid, or `Ok(None)` if not found.
+        fn load_provisioned_config(provisioned_config: &config::Config) -> Result<Option<Config<Self>>, SharedError> {
+            if let Ok(value) = provisioned_config.get::<config::Value>(Self::NAME) {
+                println!("Found provisioned value for {}: {:?}", Self::NAME, value);
+                let inner = value
+                    .try_deserialize::<Self::Target>()
+                    // If the value is not found, return an error.
+                    .map_err(|e| SharedError::ConfigurationNotSuitableForProduction(e.to_string()))?;
+
+                Ok(Some(Self::from_provisioned(inner)))
+            } else {
+                // If the value is not found, return None.
+                // This is not an error, as the configuration may not be required or may have a default value.
+                Ok(None)
+            }
+        }
+
+        /// Provides the default value for the configuration in a development environment.
+        /// Returns `None` if no default is defined.
+        fn development_default() -> Option<Self::Target> {
+            None
+        }
+
+        /// Provides the default value for the configuration in a production environment.
+        /// Returns `None` if no default is defined.
+        fn production_default() -> Option<Self::Target> {
+            None
+        }
+
+        fn default() -> Option<Self::Target> {
+            None
+        }
+
+        /// Loads the configuration by first attempting to load a provisioned value.
+        /// If no provisioned value is found, it falls back to the default value based on the application profile.
+        /// Returns an error if neither a provisioned value nor a default value is available.
+        fn load(
+            provisioned_config: &config::Config,
+            application_profile: &ApplicationProfile,
+        ) -> Result<Config<Self>, SharedError> {
+            // Load the provisioned value if it exists.
+            let provisioned_value: Option<Config<Self>> = Self::load_provisioned_config(provisioned_config)?;
+
+            provisioned_value
+                .or_else(|| {
+                    // If no provisioned value is found, use the default value.
+                    let inner = match application_profile {
+                        ApplicationProfile::Development => Self::development_default(),
+                        ApplicationProfile::Production => Self::production_default(),
+                    }
+                    .or_else(|| Self::default());
+
+                    inner.map(|inner| Config {
+                        provisioned: false,
+                        inner: Self::from_inner(inner),
+                    })
+                })
+                .ok_or_else(|| {
+                    SharedError::ConfigurationNotSuitableForProduction(format!(
+                        "No default value found for the configuration: {}",
+                        Self::NAME
+                    ))
+                })
+        }
+    }
+
+    pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> =
+        Lazy::new(|| RwLock::new(ApplicationConfiguration::load().unwrap()));
+
+    pub fn config() -> RwLockReadGuard<'static, ApplicationConfiguration> {
+        CONFIG.read().unwrap()
+    }
+
+    #[skip_serializing_none]
+    #[derive(Debug, Clone, Serialize, Deserialize, derive_more::Deref)]
+    pub struct Config<T: ConfigImpl>
+    where
+        T::Target: serde::de::DeserializeOwned + Serialize,
+    {
+        #[serde(skip)]
+        pub provisioned: bool,
+        #[deref]
+        #[serde(flatten)]
+        pub inner: T,
+    }
+
+    impl<T: ConfigImpl> Config<T>
+    where
+        T::Target: serde::de::DeserializeOwned + Serialize,
+    {
+        pub fn get(&self) -> &T::Target {
+            &*self.inner
+        }
+    }
+}
+
+#[cfg(test)]
 mod new_application_configuration_tests {
     use super::*;
 

@@ -316,6 +316,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "config",
+ "config_macro",
  "cqrs-es",
  "derive_more 2.0.1",
  "dotenvy",
@@ -1250,6 +1251,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "case"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd6c0e7b807d60291f42f33f58480c0bfafe28ed08286446f45e463728cf9c1c"
+
+[[package]]
 name = "cc"
 version = "1.0.99"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1428,6 +1435,16 @@ dependencies = [
  "serde_json",
  "toml 0.8.14",
  "yaml-rust2",
+]
+
+[[package]]
+name = "config_macro"
+version = "0.1.0"
+dependencies = [
+ "case",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.67",
 ]
 
 [[package]]
