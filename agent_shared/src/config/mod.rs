@@ -999,97 +999,77 @@ pub mod new_application_configuration_tests2 {
 
     #[test]
     fn test_example_4321() {
+        let env_var = &config().base_path;
+
+        assert_eq!(env_var, &None);
+
         let config = config().clone();
         println!("{}", serde_json::to_string_pretty(&config).unwrap());
 
         let provisioned_config = config.to_provisioned_config();
 
         println!("{}", serde_json::to_string_pretty(&provisioned_config).unwrap());
-    }
 
-    /// The `ConfigImpl` trait defines a contract for configuration types that can be used with the `Config` wrapper.
-    /// It provides methods for loading, creating, and managing configuration values, including defaults and provisioned values.
-    pub trait ConfigImpl: std::ops::Deref
-    where
-        Self: Sized,
-        Self::Target: serde::de::DeserializeOwned + Serialize,
-    {
-        /// The name of the configuration field, used for serialization and deserialization.
-        const NAME: &str;
-
-        /// Creates an instance of the configuration type from its inner value.
-        fn from_inner(inner: Self::Target) -> Self;
-
-        /// Loads the provisioned configuration from the provided configuration source.
-        /// Returns `Ok(Some(Config<Self>))` if the configuration is found and valid, or `Ok(None)` if not found.
-        fn load_provisioned_config(provisioned_config: &config::Config) -> Result<Option<(bool, Self)>, SharedError> {
-            if let Ok(value) = provisioned_config.get::<config::Value>(Self::NAME) {
-                println!("Found provisioned value for {}: {:?}", Self::NAME, value);
-                let inner = value
-                    .try_deserialize::<Self::Target>()
-                    // If the value is not found, return an error.
-                    .map_err(|e| SharedError::ConfigurationNotSuitableForProduction(e.to_string()))?;
-
-                Ok(Some((true, Self::from_inner(inner))))
-            } else {
-                // If the value is not found, return None.
-                // This is not an error, as the configuration may not be required or may have a default value.
-                Ok(None)
-            }
-        }
-
-        /// Provides the default value for the configuration in a development environment.
-        /// Returns `None` if no default is defined.
-        fn development_default() -> Option<Self::Target> {
-            None
-        }
-
-        /// Provides the default value for the configuration in a production environment.
-        /// Returns `None` if no default is defined.
-        fn production_default() -> Option<Self::Target> {
-            None
-        }
-
-        fn default() -> Option<Self::Target> {
-            None
-        }
-
-        /// Loads the configuration by first attempting to load a provisioned value.
-        /// If no provisioned value is found, it falls back to the default value based on the application profile.
-        /// Returns an error if neither a provisioned value nor a default value is available.
-        fn load(
-            provisioned_config: &config::Config,
-            application_profile: &ApplicationProfile,
-        ) -> Result<(bool, Self), SharedError> {
-            // Load the provisioned value if it exists.
-            let provisioned_value: Option<(bool, Self)> = Self::load_provisioned_config(provisioned_config)?;
-
-            provisioned_value
-                .or_else(|| {
-                    // If no provisioned value is found, use the default value.
-                    let inner = match application_profile {
-                        ApplicationProfile::Development => Self::development_default(),
-                        ApplicationProfile::Production => Self::production_default(),
+        assert_eq!(
+            serde_json::json!(config),
+            serde_json::json!(
+                {
+                    "port": 3033,
+                    "log_format": "json",
+                    "event_store": {
+                      "type": "in_memory"
+                    },
+                    "url": "http://localhost:3033/",
+                    "cors_enabled": false,
+                    "did_methods": {
+                      "did:jwk": {
+                        "enabled": true,
+                        "preferred": true
+                      },
+                      "did:key": {
+                        "enabled": true
+                      }
+                    },
+                    "external_server_response_timeout_ms": 2000,
+                    "domain_linkage_enabled": true,
+                    "credential_offer_by_value_enabled": false,
+                    "credential_configurations": [
+                      {
+                        "credential_configuration_id": "001",
+                        "format": "jwt_vc_json",
+                        "credential_definition": {
+                          "type": [
+                            "VerifiableCredential"
+                          ]
+                        },
+                        "display": []
+                      }
+                    ],
+                    "signing_algorithms_supported": {},
+                    "display": [
+                      {
+                        "name": "UniCore",
+                        "locale": "en",
+                        "logo": {
+                          "uri": "https://www.impierce.com/external/impierce-logo.png",
+                          "alt_text": "Impierce Logo"
+                        }
+                      }
+                    ],
+                    "event_publishers": {
+                      "http": null
+                    },
+                    "vp_formats": {
+                      "jwt_vp_json": {
+                        "enabled": true
+                      },
+                      "jwt_vc_json": {
+                        "enabled": true,
+                        "preferred": true
+                      }
                     }
-                    .or_else(|| Self::default());
-
-                    inner.map(|inner| (false, Self::from_inner(inner)))
-                })
-                .ok_or_else(|| {
-                    SharedError::ConfigurationNotSuitableForProduction(format!(
-                        "No default value found for the configuration: {}",
-                        Self::NAME
-                    ))
-                })
-        }
-    }
-
-    pub static PROVISIONING_METADATA: Lazy<RwLock<HashMap<String, bool>>> = Lazy::new(|| RwLock::new(HashMap::new()));
-
-    pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> =
-        Lazy::new(|| RwLock::new(ApplicationConfiguration::load().unwrap()));
-
-    pub fn config() -> RwLockReadGuard<'static, ApplicationConfiguration> {
-        CONFIG.read().unwrap()
+                  }
+            )
+        )
     }
 }

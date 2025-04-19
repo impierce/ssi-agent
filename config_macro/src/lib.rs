@@ -1,4 +1,3 @@
-use case::CaseExt;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, token, Data, DeriveInput, Error, Fields, Ident, Lit};
@@ -22,19 +21,20 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
         panic!("ConfigImpl can only be derived for structs");
     };
 
-    // Generate new types and `ConfigImpl` implementations for fields marked with `#[config_impl]`
+    // Vectors to store generated code for different parts of the implementation
     let mut generated_code = Vec::new();
     let mut field_checks = Vec::new();
     let mut a = Vec::new();
     let mut b = Vec::new();
+
+    // Iterate over each field in the struct
     for field in fields {
         if field.attrs.iter().any(|attr| attr.path().is_ident("config_impl")) {
             let field_type = field.ty;
             let field_name = field.ident.unwrap();
             let field_name_str = field_name.to_string();
             let type_config = Ident::new(&format!("{field_name}_config"), field_name.span());
-            // Generate a new type based on the field name
-            let type_name = syn::Ident::new(&format!("_{}", field_name.to_string().to_camel()), field_name.span());
+            let fn_field_name = Ident::new(&format!("fn_{field_name}"), field_name.span());
 
             // Generate code to check if the field is provisioned and add it to the JSON object
             field_checks.push(quote! {
@@ -43,7 +43,7 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
                 }
             });
 
-            // Parse the `#[config_impl]` attribute to extract the `default`, `development_default`, and `production_default` values
+            // Parse the `#[config_impl]` attribute to extract default values
             let mut default_value = None;
             let mut development_default_value = None;
             let mut production_default_value = None;
@@ -83,69 +83,57 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
                 }
             }
 
-            // Generate the `default` method implementation
-            let default_method = if let Some(default_value) = default_value {
-                let parsed_default: proc_macro2::TokenStream = default_value.parse().unwrap();
-                quote! {
-                    fn default() -> Option<Self::Target> {
-                        Some(#parsed_default)
-                    }
-                }
-            } else {
-                quote! {}
-            };
+            // Generate default values for the field
+            let default = generate_default_value(default_value);
+            let development_default = generate_default_value(development_default_value);
+            let production_default = generate_default_value(production_default_value);
 
-            // Generate the `development_default` method implementation
-            let development_default_method = if let Some(development_default_value) = development_default_value {
-                let parsed_default: proc_macro2::TokenStream = development_default_value.parse().unwrap();
-                quote! {
-                    fn development_default() -> Option<Self::Target> {
-                        Some(#parsed_default)
-                    }
-                }
-            } else {
-                quote! {}
-            };
-
-            // Generate the `production_default` method implementation
-            let production_default_method = if let Some(production_default_value) = production_default_value {
-                let parsed_default: proc_macro2::TokenStream = production_default_value.parse().unwrap();
-                quote! {
-                    fn production_default() -> Option<Self::Target> {
-                        Some(#parsed_default)
-                    }
-                }
-            } else {
-                quote! {}
-            };
-
+            // Add code to initialize the field during loading
             a.push(quote! {
-                let (provisioned, #type_config) = #type_name::load(&provisioned_config, &application_profile).unwrap();
+                let (provisioned, #type_config) = #fn_field_name(&provisioned_config, &application_profile).unwrap();
 
                 metadata.insert(#field_name_str.to_string(), provisioned);
             });
 
+            // Add code to construct the struct
             b.push(quote! {
-                #field_name: (*#type_config).clone(),
+                #field_name: #type_config,
             });
 
-            // Generate the new type and its `ConfigImpl` implementation
+            // Generate the function to load the field
             generated_code.push(quote! {
-                #[derive(Debug, Clone, Serialize, Deserialize, derive_more::Deref)]
-                pub struct #type_name {
-                    pub #field_name: #field_type,
-                }
+                pub fn #fn_field_name(
+                    provisioned_config: &config::Config,
+                    application_profile: &ApplicationProfile,
+                ) -> Result<(bool, #field_type), SharedError> {
+                    // Load the provisioned value if it exists
+                    let provisioned_value: Option<(bool, #field_type)> = if let Ok(value) = provisioned_config.get::<config::Value>(#field_name_str) {
+                        let inner = value
+                            .try_deserialize::<#field_type>()
+                            .map_err(|e| SharedError::ConfigurationNotSuitableForProduction(e.to_string()))?;
 
-                impl ConfigImpl for #type_name {
-                    const NAME: &str = stringify!(#field_name);
+                        Some((true, inner))
+                    } else {
+                        None // No provisioned value found
+                    };
 
-                    fn from_inner(inner: Self::Target) -> Self {
-                        #type_name { #field_name: inner }
-                    }
+                    // Use the provisioned value or fall back to defaults
+                    provisioned_value
+                        .or_else(|| {
+                            let inner = match application_profile {
+                                ApplicationProfile::Development => #development_default,
+                                ApplicationProfile::Production => #production_default,
+                            }
+                            .or_else(|| #default);
 
-                    #default_method
-                    #development_default_method
-                    #production_default_method
+                            inner.map(|inner| (false, inner))
+                        })
+                        .ok_or_else(|| {
+                            SharedError::ConfigurationNotSuitableForProduction(format!(
+                                "No default value found for the configuration: {}",
+                                stringify!(#field_name)
+                            ))
+                        })
                 }
             });
         }
@@ -153,8 +141,20 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
 
     // Combine all generated implementations
     let expanded = quote! {
-        impl #struct_name {
+        // Static metadata for provisioning
+        pub static PROVISIONING_METADATA: Lazy<RwLock<HashMap<String, bool>>> = Lazy::new(|| RwLock::new(HashMap::new()));
 
+        // Static configuration instance
+        pub static CONFIG: Lazy<RwLock<#struct_name>> =
+            Lazy::new(|| RwLock::new(#struct_name::load().unwrap()));
+
+        // Accessor for the configuration
+        pub fn config() -> RwLockReadGuard<'static, #struct_name> {
+            CONFIG.read().unwrap()
+        }
+
+        impl #struct_name {
+            // Load the configuration with provisioned values and defaults
             pub fn load2(
                 provisioned_config: config::Config,
                 application_profile: ApplicationProfile,
@@ -168,6 +168,7 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
                 })
             }
 
+            // Convert the configuration to a provisioned JSON object
             pub fn to_provisioned_config(&self) -> serde_json::Value {
                 let mut provisioned_config = json!({});
 
@@ -176,6 +177,7 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
                 provisioned_config
             }
 
+            // Check if a field is provisioned
             fn is_provisioned(field: &str) -> bool {
                 PROVISIONING_METADATA
                     .read()
@@ -186,9 +188,20 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
             }
         }
 
+        // Generated functions for each field
         #(#generated_code)*
     };
 
     // Convert the generated code into a TokenStream and return it
     TokenStream::from(expanded)
+}
+
+// Helper function to generate default values
+fn generate_default_value(default_value: Option<String>) -> proc_macro2::TokenStream {
+    if let Some(value) = default_value {
+        let parsed_default: proc_macro2::TokenStream = value.parse().unwrap();
+        quote! { Some(#parsed_default) }
+    } else {
+        quote! { None }
+    }
 }
