@@ -1,7 +1,7 @@
 use case::CaseExt;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Error, Fields, Ident, Lit};
+use syn::{parse_macro_input, token, Data, DeriveInput, Error, Fields, Ident, Lit};
 
 #[proc_macro_derive(ConfigImpl, attributes(config_impl))]
 pub fn config_derive(input: TokenStream) -> TokenStream {
@@ -52,11 +52,15 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
                 if attr.path().is_ident("config_impl") {
                     attr.parse_nested_meta(|meta| {
                         if meta.path.is_ident("default") {
-                            let lit_str = meta.value()?.parse::<Lit>()?;
-                            if let Lit::Str(lit_str) = lit_str {
-                                default_value = Some(lit_str.value());
+                            if !meta.input.peek(token::Eq) {
+                                default_value = Some("Default::default()".to_string());
                             } else {
-                                return Err(Error::new_spanned(lit_str, "Expected a string literal"));
+                                let lit_str = meta.value()?.parse::<Lit>()?;
+                                if let Lit::Str(lit_str) = lit_str {
+                                    default_value = Some(lit_str.value());
+                                } else {
+                                    return Err(Error::new_spanned(lit_str, "Expected a string literal"));
+                                }
                             }
                         } else if meta.path.is_ident("development_default") {
                             let lit_str = meta.value()?.parse::<Lit>()?;
@@ -116,13 +120,13 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
             };
 
             a.push(quote! {
-                let #type_config = #type_name::load(&provisioned_config, &application_profile).unwrap();
+                let (provisioned, #type_config) = #type_name::load(&provisioned_config, &application_profile).unwrap();
 
-                metadata.insert(#field_name_str.to_string(), #type_config.provisioned);
+                metadata.insert(#field_name_str.to_string(), provisioned);
             });
 
             b.push(quote! {
-                #field_name: (*#type_config.inner).clone(),
+                #field_name: (*#type_config).clone(),
             });
 
             // Generate the new type and its `ConfigImpl` implementation

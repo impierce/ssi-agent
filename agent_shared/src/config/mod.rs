@@ -832,149 +832,131 @@ mod tests {
 pub mod new_application_configuration_tests2 {
     use super::*;
     use config_macro::ConfigImpl;
-    use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition;
-    use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
-    use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJsonParameters;
-    use oid4vci::credential_format_profiles::w3c_verifiable_credentials::CredentialSubject;
-    use oid4vci::credential_format_profiles::Parameters;
 
     #[skip_serializing_none]
     #[derive(Debug, Deserialize, Clone, Serialize, ConfigImpl)]
     pub struct ApplicationConfiguration {
-        #[config_impl(default = "None", development_default = "Some(3033)")]
+        #[config_impl(default, development_default = "Some(3033)")]
         pub port: Option<u16>,
-        // #[config_impl(default = "LogFormat::Json")]
-        // pub log_format: LogFormat,
-        // #[config_impl(development_default = "EventStoreConfig {
-        //         type_: EventStoreType::InMemory,
-        //         connection_string: None
-        //     }")]
-        // pub event_store: EventStoreConfig,
-        // #[config_impl(development_default = r#"Url::parse("http://localhost:3033").unwrap()"#)]
-        // pub url: Url,
-        // #[config_impl(default = "None")]
-        // pub base_path: Option<String>,
-        // #[config_impl(default = "false")]
-        // pub cors_enabled: bool,
-        // #[config_impl(
-        //     default = "HashMap::default()",
-        //     development_default = "HashMap::from(
-        //         [
-        //             (
-        //                 SupportedDidMethod::Jwk,
-        //                 ToggleOptions {
-        //                     enabled: true,
-        //                     preferred: Some(true)
-        //                 }
-        //             ),
-        //             (
-        //                 SupportedDidMethod::Key,
-        //                 ToggleOptions {
-        //                     enabled: true,
-        //                     preferred: None
-        //                 }
-        //             )
-        //         ]
-        //     )",
-        //     production_default = "HashMap::from(
-        //         [
-        //             (
-        //                 SupportedDidMethod::Jwk,
-        //                 ToggleOptions {
-        //                     enabled: false,
-        //                     preferred: None
-        //                 }
-        //             ),
-        //             (
-        //                 SupportedDidMethod::Key,
-        //                 ToggleOptions {
-        //                     enabled: false,
-        //                     preferred: None
-        //                 }
-        //             ),
-        //             (
-        //                 SupportedDidMethod::Web,
-        //                 ToggleOptions {
-        //                     enabled: true,
-        //                     preferred: Some(true)
-        //                 }
-        //             )
-        //         ]
-        //     )"
-        // )]
-        // pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
-        // #[config_impl(default = "2000")]
-        // pub external_server_response_timeout_ms: u64,
-        // #[config_impl(default = "false", production_default = "true")]
-        // pub domain_linkage_enabled: bool,
-        // #[config_impl(default = "false")]
-        // pub credential_offer_by_value_enabled: bool,
-        // // FIXME: implement this very carefully
-        // // secret_manager: SecretManagerConfig
-        // #[config_impl(
-        //     default = "Vec::default()",
-        //     development_default = r#"vec![
-        //         CredentialConfiguration {
-        //             credential_configuration_id: "001".to_string(),
-        //             credential_format_with_parameters: CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
-        //                 parameters: JwtVcJsonParameters {
-        //                     credential_definition: CredentialDefinition {
-        //                         type_: vec!["VerifiableCredential".to_string()],
-        //                         credential_subject: CredentialSubject::default(),
-        //                     },
-        //                     order: None,
-        //                 },
-        //             }),
-        //             display: vec![serde_json::to_value(Display {
-        //                 name: "Verifiable Credential".to_string(),
-        //                 locale: Some("en".to_string()),
-        //                 logo: Some(Logo {
-        //                     uri: Some(Url::parse("https://www.impierce.com/external/impierce-logo.png").unwrap()),
-        //                     alt_text: Some("Impierce Logo".to_string()),
-        //                 }),
-        //             })
-        //             .unwrap()]
-        //         }
-        //     ]"#
-        // )]
-        // pub credential_configurations: Vec<CredentialConfiguration>,
-        // #[config_impl(default = "HashMap::default()")]
-        // pub signing_algorithms_supported: HashMap<Algorithm, ToggleOptions>,
-        // #[config_impl(
-        //     default = "Vec::default()",
-        //     development_default = r#"vec![
-        //         Display {
-        //             name: "UniCore".to_string(),
-        //             locale: Some("en".to_string()),
-        //             logo: Some(Logo {
-        //                 uri: Some(Url::parse("https://www.impierce.com/external/impierce-logo.png").unwrap()),
-        //                 alt_text: Some("Impierce Logo".to_string()),
-        //             }),
-        //         }
-        //     ]"#
-        // )]
-        // pub display: Vec<Display>,
-        // #[config_impl(default = "EventPublishers::default()")]
-        // pub event_publishers: EventPublishers,
-        // #[config_impl(default = "HashMap::from(
-        //         [
-        //             (
-        //                 ClaimFormatDesignation::JwtVcJson,
-        //                 ToggleOptions {
-        //                     enabled: true,
-        //                     preferred: Some(true)
-        //                 }
-        //             ),
-        //             (
-        //                 ClaimFormatDesignation::JwtVpJson,
-        //                 ToggleOptions {
-        //                     enabled: true,
-        //                     preferred: None
-        //                 }
-        //             )
-        //         ]
-        //     )")]
-        // pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
+        #[config_impl(default)]
+        pub log_format: LogFormat,
+        #[config_impl(development_default = "EventStoreConfig {
+                type_: EventStoreType::InMemory,
+                connection_string: None
+            }")]
+        pub event_store: EventStoreConfig,
+        #[config_impl(development_default = r#"Url::parse("http://localhost:3033").unwrap()"#)]
+        pub url: Url,
+        #[config_impl(default)]
+        pub base_path: Option<String>,
+        #[config_impl(default)]
+        pub cors_enabled: bool,
+        #[config_impl(
+            default,
+            development_default = "HashMap::from(
+                [
+                    (
+                        SupportedDidMethod::Jwk,
+                        ToggleOptions {
+                            enabled: true,
+                            preferred: Some(true)
+                        }
+                    ),
+                    (
+                        SupportedDidMethod::Key,
+                        ToggleOptions {
+                            enabled: true,
+                            preferred: None
+                        }
+                    )
+                ]
+            )",
+            production_default = "HashMap::from(
+                [
+                    (
+                        SupportedDidMethod::Jwk,
+                        ToggleOptions {
+                            enabled: false,
+                            preferred: None
+                        }
+                    ),
+                    (
+                        SupportedDidMethod::Key,
+                        ToggleOptions {
+                            enabled: false,
+                            preferred: None
+                        }
+                    ),
+                    (
+                        SupportedDidMethod::Web,
+                        ToggleOptions {
+                            enabled: true,
+                            preferred: Some(true)
+                        }
+                    )
+                ]
+            )"
+        )]
+        pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
+        #[config_impl(default = "2000")]
+        pub external_server_response_timeout_ms: u64,
+        #[config_impl(default, production_default = "true")]
+        pub domain_linkage_enabled: bool,
+        #[config_impl(default)]
+        pub credential_offer_by_value_enabled: bool,
+        // FIXME: implement this very carefully
+        // secret_manager: SecretManagerConfig
+        #[config_impl(
+            default,
+            development_default = r#"
+                vec![serde_json::from_value(
+                    serde_json::json!({
+                        "credential_configuration_id": "001",
+                        "format": "jwt_vc_json",
+                        "credential_definition": {
+                            "type": ["VerifiableCredential"]
+                        },
+                    })
+                ).unwrap()]"#
+        )]
+        pub credential_configurations: Vec<CredentialConfiguration>,
+        #[config_impl(default)]
+        pub signing_algorithms_supported: HashMap<Algorithm, ToggleOptions>,
+        #[config_impl(
+            default,
+            development_default = r#"vec![
+                Display {
+                    name: "UniCore".to_string(),
+                    locale: Some("en".to_string()),
+                    logo: Some(Logo {
+                        uri: Some(Url::parse("https://www.impierce.com/external/impierce-logo.png").unwrap()),
+                        alt_text: Some("Impierce Logo".to_string()),
+                    }),
+                }
+            ]"#
+        )]
+        pub display: Vec<Display>,
+        #[config_impl(default)]
+        pub event_publishers: EventPublishers,
+        #[config_impl(default = "HashMap::from(
+                [
+                    (
+                        ClaimFormatDesignation::JwtVcJson,
+                        ToggleOptions {
+                            enabled: true,
+                            preferred: Some(true)
+                        }
+                    ),
+                    (
+                        ClaimFormatDesignation::JwtVpJson,
+                        ToggleOptions {
+                            enabled: true,
+                            preferred: None
+                        }
+                    )
+                ]
+            )")]
+        pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
     }
 
     impl ApplicationConfiguration {
@@ -1038,18 +1020,9 @@ pub mod new_application_configuration_tests2 {
         /// Creates an instance of the configuration type from its inner value.
         fn from_inner(inner: Self::Target) -> Self;
 
-        /// Creates a provisioned `Config` instance from the inner value.
-        /// Marks the configuration as provisioned.
-        fn from_provisioned(inner: Self::Target) -> Config<Self> {
-            Config {
-                provisioned: true,
-                inner: Self::from_inner(inner),
-            }
-        }
-
         /// Loads the provisioned configuration from the provided configuration source.
         /// Returns `Ok(Some(Config<Self>))` if the configuration is found and valid, or `Ok(None)` if not found.
-        fn load_provisioned_config(provisioned_config: &config::Config) -> Result<Option<Config<Self>>, SharedError> {
+        fn load_provisioned_config(provisioned_config: &config::Config) -> Result<Option<(bool, Self)>, SharedError> {
             if let Ok(value) = provisioned_config.get::<config::Value>(Self::NAME) {
                 println!("Found provisioned value for {}: {:?}", Self::NAME, value);
                 let inner = value
@@ -1057,7 +1030,7 @@ pub mod new_application_configuration_tests2 {
                     // If the value is not found, return an error.
                     .map_err(|e| SharedError::ConfigurationNotSuitableForProduction(e.to_string()))?;
 
-                Ok(Some(Self::from_provisioned(inner)))
+                Ok(Some((true, Self::from_inner(inner))))
             } else {
                 // If the value is not found, return None.
                 // This is not an error, as the configuration may not be required or may have a default value.
@@ -1087,9 +1060,9 @@ pub mod new_application_configuration_tests2 {
         fn load(
             provisioned_config: &config::Config,
             application_profile: &ApplicationProfile,
-        ) -> Result<Config<Self>, SharedError> {
+        ) -> Result<(bool, Self), SharedError> {
             // Load the provisioned value if it exists.
-            let provisioned_value: Option<Config<Self>> = Self::load_provisioned_config(provisioned_config)?;
+            let provisioned_value: Option<(bool, Self)> = Self::load_provisioned_config(provisioned_config)?;
 
             provisioned_value
                 .or_else(|| {
@@ -1100,10 +1073,7 @@ pub mod new_application_configuration_tests2 {
                     }
                     .or_else(|| Self::default());
 
-                    inner.map(|inner| Config {
-                        provisioned: false,
-                        inner: Self::from_inner(inner),
-                    })
+                    inner.map(|inner| (false, Self::from_inner(inner)))
                 })
                 .ok_or_else(|| {
                     SharedError::ConfigurationNotSuitableForProduction(format!(
@@ -1121,27 +1091,5 @@ pub mod new_application_configuration_tests2 {
 
     pub fn config() -> RwLockReadGuard<'static, ApplicationConfiguration> {
         CONFIG.read().unwrap()
-    }
-
-    #[skip_serializing_none]
-    #[derive(Debug, Clone, Serialize, Deserialize, derive_more::Deref)]
-    pub struct Config<T: ConfigImpl>
-    where
-        T::Target: serde::de::DeserializeOwned + Serialize,
-    {
-        #[serde(skip)]
-        pub provisioned: bool,
-        #[deref]
-        #[serde(flatten)]
-        pub inner: T,
-    }
-
-    impl<T: ConfigImpl> Config<T>
-    where
-        T::Target: serde::de::DeserializeOwned + Serialize,
-    {
-        pub fn get(&self) -> &T::Target {
-            &*self.inner
-        }
     }
 }
