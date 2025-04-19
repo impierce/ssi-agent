@@ -1,7 +1,7 @@
 use case::CaseExt;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Error, Fields, Lit};
+use syn::{parse_macro_input, Data, DeriveInput, Error, Fields, Ident, Lit};
 
 #[proc_macro_derive(ConfigImpl, attributes(config_impl))]
 pub fn config_derive(input: TokenStream) -> TokenStream {
@@ -24,10 +24,24 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
 
     // Generate new types and `ConfigImpl` implementations for fields marked with `#[config_impl]`
     let mut generated_code = Vec::new();
+    let mut field_checks = Vec::new();
+    let mut a = Vec::new();
+    let mut b = Vec::new();
     for field in fields {
         if field.attrs.iter().any(|attr| attr.path().is_ident("config_impl")) {
-            let field_name = field.ident.unwrap();
             let field_type = field.ty;
+            let field_name = field.ident.unwrap();
+            let field_name_str = field_name.to_string();
+            let type_config = Ident::new(&format!("{field_name}_config"), field_name.span());
+            // Generate a new type based on the field name
+            let type_name = syn::Ident::new(&format!("_{}", field_name.to_string().to_camel()), field_name.span());
+
+            // Generate code to check if the field is provisioned and add it to the JSON object
+            field_checks.push(quote! {
+                if Self::is_provisioned(#field_name_str) {
+                    provisioned_config[#field_name_str] = json!(self.#field_name);
+                }
+            });
 
             // Parse the `#[config_impl]` attribute to extract the `default`, `development_default`, and `production_default` values
             let mut default_value = None;
@@ -101,8 +115,15 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
                 quote! {}
             };
 
-            // Generate a new type based on the field name
-            let type_name = syn::Ident::new(&format!("{}", field_name.to_string().to_camel()), field_name.span());
+            a.push(quote! {
+                let #type_config = #type_name::load(&provisioned_config, &application_profile).unwrap();
+
+                metadata.insert(#field_name_str.to_string(), #type_config.provisioned);
+            });
+
+            b.push(quote! {
+                #field_name: (*#type_config.inner).clone(),
+            });
 
             // Generate the new type and its `ConfigImpl` implementation
             generated_code.push(quote! {
@@ -128,6 +149,39 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
 
     // Combine all generated implementations
     let expanded = quote! {
+        impl #struct_name {
+
+            pub fn load2(
+                provisioned_config: config::Config,
+                application_profile: ApplicationProfile,
+            ) -> Result<Self, SharedError> {
+                let mut metadata = PROVISIONING_METADATA.write().unwrap();
+
+                #(#a)*
+
+                Ok(#struct_name {
+                    #(#b)*
+                })
+            }
+
+            pub fn to_provisioned_config(&self) -> serde_json::Value {
+                let mut provisioned_config = json!({});
+
+                #(#field_checks)*
+
+                provisioned_config
+            }
+
+            fn is_provisioned(field: &str) -> bool {
+                PROVISIONING_METADATA
+                    .read()
+                    .unwrap()
+                    .get(field)
+                    .cloned()
+                    .unwrap_or(false)
+            }
+        }
+
         #(#generated_code)*
     };
 
