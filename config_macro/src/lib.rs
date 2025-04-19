@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, token, Data, DeriveInput, Error, Fields, Ident, Lit};
 
-#[proc_macro_derive(ConfigImpl, attributes(config_impl))]
+#[proc_macro_derive(Config, attributes(config))]
 pub fn config_derive(input: TokenStream) -> TokenStream {
     // Parse the input tokens into a syntax tree
     let input = parse_macro_input!(input as DeriveInput);
@@ -15,10 +15,10 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
         if let Fields::Named(fields) = data.fields {
             fields.named
         } else {
-            panic!("ConfigImpl can only be derived for structs with named fields");
+            panic!("Config can only be derived for structs with named fields");
         }
     } else {
-        panic!("ConfigImpl can only be derived for structs");
+        panic!("Config can only be derived for structs");
     };
 
     // Vectors to store generated code for different parts of the implementation
@@ -29,7 +29,7 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
 
     // Iterate over each field in the struct
     for field in fields {
-        if field.attrs.iter().any(|attr| attr.path().is_ident("config_impl")) {
+        if field.attrs.iter().any(|attr| attr.path().is_ident("config")) {
             let field_type = field.ty;
             let field_name = field.ident.unwrap();
             let field_name_str = field_name.to_string();
@@ -43,13 +43,13 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
                 }
             });
 
-            // Parse the `#[config_impl]` attribute to extract default values
+            // Parse the `#[config]` attribute to extract default values
             let mut default_value = None;
             let mut development_default_value = None;
             let mut production_default_value = None;
 
             for attr in &field.attrs {
-                if attr.path().is_ident("config_impl") {
+                if attr.path().is_ident("config") {
                     attr.parse_nested_meta(|meta| {
                         if meta.path.is_ident("default") {
                             if !meta.input.peek(token::Eq) {

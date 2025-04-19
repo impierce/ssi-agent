@@ -831,27 +831,27 @@ mod tests {
 #[cfg(test)]
 pub mod new_application_configuration_tests2 {
     use super::*;
-    use config_macro::ConfigImpl;
+    use config_macro::Config;
 
     #[skip_serializing_none]
-    #[derive(Debug, Deserialize, Clone, Serialize, ConfigImpl)]
+    #[derive(Debug, Deserialize, Clone, Serialize, Config)]
     pub struct ApplicationConfiguration {
-        #[config_impl(default, development_default = "Some(3033)")]
+        #[config(default, development_default = "Some(3033)")]
         pub port: Option<u16>,
-        #[config_impl(default)]
+        #[config(default)]
         pub log_format: LogFormat,
-        #[config_impl(development_default = "EventStoreConfig {
+        #[config(development_default = "EventStoreConfig {
                 type_: EventStoreType::InMemory,
                 connection_string: None
             }")]
         pub event_store: EventStoreConfig,
-        #[config_impl(development_default = r#"Url::parse("http://localhost:3033").unwrap()"#)]
+        #[config(development_default = r#"Url::parse("http://localhost:3033").unwrap()"#)]
         pub url: Url,
-        #[config_impl(default)]
+        #[config(default)]
         pub base_path: Option<String>,
-        #[config_impl(default)]
+        #[config(default)]
         pub cors_enabled: bool,
-        #[config_impl(
+        #[config(
             default,
             development_default = "HashMap::from(
                 [
@@ -898,15 +898,15 @@ pub mod new_application_configuration_tests2 {
             )"
         )]
         pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
-        #[config_impl(default = "2000")]
+        #[config(default = "2000")]
         pub external_server_response_timeout_ms: u64,
-        #[config_impl(default, production_default = "true")]
+        #[config(default, production_default = "true")]
         pub domain_linkage_enabled: bool,
-        #[config_impl(default)]
+        #[config(default)]
         pub credential_offer_by_value_enabled: bool,
         // FIXME: implement this very carefully
         // secret_manager: SecretManagerConfig
-        #[config_impl(
+        #[config(
             default,
             development_default = r#"
                 vec![serde_json::from_value(
@@ -920,9 +920,9 @@ pub mod new_application_configuration_tests2 {
                 ).unwrap()]"#
         )]
         pub credential_configurations: Vec<CredentialConfiguration>,
-        #[config_impl(default)]
+        #[config(default)]
         pub signing_algorithms_supported: HashMap<Algorithm, ToggleOptions>,
-        #[config_impl(
+        #[config(
             default,
             development_default = r#"vec![
                 Display {
@@ -936,26 +936,26 @@ pub mod new_application_configuration_tests2 {
             ]"#
         )]
         pub display: Vec<Display>,
-        #[config_impl(default)]
+        #[config(default)]
         pub event_publishers: EventPublishers,
-        #[config_impl(default = "HashMap::from(
-                [
-                    (
-                        ClaimFormatDesignation::JwtVcJson,
-                        ToggleOptions {
-                            enabled: true,
-                            preferred: Some(true)
-                        }
-                    ),
-                    (
-                        ClaimFormatDesignation::JwtVpJson,
-                        ToggleOptions {
-                            enabled: true,
-                            preferred: None
-                        }
-                    )
-                ]
-            )")]
+        #[config(default = "HashMap::from(
+            [
+                (
+                    ClaimFormatDesignation::JwtVcJson,
+                    ToggleOptions {
+                        enabled: true,
+                        preferred: Some(true)
+                    }
+                ),
+                (
+                    ClaimFormatDesignation::JwtVpJson,
+                    ToggleOptions {
+                        enabled: true,
+                        preferred: None
+                    }
+                )
+            ]
+        )")]
         pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
     }
 
