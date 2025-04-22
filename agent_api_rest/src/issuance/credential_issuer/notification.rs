@@ -1,8 +1,7 @@
-use crate::issuance::error::notification_error;
-use agent_issuance::{
-    credential::command::CredentialCommand, offer::queries::access_token::AccessTokenView, state::IssuanceState,
-};
-use agent_shared::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, query_handler};
+use crate::issuance::error::{internal_server_error, into_response, PublicError};
+use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
+
 use axum::response::{IntoResponse, Response};
 use axum::{
     extract::{Json, State},
@@ -28,20 +27,25 @@ pub async fn notification(
         Ok(notification_request) => notification_request,
         Err(e) => {
             error!("Failed to parse notification request: {}", e);
-            return notification_error(NotificationErrorResponse::InvalidNotificationRequest);
+            return into_response(PublicError::from(NotificationErrorResponse::InvalidNotificationRequest));
         }
     };
 
-    let _offer_id = match query_handler(&access_token, &state.query.access_token).await {
-        Ok(Some(AccessTokenView { offer_id })) => offer_id,
-        _ => {
-            return notification_error(NotificationErrorResponse::InvalidToken);
+    let access_token_result = match query_handler(&access_token, &state.query.access_token).await {
+        Ok(result) => result,
+        Err(_) => return internal_server_error(),
+    };
+
+    let _offer_id = match access_token_result {
+        Some(access_token_view) => access_token_view.offer_id,
+        None => {
+            return into_response(PublicError::from(NotificationErrorResponse::InvalidToken));
         }
     };
 
     let credentials = match query_handler("all_credentials", &state.query.all_credentials).await {
         Ok(Some(all_credentials)) => all_credentials.credentials,
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        _ => return internal_server_error(),
     };
 
     let credential_id = credentials
@@ -52,7 +56,7 @@ pub async fn notification(
     let credential_id = match credential_id {
         Some(id) => id,
         None => {
-            return notification_error(NotificationErrorResponse::InvalidNotificationId);
+            return into_response(PublicError::from(NotificationErrorResponse::InvalidNotificationId));
         }
     };
 
@@ -61,9 +65,8 @@ pub async fn notification(
         notification: notification_request,
     };
 
-    if let Err(e) = command_handler(&credential_id, &state.command.credential, command).await {
-        error!("Failed to add notification: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    if let Err(_) = command_handler(&credential_id, &state.command.credential, command).await {
+        return internal_server_error();
     }
     StatusCode::NO_CONTENT.into_response()
 }

@@ -10,6 +10,7 @@ use oid4vci::errors::{
     AuthorizationErrorResponse, BatchCredentialErrorResponse, CredentialErrorResponse, DeferredCredentialErrorResponse,
     ErrorStatusCode, NotificationErrorResponse, OID4VCError, TokenErrorResponse,
 };
+use serde::{Deserialize, Serialize};
 /// use std::os::macos::raw::stat;
 impl IntoApiErrorExt for CredentialError {
     fn into_api_error(self) -> ApiError {
@@ -108,6 +109,78 @@ impl IntoApiErrorExt for ServerConfigError {
         match self {}
     }
 }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InternalServerError {
+    pub error: String,
+}
+
+impl ErrorStatusCode for InternalServerError {
+    fn status_code(&self) -> StatusCode {
+        StatusCode::INTERNAL_SERVER_ERROR
+    }
+}
+
+impl std::fmt::Display for InternalServerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Internal Server Error")
+    }
+}
+impl std::error::Error for InternalServerError {}
+
+impl Default for InternalServerError {
+    fn default() -> Self {
+        InternalServerError {
+            error: "internal_server_error".to_string(),
+        }
+    }
+}
+pub enum PublicError<T: ErrorStatusCode> {
+    OID4VCError(OID4VCError<T>),
+    InternalServerError(InternalServerError),
+}
+
+impl<T: ErrorStatusCode> From<T> for PublicError<T> {
+    fn from(error: T) -> Self {
+        PublicError::OID4VCError(OID4VCError::new(error))
+    }
+}
+
+pub fn into_response<T: ErrorStatusCode + Serialize>(error: PublicError<T>) -> Response {
+    match error {
+        PublicError::OID4VCError(oid4vc_error) => {
+            let status = oid4vc_error.error.status_code();
+            let json_body = serde_json::to_string(&oid4vc_error)
+                .unwrap_or_else(|_| String::from(r#"{"error":"serialization_error"}"#));
+
+            let mut response = Response::new(json_body.into());
+            *response.status_mut() = status;
+            response.headers_mut().insert(
+                "Content-Type",
+                http::header::HeaderValue::from_static("application/json"),
+            );
+
+            response
+        }
+        PublicError::InternalServerError(internal_error) => {
+            let status = internal_error.status_code();
+            let json_body = serde_json::to_string(&internal_error)
+                .unwrap_or_else(|_| String::from(r#"{"error":"internal_server_error"}"#));
+
+            let mut response = Response::new(json_body.into());
+            *response.status_mut() = status;
+            response.headers_mut().insert(
+                "Content-Type",
+                http::header::HeaderValue::from_static("application/json"),
+            );
+
+            response
+        }
+    }
+}
+
+pub fn internal_server_error() -> Response {
+    into_response::<InternalServerError>(PublicError::InternalServerError(InternalServerError::default()))
+}
 /// - OID4VCI Error Responses
 pub fn authorization_error(error: AuthorizationErrorResponse) -> Response {
     let error: OID4VCError<AuthorizationErrorResponse> = OID4VCError::new(error);
@@ -170,6 +243,7 @@ pub fn notification_error(error: NotificationErrorResponse) -> Response {
     let status = error.error.status_code();
     (status, Json(error)).into_response()
 }
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
