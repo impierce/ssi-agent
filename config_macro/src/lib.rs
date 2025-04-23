@@ -76,6 +76,12 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
             // Add code to construct the struct
             b.push(quote! {
                 #field_name: #fn_field_name(&provisioned_config, &application_profile).unwrap(),
+                // .map_err(|e| {
+                //     // FIXME!!
+                //     ConfigError::Message(format!(
+                //         "Configuration is not suitable for production: UniCore URL must be provided",
+                //     ))
+                // })?,
             });
 
             // Generate the function to load the field

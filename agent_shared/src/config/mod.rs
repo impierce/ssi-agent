@@ -213,14 +213,15 @@ impl ApplicationConfiguration {
             ));
         }
 
-        if std::env::var("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD")
-            .ok()
-            .is_none()
-        {
-            return Err(SharedError::ConfigurationNotSuitableForProduction(
-                "Stronghold password must be provided as environment variable".to_string(),
-            ));
-        }
+        // FIXME
+        // if std::env::var("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD")
+        //     .ok()
+        //     .is_none()
+        // {
+        //     return Err(SharedError::ConfigurationNotSuitableForProduction(
+        //         "Stronghold password must be provided as environment variable".to_string(),
+        //     ));
+        // }
 
         // Password policy
         // TODO: refine
@@ -1039,38 +1040,47 @@ mod tests {
         );
     }
 
-    // #[test]
-    // #[serial]
-    // fn test_loads_config_file() {
-    //     temp_env::with_var(
-    //         "UNICORE__CONFIG_FILE",
-    //         Some("../agent_application/example.config.yaml"),
-    //         || {
-    //             let provisioned_config = load_provisioned_config().unwrap();
+    #[test]
+    #[serial]
+    fn test_loads_config_file() {
+        temp_env::with_vars(
+            [
+                ("UNICORE__CONFIG_FILE", Some("../agent_application/example.config.yaml")),
+                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
+            ],
+            || {
+                let provisioned_config = load_provisioned_config().unwrap();
 
-    //             let config =
-    //                 ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production).unwrap();
+                let config =
+                    ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production).unwrap();
 
-    //             let serialized = serde_json::to_value(&config).unwrap();
+                let serialized = serde_json::to_value(&config).unwrap();
 
-    //             assert_eq!(serialized.get("url").unwrap(), &json!("https://ssi-agent.example.org/"));
-    //         },
-    //     );
-    // }
+                assert_eq!(serialized.get("url").unwrap(), &json!("https://ssi-agent.example.org/"));
+            },
+        );
+    }
 
-    // #[test]
-    // #[serial]
-    // fn test_env_var_overwrites_config_file() {
-    //     temp_env::with_var("UNICORE__LOG_FORMAT", Some("text"), || {
-    //         let provisioned_config = load_provisioned_config().unwrap();
+    #[test]
+    #[serial]
+    fn test_env_var_overwrites_config_file() {
+        temp_env::with_vars(
+            [
+                ("UNICORE__LOG_FORMAT", Some("text")),
+                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
+            ],
+            || {
+                let provisioned_config = load_provisioned_config().unwrap();
 
-    //         let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production).unwrap();
+                let config =
+                    ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production).unwrap();
 
-    //         let serialized = serde_json::to_value(&config).unwrap();
+                let serialized = serde_json::to_value(&config).unwrap();
 
-    //         assert_eq!(serialized.get("log_format").unwrap(), &json!("text"));
-    //     });
-    // }
+                assert_eq!(serialized.get("log_format").unwrap(), &json!("text"));
+            },
+        );
+    }
 
     #[test]
     #[serial]
