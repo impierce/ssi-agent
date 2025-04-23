@@ -312,6 +312,7 @@ dependencies = [
 name = "agent_shared"
 version = "0.1.0"
 dependencies = [
+ "agent_shared",
  "async-trait",
  "base64 0.22.1",
  "chrono",

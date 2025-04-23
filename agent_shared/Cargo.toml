@@ -35,6 +35,7 @@ url.workspace = true
 config_macro = { path = "../config_macro" }
 
 [dev-dependencies]
+agent_shared = { path = ".", features = ["test_utils"] }
 serial_test = "3.0"
 temp-env = "0.3"
 

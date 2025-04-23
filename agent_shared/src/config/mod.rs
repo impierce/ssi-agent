@@ -304,7 +304,7 @@ pub enum LogFormat {
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct EventStoreConfig {
-    #[serde(rename = "type")]
+    #[serde(rename = "type", default)]
     pub type_: EventStoreType,
     #[serde(serialize_with = "redact")]
     pub connection_string: Option<String>,
@@ -972,36 +972,102 @@ mod tests {
         );
     }
 
-    // #[test]
-    // #[serial]
-    // fn test_validate_production_config_requires_explicit_url() {
-    //     temp_env::with_vars(
-    //         [
-    //             // ("UNICORE__CONFIG_FILE", Some("./config.yaml")),
-    //             ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("postgresql://test")),
-    //             ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
-    //             ("UNICORE__URL", None::<&str>),
-    //         ],
-    //         || {
-    //             let provisioned_config = config::Config::builder()
-    //                 .add_source(config::File::from_str(
-    //                     r#"
-    //                         event_store:
-    //                             type: "postgres"
-    //                     "#,
-    //                     config::FileFormat::Yaml,
-    //                 ))
-    //                 .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
-    //                 .build()
-    //                 .unwrap();
+    #[test]
+    #[serial]
+    fn test_validate_production_config_requires_explicit_url() {
+        temp_env::with_vars(
+            [
+                // ("UNICORE__CONFIG_FILE", Some("./config.yaml")),
+                ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("postgresql://:test:")),
+                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
+                ("UNICORE__URL", None::<&str>),
+            ],
+            || {
+                let provisioned_config = config::Config::builder()
+                    .add_source(config::File::from_str(
+                        r#"
+                            event_store:
+                                type: "postgres"
+                        "#,
+                        config::FileFormat::Yaml,
+                    ))
+                    .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                    .build()
+                    .unwrap();
 
-    //             let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production);
+                let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production);
 
-    //             assert_eq!(
-    //                 config.unwrap_err().to_string(),
-    //                 "Configuration is not suitable for production: UniCore URL must be provided"
-    //             );
-    //         },
-    //     );
-    // }
+                assert_eq!(
+                    config.unwrap_err().to_string(),
+                    "Configuration is not suitable for production: UniCore URL must be provided"
+                );
+            },
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_config_file_not_found_only_includes_provisioned_env_vars() {
+        temp_env::with_vars(
+            [
+                ("UNICORE__CONFIG_FILE", Some("./does-not-exist.yaml")),
+                ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("postgresql://:test:")),
+                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
+                ("UNICORE__URL", Some("http://localhost")),
+            ],
+            || {
+                let provisioned_config = load_provisioned_config().unwrap();
+
+                let config =
+                    ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production).unwrap();
+
+                assert_eq!(
+                    config.get_provisioned_config(),
+                    json!({
+                      "config_file": "./does-not-exist.yaml",
+                      "url": "http://localhost/",
+                      "event_store": {
+                        "connection_string": "<REDACTED>"
+                      },
+                      "secret_manager": {
+                        "stronghold_password": "<REDACTED>"
+                      }
+                    })
+                );
+            },
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_loads_config_file() {
+        temp_env::with_var(
+            "UNICORE__CONFIG_FILE",
+            Some("../agent_application/example.config.yaml"),
+            || {
+                let provisioned_config = load_provisioned_config().unwrap();
+
+                let config =
+                    ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production).unwrap();
+
+                let serialized = serde_json::to_value(&config).unwrap();
+
+                assert_eq!(serialized.get("url").unwrap(), &json!("https://ssi-agent.example.org/"));
+            },
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_env_var_overwrites_config_file() {
+        temp_env::with_var("UNICORE__LOG_FORMAT", Some("text"), || {
+            let provisioned_config = load_provisioned_config().unwrap();
+
+            let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production).unwrap();
+
+            let serialized = serde_json::to_value(&config).unwrap();
+
+            assert_eq!(serialized.get("log_format").unwrap(), &json!("text"));
+        });
+    }
 }
