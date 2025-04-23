@@ -139,7 +139,25 @@ pub struct ApplicationConfiguration {
             ).unwrap()]"#
     )]
     pub credential_configurations: Vec<CredentialConfiguration>,
-    #[config(default)]
+    #[config(default = "
+        HashMap::from(
+            [
+                (
+                    Algorithm::EdDSA,
+                    ToggleOptions {
+                        enabled: true,
+                        preferred: Some(true)
+                    }
+                ),
+                (
+                    Algorithm::ES256,
+                    ToggleOptions {
+                        enabled: true,
+                        preferred: None
+                    }
+                )
+            ]
+        )")]
     pub signing_algorithms_supported: HashMap<Algorithm, ToggleOptions>,
     #[config(
         default,
