@@ -63,7 +63,7 @@ async fn main() -> io::Result<()> {
 
     info!("{:?}", config());
 
-    let url = &config().url.clone().expect("Unexpected error: UniCore URL not set");
+    let url = &config().url.clone();
 
     info!("Application url: {}", url);
 

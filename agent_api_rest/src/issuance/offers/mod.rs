@@ -181,7 +181,7 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_offers_endpoint_by_reference() {
-        set_config().credential_offer_by_value_enabled = Some(false);
+        set_config().credential_offer_by_value_enabled = false;
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
 
@@ -189,6 +189,6 @@ pub mod tests {
 
         credentials(&mut app).await;
         let _pre_authorized_code = offers(&mut app).await;
-        set_config().credential_offer_by_value_enabled = Some(true);
+        set_config().credential_offer_by_value_enabled = true;
     }
 }

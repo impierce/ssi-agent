@@ -61,11 +61,7 @@ impl Aggregate for Service {
             } => {
                 let subject = &services.subject;
 
-                let origin = config()
-                    .url
-                    .clone()
-                    .expect("Unexpected error: UniCore URL not set")
-                    .origin();
+                let origin = config().url.clone().origin();
                 let origin = identity_core::common::Url::parse(origin.ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
@@ -184,15 +180,8 @@ impl Aggregate for Service {
                 service_id,
                 presentation_ids,
             } => {
-                let origin = identity_core::common::Url::parse(
-                    config()
-                        .url
-                        .clone()
-                        .expect("Unexpected error: UniCore URL not set")
-                        .origin()
-                        .ascii_serialization(),
-                )
-                .map_err(|err| InvalidUrlError(err.to_string()))?;
+                let origin = identity_core::common::Url::parse(config().url.clone().origin().ascii_serialization())
+                    .map_err(|err| InvalidUrlError(err.to_string()))?;
 
                 let service_endpoint = ServiceEndpoint::from(OrderedSet::from_iter(
                     presentation_ids
@@ -392,12 +381,7 @@ pub mod test_utils {
     pub fn linked_verifiable_presentation_service(
         linked_verifiable_presentation_service_id: String,
     ) -> DocumentService {
-        let origin = config()
-            .url
-            .clone()
-            .expect("Unexpected error: UniCore URL not set")
-            .origin()
-            .ascii_serialization();
+        let origin = config().url.clone().origin().ascii_serialization();
 
         Service::builder(Default::default())
             .id(format!("did:place:holder#{linked_verifiable_presentation_service_id}")
