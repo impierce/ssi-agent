@@ -26,7 +26,8 @@ pub fn load_provisioned_config() -> Result<config::Config, config::ConfigError> 
     }
 
     // Load the appropriate .env file
-    if cfg!(feature = "test_utils") {
+    #[cfg(feature = "test_utils")]
+    {
         let env_test = load_env_file_variables("../.env.test");
         // Use the map as the environment source
         builder = builder.add_source(
@@ -35,6 +36,8 @@ pub fn load_provisioned_config() -> Result<config::Config, config::ConfigError> 
                 .source(Some(env_test)),
         );
     }
+    #[cfg(not(feature = "test_utils"))]
+    dotenvy::dotenv().ok();
 
     builder = builder.add_source(config::Environment::with_prefix("UNICORE").separator("__"));
 
