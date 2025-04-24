@@ -19,6 +19,7 @@ pub enum OfferCommand {
     AddCredentials {
         offer_id: String,
         credential_ids: Vec<String>,
+        credential_configuration_ids: Vec<String>,
     },
     SendCredentialOffer {
         offer_id: String,

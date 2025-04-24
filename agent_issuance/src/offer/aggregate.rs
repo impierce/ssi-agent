@@ -8,6 +8,7 @@ use oid4vci::credential_response::{CredentialResponse, CredentialResponseType};
 use oid4vci::token_request::TokenRequest;
 use oid4vci::token_response::TokenResponse;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::{debug, info};
 
@@ -76,11 +77,9 @@ impl Aggregate for Offer {
                     )
                 };
 
-                // TODO: This needs to be fixed when we implement Batch credentials.
-                let credentials_supported = credential_issuer_metadata.credential_configurations_supported.clone();
                 let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
                     credential_issuer: credential_issuer_metadata.credential_issuer.clone(),
-                    credential_configuration_ids: credentials_supported.keys().cloned().collect(),
+                    credential_configuration_ids: vec![],
                     grants: Some(Grants {
                         authorization_code: None,
                         pre_authorized_code: Some(PreAuthorizedCode {
@@ -125,10 +124,46 @@ impl Aggregate for Offer {
             AddCredentials {
                 offer_id,
                 credential_ids,
-            } => Ok(vec![CredentialsAdded {
-                offer_id,
-                credential_ids,
-            }]),
+                credential_configuration_ids,
+            } => {
+                let mut credential_offer = self
+                    .credential_offer
+                    .clone()
+                    .ok_or_else(|| MissingCredentialOfferError)?;
+
+                if let CredentialOffer::CredentialOffer(credential_offer) = &mut credential_offer {
+                    // Deduplicate credential_configuration_ids to ensure uniqueness
+                    let credential_configuration_id_set: HashSet<String> = credential_offer
+                        .credential_configuration_ids
+                        .iter()
+                        .cloned()
+                        .chain(credential_configuration_ids)
+                        .collect();
+
+                    credential_offer.credential_configuration_ids =
+                        credential_configuration_id_set.into_iter().collect();
+                } else {
+                    unreachable!();
+                }
+
+                let mut events = vec![CredentialsAdded {
+                    offer_id: offer_id.clone(),
+                    credential_ids: credential_ids.clone(),
+                    credential_offer: credential_offer.clone(),
+                }];
+
+                // If Credential Offer by Value is enabled, the form URL encoded Credential Offer needs to be updated.
+                if config().credential_offer_by_value_enabled {
+                    let form_url_encoded_credential_offer = credential_offer.to_string();
+                    events.push(FormUrlEncodedCredentialOfferCreated {
+                        offer_id: offer_id.clone(),
+                        form_url_encoded_credential_offer,
+                        status: Status::Pending,
+                    })
+                }
+
+                Ok(events)
+            }
             SendCredentialOffer { offer_id, target_url } => {
                 let client = reqwest::Client::new();
                 let target = self
@@ -257,9 +292,11 @@ impl Aggregate for Offer {
             CredentialsAdded {
                 offer_id,
                 credential_ids,
+                credential_offer,
             } => {
                 self.offer_id = offer_id;
                 self.credential_ids = credential_ids;
+                self.credential_offer.replace(credential_offer);
             }
             FormUrlEncodedCredentialOfferCreated {
                 offer_id,
