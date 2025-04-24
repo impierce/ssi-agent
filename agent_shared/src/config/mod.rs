@@ -835,7 +835,15 @@ mod tests {
                   ]
                 }
               ],
-              "signing_algorithms_supported": {},
+              "signing_algorithms_supported": {
+                "EdDSA": {
+                  "enabled": true,
+                  "preferred": true
+                },
+                "ES256": {
+                  "enabled": true
+                }
+              },
               "display": [
                 {
                   "name": "UniCore",
