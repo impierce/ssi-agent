@@ -127,6 +127,7 @@ pub(crate) async fn credentials(
     let command = OfferCommand::AddCredentials {
         offer_id: offer_id.clone(),
         credential_ids: vec![credential_id.clone()],
+        credential_configuration_ids: vec![credential_configuration_id],
     };
 
     // Add the credential to the offer.
