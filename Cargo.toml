@@ -7,10 +7,11 @@ members = [
     "agent_holder",
     "agent_identity",
     "agent_issuance",
+    "agent_macros",
     "agent_secret_manager",
     "agent_shared",
     "agent_store",
-    "agent_verification", "config_macro",
+    "agent_verification"
 ]
 
 [workspace.package]

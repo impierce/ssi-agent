@@ -283,6 +283,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent_macros"
+version = "0.1.0"
+dependencies = [
+ "darling 0.20.9",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.67",
+]
+
+[[package]]
 name = "agent_secret_manager"
 version = "0.1.0"
 dependencies = [
@@ -312,12 +322,12 @@ dependencies = [
 name = "agent_shared"
 version = "0.1.0"
 dependencies = [
+ "agent_macros",
  "agent_shared",
  "async-trait",
  "base64 0.22.1",
  "chrono",
  "config",
- "config_macro",
  "cqrs-es",
  "derive_more 2.0.1",
  "dotenvy",
@@ -1430,15 +1440,6 @@ dependencies = [
  "serde_json",
  "toml 0.8.14",
  "yaml-rust2",
-]
-
-[[package]]
-name = "config_macro"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.67",
 ]
 
 [[package]]

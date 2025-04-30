@@ -1,9 +1,8 @@
 // mod defaults;
 mod provisioned;
 
+use agent_macros::Config;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use config::ConfigError;
-use config_macro::Config;
 use identity_iota::storage::KeyId;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
@@ -11,7 +10,6 @@ use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
 use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::Lazy;
 use rand::Rng;
-// use provisioned::ProvisionedApplicationConfiguration;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_with::{skip_serializing_none, SerializeDisplay};
@@ -20,7 +18,6 @@ use std::{
     sync::{RwLock, RwLockReadGuard},
 };
 use strum::VariantArray;
-use tracing::{debug, info, warn};
 use url::Url;
 
 use crate::{error::SharedError, profile::ApplicationProfile};
@@ -36,7 +33,10 @@ static ES256_KEY_ID: &str = "es256-0";
 
 // Static configuration instance
 pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
-    RwLock::new(ApplicationConfiguration::load(load_provisioned_config().unwrap(), ApplicationProfile::load()).unwrap())
+    let application_configuration =
+        ApplicationConfiguration::load(load_provisioned_config().unwrap(), ApplicationProfile::load())
+            .unwrap_or_else(|e| panic!("{e}"));
+    RwLock::new(application_configuration)
 });
 
 // Accessor for the configuration
@@ -159,9 +159,7 @@ pub struct ApplicationConfiguration {
             ]
         )")]
     pub signing_algorithms_supported: HashMap<Algorithm, ToggleOptions>,
-    #[config(
-        default,
-        development_default = r#"vec![
+    #[config(development_default = r#"vec![
             Display {
                 name: "UniCore".to_string(),
                 locale: Some("en".to_string()),
@@ -170,8 +168,7 @@ pub struct ApplicationConfiguration {
                     alt_text: Some("Impierce Icon".to_string()),
                 }),
             }
-        ]"#
-    )]
+        ]"#)]
     pub display: Vec<Display>,
     #[config(default)]
     pub event_publishers: EventPublishers,
@@ -231,15 +228,15 @@ impl ApplicationConfiguration {
             ));
         }
 
-        // FIXME
-        // if std::env::var("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD")
-        //     .ok()
-        //     .is_none()
-        // {
-        //     return Err(SharedError::ConfigurationNotSuitableForProduction(
-        //         "Stronghold password must be provided as environment variable".to_string(),
-        //     ));
-        // }
+        #[cfg(not(feature = "test_utils"))]
+        if std::env::var("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD")
+            .ok()
+            .is_none()
+        {
+            return Err(SharedError::ConfigurationNotSuitableForProduction(
+                "Stronghold password must be provided as environment variable".to_string(),
+            ));
+        }
 
         // Password policy
         // TODO: refine
@@ -358,7 +355,7 @@ pub struct SecretManagerConfig {
 impl SecretManagerConfig {
     fn development_default() -> Self {
         let random_bytes: [u8; 32] = rand::thread_rng().gen();
-        let stronghold_password = URL_SAFE_NO_PAD.encode(&random_bytes)[..24].to_string();
+        let stronghold_password = URL_SAFE_NO_PAD.encode(random_bytes)[..24].to_string();
         println!(
             r#"
             #####################################################
@@ -716,18 +713,6 @@ where
     redacted_value.serialize(serializer)
 }
 
-fn overwrite_existing_fields(a: &mut serde_json::Value, b: &serde_json::Value) {
-    if let (Some(a_map), Some(b_map)) = (a.as_object_mut(), b.as_object()) {
-        for (k, a_v) in a_map.iter_mut() {
-            if let Some(b_v) = b_map.get(k) {
-                overwrite_existing_fields(a_v, b_v);
-            }
-        }
-    } else {
-        *a = b.clone();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -893,6 +878,8 @@ mod tests {
                         url: "http://localhost"
                         event_store:
                             type: "in_memory"
+                        display:
+                            - name: "UniCore"
                     "#,
                     config::FileFormat::Yaml,
                 ))
@@ -912,9 +899,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_validate_production_config_when_disrespecting_password_policy_fails() {
-        temp_env::with_var(
-            "UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD",
-            Some("too_short"),
+        temp_env::with_vars(
+            [("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("too_short"))],
             || {
                 let provisioned_config = config::Config::builder()
                     .add_source(config::File::from_str(
@@ -922,6 +908,8 @@ mod tests {
                             url: "http://localhost"
                             event_store:
                                 type: "in_memory"
+                            display:
+                                - name: "UniCore"
                         "#,
                         config::FileFormat::Yaml,
                     ))
@@ -952,6 +940,8 @@ mod tests {
                     .add_source(config::File::from_str(
                         r#"
                             url: "http://localhost"
+                            display:
+                                - name: "UniCore"
                         "#,
                         config::FileFormat::Yaml,
                     ))
@@ -982,6 +972,8 @@ mod tests {
                             url: "http://localhost"
                             event_store:
                                 type: "postgres"
+                            display:
+                                - name: "UniCore"
                         "#,
                         config::FileFormat::Yaml,
                     ))
@@ -999,39 +991,37 @@ mod tests {
         );
     }
 
-    // FIXME: make sure we can set specific errors (or can this be a generic error?)
-    // #[test]
-    // #[serial]
-    // fn test_validate_production_config_requires_explicit_url() {
-    //     temp_env::with_vars(
-    //         [
-    //             // ("UNICORE__CONFIG_FILE", Some("./config.yaml")),
-    //             ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("postgresql://:test:")),
-    //             ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
-    //             ("UNICORE__URL", None::<&str>),
-    //         ],
-    //         || {
-    //             let provisioned_config = config::Config::builder()
-    //                 .add_source(config::File::from_str(
-    //                     r#"
-    //                         event_store:
-    //                             type: "postgres"
-    //                     "#,
-    //                     config::FileFormat::Yaml,
-    //                 ))
-    //                 .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
-    //                 .build()
-    //                 .unwrap();
+    #[test]
+    #[serial]
+    fn test_validate_production_config_requires_explicit_url() {
+        temp_env::with_vars(
+            [
+                ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("postgresql://:test:")),
+                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
+                ("UNICORE__URL", None::<&str>),
+            ],
+            || {
+                let provisioned_config = config::Config::builder()
+                    .add_source(config::File::from_str(
+                        r#"
+                            event_store:
+                                type: "postgres"
+                        "#,
+                        config::FileFormat::Yaml,
+                    ))
+                    .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                    .build()
+                    .unwrap();
 
-    //             let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production);
+                let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production);
 
-    //             assert_eq!(
-    //                 config.unwrap_err().to_string(),
-    //                 "Configuration is not suitable for production: UniCore URL must be provided"
-    //             );
-    //         },
-    //     );
-    // }
+                assert_eq!(
+                    config.unwrap_err().to_string(),
+                    "Configuration is not suitable for production: `url` must be provided"
+                );
+            },
+        );
+    }
 
     #[test]
     #[serial]
@@ -1044,7 +1034,17 @@ mod tests {
                 ("UNICORE__URL", Some("http://localhost")),
             ],
             || {
-                let provisioned_config = load_provisioned_config().unwrap();
+                let provisioned_config = config::Config::builder()
+                    .add_source(load_provisioned_config().unwrap())
+                    .add_source(config::File::from_str(
+                        r#"
+                            display:
+                                - name: "UniCore"
+                        "#,
+                        config::FileFormat::Yaml,
+                    ))
+                    .build()
+                    .unwrap();
 
                 let config =
                     ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production).unwrap();
@@ -1052,14 +1052,18 @@ mod tests {
                 assert_eq!(
                     config.get_provisioned_config(),
                     json!({
-                      "config_file": "./does-not-exist.yaml",
                       "url": "http://localhost/",
                       "event_store": {
                         "connection_string": "<REDACTED>"
                       },
                       "secret_manager": {
                         "stronghold_password": "<REDACTED>"
-                      }
+                      },
+                      "display": [
+                        {
+                          "name": "UniCore"
+                        }
+                      ]
                     })
                 );
             },
@@ -1129,11 +1133,11 @@ mod tests {
         assert_eq!(config.url, Url::parse("http://localhost:3033").unwrap());
 
         // Enable centrally hosted DID methods
-        assert_eq!(config.did_methods.get(&SupportedDidMethod::Jwk).unwrap().enabled, true);
-        assert_eq!(config.did_methods.get(&SupportedDidMethod::Key).unwrap().enabled, true);
+        assert!(config.did_methods.get(&SupportedDidMethod::Jwk).unwrap().enabled);
+        assert!(config.did_methods.get(&SupportedDidMethod::Key).unwrap().enabled);
 
         // Domain linkage is disabled
-        assert_eq!(config.domain_linkage_enabled, false);
+        assert!(!config.domain_linkage_enabled);
 
         // Some display information is set
         assert_eq!(config.display.len(), 1);
@@ -1154,18 +1158,25 @@ mod tests {
             ],
             || {
                 let provisioned_config = config::Config::builder()
+                    .add_source(config::File::from_str(
+                        r#"
+                            display:
+                                - name: "UniCore"
+                        "#,
+                        config::FileFormat::Yaml,
+                    ))
                     .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
                     .build()
                     .unwrap();
                 let config =
                     ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production).unwrap();
 
-                assert_eq!(config.domain_linkage_enabled, true);
+                assert!(config.domain_linkage_enabled);
 
                 // Disable DID methods that do not support updates
-                assert_eq!(config.did_methods.get(&SupportedDidMethod::Jwk).unwrap().enabled, false);
-                assert_eq!(config.did_methods.get(&SupportedDidMethod::Key).unwrap().enabled, false);
-                assert_eq!(config.did_methods.get(&SupportedDidMethod::Web).unwrap().enabled, true);
+                assert!(!config.did_methods.get(&SupportedDidMethod::Jwk).unwrap().enabled);
+                assert!(!config.did_methods.get(&SupportedDidMethod::Key).unwrap().enabled);
+                assert!(config.did_methods.get(&SupportedDidMethod::Web).unwrap().enabled);
             },
         );
     }
