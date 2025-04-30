@@ -352,7 +352,7 @@ pub mod tests {
             assert!(external_server.received_requests().await.unwrap().len() == 1);
         }
     }
-    #[cfg(test)]
+
     pub async fn credential(app: &mut Router) -> (String, String) {
         credentials(app).await;
         let pre_authorized_code = offers(app).await.unwrap();
