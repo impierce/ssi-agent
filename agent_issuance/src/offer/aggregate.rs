@@ -215,8 +215,6 @@ impl Aggregate for Offer {
             } => {
                 // TODO: support batch credentials.
                 let (signed_credential, notification_id) = signed_credentials.pop().ok_or(MissingCredentialError)?;
-                // let signed_credential = signed_credentials.pop().ok_or(MissingCredentialError)?.0;
-                // let notification_id = signed_credentials.pop().ok_or(MissingCredentialError)?.1;
                 let credential_response = CredentialResponse {
                     credential: CredentialResponseType::Immediate {
                         credential: signed_credential,

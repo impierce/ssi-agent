@@ -1,7 +1,7 @@
+
 use crate::handlers::{command_handler, query_handler};
 use crate::issuance::error::{internal_server_error, PublicError};
 use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
-
 use axum::response::{IntoResponse, Response};
 use axum::{
     extract::{Json, State},
@@ -11,6 +11,7 @@ use axum_auth::AuthBearer;
 use oid4vci::errors::NotificationErrorResponse;
 use oid4vci::notification_request::NotificationRequest;
 use serde_json::json;
+
 use tracing::info;
 /// The HTTP response MUST use the HTTP status code 400 (Bad Request) and set the content type to application/json.
 /// Reference: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-13.html#name-notification-error-response
@@ -39,6 +40,7 @@ pub async fn notification(
 
     let credentials = match query_handler("all_credentials", &state.query.all_credentials).await {
         Ok(Some(all_credentials)) => all_credentials.credentials,
+
         _ => return Err(internal_server_error()),
     };
 
@@ -50,6 +52,7 @@ pub async fn notification(
     let credential_id = match credential_id {
         Some(id) => id,
         None => {
+
             return Err(PublicError::from(NotificationErrorResponse::InvalidNotificationId));
         }
     };
@@ -58,6 +61,7 @@ pub async fn notification(
         credential_id: credential_id.clone(),
         notification: notification_request,
     };
+
 
     if command_handler(&credential_id, &state.command.credential, command)
         .await

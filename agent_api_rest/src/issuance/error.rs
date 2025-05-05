@@ -11,7 +11,7 @@ use oid4vci::errors::{
     ErrorStatusCode, NotificationErrorResponse, OID4VCError, TokenErrorResponse,
 };
 use serde::{Deserialize, Serialize};
-/// use std::os::macos::raw::stat;
+
 impl IntoApiErrorExt for CredentialError {
     fn into_api_error(self) -> ApiError {
         use CredentialError::*;
@@ -109,6 +109,7 @@ impl IntoApiErrorExt for ServerConfigError {
         match self {}
     }
 }
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InternalServerError {
     pub error: String,
@@ -141,14 +142,6 @@ pub enum PublicError {
     NotificationError(OID4VCError<NotificationErrorResponse>),
     InternalServerError(InternalServerError),
 }
-
-// impl<T> From<T> for PublicError
-// where
-//     T: ErrorStatusCode,
-// {
-//     fn from(error: T) -> Self {
-//         PublicError::OID4VCError(OID4VCError::new(error))
-//
 
 impl axum::response::IntoResponse for PublicError {
     fn into_response(self) -> axum::response::Response {
@@ -234,6 +227,7 @@ pub fn token_error(error: TokenErrorResponse) -> Response {
     let status = error.error.status_code();
     (status, Json(error)).into_response()
 }
+
 pub fn token_error_to_api_error(error: TokenErrorResponse) -> ApiError {
     let status = error.status_code();
     ApiError::builder(status)
@@ -241,11 +235,13 @@ pub fn token_error_to_api_error(error: TokenErrorResponse) -> ApiError {
         .source(error)
         .finish()
 }
+
 pub fn credential_error(error: CredentialErrorResponse) -> Response {
     let error = OID4VCError::new(error);
     let status = error.error.status_code();
     (status, Json(error)).into_response()
 }
+
 pub fn credential_error_to_api_error(error: CredentialErrorResponse) -> ApiError {
     let status = error.status_code();
     //You could add .type_url for documentation URL (if needed)
@@ -254,19 +250,21 @@ pub fn credential_error_to_api_error(error: CredentialErrorResponse) -> ApiError
         .source(error)
         .finish()
 }
+
 pub fn batch_credential_error(error: BatchCredentialErrorResponse) -> Response {
     let error = OID4VCError::new(error);
     let status = error.error.status_code();
     (status, Json(error)).into_response()
 }
+
 pub fn batch_credential_error_to_api_error(error: BatchCredentialErrorResponse) -> ApiError {
     let status = error.status_code();
-
     ApiError::builder(status)
         .title(format!("OID4VCI Error: {}", error))
         .source(error)
         .finish()
 }
+
 pub fn deferred_credential_error(error: DeferredCredentialErrorResponse) -> Response {
     let error = OID4VCError::new(error);
     let status = error.error.status_code();
@@ -280,6 +278,7 @@ pub fn deferred_credential_error_to_api_error(error: DeferredCredentialErrorResp
         .source(error)
         .finish()
 }
+
 pub fn notification_error(error: NotificationErrorResponse) -> Response {
     let error = OID4VCError::new(error);
     let status = error.error.status_code();
