@@ -134,52 +134,94 @@ impl Default for InternalServerError {
         }
     }
 }
-pub enum PublicError<T: ErrorStatusCode> {
-    OID4VCError(OID4VCError<T>),
+pub enum PublicError {
+    // OID4VCError(OID4VCError<T>),
+    TokenError(OID4VCError<TokenErrorResponse>),
+    CredentialError(OID4VCError<CredentialErrorResponse>),
+    NotificationError(OID4VCError<NotificationErrorResponse>),
     InternalServerError(InternalServerError),
 }
 
-impl<T: ErrorStatusCode> From<T> for PublicError<T> {
-    fn from(error: T) -> Self {
-        PublicError::OID4VCError(OID4VCError::new(error))
-    }
-}
+// impl<T> From<T> for PublicError
+// where
+//     T: ErrorStatusCode,
+// {
+//     fn from(error: T) -> Self {
+//         PublicError::OID4VCError(OID4VCError::new(error))
+//
 
-pub fn into_response<T: ErrorStatusCode + Serialize>(error: PublicError<T>) -> Response {
-    match error {
-        PublicError::OID4VCError(oid4vc_error) => {
-            let status = oid4vc_error.error.status_code();
-            let json_body = serde_json::to_string(&oid4vc_error)
-                .unwrap_or_else(|_| String::from(r#"{"error":"serialization_error"}"#));
-
-            let mut response = Response::new(json_body.into());
-            *response.status_mut() = status;
-            response.headers_mut().insert(
-                "Content-Type",
-                http::header::HeaderValue::from_static("application/json"),
-            );
-
-            response
-        }
-        PublicError::InternalServerError(internal_error) => {
-            let status = internal_error.status_code();
-            let json_body = serde_json::to_string(&internal_error)
-                .unwrap_or_else(|_| String::from(r#"{"error":"internal_server_error"}"#));
-
-            let mut response = Response::new(json_body.into());
-            *response.status_mut() = status;
-            response.headers_mut().insert(
-                "Content-Type",
-                http::header::HeaderValue::from_static("application/json"),
-            );
-
-            response
+impl axum::response::IntoResponse for PublicError {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            PublicError::TokenError(oid4vc_error) => {
+                let status = oid4vc_error.error.status_code();
+                (status, axum::Json(oid4vc_error)).into_response()
+            }
+            PublicError::CredentialError(oid4vc_error) => {
+                let status = oid4vc_error.error.status_code();
+                (status, axum::Json(oid4vc_error)).into_response()
+            }
+            PublicError::NotificationError(oid4vc_error) => {
+                let status = oid4vc_error.error.status_code();
+                (status, axum::Json(oid4vc_error)).into_response()
+            }
+            PublicError::InternalServerError(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
     }
 }
+pub trait IntoPublicError: std::error::Error {
+    fn into_public_error(self) -> PublicError;
+}
 
-pub fn internal_server_error() -> Response {
-    into_response::<InternalServerError>(PublicError::InternalServerError(InternalServerError::default()))
+impl IntoPublicError for CredentialError {
+    fn into_public_error(self) -> PublicError
+// where
+    //     T: From<CredentialErrorResponse>,
+    {
+        use CredentialError::*;
+        match self {
+            UnsupportedCredentialFormat(_) => {
+                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::UnsupportedCredentialFormat))
+            }
+
+            UnsupportedCredentialType => {
+                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::UnsupportedCredentialType))
+            }
+
+            InvalidCredentialSubjectError(_) => PublicError::InternalServerError(InternalServerError::default()),
+
+            InvalidIdentifierError => PublicError::InternalServerError(InternalServerError::default()),
+
+            InvalidExpirationDateError => PublicError::InternalServerError(InternalServerError::default()),
+
+            // MissingCredentialDataError => PublicError::InternalServerError(InternalServerError::default()),
+
+            // Public API Errors
+            // `/openid4vci/credential` endpoint
+            MissingCredentialDataError => PublicError::InternalServerError(InternalServerError::default()),
+        }
+    }
+}
+
+impl From<CredentialErrorResponse> for PublicError {
+    fn from(err: CredentialErrorResponse) -> Self {
+        PublicError::CredentialError(OID4VCError::new(err))
+    }
+}
+impl From<TokenErrorResponse> for PublicError {
+    fn from(err: TokenErrorResponse) -> Self {
+        PublicError::TokenError(OID4VCError::new(err))
+    }
+}
+impl From<NotificationErrorResponse> for PublicError {
+    fn from(err: NotificationErrorResponse) -> Self {
+        PublicError::NotificationError(OID4VCError::new(err))
+    }
+}
+impl From<InternalServerError> for PublicError {
+    fn from(err: InternalServerError) -> Self {
+        PublicError::InternalServerError(err)
+    }
 }
 /// - OID4VCI Error Responses
 pub fn authorization_error(error: AuthorizationErrorResponse) -> Response {
@@ -242,6 +284,10 @@ pub fn notification_error(error: NotificationErrorResponse) -> Response {
     let error = OID4VCError::new(error);
     let status = error.error.status_code();
     (status, Json(error)).into_response()
+}
+
+pub fn internal_server_error() -> PublicError {
+    PublicError::InternalServerError(InternalServerError::default())
 }
 
 #[cfg(test)]

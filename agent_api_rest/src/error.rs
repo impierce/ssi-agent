@@ -1,4 +1,7 @@
-use crate::DOCUMENTATION_URL;
+use crate::{
+    issuance::error::{InternalServerError, PublicError},
+    DOCUMENTATION_URL,
+};
 use cqrs_es::{persist::PersistenceError, AggregateError};
 use http_api_problem::ApiError;
 use hyper::StatusCode;
@@ -32,12 +35,35 @@ impl IntoApiErrorExt for ApiError {
     }
 }
 
-impl IntoApiErrorExt for PersistenceError {
-    fn into_api_error(self) -> ApiError {
-        AggregateError::<ApiError>::from(self).into_api_error()
+impl<T: std::error::Error + IntoApiErrorExt> From<ErrorWrapper<T>> for PublicError {
+    fn from(err: ErrorWrapper<T>) -> Self {
+        match err {
+            ErrorWrapper::AggregateError(error) => PublicError::from(error),
+            ErrorWrapper::PersistenceError(error) => PublicError::from(error),
+        }
     }
 }
-
+impl<T: IntoApiErrorExt + std::error::Error> From<AggregateError<T>> for PublicError {
+    fn from(err: AggregateError<T>) -> Self {
+        match err {
+            AggregateError::UserError(error) => PublicError::InternalServerError(InternalServerError {
+                error: error.to_string(),
+            }),
+            AggregateError::AggregateConflict => PublicError::InternalServerError(InternalServerError {
+                error: "Aggregate Conflict".to_string(),
+            }),
+            AggregateError::DatabaseConnectionError(error) => PublicError::InternalServerError(InternalServerError {
+                error: format!("Database Connection Error: {}", error),
+            }),
+            AggregateError::DeserializationError(error) => PublicError::InternalServerError(InternalServerError {
+                error: format!("Deserialization Error: {}", error),
+            }),
+            AggregateError::UnexpectedError(error) => PublicError::InternalServerError(InternalServerError {
+                error: format!("Unexpected Error: {}", error),
+            }),
+        }
+    }
+}
 impl<T: IntoApiErrorExt> IntoApiErrorExt for AggregateError<T>
 where
     T: Send + Sync + 'static,
@@ -66,6 +92,58 @@ where
                 .type_url(format!("{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"))
                 .source_in_a_box(error)
                 .finish(),
+        }
+    }
+}
+impl IntoApiErrorExt for PersistenceError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            PersistenceError::OptimisticLockError => ApiError::builder(StatusCode::SERVICE_UNAVAILABLE)
+                .title("Optimistic Lock Error")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/persistence#optimistic-lock-error"
+                ))
+                .message("A conflict occurred while trying to update the resource. Please try again.")
+                .finish(),
+            PersistenceError::ConnectionError(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Database Connection Error")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/persistence#database-connection-error"
+                ))
+                .message(error)
+                .finish(),
+            PersistenceError::DeserializationError(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Deserialization Error")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/persistence#deserialization-error"
+                ))
+                .message(error)
+                .finish(),
+            PersistenceError::UnknownError(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Unexpected Error")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
+                ))
+                .message(error)
+                .finish(),
+        }
+    }
+}
+impl From<PersistenceError> for PublicError {
+    fn from(err: PersistenceError) -> Self {
+        match err {
+            PersistenceError::OptimisticLockError => PublicError::InternalServerError(InternalServerError {
+                error: "Optimistic Lock Error".to_string(),
+            }),
+            PersistenceError::ConnectionError(error) => PublicError::InternalServerError(InternalServerError {
+                error: format!("Database Connection Error: {}", error),
+            }),
+            PersistenceError::DeserializationError(error) => PublicError::InternalServerError(InternalServerError {
+                error: format!("Deserialization Error: {}", error),
+            }),
+            PersistenceError::UnknownError(error) => PublicError::InternalServerError(InternalServerError {
+                error: format!("Unexpected Error: {}", error),
+            }),
         }
     }
 }

@@ -1,5 +1,5 @@
 use crate::handlers::{command_handler, query_handler};
-use crate::issuance::error::{internal_server_error, into_response, PublicError};
+use crate::issuance::error::{internal_server_error, PublicError};
 use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
 
 use axum::response::{IntoResponse, Response};
@@ -11,7 +11,7 @@ use axum_auth::AuthBearer;
 use oid4vci::errors::NotificationErrorResponse;
 use oid4vci::notification_request::NotificationRequest;
 use serde_json::json;
-use tracing::{error, info};
+use tracing::info;
 /// The HTTP response MUST use the HTTP status code 400 (Bad Request) and set the content type to application/json.
 /// Reference: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-13.html#name-notification-error-response
 
@@ -20,32 +20,26 @@ pub async fn notification(
     State(state): State<IssuanceState>,
     AuthBearer(access_token): AuthBearer,
     Json(raw_value): Json<serde_json::Value>,
-) -> Response {
+) -> Result<Response, PublicError> {
     info!("Notification Request: {}", json!(raw_value));
 
-    let notification_request: NotificationRequest = match serde_json::from_value::<NotificationRequest>(raw_value) {
-        Ok(notification_request) => notification_request,
-        Err(e) => {
-            error!("Failed to parse notification request: {}", e);
-            return into_response(PublicError::from(NotificationErrorResponse::InvalidNotificationRequest));
-        }
-    };
+    let notification_request: NotificationRequest = serde_json::from_value::<NotificationRequest>(raw_value)
+        .map_err(|_| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
 
-    let access_token_result = match query_handler(&access_token, &state.query.access_token).await {
-        Ok(result) => result,
-        Err(_) => return internal_server_error(),
-    };
+    let access_token_result = query_handler(&access_token, &state.query.access_token)
+        .await
+        .map_err(|_| internal_server_error())?;
 
     let _offer_id = match access_token_result {
         Some(access_token_view) => access_token_view.offer_id,
         None => {
-            return into_response(PublicError::from(NotificationErrorResponse::InvalidToken));
+            return Err(PublicError::from(NotificationErrorResponse::InvalidToken));
         }
     };
 
     let credentials = match query_handler("all_credentials", &state.query.all_credentials).await {
         Ok(Some(all_credentials)) => all_credentials.credentials,
-        _ => return internal_server_error(),
+        _ => return Err(internal_server_error()),
     };
 
     let credential_id = credentials
@@ -56,7 +50,7 @@ pub async fn notification(
     let credential_id = match credential_id {
         Some(id) => id,
         None => {
-            return into_response(PublicError::from(NotificationErrorResponse::InvalidNotificationId));
+            return Err(PublicError::from(NotificationErrorResponse::InvalidNotificationId));
         }
     };
 
@@ -65,10 +59,13 @@ pub async fn notification(
         notification: notification_request,
     };
 
-    if let Err(_) = command_handler(&credential_id, &state.command.credential, command).await {
-        return internal_server_error();
+    if command_handler(&credential_id, &state.command.credential, command)
+        .await
+        .is_err()
+    {
+        return Err(internal_server_error());
     }
-    StatusCode::NO_CONTENT.into_response()
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 #[cfg(test)]
