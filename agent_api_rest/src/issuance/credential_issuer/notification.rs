@@ -58,7 +58,6 @@ pub async fn notification(
         credential_id: credential_id.clone(),
         notification: notification_request,
     };
-
     if command_handler(&credential_id, &state.command.credential, command)
         .await
         .is_err()
