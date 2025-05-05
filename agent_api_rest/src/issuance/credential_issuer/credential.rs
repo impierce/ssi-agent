@@ -32,6 +32,7 @@ pub(crate) async fn credential(
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> Result<Response, PublicError> {
+
     // Use the `access_token` to get the `offer_id` from the `AccessTokenView`.
     let offer_id = query_handler(&access_token, &state.query.access_token)
         .await?
@@ -108,6 +109,7 @@ pub(crate) async fn credential(
                 ..
             }) => (signed_credential, notification_id),
             _ => return Err(internal_server_error()),
+
         };
 
         signed_credentials.push(signed_credential);
