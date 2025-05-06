@@ -127,7 +127,6 @@ dependencies = [
  "serde_with 3.8.1",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -351,6 +350,7 @@ dependencies = [
  "thiserror",
  "time",
  "tracing",
+ "tracing-subscriber",
  "url",
 ]
 

@@ -7,6 +7,8 @@ pub enum SharedError {
     // This error should always be unreachable since all configuration fields should have a default value in development mode
     #[error("Configuration parameter `{0}` is missing a default value")]
     MissingDefaultValueForDevelopment(String),
+    #[error("Configuration is not suitable for development: {0}")]
+    ConfigurationNotSuitableForDevelopment(String),
     #[error("Configuration is not suitable for production: {0}")]
     ConfigurationNotSuitableForProduction(String),
 }

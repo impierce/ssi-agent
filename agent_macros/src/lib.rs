@@ -118,8 +118,8 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
 
                 // If the application is running in production mode, the configuration is validated.
                 match application_profile {
+                    ApplicationProfile::Development => res.validate_development()?,
                     ApplicationProfile::Production => res.validate()?,
-                    _ => {}
                 }
 
                 Ok(res)

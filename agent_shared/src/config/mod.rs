@@ -18,6 +18,8 @@ use std::{
     sync::{RwLock, RwLockReadGuard},
 };
 use strum::VariantArray;
+use tracing::{debug, info};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
 use crate::{error::SharedError, profile::ApplicationProfile};
@@ -35,7 +37,21 @@ static ES256_KEY_ID: &str = "es256-0";
 pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
     let application_configuration =
         ApplicationConfiguration::load(load_provisioned_config().unwrap(), ApplicationProfile::load())
+            // Fail fast when the configuration is not suitable for the current application profile.
             .unwrap_or_else(|e| panic!("{e}"));
+
+    let tracing_subscriber = tracing_subscriber::registry()
+        // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
+        .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
+
+    match application_configuration.log_format {
+        LogFormat::Json => tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init(),
+        LogFormat::Text => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
+    }
+
+    info!("Configuration loaded successfully");
+    debug!("{:#?}", application_configuration);
+
     RwLock::new(application_configuration)
 });
 
@@ -194,31 +210,25 @@ pub struct ApplicationConfiguration {
 }
 
 impl ApplicationConfiguration {
-    //     // TODO: include this logic again
+    /// Validates whether the configuration is suitable for development (enforce restrictions).
+    pub fn validate_development(&self) -> Result<(), SharedError> {
+        if self.event_store.type_ == EventStoreType::InMemory {
+            for did_method in &[SupportedDidMethod::Iota, SupportedDidMethod::IotaSmr] {
+                if self
+                    .did_methods
+                    .get(did_method)
+                    .map(|options| options.enabled)
+                    .unwrap_or_default()
+                {
+                    return Err(SharedError::ConfigurationNotSuitableForDevelopment(format!(
+                        "`{did_method}` cannot be enabled when using the `in_memory` event store"
+                    )));
+                }
+            }
+        }
 
-    //     // provisioned_config
-    //     //     .try_deserialize()
-    //     //     .inspect(|config: &ApplicationConfiguration| {
-    //     //         // TODO: this won't be logged either because `tracing_subscriber` is not initialized yet at this point. To
-    //     //         // fix this we can consider obtaining the `log_format` from the config file prior to loading the complete
-    //     //         // configuration.
-    //     //         info!("Configuration loaded successfully");
-    //     //         debug!("{:#?}", config);
-
-    //     //         if config.event_store.type_ == EventStoreType::InMemory {
-    //     //             for did_method in &[SupportedDidMethod::Iota, SupportedDidMethod::IotaSmr] {
-    //     //                 if config
-    //     //                     .did_methods
-    //     //                     .get(did_method)
-    //     //                     .map(|options| options.enabled)
-    //     //                     .unwrap_or_default()
-    //     //                 {
-    //     //                     panic!("`{did_method}` cannot be enabled when using the `in_memory` event store");
-    //     //                 }
-    //     //             }
-    //     //         }
-    //     //     })
-    // }
+        Ok(())
+    }
 
     /// Validates whether the configuration is suitable for production (enforce restrictions).
     pub fn validate(&self) -> Result<(), SharedError> {
