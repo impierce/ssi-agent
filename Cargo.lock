@@ -127,7 +127,6 @@ dependencies = [
  "serde_with 3.8.1",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -283,6 +282,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent_macros"
+version = "0.1.0"
+dependencies = [
+ "darling 0.20.9",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.67",
+]
+
+[[package]]
 name = "agent_secret_manager"
 version = "0.1.0"
 dependencies = [
@@ -312,14 +321,13 @@ dependencies = [
 name = "agent_shared"
 version = "0.1.0"
 dependencies = [
+ "agent_macros",
  "agent_shared",
  "async-trait",
  "base64 0.22.1",
  "chrono",
  "config",
- "config_macro",
  "cqrs-es",
- "derive_more 2.0.1",
  "dotenvy",
  "http-serde",
  "identity_iota",
@@ -328,7 +336,6 @@ dependencies = [
  "oid4vci",
  "oid4vp",
  "once_cell",
- "paste",
  "rand 0.8.5",
  "reqwest 0.12.5",
  "serde",
@@ -341,6 +348,7 @@ dependencies = [
  "thiserror",
  "time",
  "tracing",
+ "tracing-subscriber",
  "url",
 ]
 
@@ -1433,15 +1441,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "config_macro"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.67",
-]
-
-[[package]]
 name = "const-oid"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1517,15 +1516,6 @@ name = "convert_case"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec182b0ca2f35d8fc196cf3404988fd8b8c739a4d270ff118a398feb0cbec1ca"
-dependencies = [
- "unicode-segmentation",
-]
-
-[[package]]
-name = "convert_case"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb402b8d4c85569410425650ce3eddc7d698ed96d39a73f941b08fb63082f1e7"
 dependencies = [
  "unicode-segmentation",
 ]
@@ -1988,28 +1978,6 @@ dependencies = [
  "quote",
  "rustc_version",
  "syn 2.0.67",
-]
-
-[[package]]
-name = "derive_more"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "093242cf7570c207c83073cf82f79706fe7b8317e98620a47d5be7c3d8497678"
-dependencies = [
- "derive_more-impl",
-]
-
-[[package]]
-name = "derive_more-impl"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bda628edc44c4bb645fbe0f758797143e4e07926f7ebf4e9bdfbd3d2ce621df3"
-dependencies = [
- "convert_case 0.7.1",
- "proc-macro2",
- "quote",
- "syn 2.0.67",
- "unicode-xid",
 ]
 
 [[package]]
@@ -3791,7 +3759,7 @@ dependencies = [
  "bech32",
  "bitflags 2.5.0",
  "bytemuck",
- "derive_more 0.99.18",
+ "derive_more",
  "futures",
  "getset",
  "gloo-timers 0.3.0",
@@ -4945,7 +4913,7 @@ dependencies = [
  "async-trait",
  "base64-url",
  "derivative",
- "derive_more 0.99.18",
+ "derive_more",
  "did_url",
  "ed25519-dalek 2.1.1",
  "getset",
@@ -6924,7 +6892,7 @@ dependencies = [
  "async-trait",
  "base64-url",
  "chrono",
- "derive_more 0.99.18",
+ "derive_more",
  "did_url",
  "futures",
  "getset",
@@ -8297,12 +8265,6 @@ name = "unicode-width"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0336d538f7abc86d282a4189614dfaa90810dfc2c6f6427eaf88e16311dd225d"
-
-[[package]]
-name = "unicode-xid"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
 name = "unicode_categories"

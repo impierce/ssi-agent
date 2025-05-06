@@ -97,9 +97,7 @@ impl Aggregate for Offer {
                         .map_err(InvalidCredentialOfferUriError)?,
                 );
 
-                let credential_offer_by_value_enabled = config().credential_offer_by_value_enabled.clone();
-
-                let form_url_encoded_credential_offer = if credential_offer_by_value_enabled {
+                let form_url_encoded_credential_offer = if config().credential_offer_by_value_enabled {
                     credential_offer.to_string()
                 } else {
                     credential_offer_uri.to_string()

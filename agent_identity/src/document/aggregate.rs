@@ -213,7 +213,7 @@ impl Aggregate for Document {
                         }
                     }
                     SupportedDidMethod::Web => {
-                        let origin = config().url.clone().origin();
+                        let origin = config().url.origin();
 
                         info!("Origin: {}", &origin.ascii_serialization());
 

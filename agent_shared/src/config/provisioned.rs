@@ -1,5 +1,3 @@
-use std::{collections::HashMap, fs};
-
 use tracing::{info, warn};
 
 /// Loads provisioned configuration from a yaml file and environment variables.
@@ -52,9 +50,9 @@ pub fn load_provisioned_config() -> Result<config::Config, config::ConfigError> 
 // and provide it directly to the config builder. This approach ensures test isolation by not
 // modifying the global process environment.
 #[cfg(feature = "test_utils")]
-fn load_env_file_variables(path: &str) -> HashMap<String, String> {
-    let mut map = HashMap::new();
-    let content = fs::read_to_string(path).expect("Failed to read .env file");
+fn load_env_file_variables(path: &str) -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+    let content = std::fs::read_to_string(path).expect("Failed to read .env file");
     for line in content.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {

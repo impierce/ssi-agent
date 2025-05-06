@@ -16,9 +16,8 @@ pub async fn configuration(params: Query<QueryParams>) -> impl IntoResponse {
     if params.provisioned.unwrap_or(false) {
         // When "provisioned" query parameter is present and set to "true", then only the values are returned that have been _actively_ configured.
         // This helps implementers to understand which values can be changed during runtime and which ones are immutable.
-        let provisioned_config = config().clone().get_provisioned_config();
-        Json(serde_json::to_value(provisioned_config).unwrap())
+        Json(config().get_provisioned_config())
     } else {
-        Json(serde_json::to_value(config().clone()).unwrap())
+        Json(serde_json::json!(config().clone()))
     }
 }

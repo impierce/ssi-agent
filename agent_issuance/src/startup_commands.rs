@@ -37,6 +37,7 @@ pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
 }
 
 pub fn create_credentials_supported() -> Vec<ServerConfigCommand> {
+    // FIXME: fix unwraps
     let credential_configurations: Vec<CredentialConfiguration> = config()
         .credential_configuration_file
         .as_ref()
