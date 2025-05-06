@@ -11,7 +11,7 @@ members = [
     "agent_secret_manager",
     "agent_shared",
     "agent_store",
-    "agent_verification"
+    "agent_verification",
 ]
 
 [workspace.package]

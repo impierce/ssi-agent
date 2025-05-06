@@ -53,7 +53,7 @@ async fn main() -> io::Result<()> {
 
     info!("{:?}", config());
 
-    let url = &config().url.clone();
+    let url = &config().url;
 
     info!("Application url: {}", url);
 
