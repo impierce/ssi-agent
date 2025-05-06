@@ -3,7 +3,7 @@ mod provisioned;
 
 use agent_macros::Config;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use identity_iota::storage::KeyId;
+use identity_iota::{iota::block::output::feature, storage::KeyId};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
@@ -40,17 +40,20 @@ pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
             // Fail fast when the configuration is not suitable for the current application profile.
             .unwrap_or_else(|e| panic!("{e}"));
 
-    let tracing_subscriber = tracing_subscriber::registry()
-        // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
-        .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
+    #[cfg(not(feature = "test_utils"))]
+    {
+        let tracing_subscriber = tracing_subscriber::registry()
+            // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
+            .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
 
-    match application_configuration.log_format {
-        LogFormat::Json => tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init(),
-        LogFormat::Text => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
+        match application_configuration.log_format {
+            LogFormat::Json => tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init(),
+            LogFormat::Text => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
+        }
+
+        info!("Configuration loaded successfully");
+        debug!("{:#?}", application_configuration);
     }
-
-    info!("Configuration loaded successfully");
-    debug!("{:#?}", application_configuration);
 
     RwLock::new(application_configuration)
 });
