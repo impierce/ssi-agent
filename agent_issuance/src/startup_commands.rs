@@ -38,6 +38,7 @@ pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
 
 pub fn create_credentials_supported() -> Vec<ServerConfigCommand> {
     let credential_configurations: Vec<CredentialConfiguration> =
+        // TODO: make sure that multiple configurations are supported
         config().credential_configurations.iter().take(1).cloned().collect();
 
     let mut commands = Vec::new();
