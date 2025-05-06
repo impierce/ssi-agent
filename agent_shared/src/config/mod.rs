@@ -3,7 +3,7 @@ mod provisioned;
 
 use agent_macros::Config;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use identity_iota::{iota::block::output::feature, storage::KeyId};
+use identity_iota::storage::KeyId;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
@@ -18,8 +18,6 @@ use std::{
     sync::{RwLock, RwLockReadGuard},
 };
 use strum::VariantArray;
-use tracing::{debug, info};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
 use crate::{error::SharedError, profile::ApplicationProfile};
@@ -42,6 +40,9 @@ pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
 
     #[cfg(not(feature = "test_utils"))]
     {
+        use tracing::{debug, info};
+        use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
         let tracing_subscriber = tracing_subscriber::registry()
             // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
             .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
