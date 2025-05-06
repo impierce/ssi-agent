@@ -72,7 +72,11 @@ pub struct ApplicationConfiguration {
             connection_string: None
         }")]
     pub event_store: EventStoreConfig,
-    #[config(development_default = r#"Url::parse("http://localhost:3033").unwrap()"#)]
+    #[config(development_default = r#"{
+            let port = provisioned_config.get::<u16>("port").unwrap_or(3033);
+        
+            Url::parse(&format!("http://localhost:{port}")).unwrap()
+        }"#)]
     pub url: Url,
     #[config(default)]
     pub base_path: Option<String>,
@@ -366,6 +370,7 @@ impl SecretManagerConfig {
     fn development_default() -> Self {
         let random_bytes: [u8; 32] = rand::thread_rng().gen();
         let stronghold_password = URL_SAFE_NO_PAD.encode(random_bytes)[..24].to_string();
+
         println!(
             r#"
             #####################################################
