@@ -1,4 +1,5 @@
 use crate::handlers::{command_handler, query_handler};
+use crate::issuance::error::{internal_server_error, PublicError};
 use agent_issuance::{offer::command::OfferCommand, state::IssuanceState};
 use axum::{
     extract::{Json, State},
@@ -6,7 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
     Form,
 };
-use http_api_problem::ApiError;
+use oid4vci::errors::TokenErrorResponse;
 use oid4vci::token_request::TokenRequest;
 
 #[axum_macros::debug_handler]
@@ -14,19 +15,19 @@ pub(crate) async fn token(
     State(state): State<IssuanceState>,
     Form(token_request): Form<TokenRequest>,
     // TODO: implement official oid4vci error response. This TODO is also in the `credential` endpoint.
-) -> Result<Response, ApiError> {
+) -> Result<Response, PublicError> {
     // Get the `pre_authorized_code` from the `TokenRequest`.
     let pre_authorized_code = match &token_request {
         TokenRequest::PreAuthorizedCode {
             pre_authorized_code, ..
         } => pre_authorized_code,
-        _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
+        _ => return Err(PublicError::from(TokenErrorResponse::InvalidGrant)),
     };
 
     // Use the `pre_authorized_code` to get the `offer_id` from the `PreAuthorizedCodeView`.
     let offer_id = query_handler(pre_authorized_code, &state.query.pre_authorized_code)
         .await?
-        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED))?
+        .ok_or_else(|| PublicError::from(TokenErrorResponse::InvalidGrant))?
         .offer_id;
 
     let command = OfferCommand::CreateTokenResponse {
@@ -42,7 +43,7 @@ pub(crate) async fn token(
         .await?
         .and_then(|offer_view| offer_view.token_response)
         .map(|token_response| (StatusCode::OK, Json(token_response)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+        .ok_or_else(internal_server_error)
 }
 
 #[cfg(test)]

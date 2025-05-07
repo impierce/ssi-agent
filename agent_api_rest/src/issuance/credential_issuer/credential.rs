@@ -1,5 +1,10 @@
 use std::time::{Duration, Instant};
 
+use crate::{
+    handlers::{command_handler, query_handler},
+    issuance::error::internal_server_error,
+    issuance::error::PublicError,
+};
 use agent_issuance::{
     credential::{command::CredentialCommand, views::CredentialView},
     offer::{command::OfferCommand, views::OfferView},
@@ -13,12 +18,10 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
-use http_api_problem::ApiError;
 use oid4vci::credential_request::CredentialRequest;
+use oid4vci::errors::CredentialErrorResponse;
 use tokio::time::sleep;
 use tracing::error;
-
-use crate::handlers::{command_handler, query_handler};
 
 const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
 const POLLING_INTERVAL_MS: u64 = 100;
@@ -28,11 +31,11 @@ pub(crate) async fn credential(
     State(state): State<IssuanceState>,
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
-) -> Result<Response, ApiError> {
+) -> Result<Response, PublicError> {
     // Use the `access_token` to get the `offer_id` from the `AccessTokenView`.
     let offer_id = query_handler(&access_token, &state.query.access_token)
         .await?
-        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED))?
+        .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidToken))?
         .offer_id;
 
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
@@ -45,7 +48,7 @@ pub(crate) async fn credential(
                 Box::new(credential_issuer_metadata),
                 Box::new(authorization_server_metadata),
             ),
-            _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
+            _ => return Err(internal_server_error()),
         };
 
     let command = OfferCommand::VerifyCredentialRequest {
@@ -73,7 +76,7 @@ pub(crate) async fn credential(
                     sleep(Duration::from_millis(POLLING_INTERVAL_MS)).await;
                 } else {
                     error!("timeout failure");
-                    return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR));
+                    return Err(internal_server_error());
                 }
             }
             Some(OfferView {
@@ -82,7 +85,7 @@ pub(crate) async fn credential(
                 ..
             }) => break (credential_ids, subject_id),
             _ => {
-                return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR));
+                return Err(internal_server_error());
             }
         }
     };
@@ -104,7 +107,7 @@ pub(crate) async fn credential(
                 notification_id,
                 ..
             }) => (signed_credential, notification_id),
-            _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
+            _ => return Err(internal_server_error()),
         };
 
         signed_credentials.push(signed_credential);
@@ -123,7 +126,7 @@ pub(crate) async fn credential(
         .await?
         .and_then(|offer_view| offer_view.credential_response)
         .map(|credential_response| (StatusCode::OK, Json(credential_response)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+        .ok_or_else(internal_server_error)
 }
 
 #[cfg(test)]

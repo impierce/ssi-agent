@@ -1,8 +1,6 @@
-use crate::issuance::error::notification_error;
-use agent_issuance::{
-    credential::command::CredentialCommand, offer::queries::access_token::AccessTokenView, state::IssuanceState,
-};
-use agent_shared::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, query_handler};
+use crate::issuance::error::{internal_server_error, PublicError};
+use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
 use axum::response::{IntoResponse, Response};
 use axum::{
     extract::{Json, State},
@@ -12,35 +10,34 @@ use axum_auth::AuthBearer;
 use oid4vci::errors::NotificationErrorResponse;
 use oid4vci::notification_request::NotificationRequest;
 use serde_json::json;
-use tracing::{error, info};
+
+use tracing::info;
 /// The HTTP response MUST use the HTTP status code 400 (Bad Request) and set the content type to application/json.
 /// Reference: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-13.html#name-notification-error-response
+
 #[axum_macros::debug_handler]
 pub async fn notification(
     State(state): State<IssuanceState>,
     AuthBearer(access_token): AuthBearer,
     Json(raw_value): Json<serde_json::Value>,
-) -> Response {
+) -> Result<Response, PublicError> {
     info!("Notification Request: {}", json!(raw_value));
 
-    let notification_request: NotificationRequest = match serde_json::from_value::<NotificationRequest>(raw_value) {
-        Ok(notification_request) => notification_request,
-        Err(e) => {
-            error!("Failed to parse notification request: {}", e);
-            return notification_error(NotificationErrorResponse::InvalidNotificationRequest);
+    let notification_request: NotificationRequest = serde_json::from_value::<NotificationRequest>(raw_value)
+        .map_err(|_| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
+
+    let access_token_result = query_handler(&access_token, &state.query.access_token).await?;
+
+    let _offer_id = match access_token_result {
+        Some(access_token_view) => access_token_view.offer_id,
+        None => {
+            return Err(PublicError::from(NotificationErrorResponse::InvalidToken));
         }
     };
 
-    let _offer_id = match query_handler(&access_token, &state.query.access_token).await {
-        Ok(Some(AccessTokenView { offer_id })) => offer_id,
-        _ => {
-            return notification_error(NotificationErrorResponse::InvalidToken);
-        }
-    };
-
-    let credentials = match query_handler("all_credentials", &state.query.all_credentials).await {
-        Ok(Some(all_credentials)) => all_credentials.credentials,
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    let credentials = match query_handler("all_credentials", &state.query.all_credentials).await? {
+        Some(all_credentials) => all_credentials.credentials,
+        _ => return Err(internal_server_error()),
     };
 
     let credential_id = credentials.iter().find_map(|(credential_id, credential)| {
@@ -52,7 +49,7 @@ pub async fn notification(
     let credential_id = match credential_id {
         Some(id) => id,
         None => {
-            return notification_error(NotificationErrorResponse::InvalidNotificationId);
+            return Err(PublicError::from(NotificationErrorResponse::InvalidNotificationId));
         }
     };
 
@@ -61,11 +58,9 @@ pub async fn notification(
         notification: notification_request,
     };
 
-    if let Err(e) = command_handler(&credential_id, &state.command.credential, command).await {
-        error!("Failed to add notification: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-    StatusCode::NO_CONTENT.into_response()
+    command_handler(&credential_id, &state.command.credential, command).await?;
+
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 #[cfg(test)]
