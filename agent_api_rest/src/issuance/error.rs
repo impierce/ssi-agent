@@ -94,7 +94,6 @@ impl IntoApiErrorExt for ServerConfigError {
 }
 
 pub enum PublicError {
-    // OID4VCError(OID4VCError<T>),
     TokenError(OID4VCError<TokenErrorResponse>),
     CredentialError(OID4VCError<CredentialErrorResponse>),
     NotificationError(OID4VCError<NotificationErrorResponse>),
@@ -138,9 +137,6 @@ impl IntoPublicError for CredentialError {
             }
 
             _ => PublicError::InternalServerError,
-            // Public API Errors
-            // `/openid4vci/credential` endpoint
-            //MissingCredentialDataError => PublicError::InternalServerError,
         }
     }
 }
