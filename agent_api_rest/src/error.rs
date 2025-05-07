@@ -11,6 +11,11 @@ pub enum ErrorWrapper<T: std::error::Error> {
     PersistenceError(PersistenceError),
 }
 
+/// Helper function to construct type URLs for problem details.
+pub fn type_url(path: &str) -> String {
+    format!("{DOCUMENTATION_URL}problem-details/{path}")
+}
+
 impl<T: std::error::Error + IntoApiErrorExt> http_api_problem::IntoApiError for ErrorWrapper<T>
 where
     T: Send + Sync + 'static,
@@ -60,23 +65,23 @@ where
             AggregateError::UserError(error) => error.into_api_error(),
             AggregateError::AggregateConflict => ApiError::builder(StatusCode::SERVICE_UNAVAILABLE)
             .title("Aggregate Conflict")
-            .type_url(format!("{DOCUMENTATION_URL}problem-details/persistence#aggregate-conflict"))
+            .type_url(type_url("persistence#aggregate-conflict"))
             .message("The server is currently unable to handle the request due to temporary overloading or maintenance. Please try again later.")
             .finish(),
         AggregateError::DatabaseConnectionError(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
             .title("Database Connection Error")
-            .type_url(format!("{DOCUMENTATION_URL}problem-details/persistence#database-connection-error"))
+            .type_url(type_url("persistence#database-connection-error"))
             .source_in_a_box(error)
             .finish(),
         AggregateError::DeserializationError(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
             .title("Deserialization Error")
-            .type_url(format!("{DOCUMENTATION_URL}problem-details/persistence#deserialization-error"))
+            .type_url(type_url("persistence#deserialization-error"))
             .message("The system failed to deserialize events from the event store due to a schema mismatch. Data migration is not supported; therefore, the only resolution is to reset the event store by wiping the existing data.")
             .source_in_a_box(error)
             .finish(),
         AggregateError::UnexpectedError(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
             .title("Unexpected Error")
-            .type_url(format!("{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"))
+            .type_url(type_url("unexpected#unexpected-error"))
             .source_in_a_box(error)
                 .finish(),
         }

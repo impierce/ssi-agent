@@ -1,5 +1,4 @@
-use crate::error::IntoApiErrorExt;
-use crate::DOCUMENTATION_URL;
+use crate::error::{type_url, IntoApiErrorExt};
 use agent_issuance::{
     credential::error::CredentialError, offer::error::OfferError, server_config::error::ServerConfigError,
 };
@@ -19,37 +18,27 @@ impl IntoApiErrorExt for CredentialError {
             // UniCore API Problem Details
             UnsupportedCredentialFormat(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Unsupported Credential Format")
-                .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-format"
-                ))
+                .type_url(type_url("issuance#unsupported-credential-format"))
                 .source(self)
                 .finish(),
             UnsupportedCredentialType => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Unsupported Credential Type")
-                .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-type"
-                ))
+                .type_url(type_url("issuance#unsupported-credential-type"))
                 .source(self)
                 .finish(),
             InvalidCredentialSubjectError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Credential Subject")
-                .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details/issuance#invalid-credential-subject"
-                ))
+                .type_url(type_url("issuance#invalid-credential-subject"))
                 .source(self)
                 .finish(),
             InvalidIdentifierError => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Identifier")
-                .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details/issuance#invalid-identifier"
-                ))
+                .type_url(type_url("issuance#invalid-identifier"))
                 .source(self)
                 .finish(),
             InvalidExpirationDateError => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Expiration Date")
-                .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details/issuance#invalid-expiration-date"
-                ))
+                .type_url(type_url("issuance#invalid-expiration-date"))
                 .source(self)
                 .finish(),
 
@@ -69,23 +58,17 @@ impl IntoApiErrorExt for OfferError {
             // UniCore API Problem Details
             MissingCredentialOfferError => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Missing Credential Offer")
-                .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details/issuance#missing-credential-offer"
-                ))
+                .type_url(type_url("issuance#missing-credential-offer"))
                 .source(self)
                 .finish(),
             SendCredentialOfferError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Send Credential Offer Error")
-                .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details/issuance#send-credential-offer-error"
-                ))
+                .type_url(type_url("issuance#send-credential-offer-error"))
                 .source(self)
                 .finish(),
             InvalidCredentialOfferUriError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Unexpected Error")
-                .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
-                ))
+                .type_url(type_url("unexpected#unexpected-error"))
                 .source(self)
                 .finish(),
 
@@ -103,6 +86,7 @@ impl IntoApiErrorExt for OfferError {
     }
 }
 
+// TODO: Implement error mapping for ServerConfigError
 impl IntoApiErrorExt for ServerConfigError {
     fn into_api_error(self) -> ApiError {
         match self {}
@@ -136,15 +120,13 @@ impl axum::response::IntoResponse for PublicError {
         }
     }
 }
+
 pub trait IntoPublicError: std::error::Error {
     fn into_public_error(self) -> PublicError;
 }
 
 impl IntoPublicError for CredentialError {
-    fn into_public_error(self) -> PublicError
-// where
-    //     T: From<CredentialErrorResponse>,
-    {
+    fn into_public_error(self) -> PublicError {
         use CredentialError::*;
         match self {
             UnsupportedCredentialFormat(_) => {
@@ -164,10 +146,7 @@ impl IntoPublicError for CredentialError {
 }
 
 impl IntoPublicError for OfferError {
-    fn into_public_error(self) -> PublicError
-// where
-    //     T: From<CredentialErrorResponse>,
-    {
+    fn into_public_error(self) -> PublicError {
         use OfferError::*;
         match self {
             MissingCredentialOfferError => {
@@ -194,6 +173,7 @@ impl From<TokenErrorResponse> for PublicError {
         PublicError::TokenError(OID4VCError::new(err))
     }
 }
+
 impl From<NotificationErrorResponse> for PublicError {
     fn from(err: NotificationErrorResponse) -> Self {
         PublicError::NotificationError(OID4VCError::new(err))
@@ -205,6 +185,7 @@ pub fn authorization_error(error: AuthorizationErrorResponse) -> Response {
     let status = error.error.status_code();
     (status, Json(error)).into_response()
 }
+
 pub fn token_error(error: TokenErrorResponse) -> Response {
     let error = OID4VCError::new(error);
     let status = error.error.status_code();
@@ -276,6 +257,7 @@ pub fn internal_server_error() -> PublicError {
 pub mod tests {
     use super::*;
     use crate::error::tests::into_json_value;
+    use crate::DOCUMENTATION_URL;
     use serde_json::json;
 
     #[tokio::test]
