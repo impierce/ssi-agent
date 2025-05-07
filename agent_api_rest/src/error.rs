@@ -11,7 +11,7 @@ pub enum ErrorWrapper<T: std::error::Error> {
     PersistenceError(PersistenceError),
 }
 
-/// Helper function to construct type URLs for problem details.
+// Helper function to construct type URLs for problem details.
 pub fn type_url(path: &str) -> String {
     format!("{DOCUMENTATION_URL}problem-details/{path}")
 }
