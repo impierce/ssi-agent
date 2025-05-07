@@ -26,9 +26,7 @@ pub async fn notification(
     let notification_request: NotificationRequest = serde_json::from_value::<NotificationRequest>(raw_value)
         .map_err(|_| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
 
-    let access_token_result = query_handler(&access_token, &state.query.access_token)
-        .await
-        .map_err(|_| internal_server_error())?;
+    let access_token_result = query_handler(&access_token, &state.query.access_token).await?;
 
     let _offer_id = match access_token_result {
         Some(access_token_view) => access_token_view.offer_id,
@@ -37,16 +35,16 @@ pub async fn notification(
         }
     };
 
-    let credentials = match query_handler("all_credentials", &state.query.all_credentials).await {
-        Ok(Some(all_credentials)) => all_credentials.credentials,
-
+    let credentials = match query_handler("all_credentials", &state.query.all_credentials).await? {
+        Some(all_credentials) => all_credentials.credentials,
         _ => return Err(internal_server_error()),
     };
 
-    let credential_id = credentials
-        .iter()
-        .find(|entry| entry.1.notification_id.as_ref() == Some(&notification_request.notification_id))
-        .map(|entry| entry.0.clone());
+    let credential_id = credentials.iter().find_map(|(credential_id, credential)| {
+        let is_matching_notification =
+            credential.notification_id.as_ref() == Some(&notification_request.notification_id);
+        is_matching_notification.then_some(credential_id.clone())
+    });
 
     let credential_id = match credential_id {
         Some(id) => id,
@@ -60,12 +58,8 @@ pub async fn notification(
         notification: notification_request,
     };
 
-    if command_handler(&credential_id, &state.command.credential, command)
-        .await
-        .is_err()
-    {
-        return Err(internal_server_error());
-    }
+    command_handler(&credential_id, &state.command.credential, command).await?;
+
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 

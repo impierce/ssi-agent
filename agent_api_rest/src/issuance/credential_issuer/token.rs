@@ -35,17 +35,17 @@ pub(crate) async fn token(
         token_request,
     };
 
-    command_handler(&offer_id, &state.command.offer, command)
-        .await
-        .map_err(|_| internal_server_error())?;
+    // Create a `TokenResponse` using the `offer_id` and `token_request`.
+    command_handler(&offer_id, &state.command.offer, command).await?;
 
+    // Use the `offer_id` to get the `token_response` from the `OfferView`.
     query_handler(&offer_id, &state.query.offer)
         .await?
-        .ok_or_else(internal_server_error)?
-        .token_response
+        .and_then(|offer_view| offer_view.token_response)
         .map(|token_response| (StatusCode::OK, Json(token_response)).into_response())
         .ok_or_else(internal_server_error)
 }
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
