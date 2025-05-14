@@ -16,20 +16,13 @@ pub async fn stronghold_storage() -> StrongholdExtStorage {
 
     // TODO: security: this is potentially insecure, as it would allow creating a weakly encrypted Stronghold during development which could be taken to production
     // Can the "work factor" be detected and checked for an existing Stronghold file to prevent its usage in a production profile?
-    match ApplicationProfile::load() {
-        ApplicationProfile::Development => {
-            iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).unwrap();
-        }
-        _ => {}
+    if let ApplicationProfile::Development = ApplicationProfile::load() {
+        iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).unwrap();
     }
 
     info!("Initializing Stronghold storage");
 
-    let stronghold_password = config()
-        .secret_manager
-        .stronghold_password
-        .clone()
-        .expect("Stronghold password not set");
+    let stronghold_password = config().secret_manager.stronghold_password.clone();
     let stronghold_path = config().secret_manager.stronghold_path.clone();
 
     info!("Stronghold path: {stronghold_path}");

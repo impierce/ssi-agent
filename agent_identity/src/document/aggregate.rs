@@ -213,11 +213,7 @@ impl Aggregate for Document {
                         }
                     }
                     SupportedDidMethod::Web => {
-                        let origin = config()
-                            .url
-                            .clone()
-                            .expect("Unexpected error: UniCore URL not set")
-                            .origin();
+                        let origin = config().url.origin();
 
                         info!("Origin: {}", &origin.ascii_serialization());
 

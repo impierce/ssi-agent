@@ -7,11 +7,16 @@ UniCore can be configured using a configuration file or via environment variable
 By default, UniCore looks for a `config.yaml` file in the application root folder on startup. A path to a different config file can be specified using the `UNICORE__CONFIG_FILE` environment variable. An example config file can be found in [example.config.yaml](https://github.com/impierce/ssi-agent/blob/beta/agent_application/example.config.yaml). Using a config file generally gives a better overview over the configuration, while environment variables are commonly used to inject sensitive values or set deployment-specific values in a CI.
 
 :::info
-Environment variables **override** values specified in the configuration file. This allows you to define a base configuration in a file and override specific values using environment variables.
+
+Environment variables **override** values specified in the configuration file. This allows you to define a base
+configuration in a file and override specific values using environment variables.
+
 :::
 
 :::note
+
 All environment variables need to be prefixed with `UNICORE__` to prevent conflicts with other unrelated variables.
+
 :::
 
 ## Default and provisioned values
@@ -150,7 +155,9 @@ event_store:
 ## Look and Feel
 
 :::info
+
 Setting display values is currently not supported through environment variables. Please refer to `config.yaml`.
+
 :::
 
 <!-- TODO: DISPLAY_0_NAME: even configured through env vars? -->

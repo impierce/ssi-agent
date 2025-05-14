@@ -83,6 +83,7 @@ mod tests {
     use serde_json;
     use tower::ServiceExt;
 
+    #[serial_test::serial]
     #[tokio::test]
     async fn test_valid_notification_request() {
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
