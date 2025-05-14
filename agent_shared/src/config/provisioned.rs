@@ -23,47 +23,36 @@ pub fn load_provisioned_config() -> Result<config::Config, config::ConfigError> 
         warn!("Config file not found: `{}`", config_file_path.display());
     }
 
-    // Load the appropriate .env file
     #[cfg(feature = "test_utils")]
     {
-        let env_test = load_env_file_variables("../.env.test");
-        // Use the map as the environment source
-        builder = builder.add_source(
-            config::Environment::with_prefix("UNICORE")
-                .separator("__")
-                .source(Some(env_test)),
-        );
+        let config = temp_env::with_vars(
+            [
+                (
+                    "UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD",
+                    Some("VNvRtH4tKyWwvJDpL6Vuc2aoLiKAecGQ"),
+                ),
+                ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("postgresql://:test:")),
+            ],
+            || {
+                builder
+                    .add_source(
+                        config::Environment::with_prefix("UNICORE").separator("__"), // .source(Some(env_test)),
+                    )
+                    .build()
+            },
+        )?;
+
+        Ok(config)
     }
     #[cfg(not(feature = "test_utils"))]
-    dotenvy::dotenv().ok();
+    {
+        // Load the appropriate .env file
+        dotenvy::dotenv().ok();
 
-    builder = builder.add_source(config::Environment::with_prefix("UNICORE").separator("__"));
+        let config = builder
+            .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+            .build()?;
 
-    let config = builder.build()?;
-
-    Ok(config)
-}
-
-// We avoid using the `dotenvy` crate here because it sets environment variables globally,
-// which can cause interference between tests (even when run serially) if one test sets a variable
-// that another test expects to be unset. Instead, we manually load the .env file into a HashMap
-// and provide it directly to the config builder. This approach ensures test isolation by not
-// modifying the global process environment.
-#[cfg(feature = "test_utils")]
-fn load_env_file_variables(path: &str) -> std::collections::HashMap<String, String> {
-    let mut map = std::collections::HashMap::new();
-    let content = std::fs::read_to_string(path).expect("Failed to read .env file");
-    for line in content.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if let Some((key, value)) = line.split_once('=') {
-            map.insert(
-                key.trim().to_string(),
-                value.trim_start_matches('"').trim_end_matches('"').to_string(),
-            );
-        }
+        Ok(config)
     }
-    map
 }

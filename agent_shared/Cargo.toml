@@ -27,6 +27,7 @@ serde_json.workspace = true
 serde_with = "3.0"
 serde_yaml.workspace = true
 strum = { version = "0.26", features = ["derive"] }
+temp-env = "0.3"
 thiserror.workspace = true
 time = { version = "0.3" }
 tracing.workspace = true
@@ -36,7 +37,6 @@ url.workspace = true
 [dev-dependencies]
 agent_shared = { path = ".", features = ["test_utils"] }
 serial_test = "3.0"
-temp-env = "0.3"
 
 [features]
 local_development = []
