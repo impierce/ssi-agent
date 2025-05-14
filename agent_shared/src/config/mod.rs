@@ -228,7 +228,7 @@ impl ApplicationConfiguration {
                     .map(|options| options.enabled)
                     .unwrap_or_default()
                 {
-                    return Err(SharedError::ConfigurationNotSuitableForDevelopment(format!(
+                    return Err(SharedError::InvalidConfiguration(format!(
                         "`{did_method}` cannot be enabled when using the `in_memory` event store"
                     )));
                 }
