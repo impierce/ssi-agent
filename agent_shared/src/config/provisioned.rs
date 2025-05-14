@@ -35,9 +35,7 @@ pub fn load_provisioned_config() -> Result<config::Config, config::ConfigError> 
             ],
             || {
                 builder
-                    .add_source(
-                        config::Environment::with_prefix("UNICORE").separator("__"), // .source(Some(env_test)),
-                    )
+                    .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
                     .build()
             },
         )?;
