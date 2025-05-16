@@ -9,6 +9,7 @@ pub enum CredentialCommand {
     CreateUnsignedCredential {
         data: Data,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
+        // conv_args: Option<ConvArgs> TODO
     },
     CreateSignedCredential {
         signed_credential: serde_json::Value,

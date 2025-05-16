@@ -58,6 +58,7 @@ impl Aggregate for Credential {
             CreateUnsignedCredential {
                 data,
                 credential_configuration,
+                // conv_args: _
             } => match &credential_configuration.credential_format {
                 CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
                     parameters:

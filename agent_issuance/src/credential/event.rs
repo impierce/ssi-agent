@@ -17,6 +17,11 @@ pub enum CredentialEvent {
     CredentialSigned {
         signed_credential: serde_json::Value,
     },
+    // UnsignedCredentialConversion {
+    //    old_data: Data,
+    //    new_data: Data,
+    //    conv_args: ConvArgs,
+    // }
 }
 
 impl DomainEvent for CredentialEvent {
