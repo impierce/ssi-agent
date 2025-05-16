@@ -1,7 +1,7 @@
-use agent_shared::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, query_handler};
 use agent_verification::{
-    authorization_request::queries::AuthorizationRequestView, connection::command::ConnectionCommand,
-    generic_oid4vc::GenericAuthorizationResponse, state::VerificationState,
+    authorization_request::command::AuthorizationRequestCommand, generic_oid4vc::GenericAuthorizationResponse,
+    state::VerificationState,
 };
 use axum::{
     extract::State,
@@ -9,47 +9,43 @@ use axum::{
     response::{IntoResponse, Response},
     Form,
 };
+use http_api_problem::ApiError;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn redirect(
     State(verification_state): State<VerificationState>,
     Form(authorization_response): Form<GenericAuthorizationResponse>,
-) -> Response {
+) -> Result<Response, ApiError> {
     let authorization_request_id = if let Some(state) = authorization_response.state() {
         state.clone()
     } else {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        // TODO: Return a standardized error response.
+        return Err(ApiError::new(StatusCode::BAD_REQUEST));
     };
 
     // Retrieve the authorization request.
-    let authorization_request = match query_handler(
+    let authorization_request = query_handler(
         &authorization_request_id,
         &verification_state.query.authorization_request,
     )
-    .await
-    {
-        Ok(Some(AuthorizationRequestView {
-            authorization_request: Some(authorization_request),
-            ..
-        })) => authorization_request,
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
+    .await?
+    .and_then(|authorization_request_view| authorization_request_view.authorization_request)
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
 
-    let connection_id = authorization_request.client_id();
-
-    let command = ConnectionCommand::VerifyAuthorizationResponse {
+    let command = AuthorizationRequestCommand::VerifyAuthorizationResponse {
         authorization_request,
         authorization_response,
     };
 
     // Verify the authorization response.
-    if command_handler(&connection_id, &verification_state.command.connection, command)
-        .await
-        .is_err()
-    {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-    StatusCode::OK.into_response()
+    command_handler(
+        &authorization_request_id,
+        &verification_state.command.authorization_request,
+        command,
+    )
+    .await?;
+
+    Ok(StatusCode::OK.into_response())
 }
 
 #[cfg(test)]
@@ -61,7 +57,7 @@ pub mod tests {
         authorization_requests::tests::authorization_requests, relying_party::request::tests::request, router,
     };
     use agent_event_publisher_http::EventPublisherHttp;
-    use agent_secret_manager::{secret_manager, service::Service, subject::Subject};
+    use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{set_config, Events};
     use agent_store::{in_memory, EventPublisher};
     use axum::{
@@ -106,14 +102,8 @@ pub mod tests {
             .build()
             .unwrap();
 
-        let provider_manager = ProviderManager::new(
-            Arc::new(Subject {
-                secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
-            }),
-            vec!["did:key"],
-            vec![Algorithm::EdDSA],
-        )
-        .unwrap();
+        let provider_manager =
+            ProviderManager::new(Arc::new(Subject::default()), vec!["did:key"], vec![Algorithm::EdDSA]).unwrap();
         let authorization_response = provider_manager
             .generate_response(&authorization_request, Default::default())
             .await
@@ -153,7 +143,9 @@ pub mod tests {
         set_config().enable_event_publisher_http();
         set_config().set_event_publisher_http_target_url(target_url.clone());
         set_config().set_event_publisher_http_target_events(Events {
-            connection: vec![agent_shared::config::ConnectionEvent::SIOPv2AuthorizationResponseVerified],
+            authorization_request: vec![
+                agent_shared::config::AuthorizationRequestEvent::SIOPv2AuthorizationResponseVerified,
+            ],
             ..Default::default()
         });
 

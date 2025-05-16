@@ -49,5 +49,5 @@ where
     state
         .execute_with_metadata(aggregate_id, command, metadata)
         .await
-        .inspect_err(|err| error!("Error: {:?}", err))
+        .inspect_err(|err| error!("Error: {}", err.to_string()))
 }

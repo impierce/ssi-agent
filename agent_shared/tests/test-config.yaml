@@ -10,12 +10,11 @@ did_methods:
   did_key:
     enabled: true
     preferred: true
-  did_iota_rms:
-    enabled: true
   did_web:
     enabled: false
 
 domain_linkage_enabled: false
+credential_offer_by_value_enabled: true
 
 signing_algorithms_supported:
   eddsa:
@@ -32,6 +31,8 @@ event_publishers:
   http:
     enabled: false
     target_url: "http://localhost"
+    headers:
+      Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
     events:
       server_config: []
       credential: [UnsignedCredentialCreated, CredentialSigned]
@@ -57,8 +58,6 @@ credential_configurations:
           alt_text: UniCore Logo
 
 secret_manager:
-  stronghold_path: "../agent_secret_manager/tests/res/selv.stronghold"
+  stronghold_path: "../agent_secret_manager/tests/res/test.stronghold.dat"
   stronghold_password: "VNvRtH4tKyWwvJDpL6Vuc2aoLiKAecGQ"
   issuer_eddsa_key_id: "UVDxWhG2rB39FkaR7I27mHeUNrGtUgcr"
-  issuer_did: "did:iota:rms:0x42ad588322e58b3c07aa39e4948d021ee17ecb5747915e9e1f35f028d7ecaf90"
-  issuer_fragment: "bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"

@@ -5,13 +5,13 @@ use std::sync::Arc;
 use tracing::{info, warn};
 
 use crate::credential::aggregate::Credential;
-use crate::credential::queries::all_credentials::AllCredentialsView;
-use crate::credential::queries::CredentialView;
+use crate::credential::views::all_credentials::AllCredentialsView;
+use crate::credential::views::CredentialView;
 use crate::offer::aggregate::Offer;
 use crate::offer::queries::access_token::AccessTokenView;
-use crate::offer::queries::all_offers::AllOffersView;
 use crate::offer::queries::pre_authorized_code::PreAuthorizedCodeView;
-use crate::offer::queries::OfferView;
+use crate::offer::views::all_offers::AllOffersView;
+use crate::offer::views::OfferView;
 use crate::server_config::aggregate::ServerConfig;
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::queries::ServerConfigView;
@@ -81,7 +81,7 @@ pub const SERVER_CONFIG_ID: &str = "SERVER-CONFIG-001";
 
 /// Initialize the application state by executing the startup commands.
 pub async fn initialize(state: &IssuanceState, startup_commands: Vec<ServerConfigCommand>) {
-    info!("Initializing ...");
+    info!("Initializing the issuance state ...");
 
     for command in startup_commands {
         let command_string = format!("{:?}", command).split(' ').next().unwrap().to_string();

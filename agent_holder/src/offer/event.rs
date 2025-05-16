@@ -1,4 +1,4 @@
-use super::aggregate::Status;
+use super::aggregate::{OfferCredential, Status};
 use cqrs_es::DomainEvent;
 use oid4vci::{
     credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject,
@@ -6,45 +6,37 @@ use oid4vci::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use strum::Display;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
 pub enum OfferEvent {
     CredentialOfferReceived {
-        offer_id: String,
+        received_offer_id: String,
         credential_offer: Box<CredentialOfferParameters>,
         credential_configurations: HashMap<String, CredentialConfigurationsSupportedObject>,
     },
     CredentialOfferAccepted {
-        offer_id: String,
+        received_offer_id: String,
         status: Status,
     },
     TokenResponseReceived {
-        offer_id: String,
+        received_offer_id: String,
         token_response: TokenResponse,
     },
     CredentialResponseReceived {
-        offer_id: String,
+        received_offer_id: String,
         status: Status,
-        credentials: Vec<serde_json::Value>,
+        credentials: Vec<OfferCredential>,
     },
     CredentialOfferRejected {
-        offer_id: String,
+        received_offer_id: String,
         status: Status,
     },
 }
 
 impl DomainEvent for OfferEvent {
     fn event_type(&self) -> String {
-        use OfferEvent::*;
-
-        let event_type: &str = match self {
-            CredentialOfferReceived { .. } => "CredentialOfferReceived",
-            CredentialOfferAccepted { .. } => "CredentialOfferAccepted",
-            TokenResponseReceived { .. } => "AccessTokenReceived",
-            CredentialResponseReceived { .. } => "CredentialResponseReceived",
-            CredentialOfferRejected { .. } => "CredentialOfferRejected",
-        };
-        event_type.to_string()
+        self.to_string()
     }
 
     fn event_version(&self) -> String {

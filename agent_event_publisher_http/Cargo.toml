@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 agent_holder = { path = "../agent_holder" }
+agent_identity = { path = "../agent_identity" }
 agent_issuance = { path = "../agent_issuance" }
 agent_shared = { path = "../agent_shared" }
 agent_store = { path = "../agent_store" }
@@ -14,6 +15,7 @@ agent_verification = { path = "../agent_verification" }
 anyhow = "1.0"
 async-trait.workspace = true
 cqrs-es.workspace = true
+http-serde = "2.1"
 rustls = { version = "0.23", default-features = false, features = [
     "logging",
     "std",
@@ -22,7 +24,6 @@ rustls = { version = "0.23", default-features = false, features = [
 reqwest.workspace = true
 serde.workspace = true
 serde_with.workspace = true
-serde_yaml.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 

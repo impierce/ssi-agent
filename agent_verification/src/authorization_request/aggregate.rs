@@ -1,22 +1,28 @@
 use super::{command::AuthorizationRequestCommand, error::AuthorizationRequestError, event::AuthorizationRequestEvent};
 use crate::{
-    generic_oid4vc::{GenericAuthorizationRequest, OID4VPAuthorizationRequest, SIOPv2AuthorizationRequest},
+    generic_oid4vc::{
+        GenericAuthorizationRequest, GenericAuthorizationResponse, OID4VPAuthorizationRequest,
+        SIOPv2AuthorizationRequest,
+    },
     services::VerificationServices,
 };
 use agent_shared::config::{config, get_preferred_signing_algorithm};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use oid4vc_core::{authorization_request::ByReference, scope::Scope};
-use oid4vp::authorization_request::ClientIdScheme;
+use oid4vp::{authorization_request::ClientIdScheme, Oid4vpParams};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{debug, info};
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct AuthorizationRequest {
-    authorization_request: Option<GenericAuthorizationRequest>,
-    form_url_encoded_authorization_request: Option<String>,
-    signed_authorization_request_object: Option<String>,
+    pub authorization_request: Option<GenericAuthorizationRequest>,
+    pub form_url_encoded_authorization_request: Option<String>,
+    pub signed_authorization_request_object: Option<String>,
+    pub id_token: Option<String>,
+    pub vp_token: Option<String>,
+    pub state: Option<String>,
 }
 
 #[async_trait]
@@ -51,8 +57,10 @@ impl Aggregate for AuthorizationRequest {
                     .unwrap();
 
                 let url = &config().url;
-                let request_uri = format!("{url}/request/{state}").parse().unwrap();
-                let redirect_uri = format!("{url}/redirect").parse::<url::Url>().unwrap();
+
+                // TODO: ensure that URLs like these are validated during configuration.
+                let request_uri = format!("{url}request/{state}").parse().unwrap();
+                let redirect_uri = format!("{url}redirect").parse::<url::Url>().unwrap();
 
                 let authorization_request = Box::new(if let Some(presentation_definition) = presentation_definition {
                     GenericAuthorizationRequest::OID4VP(Box::new(
@@ -127,13 +135,52 @@ impl Aggregate for AuthorizationRequest {
                     signed_authorization_request_object,
                 }])
             }
+            VerifyAuthorizationResponse {
+                // TODO: use this once `RelyingPartyManager` uses the official SIOPv2 validation logic.
+                authorization_request: _,
+                authorization_response,
+            } => {
+                let relying_party = &services.relying_party;
+
+                match authorization_response {
+                    GenericAuthorizationResponse::SIOPv2(authorization_response) => {
+                        let _ = relying_party
+                            .validate_response(&authorization_response)
+                            .await
+                            .map_err(InvalidSIOPv2AuthorizationResponse)?;
+
+                        let id_token = authorization_response.extension.id_token.clone();
+
+                        Ok(vec![SIOPv2AuthorizationResponseVerified {
+                            id_token,
+                            state: authorization_response.state,
+                        }])
+                    }
+                    GenericAuthorizationResponse::OID4VP(oid4vp_authorization_response) => {
+                        let _ = relying_party
+                            .validate_response(&oid4vp_authorization_response)
+                            .await
+                            .map_err(InvalidOID4VPAuthorizationResponse)?;
+
+                        let vp_token = match oid4vp_authorization_response.extension.oid4vp_parameters {
+                            Oid4vpParams::Params { vp_token, .. } => vp_token,
+                            Oid4vpParams::Jwt { .. } => return Err(UnsupportedAuthorizationResponseParameterError),
+                        };
+
+                        Ok(vec![OID4VPAuthorizationResponseVerified {
+                            vp_token,
+                            state: oid4vp_authorization_response.state,
+                        }])
+                    }
+                }
+            }
         }
     }
 
     fn apply(&mut self, event: Self::Event) {
         use AuthorizationRequestEvent::*;
 
-        info!("Applying event: {:?}", event);
+        debug!("Applying event: {:?}", event);
 
         match event {
             AuthorizationRequestCreated { authorization_request } => {
@@ -151,6 +198,14 @@ impl Aggregate for AuthorizationRequest {
                 self.signed_authorization_request_object
                     .replace(signed_authorization_request_object);
             }
+            SIOPv2AuthorizationResponseVerified { id_token, state } => {
+                self.id_token.replace(id_token);
+                self.state = state;
+            }
+            OID4VPAuthorizationResponseVerified { vp_token, state } => {
+                self.vp_token.replace(vp_token);
+                self.state = state;
+            }
         }
     }
 }
@@ -159,16 +214,22 @@ impl Aggregate for AuthorizationRequest {
 pub mod tests {
     use std::str::FromStr;
 
-    use agent_secret_manager::secret_manager;
     use agent_secret_manager::service::Service as _;
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::set_config;
     use agent_shared::config::SupportedDidMethod;
     use cqrs_es::test::TestFramework;
+    use identity_credential::credential::Jwt;
+    use identity_credential::presentation::Presentation;
     use jsonwebtoken::Algorithm;
     use lazy_static::lazy_static;
     use oid4vc_core::Subject as _;
     use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
+    use oid4vc_manager::managers::presentation::create_presentation_submission;
+    use oid4vc_manager::ProviderManager;
+    use oid4vci::VerifiableCredentialJwt;
+    use oid4vp::oid4vp::AuthorizationResponseInput;
+    use oid4vp::oid4vp::PresentationInputType;
     use oid4vp::PresentationDefinition;
     use rstest::rstest;
     use serde_json::json;
@@ -180,10 +241,9 @@ pub mod tests {
     #[rstest]
     #[serial_test::serial]
     async fn test_create_authorization_request(
-        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
-        verifier_did_method: SupportedDidMethod,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
     ) {
-        set_config().set_preferred_did_method(verifier_did_method.clone());
+        set_config().set_preferred_did_method(verifier_did_method);
 
         let verification_services = VerificationServices::default();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
@@ -219,10 +279,9 @@ pub mod tests {
     #[rstest]
     #[serial_test::serial]
     async fn test_sign_authorization_request_object(
-        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
-        verifier_did_method: SupportedDidMethod,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
     ) {
-        set_config().set_preferred_did_method(verifier_did_method.clone());
+        set_config().set_preferred_did_method(verifier_did_method);
 
         let verification_services = VerificationServices::default();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
@@ -253,6 +312,140 @@ pub mod tests {
                     &verifier_did_method.to_string(),
                 ),
             }]);
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_verify_authorization_response(
+        // "id_token" represents the `SIOPv2` flow, and "vp_token" represents the `OID4VP` flow.
+        #[values("id_token", "vp_token")] response_type: &str,
+        // TODO: add `did:web`, check for other tests as well. Probably should be moved to E2E test.
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] provider_did_method: SupportedDidMethod,
+    ) {
+        set_config().set_preferred_did_method(verifier_did_method);
+
+        let verification_services = VerificationServices::default();
+        let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
+        let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
+
+        let authorization_request = authorization_request(
+            response_type,
+            &verifier_did_method.to_string(),
+            siopv2_client_metadata,
+            oid4vp_client_metadata,
+        )
+        .await;
+
+        let authorization_response =
+            authorization_response(&provider_did_method.to_string(), &authorization_request).await;
+        let token = authorization_response.token();
+
+        AuthorizationRequestTestFramework::with(verification_services)
+            .given_no_previous_events()
+            .when(AuthorizationRequestCommand::VerifyAuthorizationResponse {
+                authorization_request,
+                authorization_response,
+            })
+            .then_expect_events(vec![match response_type {
+                "id_token" => AuthorizationRequestEvent::SIOPv2AuthorizationResponseVerified {
+                    id_token: token,
+                    state: Some("state".to_string()),
+                },
+                "vp_token" => AuthorizationRequestEvent::OID4VPAuthorizationResponseVerified {
+                    vp_token: token,
+                    state: Some("state".to_string()),
+                },
+                _ => unreachable!("Invalid response type."),
+            }]);
+    }
+
+    async fn authorization_response(
+        did_method: &str,
+        authorization_request: &GenericAuthorizationRequest,
+    ) -> GenericAuthorizationResponse {
+        let provider_manager =
+            ProviderManager::new(Arc::new(Subject::default()), vec![did_method], vec![Algorithm::EdDSA]).unwrap();
+
+        let default_did_method = provider_manager.default_subject_syntax_types()[0].to_string();
+
+        match authorization_request {
+            GenericAuthorizationRequest::SIOPv2(siopv2_authorization_request) => GenericAuthorizationResponse::SIOPv2(
+                provider_manager
+                    .generate_response(siopv2_authorization_request, Default::default())
+                    .await
+                    .unwrap(),
+            ),
+            GenericAuthorizationRequest::OID4VP(oid4vp_authorization_request) => {
+                // TODO: implement test fixture for subject and issuer instead of using the same did as verifier.
+                // Fixtures can be implemented using the `rstest` crate as described here: https://docs.rs/rstest/latest/rstest/attr.fixture.html
+                let issuer_did = verifier_did(&default_did_method).await;
+                let subject_did = issuer_did.clone();
+
+                let issuance_date_str = "2010-01-01T00:00:00Z";
+                let issuance_date = issuance_date_str.parse::<chrono::DateTime<chrono::Utc>>().unwrap();
+
+                // Create a new verifiable credential.
+                let verifiable_credential = VerifiableCredentialJwt::builder()
+                    .sub(&subject_did)
+                    .iss(&issuer_did)
+                    .iat(issuance_date.timestamp())
+                    .verifiable_credential(serde_json::json!({
+                        "@context": [
+                            "https://www.w3.org/2018/credentials/v1",
+                            "https://www.w3.org/2018/credentials/examples/v1"
+                        ],
+                        "type": [
+                            "VerifiableCredential",
+                            "TestCredential"
+                        ],
+                        "issuanceDate": issuance_date_str,
+                        "issuer": issuer_did,
+                        "credentialSubject": {
+                        "id": subject_did,
+                        "givenName": "Ferris",
+                        "familyName": "Crabman",
+                        "email": "ferris.crabman@crabmail.com",
+                        "birthdate": "1985-05-21"
+                        }
+                    }))
+                    .build()
+                    .unwrap();
+
+                // Encode the verifiable credential as a JWT.
+                let jwt = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkI3o2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvZXhhbXBsZXMvdjEiXSwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsIlRlc3RDcmVkZW50aWFsIl0sImlzc3VhbmNlRGF0ZSI6IjIwMjItMDEtMDFUMDA6MDA6MDBaIiwiaXNzdWVyIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwiZ2l2ZW5OYW1lIjoiRmVycmlzIiwiZmFtaWx5TmFtZSI6IkNyYWJtYW4iLCJlbWFpbCI6ImZlcnJpcy5jcmFibWFuQGNyYWJtYWlsLmNvbSIsImJpcnRoZGF0ZSI6IjE5ODUtMDUtMjEifX19.6guSHngBj_QQYom3kXKmxKrHExoyW1eObBsBg8ACYn-H30YD6eub56zsWnnMzw8IznGDYAguuo3V1D37-A_vCQ".to_string();
+
+                // Create presentation submission using the presentation definition and the verifiable credential.
+                let presentation_submission = create_presentation_submission(
+                    "temporary_string".to_string(),
+                    &PRESENTATION_DEFINITION,
+                    &[serde_json::to_value(&verifiable_credential).unwrap()],
+                )
+                .unwrap();
+
+                // Create a verifiable presentation using the JWT.
+                let verifiable_presentation =
+                    Presentation::builder(subject_did.parse().unwrap(), identity_core::common::Object::new())
+                        .credential(Jwt::from(jwt))
+                        .build()
+                        .unwrap();
+
+                GenericAuthorizationResponse::OID4VP(
+                    provider_manager
+                        .generate_response(
+                            oid4vp_authorization_request,
+                            AuthorizationResponseInput {
+                                verifiable_presentation_input: PresentationInputType::Presentation(
+                                    verifiable_presentation,
+                                ),
+                                presentation_submission,
+                            },
+                        )
+                        .await
+                        .unwrap(),
+                )
+            }
+        }
     }
 
     pub async fn verifier_did(did_method: &str) -> String {
@@ -331,7 +524,6 @@ pub mod tests {
         match did_method {
             "did:key" => FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_KEY.to_string(),
             "did:jwk" => FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_JWK.to_string(),
-            "did:iota:rms" => FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_IOTA.to_string(),
             _ => unimplemented!("Unknown DID method: {}", did_method),
         }
     }
@@ -340,17 +532,12 @@ pub mod tests {
         match did_method {
             "did:key" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_KEY.to_string(),
             "did:jwk" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK.to_string(),
-            "did:iota:rms" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_IOTA.to_string(),
             _ => unimplemented!("Unknown DID method: {}", did_method),
         }
     }
 
     lazy_static! {
-        pub static ref VERIFIER: Subject = futures::executor::block_on(async {
-            Subject {
-                secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
-            }
-        });
+        pub static ref VERIFIER: Subject = Subject::default();
         pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
         pub static ref PRESENTATION_DEFINITION: PresentationDefinition = serde_json::from_value(json!(
             {
@@ -387,11 +574,6 @@ pub mod tests {
         openid://?\
             client_id=did%3Ajwk%3AeyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ&\
             request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2Fstate";
-    const FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_IOTA: &str = "\
-        openid://?\
-            client_id=did%3Aiota%3Arms%3A0x42ad588322e58b3c07aa39e4948d021ee17ecb5747915e9e1f35f028d7ecaf90&\
-            request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2Fstate";
-    const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_KEY: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJjbGllbnRfaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInJlZGlyZWN0X3VyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL3JlZGlyZWN0Iiwic3RhdGUiOiJzdGF0ZSIsInJlc3BvbnNlX3R5cGUiOiJpZF90b2tlbiIsInNjb3BlIjoib3BlbmlkIiwicmVzcG9uc2VfbW9kZSI6ImRpcmVjdF9wb3N0Iiwibm9uY2UiOiJub25jZSIsImNsaWVudF9tZXRhZGF0YSI6eyJjbGllbnRfbmFtZSI6IlVuaUNvcmUiLCJsb2dvX3VyaSI6Imh0dHBzOi8vaW1waWVyY2UuY29tL2ltYWdlcy9mYXZpY29uL2FwcGxlLXRvdWNoLWljb24ucG5nIiwic3ViamVjdF9zeW50YXhfdHlwZXNfc3VwcG9ydGVkIjpbImRpZDpqd2siLCJkaWQ6a2V5IiwiZGlkOmlvdGE6cm1zIl0sImlkX3Rva2VuX3NpZ25lZF9yZXNwb25zZV9hbGciOiJFZERTQSIsImlkX3Rva2VuX3NpZ25pbmdfYWxnX3ZhbHVlc19zdXBwb3J0ZWQiOlsiRWREU0EiXX19.bSJic_ZsIygLNYCi2cZBeAncGw68RNN64-nTOC6Mi09yF1NXuPJE3J5qWupjycVLf7LscYKDCjO50kvGf4fPDw";
-    const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGWkVSVFFTSXNJbU55ZGlJNklrVmtNalUxTVRraUxDSnJhV1FpT2lKaVVVdFJVbnBoYjNBM1EyZEZkbkZXY1RoVmJHZE1SM05rUmkxU0xXaHVURVpyUzBaYWNWY3lWazR3SWl3aWEzUjVJam9pVDB0UUlpd2llQ0k2SWtkc2JrczVaVkJ6T0RBeVdIaEJaMnhTVDFGNmIwZDFjbTA1VVhCMk1FbEdVRVZpWkUxRFNVeE9YMVVpZlEjMCJ9.eyJjbGllbnRfaWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2NUaFZiR2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVVYQjJNRWxHVUVWaVpFMURTVXhPWDFVaWZRIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzcG9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGFkYXRhIjp7ImNsaWVudF9uYW1lIjoiVW5pQ29yZSIsImxvZ29fdXJpIjoiaHR0cHM6Ly9pbXBpZXJjZS5jb20vaW1hZ2VzL2Zhdmljb24vYXBwbGUtdG91Y2gtaWNvbi5wbmciLCJzdWJqZWN0X3N5bnRheF90eXBlc19zdXBwb3J0ZWQiOlsiZGlkOmp3ayIsImRpZDprZXkiLCJkaWQ6aW90YTpybXMiXSwiaWRfdG9rZW5fc2lnbmVkX3Jlc3BvbnNlX2FsZyI6IkVkRFNBIiwiaWRfdG9rZW5fc2lnbmluZ19hbGdfdmFsdWVzX3N1cHBvcnRlZCI6WyJFZERTQSJdfX0.8Qj3u6rC5Qb0W54duip_HeJdp9It104Im8BKNR4H6Pw5AY6U826q-GBO618TLwavm2I20ehA8XWGYoOBzPyGDQ";
-    const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_IOTA: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDppb3RhOnJtczoweDQyYWQ1ODgzMjJlNThiM2MwN2FhMzllNDk0OGQwMjFlZTE3ZWNiNTc0NzkxNWU5ZTFmMzVmMDI4ZDdlY2FmOTAjYlFLUVJ6YW9wN0NnRXZxVnE4VWxnTEdzZEYtUi1obkxGa0tGWnFXMlZOMCJ9.eyJjbGllbnRfaWQiOiJkaWQ6aW90YTpybXM6MHg0MmFkNTg4MzIyZTU4YjNjMDdhYTM5ZTQ5NDhkMDIxZWUxN2VjYjU3NDc5MTVlOWUxZjM1ZjAyOGQ3ZWNhZjkwIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzcG9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGFkYXRhIjp7ImNsaWVudF9uYW1lIjoiVW5pQ29yZSIsImxvZ29fdXJpIjoiaHR0cHM6Ly9pbXBpZXJjZS5jb20vaW1hZ2VzL2Zhdmljb24vYXBwbGUtdG91Y2gtaWNvbi5wbmciLCJzdWJqZWN0X3N5bnRheF90eXBlc19zdXBwb3J0ZWQiOlsiZGlkOmp3ayIsImRpZDprZXkiLCJkaWQ6aW90YTpybXMiXSwiaWRfdG9rZW5fc2lnbmVkX3Jlc3BvbnNlX2FsZyI6IkVkRFNBIiwiaWRfdG9rZW5fc2lnbmluZ19hbGdfdmFsdWVzX3N1cHBvcnRlZCI6WyJFZERTQSJdfX0.TGQ_9RQYwltCjE8mRVG1CFveoQjWH9Xf55pm8TcYLkOmUitHeK_PKwwO16vWXHfgLeAVe7Y5b98hKCAupZ6FBg";
+    const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_KEY: &str = "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCN6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifQ.eyJjbGllbnRfaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInJlZGlyZWN0X3VyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL3JlZGlyZWN0Iiwic3RhdGUiOiJzdGF0ZSIsInJlc3BvbnNlX3R5cGUiOiJpZF90b2tlbiIsInNjb3BlIjoib3BlbmlkIiwicmVzcG9uc2VfbW9kZSI6ImRpcmVjdF9wb3N0Iiwibm9uY2UiOiJub25jZSIsImNsaWVudF9tZXRhZGF0YSI6eyJjbGllbnRfbmFtZSI6IlVuaUNvcmUiLCJsb2dvX3VyaSI6Imh0dHBzOi8vaW1waWVyY2UuY29tL2ltYWdlcy9mYXZpY29uL2FwcGxlLXRvdWNoLWljb24ucG5nIiwic3ViamVjdF9zeW50YXhfdHlwZXNfc3VwcG9ydGVkIjpbImRpZDpqd2siLCJkaWQ6a2V5Il0sImlkX3Rva2VuX3NpZ25lZF9yZXNwb25zZV9hbGciOiJFZERTQSIsImlkX3Rva2VuX3NpZ25pbmdfYWxnX3ZhbHVlc19zdXBwb3J0ZWQiOlsiRWREU0EiXX19.caML3la0NDH51B6N4lXgAtt3vSCjhYQGalVDUfGcjwMJAVvCMXGUnfDNvA4IHGqHeAO3P6UDDSUe5NRN50rcBw";
+    const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK: &str = "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2NUaFZiR2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVVYQjJNRWxHVUVWaVpFMURTVXhPWDFVaWZRIzAifQ.eyJjbGllbnRfaWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2NUaFZiR2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVVYQjJNRWxHVUVWaVpFMURTVXhPWDFVaWZRIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzcG9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGFkYXRhIjp7ImNsaWVudF9uYW1lIjoiVW5pQ29yZSIsImxvZ29fdXJpIjoiaHR0cHM6Ly9pbXBpZXJjZS5jb20vaW1hZ2VzL2Zhdmljb24vYXBwbGUtdG91Y2gtaWNvbi5wbmciLCJzdWJqZWN0X3N5bnRheF90eXBlc19zdXBwb3J0ZWQiOlsiZGlkOmp3ayIsImRpZDprZXkiXSwiaWRfdG9rZW5fc2lnbmVkX3Jlc3BvbnNlX2FsZyI6IkVkRFNBIiwiaWRfdG9rZW5fc2lnbmluZ19hbGdfdmFsdWVzX3N1cHBvcnRlZCI6WyJFZERTQSJdfX0.H0GAqXL_P8GsIFL7_6ZTrZ5OG67iIt1dPDqiVQSCcbpU5Ky3ptwvAmYTNY4bKou76ChFMVj-MRnoVE1s5FbZBA";
 }

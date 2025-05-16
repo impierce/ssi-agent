@@ -1,9 +1,10 @@
-use crate::{partition_event_publishers, EventPublisher};
+use crate::{partition_event_publishers, EventPublisher, Partitions};
 use agent_holder::{services::HolderServices, state::HolderState};
+use agent_identity::{services::IdentityServices, state::IdentityState};
 use agent_issuance::{
     offer::queries::{access_token::AccessTokenQuery, pre_authorized_code::PreAuthorizedCodeQuery},
     services::IssuanceServices,
-    state::{CommandHandlers, IssuanceState, ViewRepositories},
+    state::IssuanceState,
     SimpleLoggingQuery,
 };
 use agent_shared::{
@@ -65,6 +66,76 @@ where
     }
 }
 
+pub async fn identity_state(
+    identity_services: Arc<IdentityServices>,
+    event_publishers: Vec<Box<dyn EventPublisher>>,
+) -> IdentityState {
+    let connection_string = config().event_store.connection_string.clone().expect(
+        "Missing config parameter `event_store.connection_string` or `UNICORE__EVENT_STORE__CONNECTION_STRING`",
+    );
+    let pool = default_postgress_pool(&connection_string).await;
+
+    // Initialize the postgres repositories.
+    let connection = Arc::new(PostgresViewRepository::new("connection", pool.clone()));
+    let all_connections = Arc::new(PostgresViewRepository::new("all_connections", pool.clone()));
+    let document = Arc::new(PostgresViewRepository::new("document", pool.clone()));
+    let all_documents = Arc::new(PostgresViewRepository::new("all_documents", pool.clone()));
+    let service = Arc::new(PostgresViewRepository::new("service", pool.clone()));
+    let all_services = Arc::new(PostgresViewRepository::new("all_services", pool.clone()));
+
+    let all_connections_query = ListAllQuery::new(all_connections.clone(), "all_connections");
+    let all_documents_query = ListAllQuery::new(all_documents.clone(), "all_documents");
+    let all_services_query = ListAllQuery::new(all_services.clone(), "all_services");
+
+    // Partition the event_publishers into the different aggregates.
+    let Partitions {
+        connection_event_publishers,
+        document_event_publishers,
+        service_event_publishers,
+        ..
+    } = partition_event_publishers(event_publishers);
+
+    IdentityState {
+        command: agent_identity::state::CommandHandlers {
+            connection: Arc::new(
+                connection_event_publishers.into_iter().fold(
+                    AggregateHandler::new(pool.clone(), identity_services.clone())
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(connection.clone()))
+                        .append_query(all_connections_query),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
+                ),
+            ),
+            document: Arc::new(
+                document_event_publishers.into_iter().fold(
+                    AggregateHandler::new(pool.clone(), identity_services.clone())
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(document.clone()))
+                        .append_query(all_documents_query),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
+                ),
+            ),
+            service: Arc::new(
+                service_event_publishers.into_iter().fold(
+                    AggregateHandler::new(pool.clone(), identity_services)
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(service.clone()))
+                        .append_query(all_services_query),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
+                ),
+            ),
+        },
+        query: agent_identity::state::ViewRepositories {
+            connection,
+            all_connections,
+            document,
+            all_documents,
+            service,
+            all_services,
+        },
+    }
+}
+
 pub async fn issuance_state(
     issuance_services: Arc<IssuanceServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
@@ -88,15 +159,19 @@ pub async fn issuance_state(
     let access_token_query = AccessTokenQuery::new(access_token.clone());
 
     // Partition the event_publishers into the different aggregates.
-    let (server_config_event_publishers, credential_event_publishers, offer_event_publishers, _, _, _, _) =
-        partition_event_publishers(event_publishers);
+    let Partitions {
+        server_config_event_publishers,
+        credential_event_publishers,
+        offer_event_publishers,
+        ..
+    } = partition_event_publishers(event_publishers);
 
     // Create custom-queries for the offer aggregate.
     let all_credentials_query = ListAllQuery::new(all_credentials.clone(), "all_credentials");
     let all_offers_query = ListAllQuery::new(all_offers.clone(), "all_offers");
 
     IssuanceState {
-        command: CommandHandlers {
+        command: agent_issuance::state::CommandHandlers {
             server_config: Arc::new(
                 server_config_event_publishers.into_iter().fold(
                     AggregateHandler::new(pool.clone(), ())
@@ -126,7 +201,7 @@ pub async fn issuance_state(
                 ),
             ),
         },
-        query: ViewRepositories {
+        query: agent_issuance::state::ViewRepositories {
             server_config,
             pre_authorized_code,
             access_token,
@@ -152,21 +227,28 @@ pub async fn holder_state(
         Arc::new(PostgresViewRepository::new("holder_credential", pool.clone()));
     let all_holder_credentials: Arc<PostgresViewRepository<_, _>> =
         Arc::new(PostgresViewRepository::new("all_holder_credentials", pool.clone()));
+    let presentation = Arc::new(PostgresViewRepository::new("presentation", pool.clone()));
+    let all_presentations = Arc::new(PostgresViewRepository::new("all_presentations", pool.clone()));
     let received_offer = Arc::new(PostgresViewRepository::new("received_offer", pool.clone()));
     let all_received_offers = Arc::new(PostgresViewRepository::new("all_received_offers", pool.clone()));
 
     // Create custom-queries for the offer aggregate.
     let all_holder_credentials_query = ListAllQuery::new(all_holder_credentials.clone(), "all_holder_credentials");
+    let all_presentations_query = ListAllQuery::new(all_presentations.clone(), "all_presentations");
     let all_received_offers_query = ListAllQuery::new(all_received_offers.clone(), "all_received_offers");
 
     // Partition the event_publishers into the different aggregates.
-    let (_, _, _, credential_event_publishers, offer_event_publishers, _, _) =
-        partition_event_publishers(event_publishers);
+    let Partitions {
+        holder_credential_event_publishers,
+        presentation_event_publishers,
+        received_offer_event_publishers,
+        ..
+    } = partition_event_publishers(event_publishers);
 
     HolderState {
         command: agent_holder::state::CommandHandlers {
             credential: Arc::new(
-                credential_event_publishers.into_iter().fold(
+                holder_credential_event_publishers.into_iter().fold(
                     AggregateHandler::new(pool.clone(), holder_services.clone())
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(holder_credential.clone()))
@@ -174,8 +256,17 @@ pub async fn holder_state(
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
+            presentation: Arc::new(
+                presentation_event_publishers.into_iter().fold(
+                    AggregateHandler::new(pool.clone(), holder_services.clone())
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(presentation.clone()))
+                        .append_query(all_presentations_query),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
+                ),
+            ),
             offer: Arc::new(
-                offer_event_publishers.into_iter().fold(
+                received_offer_event_publishers.into_iter().fold(
                     AggregateHandler::new(pool, holder_services.clone())
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(received_offer.clone()))
@@ -187,6 +278,8 @@ pub async fn holder_state(
         query: agent_holder::state::ViewRepositories {
             holder_credential,
             all_holder_credentials,
+            presentation,
+            all_presentations,
             received_offer,
             all_received_offers,
         },
@@ -204,11 +297,17 @@ pub async fn verification_state(
 
     // Initialize the postgres repositories.
     let authorization_request = Arc::new(PostgresViewRepository::new("authorization_request", pool.clone()));
-    let connection = Arc::new(PostgresViewRepository::new("connection", pool.clone()));
+    let all_authorization_requests = Arc::new(PostgresViewRepository::new("all_authorization_requests", pool.clone()));
+
+    // Create custom-queries for the offer aggregate.
+    let all_authorization_requests_query =
+        ListAllQuery::new(all_authorization_requests.clone(), "all_authorization_requests");
 
     // Partition the event_publishers into the different aggregates.
-    let (_, _, _, _, _, authorization_request_event_publishers, connection_event_publishers) =
-        partition_event_publishers(event_publishers);
+    let Partitions {
+        authorization_request_event_publishers,
+        ..
+    } = partition_event_publishers(event_publishers);
 
     VerificationState {
         command: agent_verification::state::CommandHandlers {
@@ -216,22 +315,15 @@ pub async fn verification_state(
                 authorization_request_event_publishers.into_iter().fold(
                     AggregateHandler::new(pool.clone(), verification_services.clone())
                         .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(authorization_request.clone())),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
-            connection: Arc::new(
-                connection_event_publishers.into_iter().fold(
-                    AggregateHandler::new(pool, verification_services)
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(connection.clone())),
+                        .append_query(generic_query(authorization_request.clone()))
+                        .append_query(all_authorization_requests_query),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
         },
         query: agent_verification::state::ViewRepositories {
             authorization_request,
-            connection,
+            all_authorization_requests,
         },
     }
 }

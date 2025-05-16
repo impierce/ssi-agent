@@ -6,25 +6,34 @@ rust-version.workspace = true
 
 [dependencies]
 agent_holder = { path = "../agent_holder" }
+agent_identity = { path = "../agent_identity" }
 agent_issuance = { path = "../agent_issuance" }
+agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
 agent_verification = { path = "../agent_verification" }
 
 axum.workspace = true
-axum-auth = "0.7"
-axum-macros = "0.4"
-http-api-problem = "0.57"
+axum-auth = "0.8"
+axum-macros = "0.5"
+cqrs-es.workspace = true
+http = "1.3"
+http-api-problem = { version = "0.60", features = ["axum", "api-error"] }
+http-body-util = "0.1"
 hyper = { version = "1.2" }
+identity_core.workspace = true
+identity_credential.workspace = true
+identity_did.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 siopv2.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
+tower.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
 url.workspace = true
 uuid.workspace = true
 
@@ -33,6 +42,7 @@ credential_converter = { git = "https://github.com/impierce/credential-converter
 [dev-dependencies]
 agent_event_publisher_http = { path = "../agent_event_publisher_http", features = ["test_utils"] }
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
+agent_identity = { path = "../agent_identity", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
 agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
@@ -50,5 +60,6 @@ serde_urlencoded = "0.7"
 serde_yaml.workspace = true
 serial_test = "3.0"
 tower.workspace = true
+tower-http.workspace = true
 tracing-test.workspace = true
 wiremock.workspace = true

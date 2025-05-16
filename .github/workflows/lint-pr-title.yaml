@@ -11,7 +11,7 @@ on:
       - beta
       - alpha
     # https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
-    # types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened, edited]
 
 jobs:
   build:
@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: "lts/*"
 
-      - run: npm ci
+      - run: npm install -g @commitlint/config-angular
 
       - run: echo $TITLE | npx commitlint
         env:
