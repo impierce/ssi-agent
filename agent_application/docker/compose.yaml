@@ -26,7 +26,7 @@ services:
     depends_on:
       - cqrs-postgres-db
   ssi-agent:
-    image: impiercetechnologies/ssi-agent:sha-658dbaa
+    image: impiercetechnologies/ssi-agent:1.0.0-beta.8
     # build:
     #   context: ../..
     #   dockerfile: ./agent_application/docker/Dockerfile

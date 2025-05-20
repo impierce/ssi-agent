@@ -1,3 +1,4 @@
+use crate::issuance::error::{IntoPublicError, PublicError};
 use crate::DOCUMENTATION_URL;
 use cqrs_es::{persist::PersistenceError, AggregateError};
 use http_api_problem::ApiError;
@@ -8,6 +9,11 @@ use hyper::StatusCode;
 pub enum ErrorWrapper<T: std::error::Error> {
     AggregateError(AggregateError<T>),
     PersistenceError(PersistenceError),
+}
+
+// Helper function to construct type URLs for problem details.
+pub fn type_url(path: &str) -> String {
+    format!("{DOCUMENTATION_URL}problem-details/{path}")
 }
 
 impl<T: std::error::Error + IntoApiErrorExt> http_api_problem::IntoApiError for ErrorWrapper<T>
@@ -32,9 +38,21 @@ impl IntoApiErrorExt for ApiError {
     }
 }
 
-impl IntoApiErrorExt for PersistenceError {
-    fn into_api_error(self) -> ApiError {
-        AggregateError::<ApiError>::from(self).into_api_error()
+impl<T: std::error::Error + IntoPublicError> From<ErrorWrapper<T>> for PublicError {
+    fn from(err: ErrorWrapper<T>) -> Self {
+        match err {
+            ErrorWrapper::AggregateError(error) => PublicError::from(error),
+            ErrorWrapper::PersistenceError(error) => PublicError::from(error),
+        }
+    }
+}
+
+impl<T: std::error::Error + IntoPublicError> From<AggregateError<T>> for PublicError {
+    fn from(err: AggregateError<T>) -> Self {
+        match err {
+            AggregateError::UserError(error) => error.into_public_error(),
+            _ => PublicError::InternalServerError,
+        }
     }
 }
 
@@ -46,27 +64,39 @@ where
         match self {
             AggregateError::UserError(error) => error.into_api_error(),
             AggregateError::AggregateConflict => ApiError::builder(StatusCode::SERVICE_UNAVAILABLE)
-                .title("Aggregate Conflict")
-                .type_url(format!("{DOCUMENTATION_URL}problem-details/persistence#aggregate-conflict"))
-                .message("The server is currently unable to handle the request due to temporary overloading or maintenance. Please try again later.")
-                .finish(),
-            AggregateError::DatabaseConnectionError(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Database Connection Error")
-                .type_url(format!("{DOCUMENTATION_URL}problem-details/persistence#database-connection-error"))
-                .source_in_a_box(error)
-                .finish(),
-            AggregateError::DeserializationError(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Deserialization Error")
-                .type_url(format!("{DOCUMENTATION_URL}problem-details/persistence#deserialization-error"))
-                .message("The system failed to deserialize events from the event store due to a schema mismatch. Data migration is not supported; therefore, the only resolution is to reset the event store by wiping the existing data.")
-                .source_in_a_box(error)
-                .finish(),
-            AggregateError::UnexpectedError(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Unexpected Error")
-                .type_url(format!("{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"))
-                .source_in_a_box(error)
+            .title("Aggregate Conflict")
+            .type_url(type_url("persistence#aggregate-conflict"))
+            .message("The server is currently unable to handle the request due to temporary overloading or maintenance. Please try again later.")
+            .finish(),
+        AggregateError::DatabaseConnectionError(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            .title("Database Connection Error")
+            .type_url(type_url("persistence#database-connection-error"))
+            .source_in_a_box(error)
+            .finish(),
+        AggregateError::DeserializationError(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            .title("Deserialization Error")
+            .type_url(type_url("persistence#deserialization-error"))
+            .message("The system failed to deserialize events from the event store due to a schema mismatch. Data migration is not supported; therefore, the only resolution is to reset the event store by wiping the existing data.")
+            .source_in_a_box(error)
+            .finish(),
+        AggregateError::UnexpectedError(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            .title("Unexpected Error")
+            .type_url(type_url("unexpected#unexpected-error"))
+            .source_in_a_box(error)
                 .finish(),
         }
+    }
+}
+
+impl IntoApiErrorExt for PersistenceError {
+    fn into_api_error(self) -> ApiError {
+        AggregateError::<ApiError>::from(self).into_api_error()
+    }
+}
+
+impl From<PersistenceError> for PublicError {
+    fn from(_err: PersistenceError) -> Self {
+        PublicError::InternalServerError
     }
 }
 
