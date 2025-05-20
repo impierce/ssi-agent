@@ -45,13 +45,43 @@ This overview is still a work in progress. You can refer to the [example.config.
 
 :::
 
-### URL
+### Application URL
 
-UniCore's base URL. This value is communicated to clients and identity wallets.
+UniCore's application URL. This value represents the self-aware URL of the application. It is used for internal
+communication and should not be exposed to clients or identity wallets.
 
-| Environment variable | `config.yaml` |
-| -------------------- | ------------- |
-| `UNICORE__URL`       | `url`         |
+:::note
+
+The `UNICORE__APPLICATION_URL` may include a path segment, which will be treated as the base path for the application. All endpoints will be attached relative to this base path. For example, if you set `UNICORE__APPLICATION_URL` to `http://localhost:3033/my/base/path`, then all API endpoints will be served under `/my/base/path`.
+
+:::
+
+| Environment variable       | `config.yaml`     |
+| -------------------------- | ----------------- |
+| `UNICORE__APPLICATION_URL` | `application_url` |
+
+#### Example
+
+```yaml
+url: http://localhost:3033/my/base/path
+```
+
+### Public URL
+
+UniCore's public URL. This value is communicated to clients and identity wallets and should be publicly accessible. When
+not set, it defaults to the value of `UNICORE__APPLICATION_URL`.
+
+<!-- TODO: In production, should we require that `UNICORE__PUBLIC_URL` is always explicitly set, rather than defaulting to the value of `UNICORE__APPLICATION_URL`? This would help prevent accidental exposure of internal URLs to clients. -->
+
+:::note
+
+The `UNICORE__PUBLIC_URL` may also include a path segment, which will be treated as the base path for all public endpoints. For example, if you set `UNICORE__PUBLIC_URL` to `https://my-domain.example.test/my/base/path`, then all public API endpoints will be served under `/my/base/path`.
+
+:::
+
+| Environment variable  | `config.yaml` |
+| --------------------- | ------------- |
+| `UNICORE__PUBLIC_URL` | `public_url`  |
 
 #### Example
 
@@ -59,22 +89,132 @@ UniCore's base URL. This value is communicated to clients and identity wallets.
 url: https://my-domain.example.test
 ```
 
-### Port
+<!-- TODO: We should add a better explanation to describe the difference between the `UNICORE__APPLICATION_URL` and the `UNICORE__PUBLIC_URL`, possibly with some diagrams. Is this the right place for that? -->
 
-The port UniCore's HTTP server listens on.
+### Token Endpoint
 
-| Environment variable | `config.yaml` |
-| -------------------- | ------------- |
-| `UNICORE__PORT`      | `port`        |
+The OAuth2/OpenID Connect token endpoint. This endpoint is used by clients to exchange authorization codes for access tokens.
 
-#### Values
+:::note
 
-- `3033` _(default)_
+This variable is **optional**. By default, the `UNICORE__PUBLIC_URL` is used as the base, and the `/auth/token` segment is appended to form the token endpoint URL. You can completely override this default by explicitly setting the `UNICORE__TOKEN_ENDPOINT` variable or the `token_endpoint` config value.
+
+In most setups, the default value is recommended and usually the best choice.
+
+:::
+
+| Environment variable      | `config.yaml`    |
+| ------------------------- | ---------------- |
+| `UNICORE__TOKEN_ENDPOINT` | `token_endpoint` |
+
+#### Example (default)
+
+If `UNICORE__PUBLIC_URL` is set to `https://my-domain.example.test`, the default token endpoint will be:
+
+```
+https://my-domain.example.test/auth/token
+```
+
+#### Example (explicit override)
+
+```yaml
+token_endpoint: https://my-domain.example.test/custom/token/path
+```
+
+### Credential Endpoint
+
+The endpoint where credentials can be issued to clients. This is typically used in credential issuance flows.
+
+:::note
+
+This variable is **optional**. By default, the `UNICORE__PUBLIC_URL` is used as the base, and the `/openid4vci/credential` segment is appended to form the credential endpoint URL. You can completely override this default by explicitly setting the `UNICORE__CREDENTIAL_ENDPOINT` variable or the `credential_endpoint` config value.
+
+In most setups, the default value is recommended and usually the best choice.
+
+:::
+
+| Environment variable           | `config.yaml`         |
+| ------------------------------ | --------------------- |
+| `UNICORE__CREDENTIAL_ENDPOINT` | `credential_endpoint` |
+
+#### Example (default)
+
+If `UNICORE__PUBLIC_URL` is set to `https://my-domain.example.test`, the default credential endpoint will be:
+
+```
+https://my-domain.example.test/openid4vci/credential
+```
+
+#### Example (explicit override)
+
+```yaml
+credential_endpoint: https://my-domain.example.test/custom/credential/path
+```
+
+### Credential Offer URI
+
+The URI used to represent a credential offer. This is communicated to clients to initiate credential issuance.
+
+:::note
+
+This variable is **optional**. By default, the `UNICORE__PUBLIC_URL` is used as the base, and the `/credential-offer` segment is appended to form the credential offer URI. You can completely override this default by explicitly setting the `UNICORE__CREDENTIAL_OFFER_URI` variable or the `credential_offer_uri` config value.
+
+In most setups, the default value is recommended and usually the best choice.
+
+:::
+
+| Environment variable            | `config.yaml`          |
+| ------------------------------- | ---------------------- |
+| `UNICORE__CREDENTIAL_OFFER_URI` | `credential_offer_uri` |
 
 #### Example
 
 ```yaml
-port: 1337
+credential_offer_uri: https://my-domain.example.test/credential-offer
+```
+
+### Request URI
+
+The URI used to represent a request object, such as in OpenID Connect flows. This is used to pass request parameters by reference.
+
+:::note
+
+This variable is **optional**. By default, the `UNICORE__PUBLIC_URL` is used as the base, and the `/request` segment is appended to form the request URI. You can completely override this default by explicitly setting the `UNICORE__REQUEST_URI` variable or the `request_uri` config value.
+
+In most setups, the default value is recommended and usually the best choice.
+
+:::
+
+| Environment variable   | `config.yaml` |
+| ---------------------- | ------------- |
+| `UNICORE__REQUEST_URI` | `request_uri` |
+
+#### Example
+
+```yaml
+request_uri: https://my-domain.example.test/request
+```
+
+### Redirect URI
+
+The URI to which the client will be redirected after completing an authorization or credential flow. This must be registered and accessible by the client.
+
+:::note
+
+This variable is **optional**. By default, the `UNICORE__PUBLIC_URL` is used as the base, and the `/redirect` segment is appended to form the redirect URI. You can completely override this default by explicitly setting the `UNICORE__REDIRECT_URI` variable or the `redirect_uri` config value.
+
+In most setups, the default value is recommended and usually the best choice.
+
+:::
+
+| Environment variable    | `config.yaml`  |
+| ----------------------- | -------------- |
+| `UNICORE__REDIRECT_URI` | `redirect_uri` |
+
+#### Example
+
+```yaml
+redirect_uri: https://my-client.example.test/callback
 ```
 
 ### Log format
@@ -159,5 +299,3 @@ event_store:
 Setting display values is currently not supported through environment variables. Please refer to `config.yaml`.
 
 :::
-
-<!-- TODO: DISPLAY_0_NAME: even configured through env vars? -->
