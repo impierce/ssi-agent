@@ -7,6 +7,7 @@ members = [
     "agent_holder",
     "agent_identity",
     "agent_issuance",
+    "agent_macros",
     "agent_secret_manager",
     "agent_shared",
     "agent_store",
@@ -19,14 +20,14 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
-siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "c2de2e7" }
-oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "c2de2e7" }
-oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "c2de2e7" }
-oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "c2de2e7" }
-oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "c2de2e7" }
+siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "f715dc2" }
+oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "f715dc2" }
+oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "f715dc2" }
+oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "f715dc2" }
+oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "f715dc2" }
 
 async-trait = "0.1"
-axum = { version = "0.8", features = ["tracing"] }
+axum = { version = "0.8" }
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 cqrs-es = "0.4.2"

@@ -106,9 +106,7 @@ impl Aggregate for Offer {
 
                 let credential_offer_uri = CredentialOffer::CredentialOfferUri(credential_offer_uri);
 
-                let credential_offer_by_value_enabled = config().credential_offer_by_value_enabled.unwrap_or_default();
-
-                let form_url_encoded_credential_offer = if credential_offer_by_value_enabled {
+                let form_url_encoded_credential_offer = if config().credential_offer_by_value_enabled {
                     credential_offer.to_string()
                 } else {
                     credential_offer_uri.to_string()
@@ -222,12 +220,11 @@ impl Aggregate for Offer {
                 mut signed_credentials,
             } => {
                 // TODO: support batch credentials.
-                let signed_credential = signed_credentials.pop().ok_or(MissingCredentialError)?;
-
+                let (signed_credential, notification_id) = signed_credentials.pop().ok_or(MissingCredentialError)?;
                 let credential_response = CredentialResponse {
                     credential: CredentialResponseType::Immediate {
                         credential: signed_credential,
-                        notification_id: None,
+                        notification_id,
                     },
                     c_nonce: None,
                     c_nonce_expires_in: None,
@@ -300,6 +297,7 @@ impl Aggregate for Offer {
 #[allow(unused_imports)]
 pub mod tests {
     use super::test_utils::*;
+    use crate::credential::aggregate::test_utils::notification_id;
     use crate::{
         credential::aggregate::test_utils::OPENBADGE_VERIFIABLE_CREDENTIAL_JWT, offer,
         server_config::aggregate::test_utils::*,
@@ -490,6 +488,7 @@ pub mod tests {
         #[future(awt)] form_url_encoded_credential_offer: String,
         #[future(awt)] token_response: TokenResponse,
         credential_response: CredentialResponse,
+        notification_id: String,
     ) {
         OfferTestFramework::with(Service::default())
             .given(vec![
@@ -521,7 +520,10 @@ pub mod tests {
             ])
             .when(OfferCommand::CreateCredentialResponse {
                 offer_id: offer_id.clone(),
-                signed_credentials: vec![json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT)],
+                signed_credentials: vec![(
+                    json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT),
+                    Some(notification_id.clone()),
+                )],
             })
             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
                 offer_id: offer_id.clone(),
@@ -534,6 +536,7 @@ pub mod tests {
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     pub use super::*;
+    use crate::credential::aggregate::test_utils::notification_id;
     use crate::{
         credential::aggregate::test_utils::OPENBADGE_VERIFIABLE_CREDENTIAL_JWT, server_config::aggregate::test_utils::*,
     };
@@ -634,7 +637,7 @@ pub mod test_utils {
 
     #[fixture]
     pub async fn form_url_encoded_credential_offer(#[future(awt)] pre_authorized_code: String) -> String {
-        format!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fexample.com%2F%22%2C%22credential_configuration_ids%22%3A%5B%22badge%22%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%7D%7D%7D")
+        format!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fexample.com%2F%22%2C%22credential_configuration_ids%22%3A%5B%22001%22%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%7D%7D%7D")
     }
 
     #[fixture]
@@ -697,11 +700,11 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn credential_response() -> CredentialResponse {
+    pub fn credential_response(notification_id: String) -> CredentialResponse {
         CredentialResponse {
             credential: CredentialResponseType::Immediate {
                 credential: json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string()),
-                notification_id: None,
+                notification_id: Some(notification_id.clone()),
             },
             c_nonce: None,
             c_nonce_expires_in: None,

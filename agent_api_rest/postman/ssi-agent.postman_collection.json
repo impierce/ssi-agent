@@ -1,9 +1,9 @@
 {
 	"info": {
-		"_postman_id": "0bcb74f7-c53e-42fc-96a9-b146b3396280",
+		"_postman_id": "d50320fe-7e72-4e02-a358-20a4f9303d9e",
 		"name": "ssi-agent",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "41786572"
+		"_exporter_id": "30650915"
 	},
 	"item": [
 		{
@@ -517,6 +517,23 @@
 				},
 				{
 					"name": "credential",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (jsonData.notification_id) {",
+									"    pm.collectionVariables.set(\"NOTIFICATION_ID\", jsonData.notification_id);",
+									"    console.log(\"Notification ID saved: \" + jsonData.notification_id);",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -542,6 +559,55 @@
 							"path": [
 								"openid4vci",
 								"credential"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "notification",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204 No Content\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"notification_id\": \"{{NOTIFICATION_ID}}\",\n  \"event\": \"credential_accepted\",\n  \"event_description\": \"User accepted the credential in wallet\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/openid4vci/notification",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"openid4vci",
+								"notification"
 							]
 						}
 					},
@@ -1742,6 +1808,48 @@
 						}
 					},
 					"response": []
+				},
+				{
+					"name": "Show full configuration",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/configuration",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"configuration"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Show provisioned configuration",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/configuration?provisioned=true",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"configuration"
+							],
+							"query": [
+								{
+									"key": "provisioned",
+									"value": "true"
+								}
+							]
+						}
+					},
+					"response": []
 				}
 			]
 		}
@@ -1834,6 +1942,16 @@
 		},
 		{
 			"key": "DOCUMENT_ID",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "NOTIFICATION_ID",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "SERVICE_ID",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		}

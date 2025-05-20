@@ -20,7 +20,6 @@ use tracing::error;
 
 use crate::handlers::{command_handler, query_handler};
 
-const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
 const POLLING_INTERVAL_MS: u64 = 100;
 
 #[axum_macros::debug_handler]
@@ -28,7 +27,6 @@ pub(crate) async fn credential(
     State(state): State<IssuanceState>,
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
-    // TODO: implement official oid4vci error response. This TODO is also in the `token` endpoint.
 ) -> Result<Response, ApiError> {
     // Use the `access_token` to get the `offer_id` from the `AccessTokenView`.
     let offer_id = query_handler(&access_token, &state.query.access_token)
@@ -59,9 +57,7 @@ pub(crate) async fn credential(
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
     command_handler(&offer_id, &state.command.offer, command).await?;
 
-    let timeout = config()
-        .external_server_response_timeout_ms
-        .unwrap_or(DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS);
+    let timeout = config().external_server_response_timeout_ms;
     let start_time = Instant::now();
 
     // TODO: replace this polling solution with a call to the `TxChannelRegistry` as described here: https://github.com/impierce/ssi-agent/issues/75
@@ -102,8 +98,9 @@ pub(crate) async fn credential(
         let signed_credential = match query_handler(&credential_id, &state.query.credential).await? {
             Some(CredentialView {
                 signed: Some(signed_credential),
+                notification_id,
                 ..
-            }) => signed_credential,
+            }) => (signed_credential, notification_id),
             _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
         };
 
@@ -127,7 +124,7 @@ pub(crate) async fn credential(
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use crate::issuance::credentials::tests::credentials;
     use crate::issuance::router;
@@ -160,6 +157,7 @@ mod tests {
     };
 
     const CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjoiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQiLCJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIn0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoifX0.9IMQOMPD3V350XXlMthINwIT38gUC6WsPHKFpuR5hJ0w2DArrY5pjf2nG-_Ba5sSa3utKcc0QPHMaMCBPLpdAw";
+    const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
 
     trait CredentialEventTrigger {
         async fn prepare_credential_event_trigger(
@@ -255,7 +253,7 @@ mod tests {
     #[case::with_external_server(true, false, 0)]
     #[case::with_external_server_and_self_signed_credential(true, true, 0)]
     #[should_panic(expected = "assertion `left == right` failed\n  left: 500\n right: 200")]
-    #[case::should_panic_due_to_timout(true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100)]
+    #[case::should_panic_due_to_timeout(true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100)]
     #[serial_test::serial]
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
@@ -347,17 +345,57 @@ mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(
-            body,
-            json!({
-                    "credential": CREDENTIAL_JWT
-                }
-            )
-        );
+        assert_eq!(body.get("credential"), Some(&json!(CREDENTIAL_JWT)));
 
         if let Some(external_server) = external_server {
             // Assert that the event was dispatched to the target URL.
             assert!(external_server.received_requests().await.unwrap().len() == 1);
         }
+    }
+
+    pub async fn credential(app: &mut Router) -> (String, String) {
+        credentials(app).await;
+        let pre_authorized_code = offers(app).await.unwrap();
+        let access_token: String = token(app, pre_authorized_code).await;
+
+        let request_body = json!({
+            "format": "jwt_vc_json",
+            "credential_definition": {
+                "type": [
+                    "VerifiableCredential",
+                    "OpenBadgeCredential"
+                ]
+            },
+            "proof": {
+                "proof_type": "jwt",
+                "jwt": "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBY\
+                                tgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"
+            }
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/openid4vci/credential")
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .header(http::header::AUTHORIZATION, format!("Bearer {}", access_token))
+                    .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body_value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(body_value.get("credential"), Some(&json!(CREDENTIAL_JWT)));
+
+        let notification_id = body_value
+            .get("notification_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+
+        (access_token, notification_id.to_string())
     }
 }

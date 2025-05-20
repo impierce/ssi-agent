@@ -18,6 +18,7 @@ use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json
 };
 use oid4vci::credential_format_profiles::{CredentialFormats, Parameters};
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
+use oid4vci::notification_request::NotificationRequest;
 use oid4vci::VerifiableCredentialJwt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -72,10 +73,12 @@ mod never_as_str {
 pub struct Credential {
     #[serde(rename = "id")]
     pub credential_id: String,
+    pub notification_id: Option<String>,
     pub data: Option<Data>,
     pub credential_configuration: CredentialConfigurationsSupportedObject,
     pub signed: Option<serde_json::Value>,
     pub status: Status,
+    pub holder_notifications: Vec<NotificationRequest>,
 }
 
 #[async_trait]
@@ -110,6 +113,11 @@ impl Aggregate for Credential {
                             ..
                         },
                 }) => {
+                    #[cfg(feature = "test_utils")]
+                    let notification_id = test_utils::notification_id();
+                    #[cfg(not(feature = "test_utils"))]
+                    let notification_id = agent_shared::generate_random_string();
+
                     #[cfg(feature = "test_utils")]
                     let issuance_date = "2010-01-01T00:00:00Z".to_string();
                     #[cfg(not(feature = "test_utils"))]
@@ -200,6 +208,7 @@ impl Aggregate for Credential {
                                     credential_id,
                                     data: Data { raw },
                                     credential_configuration,
+                                    notification_id: Some(notification_id),
                                 }]);
                             }
                             "AchievementCredential" | "OpenBadgeCredential" => {
@@ -219,7 +228,7 @@ impl Aggregate for Credential {
                                 let builder = AchievementCredentialBuilder::default()
                                     .context(vec![
                                         "https://www.w3.org/2018/credentials/v1",
-                                        "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json",
+                                        "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json",
                                     ])
                                     .type_(AchievementCredentialType::from(vec![
                                         "VerifiableCredential",
@@ -243,6 +252,7 @@ impl Aggregate for Credential {
 
                                 return Ok(vec![UnsignedCredentialCreated {
                                     credential_id,
+                                    notification_id: Some(notification_id),
                                     data: Data { raw: json!(credential) },
                                     credential_configuration,
                                 }]);
@@ -257,13 +267,22 @@ impl Aggregate for Credential {
                     credential_configuration.credential_format
                 ))),
             },
+
             CreateSignedCredential {
                 credential_id,
                 signed_credential,
-            } => Ok(vec![SignedCredentialCreated {
-                credential_id,
-                signed_credential,
-            }]),
+            } => {
+                #[cfg(feature = "test_utils")]
+                let notification_id = test_utils::notification_id();
+                #[cfg(not(feature = "test_utils"))]
+                let notification_id = agent_shared::generate_random_string();
+
+                Ok(vec![SignedCredentialCreated {
+                    credential_id,
+                    signed_credential,
+                    notification_id: Some(notification_id),
+                }])
+            }
             SignCredential {
                 credential_id,
                 subject_id,
@@ -368,6 +387,13 @@ impl Aggregate for Credential {
                     status: Status::Issued,
                 }])
             }
+            AddNotification {
+                credential_id,
+                notification,
+            } => Ok(vec![CredentialEvent::NotificationReceived {
+                credential_id,
+                notification,
+            }]),
         }
     }
 
@@ -381,17 +407,21 @@ impl Aggregate for Credential {
                 credential_id,
                 data,
                 credential_configuration,
+                notification_id,
             } => {
                 self.credential_id = credential_id;
                 self.data.replace(data);
                 self.credential_configuration = *credential_configuration;
+                self.notification_id = notification_id;
             }
             SignedCredentialCreated {
                 credential_id,
                 signed_credential,
+                notification_id,
             } => {
                 self.credential_id = credential_id;
                 self.signed.replace(signed_credential);
+                self.notification_id = notification_id;
             }
             CredentialSigned {
                 credential_id,
@@ -401,6 +431,13 @@ impl Aggregate for Credential {
                 self.credential_id = credential_id;
                 self.signed.replace(signed_credential);
                 self.status = status;
+            }
+            NotificationReceived {
+                credential_id,
+                notification,
+            } => {
+                self.credential_id = credential_id;
+                self.holder_notifications.push(notification);
             }
         }
     }
@@ -443,6 +480,7 @@ pub mod credential_tests {
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
         #[case] unsigned_credential: serde_json::Value,
         credential_id: String,
+        notification_id: String,
     ) {
         CredentialTestFramework::with(Service::default())
             .given_no_previous_events()
@@ -459,6 +497,7 @@ pub mod credential_tests {
                 data: Data {
                     raw: unsigned_credential,
                 },
+                notification_id: Some(notification_id.clone()),
                 credential_configuration: Box::new(credential_configuration),
             }])
     }
@@ -489,6 +528,7 @@ pub mod credential_tests {
                     raw: unsigned_credential,
                 },
                 credential_configuration: Box::new(credential_configuration),
+                notification_id: None,
             }])
             .when(CredentialCommand::SignCredential {
                 credential_id: credential_id.clone(),
@@ -532,7 +572,12 @@ pub mod test_utils {
     use serde_json::json;
     use std::collections::HashMap;
 
-    pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjIuanNvbiJdLCJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJPcGVuQmFkZ2VDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJuYW1lIjoiVGVhbXdvcmsgQmFkZ2UiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwidHlwZSI6WyJBY2hpZXZlbWVudFN1YmplY3QiXSwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEiOnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY29nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNvZ25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbnQuIiwibmFtZSI6IlRlYW13b3JrIn19fX0.GBbACSRxM_nBdhWqntrVaMA78ftPR0fO0sHM1v5sYMIJUWCrOamo9EN_67nAHuvwl_og6EVz36o1we7U9M6oCA";
+    #[fixture]
+    pub fn notification_id() -> String {
+        "notification_id".to_string()
+    }
+
+    pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjMuanNvbiJdLCJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJPcGVuQmFkZ2VDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJuYW1lIjoiVGVhbXdvcmsgQmFkZ2UiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwidHlwZSI6WyJBY2hpZXZlbWVudFN1YmplY3QiXSwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEiOnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY29nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNvZ25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbnQuIiwibmFtZSI6IlRlYW13b3JrIn19fX0.JA7M0N1JjZ5P7g-yQjCg_t_54BHwxkOa2OMvypPpEwLi99RXS64Cj-pDWvWWWqvdx9J2QxLSESvsab5QRdVWAg";
 
     pub const W3C_VC_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjoiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIiwiZGVncmVlIjp7InR5cGUiOiJNYXN0ZXJEZWdyZWUiLCJuYW1lIjoiTWFzdGVyIG9mIE9jZWFub2dyYXBoeSJ9fSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiJ9fQ.Zhdom31SC8oh7h4DHz6hoTQeHIV5iA2jUO8gbt3KfYeZFiPbmJiBWNBy3ZmcSJ961YNOdK0I5MWqDw5nlsZpDw";
 
@@ -594,8 +639,8 @@ pub mod test_utils {
                     "locale": "en",
                     "name": "Verifiable Credential",
                     "logo": {
-                        "uri": "https://impierce.com/images/logo-blue.png",
-                        "alt_text": "UniCore Logo",
+                        "uri": "https://www.impierce.com/external/impierce-logo.png",
+                        "alt_text": "Impierce Logo",
                     }
                 })],
                 ..Default::default()
@@ -632,7 +677,7 @@ pub mod test_utils {
         pub static ref UNSIGNED_OPENBADGE_CREDENTIAL: serde_json::Value = json!({
           "@context": [
             "https://www.w3.org/2018/credentials/v1",
-            "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.2.json"
+            "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json"
           ],
           "id": "https://example.com/credentials/3527",
           "type": ["VerifiableCredential", "OpenBadgeCredential"],
