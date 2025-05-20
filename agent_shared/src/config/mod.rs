@@ -59,16 +59,38 @@ pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
     RwLock::new(application_configuration)
 });
 
+fn convert_url(url: Url, with_trailing_slash: bool) -> Url {
+    let mut new_url = url.clone();
+    let mut new_path = new_url.path().trim_matches('/').to_string();
+    if with_trailing_slash {
+        new_path.push('/');
+    }
+    new_url.set_path(&new_path);
+    new_url
+}
+
+/// Converts a URL into a directory URL by adding a trailing slash if it doesn't already have one.
+fn into_directory(url: Url) -> Url {
+    convert_url(url, true)
+}
+
+/// Converts a URL into a resource URL by removing the trailing slash if it has one.
+fn into_resource(url: Url) -> Url {
+    convert_url(url, false)
+}
+
 // Accessor for the configuration
 pub fn config() -> RwLockReadGuard<'static, ApplicationConfiguration> {
     CONFIG.read().unwrap()
 }
 
+pub fn config_mut() -> std::sync::RwLockWriteGuard<'static, ApplicationConfiguration> {
+    CONFIG.write().unwrap()
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Serialize, Config)]
 pub struct ApplicationConfiguration {
-    #[config(default, development_default = "Some(3033)")]
-    pub port: Option<u16>,
     #[config(default)]
     pub log_format: LogFormat,
     #[config(development_default = "EventStoreConfig {
@@ -76,14 +98,73 @@ pub struct ApplicationConfiguration {
             connection_string: None
         }")]
     pub event_store: EventStoreConfig,
-    #[config(development_default = r#"{
-            let port = provisioned_config.get::<u16>("port").unwrap_or(3033);
-        
-            Url::parse(&format!("http://localhost:{port}")).unwrap()
-        }"#)]
-    pub url: Url,
-    #[config(default)]
-    pub base_path: Option<String>,
+    #[config(
+        development_default = r#"{
+            Url::parse(&format!("http://localhost:3033")).unwrap()
+        }"#,
+        transform_with = "into_directory"
+    )]
+    pub application_url: Url,
+    #[config(
+        default = "Self::fn_application_url(provisioned_config, application_profile).unwrap()",
+        transform_with = "into_directory"
+    )]
+    pub public_url: Url,
+    #[config(
+        default = r#"{
+            let public_url = Self::fn_public_url(provisioned_config, application_profile).unwrap();
+
+            provisioned_config.get::<Url>("token_endpoint").unwrap_or_else(|_| {
+                public_url.join("auth/token").unwrap()
+            })
+        }"#,
+        transform_with = "into_resource"
+    )]
+    pub token_endpoint: Url,
+    #[config(
+        default = r#"{
+            let public_url = Self::fn_public_url(provisioned_config, application_profile).unwrap();
+
+            provisioned_config.get::<Url>("credential_endpoint").unwrap_or_else(|_| {
+                public_url.join("openid4vci/credential").unwrap()
+            })
+        }"#,
+        transform_with = "into_resource"
+    )]
+    pub credential_endpoint: Url,
+    #[config(
+        default = r#"{
+            let public_url = Self::fn_public_url(provisioned_config, application_profile).unwrap();
+
+            provisioned_config.get::<Url>("credential_offer_uri").unwrap_or_else(|_| {
+                public_url.join("openid4vci/credential-offer/").unwrap()
+            })
+        }"#,
+        transform_with = "into_resource"
+    )]
+    pub credential_offer_uri: Url,
+    #[config(
+        default = r#"{
+            let public_url = Self::fn_public_url(provisioned_config, application_profile).unwrap();
+
+            provisioned_config.get::<Url>("request_uri").unwrap_or_else(|_| {
+                public_url.join("request/").unwrap()
+            })
+        }"#,
+        transform_with = "into_resource"
+    )]
+    pub request_uri: Url,
+    #[config(
+        default = r#"{
+            let public_url = Self::fn_public_url(provisioned_config, application_profile).unwrap();
+
+            provisioned_config.get::<Url>("redirect_uri").unwrap_or_else(|_| {
+                public_url.join("redirect").unwrap()
+            })
+        }"#,
+        transform_with = "into_resource"
+    )]
+    pub redirect_uri: Url,
     #[config(default)]
     pub cors_enabled: bool,
     #[config(
@@ -793,12 +874,17 @@ mod tests {
         assert_eq!(
             json!(config),
             json!({
-              "port": 3033,
               "log_format": "text",
               "event_store": {
                 "type": "in_memory"
               },
-              "url": "http://localhost:3033/",
+              "application_url": "http://localhost:3033/",
+              "public_url": "http://localhost:3033/",
+              "token_endpoint": "http://localhost:3033/auth/token",
+              "credential_endpoint": "http://localhost:3033/openid4vci/credential",
+              "credential_offer_uri": "http://localhost:3033/openid4vci/credential-offer",
+              "request_uri": "http://localhost:3033/request",
+              "redirect_uri": "http://localhost:3033/redirect",
               "cors_enabled": true,
               "did_methods": {
                 "did:jwk": {
@@ -894,7 +980,7 @@ mod tests {
             let provisioned_config = config::Config::builder()
                 .add_source(config::File::from_str(
                     r#"
-                        url: "http://localhost"
+                        application_url: "http://localhost"
                         event_store:
                             type: "in_memory"
                         display:
@@ -924,7 +1010,7 @@ mod tests {
                 let provisioned_config = config::Config::builder()
                     .add_source(config::File::from_str(
                         r#"
-                            url: "http://localhost"
+                            application_url: "http://localhost"
                             event_store:
                                 type: "in_memory"
                             display:
@@ -958,7 +1044,7 @@ mod tests {
                 let provisioned_config = config::Config::builder()
                     .add_source(config::File::from_str(
                         r#"
-                            url: "http://localhost"
+                            application_url: "http://localhost"
                             display:
                                 - name: "UniCore"
                         "#,
@@ -988,7 +1074,7 @@ mod tests {
                 let provisioned_config = config::Config::builder()
                     .add_source(config::File::from_str(
                         r#"
-                            url: "http://localhost"
+                            application_url: "http://localhost"
                             event_store:
                                 type: "postgres"
                             display:
@@ -1012,12 +1098,12 @@ mod tests {
 
     #[test]
     #[serial]
-    fn test_validate_production_config_requires_explicit_url() {
+    fn test_validate_production_config_requires_explicit_application_url() {
         temp_env::with_vars(
             [
                 ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("postgresql://:test:")),
                 ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
-                ("UNICORE__URL", None::<&str>),
+                ("UNICORE__APPLICATION_URL", None::<&str>),
             ],
             || {
                 let provisioned_config = config::Config::builder()
@@ -1036,7 +1122,7 @@ mod tests {
 
                 assert_eq!(
                     config.unwrap_err().to_string(),
-                    "Configuration is not suitable for production: `url` must be provided"
+                    "Configuration is not suitable for production: `application_url` must be provided"
                 );
             },
         );
@@ -1050,7 +1136,7 @@ mod tests {
                 ("UNICORE__CONFIG_FILE", Some("./does-not-exist.yaml")),
                 ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("postgresql://:test:")),
                 ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
-                ("UNICORE__URL", Some("http://localhost")),
+                ("UNICORE__APPLICATION_URL", Some("http://localhost")),
             ],
             || {
                 let provisioned_config = config::Config::builder()
@@ -1071,7 +1157,7 @@ mod tests {
                 assert_eq!(
                     config.get_provisioned_config(),
                     json!({
-                      "url": "http://localhost/",
+                      "application_url": "http://localhost/",
                       "event_store": {
                         "connection_string": "<REDACTED>"
                       },
@@ -1105,7 +1191,10 @@ mod tests {
 
                 let serialized = serde_json::to_value(&config).unwrap();
 
-                assert_eq!(serialized.get("url").unwrap(), &json!("https://ssi-agent.example.org/"));
+                assert_eq!(
+                    serialized.get("application_url").unwrap(),
+                    &json!("https://ssi-agent.example.org/")
+                );
             },
         );
     }
@@ -1148,8 +1237,32 @@ mod tests {
         // A password is set
         assert!(!config.secret_manager.stronghold_password.is_empty());
 
-        // The UniCore URL points to localhost
-        assert_eq!(config.url, Url::parse("http://localhost:3033").unwrap());
+        // The UniCore Application URL points to localhost
+        assert_eq!(config.application_url, Url::parse("http://localhost:3033").unwrap());
+
+        // The public URL points to localhost
+        assert_eq!(config.public_url, Url::parse("http://localhost:3033").unwrap());
+
+        // The OpenID4VCI endpoints are set correctly
+        assert_eq!(
+            config.token_endpoint,
+            Url::parse("http://localhost:3033/auth/token").unwrap()
+        );
+        assert_eq!(
+            config.credential_endpoint,
+            Url::parse("http://localhost:3033/openid4vci/credential").unwrap()
+        );
+        assert_eq!(
+            config.credential_offer_uri,
+            Url::parse("http://localhost:3033/openid4vci/credential-offer").unwrap()
+        );
+
+        // The OpenID4VP endpoints are set correctly
+        assert_eq!(config.request_uri, Url::parse("http://localhost:3033/request").unwrap());
+        assert_eq!(
+            config.redirect_uri,
+            Url::parse("http://localhost:3033/redirect").unwrap()
+        );
 
         // Enable centrally hosted DID methods
         assert!(config.did_methods.get(&SupportedDidMethod::Jwk).unwrap().enabled);
@@ -1173,7 +1286,7 @@ mod tests {
             [
                 ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("postgresql://:test:")),
                 ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
-                ("UNICORE__URL", Some("http://localhost")),
+                ("UNICORE__APPLICATION_URL", Some("http://localhost")),
             ],
             || {
                 let provisioned_config = config::Config::builder()
@@ -1196,6 +1309,89 @@ mod tests {
                 assert!(!config.did_methods.get(&SupportedDidMethod::Jwk).unwrap().enabled);
                 assert!(!config.did_methods.get(&SupportedDidMethod::Key).unwrap().enabled);
                 assert!(config.did_methods.get(&SupportedDidMethod::Web).unwrap().enabled);
+            },
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_public_url_defaults_to_application_url() {
+        temp_env::with_vars(
+            [
+                ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("postgresql://:test:")),
+                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
+            ],
+            || {
+                let provisioned_config = config::Config::builder()
+                    .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                    .build()
+                    .unwrap();
+                let config =
+                    ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
+
+                // Assert that the public URL is set to the application URL
+                assert_eq!(config.public_url, config.application_url);
+            },
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_oid4vc_endpoint_variables_overwrite_defaults() {
+        temp_env::with_vars(
+            [
+                ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("postgresql://:test:")),
+                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
+                (
+                    "UNICORE__TOKEN_ENDPOINT",
+                    Some("https://my-domain.example.org/my/token/endpoint"),
+                ),
+                (
+                    "UNICORE__CREDENTIAL_ENDPOINT",
+                    Some("https://my-domain.example.org/my/credential/endpoint"),
+                ),
+                (
+                    "UNICORE__CREDENTIAL_OFFER_URI",
+                    Some("https://my-domain.example.org/my/credential/offer/uri"),
+                ),
+                (
+                    "UNICORE__REQUEST_URI",
+                    Some("https://my-domain.example.org/my/request/uri"),
+                ),
+                (
+                    "UNICORE__REDIRECT_URI",
+                    Some("https://my-domain.example.org/my/redirect/uri"),
+                ),
+            ],
+            || {
+                let provisioned_config = config::Config::builder()
+                    .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                    .build()
+                    .unwrap();
+                let config =
+                    ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
+
+                // Assert that the OpenID4VCI endpoints are set correctly and do not contain a trailing slash
+                assert_eq!(
+                    config.token_endpoint,
+                    Url::parse("https://my-domain.example.org/my/token/endpoint").unwrap()
+                );
+                assert_eq!(
+                    config.credential_endpoint,
+                    Url::parse("https://my-domain.example.org/my/credential/endpoint").unwrap()
+                );
+                assert_eq!(
+                    config.credential_offer_uri,
+                    Url::parse("https://my-domain.example.org/my/credential/offer/uri").unwrap()
+                );
+                assert_eq!(
+                    config.request_uri,
+                    Url::parse("https://my-domain.example.org/my/request/uri").unwrap()
+                );
+                assert_eq!(
+                    config.redirect_uri,
+                    Url::parse("https://my-domain.example.org/my/redirect/uri").unwrap()
+                );
             },
         );
     }

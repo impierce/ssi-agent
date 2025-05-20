@@ -1,8 +1,8 @@
 use super::{command::DocumentCommand, error::DocumentError, event::DocumentEvent};
 use crate::{services::IdentityServices, state::get_wallet_address};
 use agent_secret_manager::subject::StorageKey;
+use agent_shared::config::SupportedDidMethod;
 use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported};
-use agent_shared::config::{get_public_url, SupportedDidMethod};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_did::{CoreDID, DIDUrl, DID as _};
@@ -213,7 +213,7 @@ impl Aggregate for Document {
                         }
                     }
                     SupportedDidMethod::Web => {
-                        let origin = get_public_url().origin();
+                        let origin = config().public_url.origin();
 
                         info!("Origin: {}", &origin.ascii_serialization());
 
@@ -368,7 +368,7 @@ impl Aggregate for Document {
                 // Overwrite the service if it already exists.
                 document.remove_service(service.id());
                 document
-                    .insert_service(service)
+                    .insert_service(*service)
                     .map_err(|err| AddServiceError(err.to_string()))?;
 
                 Ok(vec![ServiceAdded { document_id, document }])
@@ -578,7 +578,7 @@ pub mod document_tests {
                 },
             ])
             .when(DocumentCommand::AddService {
-                service: domain_linkage_service,
+                service: Box::new(domain_linkage_service),
                 service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
             })
             .then_expect_events(vec![DocumentEvent::ServiceAdded {
@@ -628,8 +628,7 @@ pub mod document_tests {
 pub mod test_utils {
     use super::get_properties;
     use crate::state::DOMAIN_LINKAGE_SERVICE_ID;
-    use agent_shared::config::get_public_url;
-    use agent_shared::config::SupportedDidMethod;
+    use agent_shared::config::{config, SupportedDidMethod};
     use identity_core::convert::FromJson;
     use identity_did::CoreDID;
     use identity_document::{
@@ -706,7 +705,7 @@ pub mod test_utils {
             .type_("LinkedDomains")
             .service_endpoint(
                 ServiceEndpoint::from_json_value(json!({
-                    "origins": [get_public_url()],
+                    "origins": [config().public_url.clone()],
                 }))
                 .unwrap(),
             )

@@ -90,19 +90,11 @@ impl Aggregate for Offer {
                     }),
                 }));
 
-                let credential_offer_uri = config()
-                    .openid4vci_endpoints
-                    .credential_offer_uri
-                    .clone()
-                    .or_else(|| {
-                        credential_issuer_metadata
-                            .credential_issuer
-                            .join("openid4vci/")
-                            .and_then(|url| url.join("credential-offer/"))
-                            .ok()
-                    })
-                    .and_then(|url| url.join(&offer_id).ok())
-                    .unwrap();
+                let mut credential_offer_uri = config().credential_offer_uri.clone();
+                if let Ok(mut path_segments) = credential_offer_uri.path_segments_mut() {
+                    path_segments.pop_if_empty();
+                    path_segments.push(&offer_id);
+                }
 
                 let credential_offer_uri = CredentialOffer::CredentialOfferUri(credential_offer_uri);
 
@@ -637,7 +629,7 @@ pub mod test_utils {
 
     #[fixture]
     pub async fn form_url_encoded_credential_offer(#[future(awt)] pre_authorized_code: String) -> String {
-        format!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fexample.com%2F%22%2C%22credential_configuration_ids%22%3A%5B%22001%22%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%7D%7D%7D")
+        format!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fmy-domain.example.org%2F%22%2C%22credential_configuration_ids%22%3A%5B%22001%22%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%7D%7D%7D")
     }
 
     #[fixture]

@@ -45,11 +45,3 @@ services:
       # TODO: Remove this. This is a workaround that ensures that the `agent_verification/presentation_definitions`
       # folder can be accessed by the agent from the `fn authorization_requests` endpoint.
       # - ./tmp:/app/agent_api_rest
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-    volumes:
-      - ./example.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - ssi-agent

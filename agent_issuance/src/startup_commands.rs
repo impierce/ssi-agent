@@ -1,5 +1,4 @@
 use agent_shared::config::{config, CredentialConfiguration};
-use agent_shared::url_utils::UrlAppendHelpers;
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
@@ -21,22 +20,13 @@ pub fn load_server_metadata(public_url: url::Url) -> ServerConfigCommand {
         vec![display]
     });
 
-    let token_endpoint = config()
-        .openid4vci_endpoints
-        .token_endpoint
-        .clone()
-        .or_else(|| Some(public_url.clone().append_path_segment("auth/token")));
-
-    let credential_endpoint = config()
-        .openid4vci_endpoints
-        .credential_endpoint
-        .clone()
-        .unwrap_or_else(|| public_url.clone().append_path_segment("openid4vci/credential"));
+    let token_endpoint = config().token_endpoint.clone();
+    let credential_endpoint = config().credential_endpoint.clone();
 
     ServerConfigCommand::InitializeServerMetadata {
         authorization_server_metadata: Box::new(AuthorizationServerMetadata {
             issuer: public_url.clone(),
-            token_endpoint,
+            token_endpoint: Some(token_endpoint),
             ..Default::default()
         }),
         credential_issuer_metadata: Box::new(CredentialIssuerMetadata {

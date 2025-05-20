@@ -3,7 +3,7 @@ use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError::{self};
 use crate::credential::event::CredentialEvent;
 use crate::services::IssuanceServices;
-use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm, get_public_url};
+use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;
@@ -131,7 +131,7 @@ impl Aggregate for Credential {
                         .clone();
 
                     let issuer: Profile = ProfileBuilder::default()
-                        .id(get_public_url())
+                        .id(config().public_url.clone())
                         .type_("Profile")
                         .name(name)
                         .try_into()

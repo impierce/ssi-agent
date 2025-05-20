@@ -9,7 +9,7 @@ use agent_holder::services::HolderServices;
 use agent_identity::services::IdentityServices;
 use agent_issuance::{services::IssuanceServices, startup_commands::startup_commands};
 use agent_secret_manager::{service::Service as _, subject::Subject};
-use agent_shared::config::{config, get_public_url, LogFormat};
+use agent_shared::config::config;
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use probes::liveness::healthz;
@@ -53,12 +53,12 @@ async fn main() -> io::Result<()> {
 
     info!("{:?}", config());
 
-    let public_url = get_public_url();
+    info!("Application url: {}", config().application_url);
 
-    info!("Public url: {}", public_url);
+    info!("Public url: {}", config().public_url);
 
     agent_identity::state::initialize(&identity_state).await.unwrap();
-    agent_issuance::state::initialize(&issuance_state, startup_commands(public_url)).await;
+    agent_issuance::state::initialize(&issuance_state, startup_commands(config().public_url.clone())).await;
 
     let app = app(ApplicationState {
         identity_state: Some(identity_state),
@@ -81,10 +81,10 @@ async fn main() -> io::Result<()> {
     let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
     let app = probes_router.merge(app);
 
-    let port = config().port.unwrap_or(3033);
+    let port = config().application_url.port().unwrap_or(3033);
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
-    info!("HTTP API served at http://{}", listener.local_addr()?);
+    info!("HTTP API served at {}", config().application_url);
     axum::serve(listener, app).await?;
 
     Ok(())
