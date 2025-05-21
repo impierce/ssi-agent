@@ -58,8 +58,8 @@ mod tests {
         assert_eq!(
             authorization_server_metadata,
             AuthorizationServerMetadata {
-                issuer: "https://example.com/".parse().unwrap(),
-                token_endpoint: Some("https://example.com/auth/token".parse().unwrap()),
+                issuer: "https://my-domain.example.org/".parse().unwrap(),
+                token_endpoint: Some("https://my-domain.example.org/auth/token".parse().unwrap()),
                 ..Default::default()
             }
         );

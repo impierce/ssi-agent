@@ -213,7 +213,7 @@ pub mod test_utils {
     #[fixture]
     #[once]
     pub fn static_issuer_url() -> url::Url {
-        "https://example.com/".parse().unwrap()
+        "https://my-domain.example.org/".parse().unwrap()
     }
 
     #[fixture]

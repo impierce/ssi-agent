@@ -131,7 +131,7 @@ impl Aggregate for Credential {
                         .clone();
 
                     let issuer: Profile = ProfileBuilder::default()
-                        .id(config().url.clone())
+                        .id(config().public_url.clone())
                         .type_("Profile")
                         .name(name)
                         .try_into()

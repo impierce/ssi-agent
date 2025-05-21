@@ -38,16 +38,16 @@ create the appropriate DID Documents for the enabled DID methods.
 
 Because the DID Configuration resource must reside at the domain root (see [DID Configuration
 Spec](https://identity.foundation/specs/did-configuration/#resource_location)), Domain Linkage in UniCore will not work
-if the `UNICORE__URL` environment variable contains a path segment. For example, Domain Linkage will **not become active** for:
+if the `UNICORE__PUBLIC_URL` environment variable contains a path segment. For example, Domain Linkage will **not become active** for:
 
 ```bash
-UNICORE__URL=http://my-domain.com/unicore/
+UNICORE__PUBLIC_URL=http://my-domain.com/unicore/
 ```
 
 Instead, it must be configured as:
 
 ```bash
-UNICORE__URL=http://my-domain.com/
+UNICORE__PUBLIC_URL=http://my-domain.com/
 ```
 
 :::

@@ -3,10 +3,12 @@ use quote::{format_ident, quote, quote_spanned};
 use syn::{meta::ParseNestedMeta, parse_macro_input, token, Data, DeriveInput, Error, Fields, Ident, Lit};
 
 /// Holds default values for a struct field, including flags for attribute presence.
+#[derive(Default)]
 struct FieldDefaults {
     default: Option<String>,
     development: Option<String>,
     production: Option<String>,
+    transform_with: Option<String>,
 }
 
 /// Procedural macro to derive configuration loading for structs.
@@ -60,11 +62,7 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
             let field_name_str = field_name.to_string();
 
             // Parse the `#[config]` attribute to extract default values into FieldDefaults
-            let mut defaults = FieldDefaults {
-                default: None,
-                development: None,
-                production: None,
-            };
+            let mut defaults = FieldDefaults::default();
 
             for attr in &field.attrs {
                 if attr.path().is_ident("config") {
@@ -79,6 +77,8 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
                             defaults.development = parse_string_literal(&meta)?;
                         } else if meta.path.is_ident("production_default") {
                             defaults.production = parse_string_literal(&meta)?;
+                        } else if meta.path.is_ident("transform_with") {
+                            defaults.transform_with = parse_string_literal(&meta)?;
                         }
                         Ok(())
                     })
@@ -193,7 +193,16 @@ fn generate_field_loader(
     let default = generate_default_value(defaults.default.clone());
     let development_default = generate_default_value(defaults.development.clone());
     let production_default = generate_default_value(defaults.production.clone());
+    let transform_with_fn = defaults
+        .transform_with
+        .as_ref()
+        .map(|s| Ident::new(s, field_name.span()));
     let fn_field_name = Ident::new(&format!("fn_{}", field_name), field_name.span());
+    let value_expr = if let Some(transform_fn) = &transform_with_fn {
+        quote! { let value: #field_type = #transform_fn(config_value); }
+    } else {
+        quote! { let value: #field_type = config_value; }
+    };
     let loader_fn = quote_spanned! { field_name.span() =>
         /// Loads the value for this field from the provisioned config or applies defaults.
         fn #fn_field_name(
@@ -208,7 +217,8 @@ fn generate_field_loader(
             } else {
                 None
             };
-            provisioned_value
+
+            let config_value: #field_type = provisioned_value
                 .or_else(|| {
                     match application_profile {
                         ApplicationProfile::Development => #development_default,
@@ -226,7 +236,11 @@ fn generate_field_loader(
                             ))
                         }
                     }
-                })
+                })?;
+
+            #value_expr
+
+            Ok(value)
         }
     };
     let loader_call = quote! {

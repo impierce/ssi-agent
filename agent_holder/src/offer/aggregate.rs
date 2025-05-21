@@ -291,6 +291,8 @@ pub mod tests {
     use agent_issuance::server_config::aggregate::test_utils::credential_configurations_supported;
     use agent_issuance::{startup_commands::startup_commands, state::initialize};
     use agent_secret_manager::service::Service;
+    use agent_shared::config::config;
+    use agent_shared::config::config_mut;
     use agent_shared::generate_random_string;
     use agent_store::in_memory;
     use axum::{
@@ -309,6 +311,14 @@ pub mod tests {
     async fn bootstrap_issuer_server() -> CredentialOffer {
         let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
         let issuer_url = format!("http://{}", listener.local_addr().unwrap());
+
+        config_mut().application_url = issuer_url.parse().unwrap();
+
+        let application_url = config().application_url.clone();
+
+        config_mut().token_endpoint = application_url.join("auth/token").unwrap();
+        config_mut().credential_endpoint = application_url.join("openid4vci/credential").unwrap();
+        config_mut().credential_offer_uri = application_url.join("openid4vci/credential-offer/").unwrap();
 
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         initialize(&issuance_state, startup_commands(issuer_url.parse().unwrap())).await;

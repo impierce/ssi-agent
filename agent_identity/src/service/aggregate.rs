@@ -61,8 +61,7 @@ impl Aggregate for Service {
             } => {
                 let subject = &services.subject;
 
-                let origin = config().url.origin();
-                let origin = identity_core::common::Url::parse(origin.ascii_serialization())
+                let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
                 #[cfg(feature = "test_utils")]
@@ -180,7 +179,7 @@ impl Aggregate for Service {
                 service_id,
                 presentation_ids,
             } => {
-                let origin = identity_core::common::Url::parse(config().url.origin().ascii_serialization())
+                let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
                 let service_endpoint = ServiceEndpoint::from(OrderedSet::from_iter(
@@ -346,7 +345,6 @@ pub mod service_tests {
 pub mod test_utils {
     use super::*;
     use crate::state::{DOMAIN_LINKAGE_SERVICE_ID, LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID};
-    use agent_shared::config::config;
     use identity_core::{common::Url, convert::FromJson};
     use identity_document::service::{Service, ServiceEndpoint};
     use rstest::*;
@@ -369,7 +367,7 @@ pub mod test_utils {
             .type_("LinkedDomains")
             .service_endpoint(
                 ServiceEndpoint::from_json_value(json!({
-                    "origins": [config().url],
+                    "origins": [config().public_url.clone()],
                 }))
                 .unwrap(),
             )
@@ -381,7 +379,7 @@ pub mod test_utils {
     pub fn linked_verifiable_presentation_service(
         linked_verifiable_presentation_service_id: String,
     ) -> DocumentService {
-        let origin = config().url.origin().ascii_serialization();
+        let origin = config().public_url.origin().ascii_serialization();
 
         Service::builder(Default::default())
             .id(format!("did:place:holder#{linked_verifiable_presentation_service_id}")

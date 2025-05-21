@@ -1,7 +1,7 @@
 use super::offers::query_credential_issuer_metadata;
+use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
-use crate::DOCUMENTATION_URL;
 use agent_issuance::{
     credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data},
     offer::command::OfferCommand,
@@ -57,9 +57,7 @@ pub(crate) async fn credentials(
         if !credential.is_string() {
             return Err(ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Credential Type")
-                .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details/issuance#invalid-credential-type"
-                ))
+                .type_url(type_url("issuance#invalid-credential-type"))
                 .message("For signed credentials, the credential must be a string.")
                 .finish());
         }
@@ -73,9 +71,7 @@ pub(crate) async fn credentials(
         if !credential.is_object() {
             return Err(ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Credential Type")
-                .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details/issuance#invalid-credential-type"
-                ))
+                .type_url(type_url("issuance#invalid-credential-type"))
                 .message("For unsigned credentials, the credential must be an object.")
                 .finish());
         }
@@ -92,9 +88,7 @@ pub(crate) async fn credentials(
             .ok_or_else(|| {
                 ApiError::builder(StatusCode::NOT_FOUND)
                     .title("No Credential Configuration Found")
-                    .type_url(format!(
-                        "{DOCUMENTATION_URL}problem-details/issuance#no-credential-configuration-found"
-                    ))
+                    .type_url(type_url("issuance#no-credential-configuration-found"))
                     .message(format!(
                         "No Credential Configuration found with id: `{credential_configuration_id}`"
                     ))

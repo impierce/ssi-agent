@@ -53,17 +53,17 @@ This enables UniCore's **development mode**, which requires less initial configu
 
 :::
 
-### 4. Set the `UNICORE__URL` environment variable
+### 4. Set the `UNICORE__APPLICATION_URL` environment variable
 
-First, set the `UNICORE__URL` environment variable in your shell that contains your local IP address:
+First, set the `UNICORE__APPLICATION_URL` environment variable in your shell that contains your local IP address:
 
 ```bash
-export UNICORE__URL=http://<your-local-ip-address>:3033
+export UNICORE__APPLICATION_URL=http://<your-local-ip-address>:3033
 ```
 
 :::note
 
-The `UNICORE__URL` variable can also be set in the `.env` directly. However, for the purpose of this quick start, it is more practical to set the variable in the shell session as shown above, allowing it to be reused in the `curl` commands throughout this guide.
+The `UNICORE__APPLICATION_URL` variable can also be set in the `.env` directly. However, for the purpose of this quick start, it is more practical to set the variable in the shell session as shown above, allowing it to be reused in the `curl` commands throughout this guide.
 
 :::
 
@@ -88,7 +88,7 @@ Using `localhost` or `127.0.0.1` will **not work** when trying to access UniCore
 
 :::note
 
-Make sure to set `export UNICORE__URL` in the same terminal session where you will also run `docker compose
+Make sure to set `export UNICORE__APPLICATION_URL` in the same terminal session where you will also run `docker compose
 up`, or ensure that the variable is available in your environment.
 
 :::
@@ -119,12 +119,12 @@ To issue a Credential, follow these steps:
 
 ### 1. Post the Credential data to UniCore's HTTP API
 
-Open a new terminal window and ensure the `UNICORE__URL` is set as described in [this section](#4-set-the-unicore__url-environment-variable):
+Open a new terminal window and ensure the `UNICORE__APPLICATION_URL` is set as described in [this section](#4-set-the-unicore__url-environment-variable):
 
 Then run:
 
 ```bash
-curl --location "$UNICORE__URL/v0/credentials" \
+curl --location "$UNICORE__APPLICATION_URL/v0/credentials" \
 --header 'Content-Type: application/json' \
 --data '{
     "offerId":"001",
@@ -146,7 +146,7 @@ This command sends a POST request to create a new Credential Offer with the spec
 Run:
 
 ```bash
-curl --location "$UNICORE__URL/v0/offers" \
+curl --location "$UNICORE__APPLICATION_URL/v0/offers" \
 --header 'Content-Type: application/json' \
 --data '{
     "offerId": "001"
@@ -206,16 +206,16 @@ Now, request the user to present their Credential:
 
 ### 1. Create a URL-Encoded Authorization Request
 
-Ensure the `UNICORE__URL` environment variable is set (if not, set it again):
+Ensure the `UNICORE__APPLICATION_URL` environment variable is set (if not, set it again):
 
 ```bash
-export UNICORE__URL=http://<your-private-ip-address>:3033
+export UNICORE__APPLICATION_URL=http://<your-private-ip-address>:3033
 ```
 
 Then run:
 
 ```bash
-curl --location "$UNICORE__URL/v0/authorization_requests" \
+curl --location "$UNICORE__APPLICATION_URL/v0/authorization_requests" \
 --header 'Content-Type: application/json' \
 --data '{
     "nonce": "this is a nonce",
@@ -311,7 +311,7 @@ This will return an object containing a `"vp_token"` field. If the value of this
 
 - **Firewall Settings**: Ensure your machine allows incoming connections on the required ports.
 - **Access from Mobile Device**: Your mobile device must be on the same network as your UniCore instance.
-- **Environment Variables**: Remember that environment variables set in your shell are not persisted across terminal sessions. You may need to set `UNICORE__URL` in each new terminal or include it in your shell's startup script.
+- **Environment Variables**: Remember that environment variables set in your shell are not persisted across terminal sessions. You may need to set `UNICORE__APPLICATION_URL` in each new terminal or include it in your shell's startup script.
 
 ---
 

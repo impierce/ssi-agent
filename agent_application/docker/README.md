@@ -12,7 +12,7 @@ docker build -f docker/Dockerfile -t ssi-agent ..
 
 For local development, it is recommended to use Docker Compose.
 
-1. Set the environment variable `UNICORE__URL` to the following pattern: `http://<your-local-ip>:3033`, so it looks something like `http://192.168.1.100:3033`. You can copy `docker/.env.example` to `docker/.env` and adjust the value there.
+1. Set the environment variable `UNICORE__APPLICATION_URL` to the following pattern: `http://<your-local-ip>:3033`, so it looks something like `http://192.168.1.100:3033`. You can copy `docker/.env.example` to `docker/.env` and adjust the value there.
 2. A Stronghold secret file is generated inside the container at the path defined in `UNICORE__SECRET_MANAGER__STRONGHOLD_PATH` and destroyed when the container is destroyed.
    If you have an existing file or you want to reuse a Stronghold file, you can mount it under `volumes:` and set the environment variable `UNICORE__SECRET_MANAGER__STRONGHOLD_PATH` to the path where the Stronghold file is mounted.
    An example could look like this:
@@ -34,7 +34,7 @@ volumes:
 docker compose up
 ```
 
-5. The REST API will be served at the value you set in `UNICORE__URL` (and also at `http://0.0.0.0:3033`).
+5. The REST API will be served at the value you set in `UNICORE__APPLICATION_URL` (and also at `http://0.0.0.0:3033`).
 
 > [!NOTE]
 > In case you need a base bath (for example when running behind a reverse proxy), you can set the `UNICORE__BASE_PATH` to a value such as `ssi-agent`.

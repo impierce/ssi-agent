@@ -6,11 +6,7 @@ event_store:
   type: postgres
   # connection_string: <defined in .env.test>
 
-url: https://my-domain.example.org
-
-port: 1337
-
-base_path: /base/path
+application_url: https://my-domain.example.org
 
 cors_enabled: true
 
