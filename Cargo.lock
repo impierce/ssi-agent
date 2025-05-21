@@ -79,9 +79,9 @@ dependencies = [
  "http-api-problem",
  "http-body-util",
  "hyper 1.4.1",
- "identity_core",
- "identity_credential",
- "identity_did",
+ "identity_core 1.5.0",
+ "identity_credential 1.5.0",
+ "identity_did 1.5.0",
  "jsonwebtoken",
  "lazy_static",
  "mime",
@@ -169,8 +169,8 @@ dependencies = [
  "axum 0.8.1",
  "base64 0.22.1",
  "cqrs-es",
- "identity_core",
- "identity_credential",
+ "identity_core 1.5.0",
+ "identity_credential 1.5.0",
  "jsonwebtoken",
  "lazy_static",
  "mime",
@@ -214,10 +214,10 @@ dependencies = [
  "did-jwk",
  "did-method-key",
  "futures",
- "identity_core",
- "identity_credential",
- "identity_did",
- "identity_document",
+ "identity_core 1.5.0",
+ "identity_credential 1.5.0",
+ "identity_did 1.5.0",
+ "identity_document 1.5.0",
  "identity_iota",
  "iota-sdk",
  "itertools 0.14.0",
@@ -259,8 +259,8 @@ dependencies = [
  "chrono",
  "cqrs-es",
  "derivative",
- "identity_core",
- "identity_credential",
+ "identity_core 1.5.0",
+ "identity_credential 1.5.0",
  "jsonwebtoken",
  "lazy_static",
  "oid4vc-core",
@@ -365,8 +365,8 @@ dependencies = [
  "chrono",
  "cqrs-es",
  "futures",
- "identity_core",
- "identity_credential",
+ "identity_core 1.5.0",
+ "identity_credential 1.5.0",
  "jsonwebtoken",
  "lazy_static",
  "oid4vc-core",
@@ -1899,6 +1899,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "deranged"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c9e6a11ca8224451684bc0d7d5a7adbf8f2fd6887261a1cfc3c0432f9d4068e"
+
+[[package]]
 name = "derivative"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2138,7 +2144,7 @@ dependencies = [
 [[package]]
 name = "dif-presentation-exchange"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=9fcd21b#9fcd21b90c47f1616a6b31cda5b818af6db11878"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=cb7c0ed#cb7c0ed8c71c997431e57911203e1f36ba6f8215"
 dependencies = [
  "getset",
  "jsonpath_lib",
@@ -3390,6 +3396,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "identity_core"
+version = "1.6.0-alpha"
+source = "git+https://github.com/iotaledger/identity.rs?tag=v1.6.0-alpha#8b650d45167bbe0c8f9aead36981bcdeb3ae35e8"
+dependencies = [
+ "deranged 0.4.0",
+ "js-sys",
+ "multibase 0.9.1",
+ "serde",
+ "serde_json",
+ "strum 0.25.0",
+ "thiserror",
+ "time",
+ "url",
+]
+
+[[package]]
 name = "identity_credential"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3398,16 +3420,39 @@ dependencies = [
  "anyhow",
  "async-trait",
  "flate2",
+ "identity_core 1.5.0",
+ "identity_did 1.5.0",
+ "identity_document 1.5.0",
+ "identity_verification 1.5.0",
+ "indexmap 2.5.0",
+ "itertools 0.11.0",
+ "once_cell",
+ "roaring",
+ "serde",
+ "serde-aux",
+ "serde_json",
+ "serde_repr",
+ "strum 0.25.0",
+ "thiserror",
+ "url",
+]
+
+[[package]]
+name = "identity_credential"
+version = "1.6.0-alpha"
+source = "git+https://github.com/iotaledger/identity.rs?tag=v1.6.0-alpha#8b650d45167bbe0c8f9aead36981bcdeb3ae35e8"
+dependencies = [
+ "anyhow",
+ "async-trait",
  "futures",
- "identity_core",
- "identity_did",
- "identity_document",
- "identity_verification",
+ "identity_core 1.6.0-alpha",
+ "identity_did 1.6.0-alpha",
+ "identity_document 1.6.0-alpha",
+ "identity_verification 1.6.0-alpha",
  "indexmap 2.5.0",
  "itertools 0.11.0",
  "jsonschema 0.19.1",
  "once_cell",
- "roaring",
  "sd-jwt-payload 0.2.1",
  "sd-jwt-payload 0.3.0",
  "serde",
@@ -3427,8 +3472,22 @@ checksum = "b5e1ee3a38c9f9bb55f943576872747b09c3e227360d0ad674620f1a9e382786"
 dependencies = [
  "did_url_parser 0.3.0",
  "form_urlencoded",
- "identity_core",
- "identity_jose",
+ "identity_core 1.5.0",
+ "identity_jose 1.5.0",
+ "serde",
+ "strum 0.25.0",
+ "thiserror",
+]
+
+[[package]]
+name = "identity_did"
+version = "1.6.0-alpha"
+source = "git+https://github.com/iotaledger/identity.rs?tag=v1.6.0-alpha#8b650d45167bbe0c8f9aead36981bcdeb3ae35e8"
+dependencies = [
+ "did_url_parser 0.3.0",
+ "form_urlencoded",
+ "identity_core 1.6.0-alpha",
+ "identity_jose 1.6.0-alpha",
  "serde",
  "strum 0.25.0",
  "thiserror",
@@ -3441,9 +3500,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e40a92bd8ee2880437cc3ce6853ec3bb9ec57c29583d0f8ca90c1736fa7b66b"
 dependencies = [
  "did_url_parser 0.2.0",
- "identity_core",
- "identity_did",
- "identity_verification",
+ "identity_core 1.5.0",
+ "identity_did 1.5.0",
+ "identity_verification 1.5.0",
+ "indexmap 2.5.0",
+ "serde",
+ "strum 0.25.0",
+ "thiserror",
+]
+
+[[package]]
+name = "identity_document"
+version = "1.6.0-alpha"
+source = "git+https://github.com/iotaledger/identity.rs?tag=v1.6.0-alpha#8b650d45167bbe0c8f9aead36981bcdeb3ae35e8"
+dependencies = [
+ "did_url_parser 0.2.0",
+ "identity_core 1.6.0-alpha",
+ "identity_did 1.6.0-alpha",
+ "identity_verification 1.6.0-alpha",
  "indexmap 2.5.0",
  "serde",
  "strum 0.25.0",
@@ -3456,14 +3530,14 @@ version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1757a5a3f72a8eaa8c581caac72e6a3c362ecb7e28a2d28f459d9dbffd8feed0"
 dependencies = [
- "identity_core",
- "identity_credential",
- "identity_did",
- "identity_document",
+ "identity_core 1.5.0",
+ "identity_credential 1.5.0",
+ "identity_did 1.5.0",
+ "identity_document 1.5.0",
  "identity_iota_core",
  "identity_resolver",
  "identity_storage",
- "identity_verification",
+ "identity_verification 1.5.0",
 ]
 
 [[package]]
@@ -3474,11 +3548,11 @@ checksum = "eef0c1892c59cc44ad2145396e5e9ed5c9dc40640168222a4ba7aa9d82948ee1"
 dependencies = [
  "async-trait",
  "futures",
- "identity_core",
- "identity_credential",
- "identity_did",
- "identity_document",
- "identity_verification",
+ "identity_core 1.5.0",
+ "identity_credential 1.5.0",
+ "identity_did 1.5.0",
+ "identity_document 1.5.0",
+ "identity_verification 1.5.0",
  "iota-sdk",
  "num-derive 0.4.2",
  "num-traits",
@@ -3497,12 +3571,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aab986d1ed98f01a73cadf76922d7375a59abfe657d8912412ea0ccc69715d6e"
 dependencies = [
  "bls12_381_plus 0.8.17",
- "identity_core",
+ "identity_core 1.5.0",
  "iota-crypto",
  "json-proof-token",
  "serde",
  "serde_json",
  "subtle",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
+name = "identity_jose"
+version = "1.6.0-alpha"
+source = "git+https://github.com/iotaledger/identity.rs?tag=v1.6.0-alpha#8b650d45167bbe0c8f9aead36981bcdeb3ae35e8"
+dependencies = [
+ "bls12_381_plus 0.8.17",
+ "identity_core 1.6.0-alpha",
+ "iota-crypto",
+ "json-proof-token",
+ "serde",
+ "serde_json",
  "thiserror",
  "zeroize",
 ]
@@ -3515,10 +3604,10 @@ checksum = "7506310391381683102cb232928baff7956e5b53b118825e578808e2ad647c31"
 dependencies = [
  "async-trait",
  "futures",
- "identity_core",
- "identity_credential",
- "identity_did",
- "identity_document",
+ "identity_core 1.5.0",
+ "identity_credential 1.5.0",
+ "identity_did 1.5.0",
+ "identity_document 1.5.0",
  "identity_iota_core",
  "serde",
  "strum 0.25.0",
@@ -3534,12 +3623,12 @@ dependencies = [
  "anyhow",
  "async-trait",
  "futures",
- "identity_core",
- "identity_credential",
- "identity_did",
- "identity_document",
+ "identity_core 1.5.0",
+ "identity_credential 1.5.0",
+ "identity_did 1.5.0",
+ "identity_document 1.5.0",
  "identity_iota_core",
- "identity_verification",
+ "identity_verification 1.5.0",
  "seahash",
  "serde",
  "serde_json",
@@ -3554,7 +3643,7 @@ checksum = "95ff20458f3939df912af176da0409131146b0214066dc82ad028430fcda44d2"
 dependencies = [
  "async-trait",
  "identity_storage",
- "identity_verification",
+ "identity_verification 1.5.0",
  "iota-crypto",
  "iota-sdk",
  "iota_stronghold",
@@ -3571,7 +3660,7 @@ dependencies = [
  "async-trait",
  "elliptic-curve 0.13.8",
  "identity_storage",
- "identity_verification",
+ "identity_verification 1.5.0",
  "iota-sdk",
  "iota_stronghold",
  "k256",
@@ -3588,9 +3677,23 @@ version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a651188b8864fd5f69b4fe9e24d0b457ccd387504851d8e1df830df89f7e2f2"
 dependencies = [
- "identity_core",
- "identity_did",
- "identity_jose",
+ "identity_core 1.5.0",
+ "identity_did 1.5.0",
+ "identity_jose 1.5.0",
+ "serde",
+ "serde_json",
+ "strum 0.25.0",
+ "thiserror",
+]
+
+[[package]]
+name = "identity_verification"
+version = "1.6.0-alpha"
+source = "git+https://github.com/iotaledger/identity.rs?tag=v1.6.0-alpha#8b650d45167bbe0c8f9aead36981bcdeb3ae35e8"
+dependencies = [
+ "identity_core 1.6.0-alpha",
+ "identity_did 1.6.0-alpha",
+ "identity_jose 1.6.0-alpha",
  "serde",
  "serde_json",
  "strum 0.25.0",
@@ -4891,7 +4994,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=9fcd21b#9fcd21b90c47f1616a6b31cda5b818af6db11878"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=cb7c0ed#cb7c0ed8c71c997431e57911203e1f36ba6f8215"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4915,7 +5018,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=9fcd21b#9fcd21b90c47f1616a6b31cda5b818af6db11878"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=cb7c0ed#cb7c0ed8c71c997431e57911203e1f36ba6f8215"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4926,8 +5029,8 @@ dependencies = [
  "did_url",
  "futures",
  "getset",
- "identity_core",
- "identity_credential",
+ "identity_core 1.6.0-alpha",
+ "identity_credential 1.6.0-alpha",
  "jsonwebtoken",
  "oid4vc-core",
  "oid4vci",
@@ -4947,7 +5050,7 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=9fcd21b#9fcd21b90c47f1616a6b31cda5b818af6db11878"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=cb7c0ed#cb7c0ed8c71c997431e57911203e1f36ba6f8215"
 dependencies = [
  "anyhow",
  "derivative",
@@ -4972,15 +5075,15 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=9fcd21b#9fcd21b90c47f1616a6b31cda5b818af6db11878"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=cb7c0ed#cb7c0ed8c71c997431e57911203e1f36ba6f8215"
 dependencies = [
  "anyhow",
  "chrono",
  "dif-presentation-exchange",
  "futures",
  "getset",
- "identity_core",
- "identity_credential",
+ "identity_core 1.6.0-alpha",
+ "identity_credential 1.6.0-alpha",
  "is_empty",
  "jsonwebtoken",
  "monostate",
@@ -6870,7 +6973,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://git@github.com/impierce/openid4vc.git?rev=9fcd21b#9fcd21b90c47f1616a6b31cda5b818af6db11878"
+source = "git+https://git@github.com/impierce/openid4vc.git?rev=cb7c0ed#cb7c0ed8c71c997431e57911203e1f36ba6f8215"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7745,7 +7848,7 @@ version = "0.3.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5dfd88e563464686c916c7e46e623e520ddc6d79fa6641390f2e3fa86e83e885"
 dependencies = [
- "deranged",
+ "deranged 0.3.11",
  "itoa",
  "num-conv",
  "powerfmt",
