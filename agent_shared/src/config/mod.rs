@@ -1,4 +1,3 @@
-// mod defaults;
 mod provisioned;
 
 use agent_macros::Config;
