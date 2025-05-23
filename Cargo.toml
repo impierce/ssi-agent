@@ -26,6 +26,7 @@ oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "9f
 oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "9fcd21b" }
 oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "9fcd21b" }
 
+anyhow = "1.0"
 async-trait = "0.1"
 axum = { version = "0.8" }
 base64 = "0.22"
@@ -58,6 +59,7 @@ serde_with = "3.7"
 serde_yaml = "0.9"
 strum = "0.26"
 strum_macros = "0.26"
+temp-env = "0.3"
 thiserror = "1.0"
 tokio = { version = "1", features = ["full"] }
 tower = { version = "0.4" }

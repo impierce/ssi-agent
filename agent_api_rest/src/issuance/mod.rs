@@ -6,7 +6,7 @@ pub mod offers;
 pub mod error;
 
 use crate::issuance::{
-    credential_configurations::{all_credential_configurations, credential_configurations},
+    credential_configurations::credential_configurations,
     credential_issuer::{
         credential::credential, credential_offer::credential_offer_uri, notification::notification, token::token,
         well_known::oauth_authorization_server::oauth_authorization_server,
@@ -27,14 +27,7 @@ pub fn router(issuance_state: IssuanceState) -> Router {
             Router::new()
                 .route("/credentials", post(credentials).get(all_credentials))
                 .route("/credentials/{credential_id}", get(credentials::credential))
-                .route(
-                    "/credential_configurations",
-                    post(credential_configurations).get(all_credential_configurations),
-                )
-                .route(
-                    "/credential_configurations/{credential_configuration_id}",
-                    get(credential_configurations::credential_configuration),
-                )
+                .route("/credential-configurations", post(credential_configurations))
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send", post(send)),

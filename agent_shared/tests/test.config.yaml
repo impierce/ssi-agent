@@ -27,6 +27,8 @@ domain_linkage_enabled: true
 credential_offer_by_value_enabled: true
 
 signing_algorithms_supported:
+  es256:
+    enabled: true
   eddsa:
     enabled: true
     preferred: true
@@ -54,18 +56,7 @@ display:
       uri: https://www.impierce.com/external/impierce-icon.png
       alt_text: Impierce Icon
 
-credential_configurations:
-  - credential_configuration_id: "001"
-    format: jwt_vc_json
-    credential_definition:
-      type:
-        - VerifiableCredential
-    display:
-      - name: Verifiable Credential
-        locale: en
-        logo:
-          uri: https://www.impierce.com/external/impierce-logo.png
-          alt_text: Impierce Logo
+credential_configuration_file: "../agent_shared/tests/test_credential_configurations.json"
 
 secret_manager:
   stronghold_path: ../agent_secret_manager/tests/res/test.stronghold.dat

@@ -1,4 +1,3 @@
-use super::offers::query_credential_issuer_metadata;
 use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
@@ -78,9 +77,9 @@ pub(crate) async fn credentials(
 
         let credential_configuration = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
             .await?
-            .and_then(|server_config_view| server_config_view.credential_issuer_metadata)
-            .and_then(|credential_issuer_metadata| {
-                credential_issuer_metadata
+            .and_then(|server_config_view| {
+                server_config_view
+                    .credential_issuer_metadata
                     .credential_configurations_supported
                     .get(&credential_configuration_id)
                     .cloned()
@@ -108,11 +107,9 @@ pub(crate) async fn credentials(
 
     // Create an offer if it does not exist yet.
     if query_handler(&offer_id, &state.query.offer).await?.is_none() {
-        let credential_issuer_metadata = query_credential_issuer_metadata(&state).await?;
-
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
-            credential_issuer_metadata: Box::new(credential_issuer_metadata),
+            credential_configuration_ids: vec![],
         };
 
         command_handler(&offer_id, &state.command.offer, command).await?
@@ -156,9 +153,9 @@ pub(crate) async fn all_credentials(State(state): State<IssuanceState>) -> Resul
 pub mod tests {
     use super::*;
     use crate::issuance::router;
-    use crate::tests::{BASE_URL, CREDENTIAL_CONFIGURATION_ID, OFFER_ID};
+    use crate::tests::{CREDENTIAL_CONFIGURATION_ID, OFFER_ID};
     use crate::API_VERSION;
-    use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory;
     use axum::{
@@ -249,7 +246,7 @@ pub mod tests {
     #[tracing_test::traced_test]
     async fn test_credentials_endpoint() {
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
-        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
+        initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
         credentials(&mut app).await;

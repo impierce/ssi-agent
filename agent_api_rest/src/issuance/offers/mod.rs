@@ -1,6 +1,9 @@
 pub mod send;
 
-use crate::handlers::{command_handler, query_handler};
+use crate::{
+    error::type_url,
+    handlers::{command_handler, query_handler},
+};
 use agent_issuance::{
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
@@ -12,38 +15,53 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::header;
-use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
-
-pub(crate) async fn query_credential_issuer_metadata(
-    state: &IssuanceState,
-) -> Result<CredentialIssuerMetadata, ApiError> {
-    // Get the `CredentialIssuerMetadata` from the `ServerConfigView`.
-    query_handler(SERVER_CONFIG_ID, &state.query.server_config)
-        .await?
-        .and_then(|server_config_view| server_config_view.credential_issuer_metadata)
-        // TODO: this *should* be an impossible error, what should we return here?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
-}
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OffersEndpointRequest {
     pub offer_id: String,
+    #[serde(default)]
+    pub credential_configuration_ids: Vec<String>,
 }
 
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(
     State(state): State<IssuanceState>,
-    Json(OffersEndpointRequest { offer_id }): Json<OffersEndpointRequest>,
+    Json(OffersEndpointRequest {
+        offer_id,
+        credential_configuration_ids,
+    }): Json<OffersEndpointRequest>,
 ) -> Result<Response, ApiError> {
+    // Check if the credential configuration IDs are valid.
+    let persisted_credential_configuration_ids = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+        .await?
+        .map(|server_config_view| {
+            server_config_view
+                .credential_configurations
+                .into_keys()
+                .collect::<Vec<_>>()
+        })
+        // Unreachable error
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    if let Some(credential_configuration_id) = credential_configuration_ids.iter().find(|credential_configuration_id| {
+        !persisted_credential_configuration_ids.contains(*credential_configuration_id)
+    }) {
+        return Err(ApiError::builder(StatusCode::NOT_FOUND)
+            .title("No Credential Configuration Found")
+            .type_url(type_url("issuance#no-credential-configuration-found"))
+            .message(format!(
+                "No Credential Configuration found with id: `{credential_configuration_id}`"
+            ))
+            .finish());
+    }
+
     // Create an offer if it does not exist yet.
     if query_handler(&offer_id, &state.query.offer).await?.is_none() {
-        let credential_issuer_metadata = query_credential_issuer_metadata(&state).await?;
-
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
-            credential_issuer_metadata: Box::new(credential_issuer_metadata),
+            credential_configuration_ids,
         };
 
         command_handler(&offer_id, &state.command.offer, command).await?
@@ -60,7 +78,7 @@ pub(crate) async fn offers(
             )
                 .into_response()
         })
-        // TODO: this *should* be an impossible error, what should we return here?
+        // Unreachable error
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
@@ -91,9 +109,9 @@ pub mod tests {
     use crate::API_VERSION;
     use crate::{
         issuance::{credentials::tests::credentials, router},
-        tests::{BASE_URL, OFFER_ID},
+        tests::OFFER_ID,
     };
-    use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
     use agent_shared::config::set_config;
     use agent_store::in_memory;
@@ -116,7 +134,8 @@ pub mod tests {
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "offerId": OFFER_ID
+                            "offerId": OFFER_ID,
+                            "credentialConfigurationIds": ["001"],
                         }))
                         .unwrap(),
                     ))
@@ -136,6 +155,8 @@ pub mod tests {
 
         match CredentialOffer::from_str(&body).unwrap() {
             CredentialOffer::CredentialOffer(credential_offer) => {
+                assert_eq!(credential_offer.credential_configuration_ids, vec!["001".to_string()]);
+
                 let CredentialOfferParameters {
                     grants:
                         Some(Grants {
@@ -172,7 +193,7 @@ pub mod tests {
     #[tracing_test::traced_test]
     async fn test_offers_endpoint() {
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
-        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
+        initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
 
@@ -186,7 +207,7 @@ pub mod tests {
     async fn test_offers_endpoint_by_reference() {
         set_config().credential_offer_by_value_enabled = false;
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
-        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
+        initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
 

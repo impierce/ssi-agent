@@ -8,7 +8,7 @@ use crate::{
 use agent_issuance::{
     credential::{command::CredentialCommand, views::CredentialView},
     offer::{command::OfferCommand, views::OfferView},
-    server_config::queries::ServerConfigView,
+    server_config::views::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
 use agent_shared::config::config;
@@ -41,8 +41,11 @@ pub(crate) async fn credential(
     let (credential_issuer_metadata, authorization_server_metadata) =
         match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
             Some(ServerConfigView {
-                credential_issuer_metadata: Some(credential_issuer_metadata),
+                credential_issuer_metadata,
                 authorization_server_metadata,
+                credential_configurations: _,
+                cryptographic_binding_methods_supported: _,
+                signing_algorithms_supported: _,
             }) => (
                 Box::new(credential_issuer_metadata),
                 Box::new(authorization_server_metadata),
@@ -136,11 +139,11 @@ pub mod tests {
         issuance::{
             credential_issuer::token::tests::token, credentials::CredentialsEndpointRequest, offers::tests::offers,
         },
-        tests::{BASE_URL, CREDENTIAL_CONFIGURATION_ID, OFFER_ID},
+        tests::{CREDENTIAL_CONFIGURATION_ID, OFFER_ID},
     };
     use agent_event_publisher_http::EventPublisherHttp;
     use agent_issuance::credential::aggregate::CredentialExpiry;
-    use agent_issuance::{offer::event::OfferEvent, startup_commands::startup_commands, state::initialize};
+    use agent_issuance::{offer::event::OfferEvent, state::initialize};
     use agent_secret_manager::service::Service;
     use agent_shared::config::{set_config, Events};
     use agent_store::{in_memory, EventPublisher};
@@ -286,7 +289,7 @@ pub mod tests {
         };
 
         let issuance_state = in_memory::issuance_state(Service::default(), issuance_event_publishers).await;
-        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
+        initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
 

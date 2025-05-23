@@ -534,23 +534,30 @@ pub mod document_tests {
         document_id: String,
         did_method: SupportedDidMethod,
         document: CoreDocument,
-        document_with_verification_method: CoreDocument,
+        document_with_es256_verification_method: CoreDocument,
+        document_with_both_verification_methods: CoreDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
             .given(vec![DocumentEvent::DocumentCreated {
                 document_id: document_id.clone(),
                 did_method,
-                document,
+                document: document.clone(),
                 status: Status::SignAndValidate,
                 with_fixed_algorithm: None,
             }])
             .when(DocumentCommand::UpdatePublicKeys {
                 public_key_jwks: vec![],
             })
-            .then_expect_events(vec![DocumentEvent::PublicKeyUpdated {
-                document_id,
-                document: document_with_verification_method,
-            }])
+            .then_expect_events(vec![
+                DocumentEvent::PublicKeyUpdated {
+                    document_id: document_id.clone(),
+                    document: document_with_es256_verification_method,
+                },
+                DocumentEvent::PublicKeyUpdated {
+                    document_id,
+                    document: document_with_both_verification_methods,
+                },
+            ])
     }
 
     #[rstest]
@@ -560,7 +567,7 @@ pub mod document_tests {
         did_method: SupportedDidMethod,
         document: CoreDocument,
         domain_linkage_service: Service,
-        document_with_verification_method: CoreDocument,
+        document_with_both_verification_methods: CoreDocument,
         document_with_domain_linkage_service: CoreDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
@@ -574,7 +581,7 @@ pub mod document_tests {
                 },
                 DocumentEvent::PublicKeyUpdated {
                     document_id: document_id.clone(),
-                    document: document_with_verification_method,
+                    document: document_with_both_verification_methods,
                 },
             ])
             .when(DocumentCommand::AddService {
@@ -593,7 +600,7 @@ pub mod document_tests {
         document_id: String,
         did_method: SupportedDidMethod,
         document: CoreDocument,
-        document_with_verification_method: CoreDocument,
+        document_with_both_verification_methods: CoreDocument,
         document_with_domain_linkage_service: CoreDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
@@ -607,7 +614,7 @@ pub mod document_tests {
                 },
                 DocumentEvent::PublicKeyUpdated {
                     document_id: document_id.clone(),
-                    document: document_with_verification_method.clone(),
+                    document: document_with_both_verification_methods.clone(),
                 },
                 DocumentEvent::ServiceAdded {
                     document_id: document_id.clone(),
@@ -661,7 +668,32 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn verification_method() -> VerificationMethod {
+    pub fn es256_verification_method() -> VerificationMethod {
+        VerificationMethod::builder(Default::default())
+            .id(
+                "did:web:my-domain.example.org#oOY2dMVU7GK5al1q7EAxuoYloxMQlv5ZNZOatiUXQHg"
+                    .parse()
+                    .unwrap(),
+            )
+            .controller("did:web:my-domain.example.org".parse().unwrap())
+            .type_(MethodType::JSON_WEB_KEY_2020)
+            .data(MethodData::PublicKeyJwk(
+                Jwk::from_json_value(json!({
+                    "kty": "EC",
+                    "alg": "ES256",
+                    "kid": "oOY2dMVU7GK5al1q7EAxuoYloxMQlv5ZNZOatiUXQHg",
+                    "crv": "P-256",
+                    "x": "Fmk13gO2SGLbuXeL24qJPHCNncnI6lBu6ZQL2EVZv4E",
+                    "y": "fz2KvMhufzUpMeL9-K2re9fwA3mzg1bpfbceIQSuihY"
+                }))
+                .unwrap(),
+            ))
+            .build()
+            .unwrap()
+    }
+
+    #[fixture]
+    pub fn eddsa_verification_method() -> VerificationMethod {
         VerificationMethod::builder(Default::default())
             .id(
                 "did:web:my-domain.example.org#bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"
@@ -685,13 +717,35 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn document_with_verification_method(
+    pub fn both_verification_methods(
+        es256_verification_method: VerificationMethod,
+        eddsa_verification_method: VerificationMethod,
+    ) -> Vec<VerificationMethod> {
+        vec![es256_verification_method, eddsa_verification_method]
+    }
+
+    #[fixture]
+    pub fn document_with_es256_verification_method(
         mut document: CoreDocument,
-        verification_method: VerificationMethod,
+        es256_verification_method: VerificationMethod,
     ) -> CoreDocument {
         document
-            .insert_method(verification_method, MethodScope::VerificationMethod)
+            .insert_method(es256_verification_method, MethodScope::VerificationMethod)
             .unwrap();
+
+        document
+    }
+
+    #[fixture]
+    pub fn document_with_both_verification_methods(
+        mut document: CoreDocument,
+        both_verification_methods: Vec<VerificationMethod>,
+    ) -> CoreDocument {
+        for verification_method in both_verification_methods {
+            document
+                .insert_method(verification_method, MethodScope::VerificationMethod)
+                .unwrap();
+        }
 
         document
     }
@@ -715,13 +769,13 @@ pub mod test_utils {
 
     #[fixture]
     pub fn document_with_domain_linkage_service(
-        mut document_with_verification_method: CoreDocument,
+        mut document_with_both_verification_methods: CoreDocument,
         domain_linkage_service: Service,
     ) -> CoreDocument {
-        document_with_verification_method
+        document_with_both_verification_methods
             .insert_service(domain_linkage_service)
             .unwrap();
 
-        document_with_verification_method
+        document_with_both_verification_methods
     }
 }
