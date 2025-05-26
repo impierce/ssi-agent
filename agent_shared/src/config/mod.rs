@@ -1240,8 +1240,13 @@ mod tests {
         // Some display information is set
         assert_eq!(config.display.len(), 1);
 
-        // // Some credential configuration is set
-        // assert_eq!(config.credential_configurations.len(), 1);
+        // The Credential Configuration file is set to the default path
+        assert_eq!(
+            config.credential_configuration_file,
+            Some(Box::new(
+                Path::new("./config/credential_configurations.json").to_path_buf()
+            ))
+        );
     }
 
     #[test]
