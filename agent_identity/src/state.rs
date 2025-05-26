@@ -300,7 +300,7 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
                 for document_id in update_supporting_documents.keys() {
                     let command = DocumentCommand::AddService {
                         service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-                        service: service.clone(),
+                        service: Box::new(service.clone()),
                     };
 
                     command_handler(document_id, &state.command.document, command).await?;
@@ -343,7 +343,7 @@ pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -
         for document_id in did_web_document.keys() {
             let command = DocumentCommand::AddService {
                 service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-                service: service.clone(),
+                service: Box::new(service.clone()),
             };
 
             command_handler(document_id, &state.command.document, command).await?;
