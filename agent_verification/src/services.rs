@@ -1,6 +1,7 @@
 use agent_secret_manager::service::Service;
-use agent_shared::config::{config, get_all_enabled_did_methods, get_preferred_did_method};
-use jsonwebtoken::Algorithm;
+use agent_shared::config::{
+    config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, get_preferred_did_method,
+};
 use oid4vc_core::{client_metadata::ClientMetadataResource, Subject};
 use oid4vc_manager::RelyingPartyManager;
 use oid4vp::ClaimFormatProperty;
@@ -24,12 +25,7 @@ impl Service for VerificationServices {
             .first()
             .and_then(|display| display.logo.as_ref().and_then(|logo| logo.uri.clone()));
 
-        let signing_algorithms_supported: Vec<Algorithm> = config()
-            .signing_algorithms_supported
-            .iter()
-            .filter(|(_, opts)| opts.enabled)
-            .map(|(alg, _)| *alg)
-            .collect();
+        let signing_algorithms_supported = get_all_enabled_signing_algorithms_supported();
 
         let siopv2_client_metadata = ClientMetadataResource::ClientMetadata {
             client_name: client_name.clone(),

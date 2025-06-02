@@ -36,7 +36,7 @@ pub struct EventPublisherHttp {
 
 impl EventPublisherHttp {
     pub fn load() -> anyhow::Result<Self> {
-        let event_publisher_http = config().event_publishers.clone().unwrap().http.unwrap();
+        let event_publisher_http = config().event_publishers.http.clone().unwrap_or_default();
 
         // If it's not enabled, return an empty event publisher.
         if !event_publisher_http.enabled {
@@ -328,9 +328,9 @@ mod tests {
         );
 
         // A new event for the `Offer` aggregate that the publisher is not interested in.
-        let offer_event = OfferEvent::CredentialsAdded {
+        let offer_event = OfferEvent::CredentialRequestVerified {
             offer_id: Default::default(),
-            credential_ids: vec!["credential-0001".to_string()],
+            subject_id: "subject_id".to_string(),
         };
 
         let events = [EventEnvelope::<Offer> {

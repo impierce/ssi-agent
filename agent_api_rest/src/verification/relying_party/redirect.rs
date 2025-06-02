@@ -1,7 +1,6 @@
-use agent_shared::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, query_handler};
 use agent_verification::{
-    authorization_request::{command::AuthorizationRequestCommand, views::AuthorizationRequestView},
-    generic_oid4vc::GenericAuthorizationResponse,
+    authorization_request::command::AuthorizationRequestCommand, generic_oid4vc::GenericAuthorizationResponse,
     state::VerificationState,
 };
 use axum::{
@@ -10,31 +9,28 @@ use axum::{
     response::{IntoResponse, Response},
     Form,
 };
+use http_api_problem::ApiError;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn redirect(
     State(verification_state): State<VerificationState>,
     Form(authorization_response): Form<GenericAuthorizationResponse>,
-) -> Response {
+) -> Result<Response, ApiError> {
     let authorization_request_id = if let Some(state) = authorization_response.state() {
         state.clone()
     } else {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        // TODO: Return a standardized error response.
+        return Err(ApiError::new(StatusCode::BAD_REQUEST));
     };
 
     // Retrieve the authorization request.
-    let authorization_request = match query_handler(
+    let authorization_request = query_handler(
         &authorization_request_id,
         &verification_state.query.authorization_request,
     )
-    .await
-    {
-        Ok(Some(AuthorizationRequestView {
-            authorization_request: Some(authorization_request),
-            ..
-        })) => authorization_request,
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
+    .await?
+    .and_then(|authorization_request_view| authorization_request_view.authorization_request)
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
 
     let command = AuthorizationRequestCommand::VerifyAuthorizationResponse {
         authorization_request,
@@ -42,17 +38,14 @@ pub(crate) async fn redirect(
     };
 
     // Verify the authorization response.
-    if command_handler(
+    command_handler(
         &authorization_request_id,
         &verification_state.command.authorization_request,
         command,
     )
-    .await
-    .is_err()
-    {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-    StatusCode::OK.into_response()
+    .await?;
+
+    Ok(StatusCode::OK.into_response())
 }
 
 #[cfg(test)]
@@ -66,7 +59,7 @@ pub mod tests {
     use agent_event_publisher_http::EventPublisherHttp;
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{set_config, Events};
-    use agent_store::{in_memory, EventPublisher};
+    use agent_store::{in_memory::InMemory, verification_state, EventPublisher};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -158,7 +151,7 @@ pub mod tests {
 
         let event_publishers = vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>];
 
-        let verification_state = in_memory::verification_state(Service::default(), event_publishers).await;
+        let verification_state = verification_state::<InMemory>(Service::default(), event_publishers).await;
 
         let mut app = router(verification_state);
 

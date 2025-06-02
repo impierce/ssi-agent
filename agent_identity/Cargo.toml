@@ -8,7 +8,7 @@ rust-version.workspace = true
 agent_shared = { path = "../agent_shared" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 
-anyhow = "1.0"
+anyhow.workspace = true
 async-trait.workspace = true
 base64.workspace = true
 cqrs-es.workspace = true
@@ -47,7 +47,9 @@ agent_api_rest = { path = "../agent_api_rest" }
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_identity = { path = ".", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
-agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }
+agent_secret_manager = { path = "../agent_secret_manager", features = [
+    "test_utils",
+] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
 
@@ -62,7 +64,4 @@ tracing-test.workspace = true
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 
 [features]
-test_utils = [
-    "dep:futures",
-    "dep:rstest",
-]
+test_utils = ["dep:futures", "dep:rstest"]

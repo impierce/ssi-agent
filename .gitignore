@@ -3,7 +3,12 @@
 **/Cargo.lock
 !Cargo.lock
 
+debug/
+
 **/*.env
 !**/.env.example
 
 .DS_Store
+
+**/stronghold.dat
+config.yaml

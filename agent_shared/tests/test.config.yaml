@@ -1,0 +1,64 @@
+# All possible configuration values should be included to achieve a high test coverage
+
+log_format: json
+
+event_store:
+  type: postgres
+  # connection_string: <defined in .env.test>
+
+application_url: https://my-domain.example.org
+
+cors_enabled: true
+
+external_server_response_timeout_ms: 250
+
+did_methods:
+  did_jwk:
+    enabled: true
+    preferred: false
+  did_key:
+    enabled: true
+    preferred: true
+  did_web:
+    enabled: false
+
+domain_linkage_enabled: true
+
+credential_offer_by_value_enabled: true
+
+signing_algorithms_supported:
+  es256:
+    enabled: true
+  eddsa:
+    enabled: true
+    preferred: true
+
+vp_formats:
+  jwt_vc_json:
+    enabled: true
+  jwt_vp_json:
+    enabled: true
+
+event_publishers:
+  http:
+    enabled: true
+    target_url: https://service.example.test:8291/events
+    headers:
+      Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
+    events:
+      credential: [UnsignedCredentialCreated, CredentialSigned]
+      server_config: []
+
+display:
+  - name: UniCore
+    locale: en
+    logo:
+      uri: https://www.impierce.com/external/impierce-icon.png
+      alt_text: Impierce Icon
+
+credential_configuration_file: "../agent_shared/tests/test_credential_configurations.json"
+
+secret_manager:
+  stronghold_path: ../agent_secret_manager/tests/res/test.stronghold.dat
+  # stronghold_password: <defined in .env.test>
+  issuer_eddsa_key_id: UVDxWhG2rB39FkaR7I27mHeUNrGtUgcr

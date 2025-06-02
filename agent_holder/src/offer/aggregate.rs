@@ -289,8 +289,10 @@ pub mod tests {
     use agent_api_rest::API_VERSION;
     use agent_issuance::offer::aggregate::test_utils::token_response;
     use agent_issuance::server_config::aggregate::test_utils::credential_configurations_supported;
-    use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
+    use agent_shared::config::config;
+    use agent_shared::config::config_mut;
     use agent_shared::generate_random_string;
     use agent_store::in_memory;
     use axum::{
@@ -310,8 +312,17 @@ pub mod tests {
         let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
         let issuer_url = format!("http://{}", listener.local_addr().unwrap());
 
+        config_mut().application_url = issuer_url.parse().unwrap();
+
+        let application_url = config().application_url.clone();
+
+        config_mut().public_url = application_url.clone();
+        config_mut().token_endpoint = application_url.join("auth/token").unwrap();
+        config_mut().credential_endpoint = application_url.join("openid4vci/credential").unwrap();
+        config_mut().credential_offer_uri = application_url.join("openid4vci/credential-offer/").unwrap();
+
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
-        initialize(&issuance_state, startup_commands(issuer_url.parse().unwrap())).await;
+        initialize(&issuance_state).await.unwrap();
 
         let received_offer_id = generate_random_string();
 
@@ -321,7 +332,7 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri(&format!("{issuer_url}{API_VERSION}/credentials"))
+                    .uri(format!("{issuer_url}{API_VERSION}/credentials"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
@@ -335,7 +346,7 @@ pub mod tests {
                                         "name": "Master of Oceanography"
                                     }
                             }},
-                            "credentialConfigurationId": "badge",
+                            "credentialConfigurationId": "001",
                             "expiresAt": "never"
                         }))
                         .unwrap(),
@@ -348,7 +359,7 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri(&format!("{issuer_url}{API_VERSION}/offers"))
+                    .uri(format!("{issuer_url}{API_VERSION}/offers"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
@@ -516,6 +527,6 @@ pub mod test_utils {
 
     #[fixture]
     pub fn signed_credentials(holder_credential_id: String) -> Vec<OfferCredential> {
-        vec![OfferCredential { holder_credential_id, credential: Jwt::from("eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjoiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJkZWdyZWUiOnsidHlwZSI6Ik1hc3RlckRlZ3JlZSIsIm5hbWUiOiJNYXN0ZXIgb2YgT2NlYW5vZ3JhcGh5In0sImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4ifSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiJ9fQ.jUt911ms74K282EUQSbisnOZGf1ALUvpnTJfJ1PSwp6sBcoStZTX52H6k5b6o6nNRvBr6nxQWkywib_S0AzACQ".to_string())}]
+        vec![OfferCredential { holder_credential_id, credential: Jwt::from("eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ekRuYWVSd1Q0ZzZBWkNIenh2Tkw3RExqcVRhVDg4YW00WFI2VFVHcktyNkRYajZUeiIsIm5iZiI6MTI2MjMwNDAwMCwiaWF0IjoxMjYyMzA0MDAwLCJ2YyI6eyJAY29udGV4dCI6Imh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCJdLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDprZXk6ekRuYWVSd1Q0ZzZBWkNIenh2Tkw3RExqcVRhVDg4YW00WFI2VFVHcktyNkRYajZUeiIsImRlZ3JlZSI6eyJ0eXBlIjoiTWFzdGVyRGVncmVlIiwibmFtZSI6Ik1hc3RlciBvZiBPY2Vhbm9ncmFwaHkifSwiZmlyc3RfbmFtZSI6IkZlcnJpcyIsImxhc3RfbmFtZSI6IlJ1c3RhY2VhbiJ9LCJpc3N1ZXIiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIn19.24-yPLAlLo4VxX0MAHDOn4xCh2-pAj0dNB8xNka6vhnEOY_oSu7VgAwUa2_K0fCeWQ-GMrAzZFZly6amw0OXDQ".to_string())}]
     }
 }

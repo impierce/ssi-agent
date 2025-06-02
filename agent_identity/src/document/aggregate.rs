@@ -126,12 +126,12 @@ impl Aggregate for Document {
                                 .map_err(|err| AliasOutputBuilderError(err.to_string()))?;
 
                             // Publish the updated Alias Output and get the published DID document.
-                            let test_publish_result = iota_client
+                            let publish_result = iota_client
                                 .publish_did_output(stronghold_storage.as_secret_manager(), alias_output)
                                 .await
                                 .map(CoreDocument::from);
 
-                            match test_publish_result {
+                            match publish_result {
                                 // The current wallet address controls the existing DID Document.
                                 Ok(document) => Some(document),
                                 Err(test_publish_error) => match test_publish_error {
@@ -175,10 +175,10 @@ impl Aggregate for Document {
                             document
                         } else {
                             // If there was no DID Document stored in the Aggregate yet, or the current Stronghold
-                            // storage is not in control of it, then we create a completely new controler and DID Document.
+                            // storage is not in control of it, then we create a completely new controller and DID Document.
                             info!("Creating a new controller for DID method `{did_method}`");
 
-                            // Create a new 'blanc' DID Document.
+                            // Create a new 'blank' DID Document.
                             let document =
                                 IotaDocument::new(&iota_client.network_name().await.map_err(IotaClientError)?);
 
@@ -213,7 +213,7 @@ impl Aggregate for Document {
                         }
                     }
                     SupportedDidMethod::Web => {
-                        let origin = config().url.origin();
+                        let origin = config().public_url.origin();
 
                         info!("Origin: {}", &origin.ascii_serialization());
 
@@ -290,8 +290,7 @@ impl Aggregate for Document {
                 }])
             }
             UpdatePublicKeys {
-                document_id,
-                // TODO: decide whether the public keys should be suplied through the command or not.
+                // TODO: decide whether the public keys should be supplied through the command or not.
                 public_key_jwks: _,
             } => {
                 let mut document = self.document.clone().ok_or(MissingDocumentError)?;
@@ -340,14 +339,17 @@ impl Aggregate for Document {
                         .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
 
                     events.push(PublicKeyUpdated {
-                        document_id: document_id.clone(),
+                        document_id: self.document_id.clone(),
                         document: document.clone(),
                     })
                 }
 
                 Ok(events)
             }
-            UpdateDocumentStatus { document_id, status } => Ok(vec![DocumentStatusUpdated { document_id, status }]),
+            UpdateDocumentStatus { status } => Ok(vec![DocumentStatusUpdated {
+                document_id: self.document_id.clone(),
+                status,
+            }]),
             AddService {
                 service_id,
                 mut service,
@@ -366,12 +368,12 @@ impl Aggregate for Document {
                 // Overwrite the service if it already exists.
                 document.remove_service(service.id());
                 document
-                    .insert_service(service)
+                    .insert_service(*service)
                     .map_err(|err| AddServiceError(err.to_string()))?;
 
                 Ok(vec![ServiceAdded { document_id, document }])
             }
-            PublishDocument { document_id } => {
+            PublishDocument => {
                 // The API endpoint of an IOTA node, e.g. Hornet.
                 let api_endpoint = self
                     .did_method
@@ -429,8 +431,8 @@ impl Aggregate for Document {
                     .map_err(IotaClientError)?;
 
                 Ok(vec![DocumentPublished {
-                    document_id,
-                    updated_document,
+                    document_id: self.document_id.clone(),
+                    document: updated_document,
                 }])
             }
         }
@@ -467,12 +469,9 @@ impl Aggregate for Document {
                 self.document_id = document_id;
                 self.document.replace(document);
             }
-            DocumentPublished {
-                document_id,
-                updated_document,
-            } => {
+            DocumentPublished { document_id, document } => {
                 self.document_id = document_id;
-                self.document.replace(updated_document);
+                self.document.replace(document);
             }
         }
     }
@@ -535,24 +534,30 @@ pub mod document_tests {
         document_id: String,
         did_method: SupportedDidMethod,
         document: CoreDocument,
-        document_with_verification_method: CoreDocument,
+        document_with_es256_verification_method: CoreDocument,
+        document_with_both_verification_methods: CoreDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
             .given(vec![DocumentEvent::DocumentCreated {
                 document_id: document_id.clone(),
                 did_method,
-                document,
+                document: document.clone(),
                 status: Status::SignAndValidate,
                 with_fixed_algorithm: None,
             }])
             .when(DocumentCommand::UpdatePublicKeys {
-                document_id: document_id.clone(),
                 public_key_jwks: vec![],
             })
-            .then_expect_events(vec![DocumentEvent::PublicKeyUpdated {
-                document_id,
-                document: document_with_verification_method,
-            }])
+            .then_expect_events(vec![
+                DocumentEvent::PublicKeyUpdated {
+                    document_id: document_id.clone(),
+                    document: document_with_es256_verification_method,
+                },
+                DocumentEvent::PublicKeyUpdated {
+                    document_id,
+                    document: document_with_both_verification_methods,
+                },
+            ])
     }
 
     #[rstest]
@@ -562,7 +567,7 @@ pub mod document_tests {
         did_method: SupportedDidMethod,
         document: CoreDocument,
         domain_linkage_service: Service,
-        document_with_verification_method: CoreDocument,
+        document_with_both_verification_methods: CoreDocument,
         document_with_domain_linkage_service: CoreDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
@@ -576,11 +581,11 @@ pub mod document_tests {
                 },
                 DocumentEvent::PublicKeyUpdated {
                     document_id: document_id.clone(),
-                    document: document_with_verification_method,
+                    document: document_with_both_verification_methods,
                 },
             ])
             .when(DocumentCommand::AddService {
-                service: domain_linkage_service,
+                service: Box::new(domain_linkage_service),
                 service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
             })
             .then_expect_events(vec![DocumentEvent::ServiceAdded {
@@ -595,7 +600,7 @@ pub mod document_tests {
         document_id: String,
         did_method: SupportedDidMethod,
         document: CoreDocument,
-        document_with_verification_method: CoreDocument,
+        document_with_both_verification_methods: CoreDocument,
         document_with_domain_linkage_service: CoreDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
@@ -609,7 +614,7 @@ pub mod document_tests {
                 },
                 DocumentEvent::PublicKeyUpdated {
                     document_id: document_id.clone(),
-                    document: document_with_verification_method.clone(),
+                    document: document_with_both_verification_methods.clone(),
                 },
                 DocumentEvent::ServiceAdded {
                     document_id: document_id.clone(),
@@ -617,7 +622,6 @@ pub mod document_tests {
                 },
             ])
             .when(DocumentCommand::UpdateDocumentStatus {
-                document_id: document_id.clone(),
                 status: Status::Disabled,
             })
             .then_expect_events(vec![DocumentEvent::DocumentStatusUpdated {
@@ -631,8 +635,7 @@ pub mod document_tests {
 pub mod test_utils {
     use super::get_properties;
     use crate::state::DOMAIN_LINKAGE_SERVICE_ID;
-    use agent_shared::config::config;
-    use agent_shared::config::SupportedDidMethod;
+    use agent_shared::config::{config, SupportedDidMethod};
     use identity_core::convert::FromJson;
     use identity_did::CoreDID;
     use identity_document::{
@@ -665,7 +668,32 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn verification_method() -> VerificationMethod {
+    pub fn es256_verification_method() -> VerificationMethod {
+        VerificationMethod::builder(Default::default())
+            .id(
+                "did:web:my-domain.example.org#oOY2dMVU7GK5al1q7EAxuoYloxMQlv5ZNZOatiUXQHg"
+                    .parse()
+                    .unwrap(),
+            )
+            .controller("did:web:my-domain.example.org".parse().unwrap())
+            .type_(MethodType::JSON_WEB_KEY_2020)
+            .data(MethodData::PublicKeyJwk(
+                Jwk::from_json_value(json!({
+                    "kty": "EC",
+                    "alg": "ES256",
+                    "kid": "oOY2dMVU7GK5al1q7EAxuoYloxMQlv5ZNZOatiUXQHg",
+                    "crv": "P-256",
+                    "x": "Fmk13gO2SGLbuXeL24qJPHCNncnI6lBu6ZQL2EVZv4E",
+                    "y": "fz2KvMhufzUpMeL9-K2re9fwA3mzg1bpfbceIQSuihY"
+                }))
+                .unwrap(),
+            ))
+            .build()
+            .unwrap()
+    }
+
+    #[fixture]
+    pub fn eddsa_verification_method() -> VerificationMethod {
         VerificationMethod::builder(Default::default())
             .id(
                 "did:web:my-domain.example.org#bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"
@@ -689,13 +717,35 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn document_with_verification_method(
+    pub fn both_verification_methods(
+        es256_verification_method: VerificationMethod,
+        eddsa_verification_method: VerificationMethod,
+    ) -> Vec<VerificationMethod> {
+        vec![es256_verification_method, eddsa_verification_method]
+    }
+
+    #[fixture]
+    pub fn document_with_es256_verification_method(
         mut document: CoreDocument,
-        verification_method: VerificationMethod,
+        es256_verification_method: VerificationMethod,
     ) -> CoreDocument {
         document
-            .insert_method(verification_method, MethodScope::VerificationMethod)
+            .insert_method(es256_verification_method, MethodScope::VerificationMethod)
             .unwrap();
+
+        document
+    }
+
+    #[fixture]
+    pub fn document_with_both_verification_methods(
+        mut document: CoreDocument,
+        both_verification_methods: Vec<VerificationMethod>,
+    ) -> CoreDocument {
+        for verification_method in both_verification_methods {
+            document
+                .insert_method(verification_method, MethodScope::VerificationMethod)
+                .unwrap();
+        }
 
         document
     }
@@ -709,7 +759,7 @@ pub mod test_utils {
             .type_("LinkedDomains")
             .service_endpoint(
                 ServiceEndpoint::from_json_value(json!({
-                    "origins": [config().url],
+                    "origins": [config().public_url.clone()],
                 }))
                 .unwrap(),
             )
@@ -719,13 +769,13 @@ pub mod test_utils {
 
     #[fixture]
     pub fn document_with_domain_linkage_service(
-        mut document_with_verification_method: CoreDocument,
+        mut document_with_both_verification_methods: CoreDocument,
         domain_linkage_service: Service,
     ) -> CoreDocument {
-        document_with_verification_method
+        document_with_both_verification_methods
             .insert_service(domain_linkage_service)
             .unwrap();
 
-        document_with_verification_method
+        document_with_both_verification_methods
     }
 }

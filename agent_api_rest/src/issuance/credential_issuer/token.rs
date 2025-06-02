@@ -1,39 +1,34 @@
-use agent_issuance::{
-    offer::{command::OfferCommand, queries::pre_authorized_code::PreAuthorizedCodeView, views::OfferView},
-    state::IssuanceState,
-};
-use agent_shared::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, query_handler};
+use crate::issuance::error::{internal_server_error, PublicError};
+use agent_issuance::{offer::command::OfferCommand, state::IssuanceState};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Form,
 };
+use oid4vci::errors::TokenErrorResponse;
 use oid4vci::token_request::TokenRequest;
-use serde_json::json;
-use tracing::info;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn token(
     State(state): State<IssuanceState>,
     Form(token_request): Form<TokenRequest>,
     // TODO: implement official oid4vci error response. This TODO is also in the `credential` endpoint.
-) -> Response {
-    info!("Request Body: {}", json!(token_request));
-
+) -> Result<Response, PublicError> {
     // Get the `pre_authorized_code` from the `TokenRequest`.
     let pre_authorized_code = match &token_request {
         TokenRequest::PreAuthorizedCode {
             pre_authorized_code, ..
         } => pre_authorized_code,
-        _ => return StatusCode::BAD_REQUEST.into_response(),
+        _ => return Err(PublicError::from(TokenErrorResponse::InvalidGrant)),
     };
 
     // Use the `pre_authorized_code` to get the `offer_id` from the `PreAuthorizedCodeView`.
-    let offer_id = match query_handler(pre_authorized_code, &state.query.pre_authorized_code).await {
-        Ok(Some(PreAuthorizedCodeView { offer_id })) => offer_id,
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
+    let offer_id = query_handler(pre_authorized_code, &state.query.pre_authorized_code)
+        .await?
+        .ok_or_else(|| PublicError::from(TokenErrorResponse::InvalidGrant))?
+        .offer_id;
 
     let command = OfferCommand::CreateTokenResponse {
         offer_id: offer_id.clone(),
@@ -41,28 +36,21 @@ pub(crate) async fn token(
     };
 
     // Create a `TokenResponse` using the `offer_id` and `token_request`.
-    if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
+    command_handler(&offer_id, &state.command.offer, command).await?;
 
     // Use the `offer_id` to get the `token_response` from the `OfferView`.
-    match query_handler(&offer_id, &state.query.offer).await {
-        Ok(Some(OfferView {
-            token_response: Some(token_response),
-            ..
-        })) => (StatusCode::OK, Json(token_response)).into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+    query_handler(&offer_id, &state.query.offer)
+        .await?
+        .and_then(|offer_view| offer_view.token_response)
+        .map(|token_response| (StatusCode::OK, Json(token_response)).into_response())
+        .ok_or_else(internal_server_error)
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::{
-        issuance::{credentials::tests::credentials, offers::tests::offers, router},
-        tests::BASE_URL,
-    };
-    use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use crate::issuance::{credentials::tests::credentials, offers::tests::offers, router};
+    use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory;
     use axum::{
@@ -99,19 +87,18 @@ pub mod tests {
         let token_response: TokenResponse = serde_json::from_slice(&body).unwrap();
         assert_eq!(token_response.token_type, "bearer");
         assert!(token_response.c_nonce.is_some());
-
         token_response.access_token
     }
 
+    #[serial_test::serial]
     #[tokio::test]
     async fn test_token_endpoint() {
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
-        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
-
+        initialize(&issuance_state).await.unwrap();
         let mut app = router(issuance_state);
 
         credentials(&mut app).await;
-        let pre_authorized_code = offers(&mut app).await;
+        let pre_authorized_code: String = offers(&mut app).await.unwrap();
 
         let _access_token = token(&mut app, pre_authorized_code).await;
     }

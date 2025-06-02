@@ -66,8 +66,11 @@ mod default_subject {
     use super::*;
 
     impl Subject {
+        const DID_KEY_ES256_VERIFICATION_METHOD_ID: &str = "did:key:zDnaeRwT4g6AZCHzxvNL7DLjqTaT88am4XR6TUGrKr6DXj6Tz#zDnaeRwT4g6AZCHzxvNL7DLjqTaT88am4XR6TUGrKr6DXj6Tz";
         const DID_KEY_EDDSA_VERIFICATION_METHOD_ID: &str =
             "did:key:z6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt#z6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt";
+        const DID_JWK_ES256_VERIFICATION_METHOD_ID: &str =
+            "did:jwk:eyJhbGciOiJFUzI1NiIsImNydiI6IlAtMjU2Iiwia2lkIjoib09ZMmRNVlU3R0s1YWwxcTdFQXh1b1lsb3hNUWx2NVpOWk9hdGlVWFFIZyIsImt0eSI6IkVDIiwieCI6IkZtazEzZ08yU0dMYnVYZUwyNHFKUEhDTm5jbkk2bEJ1NlpRTDJFVlp2NEUiLCJ5IjoiZnoyS3ZNaHVmelVwTWVMOS1LMnJlOWZ3QTNtemcxYnBmYmNlSVFTdWloWSJ9#0";
         const DID_JWK_EDDSA_VERIFICATION_METHOD_ID: &str =
             "did:jwk:eyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ#0";
     }
@@ -80,8 +83,16 @@ mod default_subject {
 
                 let verification_method_ids = Arc::new(Mutex::new(HashMap::from_iter(vec![
                     (
+                        StorageKey::new(SupportedDidMethod::Key, Algorithm::ES256),
+                        Self::DID_KEY_ES256_VERIFICATION_METHOD_ID.parse().unwrap(),
+                    ),
+                    (
                         StorageKey::new(SupportedDidMethod::Key, Algorithm::EdDSA),
                         Self::DID_KEY_EDDSA_VERIFICATION_METHOD_ID.parse().unwrap(),
+                    ),
+                    (
+                        StorageKey::new(SupportedDidMethod::Jwk, Algorithm::ES256),
+                        Self::DID_JWK_ES256_VERIFICATION_METHOD_ID.parse().unwrap(),
                     ),
                     (
                         StorageKey::new(SupportedDidMethod::Jwk, Algorithm::EdDSA),
@@ -141,7 +152,7 @@ impl Verify for Subject {
                     }
                     _ => None,
                 })
-                .ok_or(anyhow!("Failed to decode public key for DID URL: {did_url}"))
+                .ok_or(anyhow!("Failed to decode public key for DID URL: `{did_url}`"))
         })
     }
 }

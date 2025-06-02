@@ -164,14 +164,13 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
             }) if !enabled => Some((
                 document_id.clone(),
                 DocumentCommand::UpdateDocumentStatus {
-                    document_id: document_id.clone(),
                     status: Status::Disabled,
                 },
             )),
             // If the DID method is enabled, then create the Document regardless of whether it alraedy exists or not.
             document if enabled => {
                 let document_id = document
-                    // Extract the `document_id` from the Documument if it exists.
+                    // Extract the `document_id` from the Document if it exists.
                     .map(|document| document.document_id.clone())
                     // Otherwise, generate a new `document_id`.
                     .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
@@ -195,7 +194,6 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
 
             if enabled {
                 let command = DocumentCommand::UpdatePublicKeys {
-                    document_id: document_id.clone(),
                     public_key_jwks: vec![],
                 };
 
@@ -268,7 +266,7 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
     })
     .await?;
 
-    // Check whether Domain Linkage are enabled and whether there are any enabled update supporting Documents.
+    // Check whether Domain Linkage is enabled and whether there are any enabled update-supporting Documents.
     if config().domain_linkage_enabled && !update_supporting_documents.is_empty() {
         info!(
             "Creating domain linkage service with documents: {:?}",
@@ -302,7 +300,7 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
                 for document_id in update_supporting_documents.keys() {
                     let command = DocumentCommand::AddService {
                         service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-                        service: service.clone(),
+                        service: Box::new(service.clone()),
                     };
 
                     command_handler(document_id, &state.command.document, command).await?;
@@ -345,7 +343,7 @@ pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -
         for document_id in did_web_document.keys() {
             let command = DocumentCommand::AddService {
                 service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-                service: service.clone(),
+                service: Box::new(service.clone()),
             };
 
             command_handler(document_id, &state.command.document, command).await?;
@@ -376,11 +374,7 @@ pub async fn publish_decentrally_hosted_documents(state: &IdentityState) -> anyh
 
     // Publish each decentrally hosted Documents.
     for document_id in decentrally_hosted_documents.keys() {
-        let command = DocumentCommand::PublishDocument {
-            document_id: document_id.clone(),
-        };
-
-        command_handler(document_id, &state.command.document, command).await?;
+        command_handler(document_id, &state.command.document, DocumentCommand::PublishDocument).await?;
     }
 
     Ok(())

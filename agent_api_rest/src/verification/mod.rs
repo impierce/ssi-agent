@@ -1,6 +1,8 @@
 pub mod authorization_requests;
 pub mod relying_party;
 
+pub mod error;
+
 use agent_verification::state::VerificationState;
 use authorization_requests::all_authorization_requests;
 use axum::routing::get;
@@ -22,11 +24,11 @@ pub fn router(verification_state: VerificationState) -> Router {
                     post(authorization_requests).get(all_authorization_requests),
                 )
                 .route(
-                    "/authorization_requests/:authorization_request_id",
+                    "/authorization_requests/{authorization_request_id}",
                     get(authorization_request),
                 ),
         )
-        .route("/request/:request_id", get(request))
+        .route("/request/{request_id}", get(request))
         .route("/redirect", post(redirect))
         .with_state(verification_state)
 }

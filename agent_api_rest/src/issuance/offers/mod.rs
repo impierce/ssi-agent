@@ -1,107 +1,106 @@
 pub mod send;
 
+use crate::{
+    error::type_url,
+    handlers::{command_handler, query_handler},
+};
 use agent_issuance::{
-    offer::{command::OfferCommand, views::OfferView},
-    server_config::queries::ServerConfigView,
+    offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
-use agent_shared::handlers::{command_handler, query_handler};
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use http_api_problem::ApiError;
 use hyper::header;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use serde_json::Value;
-use tracing::info;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OffersEndpointRequest {
     pub offer_id: String,
+    #[serde(default)]
+    pub credential_configuration_ids: Vec<String>,
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn offers(State(state): State<IssuanceState>, Json(payload): Json<Value>) -> Response {
-    info!("Request Body: {}", payload);
+pub(crate) async fn offers(
+    State(state): State<IssuanceState>,
+    Json(OffersEndpointRequest {
+        offer_id,
+        credential_configuration_ids,
+    }): Json<OffersEndpointRequest>,
+) -> Result<Response, ApiError> {
+    // Check if the credential configuration IDs are valid.
+    let persisted_credential_configuration_ids = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+        .await?
+        .map(|server_config_view| {
+            server_config_view
+                .credential_configurations
+                .into_keys()
+                .collect::<Vec<_>>()
+        })
+        // Unreachable error
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
-    let Ok(OffersEndpointRequest { offer_id }) = serde_json::from_value(payload) else {
-        return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
-    };
-
-    // Get the `CredentialIssuerMetadata` from the `ServerConfigView`.
-    let credential_issuer_metadata = match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
-        Ok(Some(ServerConfigView {
-            credential_issuer_metadata: Some(credential_issuer_metadata),
-            ..
-        })) => Box::new(credential_issuer_metadata),
-        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
+    if let Some(credential_configuration_id) = credential_configuration_ids.iter().find(|credential_configuration_id| {
+        !persisted_credential_configuration_ids.contains(*credential_configuration_id)
+    }) {
+        return Err(ApiError::builder(StatusCode::NOT_FOUND)
+            .title("No Credential Configuration Found")
+            .type_url(type_url("issuance#no-credential-configuration-found"))
+            .message(format!(
+                "No Credential Configuration found with id: `{credential_configuration_id}`"
+            ))
+            .finish());
+    }
 
     // Create an offer if it does not exist yet.
-    match query_handler(&offer_id, &state.query.offer).await {
-        Ok(Some(_)) => {}
-        _ => {
-            if command_handler(
-                &offer_id,
-                &state.command.offer,
-                OfferCommand::CreateCredentialOffer {
-                    offer_id: offer_id.clone(),
-                    credential_issuer_metadata,
-                },
+    if query_handler(&offer_id, &state.query.offer).await?.is_none() {
+        let command = OfferCommand::CreateCredentialOffer {
+            offer_id: offer_id.clone(),
+            credential_configuration_ids,
+        };
+
+        command_handler(&offer_id, &state.command.offer, command).await?
+    };
+
+    query_handler(&offer_id, &state.query.offer)
+        .await?
+        .and_then(|offer_view| offer_view.form_url_encoded_credential_offer)
+        .map(|form_url_encoded_credential_offer| {
+            (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "application/x-www-form-urlencoded")],
+                form_url_encoded_credential_offer,
             )
-            .await
-            .is_err()
-            {
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        }
-    };
-
-    let command = OfferCommand::CreateFormUrlEncodedCredentialOffer {
-        offer_id: offer_id.clone(),
-    };
-
-    if command_handler(&offer_id, &state.command.offer, command).await.is_err() {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-
-    match query_handler(&offer_id, &state.query.offer).await {
-        Ok(Some(OfferView {
-            form_url_encoded_credential_offer,
-            ..
-        })) => (
-            StatusCode::OK,
-            [(header::CONTENT_TYPE, "application/x-www-form-urlencoded")],
-            form_url_encoded_credential_offer,
-        )
-            .into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+                .into_response()
+        })
+        // Unreachable error
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn all_offers(State(state): State<IssuanceState>) -> Response {
-    match query_handler("all_offers", &state.query.all_offers).await {
-        Ok(Some(all_offers_view)) => {
-            let all_offers = all_offers_view.offers.into_values().collect::<Vec<_>>();
+pub(crate) async fn all_offers(State(state): State<IssuanceState>) -> Result<Response, ApiError> {
+    let all_offers = query_handler("all_offers", &state.query.all_offers)
+        .await?
+        .map(|all_offers_view| all_offers_view.offers.into_values().collect::<Vec<_>>())
+        .unwrap_or_default();
 
-            (StatusCode::OK, Json(all_offers)).into_response()
-        }
-        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+    Ok((StatusCode::OK, Json(all_offers)).into_response())
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn offer(State(state): State<IssuanceState>, Path(offer_id): Path<String>) -> Response {
-    match query_handler(&offer_id, &state.query.offer).await {
-        Ok(Some(offer_view)) => (StatusCode::OK, Json(offer_view)).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+pub(crate) async fn offer(
+    State(state): State<IssuanceState>,
+    Path(offer_id): Path<String>,
+) -> Result<Response, ApiError> {
+    query_handler(&offer_id, &state.query.offer)
+        .await?
+        .map(|offer_view| (StatusCode::OK, Json(offer_view)).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[cfg(test)]
@@ -110,10 +109,11 @@ pub mod tests {
     use crate::API_VERSION;
     use crate::{
         issuance::{credentials::tests::credentials, router},
-        tests::{BASE_URL, OFFER_ID},
+        tests::OFFER_ID,
     };
-    use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
+    use agent_shared::config::set_config;
     use agent_store::in_memory;
     use axum::{
         body::Body,
@@ -125,16 +125,17 @@ pub mod tests {
     use std::str::FromStr;
     use tower::Service as _;
 
-    pub async fn offers(app: &mut Router) -> String {
+    pub async fn offers(app: &mut Router) -> Option<String> {
         let response = app
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri(&format!("{API_VERSION}/offers"))
+                    .uri(format!("{API_VERSION}/offers"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "offerId": OFFER_ID
+                            "offerId": OFFER_ID,
+                            "credentialConfigurationIds": ["001"],
                         }))
                         .unwrap(),
                     ))
@@ -152,36 +153,66 @@ pub mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: String = String::from_utf8(body.to_vec()).unwrap();
 
-        if let CredentialOffer::CredentialOffer(credential_offer) = CredentialOffer::from_str(&body).unwrap() {
-            let CredentialOfferParameters {
-                grants:
-                    Some(Grants {
-                        pre_authorized_code:
-                            Some(PreAuthorizedCode {
-                                pre_authorized_code, ..
-                            }),
-                        ..
-                    }),
-                ..
-            } = *credential_offer
-            else {
-                unreachable!()
-            };
-            pre_authorized_code
-        } else {
-            unreachable!()
+        match CredentialOffer::from_str(&body).unwrap() {
+            CredentialOffer::CredentialOffer(credential_offer) => {
+                assert_eq!(credential_offer.credential_configuration_ids, vec!["001".to_string()]);
+
+                let CredentialOfferParameters {
+                    grants:
+                        Some(Grants {
+                            pre_authorized_code:
+                                Some(PreAuthorizedCode {
+                                    pre_authorized_code, ..
+                                }),
+                            ..
+                        }),
+                    ..
+                } = *credential_offer
+                else {
+                    unreachable!()
+                };
+
+                Some(pre_authorized_code)
+            }
+            CredentialOffer::CredentialOfferUri(credential_offer_uri) => {
+                assert_eq!(
+                    credential_offer_uri,
+                    url::Url::parse(&format!(
+                        "https://my-domain.example.org/openid4vci/credential-offer/{OFFER_ID}"
+                    ))
+                    .unwrap()
+                );
+
+                None
+            }
         }
     }
 
+    #[serial_test::serial]
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_offers_endpoint() {
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
-        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
+        initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
 
         credentials(&mut app).await;
         let _pre_authorized_code = offers(&mut app).await;
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn test_offers_endpoint_by_reference() {
+        set_config().credential_offer_by_value_enabled = false;
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
+        initialize(&issuance_state).await.unwrap();
+
+        let mut app = router(issuance_state);
+
+        credentials(&mut app).await;
+        let _pre_authorized_code = offers(&mut app).await;
+        set_config().credential_offer_by_value_enabled = true;
     }
 }

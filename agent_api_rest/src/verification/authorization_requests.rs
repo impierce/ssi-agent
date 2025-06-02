@@ -1,50 +1,45 @@
-use crate::API_VERSION;
-use agent_shared::{
-    generate_random_string,
+use crate::{
     handlers::{command_handler, query_handler},
+    API_VERSION,
 };
-use agent_verification::{
-    authorization_request::{command::AuthorizationRequestCommand, views::AuthorizationRequestView},
-    state::VerificationState,
-};
+use agent_shared::generate_random_string;
+use agent_verification::{authorization_request::command::AuthorizationRequestCommand, state::VerificationState};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
+use http_api_problem::ApiError;
 use hyper::header;
 use oid4vp::PresentationDefinition;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use tracing::info;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn all_authorization_requests(State(state): State<VerificationState>) -> Response {
-    match query_handler("all_authorization_requests", &state.query.all_authorization_requests).await {
-        Ok(Some(all_authorization_requests_view)) => {
-            let all_authorization_requests = all_authorization_requests_view
-                .authorization_requests
-                .into_values()
-                .collect::<Vec<_>>();
+pub(crate) async fn all_authorization_requests(State(state): State<VerificationState>) -> Result<Response, ApiError> {
+    let all_authorization_requests =
+        query_handler("all_authorization_requests", &state.query.all_authorization_requests)
+            .await?
+            .map(|all_authorization_requests_view| {
+                all_authorization_requests_view
+                    .authorization_requests
+                    .into_values()
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
 
-            (StatusCode::OK, Json(all_authorization_requests)).into_response()
-        }
-        Ok(None) => (StatusCode::OK, Json(json!([]))).into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+    Ok((StatusCode::OK, Json(all_authorization_requests)).into_response())
 }
 
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_request(
     State(state): State<VerificationState>,
     Path(authorization_request_id): Path<String>,
-) -> Response {
-    match query_handler(&authorization_request_id, &state.query.authorization_request).await {
-        Ok(Some(authorization_request_view)) => (StatusCode::OK, Json(authorization_request_view)).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+) -> Result<Response, ApiError> {
+    query_handler(&authorization_request_id, &state.query.authorization_request)
+        .await?
+        .map(|authorization_request_view| (StatusCode::OK, Json(authorization_request_view)).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[derive(Deserialize, Serialize)]
@@ -65,19 +60,12 @@ pub enum PresentationDefinitionResource {
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_requests(
     State(verification_state): State<VerificationState>,
-    Json(payload): Json<Value>,
-) -> Response {
-    info!("Request Body: {}", payload);
-
-    let Ok(AuthorizationRequestsEndpointRequest {
+    Json(AuthorizationRequestsEndpointRequest {
         nonce,
         state,
         presentation_definition,
-    }) = serde_json::from_value(payload)
-    else {
-        return (StatusCode::BAD_REQUEST, "invalid payload").into_response();
-    };
-
+    }): Json<AuthorizationRequestsEndpointRequest>,
+) -> Result<Response, ApiError> {
     let state = state.unwrap_or(generate_random_string());
 
     let presentation_definition = presentation_definition.map(|presentation_definition| {
@@ -107,44 +95,35 @@ pub(crate) async fn authorization_requests(
     };
 
     // Create the authorization request.
-    if command_handler(&state, &verification_state.command.authorization_request, command)
-        .await
-        .is_err()
-    {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
+    command_handler(&state, &verification_state.command.authorization_request, command).await?;
 
     // Sign the authorization request object.
-    if command_handler(
+    command_handler(
         &state,
         &verification_state.command.authorization_request,
         AuthorizationRequestCommand::SignAuthorizationRequestObject,
     )
-    .await
-    .is_err()
-    {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
+    .await?;
 
     // Return the authorization_request.
-    match query_handler(&state, &verification_state.query.authorization_request).await {
-        Ok(Some(AuthorizationRequestView {
-            form_url_encoded_authorization_request: Some(form_url_encoded_authorization_request),
-            ..
-        })) => (
-            StatusCode::CREATED,
-            [
-                (
-                    header::LOCATION,
-                    format!("{API_VERSION}/authorization_requests/{state}").as_str(),
-                ),
-                (header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
-            ],
-            form_url_encoded_authorization_request,
-        )
-            .into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+    query_handler(&state, &verification_state.query.authorization_request)
+        .await?
+        .and_then(|authorization_request_view| authorization_request_view.form_url_encoded_authorization_request)
+        .map(|form_url_encoded_authorization_request| {
+            (
+                StatusCode::CREATED,
+                [
+                    (
+                        header::LOCATION,
+                        format!("{API_VERSION}/authorization_requests/{state}").as_str(),
+                    ),
+                    (header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
+                ],
+                form_url_encoded_authorization_request,
+            )
+                .into_response()
+        })
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[cfg(test)]
@@ -152,7 +131,8 @@ pub mod tests {
     use super::*;
     use crate::verification::router;
     use agent_secret_manager::service::Service;
-    use agent_store::in_memory;
+    use agent_store::in_memory::InMemory;
+    use agent_store::verification_state;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -181,7 +161,7 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri(&format!("{API_VERSION}/authorization_requests"))
+                    .uri(format!("{API_VERSION}/authorization_requests"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
                     .unwrap(),
@@ -203,7 +183,7 @@ pub mod tests {
             .unwrap()
             .to_string();
 
-        let state = get_request_endpoint.split('/').last().unwrap().to_string();
+        let state = get_request_endpoint.split('/').next_back().unwrap().to_string();
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let form_url_encoded_authorization_request: String = String::from_utf8(body.to_vec()).unwrap();
@@ -232,7 +212,7 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_authorization_requests_endpoint(#[case] by_value: bool) {
-        let verification_state = in_memory::verification_state(Service::default(), Default::default()).await;
+        let verification_state = verification_state::<InMemory>(Service::default(), Default::default()).await;
 
         let mut app = router(verification_state);
 

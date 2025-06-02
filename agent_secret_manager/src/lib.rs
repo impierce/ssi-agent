@@ -1,4 +1,4 @@
-use agent_shared::config::config;
+use agent_shared::{config::config, profile::ApplicationProfile};
 use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use identity_iota::{
     storage::{JwkStorage, KeyId, KeyType},
@@ -13,6 +13,12 @@ pub mod subject;
 pub async fn stronghold_storage() -> StrongholdExtStorage {
     #[cfg(feature = "test_utils")]
     iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).unwrap();
+
+    // TODO: security: this is potentially insecure, as it would allow creating a weakly encrypted Stronghold during development which could be taken to production
+    // Can the "work factor" be detected and checked for an existing Stronghold file to prevent its usage in a production profile?
+    if let ApplicationProfile::Development = ApplicationProfile::load() {
+        iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).unwrap();
+    }
 
     info!("Initializing Stronghold storage");
 
@@ -65,7 +71,7 @@ pub async fn generate(
 ) -> anyhow::Result<KeyId> {
     let key_id = stronghold_ext_storage.generate(key_type.clone(), alg).await?.key_id;
 
-    info!("Generated new {key_type} key with key ID {key_id}");
+    info!("Generated new `{key_type}` key with key ID `{key_id}`");
 
     Ok(key_id)
 }

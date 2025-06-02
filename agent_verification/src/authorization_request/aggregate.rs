@@ -56,9 +56,13 @@ impl Aggregate for AuthorizationRequest {
                     .await
                     .unwrap();
 
-                let url = &config().url;
-                let request_uri = format!("{url}request/{state}").parse().unwrap();
-                let redirect_uri = format!("{url}redirect").parse::<url::Url>().unwrap();
+                let mut request_uri = config().request_uri.clone();
+                if let Ok(mut path_segments) = request_uri.path_segments_mut() {
+                    path_segments.pop_if_empty();
+                    path_segments.push(&state);
+                }
+
+                let redirect_uri = config().redirect_uri.clone();
 
                 let authorization_request = Box::new(if let Some(presentation_definition) = presentation_definition {
                     GenericAuthorizationRequest::OID4VP(Box::new(
@@ -162,7 +166,7 @@ impl Aggregate for AuthorizationRequest {
 
                         let vp_token = match oid4vp_authorization_response.extension.oid4vp_parameters {
                             Oid4vpParams::Params { vp_token, .. } => vp_token,
-                            Oid4vpParams::Jwt { .. } => return Err(UnsupportedJwtParameterError),
+                            Oid4vpParams::Jwt { .. } => return Err(UnsupportedAuthorizationResponseParameterError),
                         };
 
                         Ok(vec![OID4VPAuthorizationResponseVerified {
@@ -227,6 +231,7 @@ pub mod tests {
     use oid4vc_manager::ProviderManager;
     use oid4vci::VerifiableCredentialJwt;
     use oid4vp::oid4vp::AuthorizationResponseInput;
+    use oid4vp::oid4vp::PresentationInputType;
     use oid4vp::PresentationDefinition;
     use rstest::rstest;
     use serde_json::json;
@@ -362,7 +367,7 @@ pub mod tests {
         authorization_request: &GenericAuthorizationRequest,
     ) -> GenericAuthorizationResponse {
         let provider_manager =
-            ProviderManager::new(Arc::new(Subject::default()), vec![did_method], vec![Algorithm::EdDSA]).unwrap();
+            ProviderManager::new(Arc::new(Subject::default()), vec![did_method], vec![Algorithm::ES256]).unwrap();
 
         let default_did_method = provider_manager.default_subject_syntax_types()[0].to_string();
 
@@ -414,6 +419,7 @@ pub mod tests {
 
                 // Create presentation submission using the presentation definition and the verifiable credential.
                 let presentation_submission = create_presentation_submission(
+                    "temporary_string".to_string(),
                     &PRESENTATION_DEFINITION,
                     &[serde_json::to_value(&verifiable_credential).unwrap()],
                 )
@@ -431,7 +437,9 @@ pub mod tests {
                         .generate_response(
                             oid4vp_authorization_request,
                             AuthorizationResponseInput {
-                                verifiable_presentation,
+                                verifiable_presentation_input: PresentationInputType::Presentation(
+                                    verifiable_presentation,
+                                ),
                                 presentation_submission,
                             },
                         )
@@ -568,6 +576,6 @@ pub mod tests {
         openid://?\
             client_id=did%3Ajwk%3AeyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ&\
             request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2Fstate";
-    const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_KEY: &str = "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCN6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifQ.eyJjbGllbnRfaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInJlZGlyZWN0X3VyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL3JlZGlyZWN0Iiwic3RhdGUiOiJzdGF0ZSIsInJlc3BvbnNlX3R5cGUiOiJpZF90b2tlbiIsInNjb3BlIjoib3BlbmlkIiwicmVzcG9uc2VfbW9kZSI6ImRpcmVjdF9wb3N0Iiwibm9uY2UiOiJub25jZSIsImNsaWVudF9tZXRhZGF0YSI6eyJjbGllbnRfbmFtZSI6IlVuaUNvcmUiLCJsb2dvX3VyaSI6Imh0dHBzOi8vaW1waWVyY2UuY29tL2ltYWdlcy9mYXZpY29uL2FwcGxlLXRvdWNoLWljb24ucG5nIiwic3ViamVjdF9zeW50YXhfdHlwZXNfc3VwcG9ydGVkIjpbImRpZDpqd2siLCJkaWQ6a2V5Il0sImlkX3Rva2VuX3NpZ25lZF9yZXNwb25zZV9hbGciOiJFZERTQSIsImlkX3Rva2VuX3NpZ25pbmdfYWxnX3ZhbHVlc19zdXBwb3J0ZWQiOlsiRWREU0EiXX19.caML3la0NDH51B6N4lXgAtt3vSCjhYQGalVDUfGcjwMJAVvCMXGUnfDNvA4IHGqHeAO3P6UDDSUe5NRN50rcBw";
-    const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK: &str = "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2NUaFZiR2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVVYQjJNRWxHVUVWaVpFMURTVXhPWDFVaWZRIzAifQ.eyJjbGllbnRfaWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2NUaFZiR2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVVYQjJNRWxHVUVWaVpFMURTVXhPWDFVaWZRIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzcG9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGFkYXRhIjp7ImNsaWVudF9uYW1lIjoiVW5pQ29yZSIsImxvZ29fdXJpIjoiaHR0cHM6Ly9pbXBpZXJjZS5jb20vaW1hZ2VzL2Zhdmljb24vYXBwbGUtdG91Y2gtaWNvbi5wbmciLCJzdWJqZWN0X3N5bnRheF90eXBlc19zdXBwb3J0ZWQiOlsiZGlkOmp3ayIsImRpZDprZXkiXSwiaWRfdG9rZW5fc2lnbmVkX3Jlc3BvbnNlX2FsZyI6IkVkRFNBIiwiaWRfdG9rZW5fc2lnbmluZ19hbGdfdmFsdWVzX3N1cHBvcnRlZCI6WyJFZERTQSJdfX0.H0GAqXL_P8GsIFL7_6ZTrZ5OG67iIt1dPDqiVQSCcbpU5Ky3ptwvAmYTNY4bKou76ChFMVj-MRnoVE1s5FbZBA";
+    const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_KEY: &str = "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJkaWQ6a2V5OnpEbmFlUndUNGc2QVpDSHp4dk5MN0RManFUYVQ4OGFtNFhSNlRVR3JLcjZEWGo2VHojekRuYWVSd1Q0ZzZBWkNIenh2Tkw3RExqcVRhVDg4YW00WFI2VFVHcktyNkRYajZUeiJ9.eyJjbGllbnRfaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInJlZGlyZWN0X3VyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL3JlZGlyZWN0Iiwic3RhdGUiOiJzdGF0ZSIsInJlc3BvbnNlX3R5cGUiOiJpZF90b2tlbiIsInNjb3BlIjoib3BlbmlkIiwicmVzcG9uc2VfbW9kZSI6ImRpcmVjdF9wb3N0Iiwibm9uY2UiOiJub25jZSIsImNsaWVudF9tZXRhZGF0YSI6eyJjbGllbnRfbmFtZSI6IlVuaUNvcmUiLCJsb2dvX3VyaSI6Imh0dHBzOi8vd3d3LmltcGllcmNlLmNvbS9leHRlcm5hbC9pbXBpZXJjZS1pY29uLnBuZyIsInN1YmplY3Rfc3ludGF4X3R5cGVzX3N1cHBvcnRlZCI6WyJkaWQ6andrIiwiZGlkOmtleSJdLCJpZF90b2tlbl9zaWduZWRfcmVzcG9uc2VfYWxnIjoiRVMyNTYiLCJpZF90b2tlbl9zaWduaW5nX2FsZ192YWx1ZXNfc3VwcG9ydGVkIjpbIkVTMjU2IiwiRWREU0EiXX19.blBC3CrvKp2lTEsT-L_LwssLyeUm00JD0__n0TiEsDR63iQY__QOKjWG5eqEnDtmHhxgE7aRh9Nf5INo20mFEw";
+    const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK: &str = "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaWIwOVpNbVJOVmxVM1IwczFZV3d4Y1RkRlFYaDFiMWxzYjNoTlVXeDJOVnBPV2s5aGRHbFZXRkZJWnlJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWtadGF6RXpaMDh5VTBkTVluVllaVXd5TkhGS1VFaERUbTVqYmtrMmJFSjFObHBSVERKRlZscDJORVVpTENKNUlqb2labm95UzNaTmFIVm1lbFZ3VFdWTU9TMUxNbkpsT1daM1FUTnRlbWN4WW5CbVltTmxTVkZUZFdsb1dTSjkjMCJ9.eyJjbGllbnRfaWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2NUaFZiR2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVVYQjJNRWxHVUVWaVpFMURTVXhPWDFVaWZRIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzcG9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGFkYXRhIjp7ImNsaWVudF9uYW1lIjoiVW5pQ29yZSIsImxvZ29fdXJpIjoiaHR0cHM6Ly93d3cuaW1waWVyY2UuY29tL2V4dGVybmFsL2ltcGllcmNlLWljb24ucG5nIiwic3ViamVjdF9zeW50YXhfdHlwZXNfc3VwcG9ydGVkIjpbImRpZDpqd2siLCJkaWQ6a2V5Il0sImlkX3Rva2VuX3NpZ25lZF9yZXNwb25zZV9hbGciOiJFUzI1NiIsImlkX3Rva2VuX3NpZ25pbmdfYWxnX3ZhbHVlc19zdXBwb3J0ZWQiOlsiRVMyNTYiLCJFZERTQSJdfX0.Ts-MAI9gGZcX12RtANn-3B6vvRWinElNqmfnx0YkDUIe6cLC3TudLuQLbjcLahvwyVSbz_46oIPWpll19W3ylA";
 }

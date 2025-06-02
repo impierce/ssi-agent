@@ -3,17 +3,32 @@ pub mod identity;
 pub mod issuance;
 pub mod verification;
 
+pub mod error;
+pub mod handlers;
+
 use agent_holder::state::HolderState;
 use agent_identity::state::IdentityState;
 use agent_issuance::state::IssuanceState;
-use agent_shared::{config::config, ConfigError};
+use agent_shared::config::config;
 use agent_verification::state::VerificationState;
-use axum::{body::Bytes, extract::MatchedPath, http::Request, response::Response, Router};
+use axum::{
+    body::{Body, Bytes},
+    extract::{MatchedPath, Request},
+    middleware,
+    middleware::Next,
+    response::{IntoResponse, Response},
+    Router,
+};
+use http_body_util::BodyExt as _;
+use hyper::StatusCode;
 use std::time::Duration;
+use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
-use tracing::{info, info_span, Span};
+use tracing::{debug, info, info_span, Span};
 
 pub const API_VERSION: &str = "/v0";
+
+pub const DOCUMENTATION_URL: &str = "https://beta.docs.impierce.com/unicore/";
 
 #[derive(Default)]
 pub struct ApplicationState {
@@ -32,40 +47,51 @@ pub fn app(
     }: ApplicationState,
 ) -> Router {
     let app = Router::new()
-        .nest(
-            &get_base_path().unwrap_or_default(),
-            Router::new()
-                .merge(identity_state.map(identity::router).unwrap_or_default())
-                .merge(issuance_state.map(issuance::router).unwrap_or_default())
-                .merge(holder_state.map(holder::router).unwrap_or_default())
-                .merge(verification_state.map(verification::router).unwrap_or_default()),
-        )
-        // Trace layer
+        .merge(identity_state.map(identity::router).unwrap_or_default())
+        .merge(issuance_state.map(issuance::router).unwrap_or_default())
+        .merge(holder_state.map(holder::router).unwrap_or_default())
+        .merge(verification_state.map(verification::router).unwrap_or_default())
+        // Trace layers
         .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(|request: &Request<_>| {
-                    let path = request.extensions().get::<MatchedPath>().map(MatchedPath::as_str);
-                    info_span!(
-                        "HTTP Request ",
-                        method = ?request.method(),
-                        path,
-                    )
-                })
-                .on_request(|request: &Request<_>, _span: &Span| {
-                    info!("Received request");
-                    info!("Request Headers: {:?}", request.headers());
-                })
-                .on_response(|response: &Response, _latency: Duration, _span: &Span| {
-                    info!("Returning {}", response.status());
-                    info!("Response Headers: {:?}", response.headers());
-                })
-                .on_body_chunk(|chunk: &Bytes, _latency: Duration, _span: &Span| {
-                    info!("Response Body: {}", std::str::from_utf8(chunk).unwrap());
-                }),
+            ServiceBuilder::new()
+                .layer(
+                    TraceLayer::new_for_http()
+                        .make_span_with(|request: &Request<_>| {
+                            let path = request.extensions().get::<MatchedPath>().map(MatchedPath::as_str);
+                            info_span!(
+                                "HTTP Request ",
+                                method = ?request.method(),
+                                path,
+                            )
+                        })
+                        .on_request(|request: &Request<_>, _span: &Span| {
+                            info!("Received request");
+                            info!("Request Headers: {:?}", request.headers());
+                        })
+                        .on_response(|response: &Response, _latency: Duration, _span: &Span| {
+                            info!("Returning {}", response.status());
+                            info!("Response Headers: {:?}", response.headers());
+                        })
+                        .on_body_chunk(|chunk: &Bytes, _latency: Duration, _span: &Span| {
+                            info!("Response Body: {}", std::str::from_utf8(chunk).unwrap());
+                        }),
+                )
+                .layer(middleware::from_fn(log_request_body)),
         );
 
+    let application_base_path = config().application_url.path().to_string();
+
+    // Note: since version 0.8 axum does not allow nesting routers with an empty base path. We must explicitly check
+    // for an empty base path before nesting.
+    let app = if application_base_path == "/" {
+        app
+    } else {
+        // TODO: This breaks Domain Linkage. We need to fix this.
+        Router::new().nest(&application_base_path, app)
+    };
+
     // CORS
-    if config().cors_enabled.unwrap_or(false) {
+    if config().cors_enabled {
         info!("CORS (permissive) enabled for all routes");
         app.layer(CorsLayer::permissive())
     } else {
@@ -73,36 +99,36 @@ pub fn app(
     }
 }
 
-fn get_base_path() -> Result<String, ConfigError> {
-    config()
-        .base_path
-        .clone()
-        .ok_or_else(|| ConfigError::NotFound("No configuration for `base_path` found".to_string()))
-        .map(|mut base_path| {
-            if base_path.starts_with('/') {
-                base_path.remove(0);
-            }
+// This middleware logs the request body before passing it on.
+async fn log_request_body(request: Request, next: Next) -> Result<impl IntoResponse, Response> {
+    let request = buffer_request_body(request).await?;
 
-            if base_path.ends_with('/') {
-                base_path.pop();
-            }
+    Ok(next.run(request).await)
+}
 
-            if base_path.is_empty() {
-                panic!("UNICORE__BASE_PATH can't be empty, remove or set path");
-            }
+// Buffer the request body so it can be logged.
+async fn buffer_request_body(request: Request) -> Result<Request, Response> {
+    let (parts, body) = request.into_parts();
 
-            info!("Base path: {:?}", base_path);
+    debug!("Path segments and query string: `{}`", parts.uri);
 
-            format!("/{}", base_path)
-        })
+    // Convert the request body into bytes.
+    let bytes = body
+        .collect()
+        .await
+        .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()).into_response())?
+        .to_bytes();
+
+    let _ = serde_json::from_slice(&bytes)
+        .and_then(|json_value: serde_json::Value| serde_json::to_string_pretty(&json_value))
+        .map(|pretty_json| info!("Request Body: {}", pretty_json));
+
+    Ok(Request::from_parts(parts, Body::from(bytes)))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use agent_secret_manager::service::Service;
-    use agent_store::in_memory;
-    use axum::routing::post;
+    use agent_shared::config::config;
     use oid4vci::credential_issuer::{
         credential_configurations_supported::CredentialConfigurationsSupportedObject,
         credential_issuer_metadata::CredentialIssuerMetadata,
@@ -110,30 +136,45 @@ mod tests {
     use serde_json::json;
     use std::collections::HashMap;
 
-    pub const CREDENTIAL_CONFIGURATION_ID: &str = "badge";
+    pub const CREDENTIAL_CONFIGURATION_ID: &str = "001";
     pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
 
     lazy_static::lazy_static! {
-        pub static ref BASE_URL: url::Url = url::Url::parse("https://example.com").unwrap();
         static ref CREDENTIAL_CONFIGURATIONS_SUPPORTED: HashMap<String, CredentialConfigurationsSupportedObject> =
             vec![(
-                "0".to_string(),
+                "001".to_string(),
                 serde_json::from_value(json!({
                     "format": "jwt_vc_json",
                     "cryptographic_binding_methods_supported": [
+                        "did:jwk",
                         "did:key",
                     ],
                     "credential_signing_alg_values_supported": [
+                        "ES256",
                         "EdDSA"
                     ],
                     "credential_definition":{
                         "type": [
-                            "VerifiableCredential",
-                            "OpenBadgeCredential"
+                            "VerifiableCredential"
                         ]
                     },
-                    "proof_types_supported": [
-                        "jwt"
+                    "proof_types_supported": {
+                        "jwt": {
+                            "proof_signing_alg_values_supported": [
+                                "ES256",
+                                "EdDSA"
+                            ],
+                        }
+                    },
+                    "display": [
+                        {
+                            "name": "Verifiable Credential",
+                            "locale": "en",
+                            "logo": {
+                                "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                "alt_text": "Impierce Logo",
+                            }
+                        }
                     ]
                 }
                 ))
@@ -142,26 +183,18 @@ mod tests {
             .into_iter()
             .collect();
         pub static ref CREDENTIAL_ISSUER_METADATA: CredentialIssuerMetadata = CredentialIssuerMetadata {
-            credential_issuer: BASE_URL.clone(),
-            credential_endpoint: BASE_URL.join("credential").unwrap(),
-            batch_credential_endpoint: Some(BASE_URL.join("batch_credential").unwrap()),
+            credential_issuer: config().public_url.clone(),
+            credential_endpoint: config().public_url.join("openid4vci/credential").unwrap(),
             credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
+            display: Some(vec![json!({
+                "name": "UniCore",
+                "locale": "en",
+                "logo": {
+                    "uri": "https://www.impierce.com/external/impierce-icon.png",
+                    "alt_text": "Impierce Icon",
+                }
+            })]),
             ..Default::default()
         };
-    }
-
-    async fn handler() {}
-
-    #[tokio::test]
-    #[should_panic]
-    async fn test_base_path_routes() {
-        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
-        std::env::set_var("UNICORE__BASE_PATH", "unicore");
-        let router = app(ApplicationState {
-            issuance_state: Some(issuance_state),
-            ..Default::default()
-        });
-
-        let _ = router.route("/auth/token", post(handler));
     }
 }

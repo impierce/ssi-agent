@@ -12,6 +12,7 @@ pub enum OfferEvent {
     CredentialOfferCreated {
         offer_id: String,
         credential_offer: CredentialOffer,
+        credential_offer_uri: CredentialOffer,
         pre_authorized_code: String,
         access_token: String,
         status: Status,
@@ -19,6 +20,7 @@ pub enum OfferEvent {
     CredentialsAdded {
         offer_id: String,
         credential_ids: Vec<String>,
+        credential_offer: CredentialOffer,
     },
     FormUrlEncodedCredentialOfferCreated {
         offer_id: String,

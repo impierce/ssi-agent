@@ -61,8 +61,7 @@ impl Aggregate for Service {
             } => {
                 let subject = &services.subject;
 
-                let origin = config().url.origin();
-                let origin = identity_core::common::Url::parse(origin.ascii_serialization())
+                let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
                 #[cfg(feature = "test_utils")]
@@ -126,6 +125,9 @@ impl Aggregate for Service {
                     .join(".");
 
                     let proof_value = subject
+                        // TODO: Currently UniCore always uses the same keys for signing regardless of the DID method.
+                        // Once we implement DID method-specific keys, then we should supply the appropriate
+                        // `subject_syntax_type` here instead of this `placeholder` value.
                         .sign(linked_did.as_str(), "placeholder", algorithm)
                         .await
                         .map_err(|err| SigningError(err.to_string()))?;
@@ -177,7 +179,7 @@ impl Aggregate for Service {
                 service_id,
                 presentation_ids,
             } => {
-                let origin = identity_core::common::Url::parse(config().url.origin().ascii_serialization())
+                let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
                 let service_endpoint = ServiceEndpoint::from(OrderedSet::from_iter(
@@ -259,7 +261,7 @@ impl Aggregate for Service {
 pub mod service_tests {
     use super::test_utils::*;
     use super::*;
-    use crate::document::aggregate::test_utils::verification_method;
+    use crate::document::aggregate::test_utils::both_verification_methods;
     use agent_shared::config::set_config;
     use cqrs_es::test::TestFramework;
     use identity_document::service::Service as DocumentService;
@@ -272,7 +274,7 @@ pub mod service_tests {
     #[serial_test::serial]
     async fn test_create_domain_linkage_service(
         domain_linkage_service_id: String,
-        verification_method: VerificationMethod,
+        both_verification_methods: Vec<VerificationMethod>,
         domain_linkage_service: DocumentService,
         domain_linkage_resource: ServiceResource,
     ) {
@@ -282,7 +284,7 @@ pub mod service_tests {
             .given_no_previous_events()
             .when(ServiceCommand::CreateDomainLinkageService {
                 service_id: domain_linkage_service_id.clone(),
-                verification_methods: vec![verification_method],
+                verification_methods: both_verification_methods,
             })
             .then_expect_events(vec![ServiceEvent::DomainLinkageServiceCreated {
                 service_id: domain_linkage_service_id,
@@ -343,7 +345,6 @@ pub mod service_tests {
 pub mod test_utils {
     use super::*;
     use crate::state::{DOMAIN_LINKAGE_SERVICE_ID, LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID};
-    use agent_shared::config::config;
     use identity_core::{common::Url, convert::FromJson};
     use identity_document::service::{Service, ServiceEndpoint};
     use rstest::*;
@@ -366,7 +367,7 @@ pub mod test_utils {
             .type_("LinkedDomains")
             .service_endpoint(
                 ServiceEndpoint::from_json_value(json!({
-                    "origins": [config().url],
+                    "origins": [config().public_url.clone()],
                 }))
                 .unwrap(),
             )
@@ -378,7 +379,7 @@ pub mod test_utils {
     pub fn linked_verifiable_presentation_service(
         linked_verifiable_presentation_service_id: String,
     ) -> DocumentService {
-        let origin = config().url.origin().ascii_serialization();
+        let origin = config().public_url.origin().ascii_serialization();
 
         Service::builder(Default::default())
             .id(format!("did:place:holder#{linked_verifiable_presentation_service_id}")
