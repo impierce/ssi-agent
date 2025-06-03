@@ -1,4 +1,4 @@
-use agent_shared::config::config;
+use agent_shared::config::{config, CredentialConfiguration};
 use agent_shared::url_utils::UrlAppendHelpers;
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
@@ -8,7 +8,11 @@ use crate::server_config::command::ServerConfigCommand;
 
 /// Returns the startup commands for the application.
 pub fn startup_commands(host: url::Url) -> Vec<ServerConfigCommand> {
-    vec![load_server_metadata(host), create_credentials_supported()]
+    let mut commands = vec![load_server_metadata(host)];
+
+    commands.extend(create_credentials_supported());
+
+    commands
 }
 
 pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
@@ -32,14 +36,16 @@ pub fn load_server_metadata(base_url: url::Url) -> ServerConfigCommand {
     }
 }
 
-pub fn create_credentials_supported() -> ServerConfigCommand {
-    let credential_configuration = config()
-        .credential_configurations
-        .first()
-        .expect("No credential_configurations found")
-        .clone();
+pub fn create_credentials_supported() -> Vec<ServerConfigCommand> {
+    let credential_configurations: Vec<CredentialConfiguration> =
+        // TODO: make sure that multiple configurations are supported
+        config().credential_configurations.iter().take(1).cloned().collect();
 
-    ServerConfigCommand::AddCredentialConfiguration {
-        credential_configuration,
+    let mut commands = Vec::new();
+    for credential_configuration in credential_configurations {
+        commands.push(ServerConfigCommand::AddCredentialConfiguration {
+            credential_configuration,
+        });
     }
+    commands
 }

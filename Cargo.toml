@@ -7,6 +7,7 @@ members = [
     "agent_holder",
     "agent_identity",
     "agent_issuance",
+    "agent_macros",
     "agent_secret_manager",
     "agent_shared",
     "agent_store",
@@ -26,7 +27,7 @@ oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = 
 oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "9fcd21b" }
 
 async-trait = "0.1"
-axum = { version = "0.8", features = ["tracing"] }
+axum = { version = "0.8" }
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 cqrs-es = "0.4.2"

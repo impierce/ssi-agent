@@ -5,7 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+agent_macros = { path = "../agent_macros" }
 async-trait.workspace = true
+base64.workspace = true
 chrono.workspace = true
 config = { version = "0.14" }
 cqrs-es.workspace = true
@@ -23,11 +25,18 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 serde.workspace = true
 serde_json.workspace = true
 serde_with = "3.0"
+serde_yaml.workspace = true
 strum = { version = "0.26", features = ["derive"] }
+temp-env = "0.3"
 thiserror.workspace = true
 time = { version = "0.3" }
 tracing.workspace = true
+tracing-subscriber.workspace = true
 url.workspace = true
+
+[dev-dependencies]
+agent_shared = { path = ".", features = ["test_utils"] }
+serial_test = "3.0"
 
 [features]
 local_development = []

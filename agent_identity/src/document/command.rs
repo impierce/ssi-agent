@@ -21,7 +21,7 @@ pub enum DocumentCommand {
     },
     AddService {
         service_id: String,
-        service: DocumentService,
+        service: Box<DocumentService>,
     },
     PublishDocument,
 }

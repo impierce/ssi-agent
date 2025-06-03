@@ -9,26 +9,16 @@ use agent_holder::services::HolderServices;
 use agent_identity::services::IdentityServices;
 use agent_issuance::{services::IssuanceServices, startup_commands::startup_commands};
 use agent_secret_manager::{service::Service as _, subject::Subject};
-use agent_shared::config::{config, LogFormat};
+use agent_shared::config::config;
 use agent_store::{in_memory, postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use probes::liveness::healthz;
 use std::sync::Arc;
 use tokio::io;
 use tracing::info;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let tracing_subscriber = tracing_subscriber::registry()
-        // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
-        .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
-
-    match config().log_format {
-        LogFormat::Json => tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init(),
-        LogFormat::Text => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
-    }
-
     let subject = Arc::new(Subject::new().await);
 
     let identity_services = Arc::new(IdentityServices::new(subject.clone()));
@@ -84,14 +74,17 @@ async fn main() -> io::Result<()> {
     let metadata_router = axum::Router::new()
         .route("/version", axum::routing::get(metadata::version::version))
         .route("/info", axum::routing::get(metadata::info::info))
+        .route("/v0/configuration", axum::routing::get(metadata::config::configuration))
         .with_state(metadata_state);
     let app = metadata_router.merge(app);
 
     let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
     let app = probes_router.merge(app);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await?;
-    info!("listening on {}", listener.local_addr()?);
+    let port = config().port.unwrap_or(3033);
+
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
+    info!("HTTP API served at http://{}", listener.local_addr()?);
     axum::serve(listener, app).await?;
 
     Ok(())

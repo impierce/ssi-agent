@@ -33,16 +33,13 @@ services:
     ports:
       - 3033:3033
     environment:
-      UNICORE__LOG_FORMAT: text
-      UNICORE__EVENT_STORE__TYPE: postgres
-      UNICORE__EVENT_STORE__CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo
+      UNICORE__PROFILE: development
       UNICORE__URL: ${UNICORE__URL}
-
-      UNICORE__SECRET_MANAGER__STRONGHOLD_PATH: "/app/stronghold.dat"
+      UNICORE__EVENT_STORE__CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo
       UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD: "secure_password"
 
     volumes:
-      - ../../agent_application/config.yaml:/app/agent_application/config.yaml
+      - ../example.config.yaml:/app/config.yaml
       # - ../../agent_secret_manager/tests/res/test.stronghold:/app/stronghold.dat
       # - ../../agent_verification/presentation_definitions:/app/agent_verification/presentation_definitions
       # TODO: Remove this. This is a workaround that ensures that the `agent_verification/presentation_definitions`

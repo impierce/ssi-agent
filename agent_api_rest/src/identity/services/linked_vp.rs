@@ -57,7 +57,7 @@ pub(crate) async fn linked_vp(
 
     let command = DocumentCommand::AddService {
         service_id,
-        service: linked_verifiable_presentation_service,
+        service: Box::new(linked_verifiable_presentation_service),
     };
 
     command_handler(&document_id, &state.command.document, command).await?;

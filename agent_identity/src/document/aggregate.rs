@@ -368,7 +368,7 @@ impl Aggregate for Document {
                 // Overwrite the service if it already exists.
                 document.remove_service(service.id());
                 document
-                    .insert_service(service)
+                    .insert_service(*service)
                     .map_err(|err| AddServiceError(err.to_string()))?;
 
                 Ok(vec![ServiceAdded { document_id, document }])
@@ -578,7 +578,7 @@ pub mod document_tests {
                 },
             ])
             .when(DocumentCommand::AddService {
-                service: domain_linkage_service,
+                service: Box::new(domain_linkage_service),
                 service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
             })
             .then_expect_events(vec![DocumentEvent::ServiceAdded {
