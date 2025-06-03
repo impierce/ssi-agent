@@ -63,7 +63,7 @@ The `UNICORE__APPLICATION_URL` may include a path segment, which will be treated
 #### Example
 
 ```yaml
-url: http://localhost:3033/my/base/path
+application_url: http://localhost:3033/my/base/path
 ```
 
 ### Public URL
@@ -86,7 +86,7 @@ The `UNICORE__PUBLIC_URL` may also include a path segment, which will be treated
 #### Example
 
 ```yaml
-url: https://my-domain.example.test
+public_url: https://my-domain.example.test
 ```
 
 <!-- TODO: We should add a better explanation to describe the difference between the `UNICORE__APPLICATION_URL` and the `UNICORE__PUBLIC_URL`, possibly with some diagrams. Is this the right place for that? -->
