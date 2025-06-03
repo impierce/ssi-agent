@@ -1,17 +1,5 @@
-use crate::{partition_event_publishers, AggregateHandler, EventPublisher, EventStoreTemp, Partitions};
-use agent_issuance::{
-    offer::{
-        aggregate::Offer,
-        queries::{
-            access_token::{AccessTokenQuery, AccessTokenView},
-            pre_authorized_code::{PreAuthorizedCodeQuery, PreAuthorizedCodeView},
-        },
-    },
-    services::IssuanceServices,
-    state::IssuanceState,
-    SimpleLoggingQuery,
-};
-use agent_shared::{application_state::Command, custom_queries::ListAllQuery, generic_query::generic_query};
+use crate::{AggregateHandler, EventStoreTemp};
+use agent_shared::application_state::Command;
 use async_trait::async_trait;
 use cqrs_es::{
     mem_store::MemStore,
@@ -25,12 +13,6 @@ use tokio::sync::Mutex;
 struct MemRepository<V: View<A>, A: Aggregate> {
     pub map: Mutex<HashMap<String, serde_json::Value>>,
     _phantom: std::marker::PhantomData<(V, A)>,
-}
-
-impl<V: View<A>, A: Aggregate> MemRepository<V, A> {
-    pub fn new() -> Self {
-        Self::default()
-    }
 }
 
 #[async_trait]
@@ -105,76 +87,5 @@ impl EventStoreTemp for InMemory {
             aggregate,
             all_aggregates,
         )
-    }
-}
-
-pub async fn issuance_state(
-    issuance_services: Arc<IssuanceServices>,
-    event_publishers: Vec<Box<dyn EventPublisher>>,
-) -> IssuanceState {
-    // Initialize the in-memory repositories.
-    let server_config = Arc::new(MemRepository::default());
-    let pre_authorized_code = Arc::new(MemRepository::<PreAuthorizedCodeView, Offer>::new());
-    let access_token = Arc::new(MemRepository::<AccessTokenView, Offer>::new());
-    let credential = Arc::new(MemRepository::default());
-    let offer = Arc::new(MemRepository::default());
-    let all_credentials = Arc::new(MemRepository::default());
-    let all_offers = Arc::new(MemRepository::default());
-
-    // Create custom-queries for the offer aggregate.
-    let pre_authorized_code_query = PreAuthorizedCodeQuery::new(pre_authorized_code.clone());
-    let access_token_query = AccessTokenQuery::new(access_token.clone());
-
-    let all_credentials_query = ListAllQuery::new(all_credentials.clone(), "all_credentials");
-    let all_offers_query = ListAllQuery::new(all_offers.clone(), "all_offers");
-
-    // Partition the event_publishers into the different aggregates.
-    let Partitions {
-        server_config_event_publishers,
-        credential_event_publishers,
-        offer_event_publishers,
-        ..
-    } = partition_event_publishers(event_publishers);
-
-    IssuanceState {
-        command: agent_issuance::state::CommandHandlers {
-            server_config: Arc::new(
-                server_config_event_publishers.into_iter().fold(
-                    AggregateHandler::new(())
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(server_config.clone())),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
-            credential: Arc::new(
-                credential_event_publishers.into_iter().fold(
-                    AggregateHandler::new(issuance_services.clone())
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(credential.clone()))
-                        .append_query(all_credentials_query),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
-            offer: Arc::new(
-                offer_event_publishers.into_iter().fold(
-                    AggregateHandler::new(issuance_services)
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(offer.clone()))
-                        .append_query(all_offers_query)
-                        .append_query(pre_authorized_code_query)
-                        .append_query(access_token_query),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
-        },
-        query: agent_issuance::state::ViewRepositories {
-            server_config,
-            pre_authorized_code,
-            access_token,
-            credential,
-            all_credentials,
-            offer,
-            all_offers,
-        },
     }
 }

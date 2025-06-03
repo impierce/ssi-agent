@@ -27,7 +27,7 @@ mod tests {
     use crate::{issuance::router, tests::CREDENTIAL_ISSUER_METADATA};
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
-    use agent_store::in_memory;
+    use agent_store::{in_memory::InMemory, issuance_state};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -62,7 +62,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_openid_credential_issuer_endpoint() {
-        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);

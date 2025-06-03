@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; }
+        .container { max-width: 600px; margin: 0 auto; padding: 1em; border: 1px solid #ccc; border-radius: 8px; }
+        h1 { color: #333; }
+        strong { color: #007bff; }
+        ul { list-style: none; padding: 0; }
+        li { background-color: #f0f0f0; margin-bottom: 0.5em; padding: 0.5em; border-radius: 4px; }
+        button { padding: 0.8em 1.5em; border: none; border-radius: 4px; cursor: pointer; margin-right: 1em; }
+        .authorize { background-color: #28a745; color: white; }
+        .authorize:hover { background-color: #218838; }
+        .deny { background-color: #dc3545; color: white; }
+        .deny:hover { background-color: #c82333; }
+        .error { color: red; margin-bottom: 1em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ title }}</h1>
+
+        {% if error_message.is_some() %}
+        <p class="error">{{ error_message.as_ref().unwrap() }}</p>
+        {% endif %}
+
+        <p>The application <strong>{{ client_name }}</strong> is requesting access to your data:</p>
+
+        <h2>Requested Permissions:</h2>
+        <ul>
+            {% for scope in requested_scopes %}
+            <li>{{ scope }}</li>
+            {% endfor %}
+        </ul>
+
+        <p>Do you authorize this application to access your data?</p>
+
+        <form action="/consent" method="post">
+            <input type="hidden" name="context_id" value="{{ context_id }}">
+            <input type="hidden" name="client_id" value="{{ client_id }}">
+            <input type="hidden" name="redirect_uri" value="{{ redirect_uri }}">
+            <input type="hidden" name="response_type" value="{{ response_type }}">
+            <input type="hidden" name="state" value="{{ state }}">
+            <input type="hidden" name="scope" value="{{ requested_scopes|join(" ") }}"> {# Join scopes back to space-separated string #}
+
+            <button type="submit" name="consent_decision" value="authorize" class="authorize">Authorize</button>
+            <button type="submit" name="consent_decision" value="deny" class="deny">Deny</button>
+        </form>
+    </div>
+</body>
+</html>

@@ -3,10 +3,10 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use oid4vc_core::Validator;
 use oid4vci::credential_issuer::CredentialIssuer;
-use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants, PreAuthorizedCode};
+use oid4vci::credential_offer::{
+    AuthorizationCode, CredentialOffer, CredentialOfferParameters, Grants, PreAuthorizedCode,
+};
 use oid4vci::credential_response::{CredentialResponse, CredentialResponseType};
-use oid4vci::token_request::TokenRequest;
-use oid4vci::token_response::TokenResponse;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -34,9 +34,6 @@ pub struct Offer {
     pub subject_id: Option<String>,
     pub credential_ids: Vec<String>,
     pub form_url_encoded_credential_offer: Option<String>,
-    pub pre_authorized_code: String,
-    pub token_response: Option<TokenResponse>,
-    pub access_token: String,
     pub credential_response: Option<CredentialResponse>,
     pub status: Status,
 }
@@ -65,25 +62,20 @@ impl Aggregate for Offer {
             } => {
                 let credential_issuer = config().public_url.clone();
 
+                // FIXME: This should be replaced with a proper pre-authorized code
                 #[cfg(feature = "test_utils")]
-                let (pre_authorized_code, access_token) = {
-                    let pre_authorized_code = test_utils::pre_authorized_code().await;
-                    let access_token = test_utils::access_token().await;
-                    (pre_authorized_code, access_token)
-                };
+                let pre_authorized_code = test_utils::pre_authorized_code().await;
                 #[cfg(not(feature = "test_utils"))]
-                let (pre_authorized_code, access_token) = {
-                    (
-                        agent_shared::generate_random_string(),
-                        agent_shared::generate_random_string(),
-                    )
-                };
+                let pre_authorized_code = agent_shared::generate_random_string();
 
                 let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
                     credential_issuer: credential_issuer.clone(),
                     credential_configuration_ids,
                     grants: Some(Grants {
-                        authorization_code: None,
+                        authorization_code: Some(AuthorizationCode {
+                            issuer_state: Some(offer_id.clone()),
+                            authorization_server: None,
+                        }),
                         pre_authorized_code: Some(PreAuthorizedCode {
                             pre_authorized_code: pre_authorized_code.clone(),
                             ..Default::default()
@@ -110,8 +102,6 @@ impl Aggregate for Offer {
                         offer_id: offer_id.clone(),
                         credential_offer_uri,
                         credential_offer,
-                        pre_authorized_code,
-                        access_token,
                         status: Status::Created,
                     },
                     FormUrlEncodedCredentialOfferCreated {
@@ -187,31 +177,6 @@ impl Aggregate for Offer {
                     status: Status::Pending,
                 }])
             }
-            CreateTokenResponse {
-                offer_id,
-                token_request,
-            } => {
-                #[cfg(feature = "test_utils")]
-                let c_nonce = test_utils::c_nonce().await;
-                #[cfg(not(feature = "test_utils"))]
-                let c_nonce = agent_shared::generate_random_string();
-
-                match token_request {
-                    TokenRequest::PreAuthorizedCode { .. } => Ok(vec![TokenResponseCreated {
-                        offer_id,
-                        token_response: TokenResponse {
-                            access_token: self.access_token.clone(),
-                            token_type: "bearer".to_string(),
-                            expires_in: None,
-                            refresh_token: None,
-                            scope: None,
-                            c_nonce: Some(c_nonce),
-                            c_nonce_expires_in: None,
-                        },
-                    }]),
-                    _ => Err(UnsupportedTokenRequestGrantTypeError),
-                }
-            }
             VerifyCredentialRequest {
                 offer_id,
                 credential_issuer_metadata,
@@ -276,15 +241,11 @@ impl Aggregate for Offer {
         match event {
             CredentialOfferCreated {
                 offer_id,
-                pre_authorized_code,
-                access_token,
                 credential_offer,
                 credential_offer_uri,
                 status,
             } => {
                 self.offer_id = offer_id;
-                self.pre_authorized_code = pre_authorized_code;
-                self.access_token = access_token;
                 self.credential_offer.replace(credential_offer);
                 self.credential_offer_uri.replace(credential_offer_uri);
                 self.status = status;
@@ -311,9 +272,6 @@ impl Aggregate for Offer {
             CredentialOfferSent { .. } => {}
             CredentialRequestVerified { subject_id, .. } => {
                 self.subject_id.replace(subject_id);
-            }
-            TokenResponseCreated { token_response, .. } => {
-                self.token_response.replace(token_response);
             }
             CredentialResponseCreated {
                 credential_response, ..
@@ -353,8 +311,6 @@ pub mod tests {
     #[serial_test::serial]
     async fn test_create_offer(
         offer_id: String,
-        #[future(awt)] pre_authorized_code: String,
-        #[future(awt)] access_token: String,
         #[future(awt)] credential_offer: CredentialOffer,
         #[future(awt)] credential_offer_uri: CredentialOffer,
         #[future(awt)] form_url_encoded_credential_offer: String,
@@ -370,8 +326,6 @@ pub mod tests {
                     offer_id: offer_id.clone(),
                     credential_offer,
                     credential_offer_uri,
-                    pre_authorized_code,
-                    access_token,
                     status: Status::Created,
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
@@ -387,8 +341,6 @@ pub mod tests {
     #[allow(clippy::too_many_arguments)]
     async fn test_add_credential(
         offer_id: String,
-        #[future(awt)] pre_authorized_code: String,
-        #[future(awt)] access_token: String,
         #[future(awt)] credential_offer: CredentialOffer,
         #[future(awt)] credential_offer_uri: CredentialOffer,
         credential_configuration_id: String,
@@ -400,8 +352,6 @@ pub mod tests {
                 offer_id: offer_id.clone(),
                 credential_offer_uri,
                 credential_offer,
-                pre_authorized_code,
-                access_token,
                 status: Status::Created,
             }])
             .when(OfferCommand::AddCredentials {
@@ -424,65 +374,16 @@ pub mod tests {
             ]);
     }
 
-    #[rstest]
-    #[serial_test::serial]
-    #[allow(clippy::too_many_arguments)]
-    async fn test_create_token_response(
-        offer_id: String,
-        #[future(awt)] pre_authorized_code: String,
-        #[future(awt)] access_token: String,
-        #[future(awt)] credential_offer: CredentialOffer,
-        #[future(awt)] credential_offer_uri: CredentialOffer,
-        #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
-        #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
-        #[future(awt)] token_request: TokenRequest,
-        #[future(awt)] token_response: TokenResponse,
-    ) {
-        OfferTestFramework::with(Service::default())
-            .given(vec![
-                OfferEvent::CredentialOfferCreated {
-                    offer_id: offer_id.clone(),
-                    credential_offer,
-                    credential_offer_uri,
-                    pre_authorized_code,
-                    access_token,
-                    status: Status::Created,
-                },
-                OfferEvent::CredentialsAdded {
-                    offer_id: offer_id.clone(),
-                    credential_ids: vec!["credential-id".to_string()],
-                    credential_offer: credential_offer_with_credential_configuration_ids,
-                },
-                OfferEvent::FormUrlEncodedCredentialOfferCreated {
-                    offer_id: offer_id.clone(),
-                    form_url_encoded_credential_offer:
-                        form_url_encoded_credential_offer_with_credential_configuration_ids,
-                    status: Status::Pending,
-                },
-            ])
-            .when(OfferCommand::CreateTokenResponse {
-                offer_id: offer_id.clone(),
-                token_request,
-            })
-            .then_expect_events(vec![OfferEvent::TokenResponseCreated {
-                offer_id: offer_id.clone(),
-                token_response,
-            }]);
-    }
-
     #[allow(clippy::too_many_arguments)]
     #[rstest]
     #[serial_test::serial]
     async fn test_verify_credential_response(
         offer_id: String,
         #[future(awt)] holder: Arc<dyn Subject>,
-        #[future(awt)] pre_authorized_code: String,
-        #[future(awt)] access_token: String,
         #[future(awt)] credential_offer: CredentialOffer,
         #[future(awt)] credential_offer_uri: CredentialOffer,
         #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
         #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
-        #[future(awt)] token_response: TokenResponse,
         #[future(awt)] credential_request: CredentialRequest,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
@@ -493,8 +394,6 @@ pub mod tests {
                     offer_id: offer_id.clone(),
                     credential_offer,
                     credential_offer_uri,
-                    pre_authorized_code,
-                    access_token,
                     status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
@@ -507,10 +406,6 @@ pub mod tests {
                     form_url_encoded_credential_offer:
                         form_url_encoded_credential_offer_with_credential_configuration_ids,
                     status: Status::Pending,
-                },
-                OfferEvent::TokenResponseCreated {
-                    offer_id: offer_id.clone(),
-                    token_response,
                 },
             ])
             .when(OfferCommand::VerifyCredentialRequest {
@@ -531,13 +426,10 @@ pub mod tests {
     async fn test_create_credential_response(
         offer_id: String,
         #[future(awt)] holder: Arc<dyn Subject>,
-        #[future(awt)] pre_authorized_code: String,
-        #[future(awt)] access_token: String,
         #[future(awt)] credential_offer: CredentialOffer,
         #[future(awt)] credential_offer_uri: CredentialOffer,
         #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
         #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
-        #[future(awt)] token_response: TokenResponse,
         credential_response: CredentialResponse,
         notification_id: String,
     ) {
@@ -547,8 +439,6 @@ pub mod tests {
                     offer_id: offer_id.clone(),
                     credential_offer,
                     credential_offer_uri,
-                    pre_authorized_code,
-                    access_token,
                     status: Status::Created,
                 },
                 OfferEvent::CredentialsAdded {
@@ -561,10 +451,6 @@ pub mod tests {
                     form_url_encoded_credential_offer:
                         form_url_encoded_credential_offer_with_credential_configuration_ids,
                     status: Status::Pending,
-                },
-                OfferEvent::TokenResponseCreated {
-                    offer_id: offer_id.clone(),
-                    token_response,
                 },
                 OfferEvent::CredentialRequestVerified {
                     offer_id: offer_id.clone(),
@@ -591,13 +477,10 @@ pub mod tests {
     async fn test_just_in_time_credential_flow(
         offer_id: String,
         #[future(awt)] holder: Arc<dyn Subject>,
-        #[future(awt)] pre_authorized_code: String,
-        #[future(awt)] access_token: String,
         #[future(awt)] credential_offer: CredentialOffer,
         #[future(awt)] credential_offer_uri: CredentialOffer,
         #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
         #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
-        #[future(awt)] token_response: TokenResponse,
         credential_response: CredentialResponse,
         notification_id: String,
     ) {
@@ -607,8 +490,6 @@ pub mod tests {
                     offer_id: offer_id.clone(),
                     credential_offer,
                     credential_offer_uri,
-                    pre_authorized_code,
-                    access_token,
                     status: Status::Created,
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
@@ -616,10 +497,6 @@ pub mod tests {
                     form_url_encoded_credential_offer:
                         form_url_encoded_credential_offer_with_credential_configuration_ids,
                     status: Status::Pending,
-                },
-                OfferEvent::TokenResponseCreated {
-                    offer_id: offer_id.clone(),
-                    token_response,
                 },
                 OfferEvent::CredentialRequestVerified {
                     offer_id: offer_id.clone(),
@@ -777,26 +654,6 @@ pub mod test_utils {
     #[fixture]
     pub fn offer_id() -> String {
         "offer_id".to_string()
-    }
-    #[fixture]
-    pub async fn token_request(#[future(awt)] pre_authorized_code: String) -> TokenRequest {
-        TokenRequest::PreAuthorizedCode {
-            pre_authorized_code,
-            tx_code: None,
-        }
-    }
-
-    #[fixture]
-    pub async fn token_response(#[future(awt)] access_token: String, #[future(awt)] c_nonce: String) -> TokenResponse {
-        TokenResponse {
-            access_token,
-            token_type: "bearer".to_string(),
-            expires_in: None,
-            refresh_token: None,
-            scope: None,
-            c_nonce: Some(c_nonce),
-            c_nonce_expires_in: None,
-        }
     }
 
     #[fixture]

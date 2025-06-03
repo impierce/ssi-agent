@@ -1,8 +1,6 @@
 use super::aggregate::Status;
 use cqrs_es::DomainEvent;
-use oid4vci::{
-    credential_offer::CredentialOffer, credential_response::CredentialResponse, token_response::TokenResponse,
-};
+use oid4vci::{credential_offer::CredentialOffer, credential_response::CredentialResponse};
 use serde::{Deserialize, Serialize};
 use strum::Display;
 use url::Url;
@@ -13,8 +11,6 @@ pub enum OfferEvent {
         offer_id: String,
         credential_offer: CredentialOffer,
         credential_offer_uri: CredentialOffer,
-        pre_authorized_code: String,
-        access_token: String,
         status: Status,
     },
     CredentialsAdded {
@@ -31,10 +27,6 @@ pub enum OfferEvent {
         offer_id: String,
         target_url: Url,
         status: Status,
-    },
-    TokenResponseCreated {
-        offer_id: String,
-        token_response: TokenResponse,
     },
     CredentialRequestVerified {
         offer_id: String,

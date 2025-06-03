@@ -12,15 +12,11 @@ impl View<Offer> for Offer {
         match &event.payload {
             CredentialOfferCreated {
                 offer_id,
-                pre_authorized_code,
-                access_token,
                 status,
                 credential_offer,
                 credential_offer_uri,
             } => {
                 self.offer_id.clone_from(offer_id);
-                self.pre_authorized_code.clone_from(pre_authorized_code);
-                self.access_token.clone_from(access_token);
                 self.status.clone_from(status);
                 self.credential_offer.replace(credential_offer.clone());
                 self.credential_offer_uri.replace(credential_offer_uri.clone());
@@ -55,13 +51,6 @@ impl View<Offer> for Offer {
             CredentialRequestVerified { offer_id, subject_id } => {
                 self.offer_id.clone_from(offer_id);
                 self.subject_id.replace(subject_id.clone());
-            }
-            TokenResponseCreated {
-                offer_id,
-                token_response,
-            } => {
-                self.offer_id.clone_from(offer_id);
-                self.token_response.replace(token_response.clone());
             }
             CredentialResponseCreated {
                 offer_id,

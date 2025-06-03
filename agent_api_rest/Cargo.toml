@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+agent_authorization = { path = "../agent_authorization" }
 agent_holder = { path = "../agent_holder" }
 agent_identity = { path = "../agent_identity" }
 agent_issuance = { path = "../agent_issuance" }
@@ -12,6 +13,7 @@ agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
 agent_verification = { path = "../agent_verification" }
 
+askama = "0.14"
 axum.workspace = true
 axum-auth = "0.8"
 axum-macros = "0.5"
@@ -27,6 +29,7 @@ oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true
 serde.workspace = true
+serde_urlencoded = "0.7"
 serde_json.workspace = true
 siopv2.workspace = true
 thiserror.workspace = true
@@ -36,6 +39,9 @@ tower-http.workspace = true
 tracing.workspace = true
 url.workspace = true
 uuid.workspace = true
+
+lazy_static.workspace = true
+
 
 [dev-dependencies]
 agent_event_publisher_http = { path = "../agent_event_publisher_http", features = [

@@ -10,11 +10,7 @@ use agent_identity::services::IdentityServices;
 use agent_issuance::services::IssuanceServices;
 use agent_secret_manager::{service::Service as _, subject::Subject};
 use agent_shared::config::{config, EventStoreType};
-use agent_store::{
-    in_memory::{self, InMemory},
-    postgres::{self, Postgres},
-    EventPublisher,
-};
+use agent_store::{in_memory::InMemory, postgres::Postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use probes::liveness::healthz;
 use std::sync::Arc;
@@ -34,25 +30,30 @@ async fn main() -> io::Result<()> {
     // exactly the same, which is weird. We need some sort of layer between `agent_application` and `agent_store` that
     // will provide a cleaner way of initializing the event publishers and sending them over to `agent_store`.
     let identity_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
+    let authorization_event_publishers: Vec<Box<dyn EventPublisher>> =
+        vec![Box::new(EventPublisherHttp::load().unwrap())];
     let issuance_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
     let holder_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
     let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
-    let (identity_state, issuance_state, holder_state, verification_state) = match config().event_store.type_ {
-        EventStoreType::Postgres => (
-            agent_store::identity_state::<Postgres>(identity_services, identity_event_publishers).await,
-            postgres::issuance_state(issuance_services, issuance_event_publishers).await,
-            agent_store::holder_state::<Postgres>(holder_services, holder_event_publishers).await,
-            agent_store::verification_state::<Postgres>(verification_services, verification_event_publishers).await,
-        ),
-        EventStoreType::InMemory => (
-            agent_store::identity_state::<InMemory>(identity_services, identity_event_publishers).await,
-            in_memory::issuance_state(issuance_services, issuance_event_publishers).await,
-            agent_store::holder_state::<InMemory>(holder_services, holder_event_publishers).await,
-            agent_store::verification_state::<InMemory>(verification_services, verification_event_publishers).await,
-        ),
-    };
+    let (identity_state, authorization_state, issuance_state, holder_state, verification_state) =
+        match config().event_store.type_ {
+            EventStoreType::Postgres => (
+                agent_store::identity_state::<Postgres>(identity_services, identity_event_publishers).await,
+                agent_store::authorization_state::<Postgres>(authorization_event_publishers).await,
+                agent_store::issuance_state::<Postgres>(issuance_services, issuance_event_publishers).await,
+                agent_store::holder_state::<Postgres>(holder_services, holder_event_publishers).await,
+                agent_store::verification_state::<Postgres>(verification_services, verification_event_publishers).await,
+            ),
+            EventStoreType::InMemory => (
+                agent_store::identity_state::<InMemory>(identity_services, identity_event_publishers).await,
+                agent_store::authorization_state::<InMemory>(authorization_event_publishers).await,
+                agent_store::issuance_state::<InMemory>(issuance_services, issuance_event_publishers).await,
+                agent_store::holder_state::<InMemory>(holder_services, holder_event_publishers).await,
+                agent_store::verification_state::<InMemory>(verification_services, verification_event_publishers).await,
+            ),
+        };
 
     info!("{:?}", config());
 
@@ -65,6 +66,7 @@ async fn main() -> io::Result<()> {
 
     let app = app(ApplicationState {
         identity_state: Some(identity_state),
+        authorization_state: Some(authorization_state),
         issuance_state: Some(issuance_state),
         holder_state: Some(holder_state),
         verification_state: Some(verification_state),

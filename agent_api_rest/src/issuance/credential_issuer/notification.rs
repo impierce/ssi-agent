@@ -26,14 +26,15 @@ pub async fn notification(
     let notification_request: NotificationRequest = serde_json::from_value::<NotificationRequest>(raw_value)
         .map_err(|_| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
 
-    let access_token_result = query_handler(&access_token, &state.query.access_token).await?;
+    // FIXME
+    // let access_token_result = query_handler(&access_token, &state.query.access_token).await?;
 
-    let _offer_id = match access_token_result {
-        Some(access_token_view) => access_token_view.offer_id,
-        None => {
-            return Err(PublicError::from(NotificationErrorResponse::InvalidToken));
-        }
-    };
+    // let _offer_id = match access_token_result {
+    //     Some(access_token_view) => access_token_view.offer_id,
+    //     None => {
+    //         return Err(PublicError::from(NotificationErrorResponse::InvalidToken));
+    //     }
+    // };
 
     let credentials = match query_handler("all_credentials", &state.query.all_credentials).await? {
         Some(all_credentials) => all_credentials.credentials,
@@ -70,7 +71,8 @@ mod tests {
     use crate::issuance::router;
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
-    use agent_store::in_memory;
+    use agent_store::in_memory::InMemory;
+    use agent_store::issuance_state;
     use axum::{body::Body, http::Request};
     use oid4vci::errors::ErrorStatusCode;
     use oid4vci::notification_request::NotificationEvent;
@@ -80,7 +82,7 @@ mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_valid_notification_request() {
-        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
         initialize(&issuance_state).await.unwrap();
         let mut app = router(issuance_state);
 
@@ -107,7 +109,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_notification_request() {
-        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
         initialize(&issuance_state).await.unwrap();
         let mut app = router(issuance_state);
 
