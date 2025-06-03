@@ -299,3 +299,5 @@ event_store:
 Setting display values is currently not supported through environment variables. Please refer to `config.yaml`.
 
 :::
+
+<!-- TODO: DISPLAY_0_NAME: even configured through env vars? -->
