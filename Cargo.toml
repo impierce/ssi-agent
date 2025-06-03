@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "agent_api_rest",
     "agent_application",
+    "agent_authorization",
     "agent_event_publisher_http",
     "agent_holder",
     "agent_identity",
@@ -51,7 +52,7 @@ iota-sdk-legacy = { version = "1.0", package = "iota-sdk", default-features = fa
     "client",
     "stronghold",
 ] }
-iota-sdk = { git = "https://github.com/iotaledger/iota", package = "iota-sdk", tag = "v0.12.0-rc" }
+iota-sdk = { git = "https://github.com/impierce/iota", package = "iota-sdk", branch = "temp/fix" }
 jsonwebtoken = "9.3"
 lazy_static = "1.4"
 mime = { version = "0.3" }
@@ -80,4 +81,15 @@ url = "2.5"
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"
 
-
+[patch.'https://github.com/iotaledger/iota']
+iota-sdk = { git = "https://github.com/impierce/iota", package = "iota-sdk", branch = "temp/fix" }
+move-core-types = { git = "https://github.com/impierce/iota.git", package = "move-core-types", branch = "temp/fix" }
+shared-crypto = { git = "https://github.com/impierce/iota.git", package = "shared-crypto", branch = "temp/fix" }
+iota-network-stack = { git = "https://github.com/impierce/iota.git", package = "iota-network-stack", branch = "temp/fix" }
+iota-types = { git = "https://github.com/impierce/iota.git", package = "iota-types", branch = "temp/fix" }
+iota-metrics = { git = "https://github.com/impierce/iota.git", package = "iota-metrics", branch = "temp/fix" }
+move-binary-format = { git = "https://github.com/impierce/iota.git", package = "move-binary-format", branch = "temp/fix" }
+iota-protocol-config = { git = "https://github.com/impierce/iota.git", package = "iota-protocol-config", branch = "temp/fix" }
+move-vm-config = { git = "https://github.com/impierce/iota.git", package = "move-vm-config", branch = "temp/fix" }
+iota-adapter-latest = { git = "https://github.com/impierce/iota.git", package = "iota-adapter-latest", branch = "temp/fix" }
+iota-execution = { git = "https://github.com/impierce/iota.git", package = "iota-execution", branch = "temp/fix" }

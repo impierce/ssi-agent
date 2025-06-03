@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; }
+        .container { max-width: 400px; margin: 0 auto; padding: 1em; border: 1px solid #ccc; border-radius: 8px; }
+        label, input, button { display: block; width: 100%; margin-bottom: 1em; }
+        input[type="text"], input[type="password"] { padding: 0.8em; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { padding: 0.8em; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        .error { color: red; margin-bottom: 1em; }
+        .success { color: green; margin-bottom: 1em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ title }}</h1>
+
+        {% if error_message.is_some() %}
+        <p class="error">{{ error_message.as_ref().unwrap() }}</p>
+        {% endif %}
+
+        {% if success_message.is_some() %}
+        <p class="success">{{ success_message.as_ref().unwrap() }}</p>
+        {% endif %}
+
+        <form action="/auth/login" method="post">
+            <input type="hidden" name="client_id" value="{{ client_id }}">
+
+            <input type="hidden" name="request_uri" value="{{ request_uri }}">
+
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" required>
+
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" required>
+
+            <button type="submit">Log In</button>
+        </form>
+    </div>
+</body>
+</html>

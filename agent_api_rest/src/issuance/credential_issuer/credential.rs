@@ -31,11 +31,14 @@ pub(crate) async fn credential(
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> Result<Response, PublicError> {
-    // Use the `access_token` to get the `offer_id` from the `AccessTokenView`.
-    let offer_id = query_handler(&access_token, &state.query.access_token)
-        .await?
-        .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidToken))?
-        .offer_id;
+    // // Use the `access_token` to get the `offer_id` from the `AccessTokenView`.
+    // let offer_id = query_handler(&access_token, &state.query.access_token)
+    //     .await?
+    //     .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidToken))?
+    //     .offer_id;
+
+    let offer_id = String::default();
+    todo!("FIXME");
 
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
     let (credential_issuer_metadata, authorization_server_metadata) =
@@ -132,13 +135,12 @@ pub(crate) async fn credential(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::authorization::authorization_server::token::tests::token;
     use crate::issuance::credentials::tests::credentials;
     use crate::issuance::router;
     use crate::API_VERSION;
     use crate::{
-        issuance::{
-            credential_issuer::token::tests::token, credentials::CredentialsEndpointRequest, offers::tests::offers,
-        },
+        issuance::{credentials::CredentialsEndpointRequest, offers::tests::offers},
         tests::{CREDENTIAL_CONFIGURATION_ID, OFFER_ID},
     };
     use agent_event_publisher_http::EventPublisherHttp;
@@ -146,12 +148,13 @@ pub mod tests {
     use agent_issuance::{offer::event::OfferEvent, state::initialize};
     use agent_secret_manager::service::Service;
     use agent_shared::config::{set_config, Events};
-    use agent_store::{in_memory, EventPublisher};
+    use agent_store::{in_memory::InMemory, issuance_state, EventPublisher};
     use axum::{
         body::Body,
         http::{self, Request},
         Router,
     };
+    use oid4vci::credential_offer::PreAuthorizedCode;
     use rstest::rstest;
     use serde_json::{json, Value};
     use std::sync::Arc;
@@ -288,7 +291,7 @@ pub mod tests {
             (None, Default::default())
         };
 
-        let issuance_state = in_memory::issuance_state(Service::default(), issuance_event_publishers).await;
+        let issuance_state = issuance_state::<InMemory>(Service::default(), issuance_event_publishers).await;
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
@@ -306,7 +309,12 @@ pub mod tests {
             credentials(&mut app).await;
         }
 
-        let pre_authorized_code = offers(&mut app).await.unwrap();
+        let (
+            _authorization_code,
+            PreAuthorizedCode {
+                pre_authorized_code, ..
+            },
+        ) = offers(&mut app).await.unwrap();
 
         let access_token: String = token(&mut app, pre_authorized_code).await;
 
@@ -361,7 +369,12 @@ pub mod tests {
 
     pub async fn credential(app: &mut Router) -> (String, String) {
         credentials(app).await;
-        let pre_authorized_code = offers(app).await.unwrap();
+        let (
+            _authorization_code,
+            PreAuthorizedCode {
+                pre_authorized_code, ..
+            },
+        ) = offers(app).await.unwrap();
         let access_token: String = token(app, pre_authorized_code).await;
 
         let request_body = json!({

@@ -114,18 +114,21 @@ pub mod tests {
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
     use agent_shared::config::set_config;
-    use agent_store::in_memory;
+    use agent_store::in_memory::{self, InMemory};
+    use agent_store::issuance_state;
     use axum::{
         body::Body,
         http::{self, Request},
         Router,
     };
-    use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants, PreAuthorizedCode};
+    use oid4vci::credential_offer::{
+        AuthorizationCode, CredentialOffer, CredentialOfferParameters, Grants, PreAuthorizedCode,
+    };
     use serde_json::json;
     use std::str::FromStr;
     use tower::Service as _;
 
-    pub async fn offers(app: &mut Router) -> Option<String> {
+    pub async fn offers(app: &mut Router) -> Option<(AuthorizationCode, PreAuthorizedCode)> {
         let response = app
             .call(
                 Request::builder()
@@ -160,11 +163,8 @@ pub mod tests {
                 let CredentialOfferParameters {
                     grants:
                         Some(Grants {
-                            pre_authorized_code:
-                                Some(PreAuthorizedCode {
-                                    pre_authorized_code, ..
-                                }),
-                            ..
+                            authorization_code: Some(authorization_code),
+                            pre_authorized_code: Some(pre_authorized_code),
                         }),
                     ..
                 } = *credential_offer
@@ -172,7 +172,7 @@ pub mod tests {
                     unreachable!()
                 };
 
-                Some(pre_authorized_code)
+                Some((authorization_code, pre_authorized_code))
             }
             CredentialOffer::CredentialOfferUri(credential_offer_uri) => {
                 assert_eq!(
@@ -192,13 +192,13 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_offers_endpoint() {
-        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
 
         credentials(&mut app).await;
-        let _pre_authorized_code = offers(&mut app).await;
+        let (_authorization_code, _pre_authorized_code) = offers(&mut app).await.unwrap();
     }
 
     #[serial_test::serial]
@@ -206,13 +206,13 @@ pub mod tests {
     #[tracing_test::traced_test]
     async fn test_offers_endpoint_by_reference() {
         set_config().credential_offer_by_value_enabled = false;
-        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
 
         credentials(&mut app).await;
-        let _pre_authorized_code = offers(&mut app).await;
+        let _ = offers(&mut app).await;
         set_config().credential_offer_by_value_enabled = true;
     }
 }

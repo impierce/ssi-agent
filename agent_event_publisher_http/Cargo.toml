@@ -16,10 +16,11 @@ anyhow.workspace = true
 async-trait.workspace = true
 cqrs-es.workspace = true
 http-serde = "2.1"
-rustls = { version = "0.23", default-features = false, features = [
+rustls = { version = "0.23", default-features = true, features = [
     "logging",
     "std",
-    "tls12"
+    "tls12",
+    "ring",
 ] }
 reqwest.workspace = true
 serde.workspace = true

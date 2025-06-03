@@ -13,10 +13,10 @@ agent_shared = { path = "../agent_shared" }
 # - All components of the `identity_stronghold_ext` module are still active.
 #
 # Future work: Migrate the remaining functionality into UniCore.
-# did_manager_consumer = { path = "../../did-manager/consumer", package = "consumer" }
-# did_manager_identity_stronghold_ext = { path = "../../did-manager/identity_stronghold_ext", package = "identity_stronghold_ext" }
-did_manager_consumer = { git = "https://github.com/impierce/did-manager", branch = "feat/stronghold-ext-rebased", package = "consumer" }
-did_manager_identity_stronghold_ext = { git = "https://github.com/impierce/did-manager", branch = "feat/stronghold-ext-rebased", package = "identity_stronghold_ext" }
+did_manager_consumer = { path = "../../did-manager/consumer", package = "consumer" }
+did_manager_identity_stronghold_ext = { path = "../../did-manager/identity_stronghold_ext", package = "identity_stronghold_ext" }
+# did_manager_consumer = { git = "https://github.com/impierce/did-manager", branch = "feat/stronghold-ext-rebased", package = "consumer" }
+# did_manager_identity_stronghold_ext = { git = "https://github.com/impierce/did-manager", branch = "feat/stronghold-ext-rebased", package = "identity_stronghold_ext" }
 
 anyhow.workspace = true
 async-trait.workspace = true
@@ -44,3 +44,16 @@ ring = "0.17.8"
 
 [features]
 test_utils = []
+
+[patch.'https://github.com/iotaledger/iota']
+iota-sdk = { git = "https://github.com/impierce/iota", package = "iota-sdk", branch = "temp/fix" }
+move-core-types = { git = "https://github.com/impierce/iota.git", package = "move-core-types", branch = "temp/fix" }
+shared-crypto = { git = "https://github.com/impierce/iota.git", package = "shared-crypto", branch = "temp/fix" }
+iota-network-stack = { git = "https://github.com/impierce/iota.git", package = "iota-network-stack", branch = "temp/fix" }
+iota-types = { git = "https://github.com/impierce/iota.git", package = "iota-types", branch = "temp/fix" }
+iota-metrics = { git = "https://github.com/impierce/iota.git", package = "iota-metrics", branch = "temp/fix" }
+move-binary-format = { git = "https://github.com/impierce/iota.git", package = "move-binary-format", branch = "temp/fix" }
+iota-protocol-config = { git = "https://github.com/impierce/iota.git", package = "iota-protocol-config", branch = "temp/fix" }
+move-vm-config = { git = "https://github.com/impierce/iota.git", package = "move-vm-config", branch = "temp/fix" }
+iota-adapter-latest = { git = "https://github.com/impierce/iota.git", package = "iota-adapter-latest", branch = "temp/fix" }
+iota-execution = { git = "https://github.com/impierce/iota.git", package = "iota-execution", branch = "temp/fix" }
