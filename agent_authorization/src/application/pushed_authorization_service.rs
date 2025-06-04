@@ -74,10 +74,12 @@ impl PushedAuthorizationService {
         pushed_authorization_request: PushedAuthorizationRequest,
         // FIX ME
     ) -> Result<PushedAuthorizationResponse, ()> {
+        println!("{}:{}", file!(), line!());
+
         // FIXME
         let static_unime_configuration = ClientConfiguration {
             client_id: "test_client_id".to_string(),
-            redirect_uris: vec![url::Url::parse("https://example.com/callback").expect("Failed to parse URL")],
+            redirect_uris: vec![url::Url::parse("unime://callback").expect("Failed to parse URL")],
             grant_types: vec!["authorization_code".to_string()],
             response_types: vec!["code".to_string()],
             token_endpoint_auth_method: "none".to_string(),
@@ -90,10 +92,12 @@ impl PushedAuthorizationService {
             tos_uri: None,
         };
 
+        println!("{}:{}", file!(), line!());
         if pushed_authorization_request.client_id != static_unime_configuration.client_id {
             return Err(());
         }
 
+        println!("{}:{}", file!(), line!());
         if !static_unime_configuration
             .redirect_uris
             .contains(&pushed_authorization_request.redirect_uri)
@@ -101,6 +105,7 @@ impl PushedAuthorizationService {
             return Err(());
         }
 
+        println!("{}:{}", file!(), line!());
         if !static_unime_configuration
             .response_types
             .contains(&pushed_authorization_request.response_type)
@@ -108,26 +113,31 @@ impl PushedAuthorizationService {
             return Err(());
         }
 
+        println!("{}:{}", file!(), line!());
         if pushed_authorization_request.response_type != "code" {
             return Err(());
         }
 
+        println!("{}:{}", file!(), line!());
         if static_unime_configuration.require_pkce || static_unime_configuration.token_endpoint_auth_method == "none" {
             // FIXME: Validate PKCE
         }
 
+        println!("{}:{}", file!(), line!());
         // FIXME
         let request_uri = Uuid::default();
         let oauth2_authorization_request_id = request_uri.urn().to_string();
         let expires_in = 3600; // 1 hour
         let expires_at = chrono::Utc::now().timestamp() + expires_in as i64;
 
+        println!("{}:{}", file!(), line!());
         let command = OAuth2AuthorizationRequestCommand::InitializeFromPushedAuthorizationRequest {
             oauth2_authorization_request_id: oauth2_authorization_request_id.clone(),
             pushed_authorization_request: pushed_authorization_request.clone(),
             expires_at,
         };
 
+        println!("{}:{}", file!(), line!());
         command_handler(
             &oauth2_authorization_request_id,
             &state.command.oauth2_authorization_request,
@@ -136,6 +146,7 @@ impl PushedAuthorizationService {
         .await
         .expect("Failed to handle command");
 
+        println!("{}:{}", file!(), line!());
         // Here you would implement the logic to handle the Pushed Authorization Request
         // For now, we return a dummy response
         Ok(PushedAuthorizationResponse {

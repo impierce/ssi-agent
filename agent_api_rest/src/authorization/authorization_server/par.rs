@@ -59,7 +59,7 @@ pub mod tests {
                             response_type: "code".to_string(),
                             state: "test_state".to_string(),
                             client_id: "test_client_id".to_string(),
-                            redirect_uri: "https://example.com/callback".parse().unwrap(),
+                            redirect_uri: "unime://callback".parse().unwrap(),
                             code_challenge: Some("test_code_challenge".to_string()),
                             code_challenge_method: Some("S256".to_string()),
                             scope: "openid profile".to_string(),
@@ -107,11 +107,14 @@ pub mod tests {
         let (AuthorizationCode { issuer_state, .. }, _pre_authorized_code) = offers(&mut app).await.unwrap();
         let issuer_state = issuer_state.unwrap();
 
+        println!("Issuer State: {}", issuer_state);
+
         let authorization_state = authorization_state::<InMemory>(Default::default()).await;
         let mut app = authorization::router((authorization_state, issuance_state));
 
         let _request_uri = par(&mut app, issuer_state).await;
 
+        // FIXME
         println!(" Request URI: {}", _request_uri);
     }
 }

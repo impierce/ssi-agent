@@ -3,7 +3,23 @@ use serde::{Deserialize, Serialize};
 use strum::Display;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
-pub enum AuthorizationCodeEvent {}
+pub enum AuthorizationCodeEvent {
+    AuthorizationCodeCreated {
+        authorization_code_id: String,
+        client_id: String,
+        redirect_uri: String,
+        scope: Option<String>,
+        user_id: String,
+        code_challenge: Option<String>,
+        code_challenge_method: Option<String>,
+        issuer_state: Option<String>,
+        expires_at: Option<i64>,
+    },
+    AuthorizationCodeRedeemed {
+        authorization_code_id: String,
+        redeemed: bool,
+    },
+}
 
 impl DomainEvent for AuthorizationCodeEvent {
     fn event_type(&self) -> String {

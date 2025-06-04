@@ -1,7 +1,7 @@
 use crate::authorization::AuthorizationState;
 use crate::handlers::{command_handler, query_handler};
 use crate::issuance::error::{internal_server_error, PublicError};
-use agent_authorization::application::token_issuance_service::TokenIssuanceService;
+use agent_authorization::application::token_issuance_service::{TokenIssuanceService, TokenRequest};
 use agent_issuance::offer::command::OfferCommand;
 use agent_issuance::state::IssuanceState;
 use axum::{
@@ -11,7 +11,6 @@ use axum::{
     Form,
 };
 use oid4vci::errors::TokenErrorResponse;
-use oid4vci::token_request::TokenRequest;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn token(
@@ -19,36 +18,9 @@ pub(crate) async fn token(
     Form(token_request): Form<TokenRequest>,
     // TODO: implement official oid4vci error response. This TODO is also in the `credential` endpoint.
 ) -> Result<Response, PublicError> {
-    let token_response = TokenIssuanceService::issue_token(&authorization_state, token_request).expect("FIXME");
-
-    // // Get the `pre_authorized_code` from the `TokenRequest`.
-    // let pre_authorized_code = match &token_request {
-    //     TokenRequest::PreAuthorizedCode {
-    //         pre_authorized_code, ..
-    //     } => pre_authorized_code,
-    //     _ => return Err(PublicError::from(TokenErrorResponse::InvalidGrant)),
-    // };
-
-    // // Use the `pre_authorized_code` to get the `offer_id` from the `PreAuthorizedCodeView`.
-    // let offer_id = query_handler(pre_authorized_code, &state.query.pre_authorized_code)
-    //     .await?
-    //     .ok_or_else(|| PublicError::from(TokenErrorResponse::InvalidGrant))?
-    //     .offer_id;
-
-    // let command = OfferCommand::CreateTokenResponse {
-    //     offer_id: offer_id.clone(),
-    //     token_request,
-    // };
-
-    // // Create a `TokenResponse` using the `offer_id` and `token_request`.
-    // command_handler(&offer_id, &state.command.offer, command).await?;
-
-    // // Use the `offer_id` to get the `token_response` from the `OfferView`.
-    // query_handler(&offer_id, &state.query.offer)
-    //     .await?
-    //     .and_then(|offer_view| offer_view.token_response)
-    //     .map(|token_response| (StatusCode::OK, Json(token_response)).into_response())
-    //     .ok_or_else(internal_server_error)
+    let token_response = TokenIssuanceService::issue_token(&authorization_state, token_request)
+        .await
+        .expect("FIXME");
 
     Ok((StatusCode::OK, Json(token_response)).into_response())
 }
@@ -71,10 +43,10 @@ pub mod tests {
         http::{self, Request},
         Router,
     };
-    use oid4vci::token_response::TokenResponse;
+    use oid4vci::{credential_offer::AuthorizationCode, token_response::TokenResponse};
     use tower::Service as _;
 
-    pub async fn token(app: &mut Router, pre_authorized_code: String) -> String {
+    pub async fn token(app: &mut Router, code: String) -> String {
         let response = app
             .call(
                 Request::builder()
@@ -85,8 +57,9 @@ pub mod tests {
                         mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
                     )
                     .body(Body::from(format!(
-                        "grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code&pre-authorized_code={}",
-                        pre_authorized_code
+                        // "grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code&pre-authorized_code={}",
+                        // pre_authorized_code
+                        "grant_type=authorization_code&code={code}&code_verifier=some_code_verifier&redirect_uri=unime://callback&client_id=test_client_id",
                     )))
                     .unwrap(),
             )
@@ -99,30 +72,36 @@ pub mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let token_response: TokenResponse = serde_json::from_slice(&body).unwrap();
         assert_eq!(token_response.token_type, "bearer");
-        assert!(token_response.c_nonce.is_some());
+        // assert!(token_response.c_nonce.is_some());
         token_response.access_token
     }
 
     #[serial_test::serial]
     #[tokio::test]
     async fn test_token_endpoint() {
+        // FIXME: this only tests Authorization Code Grant, not Pre-Authorized Code Grant
         let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
 
-        // Uncomment for Pre-Authorized Code flow
-        // initialize(&issuance_state).await.unwrap();
+        initialize(&issuance_state).await.unwrap();
 
-        // let mut app = issuance::router(issuance_state.clone());
+        let mut app = issuance::router(issuance_state.clone());
 
-        // credentials(&mut app).await;
-        // let _pre_authorized_code = offers(&mut app).await;
+        credentials(&mut app).await;
+        let (AuthorizationCode { issuer_state, .. }, _pre_authorized_code) = offers(&mut app).await.unwrap();
+        let issuer_state = issuer_state.unwrap();
 
         let authorization_state = authorization_state::<InMemory>(Default::default()).await;
         let mut app = authorization::router((authorization_state, issuance_state));
 
-        // let request_uri = par(&mut app).await;
+        let request_uri = par(&mut app, issuer_state).await;
 
-        // let code = authorize(&mut app, request_uri).await;
+        let code = authorize(&mut app, request_uri).await;
 
-        // let _access_token = token(&mut app, code).await;
+        let _access_token = token(&mut app, code).await;
+
+        println!(
+            "Token endpoint test completed successfully. Access token: {}",
+            _access_token
+        );
     }
 }

@@ -1,3 +1,6 @@
+use agent_authorization::domain::access_token::aggregate::AccessToken;
+use agent_authorization::domain::access_token::views::all_tokens::AllAccessTokensView;
+use agent_authorization::domain::access_token::views::AccessTokenView;
 use agent_authorization::domain::authorization_code::aggregate::AuthorizationCode;
 use agent_authorization::domain::authorization_code::views::all_authorization_codes::AllAuthorizationCodesView;
 use agent_authorization::domain::authorization_code::views::AuthorizationCodeView;
@@ -10,9 +13,6 @@ use agent_authorization::domain::consent::views::ConsentView;
 use agent_authorization::domain::oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest;
 use agent_authorization::domain::oauth2_authorization_request::views::all_oauth2_authorization_requests::AllOAuth2AuthorizationRequestsView;
 use agent_authorization::domain::oauth2_authorization_request::views::OAuth2AuthorizationRequestView;
-use agent_authorization::domain::token::aggregate::Token;
-use agent_authorization::domain::token::views::all_tokens::AllTokensView;
-use agent_authorization::domain::token::views::TokenView;
 use agent_authorization::state::AuthorizationState;
 use agent_holder::credential::aggregate::Credential as HolderCredential;
 use agent_holder::credential::queries::all_credentials::AllHolderCredentialsView;
@@ -195,7 +195,7 @@ pub async fn authorization_state<ES: EventStoreTemp>(
         client_event_publishers,
         consent_event_publishers,
         oauth2_authorization_request_event_publishers,
-        token_event_publishers,
+        access_token_event_publishers: token_event_publishers,
         ..
     } = partition_event_publishers(event_publishers);
 
@@ -216,8 +216,8 @@ pub async fn authorization_state<ES: EventStoreTemp>(
             AllOAuth2AuthorizationRequestsView,
         >((), oauth2_authorization_request_event_publishers)
         .await;
-    let (token_command_handler, token, all_tokens) =
-        ES::commands_and_queries::<TokenView, Token, AllTokensView>((), token_event_publishers).await;
+    let (token_command_handler, access_token, all_access_tokens) =
+        ES::commands_and_queries::<AccessTokenView, AccessToken, AllAccessTokensView>((), token_event_publishers).await;
 
     AuthorizationState {
         command: agent_authorization::state::CommandHandlers {
@@ -225,13 +225,13 @@ pub async fn authorization_state<ES: EventStoreTemp>(
             client: client_command_handler,
             consent: consent_command_handler,
             oauth2_authorization_request: oauth2_authorization_request_command_handler,
-            token: token_command_handler,
+            access_token: token_command_handler,
         },
         query: agent_authorization::state::ViewRepositories {
             client,
             oauth2_authorization_request,
             authorization_code,
-            token,
+            access_token,
             consent,
         },
     }
@@ -366,7 +366,7 @@ pub type AuthorizationCodeEventPublisher = Box<dyn Query<AuthorizationCode>>;
 pub type ClientEventPublisher = Box<dyn Query<Client>>;
 pub type ConsentEventPublisher = Box<dyn Query<Consent>>;
 pub type OAuth2AuthorizationRequestEventPublisher = Box<dyn Query<OAuth2AuthorizationRequest>>;
-pub type TokenEventPublisher = Box<dyn Query<Token>>;
+pub type AccessTokenEventPublisher = Box<dyn Query<AccessToken>>;
 pub type ServerConfigEventPublisher = Box<dyn Query<ServerConfig>>;
 pub type CredentialEventPublisher = Box<dyn Query<Credential>>;
 pub type OfferEventPublisher = Box<dyn Query<Offer>>;
@@ -386,7 +386,7 @@ pub struct Partitions {
     pub client_event_publishers: Vec<ClientEventPublisher>,
     pub consent_event_publishers: Vec<ConsentEventPublisher>,
     pub oauth2_authorization_request_event_publishers: Vec<OAuth2AuthorizationRequestEventPublisher>,
-    pub token_event_publishers: Vec<TokenEventPublisher>,
+    pub access_token_event_publishers: Vec<AccessTokenEventPublisher>,
     pub server_config_event_publishers: Vec<ServerConfigEventPublisher>,
     pub credential_event_publishers: Vec<CredentialEventPublisher>,
     pub offer_event_publishers: Vec<OfferEventPublisher>,
@@ -426,7 +426,7 @@ pub trait EventPublisher {
     fn oauth2_authorization_request(&mut self) -> Option<OAuth2AuthorizationRequestEventPublisher> {
         None
     }
-    fn token(&mut self) -> Option<TokenEventPublisher> {
+    fn access_token(&mut self) -> Option<AccessTokenEventPublisher> {
         None
     }
 
@@ -486,8 +486,8 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
                     .oauth2_authorization_request_event_publishers
                     .push(oauth2_authorization_request);
             }
-            if let Some(token) = event_publisher.token() {
-                partitions.token_event_publishers.push(token);
+            if let Some(access_token) = event_publisher.access_token() {
+                partitions.access_token_event_publishers.push(access_token);
             }
 
             if let Some(server_config) = event_publisher.server_config() {
@@ -580,7 +580,7 @@ mod test {
             client_event_publishers,
             consent_event_publishers,
             oauth2_authorization_request_event_publishers,
-            token_event_publishers,
+            access_token_event_publishers: token_event_publishers,
             server_config_event_publishers,
             credential_event_publishers,
             offer_event_publishers,

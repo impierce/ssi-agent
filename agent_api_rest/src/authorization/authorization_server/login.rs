@@ -38,12 +38,12 @@ pub(crate) async fn get_login(
     .into_response())
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct LoginForm {
-    username: String,
-    password: String,
-    client_id: String,   // Client ID of the OAuth2 client
-    request_uri: String, // To restore original OAuth context after login
+    pub username: String,
+    pub password: String,
+    pub client_id: String,   // Client ID of the OAuth2 client
+    pub request_uri: String, // To restore original OAuth context after login
 }
 
 // This handles processing the login form submission (POST request)
