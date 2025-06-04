@@ -1,17 +1,17 @@
-use super::Token;
-use super::TokenView;
+use super::AccessToken;
+use super::AccessTokenView;
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct AllTokensView {
+pub struct AllAccessTokensView {
     #[serde(flatten)]
-    pub tokens: HashMap<String, TokenView>,
+    pub tokens: HashMap<String, AccessTokenView>,
 }
 
-impl View<Token> for AllTokensView {
-    fn update(&mut self, event: &EventEnvelope<Token>) {
+impl View<AccessToken> for AllAccessTokensView {
+    fn update(&mut self, event: &EventEnvelope<AccessToken>) {
         self.tokens
             // Get the entry for the aggregate_id
             .entry(event.aggregate_id.clone())

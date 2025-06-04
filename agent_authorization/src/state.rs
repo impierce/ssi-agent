@@ -3,6 +3,8 @@ use cqrs_es::persist::ViewRepository;
 use std::sync::Arc;
 use tracing::{debug, info};
 
+use crate::domain::access_token::aggregate::AccessToken;
+use crate::domain::access_token::views::AccessTokenView;
 use crate::domain::authorization_code::aggregate::AuthorizationCode;
 use crate::domain::authorization_code::views::AuthorizationCodeView;
 use crate::domain::client::aggregate::Client;
@@ -11,8 +13,6 @@ use crate::domain::consent::aggregate::Consent;
 use crate::domain::consent::views::ConsentView;
 use crate::domain::oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest;
 use crate::domain::oauth2_authorization_request::views::OAuth2AuthorizationRequestView;
-use crate::domain::token::aggregate::Token;
-use crate::domain::token::views::TokenView;
 
 #[derive(Clone)]
 pub struct AuthorizationState {
@@ -26,7 +26,7 @@ pub struct CommandHandlers {
     pub client: CommandHandler<Client>,
     pub oauth2_authorization_request: CommandHandler<OAuth2AuthorizationRequest>,
     pub authorization_code: CommandHandler<AuthorizationCode>,
-    pub token: CommandHandler<Token>,
+    pub access_token: CommandHandler<AccessToken>,
     pub consent: CommandHandler<Consent>,
 }
 
@@ -37,22 +37,22 @@ type Queries = ViewRepositories<
     dyn ViewRepository<ClientView, Client>,
     dyn ViewRepository<OAuth2AuthorizationRequestView, OAuth2AuthorizationRequest>,
     dyn ViewRepository<AuthorizationCodeView, AuthorizationCode>,
-    dyn ViewRepository<TokenView, Token>,
+    dyn ViewRepository<AccessTokenView, AccessToken>,
     dyn ViewRepository<ConsentView, Consent>,
 >;
 
-pub struct ViewRepositories<C, OAR, AC, T, Co>
+pub struct ViewRepositories<C, OAR, AC, AT, Co>
 where
     C: ViewRepository<ClientView, Client> + ?Sized,
     OAR: ViewRepository<OAuth2AuthorizationRequestView, OAuth2AuthorizationRequest> + ?Sized,
     AC: ViewRepository<AuthorizationCodeView, AuthorizationCode> + ?Sized,
-    T: ViewRepository<TokenView, Token> + ?Sized,
+    AT: ViewRepository<AccessTokenView, AccessToken> + ?Sized,
     Co: ViewRepository<ConsentView, Consent> + ?Sized,
 {
     pub client: Arc<C>,
     pub oauth2_authorization_request: Arc<OAR>,
     pub authorization_code: Arc<AC>,
-    pub token: Arc<T>,
+    pub access_token: Arc<AT>,
     pub consent: Arc<Co>,
 }
 
@@ -62,7 +62,7 @@ impl Clone for Queries {
             client: self.client.clone(),
             oauth2_authorization_request: self.oauth2_authorization_request.clone(),
             authorization_code: self.authorization_code.clone(),
-            token: self.token.clone(),
+            access_token: self.access_token.clone(),
             consent: self.consent.clone(),
         }
     }

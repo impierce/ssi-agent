@@ -29,12 +29,13 @@ pub(crate) async fn authorize(
     if TEMP_MAP
         .lock()
         .unwrap()
-        .get(&authorization_request.request_uri.to_string())
+        .get(&authorization_request.request_uri.urn().to_string())
         != Some(&true)
     {
         return Ok(Redirect::to(&format!(
             "/auth/login?client_id={}&request_uri={}",
-            authorization_request.client_id, authorization_request.request_uri
+            authorization_request.client_id,
+            authorization_request.request_uri.urn()
         ))
         .into_response());
     }
@@ -43,12 +44,13 @@ pub(crate) async fn authorize(
         .await
         .expect("FIXME");
 
-    Ok((StatusCode::FOUND, [(header::LOCATION, "unime://callback?code=my-code")]).into_response())
+    Ok((StatusCode::FOUND, [(header::LOCATION, location)]).into_response())
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::authorization::authorization_server::login::LoginForm;
     use crate::authorization::authorization_server::par::tests::par;
     use crate::issuance::credentials::tests::credentials;
     use crate::issuance::offers::tests::offers;
@@ -57,6 +59,7 @@ pub mod tests {
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
     use agent_store::{authorization_state, issuance_state};
+    use axum::response::Html;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -73,10 +76,82 @@ pub mod tests {
                     .uri(format!(
                         "/auth/authorize?client_id=test_client_id&request_uri={request_uri}",
                     ))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+
+        let see_other_location = response.headers().get("Location").unwrap().to_str().unwrap();
+        assert_eq!(
+            see_other_location,
+            "/auth/login?client_id=test_client_id&request_uri=urn:uuid:00000000-0000-0000-0000-000000000000"
+        );
+
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri(see_other_location)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get("Content-Type").unwrap(),
+            "text/html; charset=utf-8"
+        );
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        let html = String::from_utf8(body.to_vec()).unwrap();
+        assert!(html.contains("Login to Authorization Server"));
+        assert!(html.contains("test_client_id"));
+        assert!(html.contains("urn:uuid:00000000-0000-0000-0000-000000000000"));
+        assert!(html.contains("action=\"/auth/login\""));
+        assert!(html.contains("method=\"post\""));
+
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/auth/login")
                     .header(
                         http::header::CONTENT_TYPE,
                         mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
                     )
+                    .body(Body::from(
+                        serde_urlencoded::to_string(&LoginForm {
+                            username: "test_user".to_string(),
+                            password: "test_password".to_string(),
+                            client_id: "test_client_id".to_string(),
+                            request_uri: "urn:uuid:00000000-0000-0000-0000-000000000000".to_string(),
+                        })
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+
+        let see_other_location = response.headers().get("Location").unwrap().to_str().unwrap();
+        assert_eq!(
+            see_other_location,
+            "/auth/authorize?client_id=test_client_id&request_uri=urn:uuid:00000000-0000-0000-0000-000000000000"
+        );
+
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri(see_other_location)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -84,18 +159,14 @@ pub mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::FOUND);
-        assert_eq!(response.headers().get("Location").unwrap(), "unime://example?code=code");
 
-        let code = response
-            .headers()
-            .get("Location")
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .split("code=")
-            .nth(1)
-            .unwrap()
-            .to_string();
+        let found_location = response.headers().get("Location").unwrap().to_str().unwrap();
+        assert_eq!(
+            found_location,
+            "unime://callback?code=00000000-0000-0000-0000-000000000000"
+        );
+
+        let code = found_location.split("code=").nth(1).unwrap().to_string();
 
         code
     }

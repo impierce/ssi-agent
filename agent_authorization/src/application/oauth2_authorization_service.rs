@@ -1,11 +1,12 @@
 use std::str::FromStr;
 
-use agent_shared::handlers::query_handler;
+use agent_shared::handlers::{command_handler, query_handler};
 use oid4vci::authorization_details::AuthorizationDetailsObject;
+use reqwest::redirect;
 use serde::Serializer;
 use uuid::{fmt::Urn, Uuid};
 
-use crate::state::AuthorizationState;
+use crate::{domain::authorization_code::command::AuthorizationCodeCommand, state::AuthorizationState};
 
 // FIXME: Only PAR?
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -31,7 +32,7 @@ impl OAuth2AuthorizationService {
         // FIX ME
     ) -> Result<String, ()> {
         let oauth2_authorization_request = query_handler(
-            &authorization_request.request_uri.to_string(),
+            &authorization_request.request_uri.urn().to_string(),
             &state.query.oauth2_authorization_request,
         )
         .await
@@ -46,11 +47,31 @@ impl OAuth2AuthorizationService {
             return Err(());
         }
 
-        // Here you would implement the logic to handle the Authorization Request
-        // For now, we return a dummy URL
-        Ok("unime://example?code=code"
+        let redirect_uri = oauth2_authorization_request.redirect_uri.clone();
+
+        // let authorization_code_id = uuid::Uuid::new_v4().to_string();
+        let authorization_code_id = uuid::Uuid::default().to_string(); // FIXME
+        let command = AuthorizationCodeCommand::CreateAuthorizationCode {
+            authorization_code_id: authorization_code_id.clone(),
+            client_id: authorization_request.client_id,
+            redirect_uri: oauth2_authorization_request.redirect_uri,
+            scope: None, // FIXME: This should be replaced with the actual scope
+            user_id: "authenticated_user_id".to_string(), // FIXME: This should be replaced with the actual authenticated user ID
+            // authorization_details: AuthorizationDetailsObject::default(), // FIXME: This should be replaced with the actual authorization details
+            code_challenge: oauth2_authorization_request.code_challenge,
+            code_challenge_method: oauth2_authorization_request.code_challenge_method,
+            issuer_state: oauth2_authorization_request.issuer_state,
+            expires_in: Some(600), // 10 minutes
+        };
+
+        command_handler(&authorization_code_id, &state.command.authorization_code, command)
+            .await
+            .expect("FIXME");
+
+        // FIXME: Add `state` and other necessary parameters to the URL
+        Ok(format!("{redirect_uri}?code={authorization_code_id}")
             .parse::<url::Url>()
-            .expect("Failed to parse URL")
+            .expect("FIXME: Failed to parse URL")
             .to_string())
     }
 }
