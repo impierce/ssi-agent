@@ -156,7 +156,10 @@ pub mod tests {
             CredentialOffer::CredentialOfferUri(credential_offer_uri) => {
                 assert_eq!(
                     credential_offer_uri,
-                    url::Url::parse(&format!("https://example.com/openid4vci/credential-offer/{OFFER_ID}")).unwrap()
+                    url::Url::parse(&format!(
+                        "https://my-domain.example.org/openid4vci/credential-offer/{OFFER_ID}"
+                    ))
+                    .unwrap()
                 );
 
                 None

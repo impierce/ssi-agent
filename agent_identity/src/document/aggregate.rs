@@ -213,7 +213,7 @@ impl Aggregate for Document {
                         }
                     }
                     SupportedDidMethod::Web => {
-                        let origin = config().url.origin();
+                        let origin = config().public_url.origin();
 
                         info!("Origin: {}", &origin.ascii_serialization());
 
@@ -628,8 +628,7 @@ pub mod document_tests {
 pub mod test_utils {
     use super::get_properties;
     use crate::state::DOMAIN_LINKAGE_SERVICE_ID;
-    use agent_shared::config::config;
-    use agent_shared::config::SupportedDidMethod;
+    use agent_shared::config::{config, SupportedDidMethod};
     use identity_core::convert::FromJson;
     use identity_did::CoreDID;
     use identity_document::{
@@ -706,7 +705,7 @@ pub mod test_utils {
             .type_("LinkedDomains")
             .service_endpoint(
                 ServiceEndpoint::from_json_value(json!({
-                    "origins": [config().url],
+                    "origins": [config().public_url.origin().ascii_serialization()],
                 }))
                 .unwrap(),
             )

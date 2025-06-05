@@ -53,12 +53,12 @@ async fn main() -> io::Result<()> {
 
     info!("{:?}", config());
 
-    let url = &config().url;
+    info!("Application url: {}", config().application_url);
 
-    info!("Application url: {}", url);
+    info!("Public url: {}", config().public_url);
 
     agent_identity::state::initialize(&identity_state).await.unwrap();
-    agent_issuance::state::initialize(&issuance_state, startup_commands(url.clone())).await;
+    agent_issuance::state::initialize(&issuance_state, startup_commands(config().public_url.clone())).await;
 
     let app = app(ApplicationState {
         identity_state: Some(identity_state),
@@ -81,10 +81,10 @@ async fn main() -> io::Result<()> {
     let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
     let app = probes_router.merge(app);
 
-    let port = config().port.unwrap_or(3033);
+    let port = config().application_url.port().unwrap_or(3033);
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
-    info!("HTTP API served at http://{}", listener.local_addr()?);
+    info!("HTTP API served at {}", config().application_url);
     axum::serve(listener, app).await?;
 
     Ok(())

@@ -56,11 +56,13 @@ impl Aggregate for AuthorizationRequest {
                     .await
                     .unwrap();
 
-                let url = &config().url;
+                let mut request_uri = config().request_uri.clone();
+                if let Ok(mut path_segments) = request_uri.path_segments_mut() {
+                    path_segments.pop_if_empty();
+                    path_segments.push(&state);
+                }
 
-                // TODO: ensure that URLs like these are validated during configuration.
-                let request_uri = format!("{url}request/{state}").parse().unwrap();
-                let redirect_uri = format!("{url}redirect").parse::<url::Url>().unwrap();
+                let redirect_uri = config().redirect_uri.clone();
 
                 let authorization_request = Box::new(if let Some(presentation_definition) = presentation_definition {
                     GenericAuthorizationRequest::OID4VP(Box::new(
