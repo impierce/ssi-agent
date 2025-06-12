@@ -1,9 +1,10 @@
 {
 	"info": {
-		"_postman_id": "d50320fe-7e72-4e02-a358-20a4f9303d9e",
-		"name": "ssi-agent",
+		"_postman_id": "3e8dd442-b9e3-4b43-a48e-124cf32fe34f",
+		"name": "ssi-agent Copy 8",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "30650915"
+		"_exporter_id": "41786572",
+		"_collection_link": "https://impierce-technologies-bv.postman.co/workspace/New-Team-Workspace~1aa38760-77fc-4608-a1f5-e8a6fdaa0ad9/collection/24972330-3e8dd442-b9e3-4b43-a48e-124cf32fe34f?action=share&source=collection_link&creator=41786572"
 	},
 	"item": [
 		{
@@ -226,6 +227,24 @@
 					"response": []
 				},
 				{
+					"name": "Credential by ID Copy",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/credential-configurations",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"credential-configurations"
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "offers",
 					"event": [
 						{
@@ -235,10 +254,10 @@
 									"const credential_offer = responseBody;",
 									"const decodedString = decodeURIComponent(credential_offer);",
 									"const [, secondItem] = decodedString.split('=', 2);",
-									"var credential_offer_uri = JSON.parse(secondItem);",
+									"var credential_offer_uri = secondItem;",
 									"",
 									"if(credential_offer_uri){",
-									" pm.collectionVariables.set(\"CREDENTIAL_OFFER_URI\", credential_offer_uri)",
+									"    pm.collectionVariables.set(\"CREDENTIAL_OFFER_URI\", credential_offer_uri)",
 									"}"
 								],
 								"type": "text/javascript",
