@@ -225,24 +225,6 @@
 					"response": []
 				},
 				{
-					"name": "Credential by ID Copy",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/v0/credential-configurations",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"v0",
-								"credential-configurations"
-							]
-						}
-					},
-					"response": []
-				},
-				{
 					"name": "offers",
 					"event": [
 						{
