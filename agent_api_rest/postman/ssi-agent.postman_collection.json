@@ -3,9 +3,7 @@
 		"_postman_id": "3e8dd442-b9e3-4b43-a48e-124cf32fe34f",
 		"name": "ssi-agent",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "41786572",
-		"_collection_link": "https://impierce-technologies-bv.postman.co/workspace/New-Team-Workspace~1aa38760-77fc-4608-a1f5-e8a6fdaa0ad9/collection/24972330-3e8dd442-b9e3-4b43-a48e-124cf32fe34f?action=share&source=collection_link&creator=41786572"
-	},
+		"_exporter_id": "41786572"	},
 	"item": [
 		{
 			"name": "Issuance",
