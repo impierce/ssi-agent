@@ -1,4 +1,3 @@
-// mod defaults;
 mod provisioned;
 
 use agent_macros::Config;
@@ -1287,23 +1286,14 @@ mod tests {
     #[test]
     #[serial]
     fn test_public_url_defaults_to_application_url() {
-        temp_env::with_vars(
-            [
-                ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("postgresql://:test:")),
-                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
-            ],
-            || {
-                let provisioned_config = config::Config::builder()
-                    .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
-                    .build()
-                    .unwrap();
-                let config =
-                    ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
+        let provisioned_config = config::Config::builder()
+            .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+            .build()
+            .unwrap();
+        let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
 
-                // Assert that the public URL is set to the application URL
-                assert_eq!(config.public_url, config.application_url);
-            },
-        );
+        // Assert that the public URL is set to the application URL
+        assert_eq!(config.public_url, config.application_url);
     }
 
     #[test]
@@ -1311,8 +1301,6 @@ mod tests {
     fn test_oid4vc_endpoint_variables_overwrite_defaults() {
         temp_env::with_vars(
             [
-                ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("postgresql://:test:")),
-                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
                 (
                     "UNICORE__TOKEN_ENDPOINT",
                     Some("https://my-domain.example.org/my/token/endpoint"),

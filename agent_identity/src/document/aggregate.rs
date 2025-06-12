@@ -759,7 +759,7 @@ pub mod test_utils {
             .type_("LinkedDomains")
             .service_endpoint(
                 ServiceEndpoint::from_json_value(json!({
-                    "origins": [config().public_url.clone()],
+                    "origins": [config().public_url.origin().ascii_serialization()],
                 }))
                 .unwrap(),
             )
