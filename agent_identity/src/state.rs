@@ -4,6 +4,8 @@ use crate::connection::views::ConnectionView;
 use crate::document::aggregate::Status;
 use crate::document::command::DocumentCommand;
 use crate::document::views::all_documents::AllDocumentsView;
+use crate::profile::aggregate::Profile;
+use crate::profile::views::ProfileView;
 use crate::service::views::all_services::AllServicesView;
 use crate::{
     document::{aggregate::Document, views::DocumentView},
@@ -25,6 +27,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::info;
 
+/// The unique identifier for the server configuration.
+pub const PROFILE_ID: &str = "PROFILE-001";
+
 #[derive(Clone)]
 pub struct IdentityState {
     pub command: CommandHandlers,
@@ -36,6 +41,7 @@ pub struct IdentityState {
 pub struct CommandHandlers {
     pub connection: CommandHandler<Connection>,
     pub document: CommandHandler<Document>,
+    pub profile: CommandHandler<Profile>,
     pub service: CommandHandler<Service>,
 }
 
@@ -47,16 +53,18 @@ type Queries = ViewRepositories<
     dyn ViewRepository<AllConnectionsView, Connection>,
     dyn ViewRepository<DocumentView, Document>,
     dyn ViewRepository<AllDocumentsView, Document>,
+    dyn ViewRepository<ProfileView, Profile>,
     dyn ViewRepository<ServiceView, Service>,
     dyn ViewRepository<AllServicesView, Service>,
 >;
 
-pub struct ViewRepositories<C1, C2, D1, D2, S1, S2>
+pub struct ViewRepositories<C1, C2, D1, D2, P, S1, S2>
 where
     C1: ViewRepository<ConnectionView, Connection> + ?Sized,
     C2: ViewRepository<AllConnectionsView, Connection> + ?Sized,
     D1: ViewRepository<DocumentView, Document> + ?Sized,
     D2: ViewRepository<AllDocumentsView, Document> + ?Sized,
+    P: ViewRepository<ProfileView, Profile> + ?Sized,
     S1: ViewRepository<ServiceView, Service> + ?Sized,
     S2: ViewRepository<AllServicesView, Service> + ?Sized,
 {
@@ -64,6 +72,7 @@ where
     pub all_connections: Arc<C2>,
     pub document: Arc<D1>,
     pub all_documents: Arc<D2>,
+    pub profile: Arc<P>,
     pub service: Arc<S1>,
     pub all_services: Arc<S2>,
 }
@@ -75,6 +84,7 @@ impl Clone for Queries {
             all_connections: self.all_connections.clone(),
             document: self.document.clone(),
             all_documents: self.all_documents.clone(),
+            profile: self.profile.clone(),
             service: self.service.clone(),
             all_services: self.all_services.clone(),
         }

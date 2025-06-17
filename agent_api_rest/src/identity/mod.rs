@@ -1,5 +1,6 @@
 pub mod connections;
 pub mod documents;
+pub mod profiles;
 pub mod services;
 pub mod well_known;
 
@@ -15,7 +16,10 @@ use documents::{get_document, get_documents};
 use services::{linked_vp::linked_vp, service, services};
 use well_known::{did::did, did_configuration::did_configuration};
 
-use crate::API_VERSION;
+use crate::{
+    identity::profiles::{get_profile, get_profiles, post_profiles},
+    API_VERSION,
+};
 
 pub fn router(identity_state: IdentityState) -> Router {
     Router::new()
@@ -26,6 +30,8 @@ pub fn router(identity_state: IdentityState) -> Router {
                 .route("/connections/{connection_id}", get(get_connection))
                 .route("/documents", get(get_documents))
                 .route("/documents/{document_id}", get(get_document))
+                .route("/profiles", get(get_profiles).post(post_profiles))
+                .route("/profiles/{profile_id}", get(get_profile))
                 .route("/services", get(services))
                 .route("/services/{service_id}", get(service))
                 .route("/services/linked-vp", post(linked_vp)),
