@@ -16,27 +16,6 @@ use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-#[test]
-fn test() {
-    let test = PostProfilesEndpointRequest {
-        display_name: Some("Test Profile".to_string()),
-        logo: Some(Logo {
-            uri: Some("https://example.com/logo.png".parse().unwrap()),
-            alt_text: Some("test logo".to_string()),
-        }),
-    };
-
-    println!("{}", serde_json::to_string_pretty(&test).unwrap());
-
-    serde_json::json!({
-        "displayName": "Test Profile",
-        "logo": {
-            "uri": "https://example.com/logo.png",
-            "alt_text": "test logo"
-        }
-    });
-}
-
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PostProfilesEndpointRequest {
@@ -51,75 +30,22 @@ pub(crate) async fn post_profiles(
     State(state): State<IdentityState>,
     Json(PostProfilesEndpointRequest { display_name, logo }): Json<PostProfilesEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    if let Some(display_name) = display_name {
-        config_mut()
-            .display
-            .first_mut()
-            .map(|display| display.name = display_name.clone());
-    }
+    let profile_id = PROFILE_ID.to_string();
 
-    if let Some(logo) = logo {
-        config_mut()
-            .display
-            .first_mut()
-            .map(|display| display.logo = Some(logo));
-    }
+    let command = ProfileCommand::CreateProfile {
+        profile_id: profile_id.clone(),
+        display_name,
+        logo,
+        provisioned: None,
+    };
 
-    Ok(StatusCode::OK.into_response())
+    command_handler(&profile_id, &state.command.profile, command).await?;
 
-    // let profile_id = PROFILE_ID.to_string();
-
-    // let command = ProfileCommand::CreateProfile {
-    //     profile_id: profile_id.clone(),
-    //     display_name,
-    //     logo_uri,
-    //     provisioned: false,
-    // };
-
-    // command_handler(&profile_id, &state.command.profile, command).await?;
-
-    // // Return the connection.
-    // query_handler(&connection_id, &state.query.connection)
-    //     .await?
-    //     .map(|connection_view| {
-    //         (
-    //             StatusCode::CREATED,
-    //             [(header::LOCATION, &format!("{API_VERSION}/connections/{connection_id}"))],
-    //             Json(connection_view),
-    //         )
-    //             .into_response()
-    //     })
-    //     // TODO: this *should* be an impossible error, what should we return here?
-    //     .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
-}
-
-#[axum_macros::debug_handler]
-pub(crate) async fn get_profiles(State(state): State<IdentityState>) -> Result<Response, ApiError> {
-    // debug!("Request Params - alias: {alias:?}, domain: {domain:?}, did: {did:?}");
-
-    // let filtered_connections = query_handler("all_connections", &state.query.all_connections)
-    //     .await?
-    //     .map(|all_connections_view| {
-    //         let filtered_connections: Vec<_> = all_connections_view
-    //             .connections
-    //             .into_values()
-    //             .filter(|connection| {
-    //                 alias
-    //                     .as_ref()
-    //                     .map_or(true, |alias| connection.alias.as_ref() == Some(alias))
-    //                     && domain
-    //                         .as_ref()
-    //                         .map_or(true, |domain| connection.domain.as_ref() == Some(domain))
-    //                     && did.as_ref().map_or(true, |did| connection.dids.contains(did))
-    //             })
-    //             .collect();
-
-    //         filtered_connections
-    //     })
-    //     .unwrap_or_default();
-
-    // Ok((StatusCode::OK, Json(filtered_connections)).into_response())
-    todo!()
+    Ok((
+        StatusCode::CREATED,
+        [(header::LOCATION, &format!("{API_VERSION}/profiles/{profile_id}"))],
+    )
+        .into_response())
 }
 
 #[axum_macros::debug_handler]

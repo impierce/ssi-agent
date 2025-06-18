@@ -17,7 +17,7 @@ use services::{linked_vp::linked_vp, service, services};
 use well_known::{did::did, did_configuration::did_configuration};
 
 use crate::{
-    identity::profiles::{get_profile, get_profiles, post_profiles},
+    identity::profiles::{get_profile, post_profiles},
     API_VERSION,
 };
 
@@ -30,7 +30,7 @@ pub fn router(identity_state: IdentityState) -> Router {
                 .route("/connections/{connection_id}", get(get_connection))
                 .route("/documents", get(get_documents))
                 .route("/documents/{document_id}", get(get_document))
-                .route("/profiles", get(get_profiles).post(post_profiles))
+                .route("/profiles", post(post_profiles))
                 .route("/profiles/{profile_id}", get(get_profile))
                 .route("/services", get(services))
                 .route("/services/{service_id}", get(service))

@@ -9,7 +9,17 @@ impl View<Profile> for Profile {
         use ProfileEvent::*;
 
         match &event.payload {
-            _ => todo!(),
+            ProfileCreated {
+                profile_id,
+                display_name,
+                logo,
+                provisioned,
+            } => {
+                self.profile_id = profile_id.clone();
+                self.display_name = display_name.clone();
+                self.logo = logo.clone();
+                self.provisioned = *provisioned;
+            }
         }
     }
 }

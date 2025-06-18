@@ -1,3 +1,4 @@
+use agent_shared::config::Logo;
 use cqrs_es::DomainEvent;
 use identity_core::common::Url;
 use identity_did::DIDUrl;
@@ -9,8 +10,8 @@ pub enum ProfileEvent {
     ProfileCreated {
         profile_id: String,
         display_name: Option<String>,
-        logo_uri: Option<Url>,
-        provisioned: bool,
+        logo: Option<Logo>,
+        provisioned: Option<bool>,
     },
 }
 

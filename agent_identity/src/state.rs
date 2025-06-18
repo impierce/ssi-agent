@@ -5,13 +5,16 @@ use crate::document::aggregate::Status;
 use crate::document::command::DocumentCommand;
 use crate::document::views::all_documents::AllDocumentsView;
 use crate::profile::aggregate::Profile;
+use crate::profile::command::ProfileCommand;
 use crate::profile::views::ProfileView;
 use crate::service::views::all_services::AllServicesView;
 use crate::{
     document::{aggregate::Document, views::DocumentView},
     service::{aggregate::Service, command::ServiceCommand, views::ServiceView},
 };
-use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported, SupportedDidMethod, ToggleOptions};
+use agent_shared::config::{
+    config, config_mut, get_all_enabled_signing_algorithms_supported, Display, SupportedDidMethod, ToggleOptions,
+};
 use agent_shared::handlers::command_handler;
 use agent_shared::{application_state::CommandHandler, handlers::query_handler};
 use cqrs_es::persist::ViewRepository;
@@ -130,10 +133,70 @@ pub const LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID: &str = "linked-verifiable-p
 pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
     info!("Initializing the identity state ...");
 
+    initialize_display(state).await?;
     initialize_documents(state).await?;
     initialize_domain_linkage(state).await?;
     initialize_linked_verifiable_presentations(state).await?;
     publish_decentrally_hosted_documents(state).await?;
+
+    Ok(())
+}
+
+async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
+    let first = config().display.first().cloned();
+
+    info!("Initializing display ... is some display configured? {first:?}");
+
+    if let Some(display) = first {
+        let command = ProfileCommand::CreateProfile {
+            profile_id: PROFILE_ID.to_string(),
+            display_name: Some(display.name.clone()),
+            logo: display.logo.clone(),
+            provisioned: Some(true),
+        };
+
+        command_handler(PROFILE_ID, &state.command.profile, command).await?;
+    } else {
+        if let Some(Profile {
+            display_name,
+            logo,
+            provisioned,
+            ..
+        }) = query_handler(PROFILE_ID, &state.query.profile).await?
+        {
+            if provisioned.unwrap_or(false) {
+                let command = ProfileCommand::CreateProfile {
+                    profile_id: PROFILE_ID.to_string(),
+                    display_name: Default::default(),
+                    logo: None,
+                    provisioned: Some(false),
+                };
+
+                command_handler(PROFILE_ID, &state.command.profile, command).await?;
+            } else {
+                config_mut().display = vec![Display {
+                    name: display_name.clone().unwrap_or_default(),
+                    logo: logo.clone(),
+                    locale: Some("en".to_string()),
+                }];
+
+                let command = ProfileCommand::CreateProfile {
+                    profile_id: PROFILE_ID.to_string(),
+                    display_name,
+                    logo,
+                    provisioned: Some(false),
+                };
+
+                command_handler(PROFILE_ID, &state.command.profile, command).await?;
+            }
+        }
+    }
+
+    if let Some(Profile { display_name, logo, .. }) = query_handler(PROFILE_ID, &state.query.profile).await? {
+        if display_name.unwrap_or_default().is_empty() && logo.is_none() {
+            config_mut().display = vec![];
+        }
+    }
 
     Ok(())
 }

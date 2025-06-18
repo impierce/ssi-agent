@@ -1,3 +1,4 @@
+use agent_shared::config::{config, config_mut, Display, Logo};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_core::common::Url;
@@ -14,8 +15,8 @@ pub struct Profile {
     #[serde(rename = "id")]
     pub profile_id: String,
     pub display_name: Option<String>,
-    pub logo_uri: Option<Url>,
-    pub provisioned: bool,
+    pub logo: Option<Logo>,
+    pub provisioned: Option<bool>,
 }
 
 #[async_trait]
@@ -43,19 +44,31 @@ impl Aggregate for Profile {
             CreateProfile {
                 profile_id,
                 display_name,
-                logo_uri,
+                logo,
                 provisioned,
             } => {
                 debug!("Creating profile with ID: {}", profile_id);
 
-                if !provisioned && self.provisioned {
+                if provisioned.is_none() && self.provisioned == Some(true) {
                     return Err(ProfileError::AlreadyProvisioned);
                 }
 
-                Ok(vec![ProfileEvent::ProfileCreated {
+                let mut display = config().display.first().cloned().unwrap_or_default();
+
+                if let Some(display_name) = display_name.clone() {
+                    display.name = display_name;
+                }
+
+                if let Some(logo) = logo.clone() {
+                    display.logo = Some(logo.clone());
+                }
+
+                config_mut().display = vec![display];
+
+                Ok(vec![ProfileCreated {
                     profile_id,
                     display_name,
-                    logo_uri,
+                    logo,
                     provisioned,
                 }])
             }
@@ -71,12 +84,12 @@ impl Aggregate for Profile {
             ProfileCreated {
                 profile_id,
                 display_name,
-                logo_uri,
+                logo,
                 provisioned,
             } => {
                 self.profile_id = profile_id;
                 self.display_name = display_name;
-                self.logo_uri = logo_uri;
+                self.logo = logo;
                 self.provisioned = provisioned;
             }
         }
