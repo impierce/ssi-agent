@@ -437,9 +437,9 @@ pub mod tests {
                         .generate_response(
                             oid4vp_authorization_request,
                             AuthorizationResponseInput {
-                                verifiable_presentation_input: PresentationInputType::Presentation(
+                                verifiable_presentation_input: PresentationInputType::Presentation(Box::new(
                                     verifiable_presentation,
-                                ),
+                                )),
                                 presentation_submission,
                             },
                         )
