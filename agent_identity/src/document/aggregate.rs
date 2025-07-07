@@ -1,8 +1,8 @@
 use super::{command::DocumentCommand, error::DocumentError, event::DocumentEvent};
 use crate::services::IdentityServices;
 use agent_secret_manager::subject::StorageKey;
-use agent_shared::config::SupportedDidMethod;
 use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported};
+use agent_shared::config::{config_mut, SupportedDidMethod};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_did::{CoreDID, DIDUrl, DID as _};
@@ -99,6 +99,8 @@ impl Aggregate for Document {
                         let signer = StorageSigner::new(storage, key_id, public_key_jwk.clone());
 
                         let wallet_address = IotaAddress::from(&Signer::public_key(&signer).await.unwrap());
+
+                        config_mut().iota_address = Some(wallet_address.to_string());
 
                         info!("Current {network_name} Address: `{wallet_address}`");
 

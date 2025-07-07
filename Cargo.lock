@@ -197,7 +197,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "temp-env",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
  "tower 0.4.13",
  "tracing",
