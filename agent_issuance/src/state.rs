@@ -3,6 +3,7 @@ use agent_shared::config::{
     config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, CredentialConfiguration,
 };
 use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::profile::ApplicationProfile;
 use agent_shared::UrlAppendHelpers;
 use cqrs_es::persist::ViewRepository;
 use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
@@ -209,7 +210,35 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
             let file = std::fs::read(file.as_path()).expect("Failed to read credential configuration file");
             serde_json::from_slice(&file).expect("Failed to parse credential configurations from file")
         })
-        .unwrap_or_default();
+        .unwrap_or_else(|| match ApplicationProfile::load() {
+            ApplicationProfile::Development => {
+                info!("Using default development credential configurations.");
+                serde_json::from_value::<Vec<CredentialConfiguration>>(serde_json::json!([
+                  {
+                    "credential_configuration_id": "001",
+                    "format": "jwt_vc_json",
+                    "credential_definition": {
+                      "type": ["VerifiableCredential"]
+                    },
+                    "display": [
+                      {
+                        "name": "Verifiable Credential",
+                        "locale": "en",
+                        "logo": {
+                          "uri": "https://www.impierce.com/external/impierce-logo.png",
+                          "alt_text": "Impierce Logo"
+                        }
+                      }
+                    ]
+                  }
+                ]))
+                .expect("Failed to parse default development credential configurations")
+            }
+            ApplicationProfile::Production => {
+                info!("No credential configurations found");
+                vec![]
+            }
+        });
 
     let previous_provisioned_credential_configuration_ids = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
         .await?
