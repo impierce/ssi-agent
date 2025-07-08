@@ -139,7 +139,7 @@ impl Aggregate for AuthorizationRequest {
             }
             VerifyAuthorizationResponse {
                 // TODO: use this once `RelyingPartyManager` uses the official SIOPv2 validation logic.
-                authorization_request: _,
+                authorization_request: _, //should contain the og-dcql
                 authorization_response,
             } => {
                 let relying_party = &services.relying_party;
@@ -168,7 +168,7 @@ impl Aggregate for AuthorizationRequest {
                             Oid4vpParams::Params { vp_token, .. } => vp_token,
                             Oid4vpParams::Jwt { .. } => return Err(UnsupportedAuthorizationResponseParameterError),
                         };
-
+                        //line167 go
                         Ok(vec![OID4VPAuthorizationResponseVerified {
                             vp_token,
                             state: oid4vp_authorization_response.state,
