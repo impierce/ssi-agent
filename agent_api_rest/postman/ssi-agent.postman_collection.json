@@ -367,6 +367,33 @@
 						}
 					},
 					"response": []
+				},
+				{
+					"name": "Create a new Credential Configuration",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"credential_configuration_id\": \"002\",\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\"VerifiableCredential\"]\n    },\n    \"display\": [\n        {\n        \"name\": \"Verifiable Credential\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"uri\": \"https://www.impierce.com/external/impierce-logo.png\",\n            \"alt_text\": \"Impierce Logo\"\n        }\n        }\n    ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/credential-configurations",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"credential-configurations"
+							]
+						}
+					},
+					"response": []
 				}
 			]
 		},
