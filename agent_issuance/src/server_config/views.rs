@@ -54,7 +54,7 @@ impl View<ServerConfig> for ServerConfigView {
                 self.credential_issuer_metadata.clone_from(credential_issuer_metadata);
                 self.credential_configurations.clone_from(credential_configurations);
             }
-            CredentialConfigurationAdded {
+            CredentialConfigurationUpdated {
                 credential_configuration_id: _,
                 credential_issuer_metadata,
                 credential_configurations,

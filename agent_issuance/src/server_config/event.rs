@@ -35,7 +35,7 @@ pub enum ServerConfigEvent {
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject)>,
     },
-    CredentialConfigurationAdded {
+    CredentialConfigurationUpdated {
         credential_configuration_id: String,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject)>,

@@ -164,8 +164,6 @@ impl Aggregate for ServerConfig {
             } => {
                 let proof_types_supported = into_proof_types_supported(&self.signing_algorithms_supported);
 
-                // panic!("Signing algorithms: {:?}", self.signing_algorithms_supported);
-
                 let credential_configuration_object = CredentialConfigurationsSupportedObject {
                     credential_format: credential_configuration.credential_format_with_parameters,
                     cryptographic_binding_methods_supported: self.cryptographic_binding_methods_supported.clone(),
@@ -198,7 +196,7 @@ impl Aggregate for ServerConfig {
                 credential_issuer_metadata.credential_configurations_supported =
                     into_credential_configurations_supported(&credential_configurations);
 
-                Ok(vec![CredentialConfigurationAdded {
+                Ok(vec![CredentialConfigurationUpdated {
                     credential_configuration_id: credential_configuration.credential_configuration_id,
                     credential_issuer_metadata,
                     credential_configurations,
@@ -281,7 +279,7 @@ impl Aggregate for ServerConfig {
                 self.credential_issuer_metadata = *credential_issuer_metadata;
                 self.credential_configurations = credential_configurations;
             }
-            CredentialConfigurationAdded {
+            CredentialConfigurationUpdated {
                 credential_configuration_id: _,
                 credential_issuer_metadata,
                 credential_configurations,
@@ -379,7 +377,7 @@ pub mod server_config_tests {
                 },
                 provisioned: false,
             })
-            .then_expect_events(vec![ServerConfigEvent::CredentialConfigurationAdded {
+            .then_expect_events(vec![ServerConfigEvent::CredentialConfigurationUpdated {
                 credential_configuration_id,
                 credential_issuer_metadata: credential_issuer_metadata_with_credential_configuration,
                 credential_configurations,

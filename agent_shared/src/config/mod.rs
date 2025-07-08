@@ -559,7 +559,7 @@ pub enum ServiceEvent {
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum ServerConfigEvent {
     ServerMetadataInitialized,
-    CredentialConfigurationAdded,
+    CredentialConfigurationUpdated,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
