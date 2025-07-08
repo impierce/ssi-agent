@@ -207,10 +207,7 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
             debug!("Path to credential configuration file: {}", file.as_path().display());
 
             let file = std::fs::read(file.as_path()).expect("Failed to read credential configuration file");
-            let provisioned_credential_configurations =
-                serde_json::from_slice(&file).expect("Failed to parse credential configurations from file");
-
-            provisioned_credential_configurations
+            serde_json::from_slice(&file).expect("Failed to parse credential configurations from file")
         })
         .unwrap_or_default();
 
