@@ -316,7 +316,7 @@ pub mod tests {
                     .method(http::Method::POST)
                     .uri("/openid4vci/credential")
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-                    .header(http::header::AUTHORIZATION, format!("Bearer {}", access_token))
+                    .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "format": "jwt_vc_json",
@@ -385,7 +385,7 @@ pub mod tests {
                     .method(http::Method::POST)
                     .uri("/openid4vci/credential")
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-                    .header(http::header::AUTHORIZATION, format!("Bearer {}", access_token))
+                    .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
                     .unwrap(),
             )

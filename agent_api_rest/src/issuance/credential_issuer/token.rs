@@ -72,8 +72,7 @@ pub mod tests {
                         mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
                     )
                     .body(Body::from(format!(
-                        "grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code&pre-authorized_code={}",
-                        pre_authorized_code
+                        "grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code&pre-authorized_code={pre_authorized_code}"
                     )))
                     .unwrap(),
             )
