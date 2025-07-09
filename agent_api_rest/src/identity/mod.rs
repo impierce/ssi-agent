@@ -8,7 +8,7 @@ pub mod error;
 
 use agent_identity::state::IdentityState;
 use axum::{
-    routing::{get, post},
+    routing::{get, post, put},
     Router,
 };
 use connections::{get_connection, get_connections, post_connections};
@@ -17,7 +17,7 @@ use services::{linked_vp::linked_vp, service, services};
 use well_known::{did::did, did_configuration::did_configuration};
 
 use crate::{
-    identity::profiles::{get_profile, post_profiles},
+    identity::profiles::{get_profile, put_profiles},
     API_VERSION,
 };
 
@@ -30,7 +30,7 @@ pub fn router(identity_state: IdentityState) -> Router {
                 .route("/connections/{connection_id}", get(get_connection))
                 .route("/documents", get(get_documents))
                 .route("/documents/{document_id}", get(get_document))
-                .route("/profiles", post(post_profiles))
+                .route("/profiles", put(put_profiles))
                 .route("/profiles/{profile_id}", get(get_profile))
                 .route("/services", get(services))
                 .route("/services/{service_id}", get(service))

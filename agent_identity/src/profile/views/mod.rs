@@ -13,12 +13,23 @@ impl View<Profile> for Profile {
                 profile_id,
                 display_name,
                 logo,
-                provisioned,
+                source,
             } => {
-                self.profile_id = profile_id.clone();
-                self.display_name = display_name.clone();
-                self.logo = logo.clone();
-                self.provisioned = *provisioned;
+                self.profile_id.clone_from(profile_id);
+                self.display_name.clone_from(display_name);
+                self.logo.clone_from(logo);
+                self.source.clone_from(source);
+            }
+            DisplayNameUpdated { display_name, source } => {
+                self.display_name.clone_from(display_name);
+                self.source.clone_from(source);
+            }
+            LogoUpdated { logo, source } => {
+                self.logo.clone_from(logo);
+                self.source.clone_from(source);
+            }
+            SourceUpdated { source } => {
+                self.source.clone_from(source);
             }
         }
     }

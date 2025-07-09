@@ -4,7 +4,7 @@ use crate::connection::views::ConnectionView;
 use crate::document::aggregate::Status;
 use crate::document::command::DocumentCommand;
 use crate::document::views::all_documents::AllDocumentsView;
-use crate::profile::aggregate::Profile;
+use crate::profile::aggregate::{Profile, Source};
 use crate::profile::command::ProfileCommand;
 use crate::profile::views::ProfileView;
 use crate::service::views::all_services::AllServicesView;
@@ -13,7 +13,7 @@ use crate::{
     service::{aggregate::Service, command::ServiceCommand, views::ServiceView},
 };
 use agent_shared::config::{
-    config, config_mut, get_all_enabled_signing_algorithms_supported, Display, SupportedDidMethod, ToggleOptions,
+    config, config_mut, get_all_enabled_signing_algorithms_supported, SupportedDidMethod, ToggleOptions,
 };
 use agent_shared::handlers::command_handler;
 use agent_shared::{application_state::CommandHandler, handlers::query_handler};
@@ -28,7 +28,7 @@ use itertools::iproduct;
 use jsonwebtoken::Algorithm;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 
 /// The unique identifier for the server configuration.
 pub const PROFILE_ID: &str = "PROFILE-001";
@@ -142,61 +142,82 @@ pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub async fn query_profile(state: &IdentityState) -> anyhow::Result<()> {
+    match query_handler(PROFILE_ID, &state.query.profile).await? {
+        Some(Profile { display_name, logo, .. }) => {
+            if let Some(display) = config_mut().display.first_mut() {
+                display.name = display_name.unwrap_or_default();
+                display.logo = logo;
+            }
+
+            Ok(())
+        }
+        None => {
+            warn!("No profile found");
+
+            Ok(())
+        }
+    }
+}
+
 async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
     let first = config().display.first().cloned();
+
+    let current_source = if config().is_display_provisioned() {
+        Source::Provisioned
+    } else {
+        Source::Default
+    };
 
     info!("Initializing display ... is some display configured? {first:?}");
 
     if let Some(display) = first {
-        let command = ProfileCommand::CreateProfile {
-            profile_id: PROFILE_ID.to_string(),
-            display_name: Some(display.name.clone()),
-            logo: display.logo.clone(),
-            provisioned: Some(true),
-        };
+        match query_handler(PROFILE_ID, &state.query.profile).await? {
+            Some(Profile { display_name, logo, .. }) if current_source != Source::Default => {
+                if let Some(display_name) = display_name {
+                    if display.name != display_name {
+                        let command = ProfileCommand::UpdateDisplayName {
+                            display_name: Some(display.name),
+                            source: current_source.clone(),
+                        };
 
-        command_handler(PROFILE_ID, &state.command.profile, command).await?;
-    } else {
-        if let Some(Profile {
-            display_name,
-            logo,
-            provisioned,
-            ..
-        }) = query_handler(PROFILE_ID, &state.query.profile).await?
-        {
-            if provisioned.unwrap_or(false) {
-                let command = ProfileCommand::CreateProfile {
-                    profile_id: PROFILE_ID.to_string(),
-                    display_name: Default::default(),
-                    logo: None,
-                    provisioned: Some(false),
-                };
+                        command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                    }
+                }
+
+                if display.logo != logo {
+                    let command = ProfileCommand::UpdateLogo {
+                        logo: display.logo,
+                        source: current_source,
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+            }
+            Some(_) if current_source == Source::Default => {
+                let command = ProfileCommand::UpdateSource { source: current_source };
 
                 command_handler(PROFILE_ID, &state.command.profile, command).await?;
-            } else {
-                config_mut().display = vec![Display {
-                    name: display_name.clone().unwrap_or_default(),
-                    logo: logo.clone(),
-                    locale: Some("en".to_string()),
-                }];
+            }
+            None => {
+                info!("No display configured, creating a new one.");
 
                 let command = ProfileCommand::CreateProfile {
                     profile_id: PROFILE_ID.to_string(),
-                    display_name,
-                    logo,
-                    provisioned: Some(false),
+                    display_name: Some(display.name.clone()),
+                    logo: display.logo.clone(),
+                    source: current_source,
                 };
 
                 command_handler(PROFILE_ID, &state.command.profile, command).await?;
             }
-        }
+            _ => {
+                info!("Display is already configured, no action needed.");
+            }
+        };
     }
 
-    if let Some(Profile { display_name, logo, .. }) = query_handler(PROFILE_ID, &state.query.profile).await? {
-        if display_name.unwrap_or_default().is_empty() && logo.is_none() {
-            config_mut().display = vec![];
-        }
-    }
+    query_profile(state).await?;
 
     Ok(())
 }

@@ -1,4 +1,4 @@
-use crate::error::IntoApiErrorExt;
+use crate::error::{type_url, IntoApiErrorExt};
 use agent_identity::{
     connection::error::ConnectionError, document::error::DocumentError, profile::error::ProfileError,
     service::error::ServiceError,
@@ -21,8 +21,15 @@ impl IntoApiErrorExt for DocumentError {
 
 impl IntoApiErrorExt for ProfileError {
     fn into_api_error(self) -> ApiError {
-        // TODO: Implement appropriate Problem Details responses
-        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
+        use ProfileError::*;
+
+        match self {
+            AlreadyProvisioned => ApiError::builder(StatusCode::CONFLICT)
+                .title("Resource Provisioned by Configuration")
+                .type_url(type_url("conflict#resource-provisioned-by-configuration"))
+                .message("This resource was provisioned and cannot be modified during runtime")
+                .finish(),
+        }
     }
 }
 
