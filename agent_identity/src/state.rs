@@ -301,6 +301,11 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
                 .as_ref()
                 .map(SupportedDidMethod::supports_update)
                 .unwrap_or_default()
+            && document
+                .iota_metadata
+                .as_ref()
+                .map(|iota_metadata| iota_metadata.funded)
+                .unwrap_or(true)
     })
     .await?;
 

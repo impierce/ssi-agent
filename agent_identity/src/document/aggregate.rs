@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_did::{CoreDID, DIDUrl, DID as _};
 use identity_document::document::CoreDocument;
+use identity_iota::iota;
 use identity_iota::iota::rebased::client::{IdentityClient, IdentityClientReadOnly};
 use identity_iota::prelude::Resolver;
 use identity_iota::storage::{Storage, StorageSigner};
@@ -28,6 +29,16 @@ use std::str::FromStr as _;
 use std::{collections::BTreeMap, sync::Arc};
 use tracing::{debug, info, warn};
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct IotaMetadata {
+    pub wallet_address: IotaAddress,
+    pub funded: bool,
+    pub balance: u64,
+    pub explorer_url: Option<String>,
+    pub created: Option<String>,
+    pub updated: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub enum Status {
     SignAndValidate,
@@ -46,6 +57,8 @@ pub struct Document {
     // Applicable only for DID documents whose methods mandate a fixed verification algorithm,
     // such as `did:key` and `did:jwk`.
     pub with_fixed_algorithm: Option<Algorithm>,
+    // Applicable only for DID methods that are based on the IOTA ledger.
+    pub iota_metadata: Option<IotaMetadata>,
     pub status: Status,
 }
 
@@ -76,6 +89,15 @@ impl Aggregate for Document {
                 let subject = &services.subject;
                 let stronghold_storage = &subject.stronghold_storage;
 
+                let mut iota_metadata = self.iota_metadata.clone().unwrap_or_else(|| IotaMetadata {
+                    wallet_address: IotaAddress::default(),
+                    funded: false,
+                    balance: 0,
+                    created: None,
+                    updated: None,
+                    explorer_url: None,
+                });
+
                 let document = match &did_method {
                     SupportedDidMethod::Iota | SupportedDidMethod::IotaDev => {
                         // The API endpoint of an IOTA node.
@@ -87,7 +109,26 @@ impl Aggregate for Document {
                         let network_name = did_method.network_name().ok_or(MissingNetworkNameError(did_method))?;
 
                         // Build a new IOTA client to interact with the IOTA ledger.
-                        let iota_client = IotaClientBuilder::default().build(api_endpoint).await.unwrap();
+                        let mut iota_client_builder = IotaClientBuilder::default();
+
+                        if let Some(iota_node_url) = config().iota_node_url.clone() {
+                            iota_client_builder = iota_client_builder.ws_url(iota_node_url);
+
+                            if let Some(iota_node_url_auth) = config().iota_node_username.clone() {
+                                if let Some(iota_node_password) = config().iota_node_password.clone() {
+                                    iota_client_builder =
+                                        iota_client_builder.basic_auth(iota_node_url_auth, iota_node_password);
+                                } else {
+                                    warn!("No IOTA node URL password configured in the application configuration.");
+                                }
+                            } else {
+                                warn!("No IOTA node URL authentication configured in the application configuration.");
+                            }
+                        } else {
+                            warn!("No IOTA node URL configured in the application configuration.");
+                        }
+
+                        let iota_client = iota_client_builder.build(api_endpoint).await.unwrap();
 
                         // FIXME!
                         let key_id = KeyId::new("ed25519-0");
@@ -99,6 +140,12 @@ impl Aggregate for Document {
                         let signer = StorageSigner::new(storage, key_id, public_key_jwk.clone());
 
                         let wallet_address = IotaAddress::from(&Signer::public_key(&signer).await.unwrap());
+                        let balance = iota_client
+                            .coin_read_api()
+                            .get_balance(wallet_address, Some("0x2::iota::IOTA".to_string()))
+                            .await
+                            .unwrap()
+                            .total_balance;
 
                         config_mut().iota_address = Some(wallet_address.to_string());
 
@@ -139,6 +186,13 @@ impl Aggregate for Document {
                                             // wallet address.
                                             None
                                         }
+                                        identity_iota::iota::rebased::Error::DIDResolutionError(_error) => {
+                                            // This error indicates that the DID Document could not be resolved.
+                                            // We don't return an error here. Instead we assign `None` to `document` so
+                                            // that later on a new DID Document will be created using the current
+                                            // wallet address.
+                                            None
+                                        }
                                         other_test_publish_error => {
                                             return Err(IotaIdentityError(other_test_publish_error));
                                         }
@@ -149,7 +203,24 @@ impl Aggregate for Document {
                             None
                         };
 
+                        iota_metadata.wallet_address = wallet_address;
+
                         let document = if let Some(document) = document {
+                            iota_metadata.funded = true;
+                            iota_metadata.balance = balance as u64;
+
+                            iota_metadata.explorer_url = Some(format!(
+                                "https://explorer.iota.org/object/{}?network={}",
+                                document.id().tag_str(),
+                                if did_method == SupportedDidMethod::IotaDev {
+                                    "devnet"
+                                } else {
+                                    "mainnet"
+                                }
+                            ));
+                            iota_metadata.created = document.metadata.created.map(|created| created.to_string());
+                            iota_metadata.updated = document.metadata.updated.map(|updated| updated.to_string());
+
                             // Return the DID Document that was already stored in the Aggregate now we validated that
                             // the current Stronghold storage is in control of it.
                             document
@@ -172,23 +243,56 @@ impl Aggregate for Document {
                             match publish_result {
                                 // Creating and publishing the new DID Document was successful.
                                 Ok(transaction) => {
+                                    iota_metadata.funded = true;
+                                    iota_metadata.balance = balance as u64;
+
                                     let document = transaction.output;
+                                    iota_metadata.explorer_url = Some(format!(
+                                        "https://explorer.iota.org/object/{}?network={}",
+                                        document.id().tag_str(),
+                                        if did_method == SupportedDidMethod::IotaDev {
+                                            "devnet"
+                                        } else {
+                                            "mainnet"
+                                        }
+                                    ));
+                                    iota_metadata.created =
+                                        document.metadata.created.map(|created| created.to_string());
+                                    iota_metadata.updated =
+                                        document.metadata.updated.map(|updated| updated.to_string());
 
                                     info!("Created DID Document 1: {document:#}");
                                     document
                                 }
                                 // This error indicates that the Wallet Address does not have sufficient funds and
                                 // therefore we need to throw an explixit `InsufficientDepositError` error message.
-                                Err(product_common::error::Error::GasIssue(_error)) => {
-                                    return Err(InsufficientDepositError(
-                                        network_name.to_string(),
-                                        wallet_address.to_string(),
-                                    ));
+                                Err(product_common::error::Error::GasIssue(error)) => {
+                                    warn!(error, "Insufficient funds to publish DID Document");
+                                    iota_metadata.funded = false;
+                                    iota_metadata.balance = balance as u64;
+                                    iota_metadata.created = None;
+                                    iota_metadata.updated = None;
+
+                                    // return Err(InsufficientDepositError(
+                                    //     network_name.to_string(),
+                                    //     wallet_address.to_string(),
+                                    // ));
+                                    let status = Status::SignAndValidate;
+
+                                    return Ok(vec![DocumentCreated {
+                                        document_id,
+                                        did_method,
+                                        status,
+                                        document: document.into(),
+                                        with_fixed_algorithm,
+                                        iota_metadata: Some(iota_metadata),
+                                    }]);
                                 }
                                 Err(other_error) => return Err(IotaProductCommonError(other_error)),
                             }
                         };
 
+                        warn!("HHEHRERERERERER4");
                         // Publish the updated Alias Output.
                         let updated_document = identity_client
                             .publish_did_document_update(document.clone(), 50_000_000)
@@ -269,18 +373,35 @@ impl Aggregate for Document {
 
                 let status = Status::SignAndValidate;
 
+                let iota_metadata = if let SupportedDidMethod::Iota | SupportedDidMethod::IotaDev = did_method {
+                    Some(iota_metadata)
+                } else {
+                    None
+                };
+
                 Ok(vec![DocumentCreated {
                     document_id,
                     did_method,
                     status,
                     document,
                     with_fixed_algorithm,
+                    iota_metadata,
                 }])
             }
             UpdatePublicKeys {
                 // TODO: decide whether the public keys should be supplied through the command or not.
                 public_key_jwks: _,
             } => {
+                if let Some(iota_metadata) = self.iota_metadata.as_ref() {
+                    if !iota_metadata.funded {
+                        warn!(
+                            "Skipping updating public keys for DID method `{}` because it is not funded",
+                            self.did_method.as_ref().unwrap()
+                        );
+                        return Ok(vec![]);
+                    }
+                }
+
                 let mut document = self.document.clone().ok_or(MissingDocumentError)?;
                 let did = document.id().clone();
 
@@ -362,6 +483,16 @@ impl Aggregate for Document {
                 Ok(vec![ServiceAdded { document_id, document }])
             }
             PublishDocument => {
+                if let Some(iota_metadata) = self.iota_metadata.as_ref() {
+                    if !iota_metadata.funded {
+                        warn!(
+                            "Skipping publishing DID Document for DID method `{}` because it is not funded",
+                            self.did_method.as_ref().unwrap()
+                        );
+                        return Ok(vec![]);
+                    }
+                }
+
                 let did_method = self.did_method.clone().ok_or(MissingDidMethodError)?;
 
                 // The API endpoint of an IOTA node
@@ -370,7 +501,26 @@ impl Aggregate for Document {
                     .ok_or_else(|| InvalidNodeEndpointError("missing `api_endpoint`".to_string()))?;
 
                 // Build a new IOTA client to interact with the IOTA ledger.
-                let iota_client = IotaClientBuilder::default().build(api_endpoint).await.unwrap();
+                let mut iota_client_builder = IotaClientBuilder::default();
+
+                if let Some(iota_node_url) = config().iota_node_url.clone() {
+                    iota_client_builder = iota_client_builder.ws_url(iota_node_url);
+
+                    if let Some(iota_node_url_auth) = config().iota_node_username.clone() {
+                        if let Some(iota_node_password) = config().iota_node_password.clone() {
+                            iota_client_builder =
+                                iota_client_builder.basic_auth(iota_node_url_auth, iota_node_password);
+                        } else {
+                            warn!("No IOTA node URL password configured in the application configuration.");
+                        }
+                    } else {
+                        warn!("No IOTA node URL authentication configured in the application configuration.");
+                    }
+                } else {
+                    warn!("No IOTA node URL configured in the application configuration.");
+                }
+
+                let iota_client = iota_client_builder.build(api_endpoint).await.unwrap();
 
                 // Resolve the latest state of the document.
                 let document: IotaDocument = self.document.as_ref().ok_or(MissingDocumentError)?.clone().into();
@@ -395,7 +545,6 @@ impl Aggregate for Document {
                         let updated_document = identity_client
                             .publish_did_document_update(document.clone(), 50_000_000)
                             .await
-                            .map(CoreDocument::from)
                             .unwrap();
 
                         info!(
@@ -412,8 +561,21 @@ impl Aggregate for Document {
                             .await
                             .unwrap();
 
-                        CoreDocument::from(document.clone())
+                        document
                     }
+                };
+
+                let iota_metadata = if let Some(iota_metadata) = self.iota_metadata.clone() {
+                    Some(IotaMetadata {
+                        wallet_address: iota_metadata.wallet_address,
+                        funded: true,
+                        balance: iota_metadata.balance,
+                        created: document.metadata.created.map(|created| created.to_string()),
+                        updated: document.metadata.updated.map(|updated| updated.to_string()),
+                        ..iota_metadata
+                    })
+                } else {
+                    None
                 };
 
                 let wallet_address = IotaAddress::from(&Signer::public_key(&signer).await.unwrap());
@@ -432,7 +594,8 @@ impl Aggregate for Document {
 
                 Ok(vec![DocumentPublished {
                     document_id: self.document_id.clone(),
-                    document,
+                    document: CoreDocument::from(document),
+                    iota_metadata,
                 }])
             }
         }
@@ -450,12 +613,14 @@ impl Aggregate for Document {
                 status,
                 document,
                 with_fixed_algorithm,
+                iota_metadata,
             } => {
                 self.document_id = document_id;
                 self.did_method.replace(did_method);
                 self.status = status;
                 self.document.replace(document);
                 self.with_fixed_algorithm = with_fixed_algorithm;
+                self.iota_metadata = iota_metadata;
             }
             PublicKeyUpdated { document_id, document } => {
                 self.document_id = document_id;
@@ -469,9 +634,14 @@ impl Aggregate for Document {
                 self.document_id = document_id;
                 self.document.replace(document);
             }
-            DocumentPublished { document_id, document } => {
+            DocumentPublished {
+                document_id,
+                document,
+                iota_metadata,
+            } => {
                 self.document_id = document_id;
                 self.document.replace(document);
+                self.iota_metadata = iota_metadata;
             }
         }
     }
@@ -525,6 +695,7 @@ pub mod document_tests {
                 document,
                 status: Status::SignAndValidate,
                 with_fixed_algorithm: None,
+                iota_metadata: None,
             }])
     }
 
@@ -544,6 +715,7 @@ pub mod document_tests {
                 document: document.clone(),
                 status: Status::SignAndValidate,
                 with_fixed_algorithm: None,
+                iota_metadata: None,
             }])
             .when(DocumentCommand::UpdatePublicKeys {
                 public_key_jwks: vec![],
@@ -578,6 +750,7 @@ pub mod document_tests {
                     document,
                     status: Status::SignAndValidate,
                     with_fixed_algorithm: None,
+                    iota_metadata: None,
                 },
                 DocumentEvent::PublicKeyUpdated {
                     document_id: document_id.clone(),
@@ -611,6 +784,7 @@ pub mod document_tests {
                     document,
                     status: Status::SignAndValidate,
                     with_fixed_algorithm: None,
+                    iota_metadata: None,
                 },
                 DocumentEvent::PublicKeyUpdated {
                     document_id: document_id.clone(),

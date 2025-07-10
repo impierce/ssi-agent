@@ -282,6 +282,12 @@ pub struct ApplicationConfiguration {
     pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
     #[config(default)]
     pub iota_address: Option<String>,
+    #[config(default)]
+    pub iota_node_url: Option<String>,
+    #[config(default)]
+    pub iota_node_username: Option<String>,
+    #[config(default)]
+    pub iota_node_password: Option<String>,
 }
 
 impl ApplicationConfiguration {
