@@ -17,7 +17,7 @@ use agent_shared::config::{
 };
 use agent_shared::handlers::command_handler;
 use agent_shared::{application_state::CommandHandler, handlers::query_handler};
-use cqrs_es::persist::ViewRepository;
+use cqrs_es::persist::{PersistenceError, ViewRepository};
 use iota_sdk::client::api::GetAddressesOptions;
 use iota_sdk::client::secret::SecretManager;
 use iota_sdk::client::Client;
@@ -142,7 +142,15 @@ pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn query_profile(state: &IdentityState) -> anyhow::Result<()> {
+// TODO: This function is a temporary workaround and violates DDD principles.
+// It directly mutates the global configuration state, which is an impure side effect.
+//
+// The correct long-term solution is to establish the Identity Bounded Context as the single
+// source of truth for display data (name, logo). Other contexts, like Issuance and
+// Verification, should subscribe to events published by the Identity BC to receive these
+// updates, rather than reading from a shared, mutable global state.
+/// Queries the profile and updates the application state with the profile information.
+pub async fn query_profile(state: &IdentityState) -> Result<(), PersistenceError> {
     match query_handler(PROFILE_ID, &state.query.profile).await? {
         Some(Profile { display_name, logo, .. }) => {
             if let Some(display) = config_mut().display.first_mut() {
