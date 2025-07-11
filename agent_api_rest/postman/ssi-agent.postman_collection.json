@@ -1790,7 +1790,7 @@
 								"header": [],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"displayName\": \"My UniCor Instance\",\n    \"logo\": {\n        \"uri\": \"https://example.org\"\n    }\n}",
+									"raw": "{\n    \"displayName\": \"My UniCore Instance\",\n    \"logo\": {\n        \"uri\": \"https://example.org\"\n    }\n}",
 									"options": {
 										"raw": {
 											"language": "json"
