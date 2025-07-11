@@ -167,7 +167,16 @@ pub async fn query_profile(state: &IdentityState) -> Result<(), PersistenceError
         }
     }
 }
-
+// TODO: This function violates the aggregate's consistency boundary.
+// The complex business logic for deciding whether to update the profile based on its
+// source (Provisioned vs. Default vs. Runtime) should reside inside the `Profile` aggregate's `handle`
+// method, not here in the application's initialization layer.
+//
+// A better approach would be:
+// 1. This function should only read the config and dispatch a simple, declarative command,
+//    e.g., `ProfileCommand::SynchronizeFromConfig { display_name: ..., logo: ... }`.
+// 2. The `Profile` aggregate would then handle this command, containing all the logic
+//    to protect its invariants (e.g., "if my source is `Runtime`, I must reject this command")
 async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
     let first = config().display.first().cloned();
 
@@ -181,7 +190,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
 
     if let Some(display) = first {
         match query_handler(PROFILE_ID, &state.query.profile).await? {
-            Some(Profile { display_name, logo, .. }) if current_source != Source::Default => {
+            Some(Profile { display_name, logo, .. }) if current_source == Source::Provisioned => {
                 if let Some(display_name) = display_name {
                     if display.name != display_name {
                         let command = ProfileCommand::UpdateDisplayName {
@@ -202,7 +211,30 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                     command_handler(PROFILE_ID, &state.command.profile, command).await?;
                 }
             }
-            Some(_) if current_source == Source::Default => {
+            Some(Profile {
+                display_name,
+                logo,
+                source,
+                ..
+            }) if current_source == Source::Default && source == Source::Provisioned => {
+                if display_name.is_some() {
+                    let command = ProfileCommand::UpdateDisplayName {
+                        display_name: Some(display.name),
+                        source: current_source.clone(),
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+
+                if logo.is_some() {
+                    let command = ProfileCommand::UpdateLogo {
+                        logo: display.logo,
+                        source: current_source.clone(),
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+
                 let command = ProfileCommand::UpdateSource { source: current_source };
 
                 command_handler(PROFILE_ID, &state.command.profile, command).await?;
@@ -221,6 +253,43 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
             }
             _ => {
                 info!("Display is already configured, no action needed.");
+            }
+        };
+    } else {
+        match query_handler(PROFILE_ID, &state.query.profile).await? {
+            Some(Profile {
+                display_name,
+                logo,
+                source: Source::Provisioned,
+                ..
+            }) => {
+                if display_name.is_some() {
+                    let command = ProfileCommand::UpdateDisplayName {
+                        display_name: None,
+                        source: current_source.clone(),
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+
+                if logo.is_some() {
+                    let command = ProfileCommand::UpdateLogo {
+                        logo: None,
+                        source: current_source,
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+            }
+            _ => {
+                let command = ProfileCommand::CreateProfile {
+                    profile_id: PROFILE_ID.to_string(),
+                    display_name: None,
+                    logo: None,
+                    source: current_source,
+                };
+
+                command_handler(PROFILE_ID, &state.command.profile, command).await?;
             }
         };
     }
