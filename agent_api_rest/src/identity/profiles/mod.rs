@@ -1,3 +1,4 @@
+use crate::error::IntoApiErrorExt;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_identity::profile::aggregate::{Profile, Source};
@@ -60,7 +61,7 @@ pub(crate) async fn put_profiles(
                 command_handler(&profile_id, &state.command.profile, command).await?;
             }
 
-            let _ = query_profile(&state).await;
+            query_profile(&state).await.map_err(IntoApiErrorExt::into_api_error)?;
 
             Ok((StatusCode::OK).into_response())
         }
@@ -76,7 +77,7 @@ pub(crate) async fn put_profiles(
 
             command_handler(&profile_id, &state.command.profile, command).await?;
 
-            let _ = query_profile(&state).await;
+            query_profile(&state).await.map_err(IntoApiErrorExt::into_api_error)?;
 
             Ok((
                 StatusCode::CREATED,
