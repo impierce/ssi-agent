@@ -1,4 +1,6 @@
 # Profile
 
 This aggregate holds everything related to a profile:
-FIXME
+- display_name
+- logo
+- source
