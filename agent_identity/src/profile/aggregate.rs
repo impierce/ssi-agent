@@ -58,7 +58,7 @@ impl Aggregate for Profile {
                 debug!("Creating profile with ID: {}", profile_id);
 
                 if source == Source::Runtime && self.source == Source::Provisioned {
-                    return Err(ProfileError::AlreadyProvisioned);
+                    return Err(ProfileError::ConfigurationConflict);
                 }
 
                 Ok(vec![ProfileCreated {
@@ -72,7 +72,7 @@ impl Aggregate for Profile {
                 debug!("Updating display name: {:?}", display_name);
 
                 if source == Source::Runtime && self.source == Source::Provisioned {
-                    return Err(ProfileError::AlreadyProvisioned);
+                    return Err(ProfileError::ConfigurationConflict);
                 }
 
                 Ok(vec![ProfileEvent::DisplayNameUpdated { display_name, source }])
@@ -81,7 +81,7 @@ impl Aggregate for Profile {
                 debug!("Updating logo: {:?}", logo);
 
                 if source == Source::Runtime && self.source == Source::Provisioned {
-                    return Err(ProfileError::AlreadyProvisioned);
+                    return Err(ProfileError::ConfigurationConflict);
                 }
 
                 Ok(vec![ProfileEvent::LogoUpdated { logo, source }])

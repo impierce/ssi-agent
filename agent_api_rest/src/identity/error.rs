@@ -24,7 +24,7 @@ impl IntoApiErrorExt for ProfileError {
         use ProfileError::*;
 
         match self {
-            AlreadyProvisioned => ApiError::builder(StatusCode::CONFLICT)
+            ConfigurationConflict => ApiError::builder(StatusCode::CONFLICT)
                 .title("Resource Provisioned by Configuration")
                 .type_url(type_url("conflict#resource-provisioned-by-configuration"))
                 .message("This resource was provisioned and cannot be modified during runtime")
