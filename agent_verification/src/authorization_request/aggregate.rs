@@ -9,7 +9,7 @@ use crate::{
 use agent_shared::config::{config, get_preferred_signing_algorithm};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use oid4vc_core::{authorization_request::ByReference, scope::Scope};
+use oid4vc_core::{authorization_request::ByReference, client_metadata::ClientMetadataResource, scope::Scope};
 use oid4vp::{authorization_request::ClientIdScheme, Oid4vpParams};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -64,6 +64,34 @@ impl Aggregate for AuthorizationRequest {
 
                 let redirect_uri = config().redirect_uri.clone();
 
+                let mut oid4vp_client_metadata = services.oid4vp_client_metadata.clone();
+                if let ClientMetadataResource::ClientMetadata {
+                    ref mut client_name,
+                    ref mut logo_uri,
+                    ..
+                } = oid4vp_client_metadata
+                {
+                    *client_name = Some(config().display.first().map(|d| d.name.clone()).unwrap_or_default());
+                    *logo_uri = config()
+                        .display
+                        .first()
+                        .and_then(|d| d.logo.as_ref().and_then(|l| l.uri.clone()));
+                }
+
+                let mut siopv2_client_metadata = services.siopv2_client_metadata.clone();
+                if let ClientMetadataResource::ClientMetadata {
+                    ref mut client_name,
+                    ref mut logo_uri,
+                    ..
+                } = siopv2_client_metadata
+                {
+                    *client_name = Some(config().display.first().map(|d| d.name.clone()).unwrap_or_default());
+                    *logo_uri = config()
+                        .display
+                        .first()
+                        .and_then(|d| d.logo.as_ref().and_then(|l| l.uri.clone()));
+                }
+
                 let authorization_request = Box::new(if let Some(presentation_definition) = presentation_definition {
                     GenericAuthorizationRequest::OID4VP(Box::new(
                         OID4VPAuthorizationRequest::builder()
@@ -73,7 +101,7 @@ impl Aggregate for AuthorizationRequest {
                             .redirect_uri(redirect_uri)
                             .response_mode("direct_post".to_string())
                             .presentation_definition(presentation_definition)
-                            .client_metadata(services.oid4vp_client_metadata.clone())
+                            .client_metadata(oid4vp_client_metadata)
                             .state(state)
                             .nonce(nonce)
                             .build()
@@ -86,7 +114,7 @@ impl Aggregate for AuthorizationRequest {
                             .scope(Scope::openid())
                             .redirect_uri(redirect_uri)
                             .response_mode("direct_post".to_string())
-                            .client_metadata(services.siopv2_client_metadata.clone())
+                            .client_metadata(siopv2_client_metadata)
                             .state(state)
                             .nonce(nonce)
                             .build()
@@ -437,9 +465,9 @@ pub mod tests {
                         .generate_response(
                             oid4vp_authorization_request,
                             AuthorizationResponseInput {
-                                verifiable_presentation_input: PresentationInputType::Presentation(
+                                verifiable_presentation_input: PresentationInputType::Presentation(Box::new(
                                     verifiable_presentation,
-                                ),
+                                )),
                                 presentation_submission,
                             },
                         )

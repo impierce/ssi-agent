@@ -20,12 +20,14 @@ oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true
 once_cell.workspace = true
-rand = "0.8"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rand.workspace = true
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+] }
 serde.workspace = true
 serde_json.workspace = true
-serde_with = "3.0"
-serde_yaml.workspace = true
+serde_with.workspace = true
 strum = { version = "0.26", features = ["derive"] }
 temp-env = "0.3"
 thiserror.workspace = true

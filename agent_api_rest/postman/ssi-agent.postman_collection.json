@@ -1,9 +1,9 @@
 {
 	"info": {
-		"_postman_id": "d50320fe-7e72-4e02-a358-20a4f9303d9e",
-		"name": "ssi-agent",
+		"_postman_id": "83488cab-60e6-490d-b772-16fab64ff225",
+		"name": "ssi-agent Copy",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "30650915"
+		"_exporter_id": "38461474"
 	},
 	"item": [
 		{
@@ -43,7 +43,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"openbadge_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"type\": [ \"AchievementSubject\" ],\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    },\n    \"expiresAt\": \"2028-04-12T09:15:23Z\"\n}",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"openbadge_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"type\": [ \"AchievementSubject\" ],\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -97,7 +97,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    },\n    \"expiresAt\": \"never\"\n}",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -151,7 +151,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"id\": \"https://acme.example.org/1a2b3c4d5e6f\",\n        \"credentialSubject\": {\n            \"id\": \"https://ecommerce.impierce.com/\",\n            \"image\": \"https://static.wikia.nocookie.net/fictionalcompanies/images/c/c2/ACME_Corporation.png\",\n            \"name\": \"VirtualVendors\",\n            \"certificaat\": {\n                \"type\": \"ACMECorpCredential\",\n                \"certificeringsDatum\": \"2024-06-26\",\n                \"geldigheidsPeriode\": \"1 jaar\",\n                \"garanties\": [\n                    \"Het bedrijf is echt en bereikbaar.\",\n                    \"Voldoet aan de Thuiswinkel Algemene Voorwaarden.\",\n                    \"14 dagen bedenktijd.\",\n                    \"Veilige betaalmethoden.\",\n                    \"Duidelijke product/servicebeschrijvingen.\",\n                    \"Transparant bestelproces.\",\n                    \"Duidelijke prijzen.\",\n                    \"Veilige betaalomgeving.\",\n                    \"Veilige omgang met persoonlijke gegevens.\",\n                    \"Effectieve klachtenafhandeling en onafhankelijke geschillenbemiddeling.\"\n                ]\n            }\n        }\n    },\n    \"expiresAt\": \"2035-12-31T23:59:59Z\"\n}",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"w3c_vc_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"id\": \"https://ecommerce.impierce.com/\",\n            \"image\": \"https://static.wikia.nocookie.net/fictionalcompanies/images/c/c2/ACME_Corporation.png\",\n            \"name\": \"VirtualVendors\",\n            \"certificaat\": {\n                \"type\": \"ACMECorpCredential\",\n                \"certificeringsDatum\": \"2024-06-26\",\n                \"geldigheidsPeriode\": \"1 jaar\",\n                \"garanties\": [\n                    \"Het bedrijf is echt en bereikbaar.\",\n                    \"Voldoet aan de Thuiswinkel Algemene Voorwaarden.\",\n                    \"14 dagen bedenktijd.\",\n                    \"Veilige betaalmethoden.\",\n                    \"Duidelijke product/servicebeschrijvingen.\",\n                    \"Transparant bestelproces.\",\n                    \"Duidelijke prijzen.\",\n                    \"Veilige betaalomgeving.\",\n                    \"Veilige omgang met persoonlijke gegevens.\",\n                    \"Effectieve klachtenafhandeling en onafhankelijke geschillenbemiddeling.\"\n                ]\n            }\n        }\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -233,13 +233,19 @@
 							"script": {
 								"exec": [
 									"const credential_offer = responseBody;",
-									"const decodedString = decodeURIComponent(credential_offer);",
-									"const [, secondItem] = decodedString.split('=', 2);",
-									"var credential_offer_uri = JSON.parse(secondItem);",
 									"",
-									"if(credential_offer_uri){",
-									" pm.collectionVariables.set(\"CREDENTIAL_OFFER_URI\", credential_offer_uri)",
-									"}"
+									"const decodedString = decodeURIComponent(credential_offer);",
+									"",
+									"// Split the string on the first '=' character and take the second item",
+									"const [, secondItem] = decodedString.split('=', 2);",
+									"",
+									"var jsonObject = JSON.parse(secondItem);",
+									"const pre_authorized_code = jsonObject.grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']['pre-authorized_code'];",
+									"",
+									"if(pre_authorized_code){",
+									"    pm.collectionVariables.set(\"PRE_AUTHORIZED_CODE\",pre_authorized_code)",
+									"}",
+									""
 								],
 								"type": "text/javascript",
 								"packages": {}
@@ -248,11 +254,8 @@
 						{
 							"listen": "prerequest",
 							"script": {
-								"exec": [
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
+								"exec": [],
+								"type": "text/javascript"
 							}
 						}
 					],
@@ -401,36 +404,6 @@
 			"name": "oid4vci",
 			"item": [
 				{
-					"name": "Get Credential Offer",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"const jsonData = JSON.parse(responseBody);",
-									"const pre_authorized_code = jsonData.grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']['pre-authorized_code'];",
-									"if(pre_authorized_code){",
-									" pm.collectionVariables.set(\"PRE_AUTHORIZED_CODE\", pre_authorized_code)",
-									"}"
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{CREDENTIAL_OFFER_URI}}",
-							"host": [
-								"{{CREDENTIAL_OFFER_URI}}"
-							]
-						}
-					},
-					"response": []
-				},
-				{
 					"name": "oauth-authorization-server",
 					"event": [
 						{
@@ -544,23 +517,6 @@
 				},
 				{
 					"name": "credential",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"const jsonData = JSON.parse(responseBody);",
-									"",
-									"if (jsonData.notification_id) {",
-									"    pm.collectionVariables.set(\"NOTIFICATION_ID\", jsonData.notification_id);",
-									"    console.log(\"Notification ID saved: \" + jsonData.notification_id);",
-									"}"
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
-						}
-					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -586,55 +542,6 @@
 							"path": [
 								"openid4vci",
 								"credential"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "notification",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test(\"Status code is 204 No Content\", function () {",
-									"    pm.response.to.have.status(204);",
-									"});",
-									"",
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{ACCESS_TOKEN}}",
-								"type": "text"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"notification_id\": \"{{NOTIFICATION_ID}}\",\n  \"event\": \"credential_accepted\",\n  \"event_description\": \"User accepted the credential in wallet\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{HOST}}/openid4vci/notification",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"openid4vci",
-								"notification"
 							]
 						}
 					},
@@ -1079,45 +986,6 @@
 					"response": []
 				},
 				{
-					"name": "Add signed Holder Credential",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									""
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"credential\": \"eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjoiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQiLCJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIn0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoifX0.d4QN73vDtZu79RP6GldHObu6rGsjidkLYp0XMRQNbNPY75LJoSv2iXk2Rz5M-VMBZGSU3YPZHytlrKBjxr1IBQ\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{HOST}}/v0/holder/credentials",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"v0",
-								"holder",
-								"credentials"
-							]
-						}
-					},
-					"response": []
-				},
-				{
 					"name": "Holder Credential by ID",
 					"request": {
 						"method": "GET",
@@ -1242,543 +1110,442 @@
 			"name": "Identity",
 			"item": [
 				{
-					"name": "Connections",
-					"item": [
+					"name": "Create a new Connection",
+					"event": [
 						{
-							"name": "Create a new Connection",
-							"event": [
-								{
-									"listen": "test",
-									"script": {
-										"exec": [
-											""
-										],
-										"type": "text/javascript",
-										"packages": {}
-									}
-								},
-								{
-									"listen": "prerequest",
-									"script": {
-										"exec": [
-											""
-										],
-										"type": "text/javascript",
-										"packages": {}
-									}
-								}
-							],
-							"request": {
-								"method": "POST",
-								"header": [],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n    \"alias\": \"My Connection\",\n    \"domain\": \"http://example.org\",\n    \"dids\": [\"did:example:123\"],\n    \"credentialOfferEndpoint\": \"{{HOST}}/openid4vci/offers\"\n}",
-									"options": {
-										"raw": {
-											"language": "json"
-										}
-									}
-								},
-								"url": {
-									"raw": "{{HOST}}/v0/connections",
-									"host": [
-										"{{HOST}}"
-									],
-									"path": [
-										"v0",
-										"connections"
-									]
-								}
-							},
-							"response": []
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
 						},
 						{
-							"name": "List all Connections",
-							"event": [
-								{
-									"listen": "test",
-									"script": {
-										"exec": [
-											"const jsonData = JSON.parse(responseBody);",
-											"",
-											"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-											"    const lastItem = jsonData[jsonData.length - 1];",
-											"",
-											"    if (lastItem && typeof lastItem === 'object') {",
-											"        const connectionId = lastItem.id;",
-											"",
-											"        if (connectionId) {",
-											"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
-											"        }",
-											"    }",
-											"}",
-											""
-										],
-										"type": "text/javascript",
-										"packages": {}
-									}
-								},
-								{
-									"listen": "prerequest",
-									"script": {
-										"exec": [
-											""
-										],
-										"type": "text/javascript",
-										"packages": {}
-									}
-								}
-							],
-							"request": {
-								"method": "GET",
-								"header": [],
-								"url": {
-									"raw": "{{HOST}}/v0/connections",
-									"host": [
-										"{{HOST}}"
-									],
-									"path": [
-										"v0",
-										"connections"
-									]
-								}
-							},
-							"response": []
-						},
-						{
-							"name": "Query Connection by DID",
-							"event": [
-								{
-									"listen": "test",
-									"script": {
-										"exec": [
-											"const jsonData = JSON.parse(responseBody);",
-											"",
-											"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-											"    const lastItem = jsonData[jsonData.length - 1];",
-											"",
-											"    if (lastItem && typeof lastItem === 'object') {",
-											"        const connectionId = lastItem.id;",
-											"",
-											"        if (connectionId) {",
-											"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
-											"        }",
-											"    }",
-											"}",
-											""
-										],
-										"type": "text/javascript",
-										"packages": {}
-									}
-								},
-								{
-									"listen": "prerequest",
-									"script": {
-										"exec": [
-											""
-										],
-										"type": "text/javascript",
-										"packages": {}
-									}
-								}
-							],
-							"request": {
-								"method": "GET",
-								"header": [],
-								"url": {
-									"raw": "{{HOST}}/v0/connections?did=did:example:123",
-									"host": [
-										"{{HOST}}"
-									],
-									"path": [
-										"v0",
-										"connections"
-									],
-									"query": [
-										{
-											"key": "did",
-											"value": "did:example:123"
-										}
-									]
-								}
-							},
-							"response": []
-						},
-						{
-							"name": "Query Connection by Alias",
-							"event": [
-								{
-									"listen": "test",
-									"script": {
-										"exec": [
-											"const jsonData = JSON.parse(responseBody);",
-											"",
-											"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-											"    const lastItem = jsonData[jsonData.length - 1];",
-											"",
-											"    if (lastItem && typeof lastItem === 'object') {",
-											"        const connectionId = lastItem.id;",
-											"",
-											"        if (connectionId) {",
-											"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
-											"        }",
-											"    }",
-											"}",
-											""
-										],
-										"type": "text/javascript"
-									}
-								}
-							],
-							"request": {
-								"method": "GET",
-								"header": [],
-								"url": {
-									"raw": "{{HOST}}/v0/connections?alias=My+Connection",
-									"host": [
-										"{{HOST}}"
-									],
-									"path": [
-										"v0",
-										"connections"
-									],
-									"query": [
-										{
-											"key": "alias",
-											"value": "My+Connection"
-										}
-									]
-								}
-							},
-							"response": []
-						},
-						{
-							"name": "Query Connection by Domain",
-							"event": [
-								{
-									"listen": "test",
-									"script": {
-										"exec": [
-											"const jsonData = JSON.parse(responseBody);",
-											"",
-											"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-											"    const lastItem = jsonData[jsonData.length - 1];",
-											"",
-											"    if (lastItem && typeof lastItem === 'object') {",
-											"        const connectionId = lastItem.id;",
-											"",
-											"        if (connectionId) {",
-											"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
-											"        }",
-											"    }",
-											"}",
-											""
-										],
-										"type": "text/javascript",
-										"packages": {}
-									}
-								},
-								{
-									"listen": "prerequest",
-									"script": {
-										"exec": [
-											""
-										],
-										"type": "text/javascript",
-										"packages": {}
-									}
-								}
-							],
-							"request": {
-								"method": "GET",
-								"header": [],
-								"url": {
-									"raw": "{{HOST}}/v0/connections?domain=http://example.org",
-									"host": [
-										"{{HOST}}"
-									],
-									"path": [
-										"v0",
-										"connections"
-									],
-									"query": [
-										{
-											"key": "domain",
-											"value": "http://example.org"
-										}
-									]
-								}
-							},
-							"response": []
-						},
-						{
-							"name": "Connection by ID",
-							"event": [
-								{
-									"listen": "test",
-									"script": {
-										"exec": [
-											""
-										],
-										"type": "text/javascript",
-										"packages": {}
-									}
-								},
-								{
-									"listen": "prerequest",
-									"script": {
-										"exec": [
-											""
-										],
-										"type": "text/javascript",
-										"packages": {}
-									}
-								}
-							],
-							"protocolProfileBehavior": {
-								"disableBodyPruning": true
-							},
-							"request": {
-								"method": "GET",
-								"header": [],
-								"body": {
-									"mode": "formdata",
-									"formdata": [
-										{
-											"key": "test",
-											"value": "test-value",
-											"type": "text"
-										}
-									]
-								},
-								"url": {
-									"raw": "{{HOST}}/v0/connections/{{CONNECTION_ID}}",
-									"host": [
-										"{{HOST}}"
-									],
-									"path": [
-										"v0",
-										"connections",
-										"{{CONNECTION_ID}}"
-									]
-								}
-							},
-							"response": []
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
 						}
-					]
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"alias\": \"My Connection\",\n    \"domain\": \"http://example.org\",\n    \"dids\": [\"did:example:123\"],\n    \"credentialOfferEndpoint\": \"{{HOST}}/openid4vci/offers\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/connections",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"connections"
+							]
+						}
+					},
+					"response": []
 				},
 				{
-					"name": "Services",
-					"item": [
+					"name": "List all Connections",
+					"event": [
 						{
-							"name": "Create new Linked Verifiable Presentation Service",
-							"request": {
-								"method": "POST",
-								"header": [],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n    \"presentationIds\": [\"{{PRESENTATION_ID}}\"]\n}",
-									"options": {
-										"raw": {
-											"language": "json"
-										}
-									}
-								},
-								"url": {
-									"raw": "{{HOST}}/v0/services/linked-vp",
-									"host": [
-										"{{HOST}}"
-									],
-									"path": [
-										"v0",
-										"services",
-										"linked-vp"
-									]
-								}
-							},
-							"response": []
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+									"    const lastItem = jsonData[jsonData.length - 1];",
+									"",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const connectionId = lastItem.id;",
+									"",
+									"        if (connectionId) {",
+									"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"        }",
+									"    }",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
 						},
 						{
-							"name": "All Services",
-							"event": [
-								{
-									"listen": "test",
-									"script": {
-										"exec": [
-											"const jsonData = JSON.parse(responseBody);",
-											"",
-											"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-											"    const lastItem = jsonData[jsonData.length - 1];",
-											"",
-											"    if (lastItem && typeof lastItem === 'object') {",
-											"        const serviceId = lastItem.id;",
-											"",
-											"        if (serviceId) {",
-											"            pm.collectionVariables.set(\"SERVICE_ID\", serviceId);",
-											"        }",
-											"    }",
-											"}",
-											""
-										],
-										"type": "text/javascript",
-										"packages": {}
-									}
-								},
-								{
-									"listen": "prerequest",
-									"script": {
-										"exec": [],
-										"type": "text/javascript"
-									}
-								}
-							],
-							"request": {
-								"method": "GET",
-								"header": [],
-								"url": {
-									"raw": "{{HOST}}/v0/services",
-									"host": [
-										"{{HOST}}"
-									],
-									"path": [
-										"v0",
-										"services"
-									]
-								}
-							},
-							"response": []
-						},
-						{
-							"name": "Service by ID",
-							"request": {
-								"method": "GET",
-								"header": [],
-								"url": {
-									"raw": "{{HOST}}/v0/services/{{SERVICE_ID}}",
-									"host": [
-										"{{HOST}}"
-									],
-									"path": [
-										"v0",
-										"services",
-										"{{SERVICE_ID}}"
-									]
-								}
-							},
-							"response": []
-						},
-						{
-							"name": "Linked Verifiable Presentation Service",
-							"request": {
-								"method": "GET",
-								"header": [],
-								"url": {
-									"raw": "{{HOST}}/v0/services/linked-verifiable-presentation-service",
-									"host": [
-										"{{HOST}}"
-									],
-									"path": [
-										"v0",
-										"services",
-										"linked-verifiable-presentation-service"
-									]
-								}
-							},
-							"response": []
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
 						}
-					]
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/connections",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"connections"
+							]
+						}
+					},
+					"response": []
 				},
 				{
-					"name": "Documents",
-					"item": [
+					"name": "Query Connection by Alias",
+					"event": [
 						{
-							"name": "List all Documents",
-							"event": [
-								{
-									"listen": "test",
-									"script": {
-										"exec": [
-											"const jsonData = JSON.parse(responseBody);",
-											"",
-											"if (Array.isArray(jsonData) && jsonData.length > 0) {",
-											"    const lastItem = jsonData[jsonData.length - 1];",
-											"",
-											"    if (lastItem && typeof lastItem === 'object') {",
-											"        const documentId = lastItem.id;",
-											"",
-											"        if (documentId) {",
-											"            pm.collectionVariables.set(\"DOCUMENT_ID\", documentId);",
-											"        }",
-											"    }",
-											"}",
-											""
-										],
-										"type": "text/javascript",
-										"packages": {}
-									}
-								}
-							],
-							"request": {
-								"method": "GET",
-								"header": [],
-								"url": {
-									"raw": "{{HOST}}/v0/documents",
-									"host": [
-										"{{HOST}}"
-									],
-									"path": [
-										"v0",
-										"documents"
-									]
-								}
-							},
-							"response": []
-						},
-						{
-							"name": "Document by ID",
-							"request": {
-								"method": "GET",
-								"header": [],
-								"url": {
-									"raw": "{{HOST}}/v0/documents/{{DOCUMENT_ID}}",
-									"host": [
-										"{{HOST}}"
-									],
-									"path": [
-										"v0",
-										"documents",
-										"{{DOCUMENT_ID}}"
-									]
-								}
-							},
-							"response": []
-						},
-						{
-							"name": "Query Document by DID Method",
-							"request": {
-								"method": "GET",
-								"header": [],
-								"url": {
-									"raw": "{{HOST}}/v0/documents?did_method=did:jwk",
-									"host": [
-										"{{HOST}}"
-									],
-									"path": [
-										"v0",
-										"documents"
-									],
-									"query": [
-										{
-											"key": "did_method",
-											"value": "did:jwk"
-										}
-									]
-								}
-							},
-							"response": []
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+									"    const lastItem = jsonData[jsonData.length - 1];",
+									"",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const connectionId = lastItem.id;",
+									"",
+									"        if (connectionId) {",
+									"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"        }",
+									"    }",
+									"}",
+									""
+								],
+								"type": "text/javascript"
+							}
 						}
-					]
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/connections?alias=My+Connection",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"connections"
+							],
+							"query": [
+								{
+									"key": "alias",
+									"value": "My+Connection"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Query Connection by DID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+									"    const lastItem = jsonData[jsonData.length - 1];",
+									"",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const connectionId = lastItem.id;",
+									"",
+									"        if (connectionId) {",
+									"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"        }",
+									"    }",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/connections?did=did:example:123",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"connections"
+							],
+							"query": [
+								{
+									"key": "did",
+									"value": "did:example:123"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Query Connection by Domain",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+									"    const lastItem = jsonData[jsonData.length - 1];",
+									"",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const connectionId = lastItem.id;",
+									"",
+									"        if (connectionId) {",
+									"            pm.collectionVariables.set(\"CONNECTION_ID\", connectionId);",
+									"        }",
+									"    }",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/connections?domain=http://example.org",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"connections"
+							],
+							"query": [
+								{
+									"key": "domain",
+									"value": "http://example.org"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Connection by ID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "test",
+									"value": "test-value",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/connections/{{CONNECTION_ID}}",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"connections",
+								"{{CONNECTION_ID}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create new Linked Verifiable Presentation Service",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"presentationIds\": [\"{{PRESENTATION_ID}}\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/services/linked-vp",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"services",
+								"linked-vp"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "All Services",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+									"    const lastItem = jsonData[jsonData.length - 1];",
+									"",
+									"    if (lastItem && typeof lastItem === 'object') {",
+									"        const serviceId = lastItem.id;",
+									"",
+									"        if (serviceId) {",
+									"            pm.collectionVariables.set(\"SERVICE_ID\", serviceId);",
+									"        }",
+									"    }",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/services",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"services"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Service by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/services/{{SERVICE_ID}}",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"services",
+								"{{SERVICE_ID}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Linked Verifiable Presentation Service",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/v0/services/linked-verifiable-presentation-service",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"services",
+								"linked-verifiable-presentation-service"
+							]
+						}
+					},
+					"response": []
 				}
 			]
 		},
@@ -1797,82 +1564,6 @@
 							],
 							"path": [
 								"healthz"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Show version",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/version",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"version"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Show info",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/info",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"info"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Show full configuration",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/v0/configuration",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"v0",
-								"configuration"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Show provisioned configuration",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/v0/configuration?provisioned=true",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"v0",
-								"configuration"
-							],
-							"query": [
-								{
-									"key": "provisioned",
-									"value": "true"
-								}
 							]
 						}
 					},
@@ -1959,26 +1650,6 @@
 		},
 		{
 			"key": "CONNECTION_ID",
-			"value": "INITIAL_VALUE",
-			"type": "string"
-		},
-		{
-			"key": "CREDENTIAL_OFFER_URI",
-			"value": "INITIAL_VALUE",
-			"type": "string"
-		},
-		{
-			"key": "DOCUMENT_ID",
-			"value": "INITIAL_VALUE",
-			"type": "string"
-		},
-		{
-			"key": "NOTIFICATION_ID",
-			"value": "INITIAL_VALUE",
-			"type": "string"
-		},
-		{
-			"key": "SERVICE_ID",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		}

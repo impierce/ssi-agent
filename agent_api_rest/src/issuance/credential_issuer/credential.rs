@@ -72,7 +72,7 @@ pub(crate) async fn credential(
         match query_handler(&offer_id, &state.query.offer).await? {
             // When the Offer does not include the credential id's yet, wait for the external server to provide them.
             Some(OfferView { credential_ids, .. }) if credential_ids.is_empty() => {
-                if start_time.elapsed().as_millis() <= timeout.into() {
+                if start_time.elapsed().as_millis() <= timeout as u128 {
                     sleep(Duration::from_millis(POLLING_INTERVAL_MS)).await;
                 } else {
                     error!("timeout failure");

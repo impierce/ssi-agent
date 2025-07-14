@@ -37,8 +37,10 @@ pub enum DocumentError {
     MissingNetworkNameError(SupportedDidMethod),
     #[error("Error while retrieving the Wallet Address: {0}")]
     WalletAddressError(String),
-    #[error("Iota Client error: {0}")]
-    IotaClientError(#[from] identity_iota::iota::Error),
+    #[error("Iota Identity error: {0}")]
+    IotaIdentityError(#[from] identity_iota::iota::rebased::Error),
+    #[error("Iota Product Common error: {0}")]
+    IotaProductCommonError(#[from] product_common::error::Error),
     #[error("Error while building the Alias Output: {0}")]
     AliasOutputBuilderError(String),
     #[error(

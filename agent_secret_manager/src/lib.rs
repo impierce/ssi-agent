@@ -4,7 +4,7 @@ use identity_iota::{
     storage::{JwkStorage, KeyId, KeyType},
     verification::jws::JwsAlgorithm,
 };
-use iota_sdk::client::secret::stronghold::StrongholdSecretManager;
+use iota_sdk_legacy::client::secret::stronghold::StrongholdSecretManager;
 use log::info;
 
 pub mod service;

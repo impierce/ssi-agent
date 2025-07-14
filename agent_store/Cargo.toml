@@ -11,7 +11,7 @@ agent_issuance = { path = "../agent_issuance" }
 agent_shared = { path = "../agent_shared" }
 agent_verification = { path = "../agent_verification" }
 
-async-trait = "0.1"
+async-trait.workspace = true
 cqrs-es.workspace = true
 postgres-es = "0.4.12"
 serde_json.workspace = true

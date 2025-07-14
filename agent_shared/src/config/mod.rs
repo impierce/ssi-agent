@@ -2,7 +2,10 @@ mod provisioned;
 
 use agent_macros::Config;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use identity_iota::storage::KeyId;
+use identity_iota::{
+    iota_interaction::{IOTA_DEVNET_URL, IOTA_MAINNET_URL},
+    storage::KeyId,
+};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
@@ -244,16 +247,17 @@ pub struct ApplicationConfiguration {
             ]
         )")]
     pub signing_algorithms_supported: HashMap<Algorithm, ToggleOptions>,
-    #[config(development_default = r#"vec![
-            Display {
-                name: "UniCore".to_string(),
-                locale: Some("en".to_string()),
-                logo: Some(Logo {
-                    uri: Some(Url::parse("https://www.impierce.com/external/impierce-icon.png").unwrap()),
-                    alt_text: Some("Impierce Icon".to_string()),
-                }),
-            }
-        ]"#)]
+    // #[config(development_default = r#"vec![
+    //         Display {
+    //             name: "UniCore".to_string(),
+    //             locale: Some("en".to_string()),
+    //             logo: Some(Logo {
+    //                 uri: Some(Url::parse("https://www.impierce.com/external/impierce-icon.png").unwrap()),
+    //                 alt_text: Some("Impierce Icon".to_string()),
+    //             }),
+    //         }
+    //     ]"#)]
+    #[config(default)]
     pub display: Vec<Display>,
     #[config(default)]
     pub event_publishers: EventPublishers,
@@ -276,13 +280,21 @@ pub struct ApplicationConfiguration {
         ]
     )")]
     pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
+    #[config(default)]
+    pub iota_address: Option<String>,
+    #[config(default)]
+    pub iota_node_url: Option<String>,
+    #[config(default)]
+    pub iota_node_username: Option<String>,
+    #[config(default)]
+    pub iota_node_password: Option<String>,
 }
 
 impl ApplicationConfiguration {
     /// Validates whether the configuration is suitable for development (enforce restrictions).
     pub fn validate_development(&self) -> Result<(), SharedError> {
         if self.event_store.type_ == EventStoreType::InMemory {
-            for did_method in &[SupportedDidMethod::Iota, SupportedDidMethod::IotaSmr] {
+            for did_method in &[SupportedDidMethod::Iota] {
                 if self
                     .did_methods
                     .get(did_method)
@@ -479,14 +491,14 @@ pub struct CredentialConfiguration {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Logo {
     pub uri: Option<Url>,
     pub alt_text: Option<String>,
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Display {
     pub name: String,
     pub locale: Option<String>,
@@ -635,9 +647,9 @@ pub enum SupportedDidMethod {
     #[serde(alias = "did_iota", alias = "did:iota", rename = "did_iota")]
     #[strum(serialize = "did:iota")]
     Iota,
-    #[serde(alias = "did_iota_smr", alias = "did:iota:smr", rename = "did_iota_smr")]
-    #[strum(serialize = "did:iota:smr")]
-    IotaSmr,
+    #[serde(alias = "did_iota_dev", alias = "did:iota:dev", rename = "did_iota_dev")]
+    #[strum(serialize = "did:iota:dev")]
+    IotaDev,
 }
 
 /// (A subset of) DID method traits. The methods follow a naming convention that expresses boolean predicates as verb
@@ -646,7 +658,7 @@ pub enum SupportedDidMethod {
 impl SupportedDidMethod {
     pub fn supports_update(&self) -> bool {
         match self {
-            SupportedDidMethod::Web | SupportedDidMethod::Iota | SupportedDidMethod::IotaSmr => true,
+            SupportedDidMethod::Web | SupportedDidMethod::Iota | SupportedDidMethod::IotaDev => true,
             SupportedDidMethod::Jwk | SupportedDidMethod::Key => false,
         }
     }
@@ -656,7 +668,7 @@ impl SupportedDidMethod {
             SupportedDidMethod::Jwk
             | SupportedDidMethod::Key
             | SupportedDidMethod::Iota
-            | SupportedDidMethod::IotaSmr => false,
+            | SupportedDidMethod::IotaDev => false,
             SupportedDidMethod::Web => true,
         }
     }
@@ -664,16 +676,13 @@ impl SupportedDidMethod {
     pub fn hosted_decentrally(&self) -> bool {
         match self {
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => false,
-            SupportedDidMethod::Iota | SupportedDidMethod::IotaSmr => true,
+            SupportedDidMethod::Iota | SupportedDidMethod::IotaDev => true,
         }
     }
 }
 
-const MAINNET_URL: &str = "https://api.stardust-mainnet.iotaledger.net";
-const SHIMMER_URL: &str = "https://api.shimmer.network";
-
-const IOTA_NETWORK: &str = "IOTA Network";
-const SHIMMER_NETWORK: &str = "Shimmer Network";
+const IOTA_NETWORK: &str = "iota";
+const IOTA_DEV_NETWORK: &str = "dev";
 
 // See specification: "Since did:jwk only contains a single key, the DID URL fragment identifier is always a fixed #0 value."
 const JWK_FRAGMENT: &str = "0";
@@ -681,8 +690,8 @@ const JWK_FRAGMENT: &str = "0";
 impl SupportedDidMethod {
     pub fn api_endpoint(&self) -> Option<&str> {
         match self {
-            SupportedDidMethod::Iota => Some(MAINNET_URL),
-            SupportedDidMethod::IotaSmr => Some(SHIMMER_URL),
+            SupportedDidMethod::Iota => Some(IOTA_MAINNET_URL),
+            SupportedDidMethod::IotaDev => Some(IOTA_DEVNET_URL),
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
         }
     }
@@ -690,7 +699,7 @@ impl SupportedDidMethod {
     pub fn network_name(&self) -> Option<&str> {
         match self {
             SupportedDidMethod::Iota => Some(IOTA_NETWORK),
-            SupportedDidMethod::IotaSmr => Some(SHIMMER_NETWORK),
+            SupportedDidMethod::IotaDev => Some(IOTA_DEV_NETWORK),
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
         }
     }
@@ -699,7 +708,7 @@ impl SupportedDidMethod {
         match self {
             SupportedDidMethod::Jwk => Some(JWK_FRAGMENT),
             SupportedDidMethod::Iota
-            | SupportedDidMethod::IotaSmr
+            | SupportedDidMethod::IotaDev
             | SupportedDidMethod::Key
             | SupportedDidMethod::Web => None,
         }

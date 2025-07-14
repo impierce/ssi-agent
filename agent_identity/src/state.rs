@@ -4,26 +4,28 @@ use crate::connection::views::ConnectionView;
 use crate::document::aggregate::Status;
 use crate::document::command::DocumentCommand;
 use crate::document::views::all_documents::AllDocumentsView;
+use crate::profile::aggregate::Profile;
+use crate::profile::command::ProfileCommand;
+use crate::profile::views::ProfileView;
 use crate::service::views::all_services::AllServicesView;
 use crate::{
     document::{aggregate::Document, views::DocumentView},
     service::{aggregate::Service, command::ServiceCommand, views::ServiceView},
 };
-use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported, SupportedDidMethod, ToggleOptions};
+use agent_shared::config::{
+    config, config_mut, get_all_enabled_signing_algorithms_supported, Display, SupportedDidMethod, ToggleOptions,
+};
 use agent_shared::handlers::command_handler;
 use agent_shared::{application_state::CommandHandler, handlers::query_handler};
 use cqrs_es::persist::ViewRepository;
-use iota_sdk::client::api::GetAddressesOptions;
-use iota_sdk::client::secret::SecretManager;
-use iota_sdk::client::Client;
-use iota_sdk::crypto::keys::bip39;
-use iota_sdk::types::block::address::Bech32Address;
-use iota_sdk::types::block::address::Hrp;
 use itertools::iproduct;
 use jsonwebtoken::Algorithm;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::info;
+
+/// The unique identifier for the server configuration.
+pub const PROFILE_ID: &str = "PROFILE-001";
 
 #[derive(Clone)]
 pub struct IdentityState {
@@ -36,6 +38,7 @@ pub struct IdentityState {
 pub struct CommandHandlers {
     pub connection: CommandHandler<Connection>,
     pub document: CommandHandler<Document>,
+    pub profile: CommandHandler<Profile>,
     pub service: CommandHandler<Service>,
 }
 
@@ -47,16 +50,18 @@ type Queries = ViewRepositories<
     dyn ViewRepository<AllConnectionsView, Connection>,
     dyn ViewRepository<DocumentView, Document>,
     dyn ViewRepository<AllDocumentsView, Document>,
+    dyn ViewRepository<ProfileView, Profile>,
     dyn ViewRepository<ServiceView, Service>,
     dyn ViewRepository<AllServicesView, Service>,
 >;
 
-pub struct ViewRepositories<C1, C2, D1, D2, S1, S2>
+pub struct ViewRepositories<C1, C2, D1, D2, P, S1, S2>
 where
     C1: ViewRepository<ConnectionView, Connection> + ?Sized,
     C2: ViewRepository<AllConnectionsView, Connection> + ?Sized,
     D1: ViewRepository<DocumentView, Document> + ?Sized,
     D2: ViewRepository<AllDocumentsView, Document> + ?Sized,
+    P: ViewRepository<ProfileView, Profile> + ?Sized,
     S1: ViewRepository<ServiceView, Service> + ?Sized,
     S2: ViewRepository<AllServicesView, Service> + ?Sized,
 {
@@ -64,6 +69,7 @@ where
     pub all_connections: Arc<C2>,
     pub document: Arc<D1>,
     pub all_documents: Arc<D2>,
+    pub profile: Arc<P>,
     pub service: Arc<S1>,
     pub all_services: Arc<S2>,
 }
@@ -75,39 +81,11 @@ impl Clone for Queries {
             all_connections: self.all_connections.clone(),
             document: self.document.clone(),
             all_documents: self.all_documents.clone(),
+            profile: self.profile.clone(),
             service: self.service.clone(),
             all_services: self.all_services.clone(),
         }
     }
-}
-
-/// Initializes the [`SecretManager`] with a new mnemonic, if necessary,
-/// and generates an address from the given [`SecretManager`].
-pub async fn get_wallet_address(client: &Client, secret_manager: &SecretManager) -> anyhow::Result<Bech32Address> {
-    let random: [u8; 32] = rand::random();
-    let mnemonic = bip39::wordlist::encode(random.as_ref(), &bip39::wordlist::ENGLISH)
-        .map_err(|err| anyhow::anyhow!(format!("{err:?}")))?;
-
-    if let SecretManager::Stronghold(ref stronghold) = secret_manager {
-        match stronghold.store_mnemonic(mnemonic).await {
-            Ok(()) => (),
-            Err(iota_sdk::client::stronghold::Error::MnemonicAlreadyStored) => (),
-            Err(err) => anyhow::bail!(err),
-        }
-    } else {
-        anyhow::bail!("expected a `StrongholdSecretManager`");
-    }
-
-    let bech32_hrp: Hrp = client.get_bech32_hrp().await?;
-    let address: Bech32Address = secret_manager
-        .generate_ed25519_addresses(
-            GetAddressesOptions::default()
-                .with_range(0..1)
-                .with_bech32_hrp(bech32_hrp),
-        )
-        .await?[0];
-
-    Ok(address)
 }
 
 /// The unique identifier for the linked domain service.
@@ -120,10 +98,70 @@ pub const LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID: &str = "linked-verifiable-p
 pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
     info!("Initializing the identity state ...");
 
+    initialize_display(state).await?;
     initialize_documents(state).await?;
     initialize_domain_linkage(state).await?;
     initialize_linked_verifiable_presentations(state).await?;
     publish_decentrally_hosted_documents(state).await?;
+
+    Ok(())
+}
+
+async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
+    let first = config().display.first().cloned();
+
+    info!("Initializing display ... is some display configured? {first:?}");
+
+    if let Some(display) = first {
+        let command = ProfileCommand::CreateProfile {
+            profile_id: PROFILE_ID.to_string(),
+            display_name: Some(display.name.clone()),
+            logo: display.logo.clone(),
+            provisioned: Some(true),
+        };
+
+        command_handler(PROFILE_ID, &state.command.profile, command).await?;
+    } else {
+        if let Some(Profile {
+            display_name,
+            logo,
+            provisioned,
+            ..
+        }) = query_handler(PROFILE_ID, &state.query.profile).await?
+        {
+            if provisioned.unwrap_or(false) {
+                let command = ProfileCommand::CreateProfile {
+                    profile_id: PROFILE_ID.to_string(),
+                    display_name: Default::default(),
+                    logo: None,
+                    provisioned: Some(false),
+                };
+
+                command_handler(PROFILE_ID, &state.command.profile, command).await?;
+            } else {
+                config_mut().display = vec![Display {
+                    name: display_name.clone().unwrap_or_default(),
+                    logo: logo.clone(),
+                    locale: Some("en".to_string()),
+                }];
+
+                let command = ProfileCommand::CreateProfile {
+                    profile_id: PROFILE_ID.to_string(),
+                    display_name,
+                    logo,
+                    provisioned: Some(false),
+                };
+
+                command_handler(PROFILE_ID, &state.command.profile, command).await?;
+            }
+        }
+    }
+
+    if let Some(Profile { display_name, logo, .. }) = query_handler(PROFILE_ID, &state.query.profile).await? {
+        if display_name.unwrap_or_default().is_empty() && logo.is_none() {
+            config_mut().display = vec![];
+        }
+    }
 
     Ok(())
 }
@@ -263,6 +301,11 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
                 .as_ref()
                 .map(SupportedDidMethod::supports_update)
                 .unwrap_or_default()
+            && document
+                .iota_metadata
+                .as_ref()
+                .map(|iota_metadata| iota_metadata.funded)
+                .unwrap_or(true)
     })
     .await?;
 

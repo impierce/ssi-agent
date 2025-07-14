@@ -1,3 +1,5 @@
+use crate::document::aggregate::IotaMetadata;
+
 use super::aggregate::Status;
 use agent_shared::config::SupportedDidMethod;
 use cqrs_es::DomainEvent;
@@ -14,6 +16,7 @@ pub enum DocumentEvent {
         status: Status,
         document: CoreDocument,
         with_fixed_algorithm: Option<Algorithm>,
+        iota_metadata: Option<IotaMetadata>,
     },
     PublicKeyUpdated {
         document_id: String,
@@ -30,6 +33,7 @@ pub enum DocumentEvent {
     DocumentPublished {
         document_id: String,
         document: CoreDocument,
+        iota_metadata: Option<IotaMetadata>,
     },
 }
 

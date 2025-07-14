@@ -11,7 +11,10 @@ use agent_identity::document::views::all_documents::AllDocumentsView;
 use agent_identity::service::views::all_services::AllServicesView;
 use agent_identity::services::IdentityServices;
 use agent_identity::state::IdentityState;
-use agent_identity::{connection::aggregate::Connection, document::aggregate::Document, service::aggregate::Service};
+use agent_identity::{
+    connection::aggregate::Connection, document::aggregate::Document, profile::aggregate::Profile,
+    service::aggregate::Service,
+};
 use agent_issuance::SimpleLoggingQuery;
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
@@ -137,6 +140,8 @@ pub async fn identity_state<ES: EventStoreTemp>(
     let (document_command_handler, document, all_documents) =
         ES::commands_and_queries::<Document, Document, AllDocumentsView>(services.clone(), document_event_publishers)
             .await;
+    let (profile_command_handler, profile, all_profiles) =
+        ES::commands_and_queries::<Profile, Profile, Profile>(services.clone(), vec![]).await;
     let (service_command_handler, service, all_services) =
         ES::commands_and_queries::<Service, Service, AllServicesView>(services.clone(), service_event_publishers).await;
 
@@ -144,6 +149,7 @@ pub async fn identity_state<ES: EventStoreTemp>(
         command: agent_identity::state::CommandHandlers {
             connection: connection_command_handler,
             document: document_command_handler,
+            profile: profile_command_handler,
             service: service_command_handler,
         },
         query: agent_identity::state::ViewRepositories {
@@ -153,6 +159,7 @@ pub async fn identity_state<ES: EventStoreTemp>(
             all_documents,
             service,
             all_services,
+            profile,
         },
     }
 }
@@ -237,6 +244,7 @@ pub async fn holder_state<ES: EventStoreTemp>(
 
 pub type ConnectionEventPublisher = Box<dyn Query<Connection>>;
 pub type DocumentEventPublisher = Box<dyn Query<Document>>;
+pub type ProfileEventPublisher = Box<dyn Query<Profile>>;
 pub type ServiceEventPublisher = Box<dyn Query<Service>>;
 pub type ServerConfigEventPublisher = Box<dyn Query<ServerConfig>>;
 pub type CredentialEventPublisher = Box<dyn Query<Credential>>;
@@ -251,6 +259,7 @@ pub type AuthorizationRequestEventPublisher = Box<dyn Query<AuthorizationRequest
 pub struct Partitions {
     pub connection_event_publishers: Vec<ConnectionEventPublisher>,
     pub document_event_publishers: Vec<DocumentEventPublisher>,
+    pub profile_event_publishers: Vec<ProfileEventPublisher>,
     pub service_event_publishers: Vec<ServiceEventPublisher>,
     pub server_config_event_publishers: Vec<ServerConfigEventPublisher>,
     pub credential_event_publishers: Vec<CredentialEventPublisher>,
@@ -270,6 +279,9 @@ pub trait EventPublisher {
         None
     }
     fn document(&mut self) -> Option<DocumentEventPublisher> {
+        None
+    }
+    fn profile(&mut self) -> Option<ProfileEventPublisher> {
         None
     }
     fn service(&mut self) -> Option<ServiceEventPublisher> {
@@ -310,6 +322,9 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
             }
             if let Some(document) = event_publisher.document() {
                 partitions.document_event_publishers.push(document);
+            }
+            if let Some(profile) = event_publisher.profile() {
+                partitions.profile_event_publishers.push(profile);
             }
             if let Some(service) = event_publisher.service() {
                 partitions.service_event_publishers.push(service);
@@ -399,6 +414,7 @@ mod test {
         let Partitions {
             connection_event_publishers,
             document_event_publishers,
+            profile_event_publishers,
             service_event_publishers,
             server_config_event_publishers,
             credential_event_publishers,
@@ -411,6 +427,7 @@ mod test {
 
         assert_eq!(connection_event_publishers.len(), 2);
         assert_eq!(document_event_publishers.len(), 0);
+        assert_eq!(profile_event_publishers.len(), 0);
         assert_eq!(service_event_publishers.len(), 0);
         assert_eq!(server_config_event_publishers.len(), 1);
         assert_eq!(credential_event_publishers.len(), 0);
