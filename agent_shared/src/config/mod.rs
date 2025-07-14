@@ -1,4 +1,3 @@
-// mod defaults;
 mod provisioned;
 
 use agent_macros::Config;
@@ -15,7 +14,7 @@ use serde_json::json;
 use serde_with::{skip_serializing_none, SerializeDisplay};
 use std::{
     collections::HashMap,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{RwLock, RwLockReadGuard},
 };
 use strum::VariantArray;
@@ -223,12 +222,7 @@ pub struct ApplicationConfiguration {
     pub credential_offer_by_value_enabled: bool,
     #[config(development_default = "SecretManagerConfig::development_default()")]
     pub secret_manager: SecretManagerConfig,
-    #[config(
-        default,
-        development_default = r#"
-        Some(Box::new(Path::new("./config/credential_configurations.json").to_owned()))
-    "#
-    )]
+    #[config(default)]
     pub credential_configuration_file: Option<Box<PathBuf>>,
     #[config(default = "
         HashMap::from(
@@ -560,7 +554,7 @@ pub enum ServiceEvent {
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum ServerConfigEvent {
     ServerMetadataInitialized,
-    CredentialConfigurationAdded,
+    CredentialConfigurationUpdated,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -890,7 +884,6 @@ mod tests {
                 "issuer_eddsa_key_id": "ed25519-0",
                 "issuer_es256_key_id": "es256-0"
               },
-              "credential_configuration_file": "./config/credential_configurations.json",
               "signing_algorithms_supported": {
                 "EdDSA": {
                   "enabled": true,
@@ -1240,13 +1233,8 @@ mod tests {
         // Some display information is set
         assert_eq!(config.display.len(), 1);
 
-        // The Credential Configuration file is set to the default path
-        assert_eq!(
-            config.credential_configuration_file,
-            Some(Box::new(
-                Path::new("./config/credential_configurations.json").to_path_buf()
-            ))
-        );
+        // The Credential Configuration file is set to `None`
+        assert!(config.credential_configuration_file.is_none());
     }
 
     #[test]
@@ -1287,23 +1275,14 @@ mod tests {
     #[test]
     #[serial]
     fn test_public_url_defaults_to_application_url() {
-        temp_env::with_vars(
-            [
-                ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("postgresql://:test:")),
-                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
-            ],
-            || {
-                let provisioned_config = config::Config::builder()
-                    .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
-                    .build()
-                    .unwrap();
-                let config =
-                    ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
+        let provisioned_config = config::Config::builder()
+            .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+            .build()
+            .unwrap();
+        let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
 
-                // Assert that the public URL is set to the application URL
-                assert_eq!(config.public_url, config.application_url);
-            },
-        );
+        // Assert that the public URL is set to the application URL
+        assert_eq!(config.public_url, config.application_url);
     }
 
     #[test]
@@ -1311,8 +1290,6 @@ mod tests {
     fn test_oid4vc_endpoint_variables_overwrite_defaults() {
         temp_env::with_vars(
             [
-                ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("postgresql://:test:")),
-                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
                 (
                     "UNICORE__TOKEN_ENDPOINT",
                     Some("https://my-domain.example.org/my/token/endpoint"),

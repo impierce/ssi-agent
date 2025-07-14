@@ -69,7 +69,7 @@ CredentialResponseCreated
 
 ```
 ServerMetadataLoaded
-CredentialConfigurationAdded
+CredentialConfigurationUpdated
 ```
 
 #### `holder_credential`

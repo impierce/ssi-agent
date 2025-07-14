@@ -67,7 +67,7 @@ The `UNICORE__APPLICATION_URL` variable can also be set in the `.env` directly. 
 
 :::
 
-Replace `<your-private-ip-address>` with your machine's local IP address. This might help you find your local IP address:
+Replace `<your-local-ip-address>` with your machine's local IP address. This might help you find your local IP address:
 
 ```bash
 # macOS
@@ -209,7 +209,7 @@ Now, request the user to present their Credential:
 Ensure the `UNICORE__APPLICATION_URL` environment variable is set (if not, set it again):
 
 ```bash
-export UNICORE__APPLICATION_URL=http://<your-private-ip-address>:3033
+export UNICORE__APPLICATION_URL=http://<your-local-ip-address>:3033
 ```
 
 Then run:

@@ -89,7 +89,7 @@ mod tests {
         let request = Request::builder()
             .uri("/openid4vci/notification")
             .method("POST")
-            .header("Authorization", format!("Bearer {}", access_token))
+            .header("Authorization", format!("Bearer {access_token}"))
             .header("Content-Type", "application/json")
             .body(Body::from(
                 serde_json::to_string(&NotificationRequest {
@@ -146,10 +146,7 @@ mod tests {
             TestCase {
                 name: "Invalid Notification Event",
                 access_token: access_token.clone(),
-                payload: format!(
-                    r#"{{"notification_id": "{}", "event": "InvalidEventValue"}}"#,
-                    notification_id
-                ),
+                payload: format!(r#"{{"notification_id": "{notification_id}", "event": "InvalidEventValue"}}"#),
                 expected_error: NotificationErrorResponse::InvalidNotificationRequest,
             },
         ];

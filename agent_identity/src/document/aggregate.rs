@@ -534,8 +534,8 @@ pub mod document_tests {
         document_id: String,
         did_method: SupportedDidMethod,
         document: CoreDocument,
-        document_with_es256_verification_method: CoreDocument,
-        document_with_both_verification_methods: CoreDocument,
+        document_with_single_verification_method: CoreDocument,
+        document_with_multiple_verification_methods: CoreDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
             .given(vec![DocumentEvent::DocumentCreated {
@@ -551,11 +551,11 @@ pub mod document_tests {
             .then_expect_events(vec![
                 DocumentEvent::PublicKeyUpdated {
                     document_id: document_id.clone(),
-                    document: document_with_es256_verification_method,
+                    document: document_with_single_verification_method,
                 },
                 DocumentEvent::PublicKeyUpdated {
                     document_id,
-                    document: document_with_both_verification_methods,
+                    document: document_with_multiple_verification_methods,
                 },
             ])
     }
@@ -567,7 +567,7 @@ pub mod document_tests {
         did_method: SupportedDidMethod,
         document: CoreDocument,
         domain_linkage_service: Service,
-        document_with_both_verification_methods: CoreDocument,
+        document_with_multiple_verification_methods: CoreDocument,
         document_with_domain_linkage_service: CoreDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
@@ -581,7 +581,7 @@ pub mod document_tests {
                 },
                 DocumentEvent::PublicKeyUpdated {
                     document_id: document_id.clone(),
-                    document: document_with_both_verification_methods,
+                    document: document_with_multiple_verification_methods,
                 },
             ])
             .when(DocumentCommand::AddService {
@@ -600,7 +600,7 @@ pub mod document_tests {
         document_id: String,
         did_method: SupportedDidMethod,
         document: CoreDocument,
-        document_with_both_verification_methods: CoreDocument,
+        document_with_multiple_verification_methods: CoreDocument,
         document_with_domain_linkage_service: CoreDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
@@ -614,7 +614,7 @@ pub mod document_tests {
                 },
                 DocumentEvent::PublicKeyUpdated {
                     document_id: document_id.clone(),
-                    document: document_with_both_verification_methods.clone(),
+                    document: document_with_multiple_verification_methods.clone(),
                 },
                 DocumentEvent::ServiceAdded {
                     document_id: document_id.clone(),
@@ -725,7 +725,7 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn document_with_es256_verification_method(
+    pub fn document_with_single_verification_method(
         mut document: CoreDocument,
         es256_verification_method: VerificationMethod,
     ) -> CoreDocument {
@@ -737,7 +737,7 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn document_with_both_verification_methods(
+    pub fn document_with_multiple_verification_methods(
         mut document: CoreDocument,
         both_verification_methods: Vec<VerificationMethod>,
     ) -> CoreDocument {
@@ -759,7 +759,7 @@ pub mod test_utils {
             .type_("LinkedDomains")
             .service_endpoint(
                 ServiceEndpoint::from_json_value(json!({
-                    "origins": [config().public_url.clone()],
+                    "origins": [config().public_url.origin().ascii_serialization()],
                 }))
                 .unwrap(),
             )
@@ -769,13 +769,13 @@ pub mod test_utils {
 
     #[fixture]
     pub fn document_with_domain_linkage_service(
-        mut document_with_both_verification_methods: CoreDocument,
+        mut document_with_multiple_verification_methods: CoreDocument,
         domain_linkage_service: Service,
     ) -> CoreDocument {
-        document_with_both_verification_methods
+        document_with_multiple_verification_methods
             .insert_service(domain_linkage_service)
             .unwrap();
 
-        document_with_both_verification_methods
+        document_with_multiple_verification_methods
     }
 }
