@@ -32,6 +32,7 @@ url.workspace = true
 lazy_static = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }
 rstest = { workspace = true, optional = true }
+oauth_tsl = { git = "https://github.com/impierce/oauth-token-status-list", rev = "23af9c1" }
 
 [dev-dependencies]
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }

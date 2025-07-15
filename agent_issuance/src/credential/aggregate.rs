@@ -394,6 +394,7 @@ impl Aggregate for Credential {
                 credential_id,
                 notification,
             }]),
+            // TODO: implement set_status command
         }
     }
 
@@ -439,6 +440,10 @@ impl Aggregate for Credential {
                 self.credential_id = credential_id;
                 self.holder_notifications.push(notification);
             }
+            CredentialStatusSet { credential_id, status } => {
+                self.credential_id = credential_id;
+                self.status = status; //
+            } // todo: implement set_status event
         }
     }
 }

@@ -29,4 +29,8 @@ pub enum CredentialCommand {
         credential_id: String,
         notification: NotificationRequest,
     },
+    SetCredentialStatus {
+        credential_id: String,
+        status: oauth_tsl::status_list::StatusType,
+    },
 }

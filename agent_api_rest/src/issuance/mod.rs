@@ -27,7 +27,10 @@ pub fn router(issuance_state: IssuanceState) -> Router {
             API_VERSION,
             Router::new()
                 .route("/credentials", post(credentials).get(all_credentials))
-                .route("/credentials/{credential_id}", get(credentials::credential))
+                .route(
+                    "/credentials/{credential_id}",
+                    get(credentials::credential).post(set_status),
+                )
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send", post(send)),
@@ -41,5 +44,6 @@ pub fn router(issuance_state: IssuanceState) -> Router {
         .route("/openid4vci/credential", post(credential))
         .route("/openid4vci/notification", post(notification))
         .route("/openid4vci/credential-offer/{offer_id}", get(credential_offer_uri))
+        .route("/ietf-oauth-token-status-list/{path}", get(serve_token_status_list))
         .with_state(issuance_state)
 }

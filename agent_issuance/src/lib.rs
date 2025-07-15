@@ -3,6 +3,7 @@ use cqrs_es::{Aggregate, EventEnvelope, Query};
 use tracing::info;
 
 // Aggregates
+pub mod application;
 pub mod credential;
 pub mod offer;
 pub mod server_config;

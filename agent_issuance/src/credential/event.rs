@@ -30,6 +30,10 @@ pub enum CredentialEvent {
         credential_id: String,
         notification: NotificationRequest,
     },
+    CredentialStatusSet {
+        credential_id: String,
+        status: oauth_tsl::status_list::StatusType,
+    },
 }
 
 impl DomainEvent for CredentialEvent {
