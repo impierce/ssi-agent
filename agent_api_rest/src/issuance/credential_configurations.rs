@@ -14,7 +14,7 @@ pub(crate) async fn credential_configurations(
     State(state): State<IssuanceState>,
     Json(credential_configuration): Json<CredentialConfiguration>,
 ) -> Result<Response, ApiError> {
-    let command = ServerConfigCommand::AddCredentialConfiguration {
+    let command = ServerConfigCommand::UpdateCredentialConfiguration {
         credential_configuration: credential_configuration.clone(),
         provisioned: false,
     };
