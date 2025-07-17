@@ -12,6 +12,7 @@ agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
 agent_verification = { path = "../agent_verification" }
 
+anyhow.workspace = true
 axum.workspace = true
 axum-auth = "0.8"
 axum-macros = "0.5"

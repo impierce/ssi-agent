@@ -17,6 +17,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Reponsible for signing and verifying data.
+#[derive(Debug)]
 pub struct Subject {
     pub stronghold_storage: StrongholdExtStorage,
     pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DIDUrl>>>,
@@ -199,7 +200,7 @@ impl oid4vc_core::Subject for Subject {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct StorageKey {
     pub did_method: SupportedDidMethod,
     pub algorithm: Algorithm,

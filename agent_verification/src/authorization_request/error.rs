@@ -14,4 +14,6 @@ pub enum AuthorizationRequestError {
     InvalidOID4VPAuthorizationResponse(#[source] anyhow::Error),
     #[error("Authorization Responses containing `response` field are not supported yet")]
     UnsupportedAuthorizationResponseParameterError,
+    #[error("Failed to deserialize Authorization Request: {0}")]
+    SerializationError(#[source] anyhow::Error),
 }

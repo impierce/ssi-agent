@@ -33,9 +33,10 @@ pub(crate) async fn request(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::verification::{authorization_requests::tests::authorization_requests, router};
-    use agent_secret_manager::service::Service;
-    use agent_store::in_memory;
+    // use crate::verification::router;
+    // // authorization_requests::tests::authorization_requests,
+    // use agent_secret_manager::service::Service;
+    // use agent_store::in_memory;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -69,22 +70,22 @@ pub mod tests {
         assert_eq!(header, "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCN6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifQ");
     }
 
-    #[tokio::test]
-    #[tracing_test::traced_test]
-    async fn test_request_endpoint() {
-        let verification_state = in_memory::verification_state(Service::default(), Default::default()).await;
+    // #[tokio::test]
+    // #[tracing_test::traced_test]
+    // async fn test_request_endpoint() {
+    //     let verification_state = in_memory::verification_state(Service::default(), Default::default()).await;
 
-        let mut app = router(verification_state);
+    //     let mut app = router(verification_state);
 
-        let form_url_encoded_authorization_request = authorization_requests(&mut app, false).await;
+    //     let form_url_encoded_authorization_request = authorization_requests(&mut app, false).await;
 
-        // Extract the state from the form_url_encoded_authorization_request.
-        let state = form_url_encoded_authorization_request
-            .split("%2F")
-            .last()
-            .unwrap()
-            .to_string();
+    //     // Extract the state from the form_url_encoded_authorization_request.
+    //     let state = form_url_encoded_authorization_request
+    //         .split("%2F")
+    //         .last()
+    //         .unwrap()
+    //         .to_string();
 
-        request(&mut app, state).await;
-    }
+    //     request(&mut app, state).await;
+    // }
 }

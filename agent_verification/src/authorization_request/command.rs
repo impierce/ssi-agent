@@ -1,4 +1,4 @@
-use oid4vp::PresentationDefinition;
+use oid4vp::dcql::dcql_query::DcqlQuery;
 use serde::Deserialize;
 
 use crate::generic_oid4vc::{GenericAuthorizationRequest, GenericAuthorizationResponse};
@@ -9,7 +9,8 @@ pub enum AuthorizationRequestCommand {
     CreateAuthorizationRequest {
         state: String,
         nonce: String,
-        presentation_definition: Option<PresentationDefinition>,
+        dcql_query: Option<DcqlQuery>,
+        // presentation_definition: Option<PresentationDefinition>,
     },
     SignAuthorizationRequestObject,
     VerifyAuthorizationResponse {
