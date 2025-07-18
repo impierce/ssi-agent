@@ -16,4 +16,6 @@ pub enum AuthorizationRequestError {
     UnsupportedAuthorizationResponseParameterError,
     #[error("Failed to deserialize Authorization Request: {0}")]
     SerializationError(#[source] anyhow::Error),
+    #[error("Vp Token validation failed: {0}")]
+    VpTokenValidationFailed(#[source] anyhow::Error),
 }

@@ -231,371 +231,351 @@ impl Aggregate for AuthorizationRequest {
     }
 }
 
-// #[cfg(test)]
-// pub mod tests {
-//     use std::str::FromStr;
+#[cfg(test)]
+pub mod tests {
+    use agent_secret_manager::service::Service as _;
+    use agent_secret_manager::subject::Subject;
+    use agent_shared::config::set_config;
+    use agent_shared::config::SupportedDidMethod;
+    use cqrs_es::test::TestFramework;
+    use jsonwebtoken::Algorithm;
+    use lazy_static::lazy_static;
+    use oid4vc_core::Subject as _;
+    use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
+    use oid4vc_manager::ProviderManager;
+    use oid4vp::dcql::dcql_query::{
+        ClaimPath, ClaimPathElement, ClaimQuery, CredentialId, CredentialQuery, DcqlQuery, Format, MetaTypes,
+    };
+    use oid4vp::token::vp_token::{PresentationFormat, VpToken};
+    use oid4vp::token::vp_token_builder::VpTokenBuilder;
+    use rstest::rstest;
+    use serde_json::json;
+    use std::str::FromStr;
 
-//     use agent_secret_manager::service::Service as _;
-//     use agent_secret_manager::subject::Subject;
-//     use agent_shared::config::set_config;
-//     use agent_shared::config::SupportedDidMethod;
-//     use cqrs_es::test::TestFramework;
-//     use identity_credential::credential::Jwt;
-//     use identity_credential::presentation::Presentation;
-//     use jsonwebtoken::Algorithm;
-//     use lazy_static::lazy_static;
-//     use oid4vc_core::Subject as _;
-//     use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
-//     use oid4vc_manager::managers::presentation::create_presentation_submission;
-//     use oid4vc_manager::ProviderManager;
-//     use oid4vci::VerifiableCredentialJwt;
-//     // use oid4vp::oid4vp::AuthorizationResponseInput;
-//     use oid4vp::oid4vp::PresentationInputType;
-//     use rstest::rstest;
-//     use serde_json::json;
+    use super::*;
 
-//     use super::*;
+    type AuthorizationRequestTestFramework = TestFramework<AuthorizationRequest>;
 
-//     type AuthorizationRequestTestFramework = TestFramework<AuthorizationRequest>;
-// //FIXME
-//     #[rstest]
-//     #[serial_test::serial]
-//     async fn test_create_authorization_request(
-//         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
-//     ) {
-//         set_config().set_preferred_did_method(verifier_did_method);
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_authorization_request(
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
+    ) {
+        set_config().set_preferred_did_method(verifier_did_method);
 
-//         let verification_services = VerificationServices::default();
-//         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
-//         let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
+        let verification_services = VerificationServices::default();
+        let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
+        let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
 
-//         AuthorizationRequestTestFramework::with(verification_services)
-//             .given_no_previous_events()
-//             .when(AuthorizationRequestCommand::CreateAuthorizationRequest {
-//                 state: "state".to_string(),
-//                 nonce: "nonce".to_string(),
-//                 dcql_query: None,
-//                 // presentation_definition: None, --- IGNORE ---
-//             })
-//             .then_expect_events(vec![
-//                 AuthorizationRequestEvent::AuthorizationRequestCreated {
-//                     authorization_request: Box::new(
-//                         authorization_request(
-//                             "id_token",
-//                             &verifier_did_method.to_string(),
-//                             siopv2_client_metadata,
-//                             oid4vp_client_metadata,
-//                         )
-//                         .await,
-//                     ),
-//                 },
-//                 AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
-//                     form_url_encoded_authorization_request: form_url_encoded_authorization_request(
-//                         &verifier_did_method.to_string(),
-//                     ),
-//                 },
-//             ]);
-//     }
+        AuthorizationRequestTestFramework::with(verification_services)
+            .given_no_previous_events()
+            .when(AuthorizationRequestCommand::CreateAuthorizationRequest {
+                state: "state".to_string(),
+                nonce: "nonce".to_string(),
+                dcql_query: None,
+            })
+            .then_expect_events(vec![
+                AuthorizationRequestEvent::AuthorizationRequestCreated {
+                    authorization_request: Box::new(
+                        authorization_request(
+                            "id_token",
+                            &verifier_did_method.to_string(),
+                            siopv2_client_metadata,
+                            oid4vp_client_metadata,
+                        )
+                        .await,
+                    ),
+                },
+                AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
+                    form_url_encoded_authorization_request: form_url_encoded_authorization_request(
+                        &verifier_did_method.to_string(),
+                    ),
+                },
+            ]);
+    }
 
-//     #[rstest]
-//     #[serial_test::serial]
-//     async fn test_sign_authorization_request_object(
-//         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
-//     ) {
-//         set_config().set_preferred_did_method(verifier_did_method);
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_sign_authorization_request_object(
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
+    ) {
+        set_config().set_preferred_did_method(verifier_did_method);
 
-//         let verification_services = VerificationServices::default();
-//         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
-//         let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
+        let verification_services = VerificationServices::default();
+        let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
+        let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
 
-//         AuthorizationRequestTestFramework::with(verification_services)
-//             .given(vec![
-//                 AuthorizationRequestEvent::AuthorizationRequestCreated {
-//                     authorization_request: Box::new(
-//                         authorization_request(
-//                             "id_token",
-//                             &verifier_did_method.to_string(),
-//                             siopv2_client_metadata,
-//                             oid4vp_client_metadata,
-//                         )
-//                         .await,
-//                     ),
-//                 },
-//                 AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
-//                     form_url_encoded_authorization_request: form_url_encoded_authorization_request(
-//                         &verifier_did_method.to_string(),
-//                     ),
-//                 },
-//             ])
-//             .when(AuthorizationRequestCommand::SignAuthorizationRequestObject)
-//             .then_expect_events(vec![AuthorizationRequestEvent::AuthorizationRequestObjectSigned {
-//                 signed_authorization_request_object: signed_authorization_request_object(
-//                     &verifier_did_method.to_string(),
-//                 ),
-//             }]);
-//     }
+        AuthorizationRequestTestFramework::with(verification_services)
+            .given(vec![
+                AuthorizationRequestEvent::AuthorizationRequestCreated {
+                    authorization_request: Box::new(
+                        authorization_request(
+                            "id_token",
+                            &verifier_did_method.to_string(),
+                            siopv2_client_metadata,
+                            oid4vp_client_metadata,
+                        )
+                        .await,
+                    ),
+                },
+                AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
+                    form_url_encoded_authorization_request: form_url_encoded_authorization_request(
+                        &verifier_did_method.to_string(),
+                    ),
+                },
+            ])
+            .when(AuthorizationRequestCommand::SignAuthorizationRequestObject)
+            .then_expect_events(vec![AuthorizationRequestEvent::AuthorizationRequestObjectSigned {
+                signed_authorization_request_object: signed_authorization_request_object(
+                    &verifier_did_method.to_string(),
+                ),
+            }]);
+    }
 
-//     #[rstest]
-//     #[serial_test::serial]
-//     async fn test_verify_authorization_response(
-//         // "id_token" represents the `SIOPv2` flow, and "vp_token" represents the `OID4VP` flow.
-//         #[values("id_token", "vp_token")] response_type: &str,
-//         // TODO: add `did:web`, check for other tests as well. Probably should be moved to E2E test.
-//         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
-//         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] provider_did_method: SupportedDidMethod,
-//     ) {
-//         set_config().set_preferred_did_method(verifier_did_method);
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_verify_authorization_response(
+        #[values("id_token", "vp_token")] response_type: &str,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] provider_did_method: SupportedDidMethod,
+    ) {
+        set_config().set_preferred_did_method(verifier_did_method);
 
-//         let verification_services = VerificationServices::default();
-//         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
-//         let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
+        let verification_services = VerificationServices::default();
+        let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
+        let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
 
-//         let authorization_request = authorization_request(
-//             response_type,
-//             &verifier_did_method.to_string(),
-//             siopv2_client_metadata,
-//             oid4vp_client_metadata,
-//         )
-//         .await;
+        let authorization_request = authorization_request(
+            response_type,
+            &verifier_did_method.to_string(),
+            siopv2_client_metadata,
+            oid4vp_client_metadata,
+        )
+        .await;
 
-//         let authorization_response =
-//             authorization_response(&provider_did_method.to_string(), &authorization_request).await;
-//         let token = authorization_response.token();
+        let authorization_response =
+            authorization_response(&provider_did_method.to_string(), &authorization_request).await;
 
-//         AuthorizationRequestTestFramework::with(verification_services)
-//             .given_no_previous_events()
-//             .when(AuthorizationRequestCommand::VerifyAuthorizationResponse {
-//                 authorization_request,
-//                 authorization_response,
-//             })
-//             .then_expect_events(vec![match response_type {
-//                 "id_token" => AuthorizationRequestEvent::SIOPv2AuthorizationResponseVerified {
-//                     id_token: token,
-//                     state: Some("state".to_string()),
-//                 },
-//                 "vp_token" => AuthorizationRequestEvent::OID4VPAuthorizationResponseVerified {
-//                     vp_token: token,
-//                     state: Some("state".to_string()),
-//                 },
-//                 _ => unreachable!("Invalid response type."),
-//             }]);
-//     }
+        let token = match &authorization_response {
+            GenericAuthorizationResponse::SIOPv2(siopv2_response) => siopv2_response.extension.id_token.clone(),
+            GenericAuthorizationResponse::OID4VP(oid4vp_response) => {
+                serde_json::to_string(&oid4vp_response.extension.vp_token).unwrap()
+            }
+        };
 
-//     async fn authorization_response(
-//         did_method: &str,
-//         authorization_request: &GenericAuthorizationRequest,
-//     ) -> GenericAuthorizationResponse {
-//         let subject = Arc::new(Subject::default());
-//         let provider_manager = ProviderManager::new(subject.clone(), vec![did_method], vec![Algorithm::EdDSA]).unwrap(); // <--- Pass a clone to ProviderManager
+        AuthorizationRequestTestFramework::with(verification_services)
+            .given_no_previous_events()
+            .when(AuthorizationRequestCommand::VerifyAuthorizationResponse {
+                authorization_request,
+                authorization_response,
+            })
+            .then_expect_events(vec![match response_type {
+                "id_token" => AuthorizationRequestEvent::SIOPv2AuthorizationResponseVerified {
+                    id_token: token,
+                    state: Some("state".to_string()),
+                },
+                "vp_token" => AuthorizationRequestEvent::OID4VPAuthorizationResponseVerified {
+                    vp_token: token,
+                    state: Some("state".to_string()),
+                },
+                _ => unreachable!("Invalid response type."),
+            }]);
+    }
 
-//         let default_did_method = provider_manager.default_subject_syntax_types()[0].to_string();
+    async fn authorization_response(
+        did_method: &str,
+        authorization_request: &GenericAuthorizationRequest,
+    ) -> GenericAuthorizationResponse {
+        let subject = Arc::new(Subject::default());
+        let provider_manager = ProviderManager::new(subject.clone(), vec![did_method], vec![Algorithm::EdDSA]).unwrap();
 
-//         let default_did_method = provider_manager.default_subject_syntax_types()[0].to_string();
+        match authorization_request {
+            GenericAuthorizationRequest::SIOPv2(siopv2_authorization_request) => GenericAuthorizationResponse::SIOPv2(
+                provider_manager
+                    .generate_response(siopv2_authorization_request, Default::default())
+                    .await
+                    .unwrap(),
+            ),
+            GenericAuthorizationRequest::OID4VP(oid4vp_authorization_request) => {
+                let vp_token = create_simple_vp_token();
 
-//         match authorization_request {
-//             GenericAuthorizationRequest::SIOPv2(siopv2_authorization_request) => GenericAuthorizationResponse::SIOPv2(
-//                 provider_manager
-//                     .generate_response(siopv2_authorization_request, Default::default())
-//                     .await
-//                     .unwrap(),
-//             ),
-//             GenericAuthorizationRequest::OID4VP(oid4vp_authorization_request) => {
-//                 // TODO: implement test fixture for subject and issuer instead of using the same did as verifier.
-//                 // Fixtures can be implemented using the `rstest` crate as described here: https://docs.rs/rstest/latest/rstest/attr.fixture.html
-//                 let issuer_did = verifier_did(&default_did_method).await;
-//                 let subject_did = issuer_did.clone();
+                GenericAuthorizationResponse::OID4VP(
+                    provider_manager
+                        .generate_response(oid4vp_authorization_request, vp_token)
+                        .await
+                        .unwrap(),
+                )
+            }
+        }
+    }
 
-//                 let issuance_date_str = "2010-01-01T00:00:00Z";
-//                 let issuance_date = issuance_date_str.parse::<chrono::DateTime<chrono::Utc>>().unwrap();
+    pub async fn verifier_did(did_method: &str) -> String {
+        VERIFIER.identifier(did_method, Algorithm::EdDSA).await.unwrap()
+    }
 
-//                 // Create a new verifiable credential.
-//                 let verifiable_credential = VerifiableCredentialJwt::builder()
-//                     .sub(&subject_did)
-//                     .iss(&issuer_did)
-//                     .iat(issuance_date.timestamp())
-//                     .verifiable_credential(serde_json::json!({
-//                         "@context": [
-//                             "https://www.w3.org/2018/credentials/v1",
-//                             "https://www.w3.org/2018/credentials/examples/v1"
-//                         ],
-//                         "type": [
-//                             "VerifiableCredential",
-//                             "TestCredential"
-//                         ],
-//                         "issuanceDate": issuance_date_str,
-//                         "issuer": issuer_did,
-//                         "credentialSubject": {
-//                         "id": subject_did,
-//                         "givenName": "Ferris",
-//                         "familyName": "Crabman",
-//                         "email": "ferris.crabman@crabmail.com",
-//                         "birthdate": "1985-05-21"
-//                         }
-//                     }))
-//                     .build()
-//                     .unwrap();
+    pub fn siopv2_client_metadata(
+        did_method: &str,
+    ) -> ClientMetadataResource<siopv2::authorization_request::ClientMetadataParameters> {
+        ClientMetadataResource::ClientMetadata {
+            client_name: None,
+            logo_uri: None,
+            extension: siopv2::authorization_request::ClientMetadataParameters {
+                subject_syntax_types_supported: vec![SubjectSyntaxType::from_str(did_method).unwrap()],
+                id_token_signed_response_alg: None,
+            },
+            other: Default::default(),
+        }
+    }
 
-//                 // Encode the verifiable credential as a JWT.
-//                 let jwt = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkI3o2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvZXhhbXBsZXMvdjEiXSwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsIlRlc3RDcmVkZW50aWFsIl0sImlzc3VhbmNlRGF0ZSI6IjIwMjItMDEtMDFUMDA6MDA6MDBaIiwiaXNzdWVyIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwiZ2l2ZW5OYW1lIjoiRmVycmlzIiwiZmFtaWx5TmFtZSI6IkNyYWJtYW4iLCJlbWFpbCI6ImZlcnJpcy5jcmFibWFuQGNyYWJtYWlsLmNvbSIsImJpcnRoZGF0ZSI6IjE5ODUtMDUtMjEifX19.6guSHngBj_QQYom3kXKmxKrHExoyW1eObBsBg8ACYn-H30YD6eub56zsWnnMzw8IznGDYAguuo3V1D37-A_vCQ".to_string();
+    pub fn oid4vp_client_metadata() -> ClientMetadataResource<oid4vp::authorization_request::ClientMetadataParameters> {
+        ClientMetadataResource::ClientMetadata {
+            client_name: None,
+            logo_uri: None,
+            extension: serde_json::from_value(json!({
+                "vp_formats": {
+                    "jwt_vc_json": {
+                        "alg": ["EdDSA"]
+                    }
+                }
+            }))
+            .unwrap(),
+            other: Default::default(),
+        }
+    }
 
-//                 // // Create presentation submission using the presentation definition and the verifiable credential.
-//                 // let presentation_submission = create_presentation_submission(
-//                 //     "temporary_string".to_string(),
-//                 //     &PRESENTATION_DEFINITION,
-//                 //     &[serde_json::to_value(&verifiable_credential).unwrap()],
-//                 // )
-//                 // .unwrap();
+    pub async fn authorization_request(
+        response_type: &str,
+        did_method: &str,
+        siopv2_client_metadata: ClientMetadataResource<siopv2::authorization_request::ClientMetadataParameters>,
+        oid4vp_client_metadata: ClientMetadataResource<oid4vp::authorization_request::ClientMetadataParameters>,
+    ) -> GenericAuthorizationRequest {
+        match response_type {
+            "id_token" => GenericAuthorizationRequest::SIOPv2(Box::new(
+                SIOPv2AuthorizationRequest::builder()
+                    .client_id(verifier_did(did_method).await)
+                    .scope(Scope::openid())
+                    .redirect_uri(REDIRECT_URI.clone())
+                    .response_mode("direct_post".to_string())
+                    .client_metadata(siopv2_client_metadata)
+                    .nonce("nonce".to_string())
+                    .state("state".to_string())
+                    .build()
+                    .unwrap(),
+            )),
+            "vp_token" => GenericAuthorizationRequest::OID4VP(Box::new(
+                OID4VPAuthorizationRequest::builder()
+                    .dcql_query(MOCK_DCQL_QUERY.clone()) // Use DCQL instead of presentation_definition
+                    .client_id(ClientId::parse(&verifier_did(did_method).await).unwrap())
+                    .scope(Scope::openid())
+                    .redirect_uri(REDIRECT_URI.clone())
+                    .response_mode("direct_post".to_string())
+                    .client_metadata(oid4vp_client_metadata)
+                    .nonce("nonce".to_string())
+                    .state("state".to_string())
+                    .build()
+                    .unwrap(),
+            )),
+            _ => unimplemented!(),
+        }
+    }
 
-//                 // Create a verifiable presentation using the JWT.
-//                 let verifiable_presentation =
-//                     Presentation::builder(subject_did.parse().unwrap(), identity_core::common::Object::new())
-//                         .credential(Jwt::from(
-//                             verifiable_credential
-//                                 .sign(&provider_manager.subject, Algorithm::EdDSA)
-//                                 .await
-//                                 .unwrap(),
-//                         ))
-//                         .build()
-//                         .unwrap();
+    fn create_simple_vp_token() -> VpToken {
+        // Simple VpToken that matches our DCQL query
+        let mock_jwt = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSJ9.eyJpc3MiOiJkaWQ6a2V5OnRlc3QiLCJzdWIiOiJkaWQ6a2V5OnRlc3QiLCJ2YyI6eyJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSJdLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiUGVyc29uYWxJbmZvcm1hdGlvbiJdLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDprZXk6dGVzdCIsImdpdmVuTmFtZSI6IkZlcnJpcyIsImZhbWlseU5hbWUiOiJDcmFibWFuIiwiZW1haWwiOiJmZXJyaXMuY3JhYm1hbkBjcmFibWFpbC5jb20iLCJiaXJ0aGRhdGUiOiIxOTg1LTA1LTIxIn19fQ.mock_signature".to_string();
 
-//                 GenericAuthorizationResponse::OID4VP(
-//                     provider_manager
-//                         .generate_response(oid4vp_authorization_request, vp_token)
-//                         .await
-//                         .unwrap(),
-//                 )
-//             }
-//         }
-//     }
+        VpTokenBuilder::new()
+            .add_presentation(
+                CredentialId::try_new("CredentialQuery").unwrap(),
+                PresentationFormat::JwtVcJson(mock_jwt),
+            )
+            .build()
+            .unwrap()
+    }
 
-//     pub async fn verifier_did(did_method: &str) -> String {
-//         VERIFIER.identifier(did_method, Algorithm::EdDSA).await.unwrap()
-//     }
+    pub fn form_url_encoded_authorization_request(did_method: &str) -> String {
+        match did_method {
+            "did:key" => FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_KEY.to_string(),
+            "did:jwk" => FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_JWK.to_string(),
+            _ => unimplemented!("Unknown DID method: {}", did_method),
+        }
+    }
 
-//     pub fn siopv2_client_metadata(
-//         did_method: &str,
-//     ) -> ClientMetadataResource<siopv2::authorization_request::ClientMetadataParameters> {
-//         ClientMetadataResource::ClientMetadata {
-//             client_name: None,
-//             logo_uri: None,
-//             extension: siopv2::authorization_request::ClientMetadataParameters {
-//                 subject_syntax_types_supported: vec![SubjectSyntaxType::from_str(did_method).unwrap()],
-//                 id_token_signed_response_alg: None,
-//             },
-//             other: Default::default(),
-//         }
-//     }
+    pub fn signed_authorization_request_object(did_method: &str) -> String {
+        match did_method {
+            "did:key" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_KEY.to_string(),
+            "did:jwk" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK.to_string(),
+            _ => unimplemented!("Unknown DID method: {}", did_method),
+        }
+    }
 
-//     pub fn oid4vp_client_metadata() -> ClientMetadataResource<oid4vp::authorization_request::ClientMetadataParameters> {
-//         ClientMetadataResource::ClientMetadata {
-//             client_name: None,
-//             logo_uri: None,
-//             // TODO: fix this once `vp_formats` is public.
-//             extension: serde_json::from_value(json!({
-//                 "vp_formats": {
-//                     "jwt_vc_json": {
-//                         "alg": ["EdDSA"]
-//                     }
-//                 }
-//             }))
-//             .unwrap(),
-//             other: Default::default(),
-//         }
-//     }
+    lazy_static! {
+        pub static ref VERIFIER: Subject = Subject::default();
+        pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
+        pub static ref MOCK_DCQL_QUERY: DcqlQuery = DcqlQuery {
+            credentials: vec![CredentialQuery {
+                id: CredentialId::try_new("CredentialQuery").unwrap(),
+                format: Format::JwtVcJson,
+                multiple: None,
+                meta: Some(MetaTypes::W3CFormatMeta {
+                    type_values: vec![
+                        vec!["VerifiableCredential".to_string()],
+                        vec!["PersonalInformation".to_string()]
+                    ]
+                }),
+                trusted_authorities: None,
+                require_cryptographic_holder_binding: None,
+                claims: vec![
+                    ClaimQuery {
+                        id: None,
+                        path: ClaimPath::try_new(vec![
+                            ClaimPathElement::String("credentialSubject".to_string()),
+                            ClaimPathElement::String("givenName".to_string())
+                        ])
+                        .unwrap(),
+                        values: None,
+                    },
+                    ClaimQuery {
+                        id: None,
+                        path: ClaimPath::try_new(vec![
+                            ClaimPathElement::String("credentialSubject".to_string()),
+                            ClaimPathElement::String("familyName".to_string())
+                        ])
+                        .unwrap(),
+                        values: None,
+                    },
+                    ClaimQuery {
+                        id: None,
+                        path: ClaimPath::try_new(vec![
+                            ClaimPathElement::String("credentialSubject".to_string()),
+                            ClaimPathElement::String("email".to_string())
+                        ])
+                        .unwrap(),
+                        values: None,
+                    },
+                    ClaimQuery {
+                        id: None,
+                        path: ClaimPath::try_new(vec![
+                            ClaimPathElement::String("credentialSubject".to_string()),
+                            ClaimPathElement::String("birthdate".to_string())
+                        ])
+                        .unwrap(),
+                        values: None,
+                    },
+                ],
+                claim_sets: None,
+            }],
+            credential_sets: None,
+        };
+    }
 
-//     pub async fn authorization_request(
-//         response_type: &str,
-//         did_method: &str,
-//         siopv2_client_metadata: ClientMetadataResource<siopv2::authorization_request::ClientMetadataParameters>,
-//         oid4vp_client_metadata: ClientMetadataResource<oid4vp::authorization_request::ClientMetadataParameters>,
-//     ) -> GenericAuthorizationRequest {
-//         match response_type {
-//             "id_token" => GenericAuthorizationRequest::SIOPv2(Box::new(
-//                 SIOPv2AuthorizationRequest::builder()
-//                     .client_id(verifier_did(did_method).await)
-//                     .scope(Scope::openid())
-//                     .redirect_uri(REDIRECT_URI.clone())
-//                     .response_mode("direct_post".to_string())
-//                     .client_metadata(siopv2_client_metadata)
-//                     .nonce("nonce".to_string())
-//                     .state("state".to_string())
-//                     .build()
-//                     .unwrap(),
-//             )),
-//             "vp_token" => GenericAuthorizationRequest::OID4VP(Box::new(
-//                 OID4VPAuthorizationRequest::builder()
-//                     .client_id(ClientId::new(
-//                         ClientIdPrefix::DecentralizedIdentifier,
-//                         verifier_did.clone(),
-//                     ))
-//                     .scope(Scope::openid())
-//                     .redirect_uri(REDIRECT_URI.clone())
-//                     .response_mode("direct_post".to_string())
-//                     .presentation_definition(PRESENTATION_DEFINITION.clone())
-//                     .client_metadata(oid4vp_client_metadata)
-//                     .nonce("nonce".to_string())
-//                     .state("state".to_string())
-//                     .build()
-//                     .unwrap(),
-//             )),
-//             _ => unimplemented!(),
-//         }
-//     }
-
-//     pub fn form_url_encoded_authorization_request(did_method: &str) -> String {
-//         match did_method {
-//             "did:key" => FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_KEY.to_string(),
-//             "did:jwk" => FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_JWK.to_string(),
-//             _ => unimplemented!("Unknown DID method: {}", did_method),
-//         }
-//     }
-
-//     pub fn signed_authorization_request_object(did_method: &str) -> String {
-//         match did_method {
-//             "did:key" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_KEY.to_string(),
-//             "did:jwk" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK.to_string(),
-//             _ => unimplemented!("Unknown DID method: {}", did_method),
-//         }
-//     }
-
-//     lazy_static! {
-//         pub static ref VERIFIER: Subject = Subject::default();
-//         pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
-//         // pub static ref PRESENTATION_DEFINITION: PresentationDefinition = serde_json::from_value(json!(
-//         //     {
-//         //         "id":"Verifiable Presentation request for sign-on",
-//         //             "input_descriptors":[
-//         //             {
-//         //                 "id":"Request for Verifiable Credential",
-//         //                 "constraints":{
-//         //                     "fields":[
-//         //                         {
-//         //                             "path":[
-//         //                                 "$.vc.type"
-//         //                             ],
-//         //                             "filter":{
-//         //                                 "type":"array",
-//         //                                 "contains":{
-//         //                                     "const":"TestCredential"
-//         //                                 }
-//         //                             }
-//         //                         }
-//         //                     ]
-//         //                 }
-//         //             }
-//         //         ]
-//         //     }
-//         // ))
-//         .unwrap();
-//     }
-//     const FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_KEY: &str = "\
-//         openid://?\
-//             client_id=did%3Akey%3Az6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt&\
-//             request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2Fstate";
-//     const FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_JWK: &str = "\
-//         openid://?\
-//             client_id=did%3Ajwk%3AeyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ&\
-//             request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2Fstate";
-//     const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_KEY: &str = "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCN6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifQ.eyJjbGllbnRfaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInJlZGlyZWN0X3VyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL3JlZGlyZWN0Iiwic3RhdGUiOiJzdGF0ZSIsInJlc3BvbnNlX3R5cGUiOiJpZF90b2tlbiIsInNjb3BlIjoib3BlbmlkIiwicmVzcG9uc2VfbW9kZSI6ImRpcmVjdF9wb3N0Iiwibm9uY2UiOiJub25jZSIsImNsaWVudF9tZXRhZGF0YSI6eyJjbGllbnRfbmFtZSI6IlVuaUNvcmUiLCJsb2dvX3VyaSI6Imh0dHBzOi8vd3d3LmltcGllcmNlLmNvbS9leHRlcm5hbC9pbXBpZXJjZS1pY29uLnBuZyIsInN1YmplY3Rfc3ludGF4X3R5cGVzX3N1cHBvcnRlZCI6WyJkaWQ6andrIiwiZGlkOmtleSJdLCJpZF90b2tlbl9zaWduZWRfcmVzcG9uc2VfYWxnIjoiRWREU0EiLCJpZF90b2tlbl9zaWduaW5nX2FsZ192YWx1ZXNfc3VwcG9ydGVkIjpbIkVkRFNBIl19fQ.rvCCzVqiu8ewetOqOy-xrN9giIkUqwhHtZEoEiGsv33tMRQqhu1o5M6IvGMQf95Ma9gD1LfPta5CX8XAWR61DA";
-//     const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK: &str = "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2NUaFZiR2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVVYQjJNRWxHVUVWaVpFMURTVXhPWDFVaWZRIzAifQ.eyJjbGllbnRfaWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2NUaFZiR2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVVYQjJNRWxHVUVWaVpFMURTVXhPWDFVaWZRIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzcG9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGFkYXRhIjp7ImNsaWVudF9uYW1lIjoiVW5pQ29yZSIsImxvZ29fdXJpIjoiaHR0cHM6Ly93d3cuaW1waWVyY2UuY29tL2V4dGVybmFsL2ltcGllcmNlLWljb24ucG5nIiwic3ViamVjdF9zeW50YXhfdHlwZXNfc3VwcG9ydGVkIjpbImRpZDpqd2siLCJkaWQ6a2V5Il0sImlkX3Rva2VuX3NpZ25lZF9yZXNwb25zZV9hbGciOiJFZERTQSIsImlkX3Rva2VuX3NpZ25pbmdfYWxnX3ZhbHVlc19zdXBwb3J0ZWQiOlsiRWREU0EiXX19.4VuBN6yl0ZxZmxxfAeVxH1EUtvSgV6-a55Ksx9d23ZioIlFeg94NLpJW_qkBDxDx66nuy3TcbCTuImHtEedfBQ";
-// }
+    const FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_KEY: &str = "\
+        openid://?\
+            client_id=did%3Akey%3Az6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt&\
+            request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2Fstate";
+    const FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_JWK: &str = "\
+        openid://?\
+            client_id=did%3Ajwk%3AeyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ&\
+            request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2Fstate";
+    const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_KEY: &str = "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCN6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifQ.eyJjbGllbnRfaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInJlZGlyZWN0X3VyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL3JlZGlyZWN0Iiwic3RhdGUiOiJzdGF0ZSIsInJlc3BvbnNlX3R5cGUiOiJpZF90b2tlbiIsInNjb3BlIjoib3BlbmlkIiwicmVzcG9uc2VfbW9kZSI6ImRpcmVjdF9wb3N0Iiwibm9uY2UiOiJub25jZSIsImNsaWVudF9tZXRhZGF0YSI6eyJjbGllbnRfbmFtZSI6IlVuaUNvcmUiLCJsb2dvX3VyaSI6Imh0dHBzOi8vd3d3LmltcGllcmNlLmNvbS9leHRlcm5hbC9pbXBpZXJjZS1pY29uLnBuZyIsInN1YmplY3Rfc3ludGF4X3R5cGVzX3N1cHBvcnRlZCI6WyJkaWQ6andrIiwiZGlkOmtleSJdLCJpZF90b2tlbl9zaWduZWRfcmVzcG9uc2VfYWxnIjoiRWREU0EiLCJpZF90b2tlbl9zaWduaW5nX2FsZ192YWx1ZXNfc3VwcG9ydGVkIjpbIkVkRFNBIl19fQ.rvCCzVqiu8ewetOqOy-xrN9giIkUqwhHtZEoEiGsv33tMRQqhu1o5M6IvGMQf95Ma9gD1LfPta5CX8XAWR61DA";
+    const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK: &str = "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2NUaFZiR2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVVYQjJNRWxHVUVWaVpFMURTVXhPWDFVaWZRIzAifQ.eyJjbGllbnRfaWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2NUaFZiR2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVVYQjJNRWxHVUVWaVpFMURTVXhPWDFVaWZRIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzcG9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGFkYXRhIjp7ImNsaWVudF9uYW1lIjoiVW5pQ29yZSIsImxvZ29fdXJpIjoiaHR0cHM6Ly93d3cuaW1waWVyY2UuY29tL2V4dGVybmFsL2ltcGllcmNlLWljb24ucG5nIiwic3ViamVjdF9zeW50YXhfdHlwZXNfc3VwcG9ydGVkIjpbImRpZDpqd2siLCJkaWQ6a2V5Il0sImlkX3Rva2VuX3NpZ25lZF9yZXNwb25zZV9hbGciOiJFZERTQSIsImlkX3Rva2VuX3NpZ25pbmdfYWxnX3ZhbHVlc19zdXBwb3J0ZWQiOlsiRWREU0EiXX19.4VuBN6yl0ZxZmxxfAeVxH1EUtvSgV6-a55Ksx9d23ZioIlFeg94NLpJW_qkBDxDx66nuy3TcbCTuImHtEedfBQ";
+}

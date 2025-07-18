@@ -7,24 +7,21 @@ pub fn validate_vp_token_against_dcql_query(
     vp_token: &VpToken,
     dcql_query: &DcqlQuery,
 ) -> Result<(), AuthorizationRequestError> {
-    // 1. validate the DCQL query itself
-    // dcql_query
-    //     .validate()
-    //     .map_err(|e| AuthorizationRequestError::InvalidDcqlQuery(e))?;
-
-    //then create a temporary builder to use its validation logic
+    // Create a temporary builder to validate the VP token against the DCQL query
     let builder = VpTokenBuilder::builder_dcql_query(dcql_query.clone());
 
-    // add presentations from the received VP token
+    // Add presentations from the received VP token
     let mut temp_builder = builder;
     for (credential_id, presentations) in vp_token.presentations() {
         for presentation in presentations {
             temp_builder = temp_builder.add_presentation(credential_id.clone(), presentation.clone());
         }
     }
-    // makes use of the builders validation logic
-    temp_builder.build().unwrap();
-    // .map_err(|e| AuthorizationRequestError::VpTokenValidationFailed(e))?;
+    temp_builder.build().map_err(|_| {
+        AuthorizationRequestError::VpTokenValidationFailed(anyhow::anyhow!(
+            "VpToken validation failed against DCQL query"
+        ))
+    })?;
 
     Ok(())
 }
