@@ -20,6 +20,7 @@ pub enum OfferEvent {
     CredentialsAdded {
         offer_id: String,
         credential_ids: Vec<String>,
+        credential_offer: CredentialOffer,
     },
     FormUrlEncodedCredentialOfferCreated {
         offer_id: String,

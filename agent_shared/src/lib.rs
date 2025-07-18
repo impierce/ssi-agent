@@ -20,7 +20,7 @@ pub fn generate_random_string() -> String {
 
     // Convert the random bytes to a hexadecimal string
     let random_string: String = random_bytes.iter().fold(String::new(), |mut acc, byte| {
-        acc.push_str(&format!("{:02x}", byte));
+        acc.push_str(&format!("{byte:02x}"));
         acc
     });
 

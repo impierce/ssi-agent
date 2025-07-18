@@ -7,7 +7,7 @@ use agent_api_rest::{app, ApplicationState};
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_holder::services::HolderServices;
 use agent_identity::services::IdentityServices;
-use agent_issuance::{services::IssuanceServices, startup_commands::startup_commands};
+use agent_issuance::services::IssuanceServices;
 use agent_secret_manager::{service::Service as _, subject::Subject};
 use agent_shared::config::config;
 use agent_store::{in_memory, postgres, EventPublisher};
@@ -58,7 +58,7 @@ async fn main() -> io::Result<()> {
     info!("Public url: {}", config().public_url);
 
     agent_identity::state::initialize(&identity_state).await.unwrap();
-    agent_issuance::state::initialize(&issuance_state, startup_commands(config().public_url.clone())).await;
+    agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
     let app = app(ApplicationState {
         identity_state: Some(identity_state),

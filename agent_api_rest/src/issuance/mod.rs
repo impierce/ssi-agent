@@ -1,3 +1,4 @@
+pub mod credential_configurations;
 pub mod credential_issuer;
 pub mod credentials;
 pub mod offers;
@@ -5,21 +6,19 @@ pub mod offers;
 pub mod error;
 
 use crate::issuance::{
+    credential_configurations::credential_configurations,
     credential_issuer::{
-        credential::credential, notification::notification, token::token,
+        credential::credential, credential_offer::credential_offer_uri, notification::notification, token::token,
         well_known::oauth_authorization_server::oauth_authorization_server,
         well_known::openid_credential_issuer::openid_credential_issuer,
     },
-    credentials::credentials,
-    offers::{offers, send::send},
+    credentials::{all_credentials, credentials},
+    offers::{all_offers, offer, offers, send::send},
 };
 use crate::API_VERSION;
 use agent_issuance::state::IssuanceState;
 use axum::routing::get;
 use axum::{routing::post, Router};
-use credential_issuer::credential_offer::credential_offer_uri;
-use credentials::all_credentials;
-use offers::{all_offers, offer};
 
 pub fn router(issuance_state: IssuanceState) -> Router {
     Router::new()
@@ -28,6 +27,7 @@ pub fn router(issuance_state: IssuanceState) -> Router {
             Router::new()
                 .route("/credentials", post(credentials).get(all_credentials))
                 .route("/credentials/{credential_id}", get(credentials::credential))
+                .route("/credential-configurations", post(credential_configurations))
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send", post(send)),
