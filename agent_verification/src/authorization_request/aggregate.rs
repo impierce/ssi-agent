@@ -139,7 +139,7 @@ impl Aggregate for AuthorizationRequest {
             }
             VerifyAuthorizationResponse {
                 // TODO: use this once `RelyingPartyManager` uses the official SIOPv2 validation logic.
-                authorization_request, //should contain the og-dcql
+                authorization_request,
                 authorization_response,
             } => {
                 let relying_party = &services.relying_party;
