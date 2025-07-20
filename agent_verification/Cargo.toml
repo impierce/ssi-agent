@@ -34,6 +34,9 @@ tokio.workspace = true
 [dev-dependencies]
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_verification = { path = ".", features = ["test_utils"] }
+agent_secret_manager = { path = "../agent_secret_manager", features = [
+    "test_utils",
+] }
 
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 identity_core.workspace = true

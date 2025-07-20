@@ -159,7 +159,6 @@ impl Aggregate for AuthorizationRequest {
                         }])
                     }
                     GenericAuthorizationResponse::OID4VP(oid4vp_authorization_response) => {
-                        // basic validation
                         let _ = relying_party
                             .validate_response(&oid4vp_authorization_response)
                             .await
@@ -176,17 +175,10 @@ impl Aggregate for AuthorizationRequest {
                             }
                         };
                         let vp_token = &oid4vp_authorization_response.extension.vp_token;
-                        // let vp_token = match &oid4vp_authorization_response.extension.oid4vp_parameters {
-                        //     Oid4vpParams::Params { vp_token } => vp_token,
-                        //     Oid4vpParams::Jwt { .. } => {
-                        //         return Err(AuthorizationRequestError::UnsupportedAuthorizationResponseParameterError)
-                        //     }
 
                         validate_vp_token_against_dcql_query(&vp_token, &dcql_query)?;
 
-                        let vp_token_string = serde_json::to_string(&vp_token)
-                            // .map_err(|_| AuthorizationRequestError::SerializationError)?;
-                            .unwrap();
+                        let vp_token_string = serde_json::to_string(&vp_token).unwrap();
 
                         Ok(vec![OID4VPAuthorizationResponseVerified {
                             vp_token: vp_token_string,
@@ -251,6 +243,7 @@ pub mod tests {
     use rstest::rstest;
     use serde_json::json;
     use std::str::FromStr;
+    use std::sync::Arc;
 
     use super::*;
 
@@ -464,7 +457,7 @@ pub mod tests {
             )),
             "vp_token" => GenericAuthorizationRequest::OID4VP(Box::new(
                 OID4VPAuthorizationRequest::builder()
-                    .dcql_query(MOCK_DCQL_QUERY.clone()) // Use DCQL instead of presentation_definition
+                    .dcql_query(MOCK_DCQL_QUERY.clone())
                     .client_id(ClientId::parse(&verifier_did(did_method).await).unwrap())
                     .scope(Scope::openid())
                     .redirect_uri(REDIRECT_URI.clone())
@@ -485,7 +478,7 @@ pub mod tests {
 
         VpTokenBuilder::new()
             .add_presentation(
-                CredentialId::try_new("CredentialQuery").unwrap(),
+                CredentialId::try_new("CredentialQuery".to_string()).unwrap(),
                 PresentationFormat::JwtVcJson(mock_jwt),
             )
             .build()
@@ -513,7 +506,7 @@ pub mod tests {
         pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
         pub static ref MOCK_DCQL_QUERY: DcqlQuery = DcqlQuery {
             credentials: vec![CredentialQuery {
-                id: CredentialId::try_new("CredentialQuery").unwrap(),
+                id: CredentialId::try_new("CredentialQuery".to_string()).unwrap(),
                 format: Format::JwtVcJson,
                 multiple: None,
                 meta: Some(MetaTypes::W3CFormatMeta {

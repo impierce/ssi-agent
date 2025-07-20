@@ -60,31 +60,10 @@ pub(crate) async fn authorization_requests(
 ) -> Result<Response, ApiError> {
     let state = state.unwrap_or(generate_random_string());
 
-    // let presentation_definition = presentation_definition.map(|presentation_definition| {
-    //     match presentation_definition {
-    //         // TODO: This needs to be properly fixed instead of reading the presentation definitions from the file system
-    //         // everytime a request is made. `PresentationDefinition`'s should be implemented as a proper `Aggregate`. This
-    //         // current suboptimal solution requires the `./tmp:/app/agent_api_rest` volume to be mounted in the `docker-compose.yml`.
-    //         PresentationDefinitionResource::PresentationDefinitionId(presentation_definition_id) => {
-    //             let project_root_dir = env!("CARGO_MANIFEST_DIR");
-
-    //             serde_json::from_reader(
-    //                 std::fs::File::open(format!(
-    //                     "{project_root_dir}/../agent_verification/presentation_definitions/{presentation_definition_id}.json"
-    //                 ))
-    //                 .unwrap(),
-    //             )
-    //             .unwrap()
-    //         }
-    //         PresentationDefinitionResource::PresentationDefinition(presentation_definition) => presentation_definition,
-    //     }
-    // });
-
     let command = AuthorizationRequestCommand::CreateAuthorizationRequest {
         nonce: nonce.to_string(),
         state: state.clone(),
         dcql_query: dcql_query.clone(),
-        // ch:
     };
 
     // Create the authorization request.
@@ -119,97 +98,107 @@ pub(crate) async fn authorization_requests(
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
-// #[cfg(test)]
-// pub mod tests {
-// use super::*;
-// use crate::verification::router;
-// use agent_secret_manager::service::Service;
-// use agent_store::in_memory;
-// use axum::{
-//     body::Body,
-//     http::{self, Request},
-//     Router,
-// };
-// use rstest::rstest;
-// use tower::Service as _;
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use crate::verification::router;
+    use axum::{
+        body::Body,
+        http::{self, Request},
+        Router,
+    };
+    use lazy_static::lazy_static;
+    use serde_json::json;
+    use tower::Service as _;
 
-//TODO: fix test
-// pub async fn authorization_requests(app: &mut Router, by_value: bool) -> String {
-//     let request_body = AuthorizationRequestsEndpointRequest {
-//         nonce: "nonce".to_string(),
-//         state: None,
-//         dcql_query: Some(if by_value {
-//             PresentationDefinitionResource::PresentationDefinition(
-//                 serde_json::from_str(include_str!(
-//                     "../../../agent_verification/presentation_definitions/presentation_definition.json"
-//                 ))
-//                 .unwrap(),
-//             )
-//         } else {
-//             PresentationDefinitionResource::PresentationDefinitionId("presentation_definition".to_string())
-//         }),
-//     };
+    lazy_static! {
+        pub static ref DCQL_QUERY: DcqlQuery = serde_json::from_value(json!({
+            "credentials": [
+                {
+                    "id": "my_credential",
+                    "format": "jwt_vc_json",
+                    "meta": {
+                        "vct_values": [ "https://www.w3.org/2018/credentials/examples/v1#PersonalInformation" ]
+                    },
+                    "claims": [
+                        {"path": ["credentialSubject", "familyName"]},
+                        {"path": ["credentialSubject", "givenName"]},
+                        {"path": ["credentialSubject", "email"]},
+                        {"path": ["credentialSubject", "birthdate"]},
+                    ]
+                }
+            ]
+        }))
+        .unwrap();
+    }
 
-//     let response = app
-//         .call(
-//             Request::builder()
-//                 .method(http::Method::POST)
-//                 .uri(format!("{API_VERSION}/authorization_requests"))
-//                 .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-//                 .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
-//                 .unwrap(),
-//         )
-//         .await
-//         .unwrap();
+    pub async fn authorization_requests(app: &mut Router) -> String {
+        let request_body = AuthorizationRequestsEndpointRequest {
+            nonce: "nonce".to_string(),
+            state: None,
+            dcql_query: Some(DCQL_QUERY.clone()),
+        };
 
-//     assert_eq!(response.status(), StatusCode::CREATED);
-//     assert_eq!(
-//         response.headers().get("Content-Type").unwrap(),
-//         "application/x-www-form-urlencoded"
-//     );
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri(format!("{API_VERSION}/authorization_requests"))
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
 
-//     let get_request_endpoint = response
-//         .headers()
-//         .get(http::header::LOCATION)
-//         .unwrap()
-//         .to_str()
-//         .unwrap()
-//         .to_string();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        assert_eq!(
+            response.headers().get("Content-Type").unwrap(),
+            "application/x-www-form-urlencoded"
+        );
 
-//     let state = get_request_endpoint.split('/').next_back().unwrap().to_string();
+        let get_request_endpoint = response
+            .headers()
+            .get(http::header::LOCATION)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
 
-//     let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-//     let form_url_encoded_authorization_request: String = String::from_utf8(body.to_vec()).unwrap();
-//     assert_eq!(form_url_encoded_authorization_request, format!("openid://?client_id=did%3Akey%3Az6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt&request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2F{state}"));
+        let state = get_request_endpoint.split('/').next_back().unwrap().to_string();
 
-//     let response = app
-//         .call(
-//             Request::builder()
-//                 .method(http::Method::GET)
-//                 .uri(get_request_endpoint)
-//                 .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-//                 .body(Body::empty())
-//                 .unwrap(),
-//         )
-//         .await
-//         .unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let form_url_encoded_authorization_request: String = String::from_utf8(body.to_vec()).unwrap();
+        assert_eq!(form_url_encoded_authorization_request, format!("openid://?client_id=did%3Akey%3Az6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt&request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2F{state}"));
 
-//     assert_eq!(response.status(), StatusCode::OK);
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri(get_request_endpoint)
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
 
-//     form_url_encoded_authorization_request
-// }
+        assert_eq!(response.status(), StatusCode::OK);
 
-//todo: fix test chaya
-// #[rstest]
-// #[case::with_presentation_definition_by_value(true)]
-// #[case::with_presentation_definition_id(false)]
-// #[tokio::test]
-// #[tracing_test::traced_test]
-// async fn test_authorization_requests_endpoint(#[case] by_value: bool) {
-//     let verification_state = in_memory::verification_state(Service::default(), Default::default()).await;
+        form_url_encoded_authorization_request
+    }
 
-//     let mut app = router(verification_state);
+    #[tokio::test]
+    async fn test_authorization_requests_endpoint() {
+        let verification_state = agent_store::in_memory::verification_state(
+            agent_secret_manager::service::Service::default(),
+            Default::default(),
+        )
+        .await;
 
-//     authorization_requests(&mut app, by_value).await;
-// }
-// }
+        let mut app = router(verification_state);
+
+        let result = authorization_requests(&mut app).await;
+        assert!(!result.is_empty());
+    }
+}

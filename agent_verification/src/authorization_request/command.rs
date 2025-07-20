@@ -10,7 +10,6 @@ pub enum AuthorizationRequestCommand {
         state: String,
         nonce: String,
         dcql_query: Option<DcqlQuery>,
-        // presentation_definition: Option<PresentationDefinition>,
     },
     SignAuthorizationRequestObject,
     VerifyAuthorizationResponse {
