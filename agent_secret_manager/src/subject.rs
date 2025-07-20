@@ -62,7 +62,6 @@ impl Subject {
 
 /// This module contains implementations for `Subject` for testing purposes.
 /// It is only available when the `test_utils` feature is enabled.
-
 #[cfg(feature = "test_utils")]
 mod default_subject {
     use super::*;

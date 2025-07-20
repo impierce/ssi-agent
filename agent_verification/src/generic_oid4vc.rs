@@ -49,10 +49,7 @@ impl GenericAuthorizationResponse {
                 authorization_response.extension.id_token.clone()
             }
             GenericAuthorizationResponse::OID4VP(authorization_response) => {
-                match &authorization_response.extension.vp_token {
-                    // oid4vp::Oid4vpParams::Params { vp_token, .. } => vp_token.clone(),
-                    _ => unimplemented!(),
-                }
+                format!("{:?}", authorization_response.extension.vp_token)
             }
         }
     }

@@ -176,7 +176,7 @@ impl Aggregate for AuthorizationRequest {
                         };
                         let vp_token = &oid4vp_authorization_response.extension.vp_token;
 
-                        validate_vp_token_against_dcql_query(&vp_token, &dcql_query)?;
+                        validate_vp_token_against_dcql_query(vp_token, dcql_query)?;
 
                         let vp_token_string = serde_json::to_string(&vp_token).unwrap();
 
@@ -395,7 +395,6 @@ pub mod tests {
                 GenericAuthorizationResponse::OID4VP(
                     provider_manager
                         .generate_response(oid4vp_authorization_request, vp_token)
-
                         .await
                         .unwrap(),
                 )
