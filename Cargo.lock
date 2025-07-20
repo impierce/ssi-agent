@@ -187,6 +187,7 @@ dependencies = [
  "serial_test",
  "strum 0.26.3",
  "strum_macros 0.26.4",
+ "temp-env",
  "thiserror",
  "tokio",
  "tower 0.4.13",
@@ -256,6 +257,7 @@ dependencies = [
  "agent_issuance",
  "agent_secret_manager",
  "agent_shared",
+ "anyhow",
  "async-std",
  "async-trait",
  "chrono",
@@ -2163,6 +2165,7 @@ dependencies = [
 name = "dif-presentation-exchange"
 version = "0.1.0"
 source = "git+https://git@github.com/impierce/openid4vc.git?rev=d7ccac4#d7ccac41e1c67c6df9827e64489fcc828bacf55e"
+
 dependencies = [
  "getset",
  "jsonpath_lib",

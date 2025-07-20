@@ -261,7 +261,7 @@ impl Aggregate for Service {
 pub mod service_tests {
     use super::test_utils::*;
     use super::*;
-    use crate::document::aggregate::test_utils::verification_method;
+    use crate::document::aggregate::test_utils::both_verification_methods;
     use agent_shared::config::set_config;
     use cqrs_es::test::TestFramework;
     use identity_document::service::Service as DocumentService;
@@ -274,7 +274,7 @@ pub mod service_tests {
     #[serial_test::serial]
     async fn test_create_domain_linkage_service(
         domain_linkage_service_id: String,
-        verification_method: VerificationMethod,
+        both_verification_methods: Vec<VerificationMethod>,
         domain_linkage_service: DocumentService,
         domain_linkage_resource: ServiceResource,
     ) {
@@ -284,7 +284,7 @@ pub mod service_tests {
             .given_no_previous_events()
             .when(ServiceCommand::CreateDomainLinkageService {
                 service_id: domain_linkage_service_id.clone(),
-                verification_methods: vec![verification_method],
+                verification_methods: both_verification_methods,
             })
             .then_expect_events(vec![ServiceEvent::DomainLinkageServiceCreated {
                 service_id: domain_linkage_service_id,

@@ -86,10 +86,22 @@ impl IntoApiErrorExt for OfferError {
     }
 }
 
-// TODO: Implement error mapping for ServerConfigError
 impl IntoApiErrorExt for ServerConfigError {
     fn into_api_error(self) -> ApiError {
-        match self {}
+        use ServerConfigError::*;
+        match self {
+            // UniCore API Problem Details
+            UpdateProvisionedCredentialConfigurationError => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Update Provisioned Credential Configuration Error")
+                .type_url(type_url("issuance#update-provisioned-credential-configuration-error"))
+                .source(self)
+                .finish(),
+            RemoveProvisionedCredentialConfigurationError => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Remove Provisioned Credential Configuration Error")
+                .type_url(type_url("issuance#remove-provisioned-credential-configuration-error"))
+                .source(self)
+                .finish(),
+        }
     }
 }
 
@@ -148,6 +160,7 @@ impl IntoPublicError for OfferError {
             MissingCredentialOfferError => {
                 PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::InvalidCredentialRequest))
             }
+            // TODO: check for missing error responses
             _ => PublicError::InternalServerError,
         }
     }
@@ -155,7 +168,11 @@ impl IntoPublicError for OfferError {
 
 impl IntoPublicError for ServerConfigError {
     fn into_public_error(self) -> PublicError {
-        match self {}
+        use ServerConfigError::*;
+        match self {
+            UpdateProvisionedCredentialConfigurationError => PublicError::InternalServerError,
+            RemoveProvisionedCredentialConfigurationError => PublicError::InternalServerError,
+        }
     }
 }
 
@@ -297,6 +314,36 @@ pub mod tests {
                 "title": "Missing Credential Offer",
                 "status": 400,
                 "detail": "Credential Offer does not exist"
+            }),
+        );
+
+        assert_eq!(
+            into_json_value(
+                ServerConfigError::UpdateProvisionedCredentialConfigurationError
+                    .into_api_error()
+                    .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/issuance#update-provisioned-credential-configuration-error"),
+                "title": "Update Provisioned Credential Configuration Error",
+                "status": 400,
+                "detail": "Cannot update provisioned credential configuration during runtime"
+            }),
+        );
+
+        assert_eq!(
+            into_json_value(
+                ServerConfigError::RemoveProvisionedCredentialConfigurationError
+                    .into_api_error()
+                    .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/issuance#remove-provisioned-credential-configuration-error"),
+                "title": "Remove Provisioned Credential Configuration Error",
+                "status": 400,
+                "detail": "Cannot remove provisioned credential configuration during runtime"
             }),
         );
     }
