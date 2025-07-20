@@ -4,7 +4,7 @@ pub trait UrlAppendHelpers {
 
 fn create_trailing_slash_url(url: &url::Url) -> url::Url {
     if !url.path().ends_with('/') {
-        let res = url::Url::parse(&format!("{}/", url)).unwrap();
+        let res = url::Url::parse(&format!("{url}/")).unwrap();
         tracing::info!("res: {:?}", res);
         res
     } else {
@@ -25,7 +25,7 @@ impl UrlAppendHelpers for url::Url {
         match url {
             Ok(url) => url,
             Err(err) => {
-                let err_str = format!("Segment can't be added: {:?}\n{:?}", path, err);
+                let err_str = format!("Segment can't be added: {path:?}\n{err:?}");
                 tracing::error!("{:?}", &err_str);
                 panic!("{:?}", &err_str);
             }

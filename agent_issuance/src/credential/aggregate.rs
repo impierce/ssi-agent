@@ -628,16 +628,16 @@ pub mod test_utils {
                         .into(),
                 }),
                 cryptographic_binding_methods_supported: vec!["did:jwk".to_string(), "did:key".to_string(),],
-                credential_signing_alg_values_supported: vec!["EdDSA".to_string()],
+                credential_signing_alg_values_supported: vec!["ES256".to_string(), "EdDSA".to_string()],
                 proof_types_supported: HashMap::from_iter(vec![(
                     ProofType::Jwt,
                     KeyProofMetadata {
-                        proof_signing_alg_values_supported: vec![Algorithm::EdDSA],
+                        proof_signing_alg_values_supported: vec![Algorithm::ES256, Algorithm::EdDSA],
                     },
                 )]),
                 display: vec![json!({
-                    "locale": "en",
                     "name": "Verifiable Credential",
+                    "locale": "en",
                     "logo": {
                         "uri": "https://www.impierce.com/external/impierce-logo.png",
                         "alt_text": "Impierce Logo",

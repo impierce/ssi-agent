@@ -197,7 +197,7 @@ fn generate_field_loader(
         .transform_with
         .as_ref()
         .map(|s| Ident::new(s, field_name.span()));
-    let fn_field_name = Ident::new(&format!("fn_{}", field_name), field_name.span());
+    let fn_field_name = Ident::new(&format!("fn_{field_name}"), field_name.span());
     let value_expr = if let Some(transform_fn) = &transform_with_fn {
         quote! { let value: #field_type = #transform_fn(config_value); }
     } else {

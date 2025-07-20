@@ -1,10 +1,9 @@
 {
 	"info": {
-		"_postman_id": "d50320fe-7e72-4e02-a358-20a4f9303d9e",
+		"_postman_id": "3e8dd442-b9e3-4b43-a48e-124cf32fe34f",
 		"name": "ssi-agent",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "30650915"
-	},
+		"_exporter_id": "41786572"	},
 	"item": [
 		{
 			"name": "Issuance",
@@ -235,10 +234,10 @@
 									"const credential_offer = responseBody;",
 									"const decodedString = decodeURIComponent(credential_offer);",
 									"const [, secondItem] = decodedString.split('=', 2);",
-									"var credential_offer_uri = JSON.parse(secondItem);",
+									"var credential_offer_uri = secondItem;",
 									"",
 									"if(credential_offer_uri){",
-									" pm.collectionVariables.set(\"CREDENTIAL_OFFER_URI\", credential_offer_uri)",
+									"    pm.collectionVariables.set(\"CREDENTIAL_OFFER_URI\", credential_offer_uri)",
 									"}"
 								],
 								"type": "text/javascript",
@@ -363,6 +362,33 @@
 								"v0",
 								"offers",
 								"send"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create a new Credential Configuration",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"credential_configuration_id\": \"002\",\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\"VerifiableCredential\"]\n    },\n    \"display\": [\n        {\n        \"name\": \"Verifiable Credential\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"uri\": \"https://www.impierce.com/external/impierce-logo.png\",\n            \"alt_text\": \"Impierce Logo\"\n        }\n        }\n    ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/credential-configurations",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"credential-configurations"
 							]
 						}
 					},

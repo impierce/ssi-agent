@@ -1,6 +1,6 @@
 use crate::handlers::query_handler;
 use agent_issuance::{
-    server_config::queries::ServerConfigView,
+    server_config::views::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
 use axum::{
@@ -24,8 +24,8 @@ pub(crate) async fn oauth_authorization_server(State(state): State<IssuanceState
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{issuance::router, tests::BASE_URL};
-    use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use crate::issuance::router;
+    use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory;
     use axum::{
@@ -70,7 +70,7 @@ mod tests {
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
-        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
+        initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
 
