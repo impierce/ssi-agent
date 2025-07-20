@@ -2165,7 +2165,6 @@ dependencies = [
 name = "dif-presentation-exchange"
 version = "0.1.0"
 source = "git+https://git@github.com/impierce/openid4vc.git?rev=d7ccac4#d7ccac41e1c67c6df9827e64489fcc828bacf55e"
-
 dependencies = [
  "getset",
  "jsonpath_lib",
