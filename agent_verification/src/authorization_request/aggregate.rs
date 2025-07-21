@@ -379,8 +379,8 @@ pub mod tests {
         did_method: &str,
         authorization_request: &GenericAuthorizationRequest,
     ) -> GenericAuthorizationResponse {
-        let subject = Arc::new(Subject::default());
-        let provider_manager = ProviderManager::new(subject.clone(), vec![did_method], vec![Algorithm::EdDSA]).unwrap();
+        let provider_manager =
+            ProviderManager::new(Arc::new(Subject::default()), vec![did_method], vec![Algorithm::ES256]).unwrap();
 
         match authorization_request {
             GenericAuthorizationRequest::SIOPv2(siopv2_authorization_request) => GenericAuthorizationResponse::SIOPv2(
