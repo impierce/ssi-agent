@@ -158,7 +158,7 @@ impl Aggregate for ServerConfig {
                     credential_configurations,
                 }])
             }
-            AddCredentialConfiguration {
+            UpdateCredentialConfiguration {
                 credential_configuration,
                 provisioned,
             } => {
@@ -354,7 +354,7 @@ pub mod server_config_tests {
                 cryptographic_binding_methods_supported,
                 signing_algorithms_supported,
             }])
-            .when(ServerConfigCommand::AddCredentialConfiguration {
+            .when(ServerConfigCommand::UpdateCredentialConfiguration {
                 credential_configuration: CredentialConfiguration {
                     credential_configuration_id: credential_configuration_id.clone(),
                     credential_format_with_parameters: CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
