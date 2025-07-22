@@ -45,6 +45,13 @@ impl View<Credential> for Credential {
                 self.credential_id.clone_from(credential_id);
                 self.holder_notifications.push(notification.clone());
             }
+            CredentialEvent::CredentialStatusSet {
+                credential_id,
+                credential_status,
+            } => {
+                self.credential_id.clone_from(credential_id);
+                self.credential_status.clone_from(&Some(credential_status.clone()));
+            }
         }
     }
 }

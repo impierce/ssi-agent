@@ -1,3 +1,5 @@
+use crate::credential::aggregate::CredentialStatus;
+
 use super::{aggregate::Status, entity::Data};
 use cqrs_es::DomainEvent;
 use oid4vci::{
@@ -29,6 +31,10 @@ pub enum CredentialEvent {
     NotificationReceived {
         credential_id: String,
         notification: NotificationRequest,
+    },
+    CredentialStatusSet {
+        credential_id: String,
+        credential_status: CredentialStatus,
     },
 }
 

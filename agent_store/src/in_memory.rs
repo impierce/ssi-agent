@@ -230,7 +230,7 @@ pub async fn issuance_state(
             ),
             offer: Arc::new(
                 offer_event_publishers.into_iter().fold(
-                    AggregateHandler::new(issuance_services)
+                    AggregateHandler::new(issuance_services.clone())
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(offer.clone()))
                         .append_query(all_offers_query)
@@ -249,6 +249,7 @@ pub async fn issuance_state(
             offer,
             all_offers,
         },
+        signer: issuance_services.issuer.clone(),
     }
 }
 

@@ -12,6 +12,7 @@ use identity_credential::credential::{
     Credential as W3CVerifiableCredential, CredentialBuilder as W3CVerifiableCredentialBuilder, Issuer,
 };
 use jsonwebtoken::Header;
+use oauth_tsl::status_list::StatusType;
 use oid4vc_core::jwt;
 use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::{
     CredentialDefinition, JwtVcJson, JwtVcJsonParameters,
@@ -70,6 +71,13 @@ mod never_as_str {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
 #[derivative(PartialEq)]
+pub struct CredentialStatus {
+    pub index: usize,
+    pub status: StatusType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
+#[derivative(PartialEq)]
 pub struct Credential {
     #[serde(rename = "id")]
     pub credential_id: String,
@@ -79,6 +87,7 @@ pub struct Credential {
     pub signed: Option<serde_json::Value>,
     pub status: Status,
     pub holder_notifications: Vec<NotificationRequest>,
+    pub credential_status: Option<CredentialStatus>,
 }
 
 #[async_trait]
@@ -394,6 +403,13 @@ impl Aggregate for Credential {
                 credential_id,
                 notification,
             }]),
+            SetCredentialStatus {
+                credential_id,
+                credential_status,
+            } => Ok(vec![CredentialEvent::CredentialStatusSet {
+                credential_id,
+                credential_status,
+            }]),
         }
     }
 
@@ -438,6 +454,13 @@ impl Aggregate for Credential {
             } => {
                 self.credential_id = credential_id;
                 self.holder_notifications.push(notification);
+            }
+            CredentialStatusSet {
+                credential_id,
+                credential_status,
+            } => {
+                self.credential_id = credential_id;
+                self.credential_status.replace(credential_status);
             }
         }
     }

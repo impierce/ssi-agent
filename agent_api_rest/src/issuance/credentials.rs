@@ -2,6 +2,7 @@ use super::offers::query_credential_issuer_metadata;
 use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
+use agent_issuance::credential::aggregate::CredentialStatus;
 use agent_issuance::{
     credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data},
     offer::command::OfferCommand,
@@ -14,6 +15,8 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::header;
+use oauth_tsl::status_list::StatusType;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -149,6 +152,71 @@ pub(crate) async fn all_credentials(State(state): State<IssuanceState>) -> Resul
         .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_credentials)).into_response())
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PatchCredentialEndpointRequest {
+    pub status: StatusType,
+}
+
+pub const STATUSTYPESIZE: u8 = 2; // Amount of bits per status
+pub const STATUSLISTSIZE: usize = 16384; // Amount of bytes in the status list. Equates to 65536 statuses.
+
+/// Currently, this endpoint only supports patching the CredentialStatus of a credential according to the IETF OAuth Token Status List spec.
+pub async fn patch_credential(
+    State(state): State<IssuanceState>,
+    Path(credential_id): Path<String>,
+    Json(PatchCredentialEndpointRequest { status }): Json<PatchCredentialEndpointRequest>,
+) -> Result<Response, ApiError> {
+    if let Some(credential) = query_handler(&credential_id, &state.query.credential).await? {
+        let credential_status: CredentialStatus;
+
+        if credential.credential_status.is_some() {
+            credential_status = CredentialStatus {
+                index: credential.credential_status.as_ref().unwrap().index,
+                status: status.clone(),
+            }
+        } else {
+            let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
+                .await?
+                .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
+                .unwrap_or_default();
+
+            let used_indices: Vec<usize> = all_credentials
+                .iter()
+                .filter_map(|c| c.credential_status.as_ref().map(|s| s.index))
+                .collect();
+
+            // Status Lists should only be filled up to 70%, the remaining 30% will be used for decoy/psuedo indices.
+            // This greatly improves the privacy of the issuer.
+            let statuses_per_byte: usize = 8 / STATUSTYPESIZE as usize;
+            let status_list_number = used_indices.len() / ((STATUSLISTSIZE * statuses_per_byte) as f64 * 0.7) as usize;
+            let mut rng = rand::rng();
+            let mut random_index;
+
+            loop {
+                random_index = rng
+                    .random_range((status_list_number * STATUSLISTSIZE)..((status_list_number + 1) * STATUSLISTSIZE));
+                if !used_indices.contains(&random_index) {
+                    break;
+                }
+            }
+
+            credential_status = CredentialStatus {
+                index: random_index,
+                status,
+            };
+        }
+
+        let command = CredentialCommand::SetCredentialStatus {
+            credential_id: credential_id.clone(),
+            credential_status,
+        };
+
+        command_handler(&credential_id, &state.command.credential, command).await?;
+    }
+
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 #[cfg(test)]

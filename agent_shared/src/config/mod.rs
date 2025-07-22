@@ -157,6 +157,17 @@ pub struct ApplicationConfiguration {
         default = r#"{
             let public_url = Self::fn_public_url(provisioned_config, application_profile).unwrap();
 
+            provisioned_config.get::<Url>("ietf_oauth_token_status_list_uri").unwrap_or_else(|_| {
+                public_url.join("ietf-oauth-token-status-list").unwrap()
+            })
+        }"#,
+        transform_with = "into_resource"
+    )]
+    pub ietf_oauth_token_status_list_uri: Url,
+    #[config(
+        default = r#"{
+            let public_url = Self::fn_public_url(provisioned_config, application_profile).unwrap();
+
             provisioned_config.get::<Url>("redirect_uri").unwrap_or_else(|_| {
                 public_url.join("redirect").unwrap()
             })
@@ -452,7 +463,7 @@ pub struct SecretManagerConfig {
 
 impl SecretManagerConfig {
     fn development_default() -> Self {
-        let random_bytes: [u8; 32] = rand::thread_rng().gen();
+        let random_bytes: [u8; 32] = rand::rng().random();
         let stronghold_password = URL_SAFE_NO_PAD.encode(random_bytes)[..24].to_string();
 
         println!(
@@ -883,6 +894,7 @@ mod tests {
               "credential_endpoint": "http://localhost:3033/openid4vci/credential",
               "credential_offer_uri": "http://localhost:3033/openid4vci/credential-offer",
               "request_uri": "http://localhost:3033/request",
+              "ietf_oauth_token_status_list_uri": "http://localhost:3033/ietf-oauth-token-status-list",
               "redirect_uri": "http://localhost:3033/redirect",
               "cors_enabled": true,
               "did_methods": {

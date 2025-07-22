@@ -1,6 +1,7 @@
 use agent_shared::application_state::CommandHandler;
 use agent_shared::handlers::command_handler;
 use cqrs_es::persist::ViewRepository;
+use oid4vc_core::Sign;
 use std::sync::Arc;
 use tracing::{info, warn};
 
@@ -20,6 +21,7 @@ use crate::server_config::queries::ServerConfigView;
 pub struct IssuanceState {
     pub command: CommandHandlers,
     pub query: Queries,
+    pub signer: Arc<dyn Sign>,
 }
 
 /// The command handlers are used to execute commands on the aggregates.
@@ -84,7 +86,7 @@ pub async fn initialize(state: &IssuanceState, startup_commands: Vec<ServerConfi
     info!("Initializing the issuance state ...");
 
     for command in startup_commands {
-        let command_string = format!("{:?}", command).split(' ').next().unwrap().to_string();
+        let command_string = format!("{command:?}").split(' ').next().unwrap().to_string();
         match command_handler(SERVER_CONFIG_ID, &state.command.server_config, command).await {
             Ok(_) => info!("Startup task completed: `{}`", command_string),
             Err(err) => warn!("Startup task failed: {:#?}", err),
