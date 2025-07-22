@@ -11,14 +11,19 @@ pub enum ProfileEvent {
         profile_id: String,
         display_name: Option<String>,
         logo: Option<Logo>,
+        country: Option<String>,
         source: Source,
     },
     DisplayNameUpdated {
-        display_name: Option<String>,
+        display_name: String,
         source: Source,
     },
     LogoUpdated {
         logo: Option<Logo>,
+        source: Source,
+    },
+    CountryUpdated {
+        country: Option<String>,
         source: Source,
     },
     SourceUpdated {

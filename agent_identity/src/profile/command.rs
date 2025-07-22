@@ -10,14 +10,19 @@ pub enum ProfileCommand {
         profile_id: String,
         display_name: Option<String>,
         logo: Option<Logo>,
+        country: Option<String>,
         source: Source,
     },
     UpdateDisplayName {
-        display_name: Option<String>,
+        display_name: String,
         source: Source,
     },
     UpdateLogo {
         logo: Option<Logo>,
+        source: Source,
+    },
+    UpdateCountry {
+        country: Option<String>,
         source: Source,
     },
     UpdateSource {

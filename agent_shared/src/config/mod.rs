@@ -252,6 +252,7 @@ pub struct ApplicationConfiguration {
                     uri: Some(Url::parse("https://www.impierce.com/external/impierce-icon.png").unwrap()),
                     alt_text: Some("Impierce Icon".to_string()),
                 }),
+                country: None
             }
         ]"#)]
     pub display: Vec<Display>,
@@ -491,6 +492,7 @@ pub struct Display {
     pub name: String,
     pub locale: Option<String>,
     pub logo: Option<Logo>,
+    pub country: Option<String>,
 }
 
 #[skip_serializing_none]

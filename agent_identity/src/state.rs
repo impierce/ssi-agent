@@ -167,6 +167,7 @@ pub async fn query_profile(state: &IdentityState) -> Result<(), PersistenceError
         }
     }
 }
+
 // TODO: This function violates the aggregate's consistency boundary.
 // The complex business logic for deciding whether to update the profile based on its
 // source (Provisioned vs. Default vs. Runtime) should reside inside the `Profile` aggregate's `handle`
@@ -178,104 +179,112 @@ pub async fn query_profile(state: &IdentityState) -> Result<(), PersistenceError
 // 2. The `Profile` aggregate would then handle this command, containing all the logic
 //    to protect its invariants (e.g., "if my source is `Runtime`, I must reject this command")
 async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
+    // TODO: allow for multiple displays in the future with different locales.
     let first = config().display.first().cloned();
 
-    let current_source = if config().is_display_provisioned() {
+    let config_display_source = if config().is_display_provisioned() {
         Source::Provisioned
     } else {
         Source::Default
     };
 
-    info!("Initializing display ... is some display configured? {first:?}");
-
-    if let Some(display) = first {
+    if let Some(config_display) = first {
         match query_handler(PROFILE_ID, &state.query.profile).await? {
-            Some(Profile { display_name, logo, .. }) if current_source == Source::Provisioned => {
-                if let Some(display_name) = display_name {
-                    if display.name != display_name {
-                        let command = ProfileCommand::UpdateDisplayName {
-                            display_name: Some(display.name),
-                            source: current_source.clone(),
-                        };
-
-                        command_handler(PROFILE_ID, &state.command.profile, command).await?;
-                    }
-                }
-
-                if display.logo != logo {
-                    let command = ProfileCommand::UpdateLogo {
-                        logo: display.logo,
-                        source: current_source,
-                    };
-
-                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
-                }
-            }
+            // If the profile exists, we check if it needs to be updated based on the config.
+            // We only update the Profile if the config source is:
+            // - Provisioned: If the Profile is Provisioned, we update the persisted Profile.
+            // - Default: If the persisted Profile is Provisioned, we update the persisted Profile.
             Some(Profile {
-                display_name,
-                logo,
-                source,
+                display_name: persisted_display_name,
+                logo: persisted_logo,
+                country: persisted_country,
+                source: persisted_source,
                 ..
-            }) if current_source == Source::Default && source == Source::Provisioned => {
-                if display_name.is_some() {
+            }) if (config_display_source == Source::Provisioned
+                || (config_display_source == Source::Default && persisted_source == Source::Provisioned)) =>
+            {
+                if Some(&config_display.name) != persisted_display_name.as_ref() {
                     let command = ProfileCommand::UpdateDisplayName {
-                        display_name: Some(display.name),
-                        source: current_source.clone(),
+                        display_name: config_display.name,
+                        source: config_display_source.clone(),
                     };
 
                     command_handler(PROFILE_ID, &state.command.profile, command).await?;
                 }
 
-                if logo.is_some() {
+                if config_display.logo != persisted_logo {
                     let command = ProfileCommand::UpdateLogo {
-                        logo: display.logo,
-                        source: current_source.clone(),
+                        logo: config_display.logo,
+                        source: config_display_source.clone(),
                     };
 
                     command_handler(PROFILE_ID, &state.command.profile, command).await?;
                 }
 
-                let command = ProfileCommand::UpdateSource { source: current_source };
+                if config_display.country != persisted_country {
+                    let command = ProfileCommand::UpdateCountry {
+                        country: config_display.country,
+                        source: config_display_source.clone(),
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+
+                let command = ProfileCommand::UpdateSource {
+                    source: config_display_source,
+                };
 
                 command_handler(PROFILE_ID, &state.command.profile, command).await?;
             }
+            Some(_profile) => {
+                info!("Display is already configured, no action needed.");
+            }
+            // If the profile does not exist, we create it with the config display information.
             None => {
                 info!("No display configured, creating a new one.");
 
                 let command = ProfileCommand::CreateProfile {
                     profile_id: PROFILE_ID.to_string(),
-                    display_name: Some(display.name.clone()),
-                    logo: display.logo.clone(),
-                    source: current_source,
+                    display_name: Some(config_display.name.clone()),
+                    logo: config_display.logo.clone(),
+                    source: config_display_source,
+                    country: config_display.country.clone(),
                 };
 
                 command_handler(PROFILE_ID, &state.command.profile, command).await?;
-            }
-            _ => {
-                info!("Display is already configured, no action needed.");
             }
         };
     } else {
         match query_handler(PROFILE_ID, &state.query.profile).await? {
             Some(Profile {
-                display_name,
-                logo,
+                display_name: persisted_display_name,
+                logo: persisted_logo,
+                country: persisted_country,
                 source: Source::Provisioned,
                 ..
             }) => {
-                if display_name.is_some() {
+                if persisted_display_name.is_some() {
                     let command = ProfileCommand::UpdateDisplayName {
-                        display_name: None,
-                        source: current_source.clone(),
+                        display_name: "".to_string(),
+                        source: config_display_source.clone(),
                     };
 
                     command_handler(PROFILE_ID, &state.command.profile, command).await?;
                 }
 
-                if logo.is_some() {
+                if persisted_logo.is_some() {
                     let command = ProfileCommand::UpdateLogo {
                         logo: None,
-                        source: current_source,
+                        source: config_display_source.clone(),
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+
+                if persisted_country.is_some() {
+                    let command = ProfileCommand::UpdateCountry {
+                        country: None,
+                        source: config_display_source.clone(),
                     };
 
                     command_handler(PROFILE_ID, &state.command.profile, command).await?;
@@ -286,7 +295,8 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                     profile_id: PROFILE_ID.to_string(),
                     display_name: None,
                     logo: None,
-                    source: current_source,
+                    country: None,
+                    source: config_display_source,
                 };
 
                 command_handler(PROFILE_ID, &state.command.profile, command).await?;

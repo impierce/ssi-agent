@@ -1785,7 +1785,7 @@
 						{
 							"name": "Create or update Profile",
 							"request": {
-								"method": "PUT",
+								"method": "PATCH",
 								"header": [],
 								"body": {
 									"mode": "raw",
@@ -1825,8 +1825,11 @@
 								{
 									"listen": "prerequest",
 									"script": {
-										"exec": [],
-										"type": "text/javascript"
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
 									}
 								}
 							],
@@ -1834,14 +1837,13 @@
 								"method": "GET",
 								"header": [],
 								"url": {
-									"raw": "{{HOST}}/v0/profiles/PROFILE-001",
+									"raw": "{{HOST}}/v0/profiles",
 									"host": [
 										"{{HOST}}"
 									],
 									"path": [
 										"v0",
-										"profiles",
-										"PROFILE-001"
+										"profiles"
 									]
 								}
 							},
