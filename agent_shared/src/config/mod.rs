@@ -14,6 +14,7 @@ use serde_json::json;
 use serde_with::{skip_serializing_none, SerializeDisplay};
 use std::{
     collections::HashMap,
+    path::PathBuf,
     sync::{RwLock, RwLockReadGuard},
 };
 use strum::VariantArray;
@@ -232,28 +233,8 @@ pub struct ApplicationConfiguration {
     pub credential_offer_by_value_enabled: bool,
     #[config(development_default = "SecretManagerConfig::development_default()")]
     pub secret_manager: SecretManagerConfig,
-    #[config(
-        default,
-        development_default = r#"
-            vec![serde_json::from_value(
-                json!({
-                    "credential_configuration_id": "001",
-                    "format": "jwt_vc_json",
-                    "credential_definition": {
-                        "type": ["VerifiableCredential"]
-                    },
-                    "display": [{
-                        "name": "Verifiable Credential",
-                        "locale": "en",
-                        "logo": {
-                            "uri": "https://www.impierce.com/external/impierce-logo.png",
-                            "alt_text": "Impierce Logo"
-                        }
-                    }]
-                })
-            ).unwrap()]"#
-    )]
-    pub credential_configurations: Vec<CredentialConfiguration>,
+    #[config(default)]
+    pub credential_configuration_file: Option<Box<PathBuf>>,
     #[config(default = "
         HashMap::from(
             [
@@ -584,7 +565,7 @@ pub enum ServiceEvent {
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum ServerConfigEvent {
     ServerMetadataInitialized,
-    CredentialConfigurationAdded,
+    CredentialConfigurationUpdated,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -915,27 +896,6 @@ mod tests {
                 "issuer_eddsa_key_id": "ed25519-0",
                 "issuer_es256_key_id": "es256-0"
               },
-              "credential_configurations": [
-                {
-                  "credential_configuration_id": "001",
-                  "format": "jwt_vc_json",
-                  "credential_definition": {
-                    "type": [
-                      "VerifiableCredential"
-                    ]
-                  },
-                  "display": [
-                    {
-                      "name": "Verifiable Credential",
-                      "locale": "en",
-                      "logo": {
-                        "uri": "https://www.impierce.com/external/impierce-logo.png",
-                        "alt_text": "Impierce Logo"
-                      }
-                    }
-                  ]
-                }
-              ],
               "signing_algorithms_supported": {
                 "EdDSA": {
                   "enabled": true,
@@ -1285,8 +1245,8 @@ mod tests {
         // Some display information is set
         assert_eq!(config.display.len(), 1);
 
-        // Some credential configuration is set
-        assert_eq!(config.credential_configurations.len(), 1);
+        // The Credential Configuration file is set to `None`
+        assert!(config.credential_configuration_file.is_none());
     }
 
     #[test]

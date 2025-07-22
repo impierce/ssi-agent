@@ -43,6 +43,7 @@ names = { version = "0.14", default-features = false }
 reqwest.workspace = true
 rand.workspace = true
 serial_test = "3.0"
+temp-env.workspace = true
 tokio.workspace = true
 tower.workspace = true
 tracing-test.workspace = true

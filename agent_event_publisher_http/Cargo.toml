@@ -12,7 +12,7 @@ agent_shared = { path = "../agent_shared" }
 agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification" }
 
-anyhow = "1.0"
+anyhow.workspace = true
 async-trait.workspace = true
 cqrs-es.workspace = true
 http-serde = "2.1"

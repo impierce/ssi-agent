@@ -128,6 +128,7 @@ async fn buffer_request_body(request: Request) -> Result<Request, Response> {
 
 #[cfg(test)]
 mod tests {
+    use agent_shared::config::config;
     use oid4vci::credential_issuer::{
         credential_configurations_supported::CredentialConfigurationsSupportedObject,
         credential_issuer_metadata::CredentialIssuerMetadata,
@@ -139,26 +140,41 @@ mod tests {
     pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
 
     lazy_static::lazy_static! {
-        pub static ref BASE_URL: url::Url = url::Url::parse("https://my-domain.example.org").unwrap();
         static ref CREDENTIAL_CONFIGURATIONS_SUPPORTED: HashMap<String, CredentialConfigurationsSupportedObject> =
             vec![(
-                "0".to_string(),
+                "001".to_string(),
                 serde_json::from_value(json!({
                     "format": "jwt_vc_json",
                     "cryptographic_binding_methods_supported": [
+                        "did:jwk",
                         "did:key",
                     ],
                     "credential_signing_alg_values_supported": [
+                        "ES256",
                         "EdDSA"
                     ],
                     "credential_definition":{
                         "type": [
-                            "VerifiableCredential",
-                            "OpenBadgeCredential"
+                            "VerifiableCredential"
                         ]
                     },
-                    "proof_types_supported": [
-                        "jwt"
+                    "proof_types_supported": {
+                        "jwt": {
+                            "proof_signing_alg_values_supported": [
+                                "ES256",
+                                "EdDSA"
+                            ],
+                        }
+                    },
+                    "display": [
+                        {
+                            "name": "Verifiable Credential",
+                            "locale": "en",
+                            "logo": {
+                                "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                "alt_text": "Impierce Logo",
+                            }
+                        }
                     ]
                 }
                 ))
@@ -167,10 +183,17 @@ mod tests {
             .into_iter()
             .collect();
         pub static ref CREDENTIAL_ISSUER_METADATA: CredentialIssuerMetadata = CredentialIssuerMetadata {
-            credential_issuer: BASE_URL.clone(),
-            credential_endpoint: BASE_URL.join("credential").unwrap(),
-            batch_credential_endpoint: Some(BASE_URL.join("batch_credential").unwrap()),
+            credential_issuer: config().public_url.clone(),
+            credential_endpoint: config().public_url.join("openid4vci/credential").unwrap(),
             credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
+            display: Some(vec![json!({
+                "name": "UniCore",
+                "locale": "en",
+                "logo": {
+                    "uri": "https://www.impierce.com/external/impierce-icon.png",
+                    "alt_text": "Impierce Icon",
+                }
+            })]),
             ..Default::default()
         };
     }

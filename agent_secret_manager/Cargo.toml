@@ -16,7 +16,7 @@ agent_shared = { path = "../agent_shared" }
 did_manager_consumer = { git = "https://git@github.com/impierce/did-manager.git", tag = "v1.0.0-beta.4", package = "consumer" }
 did_manager_identity_stronghold_ext = { git = "https://git@github.com/impierce/did-manager.git", tag = "v1.0.0-beta.4", package = "identity_stronghold_ext" }
 
-anyhow = "1.0"
+anyhow.workspace = true
 async-trait = "0.1"
 base64.workspace = true
 futures.workspace = true

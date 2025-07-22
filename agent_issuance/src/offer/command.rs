@@ -14,11 +14,12 @@ use url::Url;
 pub enum OfferCommand {
     CreateCredentialOffer {
         offer_id: String,
-        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
+        credential_configuration_ids: Vec<String>,
     },
     AddCredentials {
         offer_id: String,
         credential_ids: Vec<String>,
+        credential_configuration_ids: Vec<String>,
     },
     SendCredentialOffer {
         offer_id: String,

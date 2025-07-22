@@ -49,11 +49,8 @@ pub(crate) async fn token(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::{
-        issuance::{credentials::tests::credentials, offers::tests::offers, router},
-        tests::BASE_URL,
-    };
-    use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use crate::issuance::{credentials::tests::credentials, offers::tests::offers, router};
+    use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory;
     use axum::{
@@ -75,8 +72,7 @@ pub mod tests {
                         mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
                     )
                     .body(Body::from(format!(
-                        "grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code&pre-authorized_code={}",
-                        pre_authorized_code
+                        "grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code&pre-authorized_code={pre_authorized_code}"
                     )))
                     .unwrap(),
             )
@@ -97,7 +93,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_token_endpoint() {
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
-        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
+        initialize(&issuance_state).await.unwrap();
         let mut app = router(issuance_state);
 
         credentials(&mut app).await;

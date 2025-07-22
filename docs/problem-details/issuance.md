@@ -195,3 +195,19 @@ when the HTTP request does not complete successfully.
 ### Resolution
 
 Check the target URL and ensure that it is reachable and correctly configured to receive the Credential Offer.
+
+## Update Provisioned Credential Configuration Error
+
+This error occurs when an attempt is made to update a provisioned credential configuration during runtime. Provisioned credential configurations are immutable after initial setup, and any update operation will result in this error. The API returns a `400 Bad Request` error.
+
+### Resolution
+
+Provisioned credential configurations cannot be updated after they are set up. If you need to change a configuration, you must update your server's configuration files and restart the service.
+
+## Remove Provisioned Credential Configuration Error
+
+This error is returned when there is an attempt to remove a provisioned credential configuration during runtime. Provisioned credential configurations cannot be removed after they have been set up. The API returns a `400 Bad Request` error.
+
+### Resolution
+
+Provisioned credential configurations cannot be removed at runtime. To remove a configuration, update your server's configuration files and restart the service.
