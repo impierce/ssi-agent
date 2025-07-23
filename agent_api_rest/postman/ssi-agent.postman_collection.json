@@ -1780,10 +1780,10 @@
 					]
 				},
 				{
-					"name": "Profiles",
+					"name": "Profile",
 					"item": [
 						{
-							"name": "Create or update Profile",
+							"name": "Update Profile",
 							"request": {
 								"method": "PATCH",
 								"header": [],
@@ -1797,13 +1797,13 @@
 									}
 								},
 								"url": {
-									"raw": "{{HOST}}/v0/profiles",
+									"raw": "{{HOST}}/v0/profile",
 									"host": [
 										"{{HOST}}"
 									],
 									"path": [
 										"v0",
-										"profiles"
+										"profile"
 									]
 								}
 							},
