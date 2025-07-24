@@ -7,7 +7,7 @@ use axum::{
 use http::StatusCode;
 use hyper::header;
 use oauth_tsl::{
-    managers::status_provider::compress_gzip,
+    managers::{relying_party::StatusListTokenResponseType, status_provider::compress_gzip},
     status_list::{Bits, EncodedStatusList, StatusList},
     tokens::status_list_token::{StatusListToken, StatusListTokenClaims},
 };
@@ -122,7 +122,7 @@ pub async fn token_status_list(
     Ok((
         StatusCode::OK,
         [
-            (header::CONTENT_TYPE, "application/statuslist+jwt"),
+            (header::CONTENT_TYPE, StatusListTokenResponseType::Jwt.as_str()),
             (header::CONTENT_ENCODING, "gzip"),
         ],
         compressed_jwt_token,

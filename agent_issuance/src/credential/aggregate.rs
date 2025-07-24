@@ -13,6 +13,7 @@ use identity_credential::credential::{
 };
 use jsonwebtoken::Header;
 use oauth_tsl::status_list::StatusType;
+use oauth_tsl::tokens::status_list_token::StatusListTyp;
 use oid4vc_core::jwt;
 use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::{
     CredentialDefinition, JwtVcJson, JwtVcJsonParameters,
@@ -209,7 +210,7 @@ impl Aggregate for Credential {
 
                                 let status = identity_credential::credential::Status {
                                     id: status_list_url.into(),
-                                    type_: "statuslist+jwt".to_string(), // TODO: get official enum from library instead of hardcoded str, also in other places
+                                    type_: StatusListTyp::Jwt.as_string(),
                                     properties: status_uri_idx,
                                 };
 
@@ -263,7 +264,7 @@ impl Aggregate for Credential {
 
                                 let builder_credential_status = types_ob_v3::prelude::CredentialStatus {
                                     id: status_list_url.clone().into(),
-                                    type_: "statuslist+jwt".to_string(), // TODO: get official enum from library instead of hardcoded str, also in other places
+                                    type_: StatusListTyp::Jwt.as_string(),
                                 };
 
                                 let builder = AchievementCredentialBuilder::default()
