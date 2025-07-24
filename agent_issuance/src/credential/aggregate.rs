@@ -239,8 +239,6 @@ impl Aggregate for Credential {
                                 let mut raw = json!(credential);
                                 raw["type"] = json!(type_);
 
-                                println!("\nVC2\n\n");
-
                                 return Ok(vec![UnsignedCredentialCreated {
                                     credential_id,
                                     data: Data { raw },
@@ -311,8 +309,6 @@ impl Aggregate for Credential {
                                     "idx".to_string(),
                                     serde_json::Value::Number(credential_status_index.index.into()),
                                 );
-
-                                println!("\nOBV3\n\n");
 
                                 return Ok(vec![UnsignedCredentialCreated {
                                     credential_id,
