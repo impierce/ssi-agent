@@ -13,6 +13,7 @@ use agent_authorization::domain::consent::views::ConsentView;
 use agent_authorization::domain::oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest;
 use agent_authorization::domain::oauth2_authorization_request::views::all_oauth2_authorization_requests::AllOAuth2AuthorizationRequestsView;
 use agent_authorization::domain::oauth2_authorization_request::views::OAuth2AuthorizationRequestView;
+use agent_authorization::services::AuthorizationServices;
 use agent_authorization::state::AuthorizationState;
 use agent_holder::credential::aggregate::Credential as HolderCredential;
 use agent_holder::credential::queries::all_credentials::AllHolderCredentialsView;
@@ -186,7 +187,7 @@ pub async fn identity_state<ES: EventStoreTemp>(
 }
 
 pub async fn authorization_state<ES: EventStoreTemp>(
-    // services: Arc<VerificationServices>,
+    services: Arc<AuthorizationServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> AuthorizationState {
     // Partition the event_publishers into the different aggregates.
@@ -234,6 +235,7 @@ pub async fn authorization_state<ES: EventStoreTemp>(
             access_token,
             consent,
         },
+        signer: services.signer.clone(),
     }
 }
 
@@ -277,6 +279,7 @@ pub async fn issuance_state<ES: EventStoreTemp>(
             offer,
             all_offers,
         },
+        subject: services.issuer.clone(),
     }
 }
 

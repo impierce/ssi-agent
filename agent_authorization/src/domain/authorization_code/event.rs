@@ -1,13 +1,14 @@
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 use strum::Display;
+use url::Url;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
 pub enum AuthorizationCodeEvent {
     AuthorizationCodeCreated {
         authorization_code_id: String,
         client_id: String,
-        redirect_uri: String,
+        redirect_uri: Url,
         scope: Option<String>,
         user_id: String,
         code_challenge: Option<String>,

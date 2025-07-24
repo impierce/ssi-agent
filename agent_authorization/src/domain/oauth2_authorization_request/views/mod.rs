@@ -17,9 +17,8 @@ impl View<OAuth2AuthorizationRequest> for OAuth2AuthorizationRequest {
                 client_id,
                 redirect_uri,
                 scope,
-                client_assertion_type,
-                client_assertion,
                 issuer_state,
+                authorization_details,
                 code_challenge,
                 code_challenge_method,
 
@@ -32,12 +31,27 @@ impl View<OAuth2AuthorizationRequest> for OAuth2AuthorizationRequest {
                 self.client_id.clone_from(client_id);
                 self.redirect_uri.clone_from(redirect_uri);
                 self.scope.clone_from(scope);
-                self.client_assertion_type.clone_from(client_assertion_type);
-                self.client_assertion.clone_from(client_assertion);
                 self.issuer_state.clone_from(issuer_state);
+                self.authorization_details.clone_from(authorization_details);
                 self.code_challenge.clone_from(code_challenge);
                 self.code_challenge_method.clone_from(code_challenge_method);
                 self.expires_at = *expires_at;
+            }
+            ConsentGranted {
+                oauth2_authorization_request_id,
+                consent_status,
+            } => {
+                self.oauth2_authorization_request_id
+                    .clone_from(oauth2_authorization_request_id);
+                self.consent_status = consent_status.clone();
+            }
+            ConsentRejected {
+                oauth2_authorization_request_id,
+                consent_status,
+            } => {
+                self.oauth2_authorization_request_id
+                    .clone_from(oauth2_authorization_request_id);
+                self.consent_status = consent_status.clone();
             }
         }
     }

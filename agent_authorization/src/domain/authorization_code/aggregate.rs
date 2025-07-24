@@ -4,8 +4,10 @@ use super::event::AuthorizationCodeEvent;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;
+use oid4vci::pkce;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
+use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
 #[derivative(PartialEq)]
@@ -14,7 +16,7 @@ pub struct AuthorizationCode {
     pub authorization_code_id: String,
     pub client_id: String,
     pub user_id: String,
-    pub redirect_uri: String,
+    pub redirect_uri: Option<Url>,
     pub scope: Option<String>,
     pub code_challenge: Option<String>,
     pub code_challenge_method: Option<String>,
@@ -106,25 +108,28 @@ impl Aggregate for AuthorizationCode {
                 // 5. Validate redirect_uri (if applicable)
                 //    The spec says if redirect_uri was present in the initial auth request,
                 //    it MUST be present in the token request and be an exact match.
-                if &self.redirect_uri != redirect_uri.as_ref().unwrap() {
+                if self.redirect_uri != redirect_uri {
                     todo!()
                     // return Err(InvalidGrant("Redirect URI mismatch".to_string()));
                 }
 
-                // // 6. Validate PKCE code_verifier
-                // if let Some(challenge) = &self.code_challenge {
-                //     todo!()
-                //     // let verifier = code_verifier.ok_or_else(|| InvalidGrant("Code verifier required".to_string()))?;
-                //     // // Implement PKCE verification logic here based on self.code_challenge_method
-                //     // // For S256: hash = SHA256(verifier_ascii); encoded_challenge = BASE64URL-NOPAD(hash)
-                //     // // For plain: challenge == verifier
-                //     // if !verify_pkce_challenge(&verifier, challenge, self.code_challenge_method.as_deref()) {
-                //     //     return Err(InvalidGrant("Invalid PKCE code verifier".to_string()));
-                //     // }
-                // } else if code_verifier.is_some() {
-                //     // Code challenge was not set, but verifier was provided - this might be an error or ignored
-                //     // depending on policy. Generally, if no challenge, no verifier should be expected.
-                // }
+                // 6. Validate PKCE code_verifier
+                if let Some(challenge) = &self.code_challenge {
+                    let code_verifier =
+                        code_verifier.expect("FIXME: Code verifier must be provided if code challenge is set");
+
+                    pkce::code_challenge(code_verifier.as_bytes());
+                    // Implement PKCE verification logic here based on self.code_challenge_method
+                    // For S256: hash = SHA256(verifier_ascii); encoded_challenge = BASE64URL-NOPAD(hash)
+                    // For plain: challenge == verifier
+                    if pkce::code_challenge(code_verifier.as_bytes()) != *challenge {
+                        todo!("FIXME: Code challenge verification failed");
+                        // return Err(InvalidGrant("Invalid PKCE code verifier".to_string()));
+                    }
+                } else if code_verifier.is_some() {
+                    // Code challenge was not set, but verifier was provided - this might be an error or ignored
+                    // depending on policy. Generally, if no challenge, no verifier should be expected.
+                }
 
                 // All checks passed, emit an event to mark as used and carry forward necessary data
                 Ok(vec![AuthorizationCodeRedeemed {
@@ -156,7 +161,7 @@ impl Aggregate for AuthorizationCode {
                 // For now, we just set the authorization_code_id
                 self.authorization_code_id = authorization_code_id;
                 self.client_id = client_id;
-                self.redirect_uri = redirect_uri;
+                self.redirect_uri.replace(redirect_uri);
                 self.scope = scope;
                 self.user_id = user_id;
                 self.code_challenge = code_challenge;

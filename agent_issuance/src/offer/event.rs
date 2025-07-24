@@ -1,6 +1,9 @@
 use super::aggregate::Status;
 use cqrs_es::DomainEvent;
-use oid4vci::{credential_offer::CredentialOffer, credential_response::CredentialResponse};
+use oid4vci::{
+    credential_offer::{CredentialOffer, GrantType},
+    credential_response::CredentialResponse,
+};
 use serde::{Deserialize, Serialize};
 use strum::Display;
 use url::Url;
@@ -9,8 +12,10 @@ use url::Url;
 pub enum OfferEvent {
     CredentialOfferCreated {
         offer_id: String,
+        grant_types: Vec<GrantType>,
         credential_offer: CredentialOffer,
         credential_offer_uri: CredentialOffer,
+        pre_authorized_code: String,
         status: Status,
     },
     CredentialsAdded {

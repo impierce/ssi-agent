@@ -1,7 +1,7 @@
 use crate::handlers::{command_handler, query_handler};
 use crate::issuance::error::{internal_server_error, PublicError};
 use agent_authorization::application::oauth2_authorization_service::{
-    AuthorizationRequest, OAuth2AuthorizationService,
+    OAuth2AuthorizationService, OAuth2AuthorizationServiceResponse,
 };
 use agent_authorization::domain::oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest;
 use agent_authorization::state::AuthorizationState;
@@ -14,47 +14,34 @@ use axum::{
 };
 
 use http::header;
-
-lazy_static::lazy_static! {
-    pub static ref TEMP_MAP: std::sync::Mutex<std::collections::HashMap<String, bool>> = {
-        std::sync::Mutex::new(std::collections::HashMap::new())
-    };
-}
+use oid4vci::wallet::AuthorizationRequestByReference;
+use tracing::info;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn authorize(
     State(state): State<AuthorizationState>,
-    Query(authorization_request): Query<AuthorizationRequest>,
+    Query(authorization_request): Query<AuthorizationRequestByReference>,
 ) -> Result<Response, PublicError> {
-    if TEMP_MAP
-        .lock()
-        .unwrap()
-        .get(&authorization_request.request_uri.urn().to_string())
-        != Some(&true)
-    {
-        return Ok(Redirect::to(&format!(
-            "/auth/login?client_id={}&request_uri={}",
-            authorization_request.client_id,
-            authorization_request.request_uri.urn()
-        ))
-        .into_response());
-    }
-
-    let location = OAuth2AuthorizationService::handle_authorization_request(&state, authorization_request)
+    match OAuth2AuthorizationService::handle_authorization_request(&state, authorization_request)
         .await
-        .expect("FIXME");
-
-    Ok((StatusCode::FOUND, [(header::LOCATION, location)]).into_response())
+        .expect("FIXME")
+    {
+        OAuth2AuthorizationServiceResponse::RedirectToConsent(location) => Ok(Redirect::to(&location).into_response()),
+        OAuth2AuthorizationServiceResponse::RedirectToClient(location) => {
+            Ok((StatusCode::FOUND, [(header::LOCATION, location.to_string())]).into_response())
+        }
+    }
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::authorization::authorization_server::login::LoginForm;
+    use crate::authorization::authorization_server::consent::ConsentForm;
     use crate::authorization::authorization_server::par::tests::par;
     use crate::issuance::credentials::tests::credentials;
     use crate::issuance::offers::tests::offers;
     use crate::{authorization, issuance};
+    use agent_authorization::state::UNIME_CLIENT_ID;
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
@@ -69,12 +56,13 @@ pub mod tests {
     use tower::Service as _;
 
     pub async fn authorize(app: &mut Router, request_uri: String) -> String {
+        let encoded_request_uri = urlencoding::encode(&request_uri);
         let response = app
             .call(
                 Request::builder()
                     .method(http::Method::GET)
                     .uri(format!(
-                        "/auth/authorize?client_id=test_client_id&request_uri={request_uri}",
+                        "/auth/authorize?client_id={UNIME_CLIENT_ID}&request_uri={encoded_request_uri}",
                     ))
                     .body(Body::empty())
                     .unwrap(),
@@ -85,9 +73,10 @@ pub mod tests {
         assert_eq!(response.status(), StatusCode::SEE_OTHER);
 
         let see_other_location = response.headers().get("Location").unwrap().to_str().unwrap();
+
         assert_eq!(
             see_other_location,
-            "/auth/login?client_id=test_client_id&request_uri=urn:uuid:00000000-0000-0000-0000-000000000000"
+            format!("/auth/consent?request_uri={encoded_request_uri}")
         );
 
         let response = app
@@ -108,29 +97,26 @@ pub mod tests {
         );
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-
         let html = String::from_utf8(body.to_vec()).unwrap();
-        assert!(html.contains("Login to Authorization Server"));
-        assert!(html.contains("test_client_id"));
-        assert!(html.contains("urn:uuid:00000000-0000-0000-0000-000000000000"));
-        assert!(html.contains("action=\"/auth/login\""));
+        assert!(html.contains("Credentials to be Shared"));
+        assert!(html.contains(UNIME_CLIENT_ID));
+        assert!(html.contains("action=\"/auth/consent\""));
         assert!(html.contains("method=\"post\""));
 
         let response = app
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri("/auth/login")
+                    .uri("/auth/consent")
                     .header(
                         http::header::CONTENT_TYPE,
                         mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
                     )
                     .body(Body::from(
-                        serde_urlencoded::to_string(&LoginForm {
-                            username: "test_user".to_string(),
-                            password: "test_password".to_string(),
-                            client_id: "test_client_id".to_string(),
-                            request_uri: "urn:uuid:00000000-0000-0000-0000-000000000000".to_string(),
+                        serde_urlencoded::to_string(&ConsentForm {
+                            client_id: UNIME_CLIENT_ID.to_string(),
+                            request_uri: request_uri.parse().unwrap(),
+                            consent_given: true,
                         })
                         .unwrap(),
                     ))
@@ -139,12 +125,12 @@ pub mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        assert_eq!(response.status(), StatusCode::FOUND);
 
         let see_other_location = response.headers().get("Location").unwrap().to_str().unwrap();
         assert_eq!(
             see_other_location,
-            "/auth/authorize?client_id=test_client_id&request_uri=urn:uuid:00000000-0000-0000-0000-000000000000"
+            format!("/auth/authorize?client_id={UNIME_CLIENT_ID}&request_uri={encoded_request_uri}")
         );
 
         let response = app
@@ -161,10 +147,7 @@ pub mod tests {
         assert_eq!(response.status(), StatusCode::FOUND);
 
         let found_location = response.headers().get("Location").unwrap().to_str().unwrap();
-        assert_eq!(
-            found_location,
-            "unime://callback?code=00000000-0000-0000-0000-000000000000"
-        );
+        assert!(found_location.starts_with("unime://callback?code="));
 
         let code = found_location.split("code=").nth(1).unwrap().to_string();
 
@@ -176,15 +159,20 @@ pub mod tests {
     async fn test_authorization_endpoint() {
         let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
 
-        initialize(&issuance_state).await.unwrap();
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let mut app = issuance::router(issuance_state.clone());
 
         credentials(&mut app).await;
-        let (AuthorizationCode { issuer_state, .. }, _pre_authorized_code) = offers(&mut app).await.unwrap();
+        let (authorization_code, _pre_authorized_code) = offers(&mut app, false).await.unwrap();
+        let AuthorizationCode { issuer_state, .. } = authorization_code.unwrap();
         let issuer_state = issuer_state.unwrap();
 
-        let authorization_state = authorization_state::<InMemory>(Default::default()).await;
+        let authorization_state = authorization_state::<InMemory>(Service::default(), Default::default()).await;
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
+
         let mut app = authorization::router((authorization_state, issuance_state));
 
         let request_uri = par(&mut app, issuer_state).await;

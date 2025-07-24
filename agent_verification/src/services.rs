@@ -1,8 +1,8 @@
-use agent_secret_manager::service::Service;
+use agent_secret_manager::{service::Service, subject::SubjectExt};
 use agent_shared::config::{
     config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, get_preferred_did_method,
 };
-use oid4vc_core::{client_metadata::ClientMetadataResource, Subject};
+use oid4vc_core::client_metadata::ClientMetadataResource;
 use oid4vc_manager::RelyingPartyManager;
 use oid4vp::ClaimFormatProperty;
 use serde_json::json;
@@ -10,14 +10,14 @@ use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 /// Verification services. This struct is used to generate authorization requests and validate authorization responses.
 pub struct VerificationServices {
-    pub verifier: Arc<dyn Subject>,
+    pub verifier: Arc<dyn SubjectExt>,
     pub relying_party: RelyingPartyManager,
     pub siopv2_client_metadata: ClientMetadataResource<siopv2::authorization_request::ClientMetadataParameters>,
     pub oid4vp_client_metadata: ClientMetadataResource<oid4vp::authorization_request::ClientMetadataParameters>,
 }
 
 impl Service for VerificationServices {
-    fn new(verifier: Arc<dyn Subject>) -> Self {
+    fn new(verifier: Arc<dyn SubjectExt>) -> Self {
         let client_name = config().display.first().as_ref().map(|display| display.name.clone());
 
         let logo_uri = config()

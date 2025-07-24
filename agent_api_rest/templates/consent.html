@@ -5,50 +5,73 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
     <style>
-        body { font-family: sans-serif; margin: 2em; }
-        .container { max-width: 600px; margin: 0 auto; padding: 1em; border: 1px solid #ccc; border-radius: 8px; }
-        h1 { color: #333; }
-        strong { color: #007bff; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background-color: #f8f9fa; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { max-width: 480px; width: 100%; background-color: white; padding: 2em; border: 1px solid #dee2e6; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .header { text-align: center; margin-bottom: 1.5em; }
+        .client-logo { max-width: 80px; max-height: 80px; margin-bottom: 1em; }
+        h1 { font-size: 1.5em; color: #333; margin: 0; }
+        p { color: #555; line-height: 1.6; }
+        strong { color: #0056b3; }
+        .permissions { margin-top: 1.5em; }
+        h2 { font-size: 1.1em; color: #333; border-bottom: 1px solid #eee; padding-bottom: 0.5em; margin-bottom: 1em; }
         ul { list-style: none; padding: 0; }
-        li { background-color: #f0f0f0; margin-bottom: 0.5em; padding: 0.5em; border-radius: 4px; }
-        button { padding: 0.8em 1.5em; border: none; border-radius: 4px; cursor: pointer; margin-right: 1em; }
-        .authorize { background-color: #28a745; color: white; }
-        .authorize:hover { background-color: #218838; }
-        .deny { background-color: #dc3545; color: white; }
-        .deny:hover { background-color: #c82333; }
-        .error { color: red; margin-bottom: 1em; }
+        li { display: flex; align-items: center; background-color: #f8f9fa; margin-bottom: 0.5em; padding: 0.75em; border-radius: 5px; }
+        li::before { content: '✓'; color: #28a745; margin-right: 0.75em; font-weight: bold; }
+        .form-actions { display: flex; justify-content: space-between; margin-top: 2em; }
+        button { flex-grow: 1; padding: 0.8em 1.5em; border: none; border-radius: 5px; cursor: pointer; font-size: 1em; font-weight: bold; }
+        .authorize { background-color: #007bff; color: white; margin-left: 0.5em; }
+        .authorize:hover { background-color: #0056b3; }
+        .deny { background-color: #e9ecef; color: #495057; margin-right: 0.5em; }
+        .deny:hover { background-color: #dae0e5; }
+        .error { color: #dc3545; background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 1em; border-radius: 5px; margin-bottom: 1.5em; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>{{ title }}</h1>
 
-        {% if error_message.is_some() %}
-        <p class="error">{{ error_message.as_ref().unwrap() }}</p>
-        {% endif %}
+        <p>The application <strong>{{ client_id }}</strong> is requesting access to your data:</p>
 
-        <p>The application <strong>{{ client_name }}</strong> is requesting access to your data:</p>
-
-        <h2>Requested Permissions:</h2>
+        <h2>Credentials to be Shared</h2>
         <ul>
-            {% for scope in requested_scopes %}
-            <li>{{ scope }}</li>
+            {% for authorization_detail in authorization_details %}
+            <li>
+                {# Use a match statement to handle the enum and get the ID #}
+                {% match &authorization_detail.credential_configuration_or_format %}
+                    {# FIX: Add `..` to ignore the other fields in the struct variant #}
+                    {% when CredentialConfigurationOrFormat::CredentialConfigurationId with { credential_configuration_id, .. } %}
+                        <strong>{{ credential_configuration_id }}</strong>
+                    {% when CredentialConfigurationOrFormat::CredentialFormat with (format) %}
+                        {# Fallback for when a format is provided instead of an ID #}
+                        <strong>Credential defined by format</strong>
+                {% endmatch %}
+
+                {# Use `if let` to safely handle the optional claims vector #}
+                {% if let Some(claims) = &authorization_detail.claims %}
+                    {% if !claims.is_empty() %}
+                        <ul>
+                            {% for claim in claims %}
+                            {# The `path` is a Vec<String>, so join it for display #}
+                            <li>{{ claim.path | join(".") }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                {% endif %}
+            </li>
             {% endfor %}
         </ul>
 
         <p>Do you authorize this application to access your data?</p>
 
-        <form action="/consent" method="post">
-            <input type="hidden" name="context_id" value="{{ context_id }}">
+        <form action="/auth/consent" method="post">
             <input type="hidden" name="client_id" value="{{ client_id }}">
-            <input type="hidden" name="redirect_uri" value="{{ redirect_uri }}">
-            <input type="hidden" name="response_type" value="{{ response_type }}">
-            <input type="hidden" name="state" value="{{ state }}">
-            <input type="hidden" name="scope" value="{{ requested_scopes|join(" ") }}"> {# Join scopes back to space-separated string #}
+            <input type="hidden" name="request_uri" value="{{ request_uri }}">
 
-            <button type="submit" name="consent_decision" value="authorize" class="authorize">Authorize</button>
-            <button type="submit" name="consent_decision" value="deny" class="deny">Deny</button>
+            <button type="submit" name="consent_given" value=true class="authorize">Authorize</button>
+            <button type="submit" name="consent_given" value=false class="deny">Deny</button>
         </form>
+
+         
     </div>
 </body>
 </html>

@@ -6,10 +6,10 @@ use strum::Display;
 pub enum AccessTokenEvent {
     AccessTokenIssued {
         access_token_id: String,
-        access_token_value: String, // FIXME: use `JWT`
         user_id: String,
         client_id: String,
         scopes: Option<String>,
+        issued_at: u64,
         access_token_expires_at: u64,
         refresh_token_expires_at: Option<u64>,
         issuer_state: Option<String>,

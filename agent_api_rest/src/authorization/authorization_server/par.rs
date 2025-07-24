@@ -1,21 +1,17 @@
-use crate::handlers::{command_handler, query_handler};
-use crate::issuance::error::{internal_server_error, PublicError};
-use agent_authorization::application::pushed_authorization_service::{
-    PushedAuthorizationRequest, PushedAuthorizationService,
-};
+use crate::{issuance::error::PublicError, utils::StringifiedForm};
+use agent_authorization::application::pushed_authorization_service::PushedAuthorizationService;
 use agent_authorization::state::AuthorizationState;
-use agent_issuance::{offer::command::OfferCommand, state::IssuanceState};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    Form,
 };
+use oid4vci::authorization_request::AuthorizationRequest;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn par(
     State(state): State<AuthorizationState>,
-    Form(pushed_authorization_request): Form<PushedAuthorizationRequest>,
+    StringifiedForm(pushed_authorization_request): StringifiedForm<AuthorizationRequest>,
 ) -> Result<Response, PublicError> {
     let pushed_authorization_response =
         PushedAuthorizationService::handle_pushed_authorization_request(&state, pushed_authorization_request)
@@ -27,13 +23,14 @@ pub(crate) async fn par(
 
 #[cfg(test)]
 pub mod tests {
+    use std::sync::OnceLock;
+
     use super::*;
     use crate::{
         authorization,
         issuance::{self, credentials::tests::credentials, offers::tests::offers},
     };
-    use agent_authorization::application::pushed_authorization_service::PushedAuthorizationResponse;
-    use agent_issuance::state::initialize;
+    use agent_authorization::state::UNIME_CLIENT_ID;
     use agent_secret_manager::service::Service;
     use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
     use axum::{
@@ -41,8 +38,30 @@ pub mod tests {
         http::{self, Request},
         Router,
     };
-    use oid4vci::credential_offer::AuthorizationCode;
+    use oid4vci::{
+        authorization_details::{AuthorizationDetailsObject, CredentialConfigurationOrFormat, OpenidCredential},
+        credential_format_profiles::CredentialFormats,
+        credential_offer::AuthorizationCode,
+        pkce,
+        wallet::PushedAuthorizationResponse,
+    };
+    use serde_json::json;
     use tower::Service as _;
+
+    // This initialization is synchronous, so `std::sync::OnceLock` is the correct tool.
+    static CODE_VERIFIER: OnceLock<Vec<u8>> = OnceLock::new();
+
+    pub fn code_verifier() -> &'static [u8] {
+        CODE_VERIFIER.get_or_init(|| pkce::code_verifier(128))
+    }
+
+    static CODE_CLALLENGE: OnceLock<String> = OnceLock::new();
+
+    pub fn code_challenge() -> String {
+        CODE_CLALLENGE
+            .get_or_init(|| pkce::code_challenge(code_verifier()))
+            .to_owned()
+    }
 
     pub async fn par(app: &mut Router, issuer_state: String) -> String {
         let response = app
@@ -55,27 +74,27 @@ pub mod tests {
                         mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
                     )
                     .body(Body::from(
-                        serde_urlencoded::to_string(&PushedAuthorizationRequest {
+                        oid4vci::to_form_urlencoded_string(&json!(AuthorizationRequest {
                             response_type: "code".to_string(),
-                            state: "test_state".to_string(),
-                            client_id: "test_client_id".to_string(),
-                            redirect_uri: "unime://callback".parse().unwrap(),
-                            code_challenge: Some("test_code_challenge".to_string()),
+                            state: Some("test_state".to_string()),
+                            client_id: UNIME_CLIENT_ID.to_string(),
+                            redirect_uri: Some("unime://callback".parse().unwrap()),
+                            code_challenge: Some(code_challenge()),
                             code_challenge_method: Some("S256".to_string()),
-                            scope: "openid profile".to_string(),
-                            client_assertion_type: None,
-                            client_assertion: None,
+                            scope: Some("openid profile".to_string()),
                             issuer_state: Some(issuer_state),
-                            // authorization_details: AuthorizationDetailsObject {
-                            //     r#type: OpenidCredential::Type,
-                            //     locations: None,
-                            //     credential_configuration_or_format:
-                            //         CredentialConfigurationOrFormat::CredentialConfigurationId {
-                            //             credential_configuration_id: "configuration_id-FIXME".to_string(),
-                            //             parameters: None,
-                            //         },
-                            // },
-                        })
+                            authorization_details: vec![AuthorizationDetailsObject {
+                                r#type: OpenidCredential::Type,
+                                locations: None,
+                                credential_configuration_or_format: CredentialConfigurationOrFormat::<
+                                    CredentialFormats,
+                                >::CredentialConfigurationId {
+                                    credential_configuration_id: "configuration_id".to_string(),
+                                    parameters: None,
+                                },
+                                claims: None,
+                            }],
+                        }))
                         .unwrap(),
                     ))
                     .unwrap(),
@@ -88,7 +107,6 @@ pub mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let pushed_authorization_response: PushedAuthorizationResponse = serde_json::from_slice(&body).unwrap();
-        assert_eq!(pushed_authorization_response.request_uri, uuid::Uuid::from_u128(0_u128));
         assert_eq!(pushed_authorization_response.expires_in, 3600);
 
         pushed_authorization_response.request_uri.urn().to_string()
@@ -99,17 +117,20 @@ pub mod tests {
     async fn test_pushed_authorization_request_endpoint() {
         let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
 
-        initialize(&issuance_state).await.unwrap();
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let mut app = issuance::router(issuance_state.clone());
 
         credentials(&mut app).await;
-        let (AuthorizationCode { issuer_state, .. }, _pre_authorized_code) = offers(&mut app).await.unwrap();
+        let (authorization_code, _pre_authorized_code) = offers(&mut app, false).await.unwrap();
+        let AuthorizationCode { issuer_state, .. } = authorization_code.unwrap();
         let issuer_state = issuer_state.unwrap();
 
-        println!("Issuer State: {}", issuer_state);
+        let authorization_state = authorization_state::<InMemory>(Service::default(), Default::default()).await;
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
 
-        let authorization_state = authorization_state::<InMemory>(Default::default()).await;
         let mut app = authorization::router((authorization_state, issuance_state));
 
         let _request_uri = par(&mut app, issuer_state).await;

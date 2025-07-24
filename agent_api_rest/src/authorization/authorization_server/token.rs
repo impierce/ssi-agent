@@ -1,7 +1,7 @@
 use crate::authorization::AuthorizationState;
 use crate::handlers::{command_handler, query_handler};
 use crate::issuance::error::{internal_server_error, PublicError};
-use agent_authorization::application::token_issuance_service::{TokenIssuanceService, TokenRequest};
+use agent_authorization::application::token_issuance_service::TokenIssuanceService;
 use agent_issuance::offer::command::OfferCommand;
 use agent_issuance::state::IssuanceState;
 use axum::{
@@ -10,7 +10,10 @@ use axum::{
     response::{IntoResponse, Response},
     Form,
 };
+use identity_credential::credential::Status;
 use oid4vci::errors::TokenErrorResponse;
+use oid4vci::token_request::TokenRequest;
+use tracing::info;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn token(
@@ -18,7 +21,7 @@ pub(crate) async fn token(
     Form(token_request): Form<TokenRequest>,
     // TODO: implement official oid4vci error response. This TODO is also in the `credential` endpoint.
 ) -> Result<Response, PublicError> {
-    let token_response = TokenIssuanceService::issue_token(&authorization_state, token_request)
+    let token_response = TokenIssuanceService::issue_token(&authorization_state, &issuance_state, token_request)
         .await
         .expect("FIXME");
 
@@ -31,11 +34,14 @@ pub mod tests {
     use crate::{
         authorization::{
             self,
-            authorization_server::{authorize::tests::authorize, par::tests::par},
+            authorization_server::{
+                authorize::tests::authorize,
+                par::tests::{code_verifier, par},
+            },
         },
         issuance::{self, credentials::tests::credentials, offers::tests::offers},
     };
-    use agent_issuance::state::initialize;
+    use agent_authorization::state::UNIME_CLIENT_ID;
     use agent_secret_manager::service::Service;
     use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
     use axum::{
@@ -43,10 +49,61 @@ pub mod tests {
         http::{self, Request},
         Router,
     };
-    use oid4vci::{credential_offer::AuthorizationCode, token_response::TokenResponse};
+    use oid4vci::{
+        credential_offer::{AuthorizationCode, PreAuthorizedCode},
+        to_form_urlencoded_string,
+        token_response::TokenResponse,
+    };
+    use rstest::rstest;
     use tower::Service as _;
 
-    pub async fn token(app: &mut Router, code: String) -> String {
+    pub async fn token(
+        app: &mut Router,
+        is_pre_authorized: bool,
+        (authorization_code, pre_authorized_code): (Option<AuthorizationCode>, Option<PreAuthorizedCode>),
+    ) -> String {
+        let code = if let Some(PreAuthorizedCode {
+            pre_authorized_code, ..
+            // TODO: handle `tx_code`
+        }) = pre_authorized_code
+        {
+            (!is_pre_authorized).then(|| {
+                panic!("Expected authorization code, but got pre-authorized code");
+            });
+
+            pre_authorized_code
+        } else if let Some(AuthorizationCode { issuer_state, .. }) = authorization_code {
+            is_pre_authorized.then(|| {
+                panic!("Expected pre-authorized code, but got authorization code");
+            });
+
+            let issuer_state = issuer_state.unwrap();
+
+            let request_uri = par(app, issuer_state).await;
+
+            let code = authorize(app, request_uri).await;
+
+            code
+        } else {
+            panic!("Expected either authorization code or pre-authorized code, but got neither");
+        };
+
+        let token_request = if is_pre_authorized {
+            TokenRequest::PreAuthorizedCode {
+                pre_authorized_code: code,
+                tx_code: None,
+            }
+        } else {
+            let code_verifier = String::from_utf8(code_verifier().to_vec()).unwrap();
+
+            TokenRequest::AuthorizationCode {
+                client_id: UNIME_CLIENT_ID.to_string(),
+                code,
+                code_verifier: Some(code_verifier),
+                redirect_uri: "unime://callback".parse().ok(),
+            }
+        };
+
         let response = app
             .call(
                 Request::builder()
@@ -56,11 +113,7 @@ pub mod tests {
                         http::header::CONTENT_TYPE,
                         mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
                     )
-                    .body(Body::from(format!(
-                        // "grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code&pre-authorized_code={}",
-                        // pre_authorized_code
-                        "grant_type=authorization_code&code={code}&code_verifier=some_code_verifier&redirect_uri=unime://callback&client_id=test_client_id",
-                    )))
+                    .body(Body::from(to_form_urlencoded_string(&token_request).unwrap()))
                     .unwrap(),
             )
             .await
@@ -76,32 +129,30 @@ pub mod tests {
         token_response.access_token
     }
 
+    #[rstest]
+    #[case::pre_authorized_code(true)]
+    #[case::authorization_code(false)]
     #[serial_test::serial]
     #[tokio::test]
-    async fn test_token_endpoint() {
+    async fn test_token_endpoint(#[case] is_pre_authorized: bool) {
         // FIXME: this only tests Authorization Code Grant, not Pre-Authorized Code Grant
         let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
 
-        initialize(&issuance_state).await.unwrap();
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let mut app = issuance::router(issuance_state.clone());
 
         credentials(&mut app).await;
-        let (AuthorizationCode { issuer_state, .. }, _pre_authorized_code) = offers(&mut app).await.unwrap();
-        let issuer_state = issuer_state.unwrap();
+        let grants = offers(&mut app, is_pre_authorized).await.unwrap();
 
-        let authorization_state = authorization_state::<InMemory>(Default::default()).await;
-        let mut app = authorization::router((authorization_state, issuance_state));
+        let authorization_state = authorization_state::<InMemory>(Service::default(), Default::default()).await;
 
-        let request_uri = par(&mut app, issuer_state).await;
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
 
-        let code = authorize(&mut app, request_uri).await;
+        let mut app = authorization::router((authorization_state.clone(), issuance_state.clone()));
 
-        let _access_token = token(&mut app, code).await;
-
-        println!(
-            "Token endpoint test completed successfully. Access token: {}",
-            _access_token
-        );
+        let _access_token = token(&mut app, is_pre_authorized, grants).await;
     }
 }

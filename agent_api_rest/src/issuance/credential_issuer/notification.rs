@@ -1,5 +1,7 @@
 use crate::handlers::{command_handler, query_handler};
 use crate::issuance::error::{internal_server_error, PublicError};
+use agent_authorization::domain::access_token::aggregate::AccessToken;
+use agent_issuance::application::access_token_validation_service::AccessTokenValidationService;
 use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
 use axum::response::{IntoResponse, Response};
 use axum::{
@@ -26,15 +28,9 @@ pub async fn notification(
     let notification_request: NotificationRequest = serde_json::from_value::<NotificationRequest>(raw_value)
         .map_err(|_| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
 
-    // FIXME
-    // let access_token_result = query_handler(&access_token, &state.query.access_token).await?;
-
-    // let _offer_id = match access_token_result {
-    //     Some(access_token_view) => access_token_view.offer_id,
-    //     None => {
-    //         return Err(PublicError::from(NotificationErrorResponse::InvalidToken));
-    //     }
-    // };
+    let _claims = AccessTokenValidationService::validate(&state, &access_token)
+        .await
+        .map_err(|_| PublicError::from(NotificationErrorResponse::InvalidToken))?;
 
     let credentials = match query_handler("all_credentials", &state.query.all_credentials).await? {
         Some(all_credentials) => all_credentials.credentials,
@@ -67,12 +63,16 @@ pub async fn notification(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::authorization::authorization_server::token::tests::token;
     use crate::issuance::credential_issuer::credential::tests::credential;
+    use crate::issuance::credentials::tests::credentials;
+    use crate::issuance::offers::tests::offers;
     use crate::issuance::router;
+    use crate::{authorization, issuance};
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
-    use agent_store::issuance_state;
+    use agent_store::{authorization_state, issuance_state};
     use axum::{body::Body, http::Request};
     use oid4vci::errors::ErrorStatusCode;
     use oid4vci::notification_request::NotificationEvent;
@@ -83,10 +83,21 @@ mod tests {
     #[tokio::test]
     async fn test_valid_notification_request() {
         let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
-        initialize(&issuance_state).await.unwrap();
-        let mut app = router(issuance_state);
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+        let mut issuance_app = issuance::router(issuance_state.clone());
 
-        let (access_token, notification_id) = credential(&mut app).await;
+        credentials(&mut issuance_app).await;
+        let grants = offers(&mut issuance_app, true).await.unwrap();
+
+        let authorization_state = authorization_state::<InMemory>(Service::default(), Default::default()).await;
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
+        let mut authorization_app = authorization::router((authorization_state, issuance_state));
+
+        let access_token: String = token(&mut authorization_app, true, grants).await;
+
+        let (access_token, notification_id) = credential(&mut issuance_app, access_token, None).await;
 
         let request = Request::builder()
             .uri("/openid4vci/notification")
@@ -103,17 +114,28 @@ mod tests {
             ))
             .unwrap();
 
-        let response = app.oneshot(request).await.unwrap();
+        let response = issuance_app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
     }
 
     #[tokio::test]
     async fn test_invalid_notification_request() {
         let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
-        initialize(&issuance_state).await.unwrap();
-        let mut app = router(issuance_state);
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+        let mut issuance_app = issuance::router(issuance_state.clone());
 
-        let (access_token, notification_id) = credential(&mut app).await;
+        credentials(&mut issuance_app).await;
+        let grants = offers(&mut issuance_app, true).await.unwrap();
+
+        let authorization_state = authorization_state::<InMemory>(Service::default(), Default::default()).await;
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
+        let mut authorization_app = authorization::router((authorization_state, issuance_state));
+
+        let access_token: String = token(&mut authorization_app, true, grants).await;
+
+        let (access_token, notification_id) = credential(&mut issuance_app, access_token, None).await;
 
         struct TestCase {
             name: &'static str,
@@ -162,7 +184,7 @@ mod tests {
                 .body(Body::from(test_case.payload))
                 .unwrap();
 
-            let response = app.clone().oneshot(request).await.unwrap();
+            let response = issuance_app.clone().oneshot(request).await.unwrap();
             assert_eq!(
                 response.status(),
                 test_case.expected_error.status_code(),

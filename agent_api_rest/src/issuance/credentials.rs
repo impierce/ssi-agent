@@ -13,6 +13,7 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::header;
+use oid4vci::credential_offer::GrantType;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -109,6 +110,7 @@ pub(crate) async fn credentials(
     if query_handler(&offer_id, &state.query.offer).await?.is_none() {
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
+            grant_types: vec![GrantType::PreAuthorizedCode],
             credential_configuration_ids: vec![],
         };
 
@@ -174,7 +176,7 @@ pub mod tests {
             "last_name": "Rustacean"
         });
         pub static ref CREDENTIAL: serde_json::Value = json!({
-            "@context": "https://www.w3.org/2018/credentials/v1",
+            "@context": ["https://www.w3.org/2018/credentials/v1"],
             "type": [ "VerifiableCredential" ],
             "issuer": {
                 "id": "https://my-domain.example.org/",

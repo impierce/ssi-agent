@@ -1,3 +1,4 @@
+use agent_secret_manager::subject::SubjectExt;
 use agent_shared::application_state::CommandHandler;
 use agent_shared::config::{
     config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, CredentialConfiguration,
@@ -25,6 +26,7 @@ use crate::server_config::views::ServerConfigView;
 pub struct IssuanceState {
     pub command: CommandHandlers,
     pub query: Queries,
+    pub subject: Arc<dyn SubjectExt>,
 }
 
 /// The command handlers are used to execute commands on the aggregates.
@@ -203,9 +205,10 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
         .unwrap_or_else(|| match ApplicationProfile::load() {
             ApplicationProfile::Development => {
                 info!("Using default development credential configurations.");
+                // FIXME: set back to "001" and remove claims?
                 serde_json::from_value::<Vec<CredentialConfiguration>>(serde_json::json!([
                   {
-                    "credential_configuration_id": "001",
+                    "credential_configuration_id": "PersonalInformation",
                     "format": "jwt_vc_json",
                     "credential_definition": {
                       "type": ["VerifiableCredential"]
@@ -219,6 +222,29 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                           "alt_text": "Impierce Logo"
                         }
                       }
+                    ],
+                    "claims": [
+                        {
+                            "path": ["credentialSubject", "first_name"],
+                            "display": [{
+                                "name": "First Name",
+                                "locale": "en"
+                            }],
+                        },
+                        {
+                            "path": ["credentialSubject", "last_name"],
+                            "display": [{
+                                "name": "Last Name",
+                                "locale": "en"
+                            }],
+                        },
+                        {
+                            "path": ["credentialSubject", "dob"],
+                            "display": [{
+                                "name": "Date of Birth",
+                                "locale": "en"
+                            }],
+                        }
                     ]
                   }
                 ]))

@@ -82,10 +82,12 @@ dependencies = [
  "agent_shared",
  "agent_store",
  "agent_verification",
+ "anyhow",
  "askama",
  "axum 0.8.3",
  "axum-auth 0.8.1",
  "axum-macros",
+ "base64 0.22.1",
  "cqrs-es",
  "futures",
  "http 1.3.1",
@@ -115,6 +117,7 @@ dependencies = [
  "tracing",
  "tracing-test",
  "url",
+ "urlencoding",
  "uuid",
  "wiremock",
 ]
@@ -149,6 +152,7 @@ version = "0.1.0"
 dependencies = [
  "agent_authorization",
  "agent_holder",
+ "agent_issuance",
  "agent_secret_manager",
  "agent_shared",
  "anyhow",
@@ -169,6 +173,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_json_path_to_error",
+ "serde_with 3.14.0",
  "serial_test",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -177,6 +182,7 @@ dependencies = [
  "tracing-test",
  "types-ob-v3",
  "url",
+ "urlencoding",
  "uuid",
 ]
 
@@ -320,6 +326,7 @@ dependencies = [
  "derivative",
  "identity_core",
  "identity_credential",
+ "identity_jose",
  "jsonwebtoken",
  "lazy_static",
  "oid4vc-core",
@@ -330,6 +337,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_json_path_to_error",
+ "serde_with 3.14.0",
  "serial_test",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -3209,7 +3217,6 @@ dependencies = [
 [[package]]
 name = "dif-presentation-exchange"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?branch=build/bump-identity-beta2#de9661292ea97af3d14a534dda8dbe4767b3ff27"
 dependencies = [
  "getset",
  "jsonpath_lib",
@@ -8086,7 +8093,6 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?branch=build/bump-identity-beta2#de9661292ea97af3d14a534dda8dbe4767b3ff27"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8110,7 +8116,6 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?branch=build/bump-identity-beta2#de9661292ea97af3d14a534dda8dbe4767b3ff27"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8143,9 +8148,9 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?branch=build/bump-identity-beta2#de9661292ea97af3d14a534dda8dbe4767b3ff27"
 dependencies = [
  "anyhow",
+ "chrono",
  "derivative",
  "dif-presentation-exchange",
  "getset",
@@ -8154,6 +8159,7 @@ dependencies = [
  "lazy_static",
  "oid4vc-core",
  "paste",
+ "pkce",
  "reqwest 0.11.27",
  "reqwest-middleware",
  "reqwest-retry",
@@ -8163,12 +8169,13 @@ dependencies = [
  "serde_with 3.14.0",
  "thiserror 1.0.69",
  "tokio",
+ "url",
+ "uuid",
 ]
 
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?branch=build/bump-identity-beta2#de9661292ea97af3d14a534dda8dbe4767b3ff27"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8743,6 +8750,17 @@ dependencies = [
  "atomic-waker",
  "fastrand",
  "futures-io",
+]
+
+[[package]]
+name = "pkce"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e228dbe2aebd82de09c914fe28d36d3170ed5192e8d52b9c070ee0794519c2d3"
+dependencies = [
+ "base64 0.21.7",
+ "rand 0.8.5",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -10852,7 +10870,6 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?branch=build/bump-identity-beta2#de9661292ea97af3d14a534dda8dbe4767b3ff27"
 dependencies = [
  "anyhow",
  "async-trait",

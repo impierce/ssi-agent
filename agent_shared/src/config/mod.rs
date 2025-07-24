@@ -8,7 +8,10 @@ use identity_iota::{
 };
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
-use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
+use oid4vci::{
+    credential_format_profiles::{CredentialFormats, WithParameters},
+    credential_issuer::credential_configurations_supported::IssuerMetadataClaim,
+};
 use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -488,6 +491,8 @@ pub struct CredentialConfiguration {
     pub credential_format_with_parameters: CredentialFormats<WithParameters>,
     #[serde(default)]
     pub display: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub claims: Vec<IssuerMetadataClaim>,
 }
 
 #[skip_serializing_none]

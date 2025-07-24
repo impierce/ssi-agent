@@ -1,18 +1,11 @@
-use crate::authorization::authorization_server::authorize::TEMP_MAP;
 use crate::authorization::authorization_server::templates::{HtmlTemplate, LoginPageTemplate};
-use crate::handlers::{command_handler, query_handler};
 use crate::issuance::error::{internal_server_error, PublicError};
-use agent_authorization::application::pushed_authorization_service::{
-    PushedAuthorizationRequest, PushedAuthorizationService,
-};
 use agent_authorization::state::AuthorizationState;
-use agent_issuance::{offer::command::OfferCommand, state::IssuanceState};
 use axum::extract::Query;
 use axum::response::Redirect;
 use axum::Form;
 use axum::{
-    extract::{Json, State},
-    http::StatusCode,
+    extract::State,
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
@@ -32,8 +25,6 @@ pub(crate) async fn get_login(
         title: "Login to Authorization Server".to_string(),
         client_id,
         request_uri,
-        error_message: None,
-        success_message: None,
     })
     .into_response())
 }
@@ -51,11 +42,11 @@ pub async fn post_login(
     State(state): State<AuthorizationState>,
     Form(form): Form<LoginForm>,
 ) -> Result<Response, PublicError> {
-    let _ = *TEMP_MAP
-        .lock()
-        .map_err(|_| PublicError::from(internal_server_error()))?
-        .entry(form.request_uri.clone())
-        .or_insert(true);
+    // let _ = *TEMP_MAP
+    //     .lock()
+    //     .map_err(|_| PublicError::from(internal_server_error()))?
+    //     .entry(form.request_uri.clone())
+    //     .or_insert(true);
 
     Ok(Redirect::to(&format!(
         "/auth/authorize?client_id={}&request_uri={}",

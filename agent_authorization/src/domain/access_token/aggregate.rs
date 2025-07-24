@@ -3,7 +3,6 @@ use crate::domain::access_token;
 use super::command::AccessTokenCommand;
 use super::error::AccessTokenError;
 use super::event::AccessTokenEvent;
-use agent_shared::config::config;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;
@@ -15,28 +14,14 @@ use tracing::{debug, info};
 pub struct AccessToken {
     #[serde(rename = "id")]
     pub access_token_id: String,
-    pub access_token_value: String, // FIXME: use JWT
-    // FIXME: can all these be removed?
     pub user_id: String,
     pub client_id: String,
     pub scopes: Option<String>,
+    pub issued_at: u64,
     pub access_token_expires_at: u64,
     pub refresh_token_expires_at: Option<u64>,
+    // FIXME: Required?
     pub issuer_state: Option<String>,
-}
-
-// Placeholder for JWT claims structure - define this properly
-#[derive(Debug, Serialize, Deserialize)]
-struct Claims {
-    iss: String,            // Issuer
-    sub: String,            // Subject (user_id)
-    aud: String,            // Audience (client_id or your resource server identifier)
-    exp: i64,               // Expiration Time
-    iat: i64,               // Issued At
-    jti: String,            // JWT ID (unique identifier for this token)
-    scopes: Option<String>, // Or Vec<String>
-    client_id: String,
-    issuer_state: Option<String>, // Custom state for issuer
 }
 
 #[async_trait]
@@ -67,53 +52,21 @@ impl Aggregate for AccessToken {
                 refresh_token_expires_in,
                 issuer_state,
             } => {
-                let now = chrono::Utc::now();
-                let iat = now.timestamp();
+                // FIXME: check this!
+                #[cfg(not(feature = "test_utils"))]
+                let issued_at = chrono::Utc::now().timestamp() as u64;
+                #[cfg(feature = "test_utils")]
+                let issued_at = test_utils::issued_at();
 
-                let access_token_expires_at = chrono::Utc::now().timestamp() as u64 + access_token_expires_in;
-                let refresh_token_expires_at =
-                    refresh_token_expires_in.map(|duration| chrono::Utc::now().timestamp() as u64 + duration);
-
-                // --- Access Token (JWT) ---
-                let exp = access_token_expires_at as i64; // Expiration time in seconds
-                let jti = self.access_token_id.clone(); // Use the access token ID as the JWT ID
-
-                // TODO: These should come from configuration or services
-                let iss = config().public_url.to_string(); // FIXME: use DID?
-                let aud = client_id.clone(); // FIXME: Or a specific RS identifier | Or Credential Issuer?
-
-                let claims = Claims {
-                    iss,
-                    sub: user_id.clone(),
-                    aud,
-                    exp,
-                    iat,
-                    jti,
-                    scopes: scopes.clone(),
-                    client_id: client_id.clone(),
-                    issuer_state: issuer_state.clone(),
-                };
-
-                // FIXME: Key Management! This is a placeholder.
-                // The key should be securely managed and ideally not hardcoded or directly in the aggregate.
-                // For HS256, the key is a byte slice. For RS256, it's an RSA private key.
-                // Consider using `services` to provide a signing capability.
-                let encoding_key_str = "your-256-bit-secret"; // FIXME: NEVER hardcode keys in production! Load from secure config.
-                let encoding_key = jsonwebtoken::EncodingKey::from_secret(encoding_key_str.as_bytes());
-
-                let access_token_value = jsonwebtoken::encode(
-                    &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256),
-                    &claims,
-                    &encoding_key,
-                )
-                .expect("FIX THIS");
+                let access_token_expires_at = issued_at + access_token_expires_in;
+                let refresh_token_expires_at = refresh_token_expires_in.map(|duration| issued_at + duration);
 
                 Ok(vec![AccessTokenIssued {
                     access_token_id: access_token_id.clone(),
-                    access_token_value,
                     user_id,
                     client_id,
                     scopes,
+                    issued_at,
                     access_token_expires_at,
                     refresh_token_expires_at,
                     issuer_state,
@@ -130,19 +83,19 @@ impl Aggregate for AccessToken {
         match event {
             AccessTokenIssued {
                 access_token_id,
-                access_token_value, // FIXME: Use JWT
                 user_id,
                 client_id,
                 scopes,
+                issued_at,
                 access_token_expires_at,
                 refresh_token_expires_at,
                 issuer_state,
             } => {
                 self.access_token_id = access_token_id;
-                self.access_token_value = access_token_value; // FIXME: Store JWT or its value
                 self.user_id = user_id;
                 self.client_id = client_id;
                 self.scopes = scopes;
+                self.issued_at = issued_at;
                 self.access_token_expires_at = access_token_expires_at;
                 self.refresh_token_expires_at = refresh_token_expires_at;
                 self.issuer_state = issuer_state;
@@ -155,9 +108,101 @@ impl Aggregate for AccessToken {
 pub mod token_tests {
     use super::test_utils::*;
     use super::*;
+    use cqrs_es::test::TestFramework;
+    use rstest::rstest;
+
+    type AccessTokenTestFramework = TestFramework<AccessToken>;
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_issue_access_token(
+        access_token_id: String,
+        user_id: String,
+        client_id: String,
+        scopes: Option<String>,
+        issued_at: u64,
+        access_token_expires_in: u64,
+        access_token_expires_at: u64,
+        refresh_token_expires_in: Option<u64>,
+        refresh_token_expires_at: Option<u64>,
+        issuer_state: Option<String>,
+    ) {
+        AccessTokenTestFramework::with(())
+            .given_no_previous_events()
+            .when(AccessTokenCommand::IssueAccessToken {
+                access_token_id: access_token_id.clone(),
+                user_id: user_id.clone(),
+                client_id: client_id.clone(),
+                scopes: scopes.clone(),
+                access_token_expires_in,
+                refresh_token_expires_in,
+                issuer_state: issuer_state.clone(),
+            })
+            .then_expect_events(vec![AccessTokenEvent::AccessTokenIssued {
+                access_token_id,
+                user_id,
+                client_id,
+                scopes,
+                issued_at,
+                access_token_expires_at,
+                refresh_token_expires_at,
+                issuer_state,
+            }]);
+    }
 }
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::*;
+    use rstest::*;
+
+    #[fixture]
+    pub fn access_token_id() -> String {
+        "access_token_id".to_string()
+    }
+
+    #[fixture]
+    pub fn user_id() -> String {
+        "user_id".to_string()
+    }
+
+    #[fixture]
+    pub fn client_id() -> String {
+        "client_id".to_string()
+    }
+
+    #[fixture]
+    pub fn scopes() -> Option<String> {
+        Some("openid profile email".to_string())
+    }
+
+    #[fixture]
+    pub fn issuer_state() -> Option<String> {
+        Some("issuer_state".to_string())
+    }
+
+    #[fixture]
+    pub fn issued_at() -> u64 {
+        0
+    }
+
+    #[fixture]
+    pub fn access_token_expires_in() -> u64 {
+        3600 // 1 hour
+    }
+
+    #[fixture]
+    pub fn access_token_expires_at(issued_at: u64, access_token_expires_in: u64) -> u64 {
+        issued_at + access_token_expires_in
+    }
+
+    #[fixture]
+    pub fn refresh_token_expires_in() -> Option<u64> {
+        Some(86400) // 24 hours
+    }
+
+    #[fixture]
+    pub fn refresh_token_expires_at(issued_at: u64, refresh_token_expires_in: Option<u64>) -> Option<u64> {
+        refresh_token_expires_in.map(|duration| issued_at + duration)
+    }
 }

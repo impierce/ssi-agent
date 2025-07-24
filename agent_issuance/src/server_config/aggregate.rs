@@ -5,8 +5,7 @@ use oid4vci::credential_issuer::credential_configurations_supported::CredentialC
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
-use oid4vci::proof::KeyProofMetadata;
-use oid4vci::ProofType;
+use oid4vci::proof::{KeyProofMetadata, ProofType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -174,6 +173,7 @@ impl Aggregate for ServerConfig {
                     ),
                     proof_types_supported,
                     display: credential_configuration.display,
+                    claims: credential_configuration.claims,
                     ..Default::default()
                 };
 
@@ -366,7 +366,6 @@ pub mod server_config_tests {
                                 type_: vec!["VerifiableCredential".to_string()],
                                 credential_subject: Default::default(),
                             },
-                            order: None,
                         },
                     }),
                     display: vec![json!({
@@ -377,6 +376,7 @@ pub mod server_config_tests {
                             "alt_text": "Impierce Logo"
                         }
                     })],
+                    claims: vec![],
                 },
                 provisioned: false,
             })
@@ -454,7 +454,6 @@ pub mod test_utils {
         Box::new(CredentialIssuerMetadata {
             credential_issuer: static_issuer_url.clone(),
             credential_endpoint: static_issuer_url.join("credential").unwrap(),
-            batch_credential_endpoint: Some(static_issuer_url.join("batch_credential").unwrap()),
             ..Default::default()
         })
     }

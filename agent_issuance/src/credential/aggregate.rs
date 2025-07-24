@@ -565,8 +565,7 @@ pub mod test_utils {
         credential_format_profiles::{
             w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, CredentialFormats, Parameters,
         },
-        proof::KeyProofMetadata,
-        ProofType,
+        proof::{KeyProofMetadata, ProofType},
     };
     use rstest::fixture;
     use serde_json::json;
@@ -590,14 +589,11 @@ pub mod test_utils {
         pub static ref OPENBADGE_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
             CredentialConfigurationsSupportedObject {
                 credential_format: CredentialFormats::JwtVcJson(Parameters {
-                    parameters: (
-                        CredentialDefinition {
-                            type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
-                            credential_subject: Default::default(),
-                        },
-                        None,
-                    )
-                        .into(),
+                    parameters: (CredentialDefinition {
+                        type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
+                        credential_subject: Default::default(),
+                    })
+                    .into(),
                 }),
                 cryptographic_binding_methods_supported: vec!["did:key".to_string(), "did:jwk".to_string(),],
                 credential_signing_alg_values_supported: vec!["EdDSA".to_string()],
@@ -618,14 +614,11 @@ pub mod test_utils {
         pub static ref W3C_VC_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
             CredentialConfigurationsSupportedObject {
                 credential_format: CredentialFormats::JwtVcJson(Parameters {
-                    parameters: (
-                        CredentialDefinition {
-                            type_: vec!["VerifiableCredential".to_string()],
-                            credential_subject: Default::default(),
-                        },
-                        None,
-                    )
-                        .into(),
+                    parameters: (CredentialDefinition {
+                        type_: vec!["VerifiableCredential".to_string()],
+                        credential_subject: Default::default(),
+                    })
+                    .into()
                 }),
                 cryptographic_binding_methods_supported: vec!["did:jwk".to_string(), "did:key".to_string(),],
                 credential_signing_alg_values_supported: vec!["ES256".to_string(), "EdDSA".to_string()],

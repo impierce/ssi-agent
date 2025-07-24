@@ -6,6 +6,6 @@ use axum::{response::IntoResponse, response::Response, Json};
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use oid4vci::errors::{
-    AuthorizationErrorResponse, BatchCredentialErrorResponse, CredentialErrorResponse, DeferredCredentialErrorResponse,
-    ErrorStatusCode, NotificationErrorResponse, OID4VCError, TokenErrorResponse,
+    AuthorizationErrorResponse, CredentialErrorResponse, DeferredCredentialErrorResponse, ErrorStatusCode,
+    NotificationErrorResponse, OID4VCError, TokenErrorResponse,
 };

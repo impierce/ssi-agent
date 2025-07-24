@@ -19,14 +19,6 @@
     <div class="container">
         <h1>{{ title }}</h1>
 
-        {% if error_message.is_some() %}
-        <p class="error">{{ error_message.as_ref().unwrap() }}</p>
-        {% endif %}
-
-        {% if success_message.is_some() %}
-        <p class="success">{{ success_message.as_ref().unwrap() }}</p>
-        {% endif %}
-
         <form action="/auth/login" method="post">
             <input type="hidden" name="client_id" value="{{ client_id }}">
 

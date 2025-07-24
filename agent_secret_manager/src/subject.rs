@@ -60,6 +60,38 @@ impl Subject {
     }
 }
 
+#[async_trait]
+pub trait SubjectExt: oid4vc_core::Subject {
+    async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk>;
+}
+
+#[async_trait]
+impl SubjectExt for Subject {
+    async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk> {
+        let did_url =
+            identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
+
+        let resolver = Resolver::new().await;
+
+        let document = resolver
+            .resolve(did_url.did().as_str())
+            .await
+            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
+
+        let verification_method = document
+            .resolve_method(DIDUrlQuery::from(&did_url), None)
+            .ok_or(anyhow!(
+                "Failed to resolve verification method for DID URL: `{did_url}`"
+            ))?;
+
+        verification_method
+            .data()
+            .public_key_jwk()
+            .ok_or_else(|| anyhow!("Failed to resolve public key for DID URL: `{did_url}`"))
+            .cloned()
+    }
+}
+
 /// This module contains implementations for `Subject` for testing purposes.
 /// It is only available when the `test_utils` feature is enabled.
 #[cfg(feature = "test_utils")]

@@ -12,14 +12,18 @@ impl View<Offer> for Offer {
         match &event.payload {
             CredentialOfferCreated {
                 offer_id,
+                grant_types,
                 status,
                 credential_offer,
                 credential_offer_uri,
+                pre_authorized_code,
             } => {
                 self.offer_id.clone_from(offer_id);
+                self.grant_types.clone_from(grant_types);
                 self.status.clone_from(status);
                 self.credential_offer.replace(credential_offer.clone());
                 self.credential_offer_uri.replace(credential_offer_uri.clone());
+                self.pre_authorized_code.clone_from(pre_authorized_code);
             }
             CredentialsAdded {
                 offer_id,

@@ -198,7 +198,12 @@ impl Aggregate for Offer {
 
                         // Get the credential.
                         let credential_response = wallet
-                            .get_credential(credential_issuer_metadata, &token_response, credential_configuration)
+                            .get_credential(
+                                credential_issuer_metadata,
+                                &token_response,
+                                credential_configuration_id.clone(),
+                                credential_configuration,
+                            )
                             .await
                             .map_err(|_| CredentialResponseError)?;
 
@@ -294,7 +299,8 @@ pub mod tests {
     use agent_shared::config::config;
     use agent_shared::config::config_mut;
     use agent_shared::generate_random_string;
-    use agent_store::in_memory;
+    use agent_store::in_memory::InMemory;
+    use agent_store::issuance_state;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -321,7 +327,7 @@ pub mod tests {
         config_mut().credential_endpoint = application_url.join("openid4vci/credential").unwrap();
         config_mut().credential_offer_uri = application_url.join("openid4vci/credential-offer/").unwrap();
 
-        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
         initialize(&issuance_state).await.unwrap();
 
         let received_offer_id = generate_random_string();

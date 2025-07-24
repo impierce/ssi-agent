@@ -4,6 +4,7 @@ mod metadata;
 mod probes;
 
 use agent_api_rest::{app, ApplicationState};
+use agent_authorization::services::AuthorizationServices;
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_holder::services::HolderServices;
 use agent_identity::services::IdentityServices;
@@ -22,6 +23,7 @@ async fn main() -> io::Result<()> {
     let subject = Arc::new(Subject::new().await);
 
     let identity_services = Arc::new(IdentityServices::new(subject.clone()));
+    let authorization_services = Arc::new(AuthorizationServices::new(subject.clone()));
     let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
     let holder_services = Arc::new(HolderServices::new(subject.clone()));
     let verification_services = Arc::new(VerificationServices::new(subject.clone()));
@@ -37,23 +39,25 @@ async fn main() -> io::Result<()> {
     let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
-    let (identity_state, authorization_state, issuance_state, holder_state, verification_state) =
-        match config().event_store.type_ {
-            EventStoreType::Postgres => (
-                agent_store::identity_state::<Postgres>(identity_services, identity_event_publishers).await,
-                agent_store::authorization_state::<Postgres>(authorization_event_publishers).await,
-                agent_store::issuance_state::<Postgres>(issuance_services, issuance_event_publishers).await,
-                agent_store::holder_state::<Postgres>(holder_services, holder_event_publishers).await,
-                agent_store::verification_state::<Postgres>(verification_services, verification_event_publishers).await,
-            ),
-            EventStoreType::InMemory => (
-                agent_store::identity_state::<InMemory>(identity_services, identity_event_publishers).await,
-                agent_store::authorization_state::<InMemory>(authorization_event_publishers).await,
-                agent_store::issuance_state::<InMemory>(issuance_services, issuance_event_publishers).await,
-                agent_store::holder_state::<InMemory>(holder_services, holder_event_publishers).await,
-                agent_store::verification_state::<InMemory>(verification_services, verification_event_publishers).await,
-            ),
-        };
+    let (identity_state, authorization_state, issuance_state, holder_state, verification_state) = match config()
+        .event_store
+        .type_
+    {
+        EventStoreType::Postgres => (
+            agent_store::identity_state::<Postgres>(identity_services, identity_event_publishers).await,
+            agent_store::authorization_state::<Postgres>(authorization_services, authorization_event_publishers).await,
+            agent_store::issuance_state::<Postgres>(issuance_services, issuance_event_publishers).await,
+            agent_store::holder_state::<Postgres>(holder_services, holder_event_publishers).await,
+            agent_store::verification_state::<Postgres>(verification_services, verification_event_publishers).await,
+        ),
+        EventStoreType::InMemory => (
+            agent_store::identity_state::<InMemory>(identity_services, identity_event_publishers).await,
+            agent_store::authorization_state::<InMemory>(authorization_services, authorization_event_publishers).await,
+            agent_store::issuance_state::<InMemory>(issuance_services, issuance_event_publishers).await,
+            agent_store::holder_state::<InMemory>(holder_services, holder_event_publishers).await,
+            agent_store::verification_state::<InMemory>(verification_services, verification_event_publishers).await,
+        ),
+    };
 
     info!("{:?}", config());
 

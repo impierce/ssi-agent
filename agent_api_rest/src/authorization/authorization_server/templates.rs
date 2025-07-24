@@ -1,3 +1,5 @@
+use oid4vci::authorization_details::CredentialConfigurationOrFormat;
+
 // src/web/templates.rs (or directly in main.rs for a small example)
 use askama::Template;
 
@@ -7,8 +9,6 @@ pub struct LoginPageTemplate {
     pub title: String,
     pub client_id: String, // Client ID of the OAuth2 client
     pub request_uri: String,
-    pub error_message: Option<String>,
-    pub success_message: Option<String>,
 }
 
 #[derive(Template)]
@@ -16,14 +16,10 @@ pub struct LoginPageTemplate {
 pub struct ConsentPageTemplate {
     pub title: String,
     pub client_name: String,
-    pub requested_scopes: Vec<String>,
-    pub context_id: String, // To pass context back
-    pub client_id: String,  // Pass original OAuth params back
-    pub redirect_uri: String,
-    pub response_type: String,
-    pub state: String,
+    pub client_id: String,
     pub scope: String, // Space-separated string
-    pub error_message: Option<String>,
+    pub authorization_details: Vec<AuthorizationDetailsObject>,
+    pub request_uri: Uuid, // To restore original OAuth context after consent
 }
 
 // You might create a helper type for Axum for cleaner handlers
@@ -34,6 +30,8 @@ pub struct HtmlTemplate<T>(pub T);
 // so that we can return it directly from Axum handlers.
 use axum::response::{Html, IntoResponse, Response};
 use http::StatusCode;
+use oid4vci::authorization_details::AuthorizationDetailsObject;
+use uuid::Uuid;
 
 impl<T: Template> IntoResponse for HtmlTemplate<T> {
     fn into_response(self) -> Response {

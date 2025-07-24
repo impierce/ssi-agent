@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+agent_issuance = { path = "../agent_issuance" }
 agent_shared = { path = "../agent_shared" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 
@@ -25,9 +26,11 @@ reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_json_path_to_error.workspace = true
+serde_with.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 url.workspace = true
+urlencoding = "2.1"
 uuid.workspace = true
 
 # `test_utils` dependencies

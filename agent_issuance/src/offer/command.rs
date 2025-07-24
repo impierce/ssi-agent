@@ -3,6 +3,7 @@ use oid4vci::{
         authorization_server_metadata::AuthorizationServerMetadata,
         credential_issuer_metadata::CredentialIssuerMetadata,
     },
+    credential_offer::GrantType,
     credential_request::CredentialRequest,
 };
 use serde::Deserialize;
@@ -13,6 +14,7 @@ use url::Url;
 pub enum OfferCommand {
     CreateCredentialOffer {
         offer_id: String,
+        grant_types: Vec<GrantType>,
         credential_configuration_ids: Vec<String>,
     },
     AddCredentials {

@@ -1,5 +1,7 @@
 use agent_shared::application_state::CommandHandler;
+use agent_shared::handlers::{command_handler, query_handler};
 use cqrs_es::persist::ViewRepository;
+use oid4vc_core::Sign;
 use std::sync::Arc;
 use tracing::{debug, info};
 
@@ -8,6 +10,7 @@ use crate::domain::access_token::views::AccessTokenView;
 use crate::domain::authorization_code::aggregate::AuthorizationCode;
 use crate::domain::authorization_code::views::AuthorizationCodeView;
 use crate::domain::client::aggregate::Client;
+use crate::domain::client::command::ClientCommand;
 use crate::domain::client::views::ClientView;
 use crate::domain::consent::aggregate::Consent;
 use crate::domain::consent::views::ConsentView;
@@ -18,6 +21,7 @@ use crate::domain::oauth2_authorization_request::views::OAuth2AuthorizationReque
 pub struct AuthorizationState {
     pub command: CommandHandlers,
     pub query: Queries,
+    pub signer: Arc<dyn Sign>,
 }
 
 /// The command handlers are used to execute commands on the aggregates.
@@ -65,5 +69,47 @@ impl Clone for Queries {
             access_token: self.access_token.clone(),
             consent: self.consent.clone(),
         }
+    }
+}
+
+/// Initialize the authorization state.
+pub async fn initialize(state: &AuthorizationState) -> anyhow::Result<()> {
+    info!("Initializing the authorization state ...");
+
+    initialize_clients(state).await?;
+
+    Ok(())
+}
+
+pub const UNIME_CLIENT_ID: &str = "unime-client-id";
+
+/// Initialize the default client (UniMe) in the authorization state.
+async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
+    if let Some(client) = query_handler(UNIME_CLIENT_ID, &state.query.client).await? {
+        debug!("UniMe client already exists: {:?}", client);
+        Ok(())
+    } else {
+        let command = ClientCommand::RegisterClient {
+            client_id: UNIME_CLIENT_ID.to_string(),
+            client_secret: None,
+            client_name: Some("UniMe".to_string()),
+            logo_uri: Some("FIXME: add unime logo".to_string()),
+            policy_uri: None,
+            tos_uri: None,
+            redirect_uris: vec!["unime://callback".parse().unwrap()],
+            grant_types: vec![
+                "authorization_code".to_string(),
+                "urn:ietf:params:oauth:grant-type:pre-authorized_code".to_string(),
+            ],
+            response_types: vec!["code".to_string()],
+            token_endpoint_auth_method: "none".to_string(),
+            require_pkce: true,
+            code_challenge_methods_supported: vec!["S256".to_string()],
+            require_pushed_authorization_request: true,
+        };
+
+        command_handler(UNIME_CLIENT_ID, &state.command.client, command).await?;
+
+        Ok(())
     }
 }

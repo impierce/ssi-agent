@@ -6,6 +6,7 @@ pub mod verification;
 
 pub mod error;
 pub mod handlers;
+pub mod utils;
 
 use agent_authorization::state::AuthorizationState;
 use agent_holder::state::HolderState;

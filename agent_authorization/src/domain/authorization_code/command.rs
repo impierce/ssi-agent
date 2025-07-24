@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use url::Url;
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -7,7 +8,7 @@ pub enum AuthorizationCodeCommand {
         authorization_code_id: String,
         client_id: String,
         user_id: String,
-        redirect_uri: String,
+        redirect_uri: Url,
         scope: Option<String>,
         code_challenge: Option<String>,
         code_challenge_method: Option<String>,
@@ -16,7 +17,7 @@ pub enum AuthorizationCodeCommand {
     },
     RedeemCode {
         client_id: String,
-        redirect_uri: Option<String>,
+        redirect_uri: Option<Url>,
         code_verifier: Option<String>,
     },
 }
