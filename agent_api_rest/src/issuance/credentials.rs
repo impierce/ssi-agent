@@ -3,7 +3,11 @@ use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_issuance::credential::aggregate::CredentialStatus;
 use agent_issuance::{
-    credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data},
+    credential::{
+        aggregate::CredentialExpiry,
+        command::{CredentialCommand, CredentialStatusIndex},
+        entity::Data,
+    },
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
@@ -15,7 +19,6 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::header;
 use oauth_tsl::status_list::StatusType;
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -97,11 +100,49 @@ pub(crate) async fn credentials(
                     .finish()
             })?;
 
+        // Create the new CredentialStatus index randomly.
+        let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
+            .await?
+            .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
+            .unwrap_or_default();
+
+        let used_indices: Vec<usize> = all_credentials.iter().map(|c| c.credential_status.index).collect();
+
+        // Status Lists should only be filled up to 70%, the remaining 30% will be used for decoy/psuedo indices.
+        // This greatly improves the privacy of the issuer.
+        let statuses_per_byte: usize = 8 / STATUSTYPESIZE as usize;
+        let status_list_number = used_indices.len() / ((STATUSLISTSIZE * statuses_per_byte) as f64 * 0.7) as usize;
+
+        let random_index;
+        #[cfg(not(feature = "test_utils"))]
+        {
+            use rand::Rng;
+
+            let mut rng = rand::rng();
+            loop {
+                let candidate = rng
+                    .random_range((status_list_number * STATUSLISTSIZE)..((status_list_number + 1) * STATUSLISTSIZE));
+                if !used_indices.contains(&candidate) {
+                    random_index = candidate;
+                    break;
+                }
+            }
+        }
+
+        #[cfg(feature = "test_utils")]
+        {
+            random_index = 123;
+        }
+
         CredentialCommand::CreateUnsignedCredential {
             credential_id: credential_id.clone(),
             data: Data { raw: credential },
             credential_configuration: Box::new(credential_configuration),
             expires_at,
+            credential_status_index: CredentialStatusIndex {
+                index: random_index,
+                list_index: status_list_number,
+            },
         }
     };
 
@@ -154,7 +195,7 @@ pub(crate) async fn all_credentials(State(state): State<IssuanceState>) -> Resul
 
 #[derive(Serialize, Deserialize)]
 pub struct PatchCredentialEndpointRequest {
-    pub status: StatusType,
+    pub credential_status: StatusType,
 }
 
 pub const STATUSTYPESIZE: u8 = 2; // Amount of bits per status
@@ -164,47 +205,15 @@ pub const STATUSLISTSIZE: usize = 16384; // Amount of bytes in the status list. 
 pub async fn patch_credential(
     State(state): State<IssuanceState>,
     Path(credential_id): Path<String>,
-    Json(PatchCredentialEndpointRequest { status }): Json<PatchCredentialEndpointRequest>,
+    Json(PatchCredentialEndpointRequest {
+        credential_status: status,
+    }): Json<PatchCredentialEndpointRequest>,
 ) -> Result<Response, ApiError> {
     if let Some(credential) = query_handler(&credential_id, &state.query.credential).await? {
-        let credential_status: CredentialStatus;
-
-        if credential.credential_status.is_some() {
-            credential_status = CredentialStatus {
-                index: credential.credential_status.as_ref().unwrap().index,
-                status: status.clone(),
-            }
-        } else {
-            let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
-                .await?
-                .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
-                .unwrap_or_default();
-
-            let used_indices: Vec<usize> = all_credentials
-                .iter()
-                .filter_map(|c| c.credential_status.as_ref().map(|s| s.index))
-                .collect();
-
-            // Status Lists should only be filled up to 70%, the remaining 30% will be used for decoy/psuedo indices.
-            // This greatly improves the privacy of the issuer.
-            let statuses_per_byte: usize = 8 / STATUSTYPESIZE as usize;
-            let status_list_number = used_indices.len() / ((STATUSLISTSIZE * statuses_per_byte) as f64 * 0.7) as usize;
-            let mut rng = rand::rng();
-            let mut random_index;
-
-            loop {
-                random_index = rng
-                    .random_range((status_list_number * STATUSLISTSIZE)..((status_list_number + 1) * STATUSLISTSIZE));
-                if !used_indices.contains(&random_index) {
-                    break;
-                }
-            }
-
-            credential_status = CredentialStatus {
-                index: random_index,
-                status,
-            };
-        }
+        let credential_status = CredentialStatus {
+            index: credential.credential_status.index,
+            status: status.clone(),
+        };
 
         let command = CredentialCommand::SetCredentialStatus {
             credential_id: credential_id.clone(),
@@ -212,9 +221,11 @@ pub async fn patch_credential(
         };
 
         command_handler(&credential_id, &state.command.credential, command).await?;
-    }
 
-    Ok(StatusCode::NO_CONTENT.into_response())
+        Ok(StatusCode::NO_CONTENT.into_response())
+    } else {
+        Err(ApiError::new(StatusCode::NOT_FOUND))
+    }
 }
 
 #[cfg(test)]
@@ -240,6 +251,8 @@ pub mod tests {
             "first_name": "Ferris",
             "last_name": "Rustacean"
         });
+
+        // The credentialStatus id/uri only contain a relative path, since we only need to have the correct route for them in the tests.
         pub static ref CREDENTIAL: serde_json::Value = json!({
             "@context": "https://www.w3.org/2018/credentials/v1",
             "type": [ "VerifiableCredential" ],
@@ -248,11 +261,18 @@ pub mod tests {
                 "name": "UniCore"
             },
             "issuanceDate": "2010-01-01T00:00:00Z",
-            "credentialSubject": CREDENTIAL_SUBJECT.clone()
+            "credentialSubject": CREDENTIAL_SUBJECT.clone(),
+            "credentialStatus": {
+                "id": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
+                "type": "statuslist+jwt",
+                "idx": 123,
+                "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0"
+            }
         });
     }
 
-    pub async fn credentials(app: &mut Router) {
+    /// This function creates and tests a credential and returns the endpoint where this credential can be accessed.
+    pub async fn credentials(app: &mut Router) -> String {
         let response = app
             .call(
                 Request::builder()
@@ -263,7 +283,7 @@ pub mod tests {
                         serde_json::to_vec(&json!({
                             "offerId": OFFER_ID,
                             "credential": {
-                                "credentialSubject": CREDENTIAL_SUBJECT.clone()
+                                "credentialSubject": CREDENTIAL_SUBJECT.clone(),
                             },
                             "credentialConfigurationId": CREDENTIAL_CONFIGURATION_ID,
                             "expiresAt": "never"
@@ -294,7 +314,7 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method(http::Method::GET)
-                    .uri(get_credentials_endpoint)
+                    .uri(get_credentials_endpoint.clone())
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::empty())
                     .unwrap(),
@@ -308,6 +328,43 @@ pub mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["data"]["raw"], CREDENTIAL.clone());
+
+        get_credentials_endpoint
+    }
+
+    pub async fn patch_credential(app: &mut Router) {
+        let credential_endpoint = credentials(app).await;
+
+        let patch_response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::PATCH)
+                    .uri(&credential_endpoint)
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "credential_status": "INVALID"
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(patch_response.status(), StatusCode::NO_CONTENT);
+
+        // query status list token to see changed status
+    }
+
+    #[tokio::test]
+    async fn test_patch_credential() {
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
+        initialize(&issuance_state).await.unwrap();
+
+        let mut app = router(issuance_state);
+
+        patch_credential(&mut app).await;
     }
 
     #[tokio::test]

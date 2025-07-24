@@ -41,6 +41,11 @@ impl IntoApiErrorExt for CredentialError {
                 .type_url(type_url("issuance#invalid-expiration-date"))
                 .source(self)
                 .finish(),
+            InvalidCredentialStatus => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Invalid Credential Status URL")
+                .type_url(type_url("issuance#invalid-credential-status-url"))
+                .source(self)
+                .finish(),
 
             // Public API Errors
 

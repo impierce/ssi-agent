@@ -1,4 +1,4 @@
-use agent_issuance::state::IssuanceState;
+use agent_issuance::{credential::aggregate::CredentialStatus, state::IssuanceState};
 use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm};
 use axum::{
     extract::{Path, State},
@@ -8,7 +8,7 @@ use http::StatusCode;
 use hyper::header;
 use oauth_tsl::{
     managers::status_provider::compress_gzip,
-    status_list::{Bits, EncodedStatusList, StatusList, StatusType},
+    status_list::{Bits, EncodedStatusList, StatusList},
     tokens::status_list_token::{StatusListToken, StatusListTokenClaims},
 };
 use oid4vc_core::jwt::encode;
@@ -35,34 +35,35 @@ pub async fn token_status_list(
     let lower_bound = status_list_number * STATUSLISTSIZE;
     let upper_bound = (status_list_number + 1) * STATUSLISTSIZE;
 
-    let mut used_indices: Vec<(usize, StatusType)> = all_credentials
+    let mut used_indices: Vec<CredentialStatus> = all_credentials
         .iter()
         .filter_map(|c| {
-            c.credential_status.as_ref().and_then(|s| {
-                let index = s.index;
-                if index >= lower_bound && index < upper_bound {
-                    Some((index, s.status.clone()))
-                } else {
-                    None
-                }
-            })
+            let index = c.credential_status.index;
+            if index >= lower_bound && index < upper_bound {
+                Some(c.credential_status.clone())
+            } else {
+                None
+            }
         })
         .collect();
 
     // This block ensures that the remaining empty 30% of a status list is filled with random values.
     // This block works in tandem with the part of `fn patch_credential` which only fills 70% of a status list.
-    used_indices = task::spawn_blocking(move || -> Result<Vec<(usize, StatusType)>, PublicError> {
+    used_indices = task::spawn_blocking(move || -> Result<Vec<CredentialStatus>, PublicError> {
         let mut indices = used_indices.clone();
 
         let mut rng = rand::rng();
         while indices.len() < STATUSLISTSIZE {
             let random_index = rng.random_range(lower_bound..upper_bound);
-            if !indices.iter().any(|(index, _)| *index == random_index) {
+            if !indices
+                .iter()
+                .any(|credential_status| credential_status.index == random_index)
+            {
                 let status_type = rng.random_range(0..2);
-                indices.push((
-                    random_index,
-                    status_type.try_into().map_err(|_| PublicError::InternalServerError)?,
-                ));
+                indices.push(CredentialStatus {
+                    index: random_index,
+                    status: status_type.try_into().map_err(|_| PublicError::InternalServerError)?,
+                });
             }
         }
 
@@ -75,7 +76,13 @@ pub async fn token_status_list(
         status_size: Bits::try_from(STATUSTYPESIZE).map_err(|_| PublicError::InternalServerError)?,
         status_list: used_indices
             .iter()
-            .map(|(_, status)| status.clone().try_into().map_err(|_| PublicError::InternalServerError))
+            .map(|credential_status| {
+                credential_status
+                    .status
+                    .clone()
+                    .try_into()
+                    .map_err(|_| PublicError::InternalServerError)
+            })
             .collect::<Result<Vec<_>, _>>()?,
         aggregation_uri: None,
     };
@@ -87,7 +94,7 @@ pub async fn token_status_list(
         .map_err(|_| PublicError::InternalServerError)?;
     let status_list_claims = StatusListTokenClaims {
         sub: sub_uri.to_string(),
-        iat: chrono::Utc::now().timestamp(),
+        iat: chrono::Utc::now().timestamp(), // this is perhaps incorrect actually? check with spec if it wants first date of creation/usage of the TSL. wouldnt need to add some logic since we actually create on the fly.
         exp: None,
         ttl: None,
         encoded_status_list: EncodedStatusList::try_from(status_list).map_err(|_| PublicError::InternalServerError)?,
@@ -123,5 +130,10 @@ pub async fn token_status_list(
         .into_response())
 }
 
-#[cfg(test)]
-pub mod tests {}
+// #[cfg(test)]
+// pub mod tests {
+//     use super::*;
+
+//     #[tokio::test]
+//     pub async fn test_token_status_list() {}
+// }

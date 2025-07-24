@@ -17,6 +17,7 @@ pub enum CredentialEvent {
         data: Data,
         notification_id: Option<String>,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
+        credential_status: CredentialStatus,
     },
     SignedCredentialCreated {
         credential_id: String,

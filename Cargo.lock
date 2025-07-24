@@ -68,6 +68,7 @@ dependencies = [
 name = "agent_api_rest"
 version = "0.1.0"
 dependencies = [
+ "agent_api_rest",
  "agent_event_publisher_http",
  "agent_holder",
  "agent_identity",

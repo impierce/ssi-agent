@@ -28,7 +28,7 @@ uuid.workspace = true
 rstest = { workspace = true, optional = true }
 
 [dev-dependencies]
-agent_api_rest = { path = "../agent_api_rest" }
+agent_api_rest = { path = "../agent_api_rest", features = ["test_utils"] }
 agent_holder = { path = ".", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
 agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }
