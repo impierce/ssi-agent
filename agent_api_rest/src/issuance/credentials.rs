@@ -355,6 +355,21 @@ pub mod tests {
         assert_eq!(patch_response.status(), StatusCode::NO_CONTENT);
 
         // query status list token to see changed status
+
+        let token_status_list_response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri("/ietf-oauth-token-status-list/0")
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // seems that status_size is a string not a number, is this correct?
+        println!("Token Status List Response: {:?}", token_status_list_response);
     }
 
     #[tokio::test]

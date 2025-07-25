@@ -108,6 +108,11 @@ pub async fn token_status_list(
     let default_did_method =
         serde_json::to_string(&get_preferred_did_method()).map_err(|_| PublicError::InternalServerError)?;
 
+    println!("here");
+    // println!("signer: {:?}", state.signer);
+    println!("status_list_token: {:?}", status_list_token);
+    println!("default_did_method: {}", default_did_method);
+
     let jwt_token = encode(
         state.signer,
         status_list_token.header,
@@ -115,9 +120,14 @@ pub async fn token_status_list(
         &default_did_method,
     )
     .await
-    .map_err(|_| PublicError::InternalServerError)?;
+    .unwrap();
+    // .map_err(|_| PublicError::InternalServerError)?;
+
+    println!("done");
 
     let compressed_jwt_token = compress_gzip(&jwt_token).map_err(|_| PublicError::InternalServerError)?;
+
+    println!("compressed");
 
     Ok((
         StatusCode::OK,

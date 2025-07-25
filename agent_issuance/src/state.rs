@@ -97,6 +97,8 @@ pub async fn initialize(state: &IssuanceState) -> anyhow::Result<()> {
     update_signing_algorithms(state).await?;
     update_credential_configurations(state).await?;
 
+    // I think the signer needs to be initialized here, but it is not clear how to do that.
+
     Ok(())
 }
 
