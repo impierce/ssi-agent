@@ -243,6 +243,7 @@ pub mod tests {
         Router,
     };
     use lazy_static::lazy_static;
+    use oauth_tsl::managers::relying_party::StatusListTokenResponseType;
     use serde_json::json;
     use tower::Service as _;
 
@@ -354,22 +355,21 @@ pub mod tests {
 
         assert_eq!(patch_response.status(), StatusCode::NO_CONTENT);
 
-        // query status list token to see changed status
-
+        // Fetch the Status List Token to check the updated status
         let token_status_list_response = app
             .call(
                 Request::builder()
                     .method(http::Method::GET)
                     .uri("/ietf-oauth-token-status-list/0")
-                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .header(http::header::ACCEPT, StatusListTokenResponseType::Jwt.as_str())
                     .body(Body::empty())
                     .unwrap(),
             )
             .await
             .unwrap();
 
-        // seems that status_size is a string not a number, is this correct?
         println!("Token Status List Response: {:?}", token_status_list_response);
+        println!("Body: {:?}", token_status_list_response.body());
     }
 
     #[tokio::test]

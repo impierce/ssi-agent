@@ -4985,7 +4985,7 @@ dependencies = [
 [[package]]
 name = "oauth_tsl"
 version = "0.1.0"
-source = "git+https://github.com/impierce/oauth-token-status-list?rev=989290a#989290a1d98a2ee21f611e484e60b291b061292a"
+source = "git+https://github.com/impierce/oauth-token-status-list?rev=b181ca3#b181ca3e6af7b525452acc4786a15aae0850ff7f"
 dependencies = [
  "axum 0.8.1",
  "base64 0.22.1",

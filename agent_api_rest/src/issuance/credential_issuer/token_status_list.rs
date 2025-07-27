@@ -87,13 +87,13 @@ pub async fn token_status_list(
         aggregation_uri: None,
     };
 
-    let sub_uri = config()
-        .ietf_oauth_token_status_list_uri
-        .clone()
-        .join(&format!("{status_list_number}"))
-        .map_err(|_| PublicError::InternalServerError)?;
+    let mut sub_url = config().ietf_oauth_token_status_list_uri.clone();
+    sub_url
+        .path_segments_mut()
+        .map_err(|_| PublicError::InternalServerError)?
+        .push(&status_list_number.to_string());
     let status_list_claims = StatusListTokenClaims {
-        sub: sub_uri.to_string(),
+        sub: sub_url.to_string(),
         iat: chrono::Utc::now().timestamp(), // this is perhaps incorrect actually? check with spec if it wants first date of creation/usage of the TSL. wouldnt need to add some logic since we actually create on the fly.
         exp: None,
         ttl: None,
@@ -105,13 +105,7 @@ pub async fn token_status_list(
         ..Default::default()
     };
     status_list_token.header.alg = get_preferred_signing_algorithm();
-    let default_did_method =
-        serde_json::to_string(&get_preferred_did_method()).map_err(|_| PublicError::InternalServerError)?;
-
-    println!("here");
-    // println!("signer: {:?}", state.signer);
-    println!("status_list_token: {:?}", status_list_token);
-    println!("default_did_method: {}", default_did_method);
+    let default_did_method = get_preferred_did_method().to_string();
 
     let jwt_token = encode(
         state.signer,
@@ -120,14 +114,9 @@ pub async fn token_status_list(
         &default_did_method,
     )
     .await
-    .unwrap();
-    // .map_err(|_| PublicError::InternalServerError)?;
-
-    println!("done");
+    .map_err(|_| PublicError::InternalServerError)?;
 
     let compressed_jwt_token = compress_gzip(&jwt_token).map_err(|_| PublicError::InternalServerError)?;
-
-    println!("compressed");
 
     Ok((
         StatusCode::OK,
@@ -140,10 +129,83 @@ pub async fn token_status_list(
         .into_response())
 }
 
-// #[cfg(test)]
-// pub mod tests {
-//     use super::*;
+#[cfg(test)]
+pub mod tests {
+    use agent_issuance::state::initialize;
+    use agent_secret_manager::{service::Service, subject::Subject};
+    use agent_shared::config::config;
+    use agent_store::in_memory;
+    use axum::body::{self, Body};
+    use http::{Request, StatusCode};
+    use jsonwebtoken::{decode_header, Algorithm, DecodingKey};
+    use oauth_tsl::{
+        managers::relying_party::{decompress_gzip, decrypt_status_list_token, StatusListTokenResponseType},
+        tokens::status_list_token::StatusListTyp,
+    };
+    use oid4vc_core::authentication::verify::Verify;
 
-//     #[tokio::test]
-//     pub async fn test_token_status_list() {}
-// }
+    use crate::issuance::{
+        credentials::{STATUSLISTSIZE, STATUSTYPESIZE},
+        router,
+    };
+    use tower::Service as _;
+
+    #[tokio::test]
+    pub async fn test_token_status_list() {
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
+        initialize(&issuance_state).await.unwrap();
+
+        let relying_party_state = Subject::default();
+
+        let mut app = router(issuance_state);
+
+        let token_status_list_response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri("/ietf-oauth-token-status-list/0")
+                    .header(http::header::ACCEPT, StatusListTokenResponseType::Jwt.as_str())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(token_status_list_response.status(), StatusCode::OK);
+        assert_eq!(
+            token_status_list_response
+                .headers()
+                .get(http::header::CONTENT_TYPE)
+                .unwrap(),
+            "application/statuslist+jwt"
+        );
+
+        let body_bytes = body::to_bytes(token_status_list_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let jwt_status_list_token = decompress_gzip(&body_bytes).unwrap();
+        let jwt_header = decode_header(&jwt_status_list_token).unwrap();
+
+        let key_id = jwt_header.kid.unwrap();
+        let public_key = relying_party_state.public_key(&key_id).await.unwrap();
+        let decoding_key = match jwt_header.alg {
+            Algorithm::EdDSA => DecodingKey::from_ed_der(&public_key),
+            Algorithm::ES256 => DecodingKey::from_ec_der(&public_key),
+            _ => {
+                panic!("Unsupported algorithm: {:?}", jwt_header.alg);
+            }
+        };
+
+        let decoded_jwt = decrypt_status_list_token(&jwt_status_list_token, decoding_key).unwrap();
+
+        assert_eq!(jwt_header.typ.unwrap(), StatusListTyp::Jwt.as_str());
+        assert_eq!(
+            decoded_jwt.claims.sub,
+            config().public_url.as_str().to_owned() + "ietf-oauth-token-status-list/0"
+        );
+        assert_eq!(decoded_jwt.claims.encoded_status_list.status_size, STATUSTYPESIZE);
+
+        let status_list = decoded_jwt.claims.encoded_status_list.decode_decompress().unwrap();
+        assert_eq!(status_list.len(), STATUSLISTSIZE);
+    }
+}
