@@ -22,6 +22,8 @@ use oauth_tsl::status_list::StatusType;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub const TESTINDEX: usize = 123;
+
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<IssuanceState>,
@@ -131,7 +133,7 @@ pub(crate) async fn credentials(
 
         #[cfg(feature = "test_utils")]
         {
-            random_index = 123;
+            random_index = TESTINDEX;
         }
 
         CredentialCommand::CreateUnsignedCredential {
@@ -215,6 +217,10 @@ pub async fn patch_credential(
             status: status.clone(),
         };
 
+        println!("index: {}", credential_status.index);
+        println!("New credential status: {:?}", status);
+        println!("Old credential status: {:?}", credential.credential_status.status);
+
         let command = CredentialCommand::SetCredentialStatus {
             credential_id: credential_id.clone(),
             credential_status,
@@ -238,14 +244,21 @@ pub mod tests {
     use agent_secret_manager::service::Service;
     use agent_store::in_memory;
     use axum::{
-        body::Body,
-        http::{self, Request},
+        body::{self, Body},
+        http::{self, Request, StatusCode},
         Router,
     };
     use lazy_static::lazy_static;
-    use oauth_tsl::managers::relying_party::StatusListTokenResponseType;
+    use oauth_tsl::{
+        managers::relying_party::{decompress_gzip, decrypt_status_list_token, StatusListTokenResponseType},
+        status_list::StatusList,
+    };
     use serde_json::json;
     use tower::Service as _;
+
+    use agent_secret_manager::subject::Subject;
+    use jsonwebtoken::{decode_header, Algorithm, DecodingKey};
+    use oid4vc_core::authentication::verify::Verify;
 
     lazy_static! {
         pub static ref CREDENTIAL_SUBJECT: serde_json::Value = json!({
@@ -266,7 +279,7 @@ pub mod tests {
             "credentialStatus": {
                 "id": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
                 "type": "statuslist+jwt",
-                "idx": 123,
+                "idx": TESTINDEX,
                 "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0"
             }
         });
@@ -336,6 +349,9 @@ pub mod tests {
     pub async fn patch_credential(app: &mut Router) {
         let credential_endpoint = credentials(app).await;
 
+        let relying_party_state = Subject::default();
+
+        println!("Credential endpoint: {}", credential_endpoint);
         let patch_response = app
             .call(
                 Request::builder()
@@ -368,8 +384,29 @@ pub mod tests {
             .await
             .unwrap();
 
-        println!("Token Status List Response: {:?}", token_status_list_response);
-        println!("Body: {:?}", token_status_list_response.body());
+        let body_bytes = body::to_bytes(token_status_list_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let jwt_status_list_token = decompress_gzip(&body_bytes).unwrap();
+        let jwt_header = decode_header(&jwt_status_list_token).unwrap();
+
+        let key_id = jwt_header.kid.unwrap();
+        let public_key = relying_party_state.public_key(&key_id).await.unwrap();
+        let decoding_key = match jwt_header.alg {
+            Algorithm::EdDSA => DecodingKey::from_ed_der(&public_key),
+            Algorithm::ES256 => DecodingKey::from_ec_der(&public_key),
+            _ => {
+                panic!("Unsupported algorithm: {:?}", jwt_header.alg);
+            }
+        };
+
+        let decoded_jwt = decrypt_status_list_token(&jwt_status_list_token, decoding_key).unwrap();
+        let status_list = StatusList::try_from(decoded_jwt.claims.encoded_status_list).unwrap();
+
+        let status = status_list.get_index(TESTINDEX).unwrap();
+
+        println!("status: {:?}", status);
+        assert_eq!(status, StatusType::INVALID as u8);
     }
 
     #[tokio::test]

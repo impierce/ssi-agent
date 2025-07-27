@@ -459,10 +459,14 @@ impl Aggregate for Credential {
             SetCredentialStatus {
                 credential_id,
                 credential_status,
-            } => Ok(vec![CredentialEvent::CredentialStatusSet {
-                credential_id,
-                credential_status,
-            }]),
+            } => {
+                println!("Hello? Setting credential status: {:?}", credential_status);
+
+                Ok(vec![CredentialEvent::CredentialStatusSet {
+                    credential_id,
+                    credential_status,
+                }])
+            }
         }
     }
 
@@ -479,6 +483,7 @@ impl Aggregate for Credential {
                 notification_id,
                 credential_status,
             } => {
+                println!("unsigned credential created: {:?}", credential_status);
                 self.credential_id = credential_id;
                 self.data.replace(data);
                 self.credential_configuration = *credential_configuration;
@@ -490,6 +495,7 @@ impl Aggregate for Credential {
                 signed_credential,
                 notification_id,
             } => {
+                println!("Credential signed created: {}", signed_credential);
                 self.credential_id = credential_id;
                 self.signed.replace(signed_credential);
                 self.notification_id = notification_id;
@@ -499,6 +505,7 @@ impl Aggregate for Credential {
                 signed_credential,
                 status,
             } => {
+                println!("Credential signed: {}", signed_credential);
                 self.credential_id = credential_id;
                 self.signed.replace(signed_credential);
                 self.status = status;
@@ -507,6 +514,7 @@ impl Aggregate for Credential {
                 credential_id,
                 notification,
             } => {
+                println!("Received notification: {:?}", notification);
                 self.credential_id = credential_id;
                 self.holder_notifications.push(notification);
             }
@@ -515,6 +523,8 @@ impl Aggregate for Credential {
                 credential_status,
             } => {
                 self.credential_id = credential_id;
+                println!("event old credential status: {:?}", self.credential_status);
+                println!("event new credential status: {:?}", credential_status);
                 self.credential_status = credential_status;
             }
         }
