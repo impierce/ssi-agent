@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub const STATUSTYPESIZE: u8 = 2; // Amount of bits per status
-pub const STATUSLISTSIZE: usize = 140; // Amount of bytes in the status list. Equates to 65536 statuses.
+pub const STATUSLISTSIZE: usize = 2048; // Amount of bytes in the status list. Equates to 8192 statuses for STATUSTYPESIZE = 2.
 pub const TESTINDEX: usize = 123;
 
 #[axum_macros::debug_handler]
@@ -395,13 +395,10 @@ pub mod tests {
         };
 
         let decoded_jwt = decrypt_status_list_token(&jwt_status_list_token, decoding_key).unwrap();
-        let mut status_list = StatusList::try_from(decoded_jwt.claims.encoded_status_list).unwrap();
+        let status_list = StatusList::try_from(decoded_jwt.claims.encoded_status_list).unwrap();
 
         let status = status_list.get_index(TESTINDEX).unwrap();
 
-        status_list.set_index(TESTINDEX, 1).unwrap();
-        let status = status_list.get_index(TESTINDEX).unwrap();
-        //
         assert_eq!(status, StatusType::INVALID as u8);
     }
 
