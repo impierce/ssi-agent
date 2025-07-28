@@ -22,6 +22,8 @@ use oauth_tsl::status_list::StatusType;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub const STATUSTYPESIZE: u8 = 2; // Amount of bits per status
+pub const STATUSLISTSIZE: usize = 140; // Amount of bytes in the status list. Equates to 65536 statuses.
 pub const TESTINDEX: usize = 123;
 
 #[axum_macros::debug_handler]
@@ -195,13 +197,10 @@ pub(crate) async fn all_credentials(State(state): State<IssuanceState>) -> Resul
     Ok((StatusCode::OK, Json(all_credentials)).into_response())
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PatchCredentialEndpointRequest {
     pub credential_status: StatusType,
 }
-
-pub const STATUSTYPESIZE: u8 = 2; // Amount of bits per status
-pub const STATUSLISTSIZE: usize = 16384; // Amount of bytes in the status list. Equates to 65536 statuses.
 
 /// Currently, this endpoint only supports patching the CredentialStatus of a credential according to the IETF OAuth Token Status List spec.
 pub async fn patch_credential(
@@ -216,10 +215,6 @@ pub async fn patch_credential(
             index: credential.credential_status.index,
             status: status.clone(),
         };
-
-        println!("index: {}", credential_status.index);
-        println!("New credential status: {:?}", status);
-        println!("Old credential status: {:?}", credential.credential_status.status);
 
         let command = CredentialCommand::SetCredentialStatus {
             credential_id: credential_id.clone(),
@@ -266,9 +261,9 @@ pub mod tests {
             "last_name": "Rustacean"
         });
 
-        // The credentialStatus id/uri only contain a relative path, since we only need to have the correct route for them in the tests.
+        // The credentialStatus id/uri only contains a relative path, since we only need to have the correct route for them in the tests.
         pub static ref CREDENTIAL: serde_json::Value = json!({
-            "@context": "https://www.w3.org/2018/credentials/v1",
+            "@context": [ "https://www.w3.org/2018/credentials/v1" ],
             "type": [ "VerifiableCredential" ],
             "issuer": {
                 "id": "https://my-domain.example.org/",
@@ -351,7 +346,6 @@ pub mod tests {
 
         let relying_party_state = Subject::default();
 
-        println!("Credential endpoint: {}", credential_endpoint);
         let patch_response = app
             .call(
                 Request::builder()
@@ -401,11 +395,13 @@ pub mod tests {
         };
 
         let decoded_jwt = decrypt_status_list_token(&jwt_status_list_token, decoding_key).unwrap();
-        let status_list = StatusList::try_from(decoded_jwt.claims.encoded_status_list).unwrap();
+        let mut status_list = StatusList::try_from(decoded_jwt.claims.encoded_status_list).unwrap();
 
         let status = status_list.get_index(TESTINDEX).unwrap();
 
-        println!("status: {:?}", status);
+        status_list.set_index(TESTINDEX, 1).unwrap();
+        let status = status_list.get_index(TESTINDEX).unwrap();
+        //
         assert_eq!(status, StatusType::INVALID as u8);
     }
 

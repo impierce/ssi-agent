@@ -8,7 +8,7 @@ use http::StatusCode;
 use hyper::header;
 use oauth_tsl::{
     managers::{relying_party::StatusListTokenResponseType, status_provider::compress_gzip},
-    status_list::{Bits, EncodedStatusList, StatusList},
+    status_list::{Bits, EncodedStatusList, StatusList, StatusType},
     tokens::status_list_token::{StatusListToken, StatusListTokenClaims},
 };
 use oid4vc_core::jwt::encode;
@@ -32,8 +32,10 @@ pub async fn token_status_list(
         .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
         .unwrap_or_default();
 
-    let lower_bound = status_list_number * STATUSLISTSIZE;
-    let upper_bound = (status_list_number + 1) * STATUSLISTSIZE;
+    let amount_indices = STATUSLISTSIZE * 8 / STATUSTYPESIZE as usize;
+
+    let lower_bound = status_list_number * amount_indices;
+    let upper_bound = (status_list_number + 1) * amount_indices;
 
     let mut used_indices: Vec<CredentialStatus> = all_credentials
         .iter()
@@ -53,7 +55,7 @@ pub async fn token_status_list(
         let mut indices = used_indices.clone();
 
         let mut rng = rand::rng();
-        while indices.len() < STATUSLISTSIZE {
+        while indices.len() < amount_indices {
             let random_index = rng.random_range(lower_bound..upper_bound);
             if !indices
                 .iter()
@@ -72,20 +74,20 @@ pub async fn token_status_list(
     .await
     .map_err(|_| PublicError::InternalServerError)??;
 
-    let status_list = StatusList {
+    used_indices.sort_by_key(|credential_status| credential_status.index);
+
+    let mut status_list = StatusList {
         status_size: Bits::try_from(STATUSTYPESIZE).map_err(|_| PublicError::InternalServerError)?,
-        status_list: used_indices
-            .iter()
-            .map(|credential_status| {
-                credential_status
-                    .status
-                    .clone()
-                    .try_into()
-                    .map_err(|_| PublicError::InternalServerError)
-            })
-            .collect::<Result<Vec<_>, _>>()?,
-        aggregation_uri: None,
+        ..Default::default()
     };
+    status_list
+        .pack_statuses_into_bytes(
+            used_indices
+                .iter()
+                .map(|s| s.status.clone())
+                .collect::<Vec<StatusType>>(),
+        )
+        .map_err(|_| PublicError::InternalServerError)?;
 
     let mut sub_url = config().ietf_oauth_token_status_list_uri.clone();
     sub_url
@@ -94,7 +96,7 @@ pub async fn token_status_list(
         .push(&status_list_number.to_string());
     let status_list_claims = StatusListTokenClaims {
         sub: sub_url.to_string(),
-        iat: chrono::Utc::now().timestamp(), // this is perhaps incorrect actually? check with spec if it wants first date of creation/usage of the TSL. wouldnt need to add some logic since we actually create on the fly.
+        iat: chrono::Utc::now().timestamp(),
         exp: None,
         ttl: None,
         encoded_status_list: EncodedStatusList::try_from(status_list).map_err(|_| PublicError::InternalServerError)?,
