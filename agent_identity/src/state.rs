@@ -30,7 +30,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{info, warn};
 
-/// The unique identifier for the server configuration.
+/// The fixed identifier for the `Profile` aggregate, which is treated as a singleton.
+///
+/// This is for internal use only within the identity bounded context to ensure
+/// all operations consistently target the one and only profile.
 pub const PROFILE_ID: &str = "PROFILE-001";
 
 #[derive(Clone)]
