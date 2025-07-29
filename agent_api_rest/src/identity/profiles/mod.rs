@@ -14,6 +14,7 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -69,10 +70,31 @@ pub(crate) async fn patch_profile(
     Ok(StatusCode::OK.into_response())
 }
 
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GetProfileEndpointResponse {
+    display_name: Option<String>,
+    logo: Option<Logo>,
+    country: Option<String>,
+    source: Source,
+}
+
 #[axum_macros::debug_handler]
 pub(crate) async fn get_profile(State(state): State<IdentityState>) -> Result<Response, ApiError> {
     query_handler(PROFILE_ID, &state.query.profile)
         .await?
-        .map(|profile_view| (StatusCode::OK, Json(profile_view)).into_response())
+        .map(|profile_view| {
+            (
+                StatusCode::OK,
+                Json(GetProfileEndpointResponse {
+                    display_name: profile_view.display_name,
+                    logo: profile_view.logo,
+                    country: profile_view.country,
+                    source: profile_view.source,
+                }),
+            )
+                .into_response()
+        })
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
