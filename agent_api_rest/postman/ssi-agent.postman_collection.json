@@ -1837,13 +1837,13 @@
 								"method": "GET",
 								"header": [],
 								"url": {
-									"raw": "{{HOST}}/v0/profiles",
+									"raw": "{{HOST}}/v0/profile",
 									"host": [
 										"{{HOST}}"
 									],
 									"path": [
 										"v0",
-										"profiles"
+										"profile"
 									]
 								}
 							},
