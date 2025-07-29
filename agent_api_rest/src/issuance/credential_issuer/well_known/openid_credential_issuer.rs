@@ -19,7 +19,7 @@ pub(crate) async fn openid_credential_issuer(State(state): State<IssuanceState>)
             mut credential_issuer_metadata,
             ..
         }) => {
-            // TODO: remove this once the Identity BC is the single source of truth for display data.
+            // TODO: remove this once the Identity Bounded Context is the single source of truth for display data.
             // This is a temporary workaround to ensure the credential issuer metadata has the correct display information.
             credential_issuer_metadata.display = Some(config().display.clone().into_iter().map(|x| json!(x)).collect());
 

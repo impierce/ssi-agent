@@ -147,7 +147,7 @@ pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
 //
 // The correct long-term solution is to establish the Identity Bounded Context as the single
 // source of truth for display data (name, logo). Other contexts, like Issuance and
-// Verification, should subscribe to events published by the Identity BC to receive these
+// Verification, should subscribe to events published by the Identity Bounded Context to receive these
 // updates, rather than reading from a shared, mutable global state.
 /// Queries the profile and updates the application state with the profile information.
 pub async fn query_profile(state: &IdentityState) -> Result<(), PersistenceError> {

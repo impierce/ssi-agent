@@ -72,7 +72,7 @@ impl Aggregate for AuthorizationRequest {
                         ..
                     } = oid4vp_client_metadata
                     {
-                        // TODO: remove this once the Identity BC is the single source of truth for display data.
+                        // TODO: remove this once the Identity Bounded Context is the single source of truth for display data.
                         // This is a temporary workaround to ensure the credential issuer metadata has the correct display information.
                         *client_name = Some(config().display.first().map(|d| d.name.clone()).unwrap_or_default());
                         *logo_uri = config()
@@ -103,7 +103,7 @@ impl Aggregate for AuthorizationRequest {
                         ..
                     } = siopv2_client_metadata
                     {
-                        // TODO: remove this once the Identity BC is the single source of truth for display data.
+                        // TODO: remove this once the Identity Bounded Context is the single source of truth for display data.
                         // This is a temporary workaround to ensure the credential issuer metadata has the correct display information.
                         *client_name = Some(config().display.first().map(|d| d.name.clone()).unwrap_or_default());
                         *logo_uri = config()
