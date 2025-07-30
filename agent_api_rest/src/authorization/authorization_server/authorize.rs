@@ -1,21 +1,18 @@
-use crate::handlers::{command_handler, query_handler};
-use crate::issuance::error::{internal_server_error, PublicError};
+use crate::issuance::error::PublicError;
 use agent_authorization::application::oauth2_authorization_service::{
     OAuth2AuthorizationService, OAuth2AuthorizationServiceResponse,
 };
-use agent_authorization::domain::oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest;
 use agent_authorization::state::AuthorizationState;
 use axum::extract::Query;
 use axum::response::Redirect;
 use axum::{
-    extract::{Json, State},
+    extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 
 use http::header;
 use oid4vci::wallet::AuthorizationRequestByReference;
-use tracing::info;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn authorize(
@@ -42,11 +39,9 @@ pub mod tests {
     use crate::issuance::offers::tests::offers;
     use crate::{authorization, issuance};
     use agent_authorization::state::UNIME_CLIENT_ID;
-    use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
     use agent_store::{authorization_state, issuance_state};
-    use axum::response::Html;
     use axum::{
         body::Body,
         http::{self, Request},

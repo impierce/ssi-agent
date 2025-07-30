@@ -184,26 +184,6 @@ impl Aggregate for AuthorizationCode {
     }
 }
 
-// FIXME: Use a proper PKCE library or implement your own
-// // Dummy PKCE verification function - replace with a proper one from a crypto library or your own impl
-// fn verify_pkce_challenge(verifier: &str, challenge: &str, method: Option<&str>) -> bool {
-//     match method {
-//         Some("S256") | None => {
-//             // Default to S256 if method is None but challenge is present
-//             use base64_url;
-//             use sha2::{Digest, Sha256};
-
-//             let mut hasher = Sha256::new();
-//             hasher.update(verifier.as_bytes());
-//             let hashed_verifier = hasher.finalize();
-//             let encoded_hashed_verifier = base64_url::encode(&hashed_verifier);
-//             encoded_hashed_verifier == challenge
-//         }
-//         Some("plain") => verifier == challenge,
-//         Some_ => false, // Unknown method
-//     }
-// }
-
 #[cfg(test)]
 pub mod authorization_code_tests {
     use super::test_utils::*;

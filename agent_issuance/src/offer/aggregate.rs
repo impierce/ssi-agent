@@ -1,6 +1,5 @@
 use agent_shared::config::config;
 use async_trait::async_trait;
-use core::panic;
 use cqrs_es::Aggregate;
 use oid4vc_core::Validator;
 use oid4vci::credential_issuer::CredentialIssuer;
@@ -585,7 +584,6 @@ pub mod test_utils {
     use url::Url;
 
     static PRE_AUTHORIZED_CODE: OnceCell<String> = OnceCell::new();
-    static ACCESS_TOKEN: OnceCell<String> = OnceCell::new();
     static C_NONCE: OnceCell<String> = OnceCell::new();
 
     #[fixture]
@@ -594,32 +592,8 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub async fn access_token() -> String {
-        ACCESS_TOKEN.get_or_init(generate_random_string).clone()
-    }
-
-    #[fixture]
     pub async fn c_nonce() -> String {
         C_NONCE.get_or_init(generate_random_string).clone()
-    }
-
-    pub struct TestAttributes {
-        pub pre_authorized_code: String,
-        pub access_token: String,
-        pub c_nonce: String,
-    }
-
-    #[fixture]
-    pub async fn attributes(
-        #[future(awt)] pre_authorized_code: String,
-        #[future(awt)] access_token: String,
-        #[future(awt)] c_nonce: String,
-    ) -> TestAttributes {
-        TestAttributes {
-            pre_authorized_code,
-            access_token,
-            c_nonce,
-        }
     }
 
     #[fixture]

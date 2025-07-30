@@ -1,7 +1,5 @@
 use agent_shared::config::Logo;
 use cqrs_es::DomainEvent;
-use identity_core::common::Url;
-use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 

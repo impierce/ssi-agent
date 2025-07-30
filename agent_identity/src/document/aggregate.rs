@@ -493,7 +493,7 @@ impl Aggregate for Document {
                     }
                 }
 
-                let did_method = self.did_method.clone().ok_or(MissingDidMethodError)?;
+                let did_method = self.did_method.ok_or(MissingDidMethodError)?;
 
                 // The API endpoint of an IOTA node
                 let api_endpoint = did_method

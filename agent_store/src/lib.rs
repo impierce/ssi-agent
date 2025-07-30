@@ -162,7 +162,7 @@ pub async fn identity_state<ES: EventStoreTemp>(
     let (document_command_handler, document, all_documents) =
         ES::commands_and_queries::<Document, Document, AllDocumentsView>(services.clone(), document_event_publishers)
             .await;
-    let (profile_command_handler, profile, all_profiles) =
+    let (profile_command_handler, profile, _all_profiles) =
         ES::commands_and_queries::<Profile, Profile, Profile>(services.clone(), vec![]).await;
     let (service_command_handler, service, all_services) =
         ES::commands_and_queries::<Service, Service, AllServicesView>(services.clone(), service_event_publishers).await;
@@ -200,24 +200,27 @@ pub async fn authorization_state<ES: EventStoreTemp>(
         ..
     } = partition_event_publishers(event_publishers);
 
-    let (authorization_code_command_handler, authorization_code, all_authorization_codes) =
+    let (authorization_code_command_handler, authorization_code, _all_authorization_codes) =
         ES::commands_and_queries::<AuthorizationCodeView, AuthorizationCode, AllAuthorizationCodesView>(
             (),
             authorization_code_event_publishers,
         )
         .await;
-    let (client_command_handler, client, all_clients) =
+    let (client_command_handler, client, _all_clients) =
         ES::commands_and_queries::<ClientView, Client, AllClientsView>((), client_event_publishers).await;
-    let (consent_command_handler, consent, all_consents) =
+    let (consent_command_handler, consent, _all_consents) =
         ES::commands_and_queries::<ConsentView, Consent, AllConsentsView>((), consent_event_publishers).await;
-    let (oauth2_authorization_request_command_handler, oauth2_authorization_request, all_oauth2_authorization_requests) =
-        ES::commands_and_queries::<
-            OAuth2AuthorizationRequestView,
-            OAuth2AuthorizationRequest,
-            AllOAuth2AuthorizationRequestsView,
-        >((), oauth2_authorization_request_event_publishers)
-        .await;
-    let (token_command_handler, access_token, all_access_tokens) =
+    let (
+        oauth2_authorization_request_command_handler,
+        oauth2_authorization_request,
+        _all_oauth2_authorization_requests,
+    ) = ES::commands_and_queries::<
+        OAuth2AuthorizationRequestView,
+        OAuth2AuthorizationRequest,
+        AllOAuth2AuthorizationRequestsView,
+    >((), oauth2_authorization_request_event_publishers)
+    .await;
+    let (token_command_handler, access_token, _all_access_tokens) =
         ES::commands_and_queries::<AccessTokenView, AccessToken, AllAccessTokensView>((), token_event_publishers).await;
 
     AuthorizationState {
@@ -259,7 +262,7 @@ pub async fn issuance_state<ES: EventStoreTemp>(
     .await;
     let (offer_command_handler, offer, all_offers) =
         ES::commands_and_queries::<OfferView, Offer, AllOffersView>(services.clone(), offer_event_publishers).await;
-    let (server_config_command_handler, server_config, all_server_configs) =
+    let (server_config_command_handler, server_config, _all_server_configs) =
         ES::commands_and_queries::<ServerConfigView, ServerConfig, ServerConfig>(
             services.clone(),
             server_config_event_publishers,

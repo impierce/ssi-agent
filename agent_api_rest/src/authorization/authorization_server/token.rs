@@ -1,8 +1,6 @@
 use crate::authorization::AuthorizationState;
-use crate::handlers::{command_handler, query_handler};
-use crate::issuance::error::{internal_server_error, PublicError};
+use crate::issuance::error::PublicError;
 use agent_authorization::application::token_issuance_service::TokenIssuanceService;
-use agent_issuance::offer::command::OfferCommand;
 use agent_issuance::state::IssuanceState;
 use axum::{
     extract::{Json, State},
@@ -10,10 +8,7 @@ use axum::{
     response::{IntoResponse, Response},
     Form,
 };
-use identity_credential::credential::Status;
-use oid4vci::errors::TokenErrorResponse;
 use oid4vci::token_request::TokenRequest;
-use tracing::info;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn token(

@@ -1,16 +1,3 @@
-use agent_issuance::{application::access_token_validation_service::Claims, state::IssuanceState};
-use agent_shared::{
-    config::{config, get_preferred_did_method, get_preferred_signing_algorithm},
-    handlers::{command_handler, query_handler},
-};
-use oid4vc_core::jwt;
-use oid4vci::{
-    authorization_details::AuthorizationDetailsObject, token_request::TokenRequest, token_response::TokenResponse,
-};
-use serde::{Deserialize, Serialize, Serializer};
-use serde_with::skip_serializing_none;
-use uuid::{fmt::Urn, Uuid};
-
 use crate::{
     domain::{
         access_token::{command::AccessTokenCommand, views::AccessTokenView},
@@ -18,7 +5,15 @@ use crate::{
     },
     state::{AuthorizationState, UNIME_CLIENT_ID},
 };
+use agent_issuance::{application::access_token_validation_service::Claims, state::IssuanceState};
+use agent_shared::{
+    config::{config, get_preferred_did_method, get_preferred_signing_algorithm},
+    handlers::{command_handler, query_handler},
+};
 use jsonwebtoken;
+use oid4vc_core::jwt;
+use oid4vci::{token_request::TokenRequest, token_response::TokenResponse};
+use uuid::Uuid;
 
 pub struct TokenIssuanceService {}
 
@@ -140,9 +135,6 @@ impl TokenIssuanceService {
             expires_in: Some(access_token_expires_in), // 1 hour FIXME: check all the timestamp stuff properly
             scope: None,
             refresh_token: None,
-            // FIXME
-            c_nonce: None,
-            c_nonce_expires_in: None,
         })
     }
 }

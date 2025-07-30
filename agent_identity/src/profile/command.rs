@@ -1,6 +1,4 @@
 use agent_shared::config::Logo;
-use identity_core::common::Url;
-use identity_did::DIDUrl;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]

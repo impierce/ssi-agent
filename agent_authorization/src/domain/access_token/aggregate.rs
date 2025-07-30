@@ -1,5 +1,3 @@
-use crate::domain::access_token;
-
 use super::command::AccessTokenCommand;
 use super::error::AccessTokenError;
 use super::event::AccessTokenEvent;
@@ -53,9 +51,9 @@ impl Aggregate for AccessToken {
                 issuer_state,
             } => {
                 // FIXME: check this!
-                #[cfg(not(feature = "test_utils"))]
+                #[cfg(not(test))]
                 let issued_at = chrono::Utc::now().timestamp() as u64;
-                #[cfg(feature = "test_utils")]
+                #[cfg(test)]
                 let issued_at = test_utils::issued_at();
 
                 let access_token_expires_at = issued_at + access_token_expires_in;

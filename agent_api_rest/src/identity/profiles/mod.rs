@@ -1,20 +1,17 @@
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_identity::profile::command::ProfileCommand;
+use agent_identity::state::IdentityState;
 use agent_identity::state::PROFILE_ID;
-use agent_identity::{connection::command::ConnectionCommand, state::IdentityState};
-use agent_shared::config::{config_mut, Logo};
+use agent_shared::config::Logo;
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Form, Json,
+    Json,
 };
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
-use identity_core::common::Url;
-use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]

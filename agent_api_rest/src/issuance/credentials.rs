@@ -159,7 +159,7 @@ pub mod tests {
     use crate::API_VERSION;
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
-    use agent_store::in_memory::{self, InMemory};
+    use agent_store::in_memory::InMemory;
     use agent_store::issuance_state;
     use axum::{
         body::Body,

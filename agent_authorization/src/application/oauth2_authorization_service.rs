@@ -31,8 +31,6 @@ impl OAuth2AuthorizationService {
         AuthorizationRequestByReference { client_id, request_uri }: AuthorizationRequestByReference,
         // FIX ME
     ) -> Result<OAuth2AuthorizationServiceResponse, ()> {
-        println!("Request URI: {}", request_uri);
-
         let oauth2_authorization_request = query_handler(
             request_uri.to_string().as_ref(),
             &state.query.oauth2_authorization_request,

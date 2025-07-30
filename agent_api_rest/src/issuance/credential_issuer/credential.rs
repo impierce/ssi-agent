@@ -173,7 +173,6 @@ pub mod tests {
     };
     use agent_event_publisher_http::EventPublisherHttp;
     use agent_issuance::credential::aggregate::CredentialExpiry;
-    use agent_issuance::offer::aggregate::test_utils::pre_authorized_code;
     use agent_issuance::offer::event::OfferEvent;
     use agent_secret_manager::service::Service;
     use agent_shared::config::{set_config, Events};
@@ -184,7 +183,6 @@ pub mod tests {
         http::{self, Request},
         Router,
     };
-    use oid4vci::credential_offer::PreAuthorizedCode;
     use rstest::rstest;
     use serde_json::{json, Value};
     use std::sync::Arc;

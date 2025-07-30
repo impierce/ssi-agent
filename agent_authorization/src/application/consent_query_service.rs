@@ -1,20 +1,9 @@
-use agent_shared::handlers::{command_handler, query_handler};
-use oid4vci::{authorization_details::AuthorizationDetailsObject, wallet::AuthorizationRequestByReference};
+use crate::state::AuthorizationState;
+use agent_shared::handlers::query_handler;
+use oid4vci::authorization_details::AuthorizationDetailsObject;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
-
-use crate::{
-    domain::{
-        authorization_code::command::AuthorizationCodeCommand,
-        client,
-        oauth2_authorization_request::{
-            aggregate::{ConsentStatus, OAuth2AuthorizationRequest},
-            command::OAuth2AuthorizationRequestCommand,
-        },
-    },
-    state::AuthorizationState,
-};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ConsentPageViewModel {

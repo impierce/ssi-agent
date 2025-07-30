@@ -1,8 +1,7 @@
 use crate::state::IssuanceState;
 use agent_shared::config::config;
 use identity_core::convert::{FromJson as _, ToJson as _};
-use identity_jose::jwk::Jwk;
-use jsonwebtoken::{decode, jwk::Jwk as JsonWebTokenJwk, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{decode, jwk::Jwk as JsonWebTokenJwk, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use thiserror::Error;
@@ -46,8 +45,8 @@ impl AccessTokenValidationService {
     ///
     /// This function checks the token's signature, expiration, issuer, audience,
     /// and ensures it contains the required scope for the operation.
-    pub async fn validate(state: &IssuanceState, token: &str) -> Result<Claims, AccessTokenValidationError> {
-        let jwt = jsonwebtoken::decode_header(token).map_err(|_| AccessTokenValidationError::InvalidToken)?;
+    pub async fn validate(state: &IssuanceState, access_token: &str) -> Result<Claims, AccessTokenValidationError> {
+        let jwt = jsonwebtoken::decode_header(access_token).map_err(|_| AccessTokenValidationError::InvalidToken)?;
         let algorithm = jwt.alg;
         let kid = jwt.kid.as_ref().ok_or(AccessTokenValidationError::InvalidToken)?;
 
@@ -73,7 +72,7 @@ impl AccessTokenValidationService {
         validation.set_issuer(&[public_url.as_str()]);
 
         // Decode the token. This checks the signature and standard time-based claims (`exp`).
-        let token_data = decode::<Claims>(token, &decoding_key, &validation).unwrap();
+        let token_data = decode::<Claims>(access_token, &decoding_key, &validation).unwrap();
         // .map_err(|_| AccessTokenValidationError::InvalidToken)?;
 
         // FIXME: Perform a specific scope check.

@@ -121,39 +121,37 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
         };
 
         command_handler(PROFILE_ID, &state.command.profile, command).await?;
-    } else {
-        if let Some(Profile {
-            display_name,
-            logo,
-            provisioned,
-            ..
-        }) = query_handler(PROFILE_ID, &state.query.profile).await?
-        {
-            if provisioned.unwrap_or(false) {
-                let command = ProfileCommand::CreateProfile {
-                    profile_id: PROFILE_ID.to_string(),
-                    display_name: Default::default(),
-                    logo: None,
-                    provisioned: Some(false),
-                };
+    } else if let Some(Profile {
+        display_name,
+        logo,
+        provisioned,
+        ..
+    }) = query_handler(PROFILE_ID, &state.query.profile).await?
+    {
+        if provisioned.unwrap_or(false) {
+            let command = ProfileCommand::CreateProfile {
+                profile_id: PROFILE_ID.to_string(),
+                display_name: Default::default(),
+                logo: None,
+                provisioned: Some(false),
+            };
 
-                command_handler(PROFILE_ID, &state.command.profile, command).await?;
-            } else {
-                config_mut().display = vec![Display {
-                    name: display_name.clone().unwrap_or_default(),
-                    logo: logo.clone(),
-                    locale: Some("en".to_string()),
-                }];
+            command_handler(PROFILE_ID, &state.command.profile, command).await?;
+        } else {
+            config_mut().display = vec![Display {
+                name: display_name.clone().unwrap_or_default(),
+                logo: logo.clone(),
+                locale: Some("en".to_string()),
+            }];
 
-                let command = ProfileCommand::CreateProfile {
-                    profile_id: PROFILE_ID.to_string(),
-                    display_name,
-                    logo,
-                    provisioned: Some(false),
-                };
+            let command = ProfileCommand::CreateProfile {
+                profile_id: PROFILE_ID.to_string(),
+                display_name,
+                logo,
+                provisioned: Some(false),
+            };
 
-                command_handler(PROFILE_ID, &state.command.profile, command).await?;
-            }
+            command_handler(PROFILE_ID, &state.command.profile, command).await?;
         }
     }
 

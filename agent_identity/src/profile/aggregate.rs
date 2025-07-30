@@ -1,7 +1,6 @@
-use agent_shared::config::{config, config_mut, Display, Logo};
+use agent_shared::config::{config, config_mut, Logo};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use identity_core::common::Url;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};

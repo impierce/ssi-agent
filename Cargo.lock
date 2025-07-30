@@ -216,6 +216,7 @@ name = "agent_holder"
 version = "0.1.0"
 dependencies = [
  "agent_api_rest",
+ "agent_authorization",
  "agent_holder",
  "agent_issuance",
  "agent_secret_manager",
@@ -256,6 +257,7 @@ name = "agent_identity"
 version = "0.1.0"
 dependencies = [
  "agent_api_rest",
+ "agent_authorization",
  "agent_holder",
  "agent_identity",
  "agent_issuance",

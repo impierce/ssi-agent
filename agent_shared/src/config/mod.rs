@@ -250,16 +250,16 @@ pub struct ApplicationConfiguration {
             ]
         )")]
     pub signing_algorithms_supported: HashMap<Algorithm, ToggleOptions>,
-    // #[config(development_default = r#"vec![
-    //         Display {
-    //             name: "UniCore".to_string(),
-    //             locale: Some("en".to_string()),
-    //             logo: Some(Logo {
-    //                 uri: Some(Url::parse("https://www.impierce.com/external/impierce-icon.png").unwrap()),
-    //                 alt_text: Some("Impierce Icon".to_string()),
-    //             }),
-    //         }
-    //     ]"#)]
+    #[config(development_default = r#"vec![
+            Display {
+                name: "UniCore".to_string(),
+                locale: Some("en".to_string()),
+                logo: Some(Logo {
+                    uri: Some(Url::parse("https://www.impierce.com/external/impierce-icon.png").unwrap()),
+                    alt_text: Some("Impierce Icon".to_string()),
+                }),
+            }
+        ]"#)]
     #[config(default)]
     pub display: Vec<Display>,
     #[config(default)]

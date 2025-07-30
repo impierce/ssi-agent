@@ -1,18 +1,8 @@
-use agent_shared::handlers::{command_handler, query_handler};
-use oid4vci::wallet::AuthorizationRequestByReference;
-use uuid::Uuid;
-
 use crate::{
-    domain::{
-        authorization_code::command::AuthorizationCodeCommand,
-        client,
-        oauth2_authorization_request::{
-            aggregate::{ConsentStatus, OAuth2AuthorizationRequest},
-            command::OAuth2AuthorizationRequestCommand,
-        },
-    },
-    state::AuthorizationState,
+    domain::oauth2_authorization_request::command::OAuth2AuthorizationRequestCommand, state::AuthorizationState,
 };
+use agent_shared::handlers::command_handler;
+use uuid::Uuid;
 
 pub enum ConsentServiceResponse {
     Found(String),
@@ -35,9 +25,6 @@ impl ConsentService {
         } else {
             OAuth2AuthorizationRequestCommand::RejectConsent
         };
-
-        // FIXME: check client_id
-        println!("Request URI here: {}", request_uri);
 
         let oauth_authorization_request = request_uri.to_string();
 

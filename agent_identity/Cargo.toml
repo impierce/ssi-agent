@@ -51,6 +51,9 @@ rstest = { workspace = true, optional = true }
 
 [dev-dependencies]
 agent_api_rest = { path = "../agent_api_rest" }
+agent_authorization = { path = "../agent_authorization", features = [
+    "test_utils",
+] }
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_identity = { path = ".", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
