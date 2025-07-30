@@ -213,7 +213,7 @@ pub async fn patch_credential(
     if let Some(credential) = query_handler(&credential_id, &state.query.credential).await? {
         let credential_status = CredentialStatus {
             index: credential.credential_status.index,
-            status: status.clone(),
+            status,
         };
 
         let command = CredentialCommand::SetCredentialStatus {
@@ -244,10 +244,8 @@ pub mod tests {
         Router,
     };
     use lazy_static::lazy_static;
-    use oauth_tsl::{
-        managers::relying_party::{decompress_gzip, decrypt_status_list_token, StatusListTokenResponseType},
-        status_list::StatusList,
-    };
+    use oauth_tsl::relying_party::check_status_in_status_list_token_jwt;
+    use oauth_tsl::relying_party::{decompress_gzip, StatusListTokenResponseType};
     use serde_json::json;
     use tower::Service as _;
 
@@ -371,7 +369,7 @@ pub mod tests {
                 Request::builder()
                     .method(http::Method::GET)
                     .uri("/ietf-oauth-token-status-list/0")
-                    .header(http::header::ACCEPT, StatusListTokenResponseType::Jwt.as_str())
+                    .header(http::header::ACCEPT, StatusListTokenResponseType::Jwt.to_string())
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -394,10 +392,7 @@ pub mod tests {
             }
         };
 
-        let decoded_jwt = decrypt_status_list_token(&jwt_status_list_token, decoding_key).unwrap();
-        let status_list = StatusList::try_from(decoded_jwt.claims.encoded_status_list).unwrap();
-
-        let status = status_list.get_index(TESTINDEX).unwrap();
+        let status = check_status_in_status_list_token_jwt(&jwt_status_list_token, TESTINDEX, decoding_key).unwrap();
 
         assert_eq!(status, StatusType::INVALID as u8);
     }

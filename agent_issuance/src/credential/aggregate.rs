@@ -210,7 +210,7 @@ impl Aggregate for Credential {
 
                                 let status = identity_credential::credential::Status {
                                     id: status_list_url.into(),
-                                    type_: StatusListTyp::Jwt.as_string(),
+                                    type_: StatusListTyp::Jwt.to_string(),
                                     properties: status_uri_idx,
                                 };
 
@@ -264,7 +264,7 @@ impl Aggregate for Credential {
 
                                 let builder_credential_status = types_ob_v3::prelude::CredentialStatus {
                                     id: status_list_url.clone().into(),
-                                    type_: StatusListTyp::Jwt.as_string(),
+                                    type_: StatusListTyp::Jwt.to_string(),
                                 };
 
                                 let builder = AchievementCredentialBuilder::default()

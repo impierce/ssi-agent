@@ -7,9 +7,9 @@ use axum::{
 use http::StatusCode;
 use hyper::header;
 use oauth_tsl::{
-    managers::{relying_party::StatusListTokenResponseType, status_provider::compress_gzip},
+    relying_party::StatusListTokenResponseType,
     status_list::{Bits, EncodedStatusList, StatusList, StatusType},
-    tokens::status_list_token::{StatusListToken, StatusListTokenClaims},
+    tokens::status_list_token::{compress_gzip, StatusListToken, StatusListTokenClaims},
 };
 use oid4vc_core::jwt::encode;
 use rand::Rng;
@@ -81,12 +81,7 @@ pub async fn token_status_list(
         ..Default::default()
     };
     status_list
-        .pack_statuses_into_bytes(
-            used_indices
-                .iter()
-                .map(|s| s.status.clone())
-                .collect::<Vec<StatusType>>(),
-        )
+        .pack_statuses_into_bytes(used_indices.iter().map(|s| s.status).collect::<Vec<StatusType>>())
         .map_err(|_| PublicError::InternalServerError)?;
 
     let mut sub_url = config().ietf_oauth_token_status_list_uri.clone();
@@ -123,7 +118,10 @@ pub async fn token_status_list(
     Ok((
         StatusCode::OK,
         [
-            (header::CONTENT_TYPE, StatusListTokenResponseType::Jwt.as_str()),
+            (
+                header::CONTENT_TYPE,
+                StatusListTokenResponseType::Jwt.to_string().as_str(),
+            ),
             (header::CONTENT_ENCODING, "gzip"),
         ],
         compressed_jwt_token,
@@ -141,7 +139,7 @@ pub mod tests {
     use http::{Request, StatusCode};
     use jsonwebtoken::{decode_header, Algorithm, DecodingKey};
     use oauth_tsl::{
-        managers::relying_party::{decompress_gzip, decrypt_status_list_token, StatusListTokenResponseType},
+        relying_party::{decompress_gzip, decrypt_status_list_token, StatusListTokenResponseType},
         tokens::status_list_token::StatusListTyp,
     };
     use oid4vc_core::authentication::verify::Verify;
@@ -166,7 +164,7 @@ pub mod tests {
                 Request::builder()
                     .method(http::Method::GET)
                     .uri("/ietf-oauth-token-status-list/0")
-                    .header(http::header::ACCEPT, StatusListTokenResponseType::Jwt.as_str())
+                    .header(http::header::ACCEPT, StatusListTokenResponseType::Jwt.to_string())
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -200,7 +198,7 @@ pub mod tests {
 
         let decoded_jwt = decrypt_status_list_token(&jwt_status_list_token, decoding_key).unwrap();
 
-        assert_eq!(jwt_header.typ.unwrap(), StatusListTyp::Jwt.as_str());
+        assert_eq!(jwt_header.typ.unwrap(), StatusListTyp::Jwt.to_string());
         assert_eq!(
             decoded_jwt.claims.sub,
             config().public_url.as_str().to_owned() + "ietf-oauth-token-status-list/0"
