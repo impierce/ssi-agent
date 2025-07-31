@@ -33,7 +33,7 @@ pub enum CredentialEvent {
         credential_id: String,
         notification: NotificationRequest,
     },
-    CredentialStatusSet {
+    CredentialStatusUpdated {
         credential_id: String,
         credential_status: CredentialStatus,
     },

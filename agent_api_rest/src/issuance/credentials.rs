@@ -216,7 +216,7 @@ pub async fn patch_credential(
             status,
         };
 
-        let command = CredentialCommand::SetCredentialStatus {
+        let command = CredentialCommand::UpdateCredentialStatus {
             credential_id: credential_id.clone(),
             credential_status,
         };

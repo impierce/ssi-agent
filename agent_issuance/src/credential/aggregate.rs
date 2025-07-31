@@ -456,10 +456,10 @@ impl Aggregate for Credential {
                 credential_id,
                 notification,
             }]),
-            SetCredentialStatus {
+            UpdateCredentialStatus {
                 credential_id,
                 credential_status,
-            } => Ok(vec![CredentialEvent::CredentialStatusSet {
+            } => Ok(vec![CredentialEvent::CredentialStatusUpdated {
                 credential_id,
                 credential_status,
             }]),
@@ -510,7 +510,7 @@ impl Aggregate for Credential {
                 self.credential_id = credential_id;
                 self.holder_notifications.push(notification);
             }
-            CredentialStatusSet {
+            CredentialStatusUpdated {
                 credential_id,
                 credential_status,
             } => {

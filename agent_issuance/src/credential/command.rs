@@ -38,7 +38,7 @@ pub enum CredentialCommand {
         credential_id: String,
         notification: NotificationRequest,
     },
-    SetCredentialStatus {
+    UpdateCredentialStatus {
         credential_id: String,
         credential_status: CredentialStatus,
     },
