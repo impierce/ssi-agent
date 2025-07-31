@@ -198,6 +198,7 @@ pub(crate) async fn all_credentials(State(state): State<IssuanceState>) -> Resul
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct PatchCredentialEndpointRequest {
     pub credential_status: StatusType,
 }
@@ -352,7 +353,7 @@ pub mod tests {
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_status": "INVALID"
+                            "credentialStatus": "INVALID"
                         }))
                         .unwrap(),
                     ))
