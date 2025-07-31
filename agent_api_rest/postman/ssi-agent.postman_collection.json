@@ -1810,7 +1810,7 @@
 							"response": []
 						},
 						{
-							"name": "Get Profile by ID",
+							"name": "Get Profile",
 							"event": [
 								{
 									"listen": "test",
