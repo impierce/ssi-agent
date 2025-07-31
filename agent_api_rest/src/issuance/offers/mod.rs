@@ -162,9 +162,7 @@ pub mod tests {
                         Some(Grants {
                             pre_authorized_code:
                                 Some(PreAuthorizedCode {
-                                    pre_authorized_code,
-                                    tx_code: Some(tx_code),
-                                    ..
+                                    pre_authorized_code, ..
                                 }),
                             ..
                         }),
