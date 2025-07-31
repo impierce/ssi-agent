@@ -18,7 +18,7 @@ pub enum AuthorizationRequestEvent {
         state: Option<String>,
     },
     OID4VPAuthorizationResponseVerified {
-        vp_token: String, //ccc look at the type
+        vp_token: String,
         state: Option<String>,
     },
 }
