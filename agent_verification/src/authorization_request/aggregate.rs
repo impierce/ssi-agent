@@ -10,6 +10,7 @@ use crate::{
 use agent_shared::config::{config, get_preferred_signing_algorithm};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
+use oid4vc_core::client_metadata::ClientMetadataResource;
 use oid4vc_core::{authorization_request::ByReference, scope::Scope};
 use oid4vp::authorization_request::ClientId;
 use serde::{Deserialize, Serialize};

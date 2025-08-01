@@ -6,7 +6,6 @@ use oid4vci::{
 use serde::{Deserialize, Serialize};
 use strum::Display;
 use url::Url;
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
 pub enum OfferEvent {
     CredentialOfferCreated {
