@@ -4,15 +4,20 @@ use crate::connection::views::ConnectionView;
 use crate::document::aggregate::Status;
 use crate::document::command::DocumentCommand;
 use crate::document::views::all_documents::AllDocumentsView;
+use crate::profile::aggregate::{Profile, Source};
+use crate::profile::command::ProfileCommand;
+use crate::profile::views::ProfileView;
 use crate::service::views::all_services::AllServicesView;
 use crate::{
     document::{aggregate::Document, views::DocumentView},
     service::{aggregate::Service, command::ServiceCommand, views::ServiceView},
 };
-use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported, SupportedDidMethod, ToggleOptions};
+use agent_shared::config::{
+    config, config_mut, get_all_enabled_signing_algorithms_supported, SupportedDidMethod, ToggleOptions,
+};
 use agent_shared::handlers::command_handler;
 use agent_shared::{application_state::CommandHandler, handlers::query_handler};
-use cqrs_es::persist::ViewRepository;
+use cqrs_es::persist::{PersistenceError, ViewRepository};
 use iota_sdk::client::api::GetAddressesOptions;
 use iota_sdk::client::secret::SecretManager;
 use iota_sdk::client::Client;
@@ -23,7 +28,13 @@ use itertools::iproduct;
 use jsonwebtoken::Algorithm;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
+
+/// The fixed identifier for the `Profile` aggregate, which is treated as a singleton.
+///
+/// This is for internal use only within the identity bounded context to ensure
+/// all operations consistently target the one and only profile.
+pub const PROFILE_ID: &str = "PROFILE-001";
 
 #[derive(Clone)]
 pub struct IdentityState {
@@ -36,6 +47,7 @@ pub struct IdentityState {
 pub struct CommandHandlers {
     pub connection: CommandHandler<Connection>,
     pub document: CommandHandler<Document>,
+    pub profile: CommandHandler<Profile>,
     pub service: CommandHandler<Service>,
 }
 
@@ -47,16 +59,18 @@ type Queries = ViewRepositories<
     dyn ViewRepository<AllConnectionsView, Connection>,
     dyn ViewRepository<DocumentView, Document>,
     dyn ViewRepository<AllDocumentsView, Document>,
+    dyn ViewRepository<ProfileView, Profile>,
     dyn ViewRepository<ServiceView, Service>,
     dyn ViewRepository<AllServicesView, Service>,
 >;
 
-pub struct ViewRepositories<C1, C2, D1, D2, S1, S2>
+pub struct ViewRepositories<C1, C2, D1, D2, P, S1, S2>
 where
     C1: ViewRepository<ConnectionView, Connection> + ?Sized,
     C2: ViewRepository<AllConnectionsView, Connection> + ?Sized,
     D1: ViewRepository<DocumentView, Document> + ?Sized,
     D2: ViewRepository<AllDocumentsView, Document> + ?Sized,
+    P: ViewRepository<ProfileView, Profile> + ?Sized,
     S1: ViewRepository<ServiceView, Service> + ?Sized,
     S2: ViewRepository<AllServicesView, Service> + ?Sized,
 {
@@ -64,6 +78,7 @@ where
     pub all_connections: Arc<C2>,
     pub document: Arc<D1>,
     pub all_documents: Arc<D2>,
+    pub profile: Arc<P>,
     pub service: Arc<S1>,
     pub all_services: Arc<S2>,
 }
@@ -75,6 +90,7 @@ impl Clone for Queries {
             all_connections: self.all_connections.clone(),
             document: self.document.clone(),
             all_documents: self.all_documents.clone(),
+            profile: self.profile.clone(),
             service: self.service.clone(),
             all_services: self.all_services.clone(),
         }
@@ -120,10 +136,178 @@ pub const LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID: &str = "linked-verifiable-p
 pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
     info!("Initializing the identity state ...");
 
+    initialize_display(state).await?;
     initialize_documents(state).await?;
     initialize_domain_linkage(state).await?;
     initialize_linked_verifiable_presentations(state).await?;
     publish_decentrally_hosted_documents(state).await?;
+
+    Ok(())
+}
+
+// TODO: This function is a temporary workaround and violates DDD principles.
+// It directly mutates the global configuration state, which is an impure side effect.
+//
+// The correct long-term solution is to establish the Identity Bounded Context as the single
+// source of truth for display data (name, logo). Other contexts, like Issuance and
+// Verification, should subscribe to events published by the Identity Bounded Context to receive these
+// updates, rather than reading from a shared, mutable global state.
+/// Queries the profile and updates the application state with the profile information.
+pub async fn query_profile(state: &IdentityState) -> Result<(), PersistenceError> {
+    match query_handler(PROFILE_ID, &state.query.profile).await? {
+        Some(Profile { display_name, logo, .. }) => {
+            if let Some(display) = config_mut().display.first_mut() {
+                display.name = display_name.unwrap_or_default();
+                display.logo = logo;
+            }
+
+            Ok(())
+        }
+        None => {
+            warn!("No profile found");
+
+            Ok(())
+        }
+    }
+}
+
+// TODO: This function violates the aggregate's consistency boundary.
+// The complex business logic for deciding whether to update the profile based on its
+// source (Provisioned vs. Default vs. Runtime) should reside inside the `Profile` aggregate's `handle`
+// method, not here in the application's initialization layer.
+//
+// A better approach would be:
+// 1. This function should only read the config and dispatch a simple, declarative command,
+//    e.g., `ProfileCommand::SynchronizeFromConfig { display_name: ..., logo: ... }`.
+// 2. The `Profile` aggregate would then handle this command, containing all the logic
+//    to protect its invariants (e.g., "if my source is `Runtime`, I must reject this command")
+async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
+    // TODO: allow for multiple displays in the future with different locales.
+    let first = config().display.first().cloned();
+
+    let config_display_source = if config().is_display_provisioned() {
+        Source::Provisioned
+    } else {
+        Source::Default
+    };
+
+    if let Some(config_display) = first {
+        match query_handler(PROFILE_ID, &state.query.profile).await? {
+            // If the profile exists, we check if it needs to be updated based on the config.
+            // We only update the Profile if the config source is:
+            // - Provisioned: If the Profile is Provisioned, we update the persisted Profile.
+            // - Default: If the persisted Profile is Provisioned, we update the persisted Profile.
+            Some(Profile {
+                display_name: persisted_display_name,
+                logo: persisted_logo,
+                country: persisted_country,
+                source: persisted_source,
+                ..
+            }) if (config_display_source == Source::Provisioned
+                || (config_display_source == Source::Default && persisted_source == Source::Provisioned)) =>
+            {
+                if Some(&config_display.name) != persisted_display_name.as_ref() {
+                    let command = ProfileCommand::UpdateDisplayName {
+                        display_name: config_display.name,
+                        source: config_display_source.clone(),
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+
+                if config_display.logo != persisted_logo {
+                    let command = ProfileCommand::UpdateLogo {
+                        logo: config_display.logo,
+                        source: config_display_source.clone(),
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+
+                if config_display.country != persisted_country {
+                    let command = ProfileCommand::UpdateCountry {
+                        country: config_display.country,
+                        source: config_display_source.clone(),
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+
+                let command = ProfileCommand::UpdateSource {
+                    source: config_display_source,
+                };
+
+                command_handler(PROFILE_ID, &state.command.profile, command).await?;
+            }
+            Some(_profile) => {
+                info!("Display is already configured, no action needed.");
+            }
+            // If the profile does not exist, we create it with the config display information.
+            None => {
+                info!("No display configured, creating a new one.");
+
+                let command = ProfileCommand::CreateProfile {
+                    profile_id: PROFILE_ID.to_string(),
+                    display_name: Some(config_display.name.clone()),
+                    logo: config_display.logo.clone(),
+                    source: config_display_source,
+                    country: config_display.country.clone(),
+                };
+
+                command_handler(PROFILE_ID, &state.command.profile, command).await?;
+            }
+        };
+    } else {
+        match query_handler(PROFILE_ID, &state.query.profile).await? {
+            Some(Profile {
+                display_name: persisted_display_name,
+                logo: persisted_logo,
+                country: persisted_country,
+                source: Source::Provisioned,
+                ..
+            }) => {
+                if persisted_display_name.is_some() {
+                    let command = ProfileCommand::UpdateDisplayName {
+                        display_name: "".to_string(),
+                        source: config_display_source.clone(),
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+
+                if persisted_logo.is_some() {
+                    let command = ProfileCommand::UpdateLogo {
+                        logo: None,
+                        source: config_display_source.clone(),
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+
+                if persisted_country.is_some() {
+                    let command = ProfileCommand::UpdateCountry {
+                        country: None,
+                        source: config_display_source.clone(),
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+            }
+            _ => {
+                let command = ProfileCommand::CreateProfile {
+                    profile_id: PROFILE_ID.to_string(),
+                    display_name: None,
+                    logo: None,
+                    country: None,
+                    source: config_display_source,
+                };
+
+                command_handler(PROFILE_ID, &state.command.profile, command).await?;
+            }
+        };
+    }
+
+    query_profile(state).await?;
 
     Ok(())
 }

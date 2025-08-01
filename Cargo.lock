@@ -93,6 +93,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
+ "serde_with 3.8.1",
  "serde_yaml",
  "serial_test",
  "siopv2",

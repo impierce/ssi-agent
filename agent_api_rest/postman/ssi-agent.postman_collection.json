@@ -1778,6 +1778,78 @@
 							"response": []
 						}
 					]
+				},
+				{
+					"name": "Profile",
+					"item": [
+						{
+							"name": "Update Profile",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"displayName\": \"My UniCore Instance\",\n    \"logo\": {\n        \"uri\": \"https://example.org\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{HOST}}/v0/profile",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"profile"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Profile",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{HOST}}/v0/profile",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"profile"
+									]
+								}
+							},
+							"response": []
+						}
+					]
 				}
 			]
 		},
