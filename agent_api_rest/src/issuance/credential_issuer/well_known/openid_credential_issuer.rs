@@ -3,20 +3,28 @@ use agent_issuance::{
     server_config::views::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
+use agent_shared::config::config;
 use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use http_api_problem::ApiError;
+use serde_json::json;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn openid_credential_issuer(State(state): State<IssuanceState>) -> Result<Response, ApiError> {
     match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
         Some(ServerConfigView {
-            credential_issuer_metadata,
+            mut credential_issuer_metadata,
             ..
-        }) => Ok((StatusCode::OK, Json(credential_issuer_metadata)).into_response()),
+        }) => {
+            // TODO: remove this once the Identity Bounded Context is the single source of truth for display data.
+            // This is a temporary workaround to ensure the credential issuer metadata has the correct display information.
+            credential_issuer_metadata.display = Some(config().display.clone().into_iter().map(|x| json!(x)).collect());
+
+            Ok((StatusCode::OK, Json(credential_issuer_metadata)).into_response())
+        }
         _ => Err(ApiError::new(StatusCode::NOT_FOUND)),
     }
 }

@@ -80,13 +80,29 @@ impl Aggregate for AuthorizationRequest {
                             .map_err(AuthorizationRequestBuilderError)?,
                     ))
                 } else {
+                    let mut siopv2_client_metadata = services.siopv2_client_metadata.clone();
+                    if let ClientMetadataResource::ClientMetadata {
+                        ref mut client_name,
+                        ref mut logo_uri,
+                        ..
+                    } = siopv2_client_metadata
+                    {
+                        // TODO: remove this once the Identity Bounded Context is the single source of truth for display data.
+                        // This is a temporary workaround to ensure the credential issuer metadata has the correct display information.
+                        *client_name = Some(config().display.first().map(|d| d.name.clone()).unwrap_or_default());
+                        *logo_uri = config()
+                            .display
+                            .first()
+                            .and_then(|d| d.logo.as_ref().and_then(|l| l.uri.clone()));
+                    }
+
                     GenericAuthorizationRequest::SIOPv2(Box::new(
                         SIOPv2AuthorizationRequest::builder()
                             .client_id(verifier_did.clone())
                             .scope(Scope::openid())
                             .redirect_uri(redirect_uri)
                             .response_mode("direct_post".to_string())
-                            .client_metadata(services.siopv2_client_metadata.clone())
+                            .client_metadata(siopv2_client_metadata)
                             .state(state)
                             .nonce(nonce)
                             .build()
