@@ -65,6 +65,9 @@ async fn main() -> io::Result<()> {
 
     info!("Public url: {}", config().public_url);
 
+    agent_authorization::state::initialize(&authorization_state)
+        .await
+        .unwrap();
     agent_identity::state::initialize(&identity_state).await.unwrap();
     agent_issuance::state::initialize(&issuance_state).await.unwrap();
 

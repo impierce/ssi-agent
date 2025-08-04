@@ -205,7 +205,6 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
         .unwrap_or_else(|| match ApplicationProfile::load() {
             ApplicationProfile::Development => {
                 info!("Using default development credential configurations.");
-                // FIXME: remove claims?
                 serde_json::from_value::<Vec<CredentialConfiguration>>(serde_json::json!([
                   {
                     "credential_configuration_id": "001",

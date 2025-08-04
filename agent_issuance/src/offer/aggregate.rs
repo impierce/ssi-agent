@@ -231,8 +231,6 @@ impl Aggregate for Offer {
                         credential: signed_credential,
                         notification_id,
                     },
-                    c_nonce: None,
-                    c_nonce_expires_in: None,
                 };
 
                 Ok(vec![CredentialResponseCreated {
@@ -584,16 +582,10 @@ pub mod test_utils {
     use url::Url;
 
     static PRE_AUTHORIZED_CODE: OnceCell<String> = OnceCell::new();
-    static C_NONCE: OnceCell<String> = OnceCell::new();
 
     #[fixture]
     pub async fn pre_authorized_code() -> String {
         PRE_AUTHORIZED_CODE.get_or_init(generate_random_string).clone()
-    }
-
-    #[fixture]
-    pub async fn c_nonce() -> String {
-        C_NONCE.get_or_init(generate_random_string).clone()
     }
 
     #[fixture]
@@ -672,14 +664,13 @@ pub mod test_utils {
 
     #[fixture]
     pub async fn credential_request(
-        #[future(awt)] c_nonce: String,
+        credential_configuration_id: String,
         #[future(awt)] holder: Arc<dyn Subject>,
         static_issuer_url: Url,
     ) -> CredentialRequest {
         CredentialRequest {
             credential_identifier_or_credential_configuration_id: CredentialConfigurationId(
-                // FIXME: This should be set to the actual credential configuration ID
-                "credential_configuration_id".to_string(),
+                credential_configuration_id,
             ),
             proof: Some(
                 Proof::builder()
@@ -689,7 +680,6 @@ pub mod test_utils {
                     .iss(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap())
                     .aud(static_issuer_url.to_string())
                     .iat(1571324800)
-                    .nonce(c_nonce)
                     .subject_syntax_type("did:key")
                     .build()
                     .await
@@ -706,8 +696,6 @@ pub mod test_utils {
                 credential: json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string()),
                 notification_id: Some(notification_id.clone()),
             },
-            c_nonce: None,
-            c_nonce_expires_in: None,
         }
     }
 }

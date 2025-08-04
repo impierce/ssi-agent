@@ -15,6 +15,7 @@ impl PushedAuthorizationService {
         pushed_authorization_request: AuthorizationRequest,
         // FIX ME
     ) -> Result<PushedAuthorizationResponse, ()> {
+        tracing::info!("client id: {}", pushed_authorization_request.client_id);
         let client = query_handler(&pushed_authorization_request.client_id, &state.query.client)
             .await
             .expect("FIXME")
