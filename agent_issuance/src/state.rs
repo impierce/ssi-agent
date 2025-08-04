@@ -272,7 +272,7 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
     }
 
     for provisioned_credential_configuration in provisioned_credential_configurations {
-        let command = ServerConfigCommand::AddCredentialConfiguration {
+        let command = ServerConfigCommand::UpdateCredentialConfiguration {
             credential_configuration: provisioned_credential_configuration,
             provisioned: true,
         };

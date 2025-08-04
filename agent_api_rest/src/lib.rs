@@ -5,6 +5,7 @@ pub mod verification;
 
 pub mod error;
 pub mod handlers;
+pub mod utils;
 
 use agent_holder::state::HolderState;
 use agent_identity::state::IdentityState;
