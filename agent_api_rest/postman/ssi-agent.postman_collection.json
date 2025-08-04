@@ -1,10 +1,9 @@
 {
 	"info": {
-		"_postman_id": "83488cab-60e6-490d-b772-16fab64ff225",
-		"name": "ssi-agent Copy",
+		"_postman_id": "3e8dd442-b9e3-4b43-a48e-124cf32fe34f",
+		"name": "ssi-agent",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "38461474"
-	},
+		"_exporter_id": "41786572"	},
 	"item": [
 		{
 			"name": "Issuance",
@@ -233,19 +232,13 @@
 							"script": {
 								"exec": [
 									"const credential_offer = responseBody;",
-									"",
 									"const decodedString = decodeURIComponent(credential_offer);",
-									"",
-									"// Split the string on the first '=' character and take the second item",
 									"const [, secondItem] = decodedString.split('=', 2);",
+									"var credential_offer_uri = secondItem;",
 									"",
-									"var jsonObject = JSON.parse(secondItem);",
-									"const pre_authorized_code = jsonObject.grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']['pre-authorized_code'];",
-									"",
-									"if(pre_authorized_code){",
-									"    pm.collectionVariables.set(\"PRE_AUTHORIZED_CODE\",pre_authorized_code)",
-									"}",
-									""
+									"if(credential_offer_uri){",
+									"    pm.collectionVariables.set(\"CREDENTIAL_OFFER_URI\", credential_offer_uri)",
+									"}"
 								],
 								"type": "text/javascript",
 								"packages": {}
@@ -1546,6 +1539,78 @@
 						}
 					},
 					"response": []
+				},
+				{
+					"name": "Profile",
+					"item": [
+						{
+							"name": "Update Profile",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"displayName\": \"My UniCore Instance\",\n    \"logo\": {\n        \"uri\": \"https://example.org\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{HOST}}/v0/profile",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"profile"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Profile",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{HOST}}/v0/profile",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"profile"
+									]
+								}
+							},
+							"response": []
+						}
+					]
 				}
 			]
 		},

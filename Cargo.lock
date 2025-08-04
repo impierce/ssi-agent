@@ -104,6 +104,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
+ "serde_with 3.13.0",
  "serial_test",
  "siopv2",
  "thiserror 1.0.69",

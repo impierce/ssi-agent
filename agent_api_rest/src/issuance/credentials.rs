@@ -173,7 +173,7 @@ pub mod tests {
             "last_name": "Rustacean"
         });
         pub static ref CREDENTIAL: serde_json::Value = json!({
-            "@context": "https://www.w3.org/2018/credentials/v1",
+            "@context": [ "https://www.w3.org/2018/credentials/v1" ],
             "type": [ "VerifiableCredential" ],
             "issuer": {
                 "id": "https://my-domain.example.org/",

@@ -26,7 +26,7 @@ pub enum ServerConfigCommand {
     UpdateSigningAlgorithms {
         signing_algorithms_supported: Vec<Algorithm>,
     },
-    AddCredentialConfiguration {
+    UpdateCredentialConfiguration {
         credential_configuration: CredentialConfiguration,
         provisioned: bool,
     },

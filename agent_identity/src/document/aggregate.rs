@@ -7,9 +7,7 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_did::{CoreDID, DIDUrl, DID as _};
 use identity_document::document::CoreDocument;
-use identity_iota::iota;
 use identity_iota::iota::rebased::client::{IdentityClient, IdentityClientReadOnly};
-use identity_iota::prelude::Resolver;
 use identity_iota::storage::{Storage, StorageSigner};
 use identity_iota::{
     iota::IotaDocument,
@@ -493,7 +491,7 @@ impl Aggregate for Document {
                     }
                 }
 
-                let did_method = self.did_method.clone().ok_or(MissingDidMethodError)?;
+                let did_method = self.did_method.ok_or(MissingDidMethodError)?;
 
                 // The API endpoint of an IOTA node
                 let api_endpoint = did_method

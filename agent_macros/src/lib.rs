@@ -53,6 +53,8 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
     // Vectors to store generated code for different parts of the implementation
     let mut generated_code = Vec::new();
     let mut load_configuration_variables = Vec::new();
+    let mut provisioning_status_fields = Vec::new();
+    let mut is_provisioned_methods = Vec::new();
 
     // Iterate over each field in the struct
     for field in fields {
@@ -89,6 +91,17 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
             let (loader_fn, loader_call) = generate_field_loader(&field_name, &field_type, &field_name_str, &defaults);
             generated_code.push(loader_fn);
             load_configuration_variables.push(loader_call);
+
+            // Generate the provisioning status field and the `is_..._provisioned` method
+            provisioning_status_fields.push(quote! { pub #field_name: bool, });
+            let is_provisioned_method_name = format_ident!("is_{}_provisioned", field_name);
+            is_provisioned_methods.push(quote! {
+                pub fn #is_provisioned_method_name(&self) -> bool {
+                    #provisioning_metadata_name.read().unwrap()
+                        .get(stringify!(#field_name))
+                        .is_some()
+                }
+            });
         }
     }
 
@@ -129,6 +142,8 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
             pub fn get_provisioned_config(&self) -> serde_json::Value {
                 #provisioning_metadata_name.read().unwrap().clone()
             }
+
+            #(#is_provisioned_methods)*
 
             // Generated functions for each field
             #(#generated_code)*

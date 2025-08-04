@@ -1,9 +1,9 @@
 use agent_shared::config::Logo;
 use cqrs_es::DomainEvent;
-use identity_core::common::Url;
-use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
 use strum::Display;
+
+use crate::profile::aggregate::Source;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
 pub enum ProfileEvent {
@@ -11,7 +11,23 @@ pub enum ProfileEvent {
         profile_id: String,
         display_name: Option<String>,
         logo: Option<Logo>,
-        provisioned: Option<bool>,
+        country: Option<String>,
+        source: Source,
+    },
+    DisplayNameUpdated {
+        display_name: String,
+        source: Source,
+    },
+    LogoUpdated {
+        logo: Option<Logo>,
+        source: Source,
+    },
+    CountryUpdated {
+        country: Option<String>,
+        source: Source,
+    },
+    SourceUpdated {
+        source: Source,
     },
 }
 
