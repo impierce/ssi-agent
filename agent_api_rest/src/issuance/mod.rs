@@ -1,8 +1,9 @@
 pub mod credential_configurations;
 pub mod credential_issuer;
 pub mod credentials;
-pub mod error;
 pub mod offers;
+
+pub mod error;
 
 use crate::issuance::{
     credential_configurations::credential_configurations,

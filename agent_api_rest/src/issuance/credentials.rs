@@ -18,6 +18,7 @@ use oauth_tsl::status_list::StatusType;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+#[cfg(feature = "test_utils")]
 pub const TESTINDEX: usize = 123;
 
 #[axum_macros::debug_handler]
