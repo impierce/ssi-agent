@@ -125,6 +125,7 @@ pub async fn identity_state(
     let all_connections = Arc::new(MemRepository::default());
     let document = Arc::new(MemRepository::default());
     let all_documents = Arc::new(MemRepository::default());
+    let profile = Arc::new(MemRepository::default());
     let service = Arc::new(MemRepository::default());
     let all_services = Arc::new(MemRepository::default());
 
@@ -136,6 +137,7 @@ pub async fn identity_state(
     let Partitions {
         connection_event_publishers,
         document_event_publishers,
+        profile_event_publishers,
         service_event_publishers,
         ..
     } = partition_event_publishers(event_publishers);
@@ -160,6 +162,14 @@ pub async fn identity_state(
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
                 ),
             ),
+            profile: Arc::new(
+                profile_event_publishers.into_iter().fold(
+                    AggregateHandler::new(identity_services.clone())
+                        .append_query(SimpleLoggingQuery {})
+                        .append_query(generic_query(profile.clone())),
+                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
+                ),
+            ),
             service: Arc::new(
                 service_event_publishers.into_iter().fold(
                     AggregateHandler::new(identity_services)
@@ -175,6 +185,7 @@ pub async fn identity_state(
             all_connections,
             document,
             all_documents,
+            profile,
             service,
             all_services,
         },
