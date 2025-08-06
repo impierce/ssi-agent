@@ -46,6 +46,11 @@ impl IntoApiErrorExt for CredentialError {
                 .type_url(type_url("issuance#invalid-credential-status-url"))
                 .source(self)
                 .finish(),
+            BuildVcJwtError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Failed to Create VC JWT")
+                .type_url(type_url("issuance#build-vc-jwt-error"))
+                .source(self)
+                .finish(),
 
             // Public API Errors
 

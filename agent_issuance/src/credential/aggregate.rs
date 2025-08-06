@@ -3,7 +3,9 @@ use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError::{self};
 use crate::credential::event::CredentialEvent;
 use crate::services::IssuanceServices;
-use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm};
+use agent_shared::config::{
+    config, get_preferred_did_method, get_preferred_signing_algorithm, STATUSLISTSIZE, STATUSTYPESIZE,
+};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use derivative::Derivative;
@@ -179,16 +181,11 @@ impl Aggregate for Credential {
                     .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
 
                     let credential_status = CredentialStatus {
-                        index: credential_status_index.index,
+                        index: credential_status_index,
                         status: StatusType::VALID,
                     };
 
-                    let status_list_number = credential_status_index.list_index.to_string();
-                    let mut status_list_url = config().ietf_oauth_token_status_list_uri.clone();
-                    status_list_url
-                        .path_segments_mut()
-                        .map_err(|_| CredentialError::InvalidCredentialStatus)?
-                        .push(&status_list_number);
+                    let status_list_url = get_status_list_url(self.credential_status.index)?;
 
                     // Loop through all the items in the `type` array in reverse until we find a match.
                     while let Some(credential_type) = credential_types.pop() {
@@ -204,7 +201,7 @@ impl Aggregate for Credential {
 
                                 let status_uri_idx = identity_core::common::Object::from_json_value(json!({
                                     "uri": status_list_url.clone(),
-                                    "idx": credential_status_index.index
+                                    "idx": credential_status_index
                                 }))
                                 .map_err(|_| CredentialError::InvalidCredentialStatus)?;
 
@@ -308,7 +305,7 @@ impl Aggregate for Credential {
                                 );
                                 raw_credential_status.insert(
                                     "idx".to_string(),
-                                    serde_json::Value::Number(credential_status_index.index.into()),
+                                    serde_json::Value::Number(credential_status_index.into()),
                                 );
 
                                 return Ok(vec![UnsignedCredentialCreated {
@@ -433,10 +430,35 @@ impl Aggregate for Credential {
                         vc_jwt_builder
                     };
 
+                    let vc_jwt_built = vc_jwt_builder
+                        .verifiable_credential(credential.raw)
+                        .build()
+                        .map_err(|e| CredentialError::BuildVcJwtError(e.to_string()))?;
+
+                    let mut vc_jwt_value = serde_json::to_value(&vc_jwt_built)
+                        .map_err(|e| CredentialError::BuildVcJwtError(e.to_string()))?;
+
+                    let mut vc_jwt_object = vc_jwt_value
+                        .as_object_mut()
+                        .ok_or(CredentialError::BuildVcJwtError(
+                            "Failed to convert VC JWT to mutable JSON object".to_string(),
+                        ))?
+                        .clone();
+
+                    vc_jwt_object.insert(
+                        "status".to_string(),
+                        json!({
+                            "status_list": {
+                                "idx": self.credential_status.index,
+                                "uri": get_status_list_url(self.credential_status.index)?,
+                            }
+                        }),
+                    );
+
                     json!(jwt::encode(
                         services.issuer.clone(),
                         Header::new(get_preferred_signing_algorithm()),
-                        vc_jwt_builder.verifiable_credential(credential.raw).build().ok(),
+                        vc_jwt_object,
                         &default_did_method.to_string()
                     )
                     .await
@@ -521,11 +543,25 @@ impl Aggregate for Credential {
     }
 }
 
+// Helpers
+
+fn get_status_list_url(index: usize) -> Result<Url, CredentialError> {
+    let statuses_per_byte: usize = 8 / STATUSTYPESIZE as usize;
+    let status_list_number = index / ((STATUSLISTSIZE * statuses_per_byte) as f64 * 0.7) as usize;
+
+    let mut status_list_url = config().ietf_oauth_token_status_list_uri.clone();
+    status_list_url
+        .path_segments_mut()
+        .map_err(|_| CredentialError::InvalidCredentialStatus)?
+        .push(&status_list_number.to_string());
+
+    Ok(status_list_url)
+}
+
 #[cfg(test)]
 pub mod credential_tests {
     use super::test_utils::*;
     use super::*;
-    use crate::credential::command::CredentialStatusIndex;
 
     use jsonwebtoken::Algorithm;
 
@@ -570,10 +606,7 @@ pub mod credential_tests {
                 },
                 credential_configuration: Box::new(credential_configuration.clone()),
                 expires_at: CredentialExpiry::Never,
-                credential_status_index: CredentialStatusIndex {
-                    index: 0,
-                    list_index: 1,
-                },
+                credential_status_index: 0,
             })
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id,
@@ -668,9 +701,9 @@ pub mod test_utils {
         "notification_id".to_string()
     }
 
-    pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjMuanNvbiJdLCJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJPcGVuQmFkZ2VDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJuYW1lIjoiVGVhbXdvcmsgQmFkZ2UiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwidHlwZSI6WyJBY2hpZXZlbWVudFN1YmplY3QiXSwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEiOnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY29nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNvZ25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbnQuIiwibmFtZSI6IlRlYW13b3JrIn19LCJjcmVkZW50aWFsU3RhdHVzIjp7ImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8xIiwidHlwZSI6InN0YXR1c2xpc3Qrand0IiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8xIiwiaWR4IjowfX19.Msz0DTiDsXFfFjqvh4PY-oXbbvjiju7c1Y_bVyjuVb1HOr3nN2otXEXmiIJ1MW_W-UJuERyN4bvQAEMjZXHiCw";
+    pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjMuanNvbiJdLCJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJPcGVuQmFkZ2VDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJuYW1lIjoiVGVhbXdvcmsgQmFkZ2UiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwidHlwZSI6WyJBY2hpZXZlbWVudFN1YmplY3QiXSwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEiOnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY29nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNvZ25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbnQuIiwibmFtZSI6IlRlYW13b3JrIn19LCJjcmVkZW50aWFsU3RhdHVzIjp7ImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidHlwZSI6InN0YXR1c2xpc3Qrand0IiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjowfX0sInN0YXR1cyI6eyJzdGF0dXNfbGlzdCI6eyJpZHgiOjAsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCJ9fX0.FBmcIzSWi10Fvr_r6PLM18seqiavenyuSzryt-CToleTUuy5p4lLzWm1Cj5OmYrEWxwC4dMH46szxEt8YwqsBw";
 
-    pub const W3C_VC_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJkZWdyZWUiOnsidHlwZSI6Ik1hc3RlckRlZ3JlZSIsIm5hbWUiOiJNYXN0ZXIgb2YgT2NlYW5vZ3JhcGh5In19LCJpc3N1ZXIiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwiY3JlZGVudGlhbFN0YXR1cyI6eyJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMSIsInR5cGUiOiJzdGF0dXNsaXN0K2p3dCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMSIsImlkeCI6MH19fQ.6-i-8_wL-TcqzW6s73lMSgFW4R5eLGT5vDSFw-RuJi_oz2HsKPcbkzL8fhqE49rpyeOHHiJDp6RAw2uKkTdEAA";
+    pub const W3C_VC_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJkZWdyZWUiOnsidHlwZSI6Ik1hc3RlckRlZ3JlZSIsIm5hbWUiOiJNYXN0ZXIgb2YgT2NlYW5vZ3JhcGh5In19LCJpc3N1ZXIiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwiY3JlZGVudGlhbFN0YXR1cyI6eyJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInR5cGUiOiJzdGF0dXNsaXN0K2p3dCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MH19LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsiaWR4IjowLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAifX19.C-nr-XWFgxQsQTFTQ84d2u-88yL7MEalB_QXHdklfvwIeLL_vYWU4wsRpseB67z5l-3s4zb1nF76yXPjm58vCg";
 
     #[fixture]
     pub fn credential_id() -> String {
@@ -781,9 +814,9 @@ pub mod test_utils {
           "name": "Teamwork Badge",
           "credentialSubject": OPENBADGE_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
           "credentialStatus": {
-              "id": "https://my-domain.example.org/ietf-oauth-token-status-list/1",
+              "id": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
               "type": "statuslist+jwt",
-              "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/1",
+              "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
               "idx": 0
           }
         });
@@ -797,9 +830,9 @@ pub mod test_utils {
           },
           "issuanceDate": "2010-01-01T00:00:00Z",
           "credentialStatus": {
-              "id": "https://my-domain.example.org/ietf-oauth-token-status-list/1",
+              "id": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
               "type": "statuslist+jwt",
-              "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/1",
+              "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
               "idx": 0
           }
         });

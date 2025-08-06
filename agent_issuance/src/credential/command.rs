@@ -9,12 +9,6 @@ use crate::credential::aggregate::CredentialStatus;
 use super::{aggregate::CredentialExpiry, entity::Data};
 
 #[derive(Debug, Deserialize)]
-pub struct CredentialStatusIndex {
-    pub index: usize,
-    pub list_index: usize,
-}
-
-#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum CredentialCommand {
     CreateUnsignedCredential {
@@ -22,7 +16,7 @@ pub enum CredentialCommand {
         data: Data,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
         expires_at: CredentialExpiry,
-        credential_status_index: CredentialStatusIndex,
+        credential_status_index: usize,
     },
     CreateSignedCredential {
         credential_id: String,

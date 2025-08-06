@@ -1,5 +1,7 @@
 use agent_issuance::{credential::aggregate::CredentialStatus, state::IssuanceState};
-use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm};
+use agent_shared::config::{
+    config, get_preferred_did_method, get_preferred_signing_algorithm, STATUSLISTSIZE, STATUSTYPESIZE,
+};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
@@ -15,13 +17,7 @@ use oid4vc_core::jwt::encode;
 use rand::Rng;
 use tokio::task;
 
-use crate::{
-    handlers::query_handler,
-    issuance::{
-        credentials::{STATUSLISTSIZE, STATUSTYPESIZE},
-        error::PublicError,
-    },
-};
+use crate::{handlers::query_handler, issuance::error::PublicError};
 
 pub async fn token_status_list(
     State(state): State<IssuanceState>,
@@ -89,6 +85,7 @@ pub async fn token_status_list(
         .path_segments_mut()
         .map_err(|_| PublicError::InternalServerError)?
         .push(&status_list_number.to_string());
+
     let status_list_claims = StatusListTokenClaims {
         sub: sub_url.to_string(),
         iat: chrono::Utc::now().timestamp(),
@@ -133,7 +130,7 @@ pub async fn token_status_list(
 pub mod tests {
     use agent_issuance::state::initialize;
     use agent_secret_manager::{service::Service, subject::Subject};
-    use agent_shared::config::config;
+    use agent_shared::config::{config, STATUSLISTSIZE, STATUSTYPESIZE};
     use agent_store::in_memory;
     use axum::body::{self, Body};
     use http::{Request, StatusCode};
@@ -144,10 +141,7 @@ pub mod tests {
     };
     use oid4vc_core::authentication::verify::Verify;
 
-    use crate::issuance::{
-        credentials::{STATUSLISTSIZE, STATUSTYPESIZE},
-        router,
-    };
+    use crate::issuance::router;
     use tower::Service as _;
 
     #[tokio::test]

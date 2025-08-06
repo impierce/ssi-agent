@@ -3,11 +3,7 @@ use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_issuance::credential::aggregate::CredentialStatus;
 use agent_issuance::{
-    credential::{
-        aggregate::CredentialExpiry,
-        command::{CredentialCommand, CredentialStatusIndex},
-        entity::Data,
-    },
+    credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data},
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
@@ -21,10 +17,6 @@ use hyper::header;
 use oauth_tsl::status_list::StatusType;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-pub const STATUSTYPESIZE: u8 = 2; // Amount of bits per status
-pub const STATUSLISTSIZE: usize = 2048; // Amount of bytes in the status list. Equates to 8192 statuses for STATUSTYPESIZE = 2.
-pub const TESTINDEX: usize = 123;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
@@ -105,22 +97,22 @@ pub(crate) async fn credentials(
             })?;
 
         // Create the new CredentialStatus index randomly.
-        let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
-            .await?
-            .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
-            .unwrap_or_default();
-
-        let used_indices: Vec<usize> = all_credentials.iter().map(|c| c.credential_status.index).collect();
-
-        // Status Lists should only be filled up to 70%, the remaining 30% will be used for decoy/psuedo indices.
-        // This greatly improves the privacy of the issuer.
-        let statuses_per_byte: usize = 8 / STATUSTYPESIZE as usize;
-        let status_list_number = used_indices.len() / ((STATUSLISTSIZE * statuses_per_byte) as f64 * 0.7) as usize;
-
         let random_index;
         #[cfg(not(feature = "test_utils"))]
         {
+            use agent_shared::config::{STATUSLISTSIZE, STATUSTYPESIZE};
             use rand::Rng;
+
+            let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
+                .await?
+                .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
+                .unwrap_or_default();
+
+            // Status Lists should only be filled up to 70%, the remaining 30% will be used for decoy/psuedo indices.
+            // This greatly improves the privacy of the issuer.
+            let used_indices: Vec<usize> = all_credentials.iter().map(|c| c.credential_status.index).collect();
+            let statuses_per_byte: usize = 8 / STATUSTYPESIZE as usize;
+            let status_list_number = used_indices.len() / ((STATUSLISTSIZE * statuses_per_byte) as f64 * 0.7) as usize;
 
             let mut rng = rand::rng();
             loop {
@@ -135,6 +127,8 @@ pub(crate) async fn credentials(
 
         #[cfg(feature = "test_utils")]
         {
+            use agent_shared::config::TESTINDEX;
+
             random_index = TESTINDEX;
         }
 
@@ -143,10 +137,7 @@ pub(crate) async fn credentials(
             data: Data { raw: credential },
             credential_configuration: Box::new(credential_configuration),
             expires_at,
-            credential_status_index: CredentialStatusIndex {
-                index: random_index,
-                list_index: status_list_number,
-            },
+            credential_status_index: random_index,
         }
     };
 
@@ -237,7 +228,8 @@ pub mod tests {
     use crate::tests::{CREDENTIAL_CONFIGURATION_ID, OFFER_ID};
     use crate::API_VERSION;
     use agent_issuance::state::initialize;
-    use agent_secret_manager::service::Service;
+    use agent_secret_manager::{service::Service, subject::Subject};
+    use agent_shared::config::TESTINDEX;
     use agent_store::in_memory;
     use axum::{
         body::{self, Body},
@@ -250,7 +242,6 @@ pub mod tests {
     use serde_json::json;
     use tower::Service as _;
 
-    use agent_secret_manager::subject::Subject;
     use jsonwebtoken::{decode_header, Algorithm, DecodingKey};
     use oid4vc_core::authentication::verify::Verify;
 

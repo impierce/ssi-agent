@@ -18,4 +18,6 @@ pub enum CredentialError {
     InvalidExpirationDateError,
     #[error("Unable to create the `credentialStatus`")]
     InvalidCredentialStatus,
+    #[error("Failed to create the VC JWT: {0}")]
+    BuildVcJwtError(String),
 }
