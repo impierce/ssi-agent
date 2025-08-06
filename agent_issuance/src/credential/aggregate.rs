@@ -4,7 +4,7 @@ use crate::credential::error::CredentialError::{self};
 use crate::credential::event::CredentialEvent;
 use crate::services::IssuanceServices;
 use agent_shared::config::{
-    config, get_preferred_did_method, get_preferred_signing_algorithm, STATUSLISTSIZE, STATUSTYPESIZE,
+    config, get_preferred_did_method, get_preferred_signing_algorithm, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT,
 };
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
@@ -546,8 +546,8 @@ impl Aggregate for Credential {
 // Helpers
 
 fn get_status_list_url(index: usize) -> Result<Url, CredentialError> {
-    let statuses_per_byte: usize = 8 / STATUSTYPESIZE as usize;
-    let status_list_number = index / ((STATUSLISTSIZE * statuses_per_byte) as f64 * 0.7) as usize;
+    let statuses_per_byte: usize = 8 / BITS_PER_STATUS as usize;
+    let status_list_number = index / ((STATUS_LIST_BYTES_AMOUNT * statuses_per_byte) as f64 * 0.7) as usize;
 
     let mut status_list_url = config().ietf_oauth_token_status_list_uri.clone();
     status_list_url

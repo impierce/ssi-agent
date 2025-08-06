@@ -1,6 +1,6 @@
 use agent_issuance::{credential::aggregate::CredentialStatus, state::IssuanceState};
 use agent_shared::config::{
-    config, get_preferred_did_method, get_preferred_signing_algorithm, STATUSLISTSIZE, STATUSTYPESIZE,
+    config, get_preferred_did_method, get_preferred_signing_algorithm, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT,
 };
 use axum::{
     extract::{Path, State},
@@ -28,7 +28,7 @@ pub async fn token_status_list(
         .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
         .unwrap_or_default();
 
-    let amount_indices = STATUSLISTSIZE * 8 / STATUSTYPESIZE as usize;
+    let amount_indices = STATUS_LIST_BYTES_AMOUNT * 8 / BITS_PER_STATUS as usize;
 
     let lower_bound = status_list_number * amount_indices;
     let upper_bound = (status_list_number + 1) * amount_indices;
@@ -74,7 +74,7 @@ pub async fn token_status_list(
     used_indices.sort_by_key(|credential_status| credential_status.index);
 
     let mut status_list = StatusList {
-        status_size: Bits::try_from(STATUSTYPESIZE).map_err(|_| PublicError::InternalServerError)?,
+        status_size: Bits::try_from(BITS_PER_STATUS).map_err(|_| PublicError::InternalServerError)?,
         ..Default::default()
     };
     status_list
@@ -131,7 +131,7 @@ pub async fn token_status_list(
 pub mod tests {
     use agent_issuance::state::initialize;
     use agent_secret_manager::{service::Service, subject::Subject};
-    use agent_shared::config::{config, STATUSLISTSIZE, STATUSTYPESIZE};
+    use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
     use agent_store::in_memory;
     use axum::body::{self, Body};
     use http::{Request, StatusCode};
@@ -198,9 +198,9 @@ pub mod tests {
             decoded_jwt.claims.sub,
             config().public_url.as_str().to_owned() + "ietf-oauth-token-status-list/0"
         );
-        assert_eq!(decoded_jwt.claims.encoded_status_list.status_size, STATUSTYPESIZE);
+        assert_eq!(decoded_jwt.claims.encoded_status_list.status_size, BITS_PER_STATUS);
 
         let status_list = decoded_jwt.claims.encoded_status_list.decode_decompress().unwrap();
-        assert_eq!(status_list.len(), STATUSLISTSIZE);
+        assert_eq!(status_list.len(), STATUS_LIST_BYTES_AMOUNT);
     }
 }

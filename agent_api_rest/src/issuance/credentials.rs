@@ -102,7 +102,7 @@ pub(crate) async fn credentials(
         let random_index;
         #[cfg(not(feature = "test_utils"))]
         {
-            use agent_shared::config::{STATUSLISTSIZE, STATUSTYPESIZE};
+            use agent_shared::config::{BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
             use rand::Rng;
 
             let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
@@ -113,14 +113,15 @@ pub(crate) async fn credentials(
             // Status Lists should only be filled up to 70%, the remaining 30% will be used for decoy/psuedo indices.
             // This greatly improves the privacy of the issuer.
             let used_indices: Vec<usize> = all_credentials.iter().map(|c| c.credential_status.index).collect();
-            let statuses_per_byte: usize = 8 / STATUSTYPESIZE as usize;
-            let status_list_number = used_indices.len() / ((STATUSLISTSIZE * statuses_per_byte) as f64 * 0.7) as usize;
+            let statuses_per_byte: usize = 8 / BITS_PER_STATUS as usize;
+            let status_list_number =
+                used_indices.len() / ((STATUS_LIST_BYTES_AMOUNT * statuses_per_byte) as f64 * 0.7) as usize;
 
             let mut rng = rand::rng();
             loop {
                 let candidate = rng.random_range(
-                    (status_list_number * STATUSLISTSIZE * statuses_per_byte)
-                        ..((status_list_number + 1) * STATUSLISTSIZE * statuses_per_byte),
+                    (status_list_number * STATUS_LIST_BYTES_AMOUNT * statuses_per_byte)
+                        ..((status_list_number + 1) * STATUS_LIST_BYTES_AMOUNT * statuses_per_byte),
                 );
                 if !used_indices.contains(&candidate) {
                     random_index = candidate;
