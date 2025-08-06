@@ -118,11 +118,10 @@ pub(crate) async fn credentials(
                 used_indices.len() / ((STATUS_LIST_BYTES_AMOUNT * statuses_per_byte) as f64 * 0.7) as usize;
 
             let mut rng = rand::rng();
+            let lower_bound = status_list_number * STATUS_LIST_BYTES_AMOUNT * statuses_per_byte;
+            let upper_bound = (status_list_number + 1) * STATUS_LIST_BYTES_AMOUNT * statuses_per_byte;
             loop {
-                let candidate = rng.random_range(
-                    (status_list_number * STATUS_LIST_BYTES_AMOUNT * statuses_per_byte)
-                        ..((status_list_number + 1) * STATUS_LIST_BYTES_AMOUNT * statuses_per_byte),
-                );
+                let candidate = rng.random_range(lower_bound..upper_bound);
                 if !used_indices.contains(&candidate) {
                     random_index = candidate;
                     break;
