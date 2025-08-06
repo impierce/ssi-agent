@@ -116,8 +116,10 @@ pub(crate) async fn credentials(
 
             let mut rng = rand::rng();
             loop {
-                let candidate = rng
-                    .random_range((status_list_number * STATUSLISTSIZE)..((status_list_number + 1) * STATUSLISTSIZE));
+                let candidate = rng.random_range(
+                    (status_list_number * STATUSLISTSIZE * statuses_per_byte)
+                        ..((status_list_number + 1) * STATUSLISTSIZE * statuses_per_byte),
+                );
                 if !used_indices.contains(&candidate) {
                     random_index = candidate;
                     break;
