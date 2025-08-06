@@ -57,6 +57,7 @@ pub async fn token_status_list(
                 .iter()
                 .any(|credential_status| credential_status.index == random_index)
             {
+                // the range is 0..2 because STATUSTYPESIZE is set to 2, meaning 4 options, but we only have 3 options defined (VALID, UNVALID, SUSPENDED)
                 let status_type = rng.random_range(0..2);
                 indices.push(CredentialStatus {
                     index: random_index,
