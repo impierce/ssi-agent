@@ -15,7 +15,6 @@ use oauth_tsl::{
 };
 use oid4vc_core::jwt::encode;
 use rand::Rng;
-use tokio::task;
 
 use crate::{handlers::query_handler, issuance::error::PublicError};
 
@@ -47,7 +46,7 @@ pub async fn token_status_list(
 
     // This block ensures that the remaining empty 30% of a status list is filled with random values.
     // This block works in tandem with the part of `fn patch_credential` which only fills 70% of a status list.
-    used_indices = task::spawn_blocking(move || -> Result<Vec<CredentialStatus>, PublicError> {
+    used_indices = {
         let mut indices = used_indices.clone();
 
         let mut rng = rand::rng();
@@ -66,10 +65,8 @@ pub async fn token_status_list(
             }
         }
 
-        Ok(indices)
-    })
-    .await
-    .map_err(|_| PublicError::InternalServerError)??;
+        indices
+    };
 
     used_indices.sort_by_key(|credential_status| credential_status.index);
 
