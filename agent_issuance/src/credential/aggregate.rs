@@ -8,7 +8,6 @@ use agent_shared::config::{
 };
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use derivative::Derivative;
 use identity_core::convert::FromJson;
 use identity_credential::credential::{
     Credential as W3CVerifiableCredential, CredentialBuilder as W3CVerifiableCredentialBuilder, Issuer,
@@ -72,15 +71,13 @@ mod never_as_str {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
-#[derivative(PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct CredentialStatus {
     pub index: usize,
     pub status: StatusType,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
-#[derivative(PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct Credential {
     #[serde(rename = "id")]
     pub credential_id: String,
@@ -260,7 +257,7 @@ impl Aggregate for Credential {
                                 .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
 
                                 let builder_credential_status = types_ob_v3::prelude::CredentialStatus {
-                                    id: status_list_url.clone().into(),
+                                    id: status_list_url.to_string(),
                                     type_: StatusListTyp::Jwt.to_string(),
                                 };
 

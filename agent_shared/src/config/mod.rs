@@ -25,7 +25,7 @@ use crate::{error::SharedError, profile::ApplicationProfile};
 pub use provisioned::load_provisioned_config;
 
 pub const BITS_PER_STATUS: u8 = 2; // Amount of bits per status
-pub const STATUS_LIST_BYTES_AMOUNT: usize = 2048; // Amount of bytes in the status list. Equates to 8192 statuses for STATUSTYPESIZE = 2.
+pub const STATUS_LIST_BYTES_AMOUNT: usize = 2048; // Amount of bytes in the status list. Equates to 8192 statuses for BITS_PER_STATUS = 2.
 
 static STRONGHOLD_PATH: &str = "./stronghold.dat";
 // TODO: Once we have a proper state implementation for `agent_secret_manager` we can make use of randomly generated Key
