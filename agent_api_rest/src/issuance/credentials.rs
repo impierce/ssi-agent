@@ -18,6 +18,8 @@ use oauth_tsl::status_list::StatusType;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub const TESTINDEX: usize = 123;
+
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<IssuanceState>,
@@ -129,8 +131,6 @@ pub(crate) async fn credentials(
 
         #[cfg(feature = "test_utils")]
         {
-            use agent_shared::config::TESTINDEX;
-
             random_index = TESTINDEX;
         }
 
@@ -231,7 +231,6 @@ pub mod tests {
     use crate::API_VERSION;
     use agent_issuance::state::initialize;
     use agent_secret_manager::{service::Service, subject::Subject};
-    use agent_shared::config::TESTINDEX;
     use agent_store::in_memory;
     use axum::{
         body::{self, Body},

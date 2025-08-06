@@ -26,7 +26,6 @@ pub use provisioned::load_provisioned_config;
 
 pub const STATUSTYPESIZE: u8 = 2; // Amount of bits per status
 pub const STATUSLISTSIZE: usize = 2048; // Amount of bytes in the status list. Equates to 8192 statuses for STATUSTYPESIZE = 2.
-pub const TESTINDEX: usize = 123;
 
 static STRONGHOLD_PATH: &str = "./stronghold.dat";
 // TODO: Once we have a proper state implementation for `agent_secret_manager` we can make use of randomly generated Key
