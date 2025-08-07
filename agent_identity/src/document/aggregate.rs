@@ -335,7 +335,7 @@ impl Aggregate for Document {
                         .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
 
                     document
-                        .insert_method(verification_method, MethodScope::VerificationMethod)
+                        .insert_method(verification_method, MethodScope::VerificationMethod) // TODO: add relationships, also TODO: adjust KID insertion elsewhere
                         .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
 
                     events.push(PublicKeyUpdated {

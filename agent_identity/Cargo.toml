@@ -24,7 +24,7 @@ iota-sdk.workspace = true
 itertools = "0.14"
 jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
-rand = "0.8"
+rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ssi-dids = "0.1.1"
@@ -47,7 +47,9 @@ agent_api_rest = { path = "../agent_api_rest" }
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_identity = { path = ".", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
-agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }
+agent_secret_manager = { path = "../agent_secret_manager", features = [
+    "test_utils",
+] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
 
@@ -62,7 +64,4 @@ tracing-test.workspace = true
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 
 [features]
-test_utils = [
-    "dep:futures",
-    "dep:rstest",
-]
+test_utils = ["dep:futures", "dep:rstest"]

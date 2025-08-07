@@ -1,4 +1,7 @@
-use crate::error::{type_url, IntoApiErrorExt};
+use crate::{
+    error::{type_url, IntoApiErrorExt},
+    DOCUMENTATION_URL,
+};
 use agent_issuance::{
     credential::error::CredentialError, offer::error::OfferError, server_config::error::ServerConfigError,
 };
@@ -39,6 +42,20 @@ impl IntoApiErrorExt for CredentialError {
             InvalidExpirationDateError => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Expiration Date")
                 .type_url(type_url("issuance#invalid-expiration-date"))
+                .source(self)
+                .finish(),
+            InvalidCredentialStatus => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Unexpected Error")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
+                ))
+                .source(self)
+                .finish(),
+            BuildVcJwtError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Unexpected Error")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
+                ))
                 .source(self)
                 .finish(),
 
