@@ -1,4 +1,7 @@
-use crate::error::{type_url, IntoApiErrorExt};
+use crate::{
+    error::{type_url, IntoApiErrorExt},
+    DOCUMENTATION_URL,
+};
 use agent_issuance::{
     credential::error::CredentialError, offer::error::OfferError, server_config::error::ServerConfigError,
 };
@@ -42,13 +45,17 @@ impl IntoApiErrorExt for CredentialError {
                 .source(self)
                 .finish(),
             InvalidCredentialStatus => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Invalid Credential Status URL")
-                .type_url(type_url("issuance#invalid-credential-status-url"))
+                .title("Unexpected Error")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
+                ))
                 .source(self)
                 .finish(),
             BuildVcJwtError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Failed to Create VC JWT")
-                .type_url(type_url("issuance#build-vc-jwt-error"))
+                .title("Unexpected Error")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
+                ))
                 .source(self)
                 .finish(),
 
