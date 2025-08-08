@@ -1,0 +1,26 @@
+name: Audit
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # run at 3 AM every day
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+      - next
+      - beta
+      - alpha
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: cargo install
+        run: cargo install cargo-audit
+
+      - run: cargo audit
