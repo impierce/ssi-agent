@@ -1,4 +1,4 @@
-name: Audit
+name: Audit dependencies
 
 on:
   schedule:
