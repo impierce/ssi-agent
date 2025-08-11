@@ -20,7 +20,8 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: cargo install
-        run: cargo install cargo-audit
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo install cargo-audit
 
       - run: cargo audit
