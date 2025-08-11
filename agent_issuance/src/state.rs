@@ -6,6 +6,7 @@ use agent_shared::handlers::{command_handler, query_handler};
 use agent_shared::profile::ApplicationProfile;
 use agent_shared::UrlAppendHelpers;
 use cqrs_es::persist::ViewRepository;
+use oid4vc_core::Sign;
 use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use std::sync::Arc;
@@ -27,6 +28,7 @@ use crate::server_config::views::ServerConfigView;
 pub struct IssuanceState {
     pub command: CommandHandlers,
     pub query: Queries,
+    pub signer: Arc<dyn Sign>,
 }
 
 /// The command handlers are used to execute commands on the aggregates.

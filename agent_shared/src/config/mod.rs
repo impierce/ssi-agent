@@ -27,6 +27,9 @@ use crate::{error::SharedError, profile::ApplicationProfile};
 // Re-export
 pub use provisioned::load_provisioned_config;
 
+pub const BITS_PER_STATUS: u8 = 2; // Amount of bits per status
+pub const STATUS_LIST_BYTES_AMOUNT: usize = 2048; // Amount of bytes in the status list. Equates to 8192 statuses for BITS_PER_STATUS = 2.
+
 static STRONGHOLD_PATH: &str = "./stronghold.dat";
 
 // TODO: Once we have a proper state implementation for `agent_secret_manager` we can make use of randomly generated Key
@@ -157,6 +160,17 @@ pub struct ApplicationConfiguration {
         transform_with = "into_resource"
     )]
     pub request_uri: Url,
+    #[config(
+        default = r#"{
+            let public_url = Self::fn_public_url(provisioned_config, application_profile).unwrap();
+
+            provisioned_config.get::<Url>("ietf_oauth_token_status_list_uri").unwrap_or_else(|_| {
+                public_url.join("ietf-oauth-token-status-list").unwrap()
+            })
+        }"#,
+        transform_with = "into_resource"
+    )]
+    pub ietf_oauth_token_status_list_uri: Url,
     #[config(
         default = r#"{
             let public_url = Self::fn_public_url(provisioned_config, application_profile).unwrap();
@@ -445,7 +459,7 @@ pub struct SecretManagerConfig {
 
 impl SecretManagerConfig {
     fn development_default() -> Self {
-        let random_bytes: [u8; 32] = rand::thread_rng().gen();
+        let random_bytes: [u8; 32] = rand::rng().random();
         let stronghold_password = URL_SAFE_NO_PAD.encode(random_bytes)[..24].to_string();
 
         println!(
@@ -874,6 +888,7 @@ mod tests {
               "credential_endpoint": "http://localhost:3033/openid4vci/credential",
               "credential_offer_uri": "http://localhost:3033/openid4vci/credential-offer",
               "request_uri": "http://localhost:3033/request",
+              "ietf_oauth_token_status_list_uri": "http://localhost:3033/ietf-oauth-token-status-list",
               "redirect_uri": "http://localhost:3033/redirect",
               "cors_enabled": true,
               "did_methods": {

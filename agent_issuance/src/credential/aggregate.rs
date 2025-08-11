@@ -3,15 +3,18 @@ use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError::{self};
 use crate::credential::event::CredentialEvent;
 use crate::services::IssuanceServices;
-use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm};
+use agent_shared::config::{
+    config, get_preferred_did_method, get_preferred_signing_algorithm, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT,
+};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use derivative::Derivative;
 use identity_core::convert::FromJson;
 use identity_credential::credential::{
     Credential as W3CVerifiableCredential, CredentialBuilder as W3CVerifiableCredentialBuilder, Issuer,
 };
 use jsonwebtoken::Header;
+use oauth_tsl::status_list::StatusType;
+use oauth_tsl::tokens::status_list_token::StatusListTyp;
 use oid4vc_core::jwt;
 use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::{
     CredentialDefinition, JwtVcJson, JwtVcJsonParameters,
@@ -68,8 +71,13 @@ mod never_as_str {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
-#[derivative(PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct CredentialStatus {
+    pub index: usize,
+    pub status: StatusType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct Credential {
     #[serde(rename = "id")]
     pub credential_id: String,
@@ -79,6 +87,7 @@ pub struct Credential {
     pub signed: Option<serde_json::Value>,
     pub status: Status,
     pub holder_notifications: Vec<NotificationRequest>,
+    pub credential_status: CredentialStatus,
 }
 
 #[async_trait]
@@ -105,6 +114,7 @@ impl Aggregate for Credential {
                 data,
                 credential_configuration,
                 expires_at,
+                credential_status_index,
             } => match &credential_configuration.credential_format {
                 CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
                     parameters:
@@ -167,6 +177,13 @@ impl Aggregate for Credential {
                     )
                     .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
 
+                    let credential_status = CredentialStatus {
+                        index: credential_status_index,
+                        status: StatusType::VALID,
+                    };
+
+                    let status_list_url = get_status_list_url(self.credential_status.index)?;
+
                     // Loop through all the items in the `type` array in reverse until we find a match.
                     while let Some(credential_type) = credential_types.pop() {
                         match credential_type.as_str() {
@@ -179,10 +196,23 @@ impl Aggregate for Credential {
                                     Err(_) => unreachable!("Couldn't parse issuer"),
                                 };
 
+                                let status_uri_idx = identity_core::common::Object::from_json_value(json!({
+                                    "uri": status_list_url.clone(),
+                                    "idx": credential_status_index
+                                }))
+                                .map_err(|_| CredentialError::InvalidCredentialStatus)?;
+
+                                let status = identity_credential::credential::Status {
+                                    id: status_list_url.into(),
+                                    type_: StatusListTyp::Jwt.to_string(),
+                                    properties: status_uri_idx,
+                                };
+
                                 let builder = W3CVerifiableCredentialBuilder::default()
                                     .issuer(issuer)
                                     .subject(credential_subject)
-                                    .issuance_date(issuance_date);
+                                    .issuance_date(issuance_date)
+                                    .status(status);
 
                                 let builder = if let Some(expiration_date) = expiration_date {
                                     builder.expiration_date(expiration_date)
@@ -209,6 +239,7 @@ impl Aggregate for Credential {
                                     data: Data { raw },
                                     credential_configuration,
                                     notification_id: Some(notification_id),
+                                    credential_status,
                                 }]);
                             }
                             "AchievementCredential" | "OpenBadgeCredential" => {
@@ -225,6 +256,11 @@ impl Aggregate for Credential {
                                 )
                                 .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
 
+                                let builder_credential_status = types_ob_v3::prelude::CredentialStatus {
+                                    id: status_list_url.to_string(),
+                                    type_: StatusListTyp::Jwt.to_string(),
+                                };
+
                                 let builder = AchievementCredentialBuilder::default()
                                     .context(vec![
                                         "https://www.w3.org/2018/credentials/v1",
@@ -237,7 +273,8 @@ impl Aggregate for Credential {
                                     .name(name)
                                     .issuer(issuer)
                                     .credential_subject(credential_subject)
-                                    .issuance_date(issuance_date.to_rfc3339());
+                                    .issuance_date(issuance_date.to_rfc3339())
+                                    .credential_status(builder_credential_status);
 
                                 let builder = if let Some(expiration_date) = expiration_date {
                                     builder.expiration_date(expiration_date.to_rfc3339())
@@ -250,11 +287,30 @@ impl Aggregate for Credential {
                                 let credential: AchievementCredential =
                                     builder.try_into().map_err(InvalidCredentialSubjectError)?;
 
+                                // `types_ob_v3::achievement_credential` builder does not support additional properties for the credentialStatus,
+                                // therefore we insert them manually.
+                                let mut raw = serde_json::to_value(credential)
+                                    .map_err(|_| CredentialError::InvalidCredentialStatus)?;
+
+                                let raw_credential_status = raw["credentialStatus"]
+                                    .as_object_mut()
+                                    .ok_or(CredentialError::InvalidCredentialStatus)?;
+
+                                raw_credential_status.insert(
+                                    "uri".to_string(),
+                                    serde_json::Value::String(status_list_url.to_string()),
+                                );
+                                raw_credential_status.insert(
+                                    "idx".to_string(),
+                                    serde_json::Value::Number(credential_status_index.into()),
+                                );
+
                                 return Ok(vec![UnsignedCredentialCreated {
                                     credential_id,
                                     notification_id: Some(notification_id),
-                                    data: Data { raw: json!(credential) },
+                                    data: Data { raw },
                                     credential_configuration,
+                                    credential_status,
                                 }]);
                             }
                             _ => continue,
@@ -371,10 +427,35 @@ impl Aggregate for Credential {
                         vc_jwt_builder
                     };
 
+                    let vc_jwt_built = vc_jwt_builder
+                        .verifiable_credential(credential.raw)
+                        .build()
+                        .map_err(|e| CredentialError::BuildVcJwtError(e.to_string()))?;
+
+                    let mut vc_jwt_value = serde_json::to_value(&vc_jwt_built)
+                        .map_err(|e| CredentialError::BuildVcJwtError(e.to_string()))?;
+
+                    let mut vc_jwt_object = vc_jwt_value
+                        .as_object_mut()
+                        .ok_or(CredentialError::BuildVcJwtError(
+                            "Failed to convert VC JWT to mutable JSON object".to_string(),
+                        ))?
+                        .clone();
+
+                    vc_jwt_object.insert(
+                        "status".to_string(),
+                        json!({
+                            "status_list": {
+                                "idx": self.credential_status.index,
+                                "uri": get_status_list_url(self.credential_status.index)?,
+                            }
+                        }),
+                    );
+
                     json!(jwt::encode(
                         services.issuer.clone(),
                         Header::new(get_preferred_signing_algorithm()),
-                        vc_jwt_builder.verifiable_credential(credential.raw).build().ok(),
+                        vc_jwt_object,
                         &default_did_method.to_string()
                     )
                     .await
@@ -394,6 +475,13 @@ impl Aggregate for Credential {
                 credential_id,
                 notification,
             }]),
+            UpdateCredentialStatus {
+                credential_id,
+                credential_status,
+            } => Ok(vec![CredentialEvent::CredentialStatusUpdated {
+                credential_id,
+                credential_status,
+            }]),
         }
     }
 
@@ -408,11 +496,13 @@ impl Aggregate for Credential {
                 data,
                 credential_configuration,
                 notification_id,
+                credential_status,
             } => {
                 self.credential_id = credential_id;
                 self.data.replace(data);
                 self.credential_configuration = *credential_configuration;
                 self.notification_id = notification_id;
+                self.credential_status = credential_status;
             }
             SignedCredentialCreated {
                 credential_id,
@@ -439,8 +529,30 @@ impl Aggregate for Credential {
                 self.credential_id = credential_id;
                 self.holder_notifications.push(notification);
             }
+            CredentialStatusUpdated {
+                credential_id,
+                credential_status,
+            } => {
+                self.credential_id = credential_id;
+                self.credential_status = credential_status;
+            }
         }
     }
+}
+
+// Helpers
+
+fn get_status_list_url(index: usize) -> Result<Url, CredentialError> {
+    let statuses_per_byte: usize = 8 / BITS_PER_STATUS as usize;
+    let status_list_number = index / ((STATUS_LIST_BYTES_AMOUNT * statuses_per_byte) as f64 * 0.7) as usize;
+
+    let mut status_list_url = config().ietf_oauth_token_status_list_uri.clone();
+    status_list_url
+        .path_segments_mut()
+        .map_err(|_| CredentialError::InvalidCredentialStatus)?
+        .push(&status_list_number.to_string());
+
+    Ok(status_list_url)
 }
 
 #[cfg(test)]
@@ -491,6 +603,7 @@ pub mod credential_tests {
                 },
                 credential_configuration: Box::new(credential_configuration.clone()),
                 expires_at: CredentialExpiry::Never,
+                credential_status_index: 0,
             })
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id,
@@ -499,6 +612,10 @@ pub mod credential_tests {
                 },
                 notification_id: Some(notification_id.clone()),
                 credential_configuration: Box::new(credential_configuration),
+                credential_status: CredentialStatus {
+                    index: 0,
+                    status: StatusType::VALID,
+                },
             }])
     }
 
@@ -529,6 +646,10 @@ pub mod credential_tests {
                 },
                 credential_configuration: Box::new(credential_configuration),
                 notification_id: None,
+                credential_status: CredentialStatus {
+                    index: 0,
+                    status: StatusType::VALID,
+                },
             }])
             .when(CredentialCommand::SignCredential {
                 credential_id: credential_id.clone(),
@@ -577,9 +698,9 @@ pub mod test_utils {
         "notification_id".to_string()
     }
 
-    pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjMuanNvbiJdLCJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJPcGVuQmFkZ2VDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJuYW1lIjoiVGVhbXdvcmsgQmFkZ2UiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwidHlwZSI6WyJBY2hpZXZlbWVudFN1YmplY3QiXSwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEiOnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY29nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNvZ25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbnQuIiwibmFtZSI6IlRlYW13b3JrIn19fX0.JA7M0N1JjZ5P7g-yQjCg_t_54BHwxkOa2OMvypPpEwLi99RXS64Cj-pDWvWWWqvdx9J2QxLSESvsab5QRdVWAg";
+    pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjMuanNvbiJdLCJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJPcGVuQmFkZ2VDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJuYW1lIjoiVGVhbXdvcmsgQmFkZ2UiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwidHlwZSI6WyJBY2hpZXZlbWVudFN1YmplY3QiXSwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEiOnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY29nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNvZ25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbnQuIiwibmFtZSI6IlRlYW13b3JrIn19LCJjcmVkZW50aWFsU3RhdHVzIjp7ImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidHlwZSI6InN0YXR1c2xpc3Qrand0IiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjowfX0sInN0YXR1cyI6eyJzdGF0dXNfbGlzdCI6eyJpZHgiOjAsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCJ9fX0.FBmcIzSWi10Fvr_r6PLM18seqiavenyuSzryt-CToleTUuy5p4lLzWm1Cj5OmYrEWxwC4dMH46szxEt8YwqsBw";
 
-    pub const W3C_VC_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJkZWdyZWUiOnsidHlwZSI6Ik1hc3RlckRlZ3JlZSIsIm5hbWUiOiJNYXN0ZXIgb2YgT2NlYW5vZ3JhcGh5In19LCJpc3N1ZXIiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIn19.usndws0yi9CoxXZJi0JsIoO1i6DKPPaYdl98VBjFS195QHU1bpBEJEesmLrl1Mf_NHUOVQvz50KKXLXh6VGlBw";
+    pub const W3C_VC_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJkZWdyZWUiOnsidHlwZSI6Ik1hc3RlckRlZ3JlZSIsIm5hbWUiOiJNYXN0ZXIgb2YgT2NlYW5vZ3JhcGh5In19LCJpc3N1ZXIiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwiY3JlZGVudGlhbFN0YXR1cyI6eyJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInR5cGUiOiJzdGF0dXNsaXN0K2p3dCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MH19LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsiaWR4IjowLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAifX19.C-nr-XWFgxQsQTFTQ84d2u-88yL7MEalB_QXHdklfvwIeLL_vYWU4wsRpseB67z5l-3s4zb1nF76yXPjm58vCg";
 
     #[fixture]
     pub fn credential_id() -> String {
@@ -689,6 +810,12 @@ pub mod test_utils {
           "issuanceDate": "2010-01-01T00:00:00Z",
           "name": "Teamwork Badge",
           "credentialSubject": OPENBADGE_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
+          "credentialStatus": {
+              "id": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
+              "type": "statuslist+jwt",
+              "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
+              "idx": 0
+          }
         });
         pub static ref UNSIGNED_W3C_VC_CREDENTIAL: serde_json::Value = json!({
           "@context": [ "https://www.w3.org/2018/credentials/v1" ],
@@ -698,7 +825,13 @@ pub mod test_utils {
             "id": "https://my-domain.example.org/",
             "name": "UniCore"
           },
-          "issuanceDate": "2010-01-01T00:00:00Z"
+          "issuanceDate": "2010-01-01T00:00:00Z",
+          "credentialStatus": {
+              "id": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
+              "type": "statuslist+jwt",
+              "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
+              "idx": 0
+          }
         });
     }
 }

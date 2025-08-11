@@ -74,7 +74,9 @@ pub fn app(
                             info!("Response Headers: {:?}", response.headers());
                         })
                         .on_body_chunk(|chunk: &Bytes, _latency: Duration, _span: &Span| {
-                            info!("Response Body: {}", std::str::from_utf8(chunk).unwrap());
+                            if let Ok(response_body) = std::str::from_utf8(chunk) {
+                                info!("Response Body: {response_body}");
+                            }
                         }),
                 )
                 .layer(middleware::from_fn(log_request_body)),

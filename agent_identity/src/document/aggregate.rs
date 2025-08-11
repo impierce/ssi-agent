@@ -1,5 +1,4 @@
 use super::{command::DocumentCommand, error::DocumentError, event::DocumentEvent};
-use crate::document::aggregate::test_utils::did_method;
 use crate::services::IdentityServices;
 use agent_secret_manager::subject::StorageKey;
 use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported};
@@ -350,7 +349,7 @@ impl Aggregate for Document {
                         .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
 
                     document
-                        .insert_method(verification_method, MethodScope::VerificationMethod)
+                        .insert_method(verification_method, MethodScope::VerificationMethod) // TODO: add relationships, also TODO: adjust KID insertion elsewhere
                         .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
 
                     events.push(PublicKeyUpdated {
