@@ -35,6 +35,10 @@ pub enum DocumentEvent {
         document: CoreDocument,
         iota_metadata: Option<IotaMetadata>,
     },
+    DocumentDeleted {
+        document_id: String,
+        document: CoreDocument,
+    },
 }
 
 impl DomainEvent for DocumentEvent {

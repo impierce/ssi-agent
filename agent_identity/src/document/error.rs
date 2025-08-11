@@ -37,6 +37,8 @@ pub enum DocumentError {
     MissingNetworkNameError(SupportedDidMethod),
     #[error("Error while retrieving the Wallet Address: {0}")]
     WalletAddressError(String),
+    #[error("Iota Controler error: {0}")]
+    IotaControllerError(identity_iota::iota::rebased::Error),
     #[error("Iota Identity error: {0}")]
     IotaIdentityError(#[from] identity_iota::iota::rebased::Error),
     #[error("Iota Product Common error: {0}")]

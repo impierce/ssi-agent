@@ -316,7 +316,7 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
                     status: Status::Disabled,
                 },
             )),
-            // If the DID method is enabled, then create the Document regardless of whether it alraedy exists or not.
+            // If the DID method is enabled, then create the Document regardless of whether it already exists or not.
             document if enabled => {
                 let document_id = document
                     // Extract the `document_id` from the Document if it exists.
@@ -415,7 +415,7 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
             && document
                 .iota_metadata
                 .as_ref()
-                .map(|iota_metadata| iota_metadata.funded)
+                .map(|iota_metadata| iota_metadata.is_funded)
                 .unwrap_or(true)
     })
     .await?;
