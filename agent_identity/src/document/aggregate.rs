@@ -15,7 +15,7 @@ use identity_iota::{
     verification::{MethodScope, MethodType, VerificationMethod},
 };
 use iota_sdk::types::base_types::IotaAddress;
-use iota_sdk::IotaClientBuilder;
+use iota_sdk::{IotaClient, IotaClientBuilder};
 use jsonwebtoken::Algorithm;
 use product_common::core_client::CoreClient as _;
 use product_common::network_name::NetworkName;
@@ -101,36 +101,11 @@ impl Aggregate for Document {
 
                 let document = match &did_method {
                     SupportedDidMethod::Iota | SupportedDidMethod::IotaDev => {
-                        // The API endpoint of an IOTA node.
-                        let api_endpoint = did_method
-                            .api_endpoint()
-                            .ok_or_else(|| InvalidNodeEndpointError("missing `api_endpoint`".to_string()))?;
-
                         // Retrieve the network name associated with the DID method.
                         let network_name = did_method
                             .network_name()
                             .and_then(|network_name| NetworkName::try_from(network_name).ok())
                             .ok_or(MissingNetworkNameError(did_method))?;
-
-                        // Build a new IOTA client to interact with the IOTA ledger.
-                        let mut iota_client_builder = IotaClientBuilder::default();
-
-                        if let Some(iota_node_url) = config().iota_node_url.clone() {
-                            iota_client_builder = iota_client_builder.ws_url(iota_node_url);
-
-                            if let Some(iota_node_url_auth) = config().iota_node_username.clone() {
-                                if let Some(iota_node_password) = config().iota_node_password.clone() {
-                                    iota_client_builder =
-                                        iota_client_builder.basic_auth(iota_node_url_auth, iota_node_password);
-                                } else {
-                                    warn!("No IOTA node URL password configured in the application configuration.");
-                                }
-                            } else {
-                                warn!("No IOTA node URL authentication configured in the application configuration.");
-                            }
-                        } else {
-                            warn!("No IOTA node URL configured in the application configuration.");
-                        }
 
                         let key_id = config().secret_manager.issuer_eddsa_key_id.clone();
 
@@ -145,10 +120,13 @@ impl Aggregate for Document {
                         // This signer is used to sign the transactions that are sent to the IOTA ledger.
                         let signer = StorageSigner::new(storage, key_id, public_key_jwk.clone());
 
-                        let iota_client = iota_client_builder
-                            .build(api_endpoint)
-                            .await
-                            .map_err(|err| IotaClientBuilderError(err.to_string()))?;
+                        // The API endpoint of an IOTA node
+                        let api_endpoint = did_method
+                            .api_endpoint()
+                            .ok_or_else(|| InvalidNodeEndpointError("missing `api_endpoint`".to_string()))?;
+
+                        // Create a new IOTA client to interact with the IOTA ledger.
+                        let iota_client = get_iota_client(api_endpoint).await?;
 
                         let read_only_client = IdentityClientReadOnly::new(iota_client.clone())
                             .await
@@ -416,30 +394,8 @@ impl Aggregate for Document {
                     .api_endpoint()
                     .ok_or_else(|| InvalidNodeEndpointError("missing `api_endpoint`".to_string()))?;
 
-                // Build a new IOTA client to interact with the IOTA ledger.
-                let mut iota_client_builder = IotaClientBuilder::default();
-
-                if let Some(iota_node_url) = config().iota_node_url.clone() {
-                    iota_client_builder = iota_client_builder.ws_url(iota_node_url);
-
-                    if let Some(iota_node_url_auth) = config().iota_node_username.clone() {
-                        if let Some(iota_node_password) = config().iota_node_password.clone() {
-                            iota_client_builder =
-                                iota_client_builder.basic_auth(iota_node_url_auth, iota_node_password);
-                        } else {
-                            warn!("No IOTA node URL password configured in the application configuration.");
-                        }
-                    } else {
-                        warn!("No IOTA node URL authentication configured in the application configuration.");
-                    }
-                } else {
-                    warn!("No IOTA node URL configured in the application configuration.");
-                }
-
-                let iota_client = iota_client_builder
-                    .build(api_endpoint)
-                    .await
-                    .map_err(|err| IotaClientBuilderError(err.to_string()))?;
+                // Create a new IOTA client to interact with the IOTA ledger.
+                let iota_client = get_iota_client(api_endpoint).await?;
 
                 let stronghold_storage = &services.subject.stronghold_storage;
 
@@ -636,6 +592,33 @@ impl Aggregate for Document {
             }
         }
     }
+}
+
+pub async fn get_iota_client(api_endpoint: &str) -> Result<IotaClient, DocumentError> {
+    let mut iota_client_builder = IotaClientBuilder::default();
+
+    if let Some(iota_node_url) = config().iota_node_url.clone() {
+        iota_client_builder = iota_client_builder.ws_url(iota_node_url);
+
+        if let Some(iota_node_url_auth) = config().iota_node_username.clone() {
+            if let Some(iota_node_password) = config().iota_node_password.clone() {
+                iota_client_builder = iota_client_builder.basic_auth(iota_node_url_auth, iota_node_password);
+            } else {
+                warn!("No IOTA node URL password configured in the application configuration.");
+            }
+        } else {
+            warn!("No IOTA node URL authentication configured in the application configuration.");
+        }
+    } else {
+        warn!("No IOTA node URL configured in the application configuration.");
+    }
+
+    let iota_client = iota_client_builder
+        .build(api_endpoint)
+        .await
+        .map_err(|err| DocumentError::IotaClientBuilderError(err.to_string()))?;
+
+    Ok(iota_client)
 }
 
 // TODO: Can we remove this? It does not seem to be required: https://w3c-ccg.github.io/did-method-web/#key-material-and-document-handling
