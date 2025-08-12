@@ -83,7 +83,7 @@ url = "2.5"
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"
 
-# TODO: Remove these patches once configuratble TLS is available in `iota-sdk`.
+# TODO: Remove these patches once configurable TLS is available in `iota-sdk`.
 [patch.'https://github.com/iotaledger/iota']
 iota-sdk = { git = "https://github.com/impierce/iota", package = "iota-sdk", branch = "temp/fix" }
 move-core-types = { git = "https://github.com/impierce/iota.git", package = "move-core-types", branch = "temp/fix" }
