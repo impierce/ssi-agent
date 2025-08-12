@@ -20,7 +20,6 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
-# TODO: Use rev after openid4vc branch is merged.
 siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "cdc02ba" }
 oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "cdc02ba" }
 oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "cdc02ba" }
@@ -83,3 +82,17 @@ tracing-test = { version = "0.2" }
 url = "2.5"
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"
+
+# TODO: Remove these patches once configuratble TLS is available in `iota-sdk`.
+[patch.'https://github.com/iotaledger/iota']
+iota-sdk = { git = "https://github.com/impierce/iota", package = "iota-sdk", branch = "temp/fix" }
+move-core-types = { git = "https://github.com/impierce/iota.git", package = "move-core-types", branch = "temp/fix" }
+shared-crypto = { git = "https://github.com/impierce/iota.git", package = "shared-crypto", branch = "temp/fix" }
+iota-network-stack = { git = "https://github.com/impierce/iota.git", package = "iota-network-stack", branch = "temp/fix" }
+iota-types = { git = "https://github.com/impierce/iota.git", package = "iota-types", branch = "temp/fix" }
+iota-metrics = { git = "https://github.com/impierce/iota.git", package = "iota-metrics", branch = "temp/fix" }
+move-binary-format = { git = "https://github.com/impierce/iota.git", package = "move-binary-format", branch = "temp/fix" }
+iota-protocol-config = { git = "https://github.com/impierce/iota.git", package = "iota-protocol-config", branch = "temp/fix" }
+move-vm-config = { git = "https://github.com/impierce/iota.git", package = "move-vm-config", branch = "temp/fix" }
+iota-adapter-latest = { git = "https://github.com/impierce/iota.git", package = "iota-adapter-latest", branch = "temp/fix" }
+iota-execution = { git = "https://github.com/impierce/iota.git", package = "iota-execution", branch = "temp/fix" }
