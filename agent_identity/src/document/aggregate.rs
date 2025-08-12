@@ -171,6 +171,7 @@ impl Aggregate for Document {
                             .map_err(|err| GenericError(err.to_string()))?
                             .total_balance;
 
+                        // TODO: This is a temporary solution to ensure that the wallet address is set in the configuration.
                         config_mut().iota_address = Some(wallet_address.to_string());
 
                         info!("Current {network_name} Address: `{wallet_address}`");
@@ -516,7 +517,7 @@ impl Aggregate for Document {
                         .with_gas_budget(MIN_GAS_BUDGET)
                         .build_and_execute(&identity_client)
                         .await
-                        .expect("Failed to publish DID Document")
+                        .map_err(|err| DocumentError::GenericError(err.to_string()))?
                         .output;
 
                     iota_metadata.created_at = document.metadata.created.map(|created| created.to_string());
