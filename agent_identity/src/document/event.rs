@@ -1,6 +1,4 @@
-use crate::document::aggregate::IotaMetadata;
-
-use super::aggregate::Status;
+use super::aggregate::{IotaMetadata, Status};
 use agent_shared::config::SupportedDidMethod;
 use cqrs_es::DomainEvent;
 use identity_document::document::CoreDocument;

@@ -5,7 +5,6 @@ use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported}
 use agent_shared::config::{config_mut, SupportedDidMethod};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use identity_did::{CoreDID, DIDUrl, DID as _};
 use identity_document::document::CoreDocument;
 use identity_iota::iota::rebased::client::{IdentityClient, IdentityClientReadOnly};
@@ -15,21 +14,15 @@ use identity_iota::{
     iota::IotaDocument,
     verification::{MethodScope, MethodType, VerificationMethod},
 };
-use identity_storage::KeyId;
-use iota_interaction::move_types::account_address::AccountAddress;
-use iota_interaction::move_types::language_storage::StructTag;
-use iota_sdk::types::base_types::{IotaAddress, ObjectID};
-use iota_sdk::types::Identifier;
+use iota_sdk::types::base_types::IotaAddress;
 use iota_sdk::IotaClientBuilder;
 use jsonwebtoken::Algorithm;
 use product_common::core_client::CoreClient as _;
 use product_common::network_name::NetworkName;
-use secret_storage::Signer;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use ssi_dids::DIDMethod;
 use ssi_dids::Source;
-use std::str::FromStr as _;
 use std::{collections::BTreeMap, sync::Arc};
 use tracing::{debug, info, warn};
 
@@ -108,7 +101,10 @@ impl Aggregate for Document {
                             .ok_or_else(|| InvalidNodeEndpointError("missing `api_endpoint`".to_string()))?;
 
                         // Retrieve the network name associated with the DID method.
-                        let network_name = did_method.network_name().ok_or(MissingNetworkNameError(did_method))?;
+                        let network_name = did_method
+                            .network_name()
+                            .and_then(|network_name| NetworkName::try_from(network_name).ok())
+                            .ok_or(MissingNetworkNameError(did_method))?;
 
                         // Build a new IOTA client to interact with the IOTA ledger.
                         let mut iota_client_builder = IotaClientBuilder::default();
@@ -132,17 +128,27 @@ impl Aggregate for Document {
 
                         let key_id = config().secret_manager.issuer_eddsa_key_id.clone();
 
-                        let public_key_jwk = stronghold_storage.get_ed25519_public_key(&key_id).await.unwrap();
+                        let public_key_jwk = stronghold_storage
+                            .get_ed25519_public_key(&key_id)
+                            .await
+                            .map_err(|err| GenericError(err.to_string()))?;
 
                         let storage = &Storage::new(stronghold_storage.clone(), stronghold_storage.clone());
 
                         let signer = StorageSigner::new(storage, key_id, public_key_jwk.clone());
 
-                        let iota_client = iota_client_builder.build(api_endpoint).await.unwrap();
+                        let iota_client = iota_client_builder
+                            .build(api_endpoint)
+                            .await
+                            .map_err(|err| IotaClientBuilderError(err.to_string()))?;
 
-                        let read_only_client = IdentityClientReadOnly::new(iota_client.clone()).await.unwrap();
+                        let read_only_client = IdentityClientReadOnly::new(iota_client.clone())
+                            .await
+                            .map_err(|err| GenericError(err.to_string()))?;
 
-                        let identity_client = IdentityClient::new(read_only_client, signer).await.unwrap();
+                        let identity_client = IdentityClient::new(read_only_client, signer)
+                            .await
+                            .map_err(|err| GenericError(err.to_string()))?;
 
                         let wallet_address = identity_client.sender_address();
 
@@ -150,7 +156,7 @@ impl Aggregate for Document {
                             .coin_read_api()
                             .get_balance(wallet_address, None)
                             .await
-                            .unwrap()
+                            .map_err(|err| GenericError(err.to_string()))?
                             .total_balance;
 
                         config_mut().iota_address = Some(wallet_address.to_string());
@@ -165,7 +171,7 @@ impl Aggregate for Document {
                             info!("Creating a new controller for DID method `{did_method}`");
 
                             // Create a new 'blank' DID Document.
-                            IotaDocument::new(&NetworkName::from_str(network_name).unwrap())
+                            IotaDocument::new(&network_name)
                         });
 
                         info!("Testing whether a DID Document can be published...");
@@ -388,6 +394,8 @@ impl Aggregate for Document {
                 Ok(vec![ServiceAdded { document_id, document }])
             }
             PublishDocument => {
+                let document: IotaDocument = self.document.clone().ok_or(MissingDocumentError)?.into();
+
                 let did_method = self.did_method.ok_or(MissingDidMethodError)?;
 
                 // The API endpoint of an IOTA node
@@ -415,35 +423,63 @@ impl Aggregate for Document {
                     warn!("No IOTA node URL configured in the application configuration.");
                 }
 
-                let iota_client = iota_client_builder.build(api_endpoint).await.unwrap();
+                let iota_client = iota_client_builder
+                    .build(api_endpoint)
+                    .await
+                    .map_err(|err| IotaClientBuilderError(err.to_string()))?;
 
                 let stronghold_storage = &services.subject.stronghold_storage;
 
                 let key_id = config().secret_manager.issuer_eddsa_key_id.clone();
 
-                let public_key_jwk = stronghold_storage.get_ed25519_public_key(&key_id).await.unwrap();
+                let public_key_jwk = stronghold_storage
+                    .get_ed25519_public_key(&key_id)
+                    .await
+                    .map_err(|err| GenericError(err.to_string()))?;
 
                 let storage = &Storage::new(stronghold_storage.clone(), stronghold_storage.clone());
 
                 let signer = StorageSigner::new(storage, key_id, public_key_jwk.clone());
 
-                let wallet_address = IotaAddress::from(&Signer::public_key(&signer).await.unwrap());
+                let read_only_client = IdentityClientReadOnly::new(iota_client.clone())
+                    .await
+                    .map_err(|err| GenericError(err.to_string()))?;
+
+                let identity_client = IdentityClient::new(read_only_client, signer)
+                    .await
+                    .map_err(|err| GenericError(err.to_string()))?;
 
                 let iota_metadata = self.iota_metadata.clone().unwrap_or_default();
 
-                let network_name = did_method.network_name().ok_or(MissingNetworkNameError(did_method))?;
+                if iota_metadata.is_published {
+                    let published_document = identity_client
+                        .resolve_did(document.id())
+                        .await
+                        .map_err(DocumentError::IotaIdentityError)?;
+
+                    if published_document.core_document() == document.core_document() {
+                        info!("Document instance does not contain any updates, skipping publishing.");
+                        return Ok(vec![]);
+                    }
+                }
+
+                let wallet_address = identity_client.sender_address();
+
+                let network_name = did_method
+                    .network_name()
+                    .and_then(|network_name| NetworkName::try_from(network_name).ok())
+                    .ok_or(MissingNetworkNameError(did_method))?;
 
                 if !iota_metadata.is_funded {
                     warn!(
-                        "Skipping publishing DID Document for DID method `{}` because it is not sufficiently funded",
-                        self.did_method.as_ref().unwrap()
+                        "Skipping publishing DID Document for DID method `{did_method}` because it is not sufficiently funded",  
                     );
 
                     let did = self
                         .document
                         .as_ref()
                         .map(|document| IotaDocument::from(document.to_owned()).id().to_owned())
-                        .unwrap_or_else(|| IotaDID::placeholder(&NetworkName::from_str(network_name).unwrap()));
+                        .unwrap_or_else(|| IotaDID::placeholder(&network_name));
 
                     let document = CoreDocument::from(IotaDocument::new_with_id(did));
 
@@ -453,12 +489,7 @@ impl Aggregate for Document {
                     }]);
                 }
 
-                let read_only_client = IdentityClientReadOnly::new(iota_client.clone()).await.unwrap();
-                let identity_client = IdentityClient::new(read_only_client, signer.clone()).await.unwrap();
-
                 let mut iota_metadata = self.iota_metadata.clone().unwrap_or_default();
-
-                let document: IotaDocument = self.document.clone().ok_or(MissingDocumentError)?.into();
 
                 let document = if !iota_metadata.is_published {
                     let document = identity_client
@@ -480,12 +511,7 @@ impl Aggregate for Document {
                             let updated_document = identity_client
                                 .publish_did_document_update(document, 50_000_000)
                                 .await
-                                .unwrap();
-
-                            info!(
-                                "Published DID Document: {updated_document}",
-                                updated_document = serde_json::to_string_pretty(&updated_document).unwrap()
-                            );
+                                .map_err(|err| GenericError(err.to_string()))?;
 
                             iota_metadata.is_deactivated = false;
 
@@ -496,9 +522,12 @@ impl Aggregate for Document {
                             identity_client
                                 .deactivate_did_output(document.id(), 50_000_000)
                                 .await
-                                .unwrap();
+                                .map_err(|err| GenericError(err.to_string()))?;
 
-                            let deactivated_document = identity_client.resolve_did(document.id()).await.unwrap();
+                            let deactivated_document = identity_client
+                                .resolve_did(document.id())
+                                .await
+                                .map_err(|err| GenericError(err.to_string()))?;
 
                             iota_metadata.is_deactivated = true;
 
@@ -511,14 +540,13 @@ impl Aggregate for Document {
                     .coin_read_api()
                     .get_balance(wallet_address, None)
                     .await
-                    .unwrap()
+                    .map_err(|err| GenericError(err.to_string()))?
                     .total_balance;
 
-                iota_metadata.is_funded = true;
+                iota_metadata.is_funded = balance > 50_000_000;
                 iota_metadata.balance = balance as u64;
-                iota_metadata.is_published = true;
                 iota_metadata.updated_at = document.metadata.updated.map(|updated| updated.to_string());
-                // FIXME: Optimize this later.
+
                 iota_metadata.explorer_url = Some(format!(
                     "https://explorer.iota.org/object/{}?network={}",
                     document.id().tag_str(),
@@ -528,20 +556,6 @@ impl Aggregate for Document {
                         "mainnet"
                     }
                 ));
-
-                let wallet_address = IotaAddress::from(&Signer::public_key(&signer).await.unwrap());
-
-                let balances = iota_client
-                    .coin_read_api()
-                    .get_all_balances(wallet_address)
-                    .await
-                    .unwrap();
-
-                println!(
-                    "Wallet Address: `{}`\nBalances: {}",
-                    wallet_address,
-                    serde_json::to_string_pretty(&balances).unwrap()
-                );
 
                 Ok(vec![DocumentPublished {
                     document_id: self.document_id.clone(),
