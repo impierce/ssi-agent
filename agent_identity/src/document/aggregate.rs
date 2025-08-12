@@ -154,7 +154,7 @@ impl Aggregate for Document {
                             .await
                             .map_err(|err| GenericError(err.to_string()))?;
 
-                        // Create an `IdentityClient`` instance.
+                        // Create an `IdentityClient` instance.
                         // This client is used to interact with the IOTA identity ledger.
                         // It is used to publish the DID Document and to resolve it later.
                         let identity_client = IdentityClient::new(read_only_client, signer)
@@ -460,7 +460,7 @@ impl Aggregate for Document {
                     .await
                     .map_err(|err| GenericError(err.to_string()))?;
 
-                // Create an `IdentityClient`` instance.
+                // Create an `IdentityClient` instance.
                 // This client is used to interact with the IOTA identity ledger.
                 // It is used to publish the DID Document and to resolve it later.
                 let identity_client = IdentityClient::new(read_only_client, signer)
