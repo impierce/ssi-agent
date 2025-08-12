@@ -64,34 +64,6 @@ impl Aggregate for AuthorizationRequest {
 
                 let redirect_uri = config().redirect_uri.clone();
 
-                let mut oid4vp_client_metadata = services.oid4vp_client_metadata.clone();
-                if let ClientMetadataResource::ClientMetadata {
-                    ref mut client_name,
-                    ref mut logo_uri,
-                    ..
-                } = oid4vp_client_metadata
-                {
-                    *client_name = Some(config().display.first().map(|d| d.name.clone()).unwrap_or_default());
-                    *logo_uri = config()
-                        .display
-                        .first()
-                        .and_then(|d| d.logo.as_ref().and_then(|l| l.uri.clone()));
-                }
-
-                let mut siopv2_client_metadata = services.siopv2_client_metadata.clone();
-                if let ClientMetadataResource::ClientMetadata {
-                    ref mut client_name,
-                    ref mut logo_uri,
-                    ..
-                } = siopv2_client_metadata
-                {
-                    *client_name = Some(config().display.first().map(|d| d.name.clone()).unwrap_or_default());
-                    *logo_uri = config()
-                        .display
-                        .first()
-                        .and_then(|d| d.logo.as_ref().and_then(|l| l.uri.clone()));
-                }
-
                 let authorization_request = Box::new(if let Some(presentation_definition) = presentation_definition {
                     let mut oid4vp_client_metadata = services.oid4vp_client_metadata.clone();
                     if let ClientMetadataResource::ClientMetadata {
