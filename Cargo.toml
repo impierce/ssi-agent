@@ -21,11 +21,11 @@ rust-version = "1.76.0"
 
 [workspace.dependencies]
 # TODO: Use rev after openid4vc branch is merged.
-siopv2 = { git = "https://github.com/impierce/openid4vc", branch = "build/bump-identity-beta2" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", branch = "build/bump-identity-beta2" }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", branch = "build/bump-identity-beta2" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", branch = "build/bump-identity-beta2" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", branch = "build/bump-identity-beta2" }
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "cdc02ba" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "cdc02ba" }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "cdc02ba" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "cdc02ba" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "cdc02ba" }
 
 anyhow = "1.0"
 async-trait = "0.1"
