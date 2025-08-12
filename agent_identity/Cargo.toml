@@ -25,6 +25,7 @@ iota-sdk.workspace = true
 itertools = "0.14"
 jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
+product_common.workspace = true
 rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -38,11 +39,6 @@ tracing.workspace = true
 url.workspace = true
 urlencoding = "2.1"
 uuid.workspace = true
-secret-storage = { git = "https://github.com/iotaledger/secret-storage", tag = "v0.3.0" }
-iota_interaction = { git = "https://github.com/iotaledger/product-core.git", tag = "v0.2.1", package = "iota_interaction" }
-iota_interaction_ts = { git = "https://github.com/iotaledger/product-core.git", tag = "v0.2.1", package = "iota_interaction_ts" }
-product_common = { git = "https://github.com/iotaledger/product-core.git", tag = "v0.2.1", package = "product_common" }
-did_manager_identity_stronghold_ext = { git = "https://github.com/impierce/did-manager", branch = "feat/stronghold-ext-rebased", package = "identity_stronghold_ext" }
 
 # `test_utils` dependencies
 futures = { workspace = true, optional = true }

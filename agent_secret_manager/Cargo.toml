@@ -13,8 +13,7 @@ agent_shared = { path = "../agent_shared" }
 # - All components of the `identity_stronghold_ext` module are still active.
 #
 # Future work: Migrate the remaining functionality into UniCore.
-# did_manager_consumer = { path = "../../did-manager/consumer", package = "consumer" }
-# did_manager_identity_stronghold_ext = { path = "../../did-manager/identity_stronghold_ext", package = "identity_stronghold_ext" }
+# TODO: Use rev after did_manager branch is merged.
 did_manager_consumer = { git = "https://github.com/impierce/did-manager", branch = "feat/stronghold-ext-rebased", package = "consumer" }
 did_manager_identity_stronghold_ext = { git = "https://github.com/impierce/did-manager", branch = "feat/stronghold-ext-rebased", package = "identity_stronghold_ext" }
 
