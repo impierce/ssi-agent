@@ -211,7 +211,7 @@ impl Aggregate for Document {
                             Err(identity_iota::iota::rebased::Error::Identity(err))
                                 if err.contains("address") && err.contains("has no control over Identity") =>
                             {
-                                warn!("Identity control lost: {err}");
+                                warn!("No control over the identity, as no matching keys were found in the key storage: {err}");
 
                                 return Err(DocumentError::IotaControllerError(
                                     identity_iota::iota::rebased::Error::Identity(err),
@@ -219,7 +219,7 @@ impl Aggregate for Document {
                             }
                             // This error is to be expected because we use a gas budget of 0.
                             Err(identity_iota::iota::rebased::Error::TransactionUnexpectedResponse(err))
-                                if err.contains("Gas budget: 0 is lower than min: 1000000") =>
+                                if err.contains("Gas budget: 0 is lower than min") =>
                             {
                                 info!("Document can be published or updated later if the funds are sufficient.");
 
