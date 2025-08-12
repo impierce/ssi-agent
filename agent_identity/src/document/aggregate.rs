@@ -26,6 +26,12 @@ use ssi_dids::Source;
 use std::{collections::BTreeMap, sync::Arc};
 use tracing::{debug, info, warn};
 
+// TODO: look into a more appropriate value for the minimum gas budget. This current value of `50_000_000` as adopted
+// from examples from the IOTA identity library.
+/// Minimum gas budget for publishing a DID Document on the IOTA ledger.
+const MIN_GAS_BUDGET: u64 = 50_000_000;
+
+/// Metadata for IOTA-based DID Documents.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct IotaMetadata {
     pub wallet_address: IotaAddress,
@@ -135,6 +141,8 @@ impl Aggregate for Document {
 
                         let storage = &Storage::new(stronghold_storage.clone(), stronghold_storage.clone());
 
+                        // Create a signer for the IOTA client.
+                        // This signer is used to sign the transactions that are sent to the IOTA ledger.
                         let signer = StorageSigner::new(storage, key_id, public_key_jwk.clone());
 
                         let iota_client = iota_client_builder
@@ -146,10 +154,14 @@ impl Aggregate for Document {
                             .await
                             .map_err(|err| GenericError(err.to_string()))?;
 
+                        // Create an `IdentityClient`` instance.
+                        // This client is used to interact with the IOTA identity ledger.
+                        // It is used to publish the DID Document and to resolve it later.
                         let identity_client = IdentityClient::new(read_only_client, signer)
                             .await
                             .map_err(|err| GenericError(err.to_string()))?;
 
+                        // Retrieve the wallet address from the identity client.
                         let wallet_address = identity_client.sender_address();
 
                         let balance = iota_client
@@ -165,10 +177,10 @@ impl Aggregate for Document {
 
                         iota_metadata.wallet_address = wallet_address;
                         iota_metadata.balance = balance as u64;
-                        iota_metadata.is_funded = balance > 50_000_000;
+                        iota_metadata.is_funded = balance > MIN_GAS_BUDGET as u128;
 
                         let document = self.document.clone().map(IotaDocument::from).unwrap_or_else(|| {
-                            info!("Creating a new controller for DID method `{did_method}`");
+                            info!("Creating a new document for DID method `{did_method}`");
 
                             // Create a new 'blank' DID Document.
                             IotaDocument::new(&network_name)
@@ -208,7 +220,7 @@ impl Aggregate for Document {
                             Err(identity_iota::iota::rebased::Error::TransactionUnexpectedResponse(err))
                                 if err.contains("Gas budget: 0 is lower than min: 1000000") =>
                             {
-                                info!("Document can be published or updated later.");
+                                info!("Document can be published or updated later if the funds are sufficient.");
 
                                 document
                             }
@@ -289,11 +301,9 @@ impl Aggregate for Document {
 
                 let status = Status::SignAndValidate;
 
-                let iota_metadata = if let SupportedDidMethod::Iota | SupportedDidMethod::IotaDev = did_method {
-                    Some(iota_metadata)
-                } else {
-                    None
-                };
+                let iota_metadata = (did_method == SupportedDidMethod::Iota
+                    || did_method == SupportedDidMethod::IotaDev)
+                    .then_some(iota_metadata);
 
                 Ok(vec![DocumentCreated {
                     document_id,
@@ -315,11 +325,13 @@ impl Aggregate for Document {
 
                 let subject = &services.subject;
 
+                // Remove all existing verification methods from the document.
                 let methods = document.methods(None).into_iter().cloned().collect::<Vec<_>>();
                 for method in methods {
                     document.remove_method(method.id());
                 }
 
+                // Insert the new verification methods based on the signing algorithms.
                 let mut events = vec![];
                 for signing_algorithm in self
                     .with_fixed_algorithm
@@ -439,12 +451,17 @@ impl Aggregate for Document {
 
                 let storage = &Storage::new(stronghold_storage.clone(), stronghold_storage.clone());
 
+                // Create a signer for the IOTA client.
+                // This signer is used to sign the transactions that are sent to the IOTA ledger.
                 let signer = StorageSigner::new(storage, key_id, public_key_jwk.clone());
 
                 let read_only_client = IdentityClientReadOnly::new(iota_client.clone())
                     .await
                     .map_err(|err| GenericError(err.to_string()))?;
 
+                // Create an `IdentityClient`` instance.
+                // This client is used to interact with the IOTA identity ledger.
+                // It is used to publish the DID Document and to resolve it later.
                 let identity_client = IdentityClient::new(read_only_client, signer)
                     .await
                     .map_err(|err| GenericError(err.to_string()))?;
@@ -463,6 +480,7 @@ impl Aggregate for Document {
                     }
                 }
 
+                // Retrieve the wallet address from the identity client.
                 let wallet_address = identity_client.sender_address();
 
                 let network_name = did_method
@@ -492,9 +510,10 @@ impl Aggregate for Document {
                 let mut iota_metadata = self.iota_metadata.clone().unwrap_or_default();
 
                 let document = if !iota_metadata.is_published {
+                    // Publish the DID Document for the first time.
                     let document = identity_client
                         .publish_did_document(document)
-                        .with_gas_budget(50_000_000)
+                        .with_gas_budget(MIN_GAS_BUDGET)
                         .build_and_execute(&identity_client)
                         .await
                         .expect("Failed to publish DID Document")
@@ -504,12 +523,14 @@ impl Aggregate for Document {
 
                     document
                 } else {
+                    // Update the existing DID Document.
                     match self.status {
+                        // This status indicates that the DID Document update is ready to be published to the IOTA ledger.
                         Status::SignAndValidate => {
                             info!("Updating DID Document with status: SignAndValidate");
                             // Publish the updated Alias Output.
                             let updated_document = identity_client
-                                .publish_did_document_update(document, 50_000_000)
+                                .publish_did_document_update(document, MIN_GAS_BUDGET)
                                 .await
                                 .map_err(|err| GenericError(err.to_string()))?;
 
@@ -518,9 +539,9 @@ impl Aggregate for Document {
                             updated_document
                         }
                         Status::Disabled => {
-                            // Deactivate the DID Document
+                            // This status indicates that the DID Document should be deactivated.
                             identity_client
-                                .deactivate_did_output(document.id(), 50_000_000)
+                                .deactivate_did_output(document.id(), MIN_GAS_BUDGET)
                                 .await
                                 .map_err(|err| GenericError(err.to_string()))?;
 
@@ -543,7 +564,7 @@ impl Aggregate for Document {
                     .map_err(|err| GenericError(err.to_string()))?
                     .total_balance;
 
-                iota_metadata.is_funded = balance > 50_000_000;
+                iota_metadata.is_funded = balance > MIN_GAS_BUDGET as u128;
                 iota_metadata.balance = balance as u64;
                 iota_metadata.updated_at = document.metadata.updated.map(|updated| updated.to_string());
 
