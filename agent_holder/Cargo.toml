@@ -28,10 +28,12 @@ uuid.workspace = true
 rstest = { workspace = true, optional = true }
 
 [dev-dependencies]
-agent_api_rest = { path = "../agent_api_rest" }
+agent_api_rest = { path = "../agent_api_rest", features = ["test_utils"] }
 agent_holder = { path = ".", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
-agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }
+agent_secret_manager = { path = "../agent_secret_manager", features = [
+    "test_utils",
+] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
 
@@ -41,7 +43,7 @@ lazy_static.workspace = true
 mime.workspace = true
 names = { version = "0.14", default-features = false }
 reqwest.workspace = true
-rand = "0.8"
+rand.workspace = true
 serial_test = "3.0"
 temp-env.workspace = true
 tokio.workspace = true
