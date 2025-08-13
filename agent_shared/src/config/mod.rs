@@ -6,7 +6,8 @@ use identity_iota::storage::KeyId;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
-use oid4vp::ClaimFormatDesignation;
+use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported};
+// use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::Lazy;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -258,25 +259,22 @@ pub struct ApplicationConfiguration {
     pub display: Vec<Display>,
     #[config(default)]
     pub event_publishers: EventPublishers,
-    #[config(default = "HashMap::from(
-        [
-            (
-                ClaimFormatDesignation::JwtVcJson,
-                ToggleOptions {
-                    enabled: true,
-                    preferred: Some(true)
-                }
-            ),
-            (
-                ClaimFormatDesignation::JwtVpJson,
-                ToggleOptions {
-                    enabled: true,
-                    preferred: None
-                }
-            )
-        ]
-    )")]
-    pub vp_formats: HashMap<ClaimFormatDesignation, ToggleOptions>,
+    #[config(default = "VpFormatsSupported {
+    jwt_vc_json: Some(JwtVcJsonParameters {
+        alg_values: Some(vec![Algorithm::ES256, Algorithm::EdDSA])
+    }),
+    jwt_vp_json: Some(JwtVpJsonParameters {
+        alg_values: Some(vec![Algorithm::ES256, Algorithm::EdDSA])
+    }),
+    dc_sd_jwt: Some(DcSdJwtParameters {
+        sd_jwt_alg_values: Some(vec![Algorithm::ES256]),
+        kb_jwt_alg_values: Some(vec![Algorithm::ES256])
+    }),
+    ldp_vc: None,
+    ldp_vp: None,
+    mso_mdoc: None,
+}")]
+    pub vp_formats_supported: VpFormatsSupported,
 }
 
 impl ApplicationConfiguration {
@@ -892,8 +890,8 @@ mod tests {
                   "preferred": true
                 },
                 "ES256": {
-                  "enabled": true
-                }
+                  "enabled": true,
+                },
               },
               "display": [
                 {
@@ -906,14 +904,17 @@ mod tests {
                 }
               ],
               "event_publishers": {},
-              "vp_formats": {
+              "vp_formats_supported": {
                 "jwt_vc_json": {
-                  "enabled": true,
-                  "preferred": true
+                  "alg_values": ["ES256", "EdDSA"],
                 },
                 "jwt_vp_json": {
-                  "enabled": true
-                }
+                  "alg_values": ["ES256", "EdDSA"]
+                },
+                "dc+sd-jwt": {
+                  "sd-jwt_alg_values": ["ES256"],
+                  "kb-jwt_alg_values": ["ES256"]
+                },
               }
             })
         );

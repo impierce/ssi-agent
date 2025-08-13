@@ -20,15 +20,15 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
-siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "d7ccac4" }
-oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "d7ccac4" }
-oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "d7ccac4" }
-oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "d7ccac4" }
-oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "d7ccac4" }
+siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "4936fcc" }
+oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "4936fcc" }
+oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "4936fcc" }
+oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "4936fcc" }
+oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "4936fcc" }
 
 
 anyhow = "1.0"
-async-trait = "0.1"
+async-trait = "0.1.88"
 axum = { version = "0.8" }
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }

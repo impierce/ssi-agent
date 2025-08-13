@@ -14,6 +14,7 @@ use oid4vc_core::client_metadata::ClientMetadataResource;
 use oid4vc_core::{authorization_request::ByReference, scope::Scope};
 use oid4vp::authorization_request::ClientId;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use std::sync::Arc;
 use tracing::{debug, info};
 
@@ -70,7 +71,9 @@ impl Aggregate for AuthorizationRequest {
                     GenericAuthorizationRequest::OID4VP(Box::new(
                         OID4VPAuthorizationRequest::builder()
                             .dcql_query(dcql_query)
-                            .client_id(ClientId::parse(&verifier_did).unwrap())
+                            .client_id(
+                                ClientId::from_str(&format!("decentralized_identifier:{}", verifier_did)).unwrap(),
+                            )
                             .scope(Scope::openid())
                             .redirect_uri(redirect_uri)
                             .response_mode("direct_post".to_string())
@@ -250,11 +253,14 @@ pub mod tests {
     use jsonwebtoken::Algorithm;
     use lazy_static::lazy_static;
     use oid4vc_core::Subject as _;
-    use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
-    use oid4vc_manager::ProviderManager;
-    use oid4vp::dcql::dcql_query::{
-        ClaimPath, ClaimPathElement, ClaimQuery, CredentialId, CredentialQuery, DcqlQuery, Format, MetaTypes,
+    use oid4vc_core::{
+        claim_path_pointer::{ClaimPathElement, ClaimPathPointer},
+        client_metadata::ClientMetadataResource,
+        SubjectSyntaxType,
     };
+
+    use oid4vc_manager::ProviderManager;
+    use oid4vp::dcql::dcql_query::{ClaimQuery, CredentialQuery, CredentialQueryId, DcqlQuery, Format, MetaTypes};
     use oid4vp::token::vp_token::{PresentationFormat, VpToken};
     use oid4vp::token::vp_token_builder::VpTokenBuilder;
     use rstest::rstest;
@@ -475,7 +481,10 @@ pub mod tests {
             "vp_token" => GenericAuthorizationRequest::OID4VP(Box::new(
                 OID4VPAuthorizationRequest::builder()
                     .dcql_query(MOCK_DCQL_QUERY.clone())
-                    .client_id(ClientId::parse(&verifier_did(did_method).await).unwrap())
+                    .client_id(
+                        ClientId::from_str(&format!("decentralized_identifier:{}", verifier_did(did_method).await))
+                            .unwrap(),
+                    )
                     .scope(Scope::openid())
                     .redirect_uri(REDIRECT_URI.clone())
                     .response_mode("direct_post".to_string())
@@ -495,7 +504,7 @@ pub mod tests {
 
         VpTokenBuilder::new()
             .add_presentation(
-                CredentialId::try_new("CredentialQuery".to_string()).unwrap(),
+                CredentialQueryId::try_new("CredentialQuery".to_string()).unwrap(),
                 PresentationFormat::JwtVcJson(mock_jwt),
             )
             .build()
@@ -523,7 +532,7 @@ pub mod tests {
         pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
         pub static ref MOCK_DCQL_QUERY: DcqlQuery = DcqlQuery {
             credentials: vec![CredentialQuery {
-                id: CredentialId::try_new("CredentialQuery".to_string()).unwrap(),
+                id: CredentialQueryId::try_new("CredentialQuery".to_string()).unwrap(),
                 format: Format::JwtVcJson,
                 multiple: None,
                 meta: Some(MetaTypes::W3CFormatMeta {
@@ -534,10 +543,10 @@ pub mod tests {
                 }),
                 trusted_authorities: None,
                 require_cryptographic_holder_binding: None,
-                claims: vec![
+                claims: Some(vec![
                     ClaimQuery {
                         id: None,
-                        path: ClaimPath::try_new(vec![
+                        path: ClaimPathPointer::try_new(vec![
                             ClaimPathElement::String("credentialSubject".to_string()),
                             ClaimPathElement::String("givenName".to_string())
                         ])
@@ -546,7 +555,7 @@ pub mod tests {
                     },
                     ClaimQuery {
                         id: None,
-                        path: ClaimPath::try_new(vec![
+                        path: ClaimPathPointer::try_new(vec![
                             ClaimPathElement::String("credentialSubject".to_string()),
                             ClaimPathElement::String("familyName".to_string())
                         ])
@@ -555,7 +564,7 @@ pub mod tests {
                     },
                     ClaimQuery {
                         id: None,
-                        path: ClaimPath::try_new(vec![
+                        path: ClaimPathPointer::try_new(vec![
                             ClaimPathElement::String("credentialSubject".to_string()),
                             ClaimPathElement::String("email".to_string())
                         ])
@@ -564,14 +573,14 @@ pub mod tests {
                     },
                     ClaimQuery {
                         id: None,
-                        path: ClaimPath::try_new(vec![
+                        path: ClaimPathPointer::try_new(vec![
                             ClaimPathElement::String("credentialSubject".to_string()),
                             ClaimPathElement::String("birthdate".to_string())
                         ])
                         .unwrap(),
                         values: None,
                     },
-                ],
+                ]),
                 claim_sets: None,
             }],
             credential_sets: None,
