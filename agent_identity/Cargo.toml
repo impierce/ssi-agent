@@ -43,7 +43,7 @@ iota_interaction = { git = "https://github.com/iotaledger/product-core.git", tag
 iota_interaction_ts = { git = "https://github.com/iotaledger/product-core.git", tag = "v0.2.1", package = "iota_interaction_ts" }
 product_common = { git = "https://github.com/iotaledger/product-core.git", tag = "v0.2.1", package = "product_common" }
 # did_manager_identity_stronghold_ext = { git = "https://github.com/impierce/did-manager", branch = "feat/stronghold-ext-rebased", package = "identity_stronghold_ext" }
-did_manager_identity_stronghold_ext = { path = "../../did-manager/identity_stronghold_ext", package = "identity_stronghold_ext" }
+did_manager_identity_stronghold_ext = { git = "https://git@github.com/impierce/did-manager", tag = "v1.0.0-beta.5", package = "identity_stronghold_ext" }
 
 # `test_utils` dependencies
 futures = { workspace = true, optional = true }
