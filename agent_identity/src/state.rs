@@ -18,12 +18,6 @@ use agent_shared::config::{
 use agent_shared::handlers::command_handler;
 use agent_shared::{application_state::CommandHandler, handlers::query_handler};
 use cqrs_es::persist::{PersistenceError, ViewRepository};
-use iota_sdk::client::api::GetAddressesOptions;
-use iota_sdk::client::secret::SecretManager;
-use iota_sdk::client::Client;
-use iota_sdk::crypto::keys::bip39;
-use iota_sdk::types::block::address::Bech32Address;
-use iota_sdk::types::block::address::Hrp;
 use itertools::iproduct;
 use jsonwebtoken::Algorithm;
 use std::collections::HashMap;
@@ -95,35 +89,6 @@ impl Clone for Queries {
             all_services: self.all_services.clone(),
         }
     }
-}
-
-/// Initializes the [`SecretManager`] with a new mnemonic, if necessary,
-/// and generates an address from the given [`SecretManager`].
-pub async fn get_wallet_address(client: &Client, secret_manager: &SecretManager) -> anyhow::Result<Bech32Address> {
-    let random: [u8; 32] = rand::random();
-    let mnemonic = bip39::wordlist::encode(random.as_ref(), &bip39::wordlist::ENGLISH)
-        .map_err(|err| anyhow::anyhow!(format!("{err:?}")))?;
-
-    if let SecretManager::Stronghold(ref stronghold) = secret_manager {
-        match stronghold.store_mnemonic(mnemonic).await {
-            Ok(()) => (),
-            Err(iota_sdk::client::stronghold::Error::MnemonicAlreadyStored) => (),
-            Err(err) => anyhow::bail!(err),
-        }
-    } else {
-        anyhow::bail!("expected a `StrongholdSecretManager`");
-    }
-
-    let bech32_hrp: Hrp = client.get_bech32_hrp().await?;
-    let address: Bech32Address = secret_manager
-        .generate_ed25519_addresses(
-            GetAddressesOptions::default()
-                .with_range(0..1)
-                .with_bech32_hrp(bech32_hrp),
-        )
-        .await?[0];
-
-    Ok(address)
 }
 
 /// The unique identifier for the linked domain service.
@@ -351,7 +316,7 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
                     status: Status::Disabled,
                 },
             )),
-            // If the DID method is enabled, then create the Document regardless of whether it alraedy exists or not.
+            // If the DID method is enabled, then create the Document regardless of whether it already exists or not.
             document if enabled => {
                 let document_id = document
                     // Extract the `document_id` from the Document if it exists.
@@ -447,6 +412,11 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
                 .as_ref()
                 .map(SupportedDidMethod::supports_update)
                 .unwrap_or_default()
+            && document
+                .iota_metadata
+                .as_ref()
+                .map(|iota_metadata| iota_metadata.is_funded)
+                .unwrap_or(true)
     })
     .await?;
 
