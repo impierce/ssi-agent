@@ -30,7 +30,8 @@ pub mod tests {
         authorization::{
             self,
             authorization_server::{
-                authorize::tests::authorize,
+                authorize::tests::{authorize_after_consent, authorize_before_consent},
+                consent::tests::{get_consent, post_consent},
                 par::tests::{code_verifier, par},
             },
         },
@@ -76,7 +77,14 @@ pub mod tests {
 
             let request_uri = par(app, issuer_state).await;
 
-            let code = authorize(app, request_uri).await;
+            let see_other_location =
+                authorize_before_consent(app, UNIME_CLIENT_ID.to_string(), request_uri.clone()).await;
+
+            get_consent(app, see_other_location.clone()).await;
+
+            let see_other_location = post_consent(app, UNIME_CLIENT_ID.to_string(), request_uri, true).await;
+
+            let code = authorize_after_consent(app, see_other_location).await;
 
             code
         } else {

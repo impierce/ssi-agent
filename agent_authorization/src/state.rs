@@ -97,7 +97,9 @@ async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
             policy_uri: None,
             tos_uri: None,
             redirect_uris: vec![
-                "https://website-git-feat-assetlinks-app-site-association-impierce.vercel.app/callback"
+                // FIXME
+                "unime://callback"
+                    // "https://website-git-feat-assetlinks-app-site-association-impierce.vercel.app/callback"
                     .parse()
                     .unwrap(),
             ],

@@ -33,7 +33,7 @@ pub(crate) async fn authorize(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::authorization::authorization_server::consent::ConsentForm;
+    use crate::authorization::authorization_server::consent::tests::{get_consent, post_consent};
     use crate::authorization::authorization_server::par::tests::par;
     use crate::issuance::credentials::tests::credentials;
     use crate::issuance::offers::tests::offers;
@@ -50,14 +50,14 @@ pub mod tests {
     use oid4vci::credential_offer::AuthorizationCode;
     use tower::Service as _;
 
-    pub async fn authorize(app: &mut Router, request_uri: String) -> String {
+    pub async fn authorize_before_consent(app: &mut Router, client_id: String, request_uri: String) -> String {
         let encoded_request_uri = urlencoding::encode(&request_uri);
         let response = app
             .call(
                 Request::builder()
                     .method(http::Method::GET)
                     .uri(format!(
-                        "/auth/authorize?client_id={UNIME_CLIENT_ID}&request_uri={encoded_request_uri}",
+                        "/auth/authorize?client_id={client_id}&request_uri={encoded_request_uri}",
                     ))
                     .body(Body::empty())
                     .unwrap(),
@@ -74,60 +74,14 @@ pub mod tests {
             format!("/auth/consent?request_uri={encoded_request_uri}")
         );
 
-        let response = app
-            .call(
-                Request::builder()
-                    .method(http::Method::GET)
-                    .uri(see_other_location)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        see_other_location.to_string()
 
-        assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(
-            response.headers().get("Content-Type").unwrap(),
-            "text/html; charset=utf-8"
-        );
+        // get_consent(app, see_other_location.to_string()).await;
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let html = String::from_utf8(body.to_vec()).unwrap();
-        assert!(html.contains("Credentials to be Shared"));
-        assert!(html.contains(UNIME_CLIENT_ID));
-        assert!(html.contains("action=\"/auth/consent\""));
-        assert!(html.contains("method=\"post\""));
+        // post_consent(app, client_id, request_uri.clone(), true).await
+    }
 
-        let response = app
-            .call(
-                Request::builder()
-                    .method(http::Method::POST)
-                    .uri("/auth/consent")
-                    .header(
-                        http::header::CONTENT_TYPE,
-                        mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
-                    )
-                    .body(Body::from(
-                        serde_urlencoded::to_string(&ConsentForm {
-                            client_id: UNIME_CLIENT_ID.to_string(),
-                            request_uri: request_uri.parse().unwrap(),
-                            consent_given: true,
-                        })
-                        .unwrap(),
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::FOUND);
-
-        let see_other_location = response.headers().get("Location").unwrap().to_str().unwrap();
-        assert_eq!(
-            see_other_location,
-            format!("/auth/authorize?client_id={UNIME_CLIENT_ID}&request_uri={encoded_request_uri}")
-        );
-
+    pub async fn authorize_after_consent(app: &mut Router, see_other_location: String) -> String {
         let response = app
             .call(
                 Request::builder()
@@ -172,6 +126,13 @@ pub mod tests {
 
         let request_uri = par(&mut app, issuer_state).await;
 
-        let _code = authorize(&mut app, request_uri).await;
+        let see_other_location =
+            authorize_before_consent(&mut app, UNIME_CLIENT_ID.to_string(), request_uri.clone()).await;
+
+        get_consent(&mut app, see_other_location.clone()).await;
+
+        let see_other_location = post_consent(&mut app, UNIME_CLIENT_ID.to_string(), request_uri, true).await;
+
+        let _code = authorize_after_consent(&mut app, see_other_location).await;
     }
 }

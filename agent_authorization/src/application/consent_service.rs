@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 pub enum ConsentServiceResponse {
     Found(String),
-    // FIXME: what if rejected?
+    // TODO: where to redirect to if consent is not given?
 }
 
 pub struct ConsentService {}
