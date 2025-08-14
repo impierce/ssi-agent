@@ -292,6 +292,14 @@ pub struct ApplicationConfiguration {
     mso_mdoc: None,
 }")]
     pub vp_formats_supported: VpFormatsSupported,
+    #[config(default)]
+    pub iota_address: Option<String>,
+    #[config(default)]
+    pub iota_node_url: Option<String>,
+    #[config(default)]
+    pub iota_node_username: Option<String>,
+    #[config(default)]
+    pub iota_node_password: Option<String>,
 }
 
 impl ApplicationConfiguration {
