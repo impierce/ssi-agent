@@ -10,7 +10,6 @@ use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
 use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported};
-// use oid4vp::ClaimFormatDesignation;
 use once_cell::sync::Lazy;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
