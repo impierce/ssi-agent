@@ -423,7 +423,7 @@ pub mod tests {
                     .unwrap(),
             ),
             GenericAuthorizationRequest::OID4VP(oid4vp_authorization_request) => {
-                let vp_token = create_simple_vp_token(&provider_did_method).await;
+                let vp_token = create_simple_vp_token(provider_did_method).await;
 
                 GenericAuthorizationResponse::OID4VP(
                     provider_manager
