@@ -1,4 +1,4 @@
-use crate::{AggregateHandler, EventStoreTemp};
+use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
 use cqrs_es::persist::PersistedEventStore;
 use cqrs_es::{persist::ViewRepository, Aggregate, Query, View};
@@ -19,7 +19,7 @@ where
 
 pub struct Postgres;
 
-impl EventStoreTemp for Postgres {
+impl CqrsComponentBuilder for Postgres {
     async fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
         services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,

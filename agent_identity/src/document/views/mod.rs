@@ -45,6 +45,10 @@ impl View<Document> for Document {
                 self.document.replace(document.clone());
                 self.iota_metadata.clone_from(iota_metadata);
             }
+            DocumentDeleted { document_id, document } => {
+                self.document_id.clone_from(document_id);
+                self.document.replace(document.clone());
+            }
         }
     }
 }

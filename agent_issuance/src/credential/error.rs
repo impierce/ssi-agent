@@ -16,4 +16,8 @@ pub enum CredentialError {
     MissingCredentialDataError,
     #[error("Invalid expiration data: The expiration date must not exceed `9999-12-31T23:59:59Z`. Please provide a valid date within the supported range.")]
     InvalidExpirationDateError,
+    #[error("Unable to create the `credentialStatus`")]
+    InvalidCredentialStatus,
+    #[error("Failed to create the VC JWT: {0}")]
+    BuildVcJwtError(String),
 }

@@ -57,20 +57,27 @@ use std::sync::Arc;
 pub mod in_memory;
 pub mod postgres;
 
-pub struct AggregateHandler<A, ES>
+/// A generic command handler for a specific aggregate.
+///
+/// This struct wraps the `CqrsFramework` to provide a unified entry point
+/// for executing commands and configuring query-side processors (views).
+pub struct AggregateHandler<A, CCB>
 where
     A: Aggregate,
-    ES: EventStore<A> + Send + Sync + 'static,
+    CCB: EventStore<A> + Send + Sync + 'static,
 {
-    pub cqrs: CqrsFramework<A, ES>,
+    pub cqrs: CqrsFramework<A, CCB>,
 }
 
+/// Implements the `Command` trait to allow the handler to execute commands.
+///
+/// This implementation simply delegates the call to the underlying `CqrsFramework`.
 #[async_trait]
-impl<A, ES> Command<A> for AggregateHandler<A, ES>
+impl<A, CCB> Command<A> for AggregateHandler<A, CCB>
 where
     A: Aggregate,
-    ES: EventStore<A>,
-    <ES as EventStore<A>>::AC: Send,
+    CCB: EventStore<A>,
+    <CCB as EventStore<A>>::AC: Send,
     <A as Aggregate>::Command: Send,
 {
     async fn execute_with_metadata(
@@ -83,12 +90,15 @@ where
     }
 }
 
-impl<A, ES> AggregateHandler<A, ES>
+impl<A, CCB> AggregateHandler<A, CCB>
 where
     A: Aggregate + 'static,
-    ES: EventStore<A>,
+    CCB: EventStore<A>,
     <A as Aggregate>::Command: Send,
 {
+    /// Appends a query processor (e.g., a view generator) to the CQRS framework.
+    ///
+    /// This is used to register components that listen to events and update read models.
     fn append_query<Q>(self, query: Q) -> Self
     where
         Q: Query<A> + 'static,
@@ -98,12 +108,17 @@ where
         }
     }
 
+    /// Appends a dynamically dispatched event publisher.
     fn append_event_publisher(self, query: Box<dyn Query<A>>) -> Self {
         Self {
             cqrs: self.cqrs.append_query(query),
         }
     }
 
+    /// A convenience method to configure the handler with standard queries and custom event publishers.
+    ///
+    /// This wires up the default queries for logging, single-aggregate views, and all-aggregate views,
+    /// and then folds in any additional event publishers provided.
     fn with_parameters<V, AV, VR1, VR2>(
         self,
         aggregate: Arc<VR1>,
@@ -120,28 +135,37 @@ where
         event_publishers.into_iter().fold(
             self.append_query(SimpleLoggingQuery {})
                 .append_query(generic_query(aggregate.clone()))
-                .append_query(ListAllQuery::new(all_aggregates.clone(), &all_aggregates_name)),
+                .append_query(ListAllQuery::new(all_aggregates.clone(), all_aggregates_name)),
             |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
         )
     }
 }
 
-pub trait EventStoreTemp {
+/// A type alias for the tuple of CQRS components for a given aggregate.
+///
+/// This includes the command handler, the single-instance view repository,
+/// and the all-instances view repository.
+pub type CqrsComponents<A, V, AV> = (
+    Arc<dyn Command<A> + Send + Sync>,
+    Arc<dyn ViewRepository<V, A>>,
+    Arc<dyn ViewRepository<AV, A>>,
+);
+
+/// A trait for building the command and query infrastructure for a given aggregate.
+///
+/// Implementors of this trait (e.g., `InMemory`, `Postgres`) are responsible
+/// for creating the full set of components needed to interact with an aggregate,
+/// including the command handler and view repositories.
+pub trait CqrsComponentBuilder {
     fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
         identity_services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
-    ) -> impl std::future::Future<
-        Output = (
-            Arc<dyn Command<A> + Send + Sync>,
-            Arc<dyn ViewRepository<V, A>>,
-            Arc<dyn ViewRepository<AV, A>>,
-        ),
-    > + Send
+    ) -> impl std::future::Future<Output = CqrsComponents<A, V, AV>> + Send
     where
         <A as Aggregate>::Command: Send + Sync;
 }
 
-pub async fn identity_state<ES: EventStoreTemp>(
+pub async fn identity_state<CCB: CqrsComponentBuilder>(
     services: Arc<IdentityServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> IdentityState {
@@ -153,19 +177,20 @@ pub async fn identity_state<ES: EventStoreTemp>(
         ..
     } = partition_event_publishers(event_publishers);
 
-    let (connection_command_handler, connection, all_connections) = ES::commands_and_queries::<
+    let (connection_command_handler, connection, all_connections) = CCB::commands_and_queries::<
         Connection,
         Connection,
         AllConnectionsView,
     >(services.clone(), connection_event_publishers)
     .await;
     let (document_command_handler, document, all_documents) =
-        ES::commands_and_queries::<Document, Document, AllDocumentsView>(services.clone(), document_event_publishers)
+        CCB::commands_and_queries::<Document, Document, AllDocumentsView>(services.clone(), document_event_publishers)
             .await;
     let (profile_command_handler, profile, _all_profiles) =
-        ES::commands_and_queries::<Profile, Profile, Profile>(services.clone(), vec![]).await;
+        CCB::commands_and_queries::<Profile, Profile, Profile>(services.clone(), vec![]).await;
     let (service_command_handler, service, all_services) =
-        ES::commands_and_queries::<Service, Service, AllServicesView>(services.clone(), service_event_publishers).await;
+        CCB::commands_and_queries::<Service, Service, AllServicesView>(services.clone(), service_event_publishers)
+            .await;
 
     IdentityState {
         command: agent_identity::state::CommandHandlers {
@@ -186,7 +211,7 @@ pub async fn identity_state<ES: EventStoreTemp>(
     }
 }
 
-pub async fn authorization_state<ES: EventStoreTemp>(
+pub async fn authorization_state<CCB: CqrsComponentBuilder>(
     services: Arc<AuthorizationServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> AuthorizationState {
@@ -201,27 +226,28 @@ pub async fn authorization_state<ES: EventStoreTemp>(
     } = partition_event_publishers(event_publishers);
 
     let (authorization_code_command_handler, authorization_code, _all_authorization_codes) =
-        ES::commands_and_queries::<AuthorizationCodeView, AuthorizationCode, AllAuthorizationCodesView>(
+        CCB::commands_and_queries::<AuthorizationCodeView, AuthorizationCode, AllAuthorizationCodesView>(
             (),
             authorization_code_event_publishers,
         )
         .await;
     let (client_command_handler, client, _all_clients) =
-        ES::commands_and_queries::<ClientView, Client, AllClientsView>((), client_event_publishers).await;
+        CCB::commands_and_queries::<ClientView, Client, AllClientsView>((), client_event_publishers).await;
     let (consent_command_handler, consent, _all_consents) =
-        ES::commands_and_queries::<ConsentView, Consent, AllConsentsView>((), consent_event_publishers).await;
+        CCB::commands_and_queries::<ConsentView, Consent, AllConsentsView>((), consent_event_publishers).await;
     let (
         oauth2_authorization_request_command_handler,
         oauth2_authorization_request,
         _all_oauth2_authorization_requests,
-    ) = ES::commands_and_queries::<
+    ) = CCB::commands_and_queries::<
         OAuth2AuthorizationRequestView,
         OAuth2AuthorizationRequest,
         AllOAuth2AuthorizationRequestsView,
     >((), oauth2_authorization_request_event_publishers)
     .await;
     let (token_command_handler, access_token, _all_access_tokens) =
-        ES::commands_and_queries::<AccessTokenView, AccessToken, AllAccessTokensView>((), token_event_publishers).await;
+        CCB::commands_and_queries::<AccessTokenView, AccessToken, AllAccessTokensView>((), token_event_publishers)
+            .await;
 
     AuthorizationState {
         command: agent_authorization::state::CommandHandlers {
@@ -242,7 +268,7 @@ pub async fn authorization_state<ES: EventStoreTemp>(
     }
 }
 
-pub async fn issuance_state<ES: EventStoreTemp>(
+pub async fn issuance_state<CCB: CqrsComponentBuilder>(
     services: Arc<agent_issuance::services::IssuanceServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> agent_issuance::state::IssuanceState {
@@ -254,16 +280,16 @@ pub async fn issuance_state<ES: EventStoreTemp>(
         ..
     } = partition_event_publishers(event_publishers);
 
-    let (credential_command_handler, credential, all_credentials) = ES::commands_and_queries::<
+    let (credential_command_handler, credential, all_credentials) = CCB::commands_and_queries::<
         CredentialView,
         Credential,
         AllCredentialsView,
     >(services.clone(), credential_event_publishers)
     .await;
     let (offer_command_handler, offer, all_offers) =
-        ES::commands_and_queries::<OfferView, Offer, AllOffersView>(services.clone(), offer_event_publishers).await;
+        CCB::commands_and_queries::<OfferView, Offer, AllOffersView>(services.clone(), offer_event_publishers).await;
     let (server_config_command_handler, server_config, _all_server_configs) =
-        ES::commands_and_queries::<ServerConfigView, ServerConfig, ServerConfig>(
+        CCB::commands_and_queries::<ServerConfigView, ServerConfig, ServerConfig>(
             services.clone(),
             server_config_event_publishers,
         )
@@ -286,7 +312,7 @@ pub async fn issuance_state<ES: EventStoreTemp>(
     }
 }
 
-pub async fn verification_state<ES: EventStoreTemp>(
+pub async fn verification_state<CCB: CqrsComponentBuilder>(
     services: Arc<VerificationServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> VerificationState {
@@ -297,7 +323,7 @@ pub async fn verification_state<ES: EventStoreTemp>(
     } = partition_event_publishers(event_publishers);
 
     let (authorization_request_command_handler, authorization_request, all_authorization_requests) =
-        ES::commands_and_queries::<AuthorizationRequest, AuthorizationRequest, AllAuthorizationRequestsView>(
+        CCB::commands_and_queries::<AuthorizationRequest, AuthorizationRequest, AllAuthorizationRequestsView>(
             services.clone(),
             authorization_request_event_publishers,
         )
@@ -314,7 +340,7 @@ pub async fn verification_state<ES: EventStoreTemp>(
     }
 }
 
-pub async fn holder_state<ES: EventStoreTemp>(
+pub async fn holder_state<CCB: CqrsComponentBuilder>(
     services: Arc<HolderServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> HolderState {
@@ -327,21 +353,21 @@ pub async fn holder_state<ES: EventStoreTemp>(
     } = partition_event_publishers(event_publishers);
 
     let (holder_credential_command_handler, holder_credential, all_holder_credential) =
-        ES::commands_and_queries::<HolderCredential, HolderCredential, AllHolderCredentialsView>(
+        CCB::commands_and_queries::<HolderCredential, HolderCredential, AllHolderCredentialsView>(
             services.clone(),
             holder_credential_publisher,
         )
         .await;
 
     let (presentation_command_handler, presentation, all_presentations) =
-        ES::commands_and_queries::<Presentation, Presentation, AllPresentationsView>(
+        CCB::commands_and_queries::<Presentation, Presentation, AllPresentationsView>(
             services.clone(),
             presentation_event_publishers,
         )
         .await;
 
     let (received_offer_command_handler, received_offer, all_received_offers) =
-        ES::commands_and_queries::<ReceivedOffer, ReceivedOffer, AllReceivedOffersView>(
+        CCB::commands_and_queries::<ReceivedOffer, ReceivedOffer, AllReceivedOffersView>(
             services.clone(),
             received_offer_event_publishers,
         )

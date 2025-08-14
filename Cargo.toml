@@ -34,7 +34,7 @@ oid4vp = { git = "https://github.com/impierce/openid4vc", branch = "feat/authori
 
 anyhow = "1.0"
 async-trait = "0.1"
-axum = { version = "0.8" }
+axum = "0.8"
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 cqrs-es = "0.4.12"
@@ -50,20 +50,22 @@ identity_credential = { git = "https://github.com/iotaledger/identity", tag = "v
 identity_did = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.2" }
 identity_document = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.2" }
 identity_iota = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.2" }
-identity_jose = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.2" }
 identity_storage = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.2" }
 identity_verification = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.2", default-features = false }
+iota-sdk = { git = "https://github.com/iotaledger/iota", package = "iota-sdk", tag = "v0.12.0-rc" }
+# TODO: Check if this is still needed.
 iota-sdk-legacy = { version = "1.0", package = "iota-sdk", default-features = false, features = [
     "tls",
     "client",
     "stronghold",
 ] }
-iota-sdk = { git = "https://github.com/impierce/iota", package = "iota-sdk", branch = "temp/fix" }
 jsonwebtoken = "9.3"
 lazy_static = "1.4"
 mime = { version = "0.3" }
+oauth_tsl = { git = "https://github.com/impierce/oauth-token-status-list", rev = "0aa0228" }
 once_cell = { version = "1.19" }
-rand = "0.8"
+product_common = { git = "https://github.com/iotaledger/product-core", tag = "v0.2.1", package = "product_common" }
+rand = "0.9"
 reqwest = { version = "0.12", default-features = false, features = [
     "json",
     "rustls-tls",
@@ -87,15 +89,16 @@ url = "2.5"
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"
 
+# TODO: Remove these patches once configurable TLS is available in `iota-sdk`.
 [patch.'https://github.com/iotaledger/iota']
 iota-sdk = { git = "https://github.com/impierce/iota", package = "iota-sdk", branch = "temp/fix" }
-move-core-types = { git = "https://github.com/impierce/iota.git", package = "move-core-types", branch = "temp/fix" }
-shared-crypto = { git = "https://github.com/impierce/iota.git", package = "shared-crypto", branch = "temp/fix" }
-iota-network-stack = { git = "https://github.com/impierce/iota.git", package = "iota-network-stack", branch = "temp/fix" }
-iota-types = { git = "https://github.com/impierce/iota.git", package = "iota-types", branch = "temp/fix" }
-iota-metrics = { git = "https://github.com/impierce/iota.git", package = "iota-metrics", branch = "temp/fix" }
-move-binary-format = { git = "https://github.com/impierce/iota.git", package = "move-binary-format", branch = "temp/fix" }
-iota-protocol-config = { git = "https://github.com/impierce/iota.git", package = "iota-protocol-config", branch = "temp/fix" }
-move-vm-config = { git = "https://github.com/impierce/iota.git", package = "move-vm-config", branch = "temp/fix" }
-iota-adapter-latest = { git = "https://github.com/impierce/iota.git", package = "iota-adapter-latest", branch = "temp/fix" }
-iota-execution = { git = "https://github.com/impierce/iota.git", package = "iota-execution", branch = "temp/fix" }
+move-core-types = { git = "https://github.com/impierce/iota", package = "move-core-types", branch = "temp/fix" }
+shared-crypto = { git = "https://github.com/impierce/iota", package = "shared-crypto", branch = "temp/fix" }
+iota-network-stack = { git = "https://github.com/impierce/iota", package = "iota-network-stack", branch = "temp/fix" }
+iota-types = { git = "https://github.com/impierce/iota", package = "iota-types", branch = "temp/fix" }
+iota-metrics = { git = "https://github.com/impierce/iota", package = "iota-metrics", branch = "temp/fix" }
+move-binary-format = { git = "https://github.com/impierce/iota", package = "move-binary-format", branch = "temp/fix" }
+iota-protocol-config = { git = "https://github.com/impierce/iota", package = "iota-protocol-config", branch = "temp/fix" }
+move-vm-config = { git = "https://github.com/impierce/iota", package = "move-vm-config", branch = "temp/fix" }
+iota-adapter-latest = { git = "https://github.com/impierce/iota", package = "iota-adapter-latest", branch = "temp/fix" }
+iota-execution = { git = "https://github.com/impierce/iota", package = "iota-execution", branch = "temp/fix" }

@@ -232,7 +232,7 @@ pub mod tests {
         let mut app = router(issuance_state);
 
         credentials(&mut app).await;
-        let _ = offers(&mut app, true).await;
+        let (_authorization_code, _pre_authorized_code) = offers(&mut app, true).await.unwrap();
         set_config().credential_offer_by_value_enabled = true;
     }
 }

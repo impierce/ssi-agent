@@ -5,6 +5,9 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum DocumentError {
+    // TODO: Add more specific errors as needed
+    #[error("Error while handling document command: {0}")]
+    GenericError(String),
     #[error("Error while producing DID document: {0}")]
     ProduceDocumentError(#[from] identity_document::error::Error),
     #[error("Missing document")]
@@ -35,20 +38,12 @@ pub enum DocumentError {
     IotaClientBuilderError(String),
     #[error("Missing required network name for method: {0}")]
     MissingNetworkNameError(SupportedDidMethod),
-    #[error("Error while retrieving the Wallet Address: {0}")]
-    WalletAddressError(String),
+    #[error("Iota Controler error: {0}")]
+    IotaControllerError(identity_iota::iota::rebased::Error),
     #[error("Iota Identity error: {0}")]
     IotaIdentityError(#[from] identity_iota::iota::rebased::Error),
     #[error("Iota Product Common error: {0}")]
     IotaProductCommonError(#[from] product_common::error::Error),
-    #[error("Error while building the Alias Output: {0}")]
-    AliasOutputBuilderError(String),
-    #[error(
-        "Failed to publish DID Document due to insufficient deposit.\n\
-        Please ensure the associated {0} address is adequately funded.\n\
-        {0} address: `{1}`"
-    )]
-    InsufficientDepositError(String, String),
 
     // did:web specific Errors
     #[error("Opaque origin not supported")]

@@ -4,7 +4,7 @@ use crate::connection::views::ConnectionView;
 use crate::document::aggregate::Status;
 use crate::document::command::DocumentCommand;
 use crate::document::views::all_documents::AllDocumentsView;
-use crate::profile::aggregate::Profile;
+use crate::profile::aggregate::{Profile, Source};
 use crate::profile::command::ProfileCommand;
 use crate::profile::views::ProfileView;
 use crate::service::views::all_services::AllServicesView;
@@ -13,18 +13,21 @@ use crate::{
     service::{aggregate::Service, command::ServiceCommand, views::ServiceView},
 };
 use agent_shared::config::{
-    config, config_mut, get_all_enabled_signing_algorithms_supported, Display, SupportedDidMethod, ToggleOptions,
+    config, config_mut, get_all_enabled_signing_algorithms_supported, SupportedDidMethod, ToggleOptions,
 };
 use agent_shared::handlers::command_handler;
 use agent_shared::{application_state::CommandHandler, handlers::query_handler};
-use cqrs_es::persist::ViewRepository;
+use cqrs_es::persist::{PersistenceError, ViewRepository};
 use itertools::iproduct;
 use jsonwebtoken::Algorithm;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 
-/// The unique identifier for the server configuration.
+/// The fixed identifier for the `Profile` aggregate, which is treated as a singleton.
+///
+/// This is for internal use only within the identity bounded context to ensure
+/// all operations consistently target the one and only profile.
 pub const PROFILE_ID: &str = "PROFILE-001";
 
 #[derive(Clone)]
@@ -107,59 +110,169 @@ pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
     Ok(())
 }
 
+// TODO: This function is a temporary workaround and violates DDD principles.
+// It directly mutates the global configuration state, which is an impure side effect.
+//
+// The correct long-term solution is to establish the Identity Bounded Context as the single
+// source of truth for display data (name, logo). Other contexts, like Issuance and
+// Verification, should subscribe to events published by the Identity Bounded Context to receive these
+// updates, rather than reading from a shared, mutable global state.
+/// Queries the profile and updates the application state with the profile information.
+pub async fn query_profile(state: &IdentityState) -> Result<(), PersistenceError> {
+    match query_handler(PROFILE_ID, &state.query.profile).await? {
+        Some(Profile { display_name, logo, .. }) => {
+            if let Some(display) = config_mut().display.first_mut() {
+                display.name = display_name.unwrap_or_default();
+                display.logo = logo;
+            }
+
+            Ok(())
+        }
+        None => {
+            warn!("No profile found");
+
+            Ok(())
+        }
+    }
+}
+
+// TODO: This function violates the aggregate's consistency boundary.
+// The complex business logic for deciding whether to update the profile based on its
+// source (Provisioned vs. Default vs. Runtime) should reside inside the `Profile` aggregate's `handle`
+// method, not here in the application's initialization layer.
+//
+// A better approach would be:
+// 1. This function should only read the config and dispatch a simple, declarative command,
+//    e.g., `ProfileCommand::SynchronizeFromConfig { display_name: ..., logo: ... }`.
+// 2. The `Profile` aggregate would then handle this command, containing all the logic
+//    to protect its invariants (e.g., "if my source is `Runtime`, I must reject this command")
 async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
+    // TODO: allow for multiple displays in the future with different locales.
     let first = config().display.first().cloned();
 
-    info!("Initializing display ... is some display configured? {first:?}");
+    let config_display_source = if config().is_display_provisioned() {
+        Source::Provisioned
+    } else {
+        Source::Default
+    };
 
-    if let Some(display) = first {
-        let command = ProfileCommand::CreateProfile {
-            profile_id: PROFILE_ID.to_string(),
-            display_name: Some(display.name.clone()),
-            logo: display.logo.clone(),
-            provisioned: Some(true),
+    if let Some(config_display) = first {
+        match query_handler(PROFILE_ID, &state.query.profile).await? {
+            // If the profile exists, we check if it needs to be updated based on the config.
+            // We only update the Profile if the config source is:
+            // - Provisioned: If the Profile is Provisioned, we update the persisted Profile.
+            // - Default: If the persisted Profile is Provisioned, we update the persisted Profile.
+            Some(Profile {
+                display_name: persisted_display_name,
+                logo: persisted_logo,
+                country: persisted_country,
+                source: persisted_source,
+                ..
+            }) if (config_display_source == Source::Provisioned
+                || (config_display_source == Source::Default && persisted_source == Source::Provisioned)) =>
+            {
+                if Some(&config_display.name) != persisted_display_name.as_ref() {
+                    let command = ProfileCommand::UpdateDisplayName {
+                        display_name: config_display.name,
+                        source: config_display_source.clone(),
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+
+                if config_display.logo != persisted_logo {
+                    let command = ProfileCommand::UpdateLogo {
+                        logo: config_display.logo,
+                        source: config_display_source.clone(),
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+
+                if config_display.country != persisted_country {
+                    let command = ProfileCommand::UpdateCountry {
+                        country: config_display.country,
+                        source: config_display_source.clone(),
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+
+                let command = ProfileCommand::UpdateSource {
+                    source: config_display_source,
+                };
+
+                command_handler(PROFILE_ID, &state.command.profile, command).await?;
+            }
+            Some(_profile) => {
+                info!("Display is already configured, no action needed.");
+            }
+            // If the profile does not exist, we create it with the config display information.
+            None => {
+                info!("No display configured, creating a new one.");
+
+                let command = ProfileCommand::CreateProfile {
+                    profile_id: PROFILE_ID.to_string(),
+                    display_name: Some(config_display.name.clone()),
+                    logo: config_display.logo.clone(),
+                    source: config_display_source,
+                    country: config_display.country.clone(),
+                };
+
+                command_handler(PROFILE_ID, &state.command.profile, command).await?;
+            }
         };
+    } else {
+        match query_handler(PROFILE_ID, &state.query.profile).await? {
+            Some(Profile {
+                display_name: persisted_display_name,
+                logo: persisted_logo,
+                country: persisted_country,
+                source: Source::Provisioned,
+                ..
+            }) => {
+                if persisted_display_name.is_some() {
+                    let command = ProfileCommand::UpdateDisplayName {
+                        display_name: "".to_string(),
+                        source: config_display_source.clone(),
+                    };
 
-        command_handler(PROFILE_ID, &state.command.profile, command).await?;
-    } else if let Some(Profile {
-        display_name,
-        logo,
-        provisioned,
-        ..
-    }) = query_handler(PROFILE_ID, &state.query.profile).await?
-    {
-        if provisioned.unwrap_or(false) {
-            let command = ProfileCommand::CreateProfile {
-                profile_id: PROFILE_ID.to_string(),
-                display_name: Default::default(),
-                logo: None,
-                provisioned: Some(false),
-            };
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
 
-            command_handler(PROFILE_ID, &state.command.profile, command).await?;
-        } else {
-            config_mut().display = vec![Display {
-                name: display_name.clone().unwrap_or_default(),
-                logo: logo.clone(),
-                locale: Some("en".to_string()),
-            }];
+                if persisted_logo.is_some() {
+                    let command = ProfileCommand::UpdateLogo {
+                        logo: None,
+                        source: config_display_source.clone(),
+                    };
 
-            let command = ProfileCommand::CreateProfile {
-                profile_id: PROFILE_ID.to_string(),
-                display_name,
-                logo,
-                provisioned: Some(false),
-            };
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
 
-            command_handler(PROFILE_ID, &state.command.profile, command).await?;
-        }
+                if persisted_country.is_some() {
+                    let command = ProfileCommand::UpdateCountry {
+                        country: None,
+                        source: config_display_source.clone(),
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+            }
+            _ => {
+                let command = ProfileCommand::CreateProfile {
+                    profile_id: PROFILE_ID.to_string(),
+                    display_name: None,
+                    logo: None,
+                    country: None,
+                    source: config_display_source,
+                };
+
+                command_handler(PROFILE_ID, &state.command.profile, command).await?;
+            }
+        };
     }
 
-    if let Some(Profile { display_name, logo, .. }) = query_handler(PROFILE_ID, &state.query.profile).await? {
-        if display_name.unwrap_or_default().is_empty() && logo.is_none() {
-            config_mut().display = vec![];
-        }
-    }
+    query_profile(state).await?;
 
     Ok(())
 }
@@ -203,7 +316,7 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
                     status: Status::Disabled,
                 },
             )),
-            // If the DID method is enabled, then create the Document regardless of whether it alraedy exists or not.
+            // If the DID method is enabled, then create the Document regardless of whether it already exists or not.
             document if enabled => {
                 let document_id = document
                     // Extract the `document_id` from the Document if it exists.
@@ -302,7 +415,7 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
             && document
                 .iota_metadata
                 .as_ref()
-                .map(|iota_metadata| iota_metadata.funded)
+                .map(|iota_metadata| iota_metadata.is_funded)
                 .unwrap_or(true)
     })
     .await?;

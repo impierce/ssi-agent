@@ -4,6 +4,8 @@ use oid4vci::{
 };
 use serde::Deserialize;
 
+use crate::credential::aggregate::CredentialStatus;
+
 use super::{aggregate::CredentialExpiry, entity::Data};
 
 #[derive(Debug, Deserialize)]
@@ -14,6 +16,7 @@ pub enum CredentialCommand {
         data: Data,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
         expires_at: CredentialExpiry,
+        credential_status_index: usize,
     },
     CreateSignedCredential {
         credential_id: String,
@@ -28,5 +31,9 @@ pub enum CredentialCommand {
     AddNotification {
         credential_id: String,
         notification: NotificationRequest,
+    },
+    UpdateCredentialStatus {
+        credential_id: String,
+        credential_status: CredentialStatus,
     },
 }

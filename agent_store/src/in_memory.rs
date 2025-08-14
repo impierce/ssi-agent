@@ -1,4 +1,4 @@
-use crate::{AggregateHandler, EventStoreTemp};
+use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::application_state::Command;
 use async_trait::async_trait;
 use cqrs_es::{
@@ -59,7 +59,7 @@ where
 
 pub struct InMemory;
 
-impl EventStoreTemp for InMemory {
+impl CqrsComponentBuilder for InMemory {
     async fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
         services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
