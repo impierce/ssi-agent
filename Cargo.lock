@@ -404,6 +404,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "cqrs-es",
+ "did-key",
  "futures",
  "identity_core",
  "identity_credential",

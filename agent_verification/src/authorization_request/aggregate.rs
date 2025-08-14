@@ -245,22 +245,28 @@ impl Aggregate for AuthorizationRequest {
 
 #[cfg(test)]
 pub mod tests {
+
     use agent_secret_manager::service::Service as _;
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::set_config;
     use agent_shared::config::SupportedDidMethod;
+    use chrono::{Duration, Utc};
     use cqrs_es::test::TestFramework;
+    use did_key::{generate, Ed25519KeyPair};
+    use identity_credential::{credential::Jwt, presentation::Presentation};
     use jsonwebtoken::Algorithm;
+    use jsonwebtoken::Header;
     use lazy_static::lazy_static;
+    use oid4vc_core::claim_path_pointer::{ClaimPathElement, ClaimPathPointer};
+    use oid4vc_core::jwt;
     use oid4vc_core::Subject as _;
-    use oid4vc_core::{
-        claim_path_pointer::{ClaimPathElement, ClaimPathPointer},
-        client_metadata::ClientMetadataResource,
-        SubjectSyntaxType,
-    };
-
+    use oid4vc_core::{client_metadata::ClientMetadataResource, SubjectSyntaxType};
+    use oid4vc_manager::methods::key_method::KeySubject;
     use oid4vc_manager::ProviderManager;
+    use oid4vci::VerifiableCredentialJwt;
+    use oid4vp::authorization_request::ClientId;
     use oid4vp::dcql::dcql_query::{ClaimQuery, CredentialQuery, CredentialQueryId, DcqlQuery, Format, MetaTypes};
+    use oid4vp::token::verifiable_presentation_jwt::VerifiablePresentationJwt;
     use oid4vp::token::vp_token::{PresentationFormat, VpToken};
     use oid4vp::token::vp_token_builder::VpTokenBuilder;
     use rstest::rstest;
@@ -399,11 +405,15 @@ pub mod tests {
     }
 
     async fn authorization_response(
-        did_method: &str,
+        provider_did_method: &str,
         authorization_request: &GenericAuthorizationRequest,
     ) -> GenericAuthorizationResponse {
-        let provider_manager =
-            ProviderManager::new(Arc::new(Subject::default()), vec![did_method], vec![Algorithm::ES256]).unwrap();
+        let provider_manager = ProviderManager::new(
+            Arc::new(Subject::default()),
+            vec![provider_did_method],
+            vec![Algorithm::ES256],
+        )
+        .unwrap();
 
         match authorization_request {
             GenericAuthorizationRequest::SIOPv2(siopv2_authorization_request) => GenericAuthorizationResponse::SIOPv2(
@@ -413,7 +423,7 @@ pub mod tests {
                     .unwrap(),
             ),
             GenericAuthorizationRequest::OID4VP(oid4vp_authorization_request) => {
-                let vp_token = create_simple_vp_token();
+                let vp_token = create_simple_vp_token(&provider_did_method.to_string()).await;
 
                 GenericAuthorizationResponse::OID4VP(
                     provider_manager
@@ -498,14 +508,87 @@ pub mod tests {
         }
     }
 
-    fn create_simple_vp_token() -> VpToken {
-        // Simple VpToken that matches our DCQL query
-        let mock_jwt = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSJ9.eyJpc3MiOiJkaWQ6a2V5OnRlc3QiLCJzdWIiOiJkaWQ6a2V5OnRlc3QiLCJ2YyI6eyJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSJdLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiUGVyc29uYWxJbmZvcm1hdGlvbiJdLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDprZXk6dGVzdCIsImdpdmVuTmFtZSI6IkZlcnJpcyIsImZhbWlseU5hbWUiOiJDcmFibWFuIiwiZW1haWwiOiJmZXJyaXMuY3JhYm1hbkBjcmFibWFpbC5jb20iLCJiaXJ0aGRhdGUiOiIxOTg1LTA1LTIxIn19fQ.mock_signature".to_string();
+    async fn create_simple_vp_token(provider_did_method: &str) -> VpToken {
+        // create a simple functional vp_token
+        let issuer = KeySubject::from_keypair(
+            generate::<Ed25519KeyPair>(Some("test-issuer-key".as_bytes().try_into().unwrap())),
+            None,
+        );
+        let issuer_did = issuer.identifier(provider_did_method, Algorithm::EdDSA).await.unwrap();
+
+        let subject = Arc::new(KeySubject::from_keypair(
+            generate::<Ed25519KeyPair>(Some("test-subject-key".as_bytes().try_into().unwrap())),
+            None,
+        ));
+        let subject_did = subject.identifier(provider_did_method, Algorithm::EdDSA).await.unwrap();
+
+        let verifiable_credential = VerifiableCredentialJwt::builder()
+            .sub(&subject_did)
+            .iss(&issuer_did)
+            .iat(0)
+            .exp(9999999999i64)
+            .verifiable_credential(serde_json::json!({
+                "@context": ["https://www.w3.org/2018/credentials/v1"],
+                "type": ["VerifiableCredential", "PersonalInformation"],
+                "issuanceDate": "2022-01-01T00:00:00Z",
+                "issuer": issuer_did,
+                "credentialSubject": {
+                    "id": subject_did,
+                    "givenName": "Ferris",
+                    "familyName": "Crabman",
+                    "email": "ferris.crabman@crabmail.com",
+                    "birthdate": "1985-05-21"
+                }
+            }))
+            .build()
+            .unwrap();
+
+        // Encode as JWT with proper headers
+        let vc_jwt = jwt::encode(
+            subject.clone(),
+            Header {
+                alg: Algorithm::EdDSA,
+                ..Default::default()
+            },
+            &verifiable_credential,
+            provider_did_method,
+        )
+        .await
+        .unwrap();
+
+        let verifiable_presentation_jwt =
+            Presentation::builder(subject_did.parse().unwrap(), identity_core::common::Object::new())
+                .credential(Jwt::from(vc_jwt))
+                .build()
+                .unwrap();
+
+        let vp_jwt_claims = VerifiablePresentationJwt::builder()
+            .iss(subject_did.clone())
+            .sub(subject_did)
+            .aud("test_audience".to_string()) // You might need to adjust this
+            .nonce("nonce".to_string())
+            .exp((Utc::now() + Duration::minutes(10)).timestamp())
+            .iat(Utc::now().timestamp())
+            .verifiable_presentation(verifiable_presentation_jwt)
+            .build()
+            .unwrap();
+
+        let vp_jwt = jwt::encode(
+            subject.clone(),
+            Header {
+                alg: Algorithm::EdDSA,
+                ..Default::default()
+            },
+            &vp_jwt_claims,
+            provider_did_method,
+        )
+        .await
+        .unwrap();
 
         VpTokenBuilder::new()
             .add_presentation(
                 CredentialQueryId::try_new("CredentialQuery".to_string()).unwrap(),
-                PresentationFormat::JwtVcJson(mock_jwt),
+                PresentationFormat::JwtVcJson(vp_jwt),
             )
             .build()
             .unwrap()
