@@ -423,7 +423,7 @@ pub mod tests {
                     .unwrap(),
             ),
             GenericAuthorizationRequest::OID4VP(oid4vp_authorization_request) => {
-                let vp_token = create_simple_vp_token(&provider_did_method.to_string()).await;
+                let vp_token = create_simple_vp_token(&provider_did_method).await;
 
                 GenericAuthorizationResponse::OID4VP(
                     provider_manager
@@ -510,14 +510,11 @@ pub mod tests {
 
     async fn create_simple_vp_token(provider_did_method: &str) -> VpToken {
         // create a simple functional vp_token
-        let issuer = KeySubject::from_keypair(
-            generate::<Ed25519KeyPair>(Some("test-issuer-key".as_bytes().try_into().unwrap())),
-            None,
-        );
+        let issuer = KeySubject::from_keypair(generate::<Ed25519KeyPair>(Some("test-issuer-key".as_bytes())), None);
         let issuer_did = issuer.identifier(provider_did_method, Algorithm::EdDSA).await.unwrap();
 
         let subject = Arc::new(KeySubject::from_keypair(
-            generate::<Ed25519KeyPair>(Some("test-subject-key".as_bytes().try_into().unwrap())),
+            generate::<Ed25519KeyPair>(Some("test-subject-key".as_bytes())),
             None,
         ));
         let subject_did = subject.identifier(provider_did_method, Algorithm::EdDSA).await.unwrap();
@@ -565,7 +562,7 @@ pub mod tests {
         let vp_jwt_claims = VerifiablePresentationJwt::builder()
             .iss(subject_did.clone())
             .sub(subject_did)
-            .aud("test_audience".to_string()) // You might need to adjust this
+            .aud("test_audience".to_string()) // might need to adjust this
             .nonce("nonce".to_string())
             .exp((Utc::now() + Duration::minutes(10)).timestamp())
             .iat(Utc::now().timestamp())
