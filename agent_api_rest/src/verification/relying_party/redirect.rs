@@ -3,35 +3,14 @@ use agent_verification::{
     authorization_request::command::AuthorizationRequestCommand, generic_oid4vc::GenericAuthorizationResponse,
     state::VerificationState,
 };
+use anyhow::{self, Result};
 use axum::{
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use http_api_problem::ApiError;
-
-use anyhow::{self, Result};
-use serde::de::DeserializeOwned;
-use serde_urlencoded;
-use std::collections::HashMap;
-
-fn from_form_urlencoded_string<T: DeserializeOwned>(encoded: &str) -> anyhow::Result<T> {
-    let string_map: HashMap<String, String> =
-        serde_urlencoded::from_str(encoded).map_err(|e| anyhow::anyhow!("Failed to decodde: {}", e))?;
-
-    // Converts the string map to a JSON map, parsing the stringified JSON values.
-    let json_map: serde_json::Map<String, serde_json::Value> = string_map
-        .into_iter()
-        .map(|(k, v)| {
-            let json_value = serde_json::from_str(&v).unwrap_or_else(|_| serde_json::Value::String(v.to_string()));
-            (k, json_value)
-        })
-        .collect();
-
-    // Converts the JSON map to the wanted type.
-    let value = serde_json::Value::Object(json_map);
-    serde_json::from_value(value).map_err(|e| anyhow::anyhow!("Failed to deserialize into target type: {}", e))
-}
+use oid4vc_core::utils::form_urlencoded::from_form_urlencoded_string;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn redirect(

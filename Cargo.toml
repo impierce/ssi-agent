@@ -20,16 +20,16 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
-siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "4936fcc" }
-oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "4936fcc" }
-oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "4936fcc" }
-oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "4936fcc" }
-oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "4936fcc" }
+siopv2 = { git = "https://git@github.com/impierce/openid4vc.git", rev = "b4582de" }
+oid4vci = { git = "https://git@github.com/impierce/openid4vc.git", rev = "b4582de" }
+oid4vc-core = { git = "https://git@github.com/impierce/openid4vc.git", rev = "b4582de" }
+oid4vc-manager = { git = "https://git@github.com/impierce/openid4vc.git", rev = "b4582de" }
+oid4vp = { git = "https://git@github.com/impierce/openid4vc.git", rev = "b4582de" }
 
 
 anyhow = "1.0"
-async-trait = "0.1.88"
-axum = { version = "0.8" }
+async-trait = "0.1"
+axum = "0.8"
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 cqrs-es = "0.4.2"
@@ -71,7 +71,6 @@ serde_json = { version = "1.0" }
 serde_json_path_to_error = { version = "0.1" }
 serde_with = "3.7"
 serde_urlencoded = "0.7"
-serde_yaml = "0.9"
 strum = "0.26"
 strum_macros = "0.26"
 temp-env = "0.3"

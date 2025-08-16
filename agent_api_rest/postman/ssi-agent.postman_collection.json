@@ -768,7 +768,7 @@
 					"response": []
 				},
 				{
-					"name": "oid4vp_authorization_requests_with_presentation_definition",
+					"name": "oid4vp_authorization_requests_with_dcql_query",
 					"event": [
 						{
 							"listen": "test",
@@ -837,7 +837,7 @@
 					"response": []
 				},
 				{
-					"name": "oid4vp_authorization_requests_with_presentation_definition_id",
+					"name": "oid4vp_authorization_requests_with_dcql_query_id",
 					"event": [
 						{
 							"listen": "test",
@@ -875,7 +875,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"presentation_definition_id\": \"presentation_definition\"\n}",
+							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"dcql_query_id\": \"dcql_credential_id\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"

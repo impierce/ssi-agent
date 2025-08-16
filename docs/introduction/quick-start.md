@@ -218,31 +218,21 @@ Then run:
 curl --location "$UNICORE__APPLICATION_URL/v0/authorization_requests" \
 --header 'Content-Type: application/json' \
 --data '{
-    "nonce": "this is a nonce",
-    "state": "state_id",
-    "presentation_definition": {
-        "id":"Verifiable Presentation request for sign-on",
-        "input_descriptors":[
-            {
-                "id":"Request for Verifiable Credential",
-                "constraints":{
-                    "fields":[
-                        {
-                            "path":[
-                                "$.vc.type"
-                            ],
-                            "filter":{
-                                "type":"array",
-                                "contains":{
-                                    "const":"VerifiableCredential"
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
-    }
+  "nonce": "this is a nonce",
+  "state": "state_id",
+  "dcql_query": {
+    "credentials": [
+      {
+        "id": "CredentialQuery",
+        "format": "jwt_vc_json",
+        "meta": {
+          "type_values": [
+            ["VerifiableCredential"]
+          ]
+        }
+      }
+    ]
+  }
 }'
 ```
 
