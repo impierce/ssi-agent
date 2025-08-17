@@ -117,7 +117,7 @@ impl Aggregate for AuthorizationRequest {
                 let form_url_encoded_authorization_request = oid4vc_core::authorization_request::AuthorizationRequest {
                     custom_url_scheme: "openid".to_string(),
                     body: ByReference {
-                        client_id: verifier_did,
+                        client_id: format!("decentralized_identifier:{}", verifier_did),
                         request_uri,
                     },
                 }
