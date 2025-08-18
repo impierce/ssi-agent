@@ -103,7 +103,8 @@ pub mod tests {
     use super::*;
     use crate::verification::router;
     use agent_secret_manager::service::Service;
-    use agent_store::in_memory::verification_state;
+    use agent_store::in_memory::InMemory;
+    use agent_store::verification_state;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -191,7 +192,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_authorization_requests_endpoint() {
-        let verification_state = verification_state(Service::default(), Default::default()).await;
+        let verification_state = verification_state::<InMemory>(Service::default(), Default::default()).await;
         let mut app = router(verification_state);
 
         let result = authorization_requests(&mut app).await;

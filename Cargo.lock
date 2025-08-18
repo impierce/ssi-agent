@@ -6572,36 +6572,6 @@ dependencies = [
 
 [[package]]
 name = "jsonschema"
-version = "0.17.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a071f4f7efc9a9118dfb627a0a94ef247986e1ab8606a4c806ae2b3aa3b6978"
-dependencies = [
- "ahash 0.8.12",
- "anyhow",
- "base64 0.21.7",
- "bytecount",
- "clap 4.5.40",
- "fancy-regex 0.11.0",
- "fraction 0.13.1",
- "getrandom 0.2.16",
- "iso8601",
- "itoa",
- "memchr",
- "num-cmp",
- "once_cell",
- "parking_lot 0.12.4",
- "percent-encoding",
- "regex",
- "reqwest 0.11.27",
- "serde",
- "serde_json",
- "time",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "jsonschema"
 version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14a655181740aa66dfcb182daca1bc8109fda5c7c0399c4f30dcb155ab0d32a6"
