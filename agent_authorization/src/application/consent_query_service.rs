@@ -48,7 +48,7 @@ impl ConsentQueryService {
             client_name: client.client_name.unwrap_or(client.client_id),
             scope: authorization_request.scope,
             authorization_details: authorization_request.authorization_details,
-            request_uri: request_uri,
+            request_uri,
         })
     }
 }

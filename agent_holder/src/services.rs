@@ -2,7 +2,7 @@ use agent_secret_manager::{service::Service, subject::SubjectExt};
 use agent_shared::config::{
     get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, get_preferred_did_method,
 };
-use oid4vc_core::{Subject, SubjectSyntaxType};
+use oid4vc_core::SubjectSyntaxType;
 use oid4vci::Wallet;
 use std::sync::Arc;
 

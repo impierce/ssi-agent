@@ -12,8 +12,6 @@ use crate::domain::authorization_code::views::AuthorizationCodeView;
 use crate::domain::client::aggregate::Client;
 use crate::domain::client::command::ClientCommand;
 use crate::domain::client::views::ClientView;
-use crate::domain::consent::aggregate::Consent;
-use crate::domain::consent::views::ConsentView;
 use crate::domain::oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest;
 use crate::domain::oauth2_authorization_request::views::OAuth2AuthorizationRequestView;
 
@@ -31,7 +29,6 @@ pub struct CommandHandlers {
     pub oauth2_authorization_request: CommandHandler<OAuth2AuthorizationRequest>,
     pub authorization_code: CommandHandler<AuthorizationCode>,
     pub access_token: CommandHandler<AccessToken>,
-    pub consent: CommandHandler<Consent>,
 }
 
 /// This type is used to define the queries that are used to query the view repositories. We make use of `dyn` here, so
@@ -42,22 +39,19 @@ type Queries = ViewRepositories<
     dyn ViewRepository<OAuth2AuthorizationRequestView, OAuth2AuthorizationRequest>,
     dyn ViewRepository<AuthorizationCodeView, AuthorizationCode>,
     dyn ViewRepository<AccessTokenView, AccessToken>,
-    dyn ViewRepository<ConsentView, Consent>,
 >;
 
-pub struct ViewRepositories<C, OAR, AC, AT, Co>
+pub struct ViewRepositories<C, OAR, AC, AT>
 where
     C: ViewRepository<ClientView, Client> + ?Sized,
     OAR: ViewRepository<OAuth2AuthorizationRequestView, OAuth2AuthorizationRequest> + ?Sized,
     AC: ViewRepository<AuthorizationCodeView, AuthorizationCode> + ?Sized,
     AT: ViewRepository<AccessTokenView, AccessToken> + ?Sized,
-    Co: ViewRepository<ConsentView, Consent> + ?Sized,
 {
     pub client: Arc<C>,
     pub oauth2_authorization_request: Arc<OAR>,
     pub authorization_code: Arc<AC>,
     pub access_token: Arc<AT>,
-    pub consent: Arc<Co>,
 }
 
 impl Clone for Queries {
@@ -67,7 +61,6 @@ impl Clone for Queries {
             oauth2_authorization_request: self.oauth2_authorization_request.clone(),
             authorization_code: self.authorization_code.clone(),
             access_token: self.access_token.clone(),
-            consent: self.consent.clone(),
         }
     }
 }

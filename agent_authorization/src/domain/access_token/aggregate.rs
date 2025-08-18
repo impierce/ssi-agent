@@ -33,9 +33,12 @@ impl Aggregate for AccessToken {
         "access_token".to_string()
     }
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(
+        &self,
+        command: Self::Command,
+        _services: &Self::Services,
+    ) -> Result<Vec<Self::Event>, Self::Error> {
         use AccessTokenCommand::*;
-        use AccessTokenError::*;
         use AccessTokenEvent::*;
 
         info!("Handling command: {:?}", command);
@@ -151,7 +154,6 @@ pub mod token_tests {
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
-    use super::*;
     use rstest::*;
 
     #[fixture]

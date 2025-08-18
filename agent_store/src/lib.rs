@@ -7,9 +7,6 @@ use agent_authorization::domain::authorization_code::views::AuthorizationCodeVie
 use agent_authorization::domain::client::aggregate::Client;
 use agent_authorization::domain::client::views::all_clients::AllClientsView;
 use agent_authorization::domain::client::views::ClientView;
-use agent_authorization::domain::consent::aggregate::Consent;
-use agent_authorization::domain::consent::views::all_consents::AllConsentsView;
-use agent_authorization::domain::consent::views::ConsentView;
 use agent_authorization::domain::oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest;
 use agent_authorization::domain::oauth2_authorization_request::views::all_oauth2_authorization_requests::AllOAuth2AuthorizationRequestsView;
 use agent_authorization::domain::oauth2_authorization_request::views::OAuth2AuthorizationRequestView;
@@ -219,7 +216,6 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
     let Partitions {
         authorization_code_event_publishers,
         client_event_publishers,
-        consent_event_publishers,
         oauth2_authorization_request_event_publishers,
         access_token_event_publishers: token_event_publishers,
         ..
@@ -233,8 +229,6 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
         .await;
     let (client_command_handler, client, _all_clients) =
         CCB::commands_and_queries::<ClientView, Client, AllClientsView>((), client_event_publishers).await;
-    let (consent_command_handler, consent, _all_consents) =
-        CCB::commands_and_queries::<ConsentView, Consent, AllConsentsView>((), consent_event_publishers).await;
     let (
         oauth2_authorization_request_command_handler,
         oauth2_authorization_request,
@@ -253,7 +247,6 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
         command: agent_authorization::state::CommandHandlers {
             authorization_code: authorization_code_command_handler,
             client: client_command_handler,
-            consent: consent_command_handler,
             oauth2_authorization_request: oauth2_authorization_request_command_handler,
             access_token: token_command_handler,
         },
@@ -262,7 +255,6 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
             oauth2_authorization_request,
             authorization_code,
             access_token,
-            consent,
         },
         signer: services.signer.clone(),
     }
@@ -396,7 +388,6 @@ pub type ProfileEventPublisher = Box<dyn Query<Profile>>;
 pub type ServiceEventPublisher = Box<dyn Query<Service>>;
 pub type AuthorizationCodeEventPublisher = Box<dyn Query<AuthorizationCode>>;
 pub type ClientEventPublisher = Box<dyn Query<Client>>;
-pub type ConsentEventPublisher = Box<dyn Query<Consent>>;
 pub type OAuth2AuthorizationRequestEventPublisher = Box<dyn Query<OAuth2AuthorizationRequest>>;
 pub type AccessTokenEventPublisher = Box<dyn Query<AccessToken>>;
 pub type ServerConfigEventPublisher = Box<dyn Query<ServerConfig>>;
@@ -416,7 +407,6 @@ pub struct Partitions {
     pub service_event_publishers: Vec<ServiceEventPublisher>,
     pub authorization_code_event_publishers: Vec<AuthorizationCodeEventPublisher>,
     pub client_event_publishers: Vec<ClientEventPublisher>,
-    pub consent_event_publishers: Vec<ConsentEventPublisher>,
     pub oauth2_authorization_request_event_publishers: Vec<OAuth2AuthorizationRequestEventPublisher>,
     pub access_token_event_publishers: Vec<AccessTokenEventPublisher>,
     pub server_config_event_publishers: Vec<ServerConfigEventPublisher>,
@@ -450,9 +440,6 @@ pub trait EventPublisher {
         None
     }
     fn client(&mut self) -> Option<ClientEventPublisher> {
-        None
-    }
-    fn consent(&mut self) -> Option<ConsentEventPublisher> {
         None
     }
     fn oauth2_authorization_request(&mut self) -> Option<OAuth2AuthorizationRequestEventPublisher> {
@@ -509,9 +496,6 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
             }
             if let Some(client) = event_publisher.client() {
                 partitions.client_event_publishers.push(client);
-            }
-            if let Some(consent) = event_publisher.consent() {
-                partitions.consent_event_publishers.push(consent);
             }
             if let Some(oauth2_authorization_request) = event_publisher.oauth2_authorization_request() {
                 partitions
@@ -610,7 +594,6 @@ mod test {
             service_event_publishers,
             authorization_code_event_publishers,
             client_event_publishers,
-            consent_event_publishers,
             oauth2_authorization_request_event_publishers,
             access_token_event_publishers: token_event_publishers,
             server_config_event_publishers,
@@ -628,7 +611,6 @@ mod test {
         assert_eq!(service_event_publishers.len(), 0);
         assert_eq!(authorization_code_event_publishers.len(), 0);
         assert_eq!(client_event_publishers.len(), 0);
-        assert_eq!(consent_event_publishers.len(), 0);
         assert_eq!(oauth2_authorization_request_event_publishers.len(), 0);
         assert_eq!(token_event_publishers.len(), 0);
         assert_eq!(server_config_event_publishers.len(), 1);

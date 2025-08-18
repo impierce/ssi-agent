@@ -324,6 +324,7 @@ pub mod test_utils {
     }
 
     #[fixture]
+    #[allow(clippy::too_many_arguments)]
     pub fn pushed_authorization_request(
         response_type: String,
         state: String,
