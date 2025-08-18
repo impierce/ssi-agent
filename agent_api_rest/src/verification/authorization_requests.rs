@@ -103,8 +103,7 @@ pub mod tests {
     use super::*;
     use crate::verification::router;
     use agent_secret_manager::service::Service;
-    use agent_store::in_memory::InMemory;
-    use agent_store::verification_state;
+    use agent_store::in_memory::verification_state;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -172,8 +171,7 @@ pub mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let form_url_encoded_authorization_request: String = String::from_utf8(body.to_vec()).unwrap();
-        assert_eq!(form_url_encoded_authorization_request, format!("openid://?client_id=did%3Akey%3Az6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt&request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2F{state}"));
-
+        assert_eq!(form_url_encoded_authorization_request, format!("openid://?client_id=decentralized_identifier%3Adid%3Akey%3Az6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt&request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2F{state}"));
         let response = app
             .call(
                 Request::builder()
@@ -193,12 +191,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_authorization_requests_endpoint() {
-        let verification_state = agent_store::in_memory::verification_state(
-            agent_secret_manager::service::Service::default(),
-            Default::default(),
-        )
-        .await;
-
+        let verification_state = verification_state(Service::default(), Default::default()).await;
         let mut app = router(verification_state);
 
         let result = authorization_requests(&mut app).await;
