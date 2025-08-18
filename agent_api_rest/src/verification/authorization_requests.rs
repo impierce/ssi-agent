@@ -102,6 +102,9 @@ pub(crate) async fn authorization_requests(
 pub mod tests {
     use super::*;
     use crate::verification::router;
+    use agent_secret_manager::service::Service;
+    use agent_store::in_memory::InMemory;
+    use agent_store::verification_state;
     use axum::{
         body::Body,
         http::{self, Request},
