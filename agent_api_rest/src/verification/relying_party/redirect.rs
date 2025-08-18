@@ -65,7 +65,7 @@ pub mod tests {
     use agent_event_publisher_http::EventPublisherHttp;
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{set_config, Events};
-    use agent_store::{in_memory, EventPublisher};
+    use agent_store::{in_memory::InMemory, verification_state, EventPublisher};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -157,7 +157,7 @@ pub mod tests {
 
         let event_publishers = vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>];
 
-        let verification_state = in_memory::verification_state(Service::default(), event_publishers).await;
+        let verification_state = verification_state::<InMemory>(Service::default(), event_publishers).await;
 
         let mut app = router(verification_state);
 
