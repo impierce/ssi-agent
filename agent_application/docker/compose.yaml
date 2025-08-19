@@ -30,12 +30,12 @@ services:
   prometheus:
     image: prom/prometheus
     container_name: prometheus
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yaml"
     ports:
       - 9090:9090
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    profiles:
+      - monitoring
 
   grafana:
     image: grafana/grafana
@@ -51,6 +51,8 @@ services:
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
       - prometheus
+    profiles:
+      - monitoring
 
   ssi-agent:
     image: impiercetechnologies/ssi-agent:1.0.0-beta.8
