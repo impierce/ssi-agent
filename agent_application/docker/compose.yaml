@@ -49,6 +49,8 @@ services:
       - ./monitoring/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
       - ./monitoring/grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
 
   ssi-agent:
     image: impiercetechnologies/ssi-agent:1.0.0-beta.8
