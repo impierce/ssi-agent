@@ -18,7 +18,8 @@ pub(crate) async fn token(
 ) -> Result<Response, PublicError> {
     let token_response = TokenIssuanceService::issue_token(&authorization_state, &issuance_state, token_request)
         .await
-        .expect("FIXME");
+        // TODO: implement proper error handling
+        .map_err(|_err| PublicError::InternalServerError)?;
 
     Ok((StatusCode::OK, Json(token_response)).into_response())
 }
@@ -32,11 +33,12 @@ pub mod tests {
             authorization_server::{
                 authorize::tests::{authorize_after_consent, authorize_before_consent},
                 consent::tests::{get_consent, post_consent},
-                par::tests::{code_verifier, par},
+                par::tests::par,
             },
         },
         issuance::{self, credentials::tests::credentials, offers::tests::offers},
     };
+    use agent_authorization::domain::oauth2_authorization_request::aggregate::test_utils::code_verifier;
     use agent_authorization::state::UNIME_CLIENT_ID;
     use agent_secret_manager::service::Service;
     use agent_store::{authorization_state, in_memory::InMemory, issuance_state};

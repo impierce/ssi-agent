@@ -5,7 +5,7 @@ use crate::{
     },
     state::{AuthorizationState, UNIME_CLIENT_ID},
 };
-use agent_issuance::{application::access_token_validation_service::Claims, state::IssuanceState};
+use agent_issuance::{application::access_token_validation_service::AccessTokenClaims, state::IssuanceState};
 use agent_shared::{
     config::{config, get_preferred_did_method, get_preferred_signing_algorithm},
     handlers::{command_handler, query_handler},
@@ -55,7 +55,7 @@ impl TokenIssuanceService {
 
                 let client_id = client.client_id.clone();
 
-                let command = AuthorizationCodeCommand::RedeemCode {
+                let command = AuthorizationCodeCommand::RedeemAuthorizationCode {
                     client_id: client_id.clone(),
                     redirect_uri,
                     code_verifier,
@@ -107,14 +107,14 @@ impl TokenIssuanceService {
             .expect("FIXME")
             .expect("FIXME");
 
-        let claims = Claims {
+        let claims = AccessTokenClaims {
             iss: config().public_url.to_string(), // FIXME: use DID?
             sub: user_id,
             aud: config().public_url.to_string(),
             exp: access_token_expires_at as u64, // Expiration time in seconds
             iat: issued_at as u64,               // Issued at time in seconds
             jti: access_token_id,
-            scopes,
+            scope: scopes,
             client_id, // UniMe?
             issuer_state,
         };

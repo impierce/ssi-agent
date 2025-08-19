@@ -65,7 +65,6 @@ impl Aggregate for Offer {
             } => {
                 let credential_issuer = config().public_url.clone();
 
-                // FIXME: This should be replaced with a proper pre-authorized code
                 #[cfg(feature = "test_utils")]
                 let pre_authorized_code = test_utils::pre_authorized_code().await;
                 #[cfg(not(feature = "test_utils"))]

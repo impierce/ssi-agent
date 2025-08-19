@@ -29,7 +29,7 @@ impl View<AuthorizationCode> for AuthorizationCode {
                 self.code_challenge.clone_from(code_challenge);
                 self.code_challenge_method.clone_from(code_challenge_method);
                 self.issuer_state.clone_from(issuer_state);
-                self.expires_at = *expires_at;
+                self.expires_at.replace(expires_at.clone());
             }
             AuthorizationCodeRedeemed {
                 authorization_code_id: _,

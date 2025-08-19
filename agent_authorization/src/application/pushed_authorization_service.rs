@@ -58,7 +58,7 @@ impl PushedAuthorizationService {
         let expires_in = 3600; // 1 hour
         let expires_at = chrono::Utc::now().timestamp() + expires_in;
 
-        let command = OAuth2AuthorizationRequestCommand::InitializeFromPushedAuthorizationRequest {
+        let command = OAuth2AuthorizationRequestCommand::CreateOAuth2AuthorizationRequest {
             oauth2_authorization_request_id: oauth2_authorization_request_id.clone(),
             pushed_authorization_request: pushed_authorization_request.clone(),
             expires_at,

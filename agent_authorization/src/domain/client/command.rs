@@ -12,6 +12,7 @@ pub enum ClientCommand {
         policy_uri: Option<String>,
         tos_uri: Option<String>,
         redirect_uris: Vec<Url>,
+        // TODO: implement strong types in `oid4vc` that can be used here.
         grant_types: Vec<String>,
         response_types: Vec<String>,
         token_endpoint_auth_method: String,

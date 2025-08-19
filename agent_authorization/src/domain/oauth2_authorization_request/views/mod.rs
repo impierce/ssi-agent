@@ -10,7 +10,7 @@ impl View<OAuth2AuthorizationRequest> for OAuth2AuthorizationRequest {
         use super::event::OAuth2AuthorizationRequestEvent::*;
 
         match &event.payload {
-            AuthorizationRequestPushed {
+            OAuth2AuthorizationRequestCreated {
                 oauth2_authorization_request_id,
                 response_type,
                 state,

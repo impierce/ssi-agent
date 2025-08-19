@@ -15,6 +15,9 @@ use crate::domain::client::views::ClientView;
 use crate::domain::oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest;
 use crate::domain::oauth2_authorization_request::views::OAuth2AuthorizationRequestView;
 
+/// The client ID for the UniMe client.
+pub const UNIME_CLIENT_ID: &str = "unime-client-id";
+
 #[derive(Clone)]
 pub struct AuthorizationState {
     pub command: CommandHandlers,
@@ -74,8 +77,6 @@ pub async fn initialize(state: &AuthorizationState) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub const UNIME_CLIENT_ID: &str = "unime-client-id";
-
 /// Initialize the default client (UniMe) in the authorization state.
 async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
     if let Some(client) = query_handler(UNIME_CLIENT_ID, &state.query.client).await? {
@@ -86,7 +87,8 @@ async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
             client_id: UNIME_CLIENT_ID.to_string(),
             client_secret: None,
             client_name: Some("UniMe".to_string()),
-            logo_uri: Some("FIXME: add unime logo".to_string()),
+            // TODO: Add UniMe logo URI
+            logo_uri: None,
             policy_uri: None,
             tos_uri: None,
             redirect_uris: vec![

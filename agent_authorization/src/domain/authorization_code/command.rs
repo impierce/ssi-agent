@@ -13,9 +13,9 @@ pub enum AuthorizationCodeCommand {
         code_challenge: Option<String>,
         code_challenge_method: Option<String>,
         issuer_state: Option<String>,
-        expires_in: Option<u64>,
+        expires_in: i64,
     },
-    RedeemCode {
+    RedeemAuthorizationCode {
         client_id: String,
         redirect_uri: Option<Url>,
         code_verifier: Option<String>,

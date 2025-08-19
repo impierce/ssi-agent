@@ -24,13 +24,12 @@ pub(crate) async fn par(
 
 #[cfg(test)]
 pub mod tests {
-    use std::sync::OnceLock;
-
     use super::*;
     use crate::{
         authorization,
         issuance::{self, credentials::tests::credentials, offers::tests::offers},
     };
+    use agent_authorization::domain::oauth2_authorization_request::aggregate::test_utils::code_challenge;
     use agent_authorization::state::UNIME_CLIENT_ID;
     use agent_secret_manager::service::Service;
     use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
@@ -43,25 +42,10 @@ pub mod tests {
         authorization_details::{AuthorizationDetailsObject, CredentialConfigurationOrFormat, OpenidCredential},
         credential_format_profiles::CredentialFormats,
         credential_offer::AuthorizationCode,
-        pkce,
         wallet::PushedAuthorizationResponse,
     };
     use serde_json::json;
     use tower::Service as _;
-
-    static CODE_VERIFIER: OnceLock<Vec<u8>> = OnceLock::new();
-
-    pub fn code_verifier() -> &'static [u8] {
-        CODE_VERIFIER.get_or_init(|| pkce::code_verifier(128))
-    }
-
-    static CODE_CLALLENGE: OnceLock<String> = OnceLock::new();
-
-    pub fn code_challenge() -> String {
-        CODE_CLALLENGE
-            .get_or_init(|| pkce::code_challenge(code_verifier()))
-            .to_owned()
-    }
 
     pub async fn par(app: &mut Router, issuer_state: String) -> String {
         let response = app

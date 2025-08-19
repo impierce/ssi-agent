@@ -5,13 +5,13 @@ use oid4vci::authorization_details::AuthorizationDetailsObject;
 use oid4vci::authorization_details::CredentialConfigurationOrFormat;
 use uuid::Uuid;
 
+// TODO: Add support for `scope` claim.
 /// Represents the view model for the consent page.
 #[derive(Template)]
 #[template(path = "consent.html")]
 pub struct ConsentPageTemplate {
     pub client_name: String,
     pub client_id: String,
-    pub scope: String,
     pub authorization_details: Vec<AuthorizationDetailsObject>,
     pub request_uri: Uuid,
 }

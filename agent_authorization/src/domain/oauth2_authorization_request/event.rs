@@ -8,13 +8,13 @@ use crate::domain::oauth2_authorization_request::aggregate::ConsentStatus;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
 pub enum OAuth2AuthorizationRequestEvent {
-    AuthorizationRequestPushed {
+    OAuth2AuthorizationRequestCreated {
         oauth2_authorization_request_id: String,
         response_type: String,
         state: String,
         client_id: String,
         redirect_uri: Option<Url>,
-        scope: String,
+        scope: Option<String>,
         issuer_state: Option<String>,
 
         // OID4VCI

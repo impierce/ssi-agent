@@ -45,6 +45,9 @@ uuid.workspace = true
 
 [dev-dependencies]
 agent_api_rest = { path = ".", features = ["test_utils"] }
+agent_authorization = { path = "../agent_authorization", features = [
+    "test_utils",
+] }
 agent_event_publisher_http = { path = "../agent_event_publisher_http", features = [
     "test_utils",
 ] }

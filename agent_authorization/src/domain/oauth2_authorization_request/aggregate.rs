@@ -24,7 +24,7 @@ pub struct OAuth2AuthorizationRequest {
     pub state: String,
     pub client_id: String,
     pub redirect_uri: Option<Url>,
-    pub scope: String,
+    pub scope: Option<String>,
     pub issuer_state: Option<String>,
 
     // OID4VCI
@@ -37,8 +37,6 @@ pub struct OAuth2AuthorizationRequest {
     pub code_challenge_method: Option<String>,
 
     pub expires_at: i64,
-    // FIXME?
-    // status: USED/EXPIRED
     pub consent_status: ConsentStatus,
 }
 
@@ -53,60 +51,42 @@ impl Aggregate for OAuth2AuthorizationRequest {
         "oauth2_authorization_request".to_string()
     }
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(
+        &self,
+        command: Self::Command,
+        _services: &Self::Services,
+    ) -> Result<Vec<Self::Event>, Self::Error> {
         use OAuth2AuthorizationRequestCommand::*;
-        use OAuth2AuthorizationRequestError::*;
         use OAuth2AuthorizationRequestEvent::*;
 
         info!("Handling command: {:?}", command);
 
         match command {
-            InitializeFromPushedAuthorizationRequest {
+            CreateOAuth2AuthorizationRequest {
                 oauth2_authorization_request_id,
                 pushed_authorization_request,
                 expires_at,
-            } => Ok(vec![AuthorizationRequestPushed {
+            } => Ok(vec![OAuth2AuthorizationRequestCreated {
                 oauth2_authorization_request_id,
                 response_type: pushed_authorization_request.response_type,
                 state: pushed_authorization_request.state.expect("FIXME"),
                 client_id: pushed_authorization_request.client_id,
                 redirect_uri: pushed_authorization_request.redirect_uri,
-                scope: pushed_authorization_request.scope.expect("FIXME"),
+                scope: pushed_authorization_request.scope,
                 issuer_state: pushed_authorization_request.issuer_state,
                 authorization_details: pushed_authorization_request.authorization_details,
                 code_challenge: pushed_authorization_request.code_challenge,
                 code_challenge_method: pushed_authorization_request.code_challenge_method,
                 expires_at,
             }]),
-            GrantConsent => {
-                if self.consent_status != ConsentStatus::Pending {
-                    todo!("FIXME: Handle already given or rejected consent");
-                    // return Err(ConsentAlreadyGivenOrRejected);
-                }
-
-                println!("Granting consent for request: {}", self.oauth2_authorization_request_id);
-
-                Ok(vec![ConsentGranted {
-                    oauth2_authorization_request_id: self.oauth2_authorization_request_id.clone(),
-                    consent_status: ConsentStatus::Given,
-                }])
-            }
-            RejectConsent => {
-                if self.consent_status != ConsentStatus::Pending {
-                    todo!("FIXME: Handle already given or rejected consent");
-                    // return Err(ConsentAlreadyGivenOrRejected);
-                }
-
-                println!(
-                    "Rejecting consent for request: {}",
-                    self.oauth2_authorization_request_id
-                );
-
-                Ok(vec![ConsentRejected {
-                    oauth2_authorization_request_id: self.oauth2_authorization_request_id.clone(),
-                    consent_status: ConsentStatus::Rejected,
-                }])
-            }
+            GrantConsent => Ok(vec![ConsentGranted {
+                oauth2_authorization_request_id: self.oauth2_authorization_request_id.clone(),
+                consent_status: ConsentStatus::Given,
+            }]),
+            RejectConsent => Ok(vec![ConsentRejected {
+                oauth2_authorization_request_id: self.oauth2_authorization_request_id.clone(),
+                consent_status: ConsentStatus::Rejected,
+            }]),
         }
     }
 
@@ -116,7 +96,7 @@ impl Aggregate for OAuth2AuthorizationRequest {
         debug!("Applying event: {:?}", event);
 
         match event {
-            AuthorizationRequestPushed {
+            OAuth2AuthorizationRequestCreated {
                 oauth2_authorization_request_id,
                 response_type,
                 state,
@@ -171,33 +151,33 @@ pub mod oauth2_authorization_request_tests {
 
     #[rstest]
     #[serial_test::serial]
-    async fn test_initialize_from_par(
+    async fn test_create_oauth2_authorization_request(
         oauth2_authorization_request_id: String,
         pushed_authorization_request: AuthorizationRequest,
         expires_at: i64,
     ) {
         OAuth2AuthorizationRequestTestFramework::with(())
             .given_no_previous_events()
-            .when(
-                OAuth2AuthorizationRequestCommand::InitializeFromPushedAuthorizationRequest {
-                    oauth2_authorization_request_id: oauth2_authorization_request_id.clone(),
-                    pushed_authorization_request: pushed_authorization_request.clone(),
+            .when(OAuth2AuthorizationRequestCommand::CreateOAuth2AuthorizationRequest {
+                oauth2_authorization_request_id: oauth2_authorization_request_id.clone(),
+                pushed_authorization_request: pushed_authorization_request.clone(),
+                expires_at,
+            })
+            .then_expect_events(vec![
+                OAuth2AuthorizationRequestEvent::OAuth2AuthorizationRequestCreated {
+                    oauth2_authorization_request_id,
+                    response_type: pushed_authorization_request.response_type,
+                    state: pushed_authorization_request.state.unwrap(),
+                    client_id: pushed_authorization_request.client_id,
+                    redirect_uri: pushed_authorization_request.redirect_uri,
+                    scope: pushed_authorization_request.scope,
+                    issuer_state: pushed_authorization_request.issuer_state,
+                    authorization_details: pushed_authorization_request.authorization_details,
+                    code_challenge: pushed_authorization_request.code_challenge,
+                    code_challenge_method: pushed_authorization_request.code_challenge_method,
                     expires_at,
                 },
-            )
-            .then_expect_events(vec![OAuth2AuthorizationRequestEvent::AuthorizationRequestPushed {
-                oauth2_authorization_request_id,
-                response_type: pushed_authorization_request.response_type,
-                state: pushed_authorization_request.state.unwrap(),
-                client_id: pushed_authorization_request.client_id,
-                redirect_uri: pushed_authorization_request.redirect_uri,
-                scope: pushed_authorization_request.scope.unwrap(),
-                issuer_state: pushed_authorization_request.issuer_state,
-                authorization_details: pushed_authorization_request.authorization_details,
-                code_challenge: pushed_authorization_request.code_challenge,
-                code_challenge_method: pushed_authorization_request.code_challenge_method,
-                expires_at,
-            }]);
+            ]);
     }
 
     #[rstest]
@@ -229,37 +209,18 @@ pub mod oauth2_authorization_request_tests {
                 consent_status: ConsentStatus::Rejected,
             }]);
     }
-
-    // #[rstest]
-    // #[serial_test::serial]
-    // async fn test_cannot_grant_consent_twice(authorization_request_pushed_event: OAuth2AuthorizationRequestEvent) {
-    //     let request_id = match authorization_request_pushed_event.clone() {
-    //         OAuth2AuthorizationRequestEvent::AuthorizationRequestPushed {
-    //             oauth2_authorization_request_id,
-    //             ..
-    //         } => oauth2_authorization_request_id,
-    //         _ => panic!("Wrong event type"),
-    //     };
-
-    //     let consent_granted_event = OAuth2AuthorizationRequestEvent::ConsentGranted {
-    //         oauth2_authorization_request_id: request_id,
-    //         consent_status: ConsentStatus::Given,
-    //     };
-
-    //     OAuth2AuthorizationRequestTestFramework::with(())
-    //         .given(vec![authorization_request_pushed_event, consent_granted_event])
-    //         .when(OAuth2AuthorizationRequestCommand::GrantConsent)
-    //         .then_expect_error_message("FIXME: Handle already given or rejected consent");
-    // }
 }
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
+    use std::sync::OnceLock;
+
     use super::*;
     use crate::domain::client::aggregate::test_utils::client_id;
     use oid4vci::{
         authorization_details::{CredentialConfigurationOrFormat, OpenidCredential},
         authorization_request::AuthorizationRequest,
+        pkce,
     };
     use rstest::*;
 
@@ -280,7 +241,7 @@ pub mod test_utils {
 
     #[fixture]
     pub fn redirect_uri() -> Option<Url> {
-        "https://client.example.com/cb".parse().ok()
+        "https://client.example.test/cb".parse().ok()
     }
 
     #[fixture]
@@ -306,9 +267,20 @@ pub mod test_utils {
         }]
     }
 
+    static CODE_VERIFIER: OnceLock<Vec<u8>> = OnceLock::new();
+
     #[fixture]
-    pub fn code_challenge() -> Option<String> {
-        Some("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".to_string())
+    pub fn code_verifier() -> &'static [u8] {
+        CODE_VERIFIER.get_or_init(|| pkce::code_verifier(128))
+    }
+
+    static CODE_CLALLENGE: OnceLock<String> = OnceLock::new();
+
+    #[fixture]
+    pub fn code_challenge() -> String {
+        CODE_CLALLENGE
+            .get_or_init(|| pkce::code_challenge(code_verifier()))
+            .to_owned()
     }
 
     #[fixture]
@@ -331,7 +303,7 @@ pub mod test_utils {
         scope: String,
         issuer_state: Option<String>,
         authorization_details: Vec<AuthorizationDetailsObject>,
-        code_challenge: Option<String>,
+        code_challenge: String,
         code_challenge_method: Option<String>,
     ) -> AuthorizationRequest {
         AuthorizationRequest {
@@ -342,7 +314,7 @@ pub mod test_utils {
             scope: Some(scope),
             issuer_state,
             authorization_details,
-            code_challenge,
+            code_challenge: Some(code_challenge),
             code_challenge_method,
         }
     }
@@ -353,13 +325,13 @@ pub mod test_utils {
         pushed_authorization_request: AuthorizationRequest,
         expires_at: i64,
     ) -> OAuth2AuthorizationRequestEvent {
-        OAuth2AuthorizationRequestEvent::AuthorizationRequestPushed {
+        OAuth2AuthorizationRequestEvent::OAuth2AuthorizationRequestCreated {
             oauth2_authorization_request_id,
             response_type: pushed_authorization_request.response_type,
             state: pushed_authorization_request.state.unwrap(),
             client_id: pushed_authorization_request.client_id,
             redirect_uri: pushed_authorization_request.redirect_uri,
-            scope: pushed_authorization_request.scope.unwrap(),
+            scope: pushed_authorization_request.scope,
             issuer_state: pushed_authorization_request.issuer_state,
             authorization_details: pushed_authorization_request.authorization_details,
             code_challenge: pushed_authorization_request.code_challenge,

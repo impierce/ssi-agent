@@ -79,7 +79,7 @@ impl OAuth2AuthorizationService {
                     code_challenge: oauth2_authorization_request.code_challenge,
                     code_challenge_method: oauth2_authorization_request.code_challenge_method,
                     issuer_state: oauth2_authorization_request.issuer_state,
-                    expires_in: Some(600), // 10 minutes
+                    expires_in: 600, // 10 minutes
                 };
 
                 command_handler(&authorization_code_id, &state.command.authorization_code, command)

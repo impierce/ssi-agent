@@ -23,7 +23,6 @@ pub(crate) async fn get_consent(
     let ConsentPageViewModel {
         client_id,
         client_name,
-        scope,
         authorization_details,
         request_uri,
     } = ConsentQueryService::prepare_consent_page_data(&state, request_uri)
@@ -34,7 +33,6 @@ pub(crate) async fn get_consent(
     Ok(HtmlTemplate(ConsentPageTemplate {
         client_name,
         client_id,
-        scope,
         authorization_details,
         request_uri,
     })

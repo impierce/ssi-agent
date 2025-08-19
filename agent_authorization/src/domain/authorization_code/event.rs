@@ -14,7 +14,7 @@ pub enum AuthorizationCodeEvent {
         code_challenge: Option<String>,
         code_challenge_method: Option<String>,
         issuer_state: Option<String>,
-        expires_at: Option<i64>,
+        expires_at: i64,
     },
     AuthorizationCodeRedeemed {
         authorization_code_id: String,

@@ -4,7 +4,7 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum OAuth2AuthorizationRequestCommand {
-    InitializeFromPushedAuthorizationRequest {
+    CreateOAuth2AuthorizationRequest {
         oauth2_authorization_request_id: String,
         pushed_authorization_request: AuthorizationRequest,
         expires_at: i64,

@@ -13,38 +13,35 @@ services:
       POSTGRES_PASSWORD: demo_pass
     volumes:
       - "./db:/docker-entrypoint-initdb.d"
-  # pg-admin:
-  #   image: dpage/pgadmin4
-  #   restart: always
-  #   ports:
-  #     - 5433:80
-  #   environment:
-  #     PGADMIN_DEFAULT_EMAIL: admin@example.org
-  #     PGADMIN_DEFAULT_PASSWORD: admin
-  #   volumes:
-  #     - "./db/pgadmin4/servers.json:/pgadmin4/servers.json"
-  #   depends_on:
-  #     - cqrs-postgres-db
-  # ssi-agent:
-  #   # image: impiercetechnologies/ssi-agent:1.0.0-beta.8
-  #   build:
-  #     context: ../..
-  #     dockerfile: ./agent_application/docker/Dockerfile
-  #   ports:
-  #     - 3033:3033
-  #   environment:
-  #     UNICORE__PROFILE: development
-  #     UNICORE__APPLICATION_URL: http://localhost:3033/
-  #     # UNICORE__APPLICATION_URL: ${UNICORE__APPLICATION_URL}
-  #     UNICORE__EVENT_STORE__CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo
-  #     UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD: "secure_password"
-  #     UNICORE__LOG_FORMAT: text
+  pg-admin:
+    image: dpage/pgadmin4
+    restart: always
+    ports:
+      - 5433:80
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.org
+      PGADMIN_DEFAULT_PASSWORD: admin
+    volumes:
+      - "./db/pgadmin4/servers.json:/pgadmin4/servers.json"
+    depends_on:
+      - cqrs-postgres-db
+  ssi-agent:
+    image: impiercetechnologies/ssi-agent:1.0.0-beta.8
+    # build:
+    #   context: ../..
+    #   dockerfile: ./agent_application/docker/Dockerfile
+    ports:
+      - 3033:3033
+    environment:
+      UNICORE__PROFILE: development
+      UNICORE__APPLICATION_URL: ${UNICORE__APPLICATION_URL}
+      UNICORE__EVENT_STORE__CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo
+      UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD: "secure_password"
 
-  #   volumes:
-  #     # - ../example.config.yaml:/app/config.yaml
-  #     - ../../config:/app/config
-  #     # - ../../agent_secret_manager/tests/res/test.stronghold:/app/stronghold.dat
-  #     # - ../../agent_verification/presentation_definitions:/app/agent_verification/presentation_definitions
-  #     # TODO: Remove this. This is a workaround that ensures that the `agent_verification/presentation_definitions`
-  #     # folder can be accessed by the agent from the `fn authorization_requests` endpoint.
-  #     # - ./tmp:/app/agent_api_rest
+    volumes:
+      - ../example.config.yaml:/app/config.yaml
+      # - ../../agent_secret_manager/tests/res/test.stronghold:/app/stronghold.dat
+      # - ../../agent_verification/presentation_definitions:/app/agent_verification/presentation_definitions
+      # TODO: Remove this. This is a workaround that ensures that the `agent_verification/presentation_definitions`
+      # folder can be accessed by the agent from the `fn authorization_requests` endpoint.
+      # - ./tmp:/app/agent_api_rest

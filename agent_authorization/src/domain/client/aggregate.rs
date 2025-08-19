@@ -54,9 +54,12 @@ impl Aggregate for Client {
         "client".to_string()
     }
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(
+        &self,
+        command: Self::Command,
+        _services: &Self::Services,
+    ) -> Result<Vec<Self::Event>, Self::Error> {
         use ClientCommand::*;
-        use ClientError::*;
         use ClientEvent::*;
 
         info!("Handling command: {:?}", command);
@@ -77,11 +80,7 @@ impl Aggregate for Client {
                 code_challenge_methods_supported,
                 require_pushed_authorization_request,
             } => {
-                // Validate the command parameters here if necessary
-                // if client_id.is_empty() || client_name.is_empty() {
-                // todo!("FIXME: Handle invalid command parameters");
-                // return Err(InvalidCommand("Client ID and name cannot be empty".to_string()));
-                // }
+                // TODO: Validate the command parameters here.
 
                 Ok(vec![ClientRegistered {
                     client_id,
@@ -225,22 +224,22 @@ pub mod test_utils {
 
     #[fixture]
     pub fn logo_uri() -> Option<String> {
-        Some("https://client.example.com/logo.png".to_string())
+        Some("https://client.example.test/logo.png".to_string())
     }
 
     #[fixture]
     pub fn policy_uri() -> Option<String> {
-        Some("https://client.example.com/policy".to_string())
+        Some("https://client.example.test/policy".to_string())
     }
 
     #[fixture]
     pub fn tos_uri() -> Option<String> {
-        Some("https://client.example.com/tos".to_string())
+        Some("https://client.example.test/tos".to_string())
     }
 
     #[fixture]
     pub fn redirect_uris() -> Vec<Url> {
-        vec!["https://client.example.com/cb".parse().unwrap()]
+        vec!["https://client.example.test/cb".parse().unwrap()]
     }
 
     #[fixture]

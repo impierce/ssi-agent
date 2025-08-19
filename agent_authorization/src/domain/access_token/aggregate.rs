@@ -50,7 +50,6 @@ impl Aggregate for AccessToken {
                 refresh_token_expires_in,
                 issuer_state,
             } => {
-                // FIXME: check this!
                 #[cfg(not(test))]
                 let issued_at = chrono::Utc::now().timestamp() as u64;
                 #[cfg(test)]
