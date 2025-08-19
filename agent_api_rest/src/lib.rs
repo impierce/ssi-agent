@@ -55,6 +55,9 @@ pub fn app(
         .merge(identity_state.map(identity::router).unwrap_or_default())
         .merge(
             authorization_state
+                // The `IssuanceState` is cloned here to ensure that the authorization router can access it. This is
+                // necessary since for the Pre-Authorized Code flow, the Token Endpoint requires a shared state with
+                // the Issuance Bounded Context.
                 .zip(issuance_state.clone())
                 .map(authorization::router)
                 .unwrap_or_default(),

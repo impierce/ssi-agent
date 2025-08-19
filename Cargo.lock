@@ -83,12 +83,10 @@ dependencies = [
  "agent_shared",
  "agent_store",
  "agent_verification",
- "anyhow",
  "askama",
  "axum 0.8.3",
  "axum-auth 0.8.1",
  "axum-macros",
- "base64 0.22.1",
  "chrono",
  "cqrs-es",
  "futures",
@@ -165,27 +163,20 @@ dependencies = [
  "async-trait",
  "chrono",
  "cqrs-es",
- "derivative",
- "identity_core",
- "identity_credential",
  "jsonwebtoken",
  "lazy_static",
  "oid4vc-core",
  "oid4vci",
  "once_cell",
- "reqwest 0.12.23",
  "rstest",
  "serde",
  "serde_json",
- "serde_json_path_to_error",
- "serde_with 3.14.0",
  "serial_test",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "thiserror 1.0.69",
  "tracing",
  "tracing-test",
- "types-ob-v3",
  "url",
  "urlencoding",
  "uuid",
@@ -7189,7 +7180,7 @@ dependencies = [
 [[package]]
 name = "macro-derive"
 version = "0.1.0"
-source = "git+https://github.com/impierce/digital-credential-data-models.git?rev=9f16c27#9f16c27b4fa2d413269fc10b38c4ce66a10a0d49"
+source = "git+https://github.com/impierce/digital-credential-data-models?rev=9f16c27#9f16c27b4fa2d413269fc10b38c4ce66a10a0d49"
 dependencies = [
  "convert_case 0.6.0",
  "proc-macro2",
@@ -12550,7 +12541,7 @@ checksum = "1dccffe3ce07af9386bfd29e80c0ab1a8205a2fc34e4bcd40364df902cfa8f3f"
 [[package]]
 name = "types-common"
 version = "0.1.0"
-source = "git+https://github.com/impierce/digital-credential-data-models.git?rev=9f16c27#9f16c27b4fa2d413269fc10b38c4ce66a10a0d49"
+source = "git+https://github.com/impierce/digital-credential-data-models?rev=9f16c27#9f16c27b4fa2d413269fc10b38c4ce66a10a0d49"
 dependencies = [
  "chrono",
  "email_address",
@@ -12565,7 +12556,7 @@ dependencies = [
 [[package]]
 name = "types-ob-v3"
 version = "0.1.0"
-source = "git+https://github.com/impierce/digital-credential-data-models.git?rev=9f16c27#9f16c27b4fa2d413269fc10b38c4ce66a10a0d49"
+source = "git+https://github.com/impierce/digital-credential-data-models?rev=9f16c27#9f16c27b4fa2d413269fc10b38c4ce66a10a0d49"
 dependencies = [
  "chrono",
  "regex",

@@ -19,10 +19,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
-use base64::Engine as _;
 use oid4vci::credential_request::CredentialRequest;
 use oid4vci::errors::CredentialErrorResponse;
-use serde_json::Value;
 use tokio::time::sleep;
 use tracing::error;
 
@@ -34,13 +32,12 @@ pub(crate) async fn credential(
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> Result<Response, PublicError> {
-    let claims = AccessTokenValidationService::validate(&state, &access_token)
+    let offer_id = AccessTokenValidationService::validate(&state, &access_token)
         .await
-        .map_err(|_| PublicError::from(CredentialErrorResponse::InvalidToken))?;
-
-    let offer_id = claims
-        .issuer_state
-        .expect("FIXME: Access token should contain issuer state");
+        .ok()
+        // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
+        .and_then(|claims| claims.issuer_state)
+        .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidToken))?;
 
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
     let (credential_issuer_metadata, authorization_server_metadata) =
@@ -137,6 +134,7 @@ pub(crate) async fn credential(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::authorization;
     use crate::authorization::authorization_server::token::tests::token;
     use crate::issuance::credentials::tests::credentials;
     use crate::issuance::router;
@@ -145,6 +143,7 @@ pub mod tests {
         issuance::{credentials::CredentialsEndpointRequest, offers::tests::offers},
         tests::{CREDENTIAL_CONFIGURATION_ID, OFFER_ID},
     };
+
     use agent_event_publisher_http::EventPublisherHttp;
     use agent_issuance::credential::aggregate::CredentialExpiry;
     use agent_issuance::offer::event::OfferEvent;
@@ -312,21 +311,21 @@ pub mod tests {
     }
 
     #[rstest]
-    #[case::without_external_server(false, false, 0)]
-    #[case::with_external_server(true, false, 0)]
-    #[case::with_external_server_and_self_signed_credential(true, true, 0)]
+    #[case::pre_authorized_code(true, false, false, 0)]
+    #[case::authorization_code(false, false, false, 0)]
+    #[case::with_external_server(true, true, false, 0)]
+    #[case::with_external_server_and_self_signed_credential(true, true, true, 0)]
     #[should_panic(expected = "assertion `left == right` failed\n  left: 500\n right: 200")]
-    #[case::should_panic_due_to_timeout(true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100)]
+    #[case::should_panic_due_to_timeout(true, true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100)]
     #[serial_test::serial]
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
     async fn test_credential_endpoint(
+        #[case] is_pre_authorized: bool,
         #[case] with_external_server: bool,
         #[case] is_self_signed: bool,
         #[case] delay: u64,
     ) {
-        use crate::authorization;
-
         let (external_server, issuance_event_publishers) = if with_external_server {
             let external_server = MockServer::start().await;
 
@@ -369,7 +368,7 @@ pub mod tests {
             credentials(&mut issuance_app).await;
         }
 
-        let grants = offers(&mut issuance_app, true).await.unwrap();
+        let grants = offers(&mut issuance_app, is_pre_authorized).await.unwrap();
 
         let authorization_state = authorization_state::<InMemory>(Service::default(), Default::default()).await;
         agent_authorization::state::initialize(&authorization_state)
@@ -378,7 +377,7 @@ pub mod tests {
 
         let mut authorization_app = authorization::router((authorization_state, issuance_state));
 
-        let access_token: String = token(&mut authorization_app, true, grants).await;
+        let access_token: String = token(&mut authorization_app, is_pre_authorized, grants).await;
 
         let response = issuance_app
             .oneshot(

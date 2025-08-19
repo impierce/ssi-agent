@@ -178,6 +178,7 @@ pub mod tests {
 
         match CredentialOffer::from_str(&body).unwrap() {
             CredentialOffer::CredentialOffer(credential_offer) => {
+                println!("{}:{}", file!(), line!());
                 assert_eq!(credential_offer.credential_configuration_ids, vec!["001".to_string()]);
 
                 let CredentialOfferParameters {
@@ -195,6 +196,7 @@ pub mod tests {
                 Some((authorization_code, pre_authorized_code))
             }
             CredentialOffer::CredentialOfferUri(credential_offer_uri) => {
+                println!("{}:{}", file!(), line!());
                 assert_eq!(
                     credential_offer_uri,
                     url::Url::parse(&format!(
@@ -232,7 +234,11 @@ pub mod tests {
         let mut app = router(issuance_state);
 
         credentials(&mut app).await;
-        let (_authorization_code, _pre_authorized_code) = offers(&mut app, true).await.unwrap();
+        let none = offers(&mut app, true).await;
+
+        // When `credential_offer_by_value_enabled` is false, we expect no grants to be returned from the `offers` test function.
+        assert!(none.is_none());
+
         set_config().credential_offer_by_value_enabled = true;
     }
 }

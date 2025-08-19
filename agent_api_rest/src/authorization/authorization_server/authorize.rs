@@ -10,7 +10,6 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-
 use http::header;
 use oid4vci::wallet::AuthorizationRequestByReference;
 
@@ -21,7 +20,8 @@ pub(crate) async fn authorize(
 ) -> Result<Response, PublicError> {
     match OAuth2AuthorizationService::handle_authorization_request(&state, authorization_request)
         .await
-        .expect("FIXME")
+        // TODO: implement proper error handling
+        .map_err(|_err| PublicError::InternalServerError)?
     {
         OAuth2AuthorizationServiceResponse::RedirectToConsent(location) => Ok(Redirect::to(&location).into_response()),
         OAuth2AuthorizationServiceResponse::RedirectToClient(location) => {
@@ -75,10 +75,6 @@ pub mod tests {
         );
 
         see_other_location.to_string()
-
-        // get_consent(app, see_other_location.to_string()).await;
-
-        // post_consent(app, client_id, request_uri.clone(), true).await
     }
 
     pub async fn authorize_after_consent(app: &mut Router, see_other_location: String) -> String {

@@ -28,11 +28,10 @@ pub(crate) async fn get_consent(
         request_uri,
     } = ConsentQueryService::prepare_consent_page_data(&state, request_uri)
         .await
-        .expect("FIXME");
+        // TODO: implement proper error handling
+        .map_err(|_err| PublicError::InternalServerError)?;
 
-    // FIXME
     Ok(HtmlTemplate(ConsentPageTemplate {
-        title: "Consent to Client Access".to_string(),
         client_name,
         client_id,
         scope,
@@ -59,7 +58,8 @@ pub async fn post_consent(
 ) -> Result<Response, PublicError> {
     match ConsentService::handle_consent(&state, client_id, request_uri, consent_given)
         .await
-        .expect("FIXME")
+        // TODO: implement proper error handling
+        .map_err(|_err| PublicError::InternalServerError)?
     {
         ConsentServiceResponse::Found(location) => {
             info!("Redirecting to location: {}", location);

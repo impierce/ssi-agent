@@ -129,9 +129,13 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
             info!("Initializing server metadata ...");
 
             let command = ServerConfigCommand::InitializeServerMetadata {
+                // TODO: Move this to `agent_authorization`.
                 authorization_server_metadata: Box::new(AuthorizationServerMetadata {
                     issuer: public_url.clone(),
+                    authorization_endpoint: Some(public_url.append_path_segment("auth/authorize")),
                     token_endpoint: Some(public_url.append_path_segment("auth/token")),
+                    pushed_authorization_request_endpoint: Some(public_url.append_path_segment("auth/par")),
+                    require_pushed_authorization_requests: Some(true),
                     ..Default::default()
                 }),
                 credential_issuer_metadata: Box::new(CredentialIssuerMetadata {

@@ -13,9 +13,6 @@ agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
 agent_verification = { path = "../agent_verification" }
 
-base64 = "0.22"
-anyhow.workspace = true
-
 askama = "0.14"
 axum.workspace = true
 axum-auth = "0.8"
@@ -35,7 +32,6 @@ oid4vci.workspace = true
 oid4vp.workspace = true
 rand.workspace = true
 serde.workspace = true
-serde_urlencoded = "0.7"
 serde_with.workspace = true
 serde_json.workspace = true
 siopv2.workspace = true
@@ -45,10 +41,7 @@ tower.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
 url.workspace = true
-urlencoding = "2.1"
 uuid.workspace = true
-
-lazy_static.workspace = true
 
 [dev-dependencies]
 agent_api_rest = { path = ".", features = ["test_utils"] }
@@ -73,13 +66,13 @@ lazy_static.workspace = true
 mime.workspace = true
 oid4vc-core.workspace = true
 oid4vc-manager.workspace = true
-oid4vci.workspace = true
 rstest.workspace = true
 serde_urlencoded = "0.7"
 serial_test = "3.0"
 tower.workspace = true
 tower-http.workspace = true
 tracing-test.workspace = true
+urlencoding = "2.1"
 wiremock.workspace = true
 
 [features]

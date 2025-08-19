@@ -29,7 +29,6 @@ pub fn router(issuance_state: IssuanceState) -> Router {
         .nest(
             API_VERSION,
             Router::new()
-                .route("/credential-offer-page", get(credential_offer_page))
                 .route("/credentials", post(credentials).get(all_credentials))
                 .route(
                     "/credentials/{credential_id}",
@@ -50,52 +49,4 @@ pub fn router(issuance_state: IssuanceState) -> Router {
         .route("/openid4vci/credential-offer/{offer_id}", get(credential_offer_uri))
         .route("/ietf-oauth-token-status-list/{path}", get(token_status_list))
         .with_state(issuance_state)
-}
-
-// FIXME: delete this!
-/// This handler serves a simple HTML page with a button to trigger the credential offer flow on a mobile device.
-async fn credential_offer_page() -> impl axum::response::IntoResponse {
-    // The custom URL scheme link provided in your request.
-    let offer_link = "openid-credential-offer://?credential_offer_uri=http%3A%2F%2F192.168.1.127%3A3033%2Fopenid4vci%2Fcredential-offer%2F001";
-
-    // We create the HTML content directly in the function.
-    // The `<a>` tag is styled to look like a button for a better user experience.
-    let html_content = format!(
-        r#"
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Credential Offer</title>
-    <style>
-        body {{ font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }}
-        .container {{ text-align: center; }}
-        .offer-button {{
-            display: inline-block;
-            padding: 15px 25px;
-            font-size: 24px;
-            font-weight: bold;
-            color: white;
-            background-color: #007bff;
-            border: none;
-            border-radius: 5px;
-            text-decoration: none;
-            cursor: pointer;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>You have a new Credential Offer!</h1>
-        <p>Click the button below to accept it in your wallet.</p>
-        <a href="{}" class="offer-button">Accept Offer</a>
-    </div>
-</body>
-</html>
-"#,
-        offer_link
-    );
-
-    axum::response::Html(html_content)
 }

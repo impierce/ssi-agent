@@ -137,7 +137,6 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_token_endpoint(#[case] is_pre_authorized: bool) {
-        // FIXME: this only tests Authorization Code Grant, not Pre-Authorized Code Grant
         let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();

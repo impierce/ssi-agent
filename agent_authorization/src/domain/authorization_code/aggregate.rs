@@ -3,14 +3,12 @@ use super::error::AuthorizationCodeError;
 use super::event::AuthorizationCodeEvent;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use derivative::Derivative;
 use oid4vci::pkce;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 use url::Url;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
-#[derivative(PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuthorizationCode {
     #[serde(rename = "id")]
     pub authorization_code_id: String,

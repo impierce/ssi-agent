@@ -275,7 +275,6 @@ pub struct ApplicationConfiguration {
                 country: None
             }
         ]"#)]
-    #[config(default)]
     pub display: Vec<Display>,
     #[config(default)]
     pub event_publishers: EventPublishers,

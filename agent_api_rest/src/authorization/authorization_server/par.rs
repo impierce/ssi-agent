@@ -16,7 +16,8 @@ pub(crate) async fn par(
     let pushed_authorization_response =
         PushedAuthorizationService::handle_pushed_authorization_request(&state, pushed_authorization_request)
             .await
-            .expect("FIXME");
+            // TODO: implement proper error handling
+            .map_err(|_err| PublicError::InternalServerError)?;
 
     Ok((StatusCode::CREATED, Json(pushed_authorization_response)).into_response())
 }
@@ -48,7 +49,6 @@ pub mod tests {
     use serde_json::json;
     use tower::Service as _;
 
-    // This initialization is synchronous, so `std::sync::OnceLock` is the correct tool.
     static CODE_VERIFIER: OnceLock<Vec<u8>> = OnceLock::new();
 
     pub fn code_verifier() -> &'static [u8] {
@@ -134,8 +134,5 @@ pub mod tests {
         let mut app = authorization::router((authorization_state, issuance_state));
 
         let _request_uri = par(&mut app, issuer_state).await;
-
-        // FIXME
-        println!(" Request URI: {}", _request_uri);
     }
 }

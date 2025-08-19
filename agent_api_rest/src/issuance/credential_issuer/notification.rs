@@ -29,7 +29,7 @@ pub async fn notification(
 
     let _claims = AccessTokenValidationService::validate(&state, &access_token)
         .await
-        .map_err(|_| PublicError::from(NotificationErrorResponse::InvalidToken))?;
+        .map_err(|_err| PublicError::from(NotificationErrorResponse::InvalidToken))?;
 
     let credentials = match query_handler("all_credentials", &state.query.all_credentials).await? {
         Some(all_credentials) => all_credentials.credentials,

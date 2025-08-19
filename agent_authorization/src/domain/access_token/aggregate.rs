@@ -3,12 +3,10 @@ use super::error::AccessTokenError;
 use super::event::AccessTokenEvent;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
-#[derivative(PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AccessToken {
     #[serde(rename = "id")]
     pub access_token_id: String,
@@ -18,7 +16,6 @@ pub struct AccessToken {
     pub issued_at: u64,
     pub access_token_expires_at: u64,
     pub refresh_token_expires_at: Option<u64>,
-    // FIXME: Required?
     pub issuer_state: Option<String>,
 }
 

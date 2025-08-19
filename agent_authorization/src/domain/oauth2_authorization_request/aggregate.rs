@@ -3,7 +3,6 @@ use super::error::OAuth2AuthorizationRequestError;
 use super::event::OAuth2AuthorizationRequestEvent;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use derivative::Derivative;
 use oid4vci::authorization_details::AuthorizationDetailsObject;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
@@ -17,8 +16,7 @@ pub enum ConsentStatus {
     Rejected,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Derivative)]
-#[derivative(PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OAuth2AuthorizationRequest {
     #[serde(rename = "id")]
     pub oauth2_authorization_request_id: String,

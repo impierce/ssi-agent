@@ -65,12 +65,15 @@ pub trait SubjectExt: oid4vc_core::Subject {
     async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk>;
 }
 
+/// Extension trait for `Subject` to provide additional functionality.
 #[async_trait]
 impl SubjectExt for Subject {
+    /// Resolves the public key for a given DID URL.
     async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk> {
         let did_url =
             identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
 
+        // TODO: Make sure the resolver only needs to be created once.
         let resolver = Resolver::new().await;
 
         let document = resolver
@@ -148,6 +151,7 @@ impl Verify for Subject {
         let did_url =
             identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
 
+        // TODO: Make sure the resolver only needs to be created once.
         let resolver = Resolver::new().await;
 
         let document = resolver

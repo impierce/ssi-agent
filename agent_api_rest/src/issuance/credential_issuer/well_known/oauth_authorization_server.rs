@@ -10,6 +10,7 @@ use axum::{
 };
 use http_api_problem::ApiError;
 
+// TODO: move this to `authorization/authorization_server/well_known.rs`!
 #[axum_macros::debug_handler]
 pub(crate) async fn oauth_authorization_server(State(state): State<IssuanceState>) -> Result<Response, ApiError> {
     match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
@@ -59,7 +60,10 @@ mod tests {
             authorization_server_metadata,
             AuthorizationServerMetadata {
                 issuer: "https://my-domain.example.org/".parse().unwrap(),
+                authorization_endpoint: Some("https://my-domain.example.org/auth/authorize".parse().unwrap()),
                 token_endpoint: Some("https://my-domain.example.org/auth/token".parse().unwrap()),
+                pushed_authorization_request_endpoint: Some("https://my-domain.example.org/auth/par".parse().unwrap()),
+                require_pushed_authorization_requests: Some(true),
                 ..Default::default()
             }
         );
