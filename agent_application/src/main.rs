@@ -72,44 +72,47 @@ async fn main() -> io::Result<()> {
         issuance_state: Some(issuance_state),
         holder_state: Some(holder_state),
         verification_state: Some(verification_state),
-    })
-    // Metrics layer
-    .route_layer(axum::middleware::from_fn(track_metrics));
+    });
 
     let metadata_state = metadata::MetadataState {
         startup_instant: std::time::Instant::now(),
     };
 
-    let metadata_router = axum::Router::new()
+    // Add metadata routes
+    let mut metadata_router = axum::Router::new()
         .route("/version", axum::routing::get(metadata::version::version))
         .route("/info", axum::routing::get(metadata::info::info))
         .route("/v0/configuration", axum::routing::get(metadata::config::configuration))
         .with_state(metadata_state);
+
+    if config().metrics_enabled {
+        metadata_router = metadata_router.route_layer(axum::middleware::from_fn(track_metrics));
+    }
+
     let app = metadata_router.merge(app);
 
+    // Add probes routes
     let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
     let app = probes_router.merge(app);
 
     let port = config().application_url.port().unwrap_or(3033);
 
-    // let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
-    // info!("HTTP API served at {}", config().application_url);
-    // axum::serve(listener, app).await?;
+    let app_handle = tokio::spawn(start_server("app".to_string(), app, port));
 
-    tokio::join!(
-        start_server("app".to_string(), app, port),
-        // The `/metrics` endpoint should not be publicly available. If behind a reverse proxy, this
-        // can be achieved by rejecting requests to `/metrics`. In this example, a second server is
-        // started on another port to expose `/metrics`.
-        start_server("metrics".to_string(), metrics(), 9090)
-    );
+    if config().metrics_enabled {
+        let metrics_handle = tokio::spawn(start_server("metrics".to_string(), metrics(), config().metrics_port));
+        let _ = tokio::join!(app_handle, metrics_handle);
+    } else {
+        let _ = app_handle.await;
+    }
 
     Ok(())
 }
 
-/// Start a server for a given router on a given port.
+/// Start a server for a given `Router` on a given port.
 async fn start_server(alias: String, router: axum::Router, port: u16) {
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await.unwrap();
-    info!("`{alias}` server listening on {}", listener.local_addr().unwrap());
+    info!("`{alias}` served at {}", listener.local_addr().unwrap());
+    // info!("HTTP API served at {}", config().application_url);
     axum::serve(listener, router).await.unwrap();
 }

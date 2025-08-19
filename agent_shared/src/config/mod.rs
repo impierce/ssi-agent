@@ -184,6 +184,10 @@ pub struct ApplicationConfiguration {
     pub redirect_uri: Url,
     #[config(default)]
     pub cors_enabled: bool,
+    #[config(default, production_default = "true")]
+    pub metrics_enabled: bool,
+    #[config(default = "9090")]
+    pub metrics_port: u16,
     #[config(
         default,
         development_default = "HashMap::from(
