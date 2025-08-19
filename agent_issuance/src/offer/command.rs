@@ -17,6 +17,10 @@ pub enum OfferCommand {
         grant_types: Vec<GrantType>,
         credential_configuration_ids: Vec<String>,
     },
+    UpdateGrantTypes {
+        offer_id: String,
+        grant_types: Vec<GrantType>,
+    },
     AddCredentials {
         offer_id: String,
         credential_ids: Vec<String>,

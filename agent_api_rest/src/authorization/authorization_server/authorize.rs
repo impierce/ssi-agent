@@ -94,7 +94,14 @@ pub mod tests {
         let found_location = response.headers().get("Location").unwrap().to_str().unwrap();
         assert!(found_location.starts_with("unime://callback?code="));
 
-        let code = found_location.split("code=").nth(1).unwrap().to_string();
+        let code = found_location
+            .split("code=")
+            .nth(1)
+            .unwrap()
+            .split('&')
+            .next()
+            .unwrap()
+            .to_string();
 
         code
     }

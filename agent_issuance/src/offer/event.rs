@@ -18,6 +18,12 @@ pub enum OfferEvent {
         pre_authorized_code: String,
         status: Status,
     },
+    GrantTypesUpdated {
+        offer_id: String,
+        credential_offer: CredentialOffer,
+        grant_types: Vec<GrantType>,
+        status: Status,
+    },
     CredentialsAdded {
         offer_id: String,
         credential_ids: Vec<String>,

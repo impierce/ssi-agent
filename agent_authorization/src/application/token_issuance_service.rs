@@ -3,7 +3,7 @@ use crate::{
         access_token::{command::AccessTokenCommand, views::AccessTokenView},
         authorization_code::command::AuthorizationCodeCommand,
     },
-    state::{AuthorizationState, UNIME_CLIENT_ID},
+    state::AuthorizationState,
 };
 use agent_issuance::{application::access_token_validation_service::AccessTokenClaims, state::IssuanceState};
 use agent_shared::{
@@ -13,7 +13,22 @@ use agent_shared::{
 use jsonwebtoken;
 use oid4vc_core::jwt;
 use oid4vci::{token_request::TokenRequest, token_response::TokenResponse};
-use uuid::Uuid;
+use thiserror::Error;
+
+// TODO: improve error handling
+#[derive(Debug, Error)]
+pub enum TokenIssuanceError {
+    #[error("Invalid client ID")]
+    InvalidClientIdError,
+    #[error("Invalid authorization code: {0}")]
+    InvalidAuthorizationCodeError(String),
+    #[error("Missing authorization code")]
+    MissingAuthorizationCodeError,
+    #[error("Missing access token")]
+    MissingAccessTokenError,
+    #[error("Internal error: {0}")]
+    Internal(String),
+}
 
 pub struct TokenIssuanceService {}
 
@@ -22,25 +37,30 @@ impl TokenIssuanceService {
         authorization_state: &AuthorizationState,
         issuance_state: &IssuanceState,
         token_request: TokenRequest,
-        // FIX ME
-    ) -> Result<TokenResponse, ()> {
+    ) -> Result<TokenResponse, TokenIssuanceError> {
         let (client_id, issuer_state) = match token_request {
             TokenRequest::PreAuthorizedCode {
                 pre_authorized_code,
+                // TODO: Support Transaction Code
                 tx_code: _tx_code,
             } => {
                 let issuer_state = query_handler("all_offers", &issuance_state.query.all_offers)
                     .await
-                    .expect("FIXME")
-                    .expect("FIXME")
+                    .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?
+                    .unwrap_or_default()
                     .offers
                     .into_iter()
                     .find_map(|(offer_id, offer)| {
                         (offer.pre_authorized_code == pre_authorized_code).then_some(offer_id)
                     });
 
-                // FIXME: Replace with actual client ID and issuer state
-                (UNIME_CLIENT_ID.to_string(), issuer_state)
+                // TODO: The `client_id` claim in the Pre-Authorized Code request is optional (see https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-15.html#section-6.1-5),
+                // but it is required in the JSON Web Token (JWT) Profile for OAuth 2.0 Access Tokens
+                // (see https://datatracker.ietf.org/doc/html/rfc9068#section-2.2-2.10). So as a temporary workaround,
+                // we will use a placeholder client ID. This is not ideal, but it is ok for now since the Access Token
+                // is opaque to the Client, and it is validated by the Credential Issuer which for now is the same as
+                // the Authorization Server.
+                ("client_id".to_string(), issuer_state)
             }
             TokenRequest::AuthorizationCode {
                 client_id,
@@ -50,8 +70,8 @@ impl TokenIssuanceService {
             } => {
                 let client = query_handler(&client_id, &authorization_state.query.client)
                     .await
-                    .expect("FIXME")
-                    .expect("FIXME");
+                    .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?
+                    .ok_or(TokenIssuanceError::InvalidClientIdError)?;
 
                 let client_id = client.client_id.clone();
 
@@ -63,35 +83,40 @@ impl TokenIssuanceService {
 
                 command_handler(&code, &authorization_state.command.authorization_code, command)
                     .await
-                    .expect("Failed to handle command");
+                    .map_err(|err| TokenIssuanceError::InvalidAuthorizationCodeError(err.to_string()))?;
 
                 let issuer_state = query_handler(&code, &authorization_state.query.authorization_code)
                     .await
-                    .expect("FIXME")
-                    .expect("FIXME")
+                    .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?
+                    // This error should never happen, since we just redeemed the authorization code.
+                    .ok_or_else(|| TokenIssuanceError::MissingAuthorizationCodeError)?
                     .issuer_state;
 
                 (client_id, issuer_state)
             }
         };
 
-        let access_token_id = Uuid::new_v4().to_string();
+        let access_token_id = uuid::Uuid::new_v4().to_string();
 
         let access_token_expires_in = 3600; // 1 hour
 
         let command = AccessTokenCommand::IssueAccessToken {
             access_token_id: access_token_id.clone(),
-            user_id: "authenticated_user_id".to_string(), // FIXME: Replace with actual authenticated user ID
+            // TODO: Since we do not support user authentication yet, we will use a placeholder user ID. When we do
+            // support user authentication, for example through SIOPv2, then this value will be the user's DID.
+            user_id: "user_id".to_string(),
             client_id,
-            scopes: None, // FIXME: Replace with actual scopes
+            // TODO: support scopes
+            scopes: None,
             access_token_expires_in: access_token_expires_in.clone(),
-            refresh_token_expires_in: Some(7200), // 2 hours
-            issuer_state,                         // FIXME: Replace with actual issuer state if needed
+            // TODO: support refresh tokens
+            refresh_token_expires_in: None,
+            issuer_state,
         };
 
         command_handler(&access_token_id, &authorization_state.command.access_token, command)
             .await
-            .expect("Failed to issue access token");
+            .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?;
 
         let AccessTokenView {
             access_token_id,
@@ -100,22 +125,25 @@ impl TokenIssuanceService {
             scopes,
             issued_at,
             access_token_expires_at,
-            refresh_token_expires_at,
+            // TODO: support refresh tokens
+            refresh_token_expires_at: _refresh_token_expires_at,
             issuer_state,
         } = query_handler(&access_token_id, &authorization_state.query.access_token)
             .await
-            .expect("FIXME")
-            .expect("FIXME");
+            .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?
+            .ok_or(TokenIssuanceError::MissingAccessTokenError)?;
 
         let claims = AccessTokenClaims {
-            iss: config().public_url.to_string(), // FIXME: use DID?
+            // TODO: Could/should this be a DID?
+            iss: config().public_url.to_string(),
             sub: user_id,
+            // TODO: Could/should this be a DID?
             aud: config().public_url.to_string(),
-            exp: access_token_expires_at as u64, // Expiration time in seconds
-            iat: issued_at as u64,               // Issued at time in seconds
+            exp: access_token_expires_at as u64,
+            iat: issued_at as u64,
             jti: access_token_id,
             scope: scopes,
-            client_id, // UniMe?
+            client_id,
             issuer_state,
         };
 
@@ -127,12 +155,13 @@ impl TokenIssuanceService {
             &get_preferred_did_method().to_string(),
         )
         .await
-        .expect("FIXME: Failed to encode JWT");
+        .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?;
 
         Ok(TokenResponse {
             access_token,
-            token_type: "bearer".to_string(), // FIXME: should this be included in the Aggregate?
-            expires_in: Some(access_token_expires_in), // 1 hour FIXME: check all the timestamp stuff properly
+            // TODO: should this be included in the aggregate?
+            token_type: "bearer".to_string(),
+            expires_in: Some(access_token_expires_in),
             scope: None,
             refresh_token: None,
         })

@@ -3,7 +3,6 @@ use axum::response::{Html, IntoResponse, Response};
 use http::StatusCode;
 use oid4vci::authorization_details::AuthorizationDetailsObject;
 use oid4vci::authorization_details::CredentialConfigurationOrFormat;
-use uuid::Uuid;
 
 // TODO: Add support for `scope` claim.
 /// Represents the view model for the consent page.
@@ -13,7 +12,7 @@ pub struct ConsentPageTemplate {
     pub client_name: String,
     pub client_id: String,
     pub authorization_details: Vec<AuthorizationDetailsObject>,
-    pub request_uri: Uuid,
+    pub request_uri: String,
 }
 
 /// Wrapper for HTML templates to implement the `IntoResponse` trait

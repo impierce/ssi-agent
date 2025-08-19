@@ -9,8 +9,6 @@ pub enum AuthorizationCodeEvent {
         authorization_code_id: String,
         client_id: String,
         redirect_uri: Url,
-        scope: Option<String>,
-        user_id: String,
         code_challenge: Option<String>,
         code_challenge_method: Option<String>,
         issuer_state: Option<String>,

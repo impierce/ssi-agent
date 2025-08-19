@@ -13,9 +13,7 @@ pub struct AuthorizationCode {
     #[serde(rename = "id")]
     pub authorization_code_id: String,
     pub client_id: String,
-    pub user_id: String,
     pub redirect_uri: Option<Url>,
-    pub scope: Option<String>,
     pub code_challenge: Option<String>,
     pub code_challenge_method: Option<String>,
     pub issuer_state: Option<String>,
@@ -49,9 +47,7 @@ impl Aggregate for AuthorizationCode {
             CreateAuthorizationCode {
                 authorization_code_id,
                 client_id,
-                user_id,
                 redirect_uri,
-                scope,
                 code_challenge,
                 code_challenge_method,
                 issuer_state,
@@ -66,8 +62,6 @@ impl Aggregate for AuthorizationCode {
                     authorization_code_id: authorization_code_id.clone(),
                     client_id,
                     redirect_uri,
-                    scope,
-                    user_id,
                     code_challenge,
                     code_challenge_method,
                     issuer_state,
@@ -133,8 +127,6 @@ impl Aggregate for AuthorizationCode {
                 authorization_code_id,
                 client_id,
                 redirect_uri,
-                scope,
-                user_id,
                 code_challenge,
                 code_challenge_method,
                 issuer_state,
@@ -143,8 +135,6 @@ impl Aggregate for AuthorizationCode {
                 self.authorization_code_id = authorization_code_id;
                 self.client_id = client_id;
                 self.redirect_uri.replace(redirect_uri);
-                self.scope = scope;
-                self.user_id = user_id;
                 self.code_challenge = code_challenge;
                 self.code_challenge_method = code_challenge_method;
                 self.issuer_state = issuer_state;
@@ -166,9 +156,9 @@ pub mod authorization_code_tests {
     use super::test_utils::*;
     use super::*;
     use crate::domain::oauth2_authorization_request::aggregate::test_utils::{
-        code_challenge, code_challenge_method, code_verifier, redirect_uri, scope,
+        code_challenge, code_challenge_method, code_verifier, redirect_uri,
     };
-    use agent_authorization::domain::access_token::aggregate::test_utils::{client_id, issuer_state, user_id};
+    use agent_authorization::domain::access_token::aggregate::test_utils::{client_id, issuer_state};
     use cqrs_es::test::TestFramework;
     use rstest::rstest;
 
@@ -178,9 +168,7 @@ pub mod authorization_code_tests {
     #[serial_test::serial]
     async fn test_create_authorization_code(
         authorization_code_id: String,
-        user_id: String,
         client_id: String,
-        scope: String,
         code_challenge: String,
         code_challenge_method: Option<String>,
         redirect_uri: Option<Url>,
@@ -193,9 +181,7 @@ pub mod authorization_code_tests {
             .when(AuthorizationCodeCommand::CreateAuthorizationCode {
                 authorization_code_id: authorization_code_id.clone(),
                 client_id: client_id.clone(),
-                user_id: user_id.clone(),
                 redirect_uri: redirect_uri.clone().unwrap(),
-                scope: Some(scope.clone()),
                 code_challenge: Some(code_challenge.clone()),
                 code_challenge_method: code_challenge_method.clone(),
                 issuer_state: issuer_state.clone(),
@@ -205,8 +191,6 @@ pub mod authorization_code_tests {
                 authorization_code_id,
                 client_id,
                 redirect_uri: redirect_uri.unwrap(),
-                scope: Some(scope),
-                user_id,
                 code_challenge: Some(code_challenge),
                 code_challenge_method,
                 issuer_state,
@@ -218,9 +202,7 @@ pub mod authorization_code_tests {
     #[serial_test::serial]
     async fn test_redeem_authorization_code(
         authorization_code_id: String,
-        user_id: String,
         client_id: String,
-        scope: String,
         code_challenge: String,
         code_challenge_method: Option<String>,
         issuer_state: Option<String>,
@@ -233,8 +215,6 @@ pub mod authorization_code_tests {
                 authorization_code_id: authorization_code_id.clone(),
                 client_id: client_id.clone(),
                 redirect_uri: redirect_uri.clone().unwrap(),
-                scope: Some(scope.clone()),
-                user_id: user_id.clone(),
                 code_challenge: Some(code_challenge),
                 code_challenge_method,
                 issuer_state,
@@ -255,9 +235,7 @@ pub mod authorization_code_tests {
     #[serial_test::serial]
     async fn test_redeem_authorization_code_twice(
         authorization_code_id: String,
-        user_id: String,
         client_id: String,
-        scope: String,
         code_challenge: String,
         code_challenge_method: Option<String>,
         issuer_state: Option<String>,
@@ -271,8 +249,6 @@ pub mod authorization_code_tests {
                     authorization_code_id: authorization_code_id.clone(),
                     client_id: client_id.clone(),
                     redirect_uri: redirect_uri.clone().unwrap(),
-                    scope: Some(scope.clone()),
-                    user_id: user_id.clone(),
                     code_challenge: Some(code_challenge),
                     code_challenge_method,
                     issuer_state,
@@ -296,9 +272,7 @@ pub mod authorization_code_tests {
     #[serial_test::serial]
     async fn test_redeem_expired_authorization_code(
         authorization_code_id: String,
-        user_id: String,
         client_id: String,
-        scope: String,
         code_challenge: String,
         code_challenge_method: Option<String>,
         issuer_state: Option<String>,
@@ -310,8 +284,6 @@ pub mod authorization_code_tests {
                 authorization_code_id: authorization_code_id.clone(),
                 client_id: client_id.clone(),
                 redirect_uri: redirect_uri.clone().unwrap(),
-                scope: Some(scope.clone()),
-                user_id: user_id.clone(),
                 code_challenge: Some(code_challenge),
                 code_challenge_method,
                 issuer_state,
@@ -330,9 +302,7 @@ pub mod authorization_code_tests {
     #[serial_test::serial]
     async fn test_redeem_authorization_code_with_invalid_client_id(
         authorization_code_id: String,
-        user_id: String,
         client_id: String,
-        scope: String,
         code_challenge: String,
         code_challenge_method: Option<String>,
         issuer_state: Option<String>,
@@ -345,8 +315,6 @@ pub mod authorization_code_tests {
                 authorization_code_id: authorization_code_id.clone(),
                 client_id,
                 redirect_uri: redirect_uri.clone().unwrap(),
-                scope: Some(scope.clone()),
-                user_id: user_id.clone(),
                 code_challenge: Some(code_challenge),
                 code_challenge_method,
                 issuer_state,
@@ -365,9 +333,7 @@ pub mod authorization_code_tests {
     #[serial_test::serial]
     async fn test_redeem_authorization_code_with_invalid_redirect_uri(
         authorization_code_id: String,
-        user_id: String,
         client_id: String,
-        scope: String,
         code_challenge: String,
         code_challenge_method: Option<String>,
         issuer_state: Option<String>,
@@ -380,8 +346,6 @@ pub mod authorization_code_tests {
                 authorization_code_id: authorization_code_id.clone(),
                 client_id: client_id.clone(),
                 redirect_uri: redirect_uri.unwrap(),
-                scope: Some(scope.clone()),
-                user_id: user_id.clone(),
                 code_challenge: Some(code_challenge),
                 code_challenge_method,
                 issuer_state,
@@ -400,9 +364,7 @@ pub mod authorization_code_tests {
     #[serial_test::serial]
     async fn test_redeem_authorization_code_with_missing_code_verifier(
         authorization_code_id: String,
-        user_id: String,
         client_id: String,
-        scope: String,
         code_challenge: String,
         code_challenge_method: Option<String>,
         issuer_state: Option<String>,
@@ -414,8 +376,6 @@ pub mod authorization_code_tests {
                 authorization_code_id: authorization_code_id.clone(),
                 client_id: client_id.clone(),
                 redirect_uri: redirect_uri.clone().unwrap(),
-                scope: Some(scope.clone()),
-                user_id: user_id.clone(),
                 code_challenge: Some(code_challenge),
                 code_challenge_method,
                 issuer_state,
@@ -434,9 +394,7 @@ pub mod authorization_code_tests {
     #[serial_test::serial]
     async fn test_redeem_authorization_code_with_invalid_code_verifier(
         authorization_code_id: String,
-        user_id: String,
         client_id: String,
-        scope: String,
         code_challenge: String,
         code_challenge_method: Option<String>,
         issuer_state: Option<String>,
@@ -448,8 +406,6 @@ pub mod authorization_code_tests {
                 authorization_code_id: authorization_code_id.clone(),
                 client_id: client_id.clone(),
                 redirect_uri: redirect_uri.clone().unwrap(),
-                scope: Some(scope.clone()),
-                user_id: user_id.clone(),
                 code_challenge: Some(code_challenge),
                 code_challenge_method,
                 issuer_state,

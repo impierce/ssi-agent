@@ -3215,7 +3215,6 @@ dependencies = [
 [[package]]
 name = "dif-presentation-exchange"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?branch=feat/authorization-code-flow#972255bfdafbda891572597a6519311662624f2d"
 dependencies = [
  "getset",
  "jsonpath_lib",
@@ -8118,7 +8117,6 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?branch=feat/authorization-code-flow#972255bfdafbda891572597a6519311662624f2d"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8142,7 +8140,6 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?branch=feat/authorization-code-flow#972255bfdafbda891572597a6519311662624f2d"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8175,7 +8172,6 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?branch=feat/authorization-code-flow#972255bfdafbda891572597a6519311662624f2d"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8204,7 +8200,6 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?branch=feat/authorization-code-flow#972255bfdafbda891572597a6519311662624f2d"
 dependencies = [
  "anyhow",
  "chrono",
@@ -10899,7 +10894,6 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?branch=feat/authorization-code-flow#972255bfdafbda891572597a6519311662624f2d"
 dependencies = [
  "anyhow",
  "async-trait",

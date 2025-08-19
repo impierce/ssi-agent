@@ -126,6 +126,7 @@ impl Aggregate for Offer {
                 let token_request = match credential_offer.grants.clone() {
                     Some(Grants {
                         pre_authorized_code: Some(pre_authorized_code),
+                        // TODO: support `authorization_code` grant type.
                         ..
                     }) => TokenRequest::PreAuthorizedCode {
                         pre_authorized_code: pre_authorized_code.pre_authorized_code,

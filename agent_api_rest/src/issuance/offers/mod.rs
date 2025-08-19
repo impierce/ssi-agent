@@ -71,17 +71,21 @@ pub(crate) async fn offers(
         vec![GrantType::AuthorizationCode]
     };
 
-    // FIXME: I only commented this out because of the Authorization Code test.
-    // // Create an offer if it does not exist yet.
-    // if query_handler(&offer_id, &state.query.offer).await?.is_none() {
-    let command = OfferCommand::CreateCredentialOffer {
-        offer_id: offer_id.clone(),
-        grant_types,
-        credential_configuration_ids,
+    // Create an offer if it does not exist yet.
+    let command = if query_handler(&offer_id, &state.query.offer).await?.is_none() {
+        OfferCommand::CreateCredentialOffer {
+            offer_id: offer_id.clone(),
+            grant_types,
+            credential_configuration_ids,
+        }
+    } else {
+        OfferCommand::UpdateGrantTypes {
+            offer_id: offer_id.clone(),
+            grant_types,
+        }
     };
 
     command_handler(&offer_id, &state.command.offer, command).await?;
-    // };
 
     query_handler(&offer_id, &state.query.offer)
         .await?
@@ -178,7 +182,6 @@ pub mod tests {
 
         match CredentialOffer::from_str(&body).unwrap() {
             CredentialOffer::CredentialOffer(credential_offer) => {
-                println!("{}:{}", file!(), line!());
                 assert_eq!(credential_offer.credential_configuration_ids, vec!["001".to_string()]);
 
                 let CredentialOfferParameters {
@@ -196,7 +199,6 @@ pub mod tests {
                 Some((authorization_code, pre_authorized_code))
             }
             CredentialOffer::CredentialOfferUri(credential_offer_uri) => {
-                println!("{}:{}", file!(), line!());
                 assert_eq!(
                     credential_offer_uri,
                     url::Url::parse(&format!(

@@ -3,7 +3,7 @@ use crate::issuance::error::PublicError;
 use crate::utils::StringifiedQuery;
 use agent_authorization::application::consent_query_service::{ConsentPageViewModel, ConsentQueryService};
 use agent_authorization::application::consent_service::{ConsentService, ConsentServiceResponse};
-use agent_authorization::application::oauth2_authorization_service::GetLoginQuery;
+use agent_authorization::application::oauth2_authorization_service::GetConsentQuery;
 use agent_authorization::state::AuthorizationState;
 use axum::Form;
 use axum::{
@@ -13,12 +13,11 @@ use axum::{
 use http::{header, StatusCode};
 use serde::{Deserialize, Serialize};
 use tracing::info;
-use uuid::Uuid;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn get_consent(
     State(state): State<AuthorizationState>,
-    StringifiedQuery(GetLoginQuery { request_uri }): StringifiedQuery<GetLoginQuery>,
+    StringifiedQuery(GetConsentQuery { request_uri }): StringifiedQuery<GetConsentQuery>,
 ) -> Result<Response, PublicError> {
     let ConsentPageViewModel {
         client_id,
@@ -42,7 +41,7 @@ pub(crate) async fn get_consent(
 #[derive(Serialize, Deserialize)]
 pub struct ConsentForm {
     pub client_id: String,
-    pub request_uri: Uuid,
+    pub request_uri: String,
     pub consent_given: bool,
 }
 

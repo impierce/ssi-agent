@@ -93,7 +93,7 @@ pub mod tests {
         let pushed_authorization_response: PushedAuthorizationResponse = serde_json::from_slice(&body).unwrap();
         assert_eq!(pushed_authorization_response.expires_in, 3600);
 
-        pushed_authorization_response.request_uri.urn().to_string()
+        pushed_authorization_response.request_uri
     }
 
     #[serial_test::serial]
