@@ -67,7 +67,7 @@ async fn main() -> io::Result<()> {
     agent_identity::state::initialize(&identity_state).await.unwrap();
     agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-    let app = app(ApplicationState {
+    let mut app = app(ApplicationState {
         identity_state: Some(identity_state),
         issuance_state: Some(issuance_state),
         holder_state: Some(holder_state),
@@ -79,21 +79,21 @@ async fn main() -> io::Result<()> {
     };
 
     // Add metadata routes
-    let mut metadata_router = axum::Router::new()
+    let metadata_router = axum::Router::new()
         .route("/version", axum::routing::get(metadata::version::version))
         .route("/info", axum::routing::get(metadata::info::info))
         .route("/v0/configuration", axum::routing::get(metadata::config::configuration))
         .with_state(metadata_state);
 
-    if config().metrics_enabled {
-        metadata_router = metadata_router.route_layer(axum::middleware::from_fn(track_metrics));
-    }
-
-    let app = metadata_router.merge(app);
+    app = metadata_router.merge(app);
 
     // Add probes routes
     let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
-    let app = probes_router.merge(app);
+    app = probes_router.merge(app);
+
+    if config().metrics_enabled {
+        app = app.route_layer(axum::middleware::from_fn(track_metrics));
+    }
 
     let port = config().application_url.port().unwrap_or(3033);
 
