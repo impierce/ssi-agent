@@ -184,10 +184,14 @@ pub struct ApplicationConfiguration {
     pub redirect_uri: Url,
     #[config(default)]
     pub cors_enabled: bool,
-    #[config(default, production_default = "true")]
-    pub metrics_enabled: bool,
-    #[config(default = "9090")]
-    pub metrics_port: u16,
+    #[config(
+        default,
+        development_default = "Metrics {
+            enabled: false,
+            port: 9090
+        }"
+    )]
+    pub metrics: Metrics,
     #[config(
         default,
         development_default = "HashMap::from(
@@ -627,6 +631,22 @@ pub enum AuthorizationRequestEvent {
     AuthorizationRequestObjectSigned,
     SIOPv2AuthorizationResponseVerified,
     OID4VPAuthorizationResponseVerified,
+}
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+#[serde(default)]
+pub struct Metrics {
+    pub enabled: bool,
+    pub port: u16,
+}
+
+impl Default for Metrics {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            port: 9090,
+        }
+    }
 }
 
 /// All DID methods supported by UniCore

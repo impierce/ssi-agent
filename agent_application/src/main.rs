@@ -67,7 +67,7 @@ async fn main() -> io::Result<()> {
     agent_identity::state::initialize(&identity_state).await.unwrap();
     agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-    let mut app = app(ApplicationState {
+    let app = app(ApplicationState {
         identity_state: Some(identity_state),
         issuance_state: Some(issuance_state),
         holder_state: Some(holder_state),
@@ -85,22 +85,22 @@ async fn main() -> io::Result<()> {
         .route("/v0/configuration", axum::routing::get(metadata::config::configuration))
         .with_state(metadata_state);
 
-    app = metadata_router.merge(app);
+    let app = metadata_router.merge(app);
 
     // Add probes routes
     let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
-    app = probes_router.merge(app);
+    let mut app = probes_router.merge(app);
 
-    if config().metrics_enabled {
+    if config().metrics.enabled {
         app = app.route_layer(axum::middleware::from_fn(track_metrics));
     }
 
     let port = config().application_url.port().unwrap_or(3033);
 
-    let app_handle = tokio::spawn(start_server("app".to_string(), app, port));
+    let app_handle = tokio::spawn(start_server("HTTP API".to_string(), app, port));
 
-    if config().metrics_enabled {
-        let metrics_handle = tokio::spawn(start_server("metrics".to_string(), metrics(), config().metrics_port));
+    if config().metrics.enabled {
+        let metrics_handle = tokio::spawn(start_server("Metrics".to_string(), metrics(), config().metrics.port));
         let _ = tokio::join!(app_handle, metrics_handle);
     } else {
         let _ = app_handle.await;
@@ -112,7 +112,11 @@ async fn main() -> io::Result<()> {
 /// Start a server for a given `Router` on a given port.
 async fn start_server(alias: String, router: axum::Router, port: u16) {
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await.unwrap();
-    info!("`{alias}` served at {}", listener.local_addr().unwrap());
-    // info!("HTTP API served at {}", config().application_url);
+    // Log the URL defined in the config for the HTTP API
+    if alias == "HTTP API" {
+        info!("HTTP API served at {}", config().application_url);
+    } else {
+        info!("{alias} served at {}", listener.local_addr().unwrap());
+    }
     axum::serve(listener, router).await.unwrap();
 }
