@@ -8,19 +8,25 @@ rust-version.workspace = true
 agent_shared = { path = "../agent_shared" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 
+anyhow.workspace = true
 async-trait.workspace = true
 cqrs-es.workspace = true
 chrono.workspace = true
-types-ob-v3 = { git = "https://github.com/impierce/digital-credential-data-models.git", rev = "9f16c27" }
-derivative = "2.2"
+types-ob-v3 = { git = "https://github.com/impierce/digital-credential-data-models", rev = "9f16c27" }
+derivative.workspace = true
 identity_core.workspace = true
 identity_credential.workspace = true
 jsonwebtoken.workspace = true
+oauth_tsl.workspace = true
 oid4vci.workspace = true
 oid4vc-core.workspace = true
+rand.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_json_path_to_error.workspace = true
+strum.workspace = true
+strum_macros.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 url.workspace = true
@@ -33,17 +39,13 @@ rstest = { workspace = true, optional = true }
 [dev-dependencies]
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_issuance = { path = ".", features = ["test_utils"] }
-agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }
+agent_secret_manager = { path = "../agent_secret_manager", features = [
+    "test_utils",
+] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
-
-did_manager.workspace = true
 serial_test = "3.0"
 tracing-test.workspace = true
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 
 [features]
-test_utils = [
-    "dep:lazy_static",
-    "dep:once_cell",
-    "dep:rstest",
-]
+test_utils = ["dep:lazy_static", "dep:once_cell", "dep:rstest"]

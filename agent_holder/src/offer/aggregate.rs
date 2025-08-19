@@ -13,7 +13,7 @@ use oid4vci::token_response::TokenResponse;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum Status {
@@ -251,7 +251,7 @@ impl Aggregate for Offer {
     fn apply(&mut self, event: Self::Event) {
         use OfferEvent::*;
 
-        info!("Applying event: {:?}", event);
+        debug!("Applying event: {:?}", event);
 
         match event {
             CredentialOfferReceived {
@@ -289,8 +289,10 @@ pub mod tests {
     use agent_api_rest::API_VERSION;
     use agent_issuance::offer::aggregate::test_utils::token_response;
     use agent_issuance::server_config::aggregate::test_utils::credential_configurations_supported;
-    use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
+    use agent_shared::config::config;
+    use agent_shared::config::config_mut;
     use agent_shared::generate_random_string;
     use agent_store::in_memory;
     use axum::{
@@ -310,8 +312,17 @@ pub mod tests {
         let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
         let issuer_url = format!("http://{}", listener.local_addr().unwrap());
 
+        config_mut().application_url = issuer_url.parse().unwrap();
+
+        let application_url = config().application_url.clone();
+
+        config_mut().public_url = application_url.clone();
+        config_mut().token_endpoint = application_url.join("auth/token").unwrap();
+        config_mut().credential_endpoint = application_url.join("openid4vci/credential").unwrap();
+        config_mut().credential_offer_uri = application_url.join("openid4vci/credential-offer/").unwrap();
+
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
-        initialize(&issuance_state, startup_commands(issuer_url.parse().unwrap())).await;
+        initialize(&issuance_state).await.unwrap();
 
         let received_offer_id = generate_random_string();
 
@@ -321,7 +332,7 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri(&format!("{issuer_url}{API_VERSION}/credentials"))
+                    .uri(format!("{issuer_url}{API_VERSION}/credentials"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
@@ -335,7 +346,7 @@ pub mod tests {
                                         "name": "Master of Oceanography"
                                     }
                             }},
-                            "credentialConfigurationId": "badge",
+                            "credentialConfigurationId": "001",
                             "expiresAt": "never"
                         }))
                         .unwrap(),
@@ -348,7 +359,7 @@ pub mod tests {
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri(&format!("{issuer_url}{API_VERSION}/offers"))
+                    .uri(format!("{issuer_url}{API_VERSION}/offers"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
@@ -516,6 +527,6 @@ pub mod test_utils {
 
     #[fixture]
     pub fn signed_credentials(holder_credential_id: String) -> Vec<OfferCredential> {
-        vec![OfferCredential { holder_credential_id, credential: Jwt::from("eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjoiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJkZWdyZWUiOnsidHlwZSI6Ik1hc3RlckRlZ3JlZSIsIm5hbWUiOiJNYXN0ZXIgb2YgT2NlYW5vZ3JhcGh5In0sImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4ifSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiJ9fQ.jUt911ms74K282EUQSbisnOZGf1ALUvpnTJfJ1PSwp6sBcoStZTX52H6k5b6o6nNRvBr6nxQWkywib_S0AzACQ".to_string())}]
+        vec![OfferCredential { holder_credential_id, credential: Jwt::from("eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ekRuYWVSd1Q0ZzZBWkNIenh2Tkw3RExqcVRhVDg4YW00WFI2VFVHcktyNkRYajZUeiIsIm5iZiI6MTI2MjMwNDAwMCwiaWF0IjoxMjYyMzA0MDAwLCJ2YyI6eyJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSJdLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6RG5hZVJ3VDRnNkFaQ0h6eHZOTDdETGpxVGFUODhhbTRYUjZUVUdyS3I2RFhqNlR6IiwiZGVncmVlIjp7InR5cGUiOiJNYXN0ZXJEZWdyZWUiLCJuYW1lIjoiTWFzdGVyIG9mIE9jZWFub2dyYXBoeSJ9LCJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIn0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJjcmVkZW50aWFsU3RhdHVzIjp7ImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWR4IjoxMjMsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCJ9fSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7ImlkeCI6MTIzLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAifX19.6oVjfN06dzQmd2oCVBm9lgOkhL0mLIHn-I8vUB0OX3n7MbjhIWjjfA_6SSvcofGGLj-BFt1fMCDUy1VriCviAA".to_string())}]
     }
 }

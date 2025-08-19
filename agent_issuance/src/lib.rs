@@ -8,7 +8,6 @@ pub mod offer;
 pub mod server_config;
 
 pub mod services;
-pub mod startup_commands;
 pub mod state;
 
 pub struct SimpleLoggingQuery {}

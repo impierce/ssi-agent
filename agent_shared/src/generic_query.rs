@@ -13,7 +13,7 @@ where
     V: View<A>,
 {
     let mut generic_query = GenericQuery::new(view_repository);
-    generic_query.use_error_handler(Box::new(|e| println!("{}", e)));
+    generic_query.use_error_handler(Box::new(|e| println!("{e}")));
 
     generic_query
 }

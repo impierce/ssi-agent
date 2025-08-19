@@ -9,11 +9,11 @@ use crate::{
 use agent_shared::config::{config, get_preferred_signing_algorithm};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use oid4vc_core::{authorization_request::ByReference, scope::Scope};
+use oid4vc_core::{authorization_request::ByReference, client_metadata::ClientMetadataResource, scope::Scope};
 use oid4vp::{authorization_request::ClientIdScheme, Oid4vpParams};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{debug, info};
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct AuthorizationRequest {
@@ -56,11 +56,31 @@ impl Aggregate for AuthorizationRequest {
                     .await
                     .unwrap();
 
-                let url = &config().url;
-                let request_uri = format!("{url}request/{state}").parse().unwrap();
-                let redirect_uri = format!("{url}redirect").parse::<url::Url>().unwrap();
+                let mut request_uri = config().request_uri.clone();
+                if let Ok(mut path_segments) = request_uri.path_segments_mut() {
+                    path_segments.pop_if_empty();
+                    path_segments.push(&state);
+                }
+
+                let redirect_uri = config().redirect_uri.clone();
 
                 let authorization_request = Box::new(if let Some(presentation_definition) = presentation_definition {
+                    let mut oid4vp_client_metadata = services.oid4vp_client_metadata.clone();
+                    if let ClientMetadataResource::ClientMetadata {
+                        ref mut client_name,
+                        ref mut logo_uri,
+                        ..
+                    } = oid4vp_client_metadata
+                    {
+                        // TODO: remove this once the Identity Bounded Context is the single source of truth for display data.
+                        // This is a temporary workaround to ensure the credential issuer metadata has the correct display information.
+                        *client_name = Some(config().display.first().map(|d| d.name.clone()).unwrap_or_default());
+                        *logo_uri = config()
+                            .display
+                            .first()
+                            .and_then(|d| d.logo.as_ref().and_then(|l| l.uri.clone()));
+                    }
+
                     GenericAuthorizationRequest::OID4VP(Box::new(
                         OID4VPAuthorizationRequest::builder()
                             .client_id(verifier_did.clone())
@@ -69,20 +89,36 @@ impl Aggregate for AuthorizationRequest {
                             .redirect_uri(redirect_uri)
                             .response_mode("direct_post".to_string())
                             .presentation_definition(presentation_definition)
-                            .client_metadata(services.oid4vp_client_metadata.clone())
+                            .client_metadata(oid4vp_client_metadata)
                             .state(state)
                             .nonce(nonce)
                             .build()
                             .map_err(AuthorizationRequestBuilderError)?,
                     ))
                 } else {
+                    let mut siopv2_client_metadata = services.siopv2_client_metadata.clone();
+                    if let ClientMetadataResource::ClientMetadata {
+                        ref mut client_name,
+                        ref mut logo_uri,
+                        ..
+                    } = siopv2_client_metadata
+                    {
+                        // TODO: remove this once the Identity Bounded Context is the single source of truth for display data.
+                        // This is a temporary workaround to ensure the credential issuer metadata has the correct display information.
+                        *client_name = Some(config().display.first().map(|d| d.name.clone()).unwrap_or_default());
+                        *logo_uri = config()
+                            .display
+                            .first()
+                            .and_then(|d| d.logo.as_ref().and_then(|l| l.uri.clone()));
+                    }
+
                     GenericAuthorizationRequest::SIOPv2(Box::new(
                         SIOPv2AuthorizationRequest::builder()
                             .client_id(verifier_did.clone())
                             .scope(Scope::openid())
                             .redirect_uri(redirect_uri)
                             .response_mode("direct_post".to_string())
-                            .client_metadata(services.siopv2_client_metadata.clone())
+                            .client_metadata(siopv2_client_metadata)
                             .state(state)
                             .nonce(nonce)
                             .build()
@@ -162,7 +198,7 @@ impl Aggregate for AuthorizationRequest {
 
                         let vp_token = match oid4vp_authorization_response.extension.oid4vp_parameters {
                             Oid4vpParams::Params { vp_token, .. } => vp_token,
-                            Oid4vpParams::Jwt { .. } => return Err(UnsupportedJwtParameterError),
+                            Oid4vpParams::Jwt { .. } => return Err(UnsupportedAuthorizationResponseParameterError),
                         };
 
                         Ok(vec![OID4VPAuthorizationResponseVerified {
@@ -178,7 +214,7 @@ impl Aggregate for AuthorizationRequest {
     fn apply(&mut self, event: Self::Event) {
         use AuthorizationRequestEvent::*;
 
-        info!("Applying event: {:?}", event);
+        debug!("Applying event: {:?}", event);
 
         match event {
             AuthorizationRequestCreated { authorization_request } => {
@@ -212,7 +248,6 @@ impl Aggregate for AuthorizationRequest {
 pub mod tests {
     use std::str::FromStr;
 
-    use agent_secret_manager::secret_manager;
     use agent_secret_manager::service::Service as _;
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::set_config;
@@ -228,6 +263,7 @@ pub mod tests {
     use oid4vc_manager::ProviderManager;
     use oid4vci::VerifiableCredentialJwt;
     use oid4vp::oid4vp::AuthorizationResponseInput;
+    use oid4vp::oid4vp::PresentationInputType;
     use oid4vp::PresentationDefinition;
     use rstest::rstest;
     use serde_json::json;
@@ -239,10 +275,9 @@ pub mod tests {
     #[rstest]
     #[serial_test::serial]
     async fn test_create_authorization_request(
-        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
-        verifier_did_method: SupportedDidMethod,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
     ) {
-        set_config().set_preferred_did_method(verifier_did_method.clone());
+        set_config().set_preferred_did_method(verifier_did_method);
 
         let verification_services = VerificationServices::default();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
@@ -278,10 +313,9 @@ pub mod tests {
     #[rstest]
     #[serial_test::serial]
     async fn test_sign_authorization_request_object(
-        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
-        verifier_did_method: SupportedDidMethod,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
     ) {
-        set_config().set_preferred_did_method(verifier_did_method.clone());
+        set_config().set_preferred_did_method(verifier_did_method);
 
         let verification_services = VerificationServices::default();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
@@ -320,12 +354,10 @@ pub mod tests {
         // "id_token" represents the `SIOPv2` flow, and "vp_token" represents the `OID4VP` flow.
         #[values("id_token", "vp_token")] response_type: &str,
         // TODO: add `did:web`, check for other tests as well. Probably should be moved to E2E test.
-        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
-        verifier_did_method: SupportedDidMethod,
-        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk, SupportedDidMethod::IotaRms)]
-        provider_did_method: SupportedDidMethod,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] provider_did_method: SupportedDidMethod,
     ) {
-        set_config().set_preferred_did_method(verifier_did_method.clone());
+        set_config().set_preferred_did_method(verifier_did_method);
 
         let verification_services = VerificationServices::default();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
@@ -366,16 +398,8 @@ pub mod tests {
         did_method: &str,
         authorization_request: &GenericAuthorizationRequest,
     ) -> GenericAuthorizationResponse {
-        let provider_manager = ProviderManager::new(
-            Arc::new(futures::executor::block_on(async {
-                Subject {
-                    secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
-                }
-            })),
-            vec![did_method],
-            vec![Algorithm::EdDSA],
-        )
-        .unwrap();
+        let provider_manager =
+            ProviderManager::new(Arc::new(Subject::default()), vec![did_method], vec![Algorithm::ES256]).unwrap();
 
         let default_did_method = provider_manager.default_subject_syntax_types()[0].to_string();
 
@@ -427,6 +451,7 @@ pub mod tests {
 
                 // Create presentation submission using the presentation definition and the verifiable credential.
                 let presentation_submission = create_presentation_submission(
+                    "temporary_string".to_string(),
                     &PRESENTATION_DEFINITION,
                     &[serde_json::to_value(&verifiable_credential).unwrap()],
                 )
@@ -444,7 +469,9 @@ pub mod tests {
                         .generate_response(
                             oid4vp_authorization_request,
                             AuthorizationResponseInput {
-                                verifiable_presentation,
+                                verifiable_presentation_input: PresentationInputType::Presentation(Box::new(
+                                    verifiable_presentation,
+                                )),
                                 presentation_submission,
                             },
                         )
@@ -531,7 +558,6 @@ pub mod tests {
         match did_method {
             "did:key" => FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_KEY.to_string(),
             "did:jwk" => FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_JWK.to_string(),
-            "did:iota:rms" => FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_IOTA.to_string(),
             _ => unimplemented!("Unknown DID method: {}", did_method),
         }
     }
@@ -540,17 +566,12 @@ pub mod tests {
         match did_method {
             "did:key" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_KEY.to_string(),
             "did:jwk" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK.to_string(),
-            "did:iota:rms" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_IOTA.to_string(),
             _ => unimplemented!("Unknown DID method: {}", did_method),
         }
     }
 
     lazy_static! {
-        pub static ref VERIFIER: Subject = futures::executor::block_on(async {
-            Subject {
-                secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
-            }
-        });
+        pub static ref VERIFIER: Subject = Subject::default();
         pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
         pub static ref PRESENTATION_DEFINITION: PresentationDefinition = serde_json::from_value(json!(
             {
@@ -587,11 +608,6 @@ pub mod tests {
         openid://?\
             client_id=did%3Ajwk%3AeyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ&\
             request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2Fstate";
-    const FORM_URL_ENCODED_AUTHORIZATION_REQUEST_DID_IOTA: &str = "\
-        openid://?\
-            client_id=did%3Aiota%3Arms%3A0x42ad588322e58b3c07aa39e4948d021ee17ecb5747915e9e1f35f028d7ecaf90&\
-            request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2Fstate";
-    const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_KEY: &str = "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCN6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifQ.eyJjbGllbnRfaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInJlZGlyZWN0X3VyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL3JlZGlyZWN0Iiwic3RhdGUiOiJzdGF0ZSIsInJlc3BvbnNlX3R5cGUiOiJpZF90b2tlbiIsInNjb3BlIjoib3BlbmlkIiwicmVzcG9uc2VfbW9kZSI6ImRpcmVjdF9wb3N0Iiwibm9uY2UiOiJub25jZSIsImNsaWVudF9tZXRhZGF0YSI6eyJjbGllbnRfbmFtZSI6IlVuaUNvcmUiLCJsb2dvX3VyaSI6Imh0dHBzOi8vaW1waWVyY2UuY29tL2ltYWdlcy9mYXZpY29uL2FwcGxlLXRvdWNoLWljb24ucG5nIiwic3ViamVjdF9zeW50YXhfdHlwZXNfc3VwcG9ydGVkIjpbImRpZDpqd2siLCJkaWQ6a2V5IiwiZGlkOmlvdGE6cm1zIl0sImlkX3Rva2VuX3NpZ25lZF9yZXNwb25zZV9hbGciOiJFZERTQSIsImlkX3Rva2VuX3NpZ25pbmdfYWxnX3ZhbHVlc19zdXBwb3J0ZWQiOlsiRWREU0EiXX19.r9N36FoNOJPn7XkH468lLBUf2zzaM3GIg3tVASt1gDktkL5_bbmWsfZEQ0dWu2M1_iSud76r-gBxS-0qw-0fCg";
-    const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK: &str = "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2NUaFZiR2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVVYQjJNRWxHVUVWaVpFMURTVXhPWDFVaWZRIzAifQ.eyJjbGllbnRfaWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2NUaFZiR2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVVYQjJNRWxHVUVWaVpFMURTVXhPWDFVaWZRIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzcG9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGFkYXRhIjp7ImNsaWVudF9uYW1lIjoiVW5pQ29yZSIsImxvZ29fdXJpIjoiaHR0cHM6Ly9pbXBpZXJjZS5jb20vaW1hZ2VzL2Zhdmljb24vYXBwbGUtdG91Y2gtaWNvbi5wbmciLCJzdWJqZWN0X3N5bnRheF90eXBlc19zdXBwb3J0ZWQiOlsiZGlkOmp3ayIsImRpZDprZXkiLCJkaWQ6aW90YTpybXMiXSwiaWRfdG9rZW5fc2lnbmVkX3Jlc3BvbnNlX2FsZyI6IkVkRFNBIiwiaWRfdG9rZW5fc2lnbmluZ19hbGdfdmFsdWVzX3N1cHBvcnRlZCI6WyJFZERTQSJdfX0.AU72_fUX8Q2j_NWfOf9iXLwfZasjpIqVax1U_svyDDizmV_9sttFZpdQ4QjkOxrrUOGmp_KOqZQb0dcg6kpsAA";
-    const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_IOTA: &str = "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJkaWQ6aW90YTpybXM6MHg0MmFkNTg4MzIyZTU4YjNjMDdhYTM5ZTQ5NDhkMDIxZWUxN2VjYjU3NDc5MTVlOWUxZjM1ZjAyOGQ3ZWNhZjkwI2JRS1FSemFvcDdDZ0V2cVZxOFVsZ0xHc2RGLVItaG5MRmtLRlpxVzJWTjAifQ.eyJjbGllbnRfaWQiOiJkaWQ6aW90YTpybXM6MHg0MmFkNTg4MzIyZTU4YjNjMDdhYTM5ZTQ5NDhkMDIxZWUxN2VjYjU3NDc5MTVlOWUxZjM1ZjAyOGQ3ZWNhZjkwIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzcG9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGFkYXRhIjp7ImNsaWVudF9uYW1lIjoiVW5pQ29yZSIsImxvZ29fdXJpIjoiaHR0cHM6Ly9pbXBpZXJjZS5jb20vaW1hZ2VzL2Zhdmljb24vYXBwbGUtdG91Y2gtaWNvbi5wbmciLCJzdWJqZWN0X3N5bnRheF90eXBlc19zdXBwb3J0ZWQiOlsiZGlkOmp3ayIsImRpZDprZXkiLCJkaWQ6aW90YTpybXMiXSwiaWRfdG9rZW5fc2lnbmVkX3Jlc3BvbnNlX2FsZyI6IkVkRFNBIiwiaWRfdG9rZW5fc2lnbmluZ19hbGdfdmFsdWVzX3N1cHBvcnRlZCI6WyJFZERTQSJdfX0.ri-s-jWYuQ8_1UVtgRBq4-1KB76e8XL7RWj1ttsyqjANIClbptABqDZiBPqX-fcmjuhHYygTFG9qZ2Sl3hgpBQ";
+    const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_KEY: &str = "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJkaWQ6a2V5OnpEbmFlUndUNGc2QVpDSHp4dk5MN0RManFUYVQ4OGFtNFhSNlRVR3JLcjZEWGo2VHojekRuYWVSd1Q0ZzZBWkNIenh2Tkw3RExqcVRhVDg4YW00WFI2VFVHcktyNkRYajZUeiJ9.eyJjbGllbnRfaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInJlZGlyZWN0X3VyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL3JlZGlyZWN0Iiwic3RhdGUiOiJzdGF0ZSIsInJlc3BvbnNlX3R5cGUiOiJpZF90b2tlbiIsInNjb3BlIjoib3BlbmlkIiwicmVzcG9uc2VfbW9kZSI6ImRpcmVjdF9wb3N0Iiwibm9uY2UiOiJub25jZSIsImNsaWVudF9tZXRhZGF0YSI6eyJjbGllbnRfbmFtZSI6IlVuaUNvcmUiLCJsb2dvX3VyaSI6Imh0dHBzOi8vd3d3LmltcGllcmNlLmNvbS9leHRlcm5hbC9pbXBpZXJjZS1pY29uLnBuZyIsInN1YmplY3Rfc3ludGF4X3R5cGVzX3N1cHBvcnRlZCI6WyJkaWQ6andrIiwiZGlkOmtleSJdLCJpZF90b2tlbl9zaWduZWRfcmVzcG9uc2VfYWxnIjoiRVMyNTYiLCJpZF90b2tlbl9zaWduaW5nX2FsZ192YWx1ZXNfc3VwcG9ydGVkIjpbIkVTMjU2IiwiRWREU0EiXX19.blBC3CrvKp2lTEsT-L_LwssLyeUm00JD0__n0TiEsDR63iQY__QOKjWG5eqEnDtmHhxgE7aRh9Nf5INo20mFEw";
+    const SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK: &str = "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaWIwOVpNbVJOVmxVM1IwczFZV3d4Y1RkRlFYaDFiMWxzYjNoTlVXeDJOVnBPV2s5aGRHbFZXRkZJWnlJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWtadGF6RXpaMDh5VTBkTVluVllaVXd5TkhGS1VFaERUbTVqYmtrMmJFSjFObHBSVERKRlZscDJORVVpTENKNUlqb2labm95UzNaTmFIVm1lbFZ3VFdWTU9TMUxNbkpsT1daM1FUTnRlbWN4WW5CbVltTmxTVkZUZFdsb1dTSjkjMCJ9.eyJjbGllbnRfaWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSmlVVXRSVW5waGIzQTNRMmRGZG5GV2NUaFZiR2RNUjNOa1JpMVNMV2h1VEVaclMwWmFjVmN5Vms0d0lpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklrZHNia3M1WlZCek9EQXlXSGhCWjJ4U1QxRjZiMGQxY20wNVVYQjJNRWxHVUVWaVpFMURTVXhPWDFVaWZRIiwicmVkaXJlY3RfdXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvcmVkaXJlY3QiLCJzdGF0ZSI6InN0YXRlIiwicmVzcG9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6Im5vbmNlIiwiY2xpZW50X21ldGFkYXRhIjp7ImNsaWVudF9uYW1lIjoiVW5pQ29yZSIsImxvZ29fdXJpIjoiaHR0cHM6Ly93d3cuaW1waWVyY2UuY29tL2V4dGVybmFsL2ltcGllcmNlLWljb24ucG5nIiwic3ViamVjdF9zeW50YXhfdHlwZXNfc3VwcG9ydGVkIjpbImRpZDpqd2siLCJkaWQ6a2V5Il0sImlkX3Rva2VuX3NpZ25lZF9yZXNwb25zZV9hbGciOiJFUzI1NiIsImlkX3Rva2VuX3NpZ25pbmdfYWxnX3ZhbHVlc19zdXBwb3J0ZWQiOlsiRVMyNTYiLCJFZERTQSJdfX0.Ts-MAI9gGZcX12RtANn-3B6vvRWinElNqmfnx0YkDUIe6cLC3TudLuQLbjcLahvwyVSbz_46oIPWpll19W3ylA";
 }

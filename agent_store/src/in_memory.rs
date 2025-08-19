@@ -1,6 +1,4 @@
-use crate::{partition_event_publishers, EventPublisher, Partitions};
-use agent_holder::{services::HolderServices, state::HolderState};
-use agent_identity::{services::IdentityServices, state::IdentityState};
+use crate::{partition_event_publishers, AggregateHandler, CqrsComponentBuilder, EventPublisher, Partitions};
 use agent_issuance::{
     offer::{
         aggregate::Offer,
@@ -14,7 +12,6 @@ use agent_issuance::{
     SimpleLoggingQuery,
 };
 use agent_shared::{application_state::Command, custom_queries::ListAllQuery, generic_query::generic_query};
-use agent_verification::{services::VerificationServices, state::VerificationState};
 use async_trait::async_trait;
 use cqrs_es::{
     mem_store::MemStore,
@@ -66,30 +63,7 @@ where
     }
 }
 
-struct AggregateHandler<A>
-where
-    A: Aggregate,
-{
-    pub cqrs: CqrsFramework<A, MemStore<A>>,
-}
-
-#[async_trait]
-impl<A> Command<A> for AggregateHandler<A>
-where
-    A: Aggregate,
-    <A as Aggregate>::Command: Send,
-{
-    async fn execute_with_metadata(
-        &self,
-        aggregate_id: &str,
-        command: A::Command,
-        metadata: HashMap<String, String>,
-    ) -> Result<(), cqrs_es::AggregateError<A::Error>> {
-        self.cqrs.execute_with_metadata(aggregate_id, command, metadata).await
-    }
-}
-
-impl<A> AggregateHandler<A>
+impl<A> AggregateHandler<A, MemStore<A>>
 where
     A: Aggregate,
     <A as Aggregate>::Command: Send,
@@ -99,84 +73,42 @@ where
             cqrs: CqrsFramework::new(MemStore::default(), vec![], services),
         }
     }
+}
 
-    fn append_query<Q>(self, query: Q) -> Self
+pub struct InMemory;
+
+impl CqrsComponentBuilder for InMemory {
+    async fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
+        services: A::Services,
+        event_publishers: Vec<Box<dyn Query<A>>>,
+    ) -> (
+        Arc<dyn Command<A> + Send + Sync>,
+        Arc<dyn ViewRepository<V, A>>,
+        Arc<dyn ViewRepository<AV, A>>,
+    )
     where
-        Q: Query<A> + 'static,
+        <A as Aggregate>::Command: Send + Sync,
     {
-        Self {
-            cqrs: self.cqrs.append_query(Box::new(query)),
-        }
-    }
+        let all_aggregates_name = format!("all_{}s", A::aggregate_type());
 
-    fn append_event_publisher(self, query: Box<dyn Query<A>>) -> Self {
-        Self {
-            cqrs: self.cqrs.append_query(query),
-        }
-    }
-}
+        // Initialize the in-memory repositories.
+        let aggregate: Arc<MemRepository<V, A>> = Arc::new(MemRepository::default());
+        let all_aggregates: Arc<MemRepository<AV, A>> = Arc::new(MemRepository::default());
 
-pub async fn identity_state(
-    identity_services: Arc<IdentityServices>,
-    event_publishers: Vec<Box<dyn EventPublisher>>,
-) -> IdentityState {
-    // Initialize the in-memory repositories.
-    let connection = Arc::new(MemRepository::default());
-    let all_connections = Arc::new(MemRepository::default());
-    let document = Arc::new(MemRepository::default());
-    let service = Arc::new(MemRepository::default());
-    let all_services = Arc::new(MemRepository::default());
-
-    let all_connections_query = ListAllQuery::new(all_connections.clone(), "all_connections");
-    let all_services_query = ListAllQuery::new(all_services.clone(), "all_services");
-
-    // Partition the event_publishers into the different aggregates.
-    let Partitions {
-        connection_event_publishers,
-        document_event_publishers,
-        service_event_publishers,
-        ..
-    } = partition_event_publishers(event_publishers);
-
-    IdentityState {
-        command: agent_identity::state::CommandHandlers {
-            connection: Arc::new(
-                connection_event_publishers.into_iter().fold(
-                    AggregateHandler::new(identity_services.clone())
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(connection.clone()))
-                        .append_query(all_connections_query),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
-            document: Arc::new(
-                document_event_publishers.into_iter().fold(
-                    AggregateHandler::new(identity_services.clone())
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(document.clone())),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
-            service: Arc::new(
-                service_event_publishers.into_iter().fold(
-                    AggregateHandler::new(identity_services)
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(service.clone()))
-                        .append_query(all_services_query),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
-        },
-        query: agent_identity::state::ViewRepositories {
-            connection,
-            all_connections,
-            document,
-            service,
-            all_services,
-        },
+        (
+            Arc::new(AggregateHandler::new(services).with_parameters(
+                aggregate.clone(),
+                all_aggregates.clone(),
+                event_publishers,
+                &all_aggregates_name,
+            )),
+            aggregate,
+            all_aggregates,
+        )
     }
 }
 
+// TODO: make a generic function for this and move it to `lib.rs`.
 pub async fn issuance_state(
     issuance_services: Arc<IssuanceServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
@@ -226,7 +158,7 @@ pub async fn issuance_state(
             ),
             offer: Arc::new(
                 offer_event_publishers.into_iter().fold(
-                    AggregateHandler::new(issuance_services)
+                    AggregateHandler::new(issuance_services.clone())
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(offer.clone()))
                         .append_query(all_offers_query)
@@ -245,108 +177,6 @@ pub async fn issuance_state(
             offer,
             all_offers,
         },
-    }
-}
-
-pub async fn holder_state(
-    holder_services: Arc<HolderServices>,
-    event_publishers: Vec<Box<dyn EventPublisher>>,
-) -> HolderState {
-    // Initialize the in-memory repositories.
-    let holder_credential = Arc::new(MemRepository::default());
-    let all_holder_credentials = Arc::new(MemRepository::default());
-    let presentation = Arc::new(MemRepository::default());
-    let all_presentations = Arc::new(MemRepository::default());
-    let received_offer = Arc::new(MemRepository::default());
-    let all_received_offers = Arc::new(MemRepository::default());
-
-    // Create custom-queries for the offer aggregate.
-    let all_holder_credentials_query = ListAllQuery::new(all_holder_credentials.clone(), "all_holder_credentials");
-    let all_presentations_query = ListAllQuery::new(all_presentations.clone(), "all_presentations");
-    let all_received_offers_query = ListAllQuery::new(all_received_offers.clone(), "all_received_offers");
-
-    // Partition the event_publishers into the different aggregates.
-    let Partitions {
-        holder_credential_event_publishers,
-        presentation_event_publishers,
-        received_offer_event_publishers,
-        ..
-    } = partition_event_publishers(event_publishers);
-
-    HolderState {
-        command: agent_holder::state::CommandHandlers {
-            credential: Arc::new(
-                holder_credential_event_publishers.into_iter().fold(
-                    AggregateHandler::new(holder_services.clone())
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(holder_credential.clone()))
-                        .append_query(all_holder_credentials_query),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
-            presentation: Arc::new(
-                presentation_event_publishers.into_iter().fold(
-                    AggregateHandler::new(holder_services.clone())
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(presentation.clone()))
-                        .append_query(all_presentations_query),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
-            offer: Arc::new(
-                received_offer_event_publishers.into_iter().fold(
-                    AggregateHandler::new(holder_services.clone())
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(received_offer.clone()))
-                        .append_query(all_received_offers_query),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
-        },
-        query: agent_holder::state::ViewRepositories {
-            holder_credential,
-            all_holder_credentials,
-            presentation,
-            all_presentations,
-            received_offer,
-            all_received_offers,
-        },
-    }
-}
-
-pub async fn verification_state(
-    verification_services: Arc<VerificationServices>,
-    event_publishers: Vec<Box<dyn EventPublisher>>,
-) -> VerificationState {
-    // Initialize the in-memory repositories.
-    let authorization_request = Arc::new(MemRepository::default());
-    let all_authorization_requests = Arc::new(MemRepository::default());
-
-    // Create custom-queries for the offer aggregate.
-    let all_authorization_requests_query =
-        ListAllQuery::new(all_authorization_requests.clone(), "all_authorization_requests");
-
-    // Partition the event_publishers into the different aggregates.
-    let Partitions {
-        authorization_request_event_publishers,
-        ..
-    } = partition_event_publishers(event_publishers);
-
-    VerificationState {
-        command: agent_verification::state::CommandHandlers {
-            authorization_request: Arc::new(
-                authorization_request_event_publishers.into_iter().fold(
-                    AggregateHandler::new(verification_services.clone())
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(authorization_request.clone()))
-                        .append_query(all_authorization_requests_query),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
-        },
-        query: agent_verification::state::ViewRepositories {
-            authorization_request,
-            all_authorization_requests,
-        },
+        signer: issuance_services.issuer.clone(),
     }
 }

@@ -2,8 +2,9 @@ use cqrs_es::DomainEvent;
 use identity_core::common::Url;
 use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
+use strum::Display;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
 pub enum ConnectionEvent {
     ConnectionAdded {
         connection_id: String,
@@ -16,12 +17,7 @@ pub enum ConnectionEvent {
 
 impl DomainEvent for ConnectionEvent {
     fn event_type(&self) -> String {
-        use ConnectionEvent::*;
-
-        let event_type: &str = match self {
-            ConnectionAdded { .. } => "ConnectionAdded",
-        };
-        event_type.to_string()
+        self.to_string()
     }
 
     fn event_version(&self) -> String {

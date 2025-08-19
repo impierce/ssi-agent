@@ -1,31 +1,31 @@
+use crate::handlers::query_handler;
 use agent_issuance::{
-    server_config::queries::ServerConfigView,
+    server_config::views::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
-use agent_shared::handlers::query_handler;
 use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use http_api_problem::ApiError;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn oauth_authorization_server(State(state): State<IssuanceState>) -> Response {
-    match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await {
-        Ok(Some(ServerConfigView {
+pub(crate) async fn oauth_authorization_server(State(state): State<IssuanceState>) -> Result<Response, ApiError> {
+    match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
+        Some(ServerConfigView {
             authorization_server_metadata,
             ..
-        })) => (StatusCode::OK, Json(authorization_server_metadata)).into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        }) => Ok((StatusCode::OK, Json(authorization_server_metadata)).into_response()),
+        _ => Err(ApiError::new(StatusCode::NOT_FOUND)),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{issuance::router, tests::BASE_URL};
-    use agent_issuance::{startup_commands::startup_commands, state::initialize};
+    use crate::issuance::router;
+    use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory;
     use axum::{
@@ -58,8 +58,8 @@ mod tests {
         assert_eq!(
             authorization_server_metadata,
             AuthorizationServerMetadata {
-                issuer: "https://example.com/".parse().unwrap(),
-                token_endpoint: Some("https://example.com/auth/token".parse().unwrap()),
+                issuer: "https://my-domain.example.org/".parse().unwrap(),
+                token_endpoint: Some("https://my-domain.example.org/auth/token".parse().unwrap()),
                 ..Default::default()
             }
         );
@@ -70,7 +70,7 @@ mod tests {
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
-        initialize(&issuance_state, startup_commands(BASE_URL.clone())).await;
+        initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
 

@@ -31,13 +31,17 @@ ConnectionAdded
 
 ```
 DocumentCreated
+PublicKeyUpdated
+DocumentStatusUpdated
 ServiceAdded
+DocumentPublished
 ```
 
 #### `service`
 
 ```
 DomainLinkageServiceCreated
+DomainLinkageServiceDeleted
 LinkedVerifiablePresentationServiceCreated
 ```
 
@@ -47,6 +51,7 @@ LinkedVerifiablePresentationServiceCreated
 UnsignedCredentialCreated
 SignedCredentialCreated
 CredentialSigned
+NotificationReceived
 ```
 
 #### `offer`
@@ -64,7 +69,7 @@ CredentialResponseCreated
 
 ```
 ServerMetadataLoaded
-CredentialConfigurationAdded
+CredentialConfigurationUpdated
 ```
 
 #### `holder_credential`

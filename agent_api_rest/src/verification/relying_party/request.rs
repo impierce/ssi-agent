@@ -1,10 +1,11 @@
-use agent_shared::handlers::query_handler;
-use agent_verification::{authorization_request::views::AuthorizationRequestView, state::VerificationState};
+use crate::handlers::query_handler;
+use agent_verification::state::VerificationState;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use http_api_problem::ApiError;
 use hyper::header;
 
 /// Instead of directly embedding the Authorization Request into a QR-code or deeplink, the `Relying Party` can embed a
@@ -14,20 +15,19 @@ use hyper::header;
 pub(crate) async fn request(
     State(verification_state): State<VerificationState>,
     Path(request_id): Path<String>,
-) -> Response {
-    match query_handler(&request_id, &verification_state.query.authorization_request).await {
-        Ok(Some(AuthorizationRequestView {
-            signed_authorization_request_object: Some(signed_authorization_request_object),
-            ..
-        })) => (
-            StatusCode::OK,
-            [(header::CONTENT_TYPE, "application/oauth-authz-req+jwt")],
-            signed_authorization_request_object,
-        )
-            .into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    }
+) -> Result<Response, ApiError> {
+    query_handler(&request_id, &verification_state.query.authorization_request)
+        .await?
+        .and_then(|authorization_request_view| authorization_request_view.signed_authorization_request_object)
+        .map(|signed_authorization_request_object| {
+            (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "application/oauth-authz-req+jwt")],
+                signed_authorization_request_object,
+            )
+                .into_response()
+        })
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[cfg(test)]
@@ -35,7 +35,7 @@ pub mod tests {
     use super::*;
     use crate::verification::{authorization_requests::tests::authorization_requests, router};
     use agent_secret_manager::service::Service;
-    use agent_store::in_memory;
+    use agent_store::{in_memory::InMemory, verification_state};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -66,13 +66,13 @@ pub mod tests {
         let body: String = String::from_utf8(body.to_vec()).unwrap();
 
         let header = body.split_once('.').unwrap().0;
-        assert_eq!(header, "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRWREU0EiLCJraWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCN6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifQ");
+        assert_eq!(header, "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJkaWQ6a2V5OnpEbmFlUndUNGc2QVpDSHp4dk5MN0RManFUYVQ4OGFtNFhSNlRVR3JLcjZEWGo2VHojekRuYWVSd1Q0ZzZBWkNIenh2Tkw3RExqcVRhVDg4YW00WFI2VFVHcktyNkRYajZUeiJ9");
     }
 
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_request_endpoint() {
-        let verification_state = in_memory::verification_state(Service::default(), Default::default()).await;
+        let verification_state = verification_state::<InMemory>(Service::default(), Default::default()).await;
 
         let mut app = router(verification_state);
 

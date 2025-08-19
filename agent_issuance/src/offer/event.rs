@@ -4,13 +4,15 @@ use oid4vci::{
     credential_offer::CredentialOffer, credential_response::CredentialResponse, token_response::TokenResponse,
 };
 use serde::{Deserialize, Serialize};
+use strum::Display;
 use url::Url;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
 pub enum OfferEvent {
     CredentialOfferCreated {
         offer_id: String,
         credential_offer: CredentialOffer,
+        credential_offer_uri: CredentialOffer,
         pre_authorized_code: String,
         access_token: String,
         status: Status,
@@ -18,6 +20,7 @@ pub enum OfferEvent {
     CredentialsAdded {
         offer_id: String,
         credential_ids: Vec<String>,
+        credential_offer: CredentialOffer,
     },
     FormUrlEncodedCredentialOfferCreated {
         offer_id: String,
@@ -46,18 +49,7 @@ pub enum OfferEvent {
 
 impl DomainEvent for OfferEvent {
     fn event_type(&self) -> String {
-        use OfferEvent::*;
-
-        let event_type: &str = match self {
-            CredentialOfferCreated { .. } => "CredentialOfferCreated",
-            CredentialsAdded { .. } => "CredentialsAdded",
-            FormUrlEncodedCredentialOfferCreated { .. } => "FormUrlEncodedCredentialOfferCreated",
-            CredentialOfferSent { .. } => "CredentialOfferSent",
-            TokenResponseCreated { .. } => "TokenResponseCreated",
-            CredentialRequestVerified { .. } => "CredentialRequestVerified",
-            CredentialResponseCreated { .. } => "CredentialResponseCreated",
-        };
-        event_type.to_string()
+        self.to_string()
     }
 
     fn event_version(&self) -> String {

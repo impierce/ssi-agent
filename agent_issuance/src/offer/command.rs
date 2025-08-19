@@ -14,11 +14,12 @@ use url::Url;
 pub enum OfferCommand {
     CreateCredentialOffer {
         offer_id: String,
-        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
+        credential_configuration_ids: Vec<String>,
     },
     AddCredentials {
         offer_id: String,
         credential_ids: Vec<String>,
+        credential_configuration_ids: Vec<String>,
     },
     SendCredentialOffer {
         offer_id: String,
@@ -26,10 +27,6 @@ pub enum OfferCommand {
     },
 
     // OpenID4VCI Pre-Authorized Code Flow
-    // TODO: add option for credential_offer_uri (by reference)
-    CreateFormUrlEncodedCredentialOffer {
-        offer_id: String,
-    },
     CreateTokenResponse {
         offer_id: String,
         token_request: TokenRequest,
@@ -40,8 +37,9 @@ pub enum OfferCommand {
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_request: CredentialRequest,
     },
+
     CreateCredentialResponse {
         offer_id: String,
-        signed_credentials: Vec<serde_json::Value>,
+        signed_credentials: Vec<(serde_json::Value, Option<String>)>,
     },
 }

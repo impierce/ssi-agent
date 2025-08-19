@@ -1,5 +1,10 @@
-use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
+use oid4vci::{
+    credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject,
+    notification_request::NotificationRequest,
+};
 use serde::Deserialize;
+
+use crate::credential::aggregate::CredentialStatus;
 
 use super::{aggregate::CredentialExpiry, entity::Data};
 
@@ -11,6 +16,7 @@ pub enum CredentialCommand {
         data: Data,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
         expires_at: CredentialExpiry,
+        credential_status_index: usize,
     },
     CreateSignedCredential {
         credential_id: String,
@@ -21,5 +27,13 @@ pub enum CredentialCommand {
         subject_id: String,
         // When true, a credential will be re-signed if it already exists.
         overwrite: bool,
+    },
+    AddNotification {
+        credential_id: String,
+        notification: NotificationRequest,
+    },
+    UpdateCredentialStatus {
+        credential_id: String,
+        credential_status: CredentialStatus,
     },
 }

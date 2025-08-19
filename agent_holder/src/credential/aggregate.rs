@@ -8,7 +8,7 @@ use cqrs_es::Aggregate;
 use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{debug, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct Data {
@@ -70,7 +70,7 @@ impl Aggregate for Credential {
     fn apply(&mut self, event: Self::Event) {
         use CredentialEvent::*;
 
-        info!("Applying event: {:?}", event);
+        debug!("Applying event: {:?}", event);
 
         match event {
             CredentialAdded {
@@ -118,7 +118,7 @@ pub mod credential_tests {
 
     #[rstest]
     #[serial_test::serial]
-    fn test_add_credential(holder_credential_id: String, received_offer_id: String) {
+    async fn test_add_credential(holder_credential_id: String, received_offer_id: String) {
         CredentialTestFramework::with(Service::default())
             .given_no_previous_events()
             .when(CredentialCommand::AddCredential {

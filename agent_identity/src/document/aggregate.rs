@@ -1,23 +1,70 @@
-use std::sync::Arc;
-
-use agent_shared::{
-    config::{config, get_preferred_signing_algorithm},
-    from_jsonwebtoken_algorithm_to_jwsalgorithm,
-};
+use super::{command::DocumentCommand, error::DocumentError, event::DocumentEvent};
+use crate::services::IdentityServices;
+use agent_secret_manager::subject::StorageKey;
+use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported};
+use agent_shared::config::{config_mut, SupportedDidMethod};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use did_manager::{DidMethod, MethodSpecificParameters};
+use identity_did::{CoreDID, DIDUrl, DID as _};
 use identity_document::document::CoreDocument;
+use identity_iota::iota::rebased::client::{IdentityClient, IdentityClientReadOnly};
+use identity_iota::iota::IotaDID;
+use identity_iota::storage::{Storage, StorageSigner};
+use identity_iota::{
+    iota::IotaDocument,
+    verification::{MethodScope, MethodType, VerificationMethod},
+};
+use iota_sdk::types::base_types::IotaAddress;
+use iota_sdk::{IotaClient, IotaClientBuilder};
+use jsonwebtoken::Algorithm;
+use product_common::core_client::CoreClient as _;
+use product_common::network_name::NetworkName;
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use serde_json::json;
+use ssi_dids::DIDMethod;
+use ssi_dids::Source;
+use std::{collections::BTreeMap, sync::Arc};
+use tracing::{debug, info, warn};
 
-use crate::services::IdentityServices;
+// TODO: look into a more appropriate value for the minimum gas budget. This current value of `50_000_000` as adopted
+// from examples from the IOTA identity library.
+/// Minimum gas budget for publishing a DID Document on the IOTA ledger.
+const MIN_GAS_BUDGET: u64 = 50_000_000;
 
-use super::{command::DocumentCommand, error::DocumentError, event::DocumentEvent};
+/// Metadata for IOTA-based DID Documents.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct IotaMetadata {
+    pub wallet_address: IotaAddress,
+    pub is_funded: bool,
+    pub balance: u64,
+    pub is_published: bool,
+    pub is_deactivated: bool,
+    pub explorer_url: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub enum Status {
+    SignAndValidate,
+    // TODO: Make a distinction between enabling both signing AND validation and just validation.
+    // ValidateOnly,
+    #[default]
+    Disabled,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Document {
+    #[serde(rename = "id")]
+    pub document_id: String,
     pub document: Option<CoreDocument>,
+    pub did_method: Option<SupportedDidMethod>,
+    // Applicable only for DID documents whose methods mandate a fixed verification algorithm,
+    // such as `did:key` and `did:jwk`.
+    pub with_fixed_algorithm: Option<Algorithm>,
+    // Applicable only for DID methods that are based on the IOTA ledger.
+    pub iota_metadata: Option<IotaMetadata>,
+    pub status: Status,
 }
 
 #[async_trait]
@@ -31,6 +78,9 @@ impl Aggregate for Document {
         "document".to_string()
     }
 
+    // TODO: Most of how these commands are handled is not Domain logic, but rather Application logic, so it should be moved
+    // to the Application layer. The Aggregate should only handle the Domain logic, such as creating a new Document, updating public keys, etc.
+    // The Application layer should handle the specifics of how to create a Document based on the DID method, how to publish it, etc.
     async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
         use DocumentCommand::*;
         use DocumentError::*;
@@ -39,37 +89,457 @@ impl Aggregate for Document {
         info!("Handling command: {:?}", command);
 
         match command {
-            CreateDocument { did_method } => {
-                let mut secret_manager = services.subject.secret_manager.lock().await;
+            CreateDocument {
+                document_id,
+                did_method,
+                with_fixed_algorithm,
+            } => {
+                let subject = &services.subject;
+                let stronghold_storage = &subject.stronghold_storage;
 
-                let method_specific_parameters =
-                    matches!(did_method, DidMethod::Web).then(|| MethodSpecificParameters::Web {
-                        origin: config().url.origin(),
-                    });
+                let mut iota_metadata = self.iota_metadata.clone().unwrap_or_default();
 
-                let document = secret_manager
-                    .produce_document(
-                        did_method,
-                        method_specific_parameters,
-                        // TODO: This way the Document can only support on single algorithm. We need to make sure that
-                        // Documents can support multiple algorithms.
-                        from_jsonwebtoken_algorithm_to_jwsalgorithm(&get_preferred_signing_algorithm()),
-                    )
-                    .await
-                    .map_err(|err| ProduceDocumentError(err.to_string()))?;
+                let document = match &did_method {
+                    SupportedDidMethod::Iota | SupportedDidMethod::IotaDev => {
+                        // Retrieve the network name associated with the DID method.
+                        let network_name = did_method
+                            .network_name()
+                            .and_then(|network_name| NetworkName::try_from(network_name).ok())
+                            .ok_or(MissingNetworkNameError(did_method))?;
 
-                Ok(vec![DocumentCreated { document }])
+                        let key_id = config().secret_manager.issuer_eddsa_key_id.clone();
+
+                        let public_key_jwk = stronghold_storage
+                            .get_ed25519_public_key(&key_id)
+                            .await
+                            .map_err(|err| GenericError(err.to_string()))?;
+
+                        let storage = &Storage::new(stronghold_storage.clone(), stronghold_storage.clone());
+
+                        // Create a signer for the IOTA client.
+                        // This signer is used to sign the transactions that are sent to the IOTA ledger.
+                        let signer = StorageSigner::new(storage, key_id, public_key_jwk.clone());
+
+                        // The API endpoint of an IOTA node
+                        let api_endpoint = did_method
+                            .api_endpoint()
+                            .ok_or_else(|| InvalidNodeEndpointError("missing `api_endpoint`".to_string()))?;
+
+                        // Create a new IOTA client to interact with the IOTA ledger.
+                        let iota_client = get_iota_client(api_endpoint).await?;
+
+                        let read_only_client = IdentityClientReadOnly::new(iota_client.clone())
+                            .await
+                            .map_err(|err| GenericError(err.to_string()))?;
+
+                        // Create an `IdentityClient` instance.
+                        // This client is used to interact with the IOTA identity ledger.
+                        // It is used to publish the DID Document and to resolve it later.
+                        let identity_client = IdentityClient::new(read_only_client, signer)
+                            .await
+                            .map_err(|err| GenericError(err.to_string()))?;
+
+                        // Retrieve the wallet address from the identity client.
+                        let wallet_address = identity_client.sender_address();
+
+                        let balance = iota_client
+                            .coin_read_api()
+                            .get_balance(wallet_address, None)
+                            .await
+                            .map_err(|err| GenericError(err.to_string()))?
+                            .total_balance;
+
+                        // TODO: This is a temporary solution to ensure that the wallet address is set in the configuration.
+                        config_mut().iota_address = Some(wallet_address.to_string());
+
+                        info!("Current {network_name} Address: `{wallet_address}`");
+
+                        iota_metadata.wallet_address = wallet_address;
+                        iota_metadata.balance = balance as u64;
+                        iota_metadata.is_funded = balance > MIN_GAS_BUDGET as u128;
+
+                        let document = self.document.clone().map(IotaDocument::from).unwrap_or_else(|| {
+                            info!("Creating a new document for DID method `{did_method}`");
+
+                            // Create a new 'blank' DID Document.
+                            IotaDocument::new(&network_name)
+                        });
+
+                        info!("Testing whether a DID Document can be published...");
+
+                        // This code block is doing a dummy publish to ensure that the DID Document is created and can
+                        // be published/updated later. It uses a gas budget of 0 to avoid actually publishing the
+                        // document.
+                        let document = match identity_client.publish_did_document_update(document.clone(), 0).await {
+                            // This match arm can never be reached, because we use a gas budget of 0.
+                            Ok(document) => document,
+                            // This error occurs when the DID Document is not published yet. We will not return an
+                            // error because the `PublishDocument` command will handle the actual publishing if the
+                            // funds are sufficient.
+                            Err(identity_iota::iota::rebased::Error::DIDResolutionError(_err)) => {
+                                warn!("Document is not published yet.");
+
+                                document
+                            }
+                            // This error occurs when the `identity_client` has no control over the DID Document that
+                            // has been stored in the aggregate instance. This usually means that the current keys
+                            // stored in the KMS have been updated between boots. We throw an error here indicating
+                            // that the original KMS needs to be used or that the database needs to be wiped.
+                            // TODO: implement KMS migration.
+                            Err(identity_iota::iota::rebased::Error::Identity(err))
+                                if err.contains("address") && err.contains("has no control over Identity") =>
+                            {
+                                warn!("No control over the identity, as no matching keys were found in the key storage: {err}");
+
+                                return Err(DocumentError::IotaControllerError(
+                                    identity_iota::iota::rebased::Error::Identity(err),
+                                ));
+                            }
+                            // This error is to be expected because we use a gas budget of 0.
+                            Err(identity_iota::iota::rebased::Error::TransactionUnexpectedResponse(err))
+                                if err.contains("Gas budget: 0 is lower than min") =>
+                            {
+                                info!("Document can be published or updated later if the funds are sufficient.");
+
+                                document
+                            }
+                            // Any other error is unexpected and should be handled.
+                            Err(err) => return Err(DocumentError::IotaIdentityError(err)),
+                        };
+
+                        info!("DID Document created: {document:#?}");
+
+                        document.into()
+                    }
+                    SupportedDidMethod::Web => {
+                        let origin = config().public_url.origin();
+
+                        info!("Origin: {}", &origin.ascii_serialization());
+
+                        let (_scheme, host, port) = match origin {
+                            url::Origin::Tuple(ref scheme, ref host, ref port) => (scheme, host, port),
+                            url::Origin::Opaque(_) => {
+                                return Err(OpaqueOriginError);
+                            }
+                        };
+
+                        // IP addresses are not allowed
+                        if matches!(host, url::Host::Ipv4(_) | url::Host::Ipv6(_)) {
+                            return Err(HostError);
+                        }
+
+                        // Omit default HTTPS port
+                        let host_port_encoded = match port {
+                            443 => host.to_string(),
+                            _ => urlencoding::encode(format!("{host}:{port}").as_str()).to_string(),
+                        };
+
+                        let controller = format!("did:web:{host_port_encoded}")
+                            .parse::<CoreDID>()
+                            .map_err(|err| InvalidDidError(err.to_string()))?;
+
+                        // Patch the generated DID document since it's not according to spec.
+                        let properties = get_properties(MethodType::JSON_WEB_KEY_2020);
+
+                        CoreDocument::builder(properties)
+                            .id(controller)
+                            .build()
+                            .map_err(ProduceDocumentError)?
+                    }
+                    SupportedDidMethod::Jwk | SupportedDidMethod::Key => {
+                        let algorithm = with_fixed_algorithm.ok_or(MissingFixedAlgorithmError(did_method))?;
+                        let key_id = match algorithm {
+                            Algorithm::EdDSA => config().secret_manager.issuer_eddsa_key_id.clone(),
+                            Algorithm::ES256 => config().secret_manager.issuer_es256_key_id.clone(),
+                            algorithm => return Err(UnsupportedSigningAlgorithmError(algorithm)),
+                        };
+
+                        // Retrieve the public key from Stronghold.
+                        let public_key_jwk = subject
+                            .get_public_key(key_id.clone(), &algorithm)
+                            .await
+                            .map_err(|err| MissingKeyError(err.to_string()))?;
+
+                        // Generate a DID from the public key.
+                        let controller = serde_json::from_value::<ssi_jwk::JWK>(json!(public_key_jwk))
+                            .ok()
+                            .and_then(|jwk| match did_method {
+                                SupportedDidMethod::Jwk => did_jwk_extern::DIDJWK.generate(&Source::Key(&jwk)),
+                                SupportedDidMethod::Key => did_key_extern::DIDKey.generate(&Source::Key(&jwk)),
+                                _ => None,
+                            })
+                            .and_then(|did| did.parse().ok())
+                            .ok_or(GenerateDidError(key_id))?;
+
+                        CoreDocument::builder(Default::default())
+                            .id(controller)
+                            .build()
+                            .map_err(ProduceDocumentError)?
+                    }
+                };
+
+                let status = Status::SignAndValidate;
+
+                let iota_metadata = (did_method == SupportedDidMethod::Iota
+                    || did_method == SupportedDidMethod::IotaDev)
+                    .then_some(iota_metadata);
+
+                Ok(vec![DocumentCreated {
+                    document_id,
+                    did_method,
+                    status,
+                    document,
+                    with_fixed_algorithm,
+                    iota_metadata,
+                }])
             }
-            AddService { service } => {
+            UpdatePublicKeys {
+                // TODO: decide whether the public keys should be supplied through the command or not.
+                public_key_jwks: _,
+            } => {
                 let mut document = self.document.clone().ok_or(MissingDocumentError)?;
+                let did = document.id().clone();
+
+                let did_method = self.did_method.ok_or(MissingDidMethodError)?;
+
+                let subject = &services.subject;
+
+                // Remove all existing verification methods from the document.
+                let methods = document.methods(None).into_iter().cloned().collect::<Vec<_>>();
+                for method in methods {
+                    document.remove_method(method.id());
+                }
+
+                // Insert the new verification methods based on the signing algorithms.
+                let mut events = vec![];
+                for signing_algorithm in self
+                    .with_fixed_algorithm
+                    .map(|signing_algorithm| vec![signing_algorithm])
+                    .unwrap_or_else(get_all_enabled_signing_algorithms_supported)
+                {
+                    let key_id = match signing_algorithm {
+                        Algorithm::EdDSA => config().secret_manager.issuer_eddsa_key_id.clone(),
+                        Algorithm::ES256 => config().secret_manager.issuer_es256_key_id.clone(),
+                        algorithm => return Err(UnsupportedSigningAlgorithmError(algorithm)),
+                    };
+
+                    let public_key_jwk = subject
+                        .get_public_key(key_id, &signing_algorithm)
+                        .await
+                        .map_err(|err| MissingKeyError(err.to_string()))?;
+
+                    let verification_method = VerificationMethod::new_from_jwk(
+                        did.clone(),
+                        public_key_jwk,
+                        (did_method == SupportedDidMethod::Key)
+                            .then_some(did.method_id())
+                            .or(did_method.fragment()),
+                    )
+                    .map_err(|err| VerificationMethodBuilderError(err.to_string()))?;
+
+                    subject
+                        .insert_verification_method_id(
+                            StorageKey::new(did_method, signing_algorithm),
+                            verification_method.id().clone(),
+                        )
+                        .await
+                        .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
+
+                    document
+                        .insert_method(verification_method, MethodScope::VerificationMethod) // TODO: add relationships, also TODO: adjust KID insertion elsewhere
+                        .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
+
+                    events.push(PublicKeyUpdated {
+                        document_id: self.document_id.clone(),
+                        document: document.clone(),
+                    })
+                }
+
+                Ok(events)
+            }
+            UpdateDocumentStatus { status } => Ok(vec![DocumentStatusUpdated {
+                document_id: self.document_id.clone(),
+                status,
+            }]),
+            AddService {
+                service_id,
+                mut service,
+            } => {
+                let document_id = self.document_id.clone();
+                let mut document = self.document.clone().ok_or(MissingDocumentError)?;
+                let subject_did = document.id();
+
+                // Set the service ID.
+                format!("{subject_did}#{service_id}")
+                    .parse::<DIDUrl>()
+                    .ok()
+                    .and_then(|service_id| service.set_id(service_id).ok())
+                    .ok_or_else(|| InvalidDidError(service_id.to_string()))?;
 
                 // Overwrite the service if it already exists.
                 document.remove_service(service.id());
                 document
-                    .insert_service(service)
+                    .insert_service(*service)
                     .map_err(|err| AddServiceError(err.to_string()))?;
 
-                Ok(vec![ServiceAdded { document }])
+                Ok(vec![ServiceAdded { document_id, document }])
+            }
+            PublishDocument => {
+                let document: IotaDocument = self.document.clone().ok_or(MissingDocumentError)?.into();
+
+                let did_method = self.did_method.ok_or(MissingDidMethodError)?;
+
+                // The API endpoint of an IOTA node
+                let api_endpoint = did_method
+                    .api_endpoint()
+                    .ok_or_else(|| InvalidNodeEndpointError("missing `api_endpoint`".to_string()))?;
+
+                // Create a new IOTA client to interact with the IOTA ledger.
+                let iota_client = get_iota_client(api_endpoint).await?;
+
+                let stronghold_storage = &services.subject.stronghold_storage;
+
+                let key_id = config().secret_manager.issuer_eddsa_key_id.clone();
+
+                let public_key_jwk = stronghold_storage
+                    .get_ed25519_public_key(&key_id)
+                    .await
+                    .map_err(|err| GenericError(err.to_string()))?;
+
+                let storage = &Storage::new(stronghold_storage.clone(), stronghold_storage.clone());
+
+                // Create a signer for the IOTA client.
+                // This signer is used to sign the transactions that are sent to the IOTA ledger.
+                let signer = StorageSigner::new(storage, key_id, public_key_jwk.clone());
+
+                let read_only_client = IdentityClientReadOnly::new(iota_client.clone())
+                    .await
+                    .map_err(|err| GenericError(err.to_string()))?;
+
+                // Create an `IdentityClient` instance.
+                // This client is used to interact with the IOTA identity ledger.
+                // It is used to publish the DID Document and to resolve it later.
+                let identity_client = IdentityClient::new(read_only_client, signer)
+                    .await
+                    .map_err(|err| GenericError(err.to_string()))?;
+
+                let iota_metadata = self.iota_metadata.clone().unwrap_or_default();
+
+                if iota_metadata.is_published {
+                    let published_document = identity_client
+                        .resolve_did(document.id())
+                        .await
+                        .map_err(DocumentError::IotaIdentityError)?;
+
+                    if published_document.core_document() == document.core_document() {
+                        info!("Document instance does not contain any updates, skipping publishing.");
+                        return Ok(vec![]);
+                    }
+                }
+
+                // Retrieve the wallet address from the identity client.
+                let wallet_address = identity_client.sender_address();
+
+                let network_name = did_method
+                    .network_name()
+                    .and_then(|network_name| NetworkName::try_from(network_name).ok())
+                    .ok_or(MissingNetworkNameError(did_method))?;
+
+                if !iota_metadata.is_funded {
+                    warn!(
+                        "Skipping publishing DID Document for DID method `{did_method}` because it is not sufficiently funded",  
+                    );
+
+                    let did = self
+                        .document
+                        .as_ref()
+                        .map(|document| IotaDocument::from(document.to_owned()).id().to_owned())
+                        .unwrap_or_else(|| IotaDID::placeholder(&network_name));
+
+                    let document = CoreDocument::from(IotaDocument::new_with_id(did));
+
+                    return Ok(vec![DocumentDeleted {
+                        document_id: self.document_id.clone(),
+                        document,
+                    }]);
+                }
+
+                let mut iota_metadata = self.iota_metadata.clone().unwrap_or_default();
+
+                let document = if !iota_metadata.is_published {
+                    // Publish the DID Document for the first time.
+                    let document = identity_client
+                        .publish_did_document(document)
+                        .with_gas_budget(MIN_GAS_BUDGET)
+                        .build_and_execute(&identity_client)
+                        .await
+                        .map_err(|err| DocumentError::GenericError(err.to_string()))?
+                        .output;
+
+                    iota_metadata.created_at = document.metadata.created.map(|created| created.to_string());
+
+                    document
+                } else {
+                    // Update the existing DID Document.
+                    match self.status {
+                        // This status indicates that the DID Document update is ready to be published to the IOTA ledger.
+                        Status::SignAndValidate => {
+                            info!("Updating DID Document with status: SignAndValidate");
+                            // Publish the updated Alias Output.
+                            let updated_document = identity_client
+                                .publish_did_document_update(document, MIN_GAS_BUDGET)
+                                .await
+                                .map_err(|err| GenericError(err.to_string()))?;
+
+                            iota_metadata.is_deactivated = false;
+
+                            updated_document
+                        }
+                        Status::Disabled => {
+                            // This status indicates that the DID Document should be deactivated.
+                            identity_client
+                                .deactivate_did_output(document.id(), MIN_GAS_BUDGET)
+                                .await
+                                .map_err(|err| GenericError(err.to_string()))?;
+
+                            let deactivated_document = identity_client
+                                .resolve_did(document.id())
+                                .await
+                                .map_err(|err| GenericError(err.to_string()))?;
+
+                            iota_metadata.is_deactivated = true;
+
+                            deactivated_document
+                        }
+                    }
+                };
+
+                let balance = iota_client
+                    .coin_read_api()
+                    .get_balance(wallet_address, None)
+                    .await
+                    .map_err(|err| GenericError(err.to_string()))?
+                    .total_balance;
+
+                iota_metadata.is_funded = balance > MIN_GAS_BUDGET as u128;
+                iota_metadata.balance = balance as u64;
+                iota_metadata.updated_at = document.metadata.updated.map(|updated| updated.to_string());
+
+                iota_metadata.explorer_url = Some(format!(
+                    "https://explorer.iota.org/object/{}?network={}",
+                    document.id().tag_str(),
+                    if did_method == SupportedDidMethod::IotaDev {
+                        "devnet"
+                    } else {
+                        "mainnet"
+                    }
+                ));
+
+                Ok(vec![DocumentPublished {
+                    document_id: self.document_id.clone(),
+                    document: CoreDocument::from(document),
+                    iota_metadata: Some(iota_metadata),
+                }])
             }
         }
     }
@@ -77,21 +547,104 @@ impl Aggregate for Document {
     fn apply(&mut self, event: Self::Event) {
         use DocumentEvent::*;
 
-        info!("Applying event: {:?}", event);
+        debug!("Applying event: {:?}", event);
 
         match event {
-            DocumentCreated { document } => {
+            DocumentCreated {
+                document_id,
+                did_method,
+                status,
+                document,
+                with_fixed_algorithm,
+                iota_metadata,
+            } => {
+                self.document_id = document_id;
+                self.did_method.replace(did_method);
+                self.status = status;
+                self.document.replace(document);
+                self.with_fixed_algorithm = with_fixed_algorithm;
+                self.iota_metadata = iota_metadata;
+            }
+            PublicKeyUpdated { document_id, document } => {
+                self.document_id = document_id;
                 self.document.replace(document);
             }
-            ServiceAdded { document } => {
+            DocumentStatusUpdated { document_id, status } => {
+                self.document_id = document_id;
+                self.status = status;
+            }
+            ServiceAdded { document_id, document } => {
+                self.document_id = document_id;
+                self.document.replace(document);
+            }
+            DocumentPublished {
+                document_id,
+                document,
+                iota_metadata,
+            } => {
+                self.document_id = document_id;
+                self.document.replace(document);
+                self.iota_metadata = iota_metadata;
+            }
+            DocumentDeleted { document_id, document } => {
+                self.document_id = document_id;
                 self.document.replace(document);
             }
         }
     }
 }
 
+pub async fn get_iota_client(api_endpoint: &str) -> Result<IotaClient, DocumentError> {
+    let mut iota_client_builder = IotaClientBuilder::default();
+
+    if let Some(iota_node_url) = config().iota_node_url.clone() {
+        iota_client_builder = iota_client_builder.ws_url(iota_node_url);
+
+        if let Some(iota_node_url_auth) = config().iota_node_username.clone() {
+            if let Some(iota_node_password) = config().iota_node_password.clone() {
+                iota_client_builder = iota_client_builder.basic_auth(iota_node_url_auth, iota_node_password);
+            } else {
+                warn!("No IOTA node URL password configured in the application configuration.");
+            }
+        } else {
+            warn!("No IOTA node URL authentication configured in the application configuration.");
+        }
+    } else {
+        warn!("No IOTA node URL configured in the application configuration.");
+    }
+
+    let iota_client = iota_client_builder
+        .build(api_endpoint)
+        .await
+        .map_err(|err| DocumentError::IotaClientBuilderError(err.to_string()))?;
+
+    Ok(iota_client)
+}
+
+// TODO: Can we remove this? It does not seem to be required: https://w3c-ccg.github.io/did-method-web/#key-material-and-document-handling
+pub fn get_properties(method_type: MethodType) -> BTreeMap<String, serde_json::Value> {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "@context".to_string(),
+        match method_type.as_str() {
+            "Ed25519VerificationKey2018" => json!([
+                "https://www.w3.org/ns/did/v1",
+                "https://w3id.org/security/suites/ed25519-2018/v1"
+            ]),
+            "JsonWebKey2020" => json!([
+                "https://www.w3.org/ns/did/v1",
+                "https://w3id.org/security/suites/jws-2020/v1"
+            ]),
+            _ => unimplemented!("Unsupported method type"),
+        },
+    );
+    properties
+}
+
 #[cfg(test)]
 pub mod document_tests {
+    use crate::state::DOMAIN_LINKAGE_SERVICE_ID;
+
     use super::test_utils::*;
     use super::*;
     use cqrs_es::test::TestFramework;
@@ -102,78 +655,259 @@ pub mod document_tests {
 
     #[rstest]
     #[serial_test::serial]
-    async fn test_create_document(did_method: DidMethod, #[future(awt)] document: CoreDocument) {
+    async fn test_create_document(document_id: String, did_method: SupportedDidMethod, document: CoreDocument) {
         DocumentTestFramework::with(IdentityServices::default())
             .given_no_previous_events()
-            .when(DocumentCommand::CreateDocument { did_method })
-            .then_expect_events(vec![DocumentEvent::DocumentCreated { document }])
+            .when(DocumentCommand::CreateDocument {
+                document_id: document_id.clone(),
+                did_method,
+                with_fixed_algorithm: None,
+            })
+            .then_expect_events(vec![DocumentEvent::DocumentCreated {
+                document_id,
+                did_method,
+                document,
+                status: Status::SignAndValidate,
+                with_fixed_algorithm: None,
+                iota_metadata: None,
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_set_public_key_jwks(
+        document_id: String,
+        did_method: SupportedDidMethod,
+        document: CoreDocument,
+        document_with_single_verification_method: CoreDocument,
+        document_with_multiple_verification_methods: CoreDocument,
+    ) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![DocumentEvent::DocumentCreated {
+                document_id: document_id.clone(),
+                did_method,
+                document: document.clone(),
+                status: Status::SignAndValidate,
+                with_fixed_algorithm: None,
+                iota_metadata: None,
+            }])
+            .when(DocumentCommand::UpdatePublicKeys {
+                public_key_jwks: vec![],
+            })
+            .then_expect_events(vec![
+                DocumentEvent::PublicKeyUpdated {
+                    document_id: document_id.clone(),
+                    document: document_with_single_verification_method,
+                },
+                DocumentEvent::PublicKeyUpdated {
+                    document_id,
+                    document: document_with_multiple_verification_methods,
+                },
+            ])
     }
 
     #[rstest]
     #[serial_test::serial]
     async fn test_add_service(
-        #[future(awt)] document: CoreDocument,
+        document_id: String,
+        did_method: SupportedDidMethod,
+        document: CoreDocument,
         domain_linkage_service: Service,
-        #[future(awt)] document_with_domain_linkage_service: CoreDocument,
+        document_with_multiple_verification_methods: CoreDocument,
+        document_with_domain_linkage_service: CoreDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
-            .given(vec![DocumentEvent::DocumentCreated { document }])
+            .given(vec![
+                DocumentEvent::DocumentCreated {
+                    document_id: document_id.clone(),
+                    did_method,
+                    document,
+                    status: Status::SignAndValidate,
+                    with_fixed_algorithm: None,
+                    iota_metadata: None,
+                },
+                DocumentEvent::PublicKeyUpdated {
+                    document_id: document_id.clone(),
+                    document: document_with_multiple_verification_methods,
+                },
+            ])
             .when(DocumentCommand::AddService {
-                service: domain_linkage_service,
+                service: Box::new(domain_linkage_service),
+                service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
             })
             .then_expect_events(vec![DocumentEvent::ServiceAdded {
+                document_id: document_id.clone(),
                 document: document_with_domain_linkage_service,
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_set_status(
+        document_id: String,
+        did_method: SupportedDidMethod,
+        document: CoreDocument,
+        document_with_multiple_verification_methods: CoreDocument,
+        document_with_domain_linkage_service: CoreDocument,
+    ) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![
+                DocumentEvent::DocumentCreated {
+                    document_id: document_id.clone(),
+                    did_method,
+                    document,
+                    status: Status::SignAndValidate,
+                    with_fixed_algorithm: None,
+                    iota_metadata: None,
+                },
+                DocumentEvent::PublicKeyUpdated {
+                    document_id: document_id.clone(),
+                    document: document_with_multiple_verification_methods.clone(),
+                },
+                DocumentEvent::ServiceAdded {
+                    document_id: document_id.clone(),
+                    document: document_with_domain_linkage_service,
+                },
+            ])
+            .when(DocumentCommand::UpdateDocumentStatus {
+                status: Status::Disabled,
+            })
+            .then_expect_events(vec![DocumentEvent::DocumentStatusUpdated {
+                document_id,
+                status: Status::Disabled,
             }])
     }
 }
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
-    use agent_secret_manager::secret_manager;
-    use agent_shared::{
-        config::{config, get_preferred_signing_algorithm},
-        from_jsonwebtoken_algorithm_to_jwsalgorithm,
-    };
-    use did_manager::{DidMethod, MethodSpecificParameters};
+    use super::get_properties;
+    use crate::state::DOMAIN_LINKAGE_SERVICE_ID;
+    use agent_shared::config::{config, SupportedDidMethod};
     use identity_core::convert::FromJson;
+    use identity_did::CoreDID;
     use identity_document::{
         document::CoreDocument,
         service::{Service, ServiceEndpoint},
     };
+    use identity_iota::verification::jwk::Jwk;
+    use identity_iota::verification::{MethodData, MethodScope, MethodType, VerificationMethod};
     use rstest::*;
     use serde_json::json;
 
     #[fixture]
-    pub fn did_method() -> DidMethod {
-        DidMethod::Web
+    pub fn document_id() -> String {
+        "document_id".to_string()
     }
 
     #[fixture]
-    pub async fn document(did_method: DidMethod) -> CoreDocument {
-        let mut secret_manager = secret_manager().await;
+    pub fn did_method() -> SupportedDidMethod {
+        SupportedDidMethod::Web
+    }
 
-        let method_specific_parameters = matches!(did_method, DidMethod::Web).then(|| MethodSpecificParameters::Web {
-            origin: config().url.origin(),
-        });
+    #[fixture]
+    pub fn document() -> CoreDocument {
+        let controller: CoreDID = "did:web:my-domain.example.org".parse().unwrap();
 
-        secret_manager
-            .produce_document(
-                did_method,
-                method_specific_parameters,
-                from_jsonwebtoken_algorithm_to_jwsalgorithm(&get_preferred_signing_algorithm()),
-            )
-            .await
+        CoreDocument::builder(get_properties(MethodType::JSON_WEB_KEY_2020))
+            .id(controller.clone())
+            .build()
             .unwrap()
+    }
+
+    #[fixture]
+    pub fn es256_verification_method() -> VerificationMethod {
+        VerificationMethod::builder(Default::default())
+            .id(
+                "did:web:my-domain.example.org#oOY2dMVU7GK5al1q7EAxuoYloxMQlv5ZNZOatiUXQHg"
+                    .parse()
+                    .unwrap(),
+            )
+            .controller("did:web:my-domain.example.org".parse().unwrap())
+            .type_(MethodType::JSON_WEB_KEY_2020)
+            .data(MethodData::PublicKeyJwk(
+                Jwk::from_json_value(json!({
+                    "kty": "EC",
+                    "alg": "ES256",
+                    "kid": "oOY2dMVU7GK5al1q7EAxuoYloxMQlv5ZNZOatiUXQHg",
+                    "crv": "P-256",
+                    "x": "Fmk13gO2SGLbuXeL24qJPHCNncnI6lBu6ZQL2EVZv4E",
+                    "y": "fz2KvMhufzUpMeL9-K2re9fwA3mzg1bpfbceIQSuihY"
+                }))
+                .unwrap(),
+            ))
+            .build()
+            .unwrap()
+    }
+
+    #[fixture]
+    pub fn eddsa_verification_method() -> VerificationMethod {
+        VerificationMethod::builder(Default::default())
+            .id(
+                "did:web:my-domain.example.org#bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"
+                    .parse()
+                    .unwrap(),
+            )
+            .controller("did:web:my-domain.example.org".parse().unwrap())
+            .type_(MethodType::JSON_WEB_KEY_2020)
+            .data(MethodData::PublicKeyJwk(
+                Jwk::from_json_value(json!({
+                    "kty": "OKP",
+                    "alg": "EdDSA",
+                    "kid": "bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0",
+                    "crv": "Ed25519",
+                    "x": "GlnK9ePs802XxAglROQzoGurm9Qpv0IFPEbdMCILN_U"
+                }))
+                .unwrap(),
+            ))
+            .build()
+            .unwrap()
+    }
+
+    #[fixture]
+    pub fn both_verification_methods(
+        es256_verification_method: VerificationMethod,
+        eddsa_verification_method: VerificationMethod,
+    ) -> Vec<VerificationMethod> {
+        vec![es256_verification_method, eddsa_verification_method]
+    }
+
+    #[fixture]
+    pub fn document_with_single_verification_method(
+        mut document: CoreDocument,
+        es256_verification_method: VerificationMethod,
+    ) -> CoreDocument {
+        document
+            .insert_method(es256_verification_method, MethodScope::VerificationMethod)
+            .unwrap();
+
+        document
+    }
+
+    #[fixture]
+    pub fn document_with_multiple_verification_methods(
+        mut document: CoreDocument,
+        both_verification_methods: Vec<VerificationMethod>,
+    ) -> CoreDocument {
+        for verification_method in both_verification_methods {
+            document
+                .insert_method(verification_method, MethodScope::VerificationMethod)
+                .unwrap();
+        }
+
+        document
     }
 
     #[fixture]
     pub fn domain_linkage_service() -> Service {
         Service::builder(Default::default())
-            .id("did:test:123#linked_domain-service".parse().unwrap())
+            .id(format!("did:web:my-domain.example.org#{DOMAIN_LINKAGE_SERVICE_ID}")
+                .parse()
+                .unwrap())
             .type_("LinkedDomains")
             .service_endpoint(
                 ServiceEndpoint::from_json_value(json!({
-                    "origins": [config().url],
+                    "origins": [config().public_url.origin().ascii_serialization()],
                 }))
                 .unwrap(),
             )
@@ -182,27 +916,14 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub async fn document_with_domain_linkage_service(
-        did_method: DidMethod,
+    pub fn document_with_domain_linkage_service(
+        mut document_with_multiple_verification_methods: CoreDocument,
         domain_linkage_service: Service,
     ) -> CoreDocument {
-        let mut secret_manager = secret_manager().await;
-
-        let method_specific_parameters = matches!(did_method, DidMethod::Web).then(|| MethodSpecificParameters::Web {
-            origin: config().url.origin(),
-        });
-
-        let mut document = secret_manager
-            .produce_document(
-                did_method,
-                method_specific_parameters,
-                from_jsonwebtoken_algorithm_to_jwsalgorithm(&get_preferred_signing_algorithm()),
-            )
-            .await
+        document_with_multiple_verification_methods
+            .insert_service(domain_linkage_service)
             .unwrap();
 
-        document.insert_service(domain_linkage_service).unwrap();
-
-        document
+        document_with_multiple_verification_methods
     }
 }

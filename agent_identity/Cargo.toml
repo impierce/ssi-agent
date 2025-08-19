@@ -8,52 +8,62 @@ rust-version.workspace = true
 agent_shared = { path = "../agent_shared" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 
+anyhow.workspace = true
 async-trait.workspace = true
 base64.workspace = true
 cqrs-es.workspace = true
-derivative = "2.2"
-did_manager.workspace = true
+derivative.workspace = true
+did-jwk-extern = { version = "0.1.1", package = "did-jwk" }
+did-key-extern = { version = "0.2.2", package = "did-method-key" }
 identity_credential.workspace = true
 identity_core.workspace = true
 identity_did.workspace = true
-identity_document = { version = "1.3" }
+identity_document.workspace = true
+identity_storage.workspace = true
+identity_iota.workspace = true
+iota-sdk.workspace = true
+itertools = "0.14"
 jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
+product_common.workspace = true
+rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+ssi-dids = "0.1.1"
+ssi-jwk = "0.1.2"
+strum.workspace = true
+strum_macros.workspace = true
 thiserror.workspace = true
+tokio.workspace = true
 tracing.workspace = true
+url.workspace = true
+urlencoding = "2.1"
+uuid.workspace = true
 
 # `test_utils` dependencies
 futures = { workspace = true, optional = true }
 rstest = { workspace = true, optional = true }
-tokio = { workspace = true, optional = true }
 
 [dev-dependencies]
 agent_api_rest = { path = "../agent_api_rest" }
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_identity = { path = ".", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
-agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }
+agent_secret_manager = { path = "../agent_secret_manager", features = [
+    "test_utils",
+] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
 
 axum.workspace = true
-did_manager.workspace = true
 lazy_static.workspace = true
 mime.workspace = true
 names = { version = "0.14", default-features = false }
 reqwest.workspace = true
-rand = "0.8"
 serial_test = "3.0"
-tokio.workspace = true
 tower.workspace = true
 tracing-test.workspace = true
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 
 [features]
-test_utils = [
-    "dep:futures",
-    "dep:rstest",
-    "dep:tokio",
-]
+test_utils = ["dep:futures", "dep:rstest"]

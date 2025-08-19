@@ -1,5 +1,6 @@
 #![allow(clippy::await_holding_lock)]
 
+mod metadata;
 mod probes;
 
 use agent_api_rest::{
@@ -10,31 +11,23 @@ use agent_api_rest::{
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_holder::services::HolderServices;
 use agent_identity::services::IdentityServices;
-use agent_issuance::{services::IssuanceServices, startup_commands::startup_commands};
-use agent_secret_manager::{secret_manager, service::Service as _, subject::Subject};
-use agent_shared::config::{config, LogFormat};
-use agent_store::{in_memory, postgres, EventPublisher};
+use agent_issuance::services::IssuanceServices;
+use agent_secret_manager::{service::Service as _, subject::Subject};
+use agent_shared::config::{config, EventStoreType};
+use agent_store::{
+    in_memory::{self, InMemory},
+    postgres::{self, Postgres},
+    EventPublisher,
+};
 use agent_verification::services::VerificationServices;
 use probes::liveness::healthz;
 use std::sync::Arc;
 use tokio::io;
 use tracing::info;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let tracing_subscriber = tracing_subscriber::registry()
-        // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
-        .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
-
-    match config().log_format {
-        LogFormat::Json => tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init(),
-        LogFormat::Text => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
-    }
-
-    let subject = Arc::new(Subject {
-        secret_manager: Arc::new(tokio::sync::Mutex::new(secret_manager().await)),
-    });
+    let subject = Arc::new(Subject::new().await);
 
     let identity_services = Arc::new(IdentityServices::new(subject.clone()));
     let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
@@ -50,32 +43,29 @@ async fn main() -> io::Result<()> {
     let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
-    let (identity_state, issuance_state, holder_state, verification_state) =
-        match agent_shared::config::config().event_store.type_ {
-            agent_shared::config::EventStoreType::Postgres => (
-                postgres::identity_state(identity_services, identity_event_publishers).await,
-                postgres::issuance_state(issuance_services, issuance_event_publishers).await,
-                postgres::holder_state(holder_services, holder_event_publishers).await,
-                postgres::verification_state(verification_services, verification_event_publishers).await,
-            ),
-            agent_shared::config::EventStoreType::InMemory => (
-                in_memory::identity_state(identity_services, identity_event_publishers).await,
-                in_memory::issuance_state(issuance_services, issuance_event_publishers).await,
-                in_memory::holder_state(holder_services, holder_event_publishers).await,
-                in_memory::verification_state(verification_services, verification_event_publishers).await,
-            ),
-        };
+    let (identity_state, issuance_state, holder_state, verification_state) = match config().event_store.type_ {
+        EventStoreType::Postgres => (
+            agent_store::identity_state::<Postgres>(identity_services, identity_event_publishers).await,
+            postgres::issuance_state(issuance_services, issuance_event_publishers).await,
+            agent_store::holder_state::<Postgres>(holder_services, holder_event_publishers).await,
+            agent_store::verification_state::<Postgres>(verification_services, verification_event_publishers).await,
+        ),
+        EventStoreType::InMemory => (
+            agent_store::identity_state::<InMemory>(identity_services, identity_event_publishers).await,
+            in_memory::issuance_state(issuance_services, issuance_event_publishers).await,
+            agent_store::holder_state::<InMemory>(holder_services, holder_event_publishers).await,
+            agent_store::verification_state::<InMemory>(verification_services, verification_event_publishers).await,
+        ),
+    };
 
     info!("{:?}", config());
 
-    let url = &config().url;
+    info!("Application url: {}", config().application_url);
 
-    info!("Application url: {}", url);
+    info!("Public url: {}", config().public_url);
 
-    agent_identity::state::initialize(&identity_state).await;
-    agent_issuance::state::initialize(&issuance_state, startup_commands(url.clone())).await;
-
-    let health_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
+    agent_identity::state::initialize(&identity_state).await.unwrap();
+    agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
     let app = app(ApplicationState {
         identity_state: Some(identity_state),
@@ -86,18 +76,32 @@ async fn main() -> io::Result<()> {
     // Metrics layer
     .route_layer(axum::middleware::from_fn(track_metrics));
 
-    let app = health_router.merge(app);
+    let metadata_state = metadata::MetadataState {
+        startup_instant: std::time::Instant::now(),
+    };
 
-    // let listener = tokio::net::TcpListener::bind("0.0.0.0:3033").await?;
-    // info!("listening on {}", listener.local_addr()?);
+    let metadata_router = axum::Router::new()
+        .route("/version", axum::routing::get(metadata::version::version))
+        .route("/info", axum::routing::get(metadata::info::info))
+        .route("/v0/configuration", axum::routing::get(metadata::config::configuration))
+        .with_state(metadata_state);
+    let app = metadata_router.merge(app);
+
+    let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
+    let app = probes_router.merge(app);
+
+    let port = config().application_url.port().unwrap_or(3033);
+
+    // let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
+    // info!("HTTP API served at {}", config().application_url);
     // axum::serve(listener, app).await?;
 
     tokio::join!(
-        start_server("app".to_string(), app, 3033),
+        start_server("app".to_string(), app, port),
         // The `/metrics` endpoint should not be publicly available. If behind a reverse proxy, this
         // can be achieved by rejecting requests to `/metrics`. In this example, a second server is
         // started on another port to expose `/metrics`.
-        start_server("metrics".to_string(), metrics(), 3031)
+        start_server("metrics".to_string(), metrics(), 9090)
     );
 
     Ok(())
