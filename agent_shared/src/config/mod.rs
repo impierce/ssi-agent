@@ -915,6 +915,10 @@ mod tests {
               "ietf_oauth_token_status_list_uri": "http://localhost:3033/ietf-oauth-token-status-list",
               "redirect_uri": "http://localhost:3033/redirect",
               "cors_enabled": true,
+              "metrics": {
+                "enabled": false,
+                "port": 9090
+              },
               "did_methods": {
                 "did:jwk": {
                   "enabled": true,
