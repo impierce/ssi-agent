@@ -8,7 +8,7 @@ use axum::{
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 use std::{future::ready, time::Instant};
 
-/// Source: https://github.com/tokio-rs/axum/blob/main/examples/prometheus-metrics/src/main.rs
+/// Source: https://github.com/tokio-rs/axum/blob/9ec85d69703a9065a1098bb43bd93113695d5ade/examples/prometheus-metrics/src/main.rs
 pub fn metrics() -> Router {
     let recorder_handle = setup_metrics_recorder();
     Router::new().route("/metrics", get(move || ready(recorder_handle.render())))
@@ -27,7 +27,7 @@ fn setup_metrics_recorder() -> PrometheusHandle {
         .unwrap()
 }
 
-/// Source: https://github.com/tokio-rs/axum/blob/main/examples/prometheus-metrics/src/main.rs
+/// Source: https://github.com/tokio-rs/axum/blob/9ec85d69703a9065a1098bb43bd93113695d5ade/examples/prometheus-metrics/src/main.rs
 pub async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
     let start = Instant::now();
     let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
