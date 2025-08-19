@@ -34,7 +34,11 @@ impl Aggregate for AuthorizationCode {
         "authorization_code".to_string()
     }
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(
+        &self,
+        command: Self::Command,
+        _services: &Self::Services,
+    ) -> Result<Vec<Self::Event>, Self::Error> {
         use AuthorizationCodeCommand::*;
         use AuthorizationCodeError::*;
         use AuthorizationCodeEvent::*;
@@ -51,11 +55,12 @@ impl Aggregate for AuthorizationCode {
                 code_challenge,
                 code_challenge_method,
                 issuer_state,
-                // FIXME: should not be optional
                 expires_in,
             } => {
-                // FIXME: i64 vs u64
-                let expires_at = expires_in.map(|duration| chrono::Utc::now().timestamp() + duration as i64);
+                #[cfg(not(test))]
+                let expires_at = chrono::Utc::now().timestamp() + expires_in;
+                #[cfg(test)]
+                let expires_at = 0 + expires_in;
 
                 Ok(vec![AuthorizationCodeCreated {
                     authorization_code_id: authorization_code_id.clone(),
@@ -69,67 +74,47 @@ impl Aggregate for AuthorizationCode {
                     expires_at,
                 }])
             }
-            RedeemCode {
+            RedeemAuthorizationCode {
                 client_id,
                 redirect_uri,
                 code_verifier,
             } => {
-                // // 1. Check if already initialized/created
-                // if !self.initialized {
-                //     // or self.code.is_none()
-                //     return Err(InvalidGrant("Code does not exist or not initialized".to_string()));
-                // }
-
-                // // 2. Check if already used
-                // if self.used.unwrap_or(false) {
-                //     // Assuming `used` is Option<bool> or bool
-                //     return Err(InvalidGrant("Authorization code has already been used".to_string()));
-                // }
-
-                // // 3. Check expiry
-                // if let Some(expires_at_ts) = self.expires_at {
-                //     if chrono::Utc::now().timestamp() > expires_at_ts {
-                //         // Optionally emit an AuthorizationCodeExpired event here too, or just error
-                //         return Err(InvalidGrant("Authorization code has expired".to_string()));
-                //     }
-                // } else {
-                //     // Should not happen if expires_in was set during creation
-                //     return Err(GenericError("Code expiry not set".to_string()));
-                // }
-
-                // 4. Validate client_id
-                if self.client_id != client_id {
-                    todo!()
-                    // return Err(InvalidGrant("Client ID mismatch".to_string()));
+                // Check if already used.
+                if self.redeemed {
+                    return Err(RedeemedAuthorizationCodeError);
                 }
 
-                // 5. Validate redirect_uri (if applicable)
-                //    The spec says if redirect_uri was present in the initial auth request,
-                //    it MUST be present in the token request and be an exact match.
-                if self.redirect_uri != redirect_uri {
-                    todo!()
-                    // return Err(InvalidGrant("Redirect URI mismatch".to_string()));
-                }
+                // Check expiry.
+                if let Some(expires_at) = self.expires_at {
+                    #[cfg(not(test))]
+                    let now = chrono::Utc::now().timestamp();
+                    #[cfg(test)]
+                    let now = 0;
 
-                // 6. Validate PKCE code_verifier
-                if let Some(challenge) = &self.code_challenge {
-                    let code_verifier =
-                        code_verifier.expect("FIXME: Code verifier must be provided if code challenge is set");
-
-                    pkce::code_challenge(code_verifier.as_bytes());
-                    // Implement PKCE verification logic here based on self.code_challenge_method
-                    // For S256: hash = SHA256(verifier_ascii); encoded_challenge = BASE64URL-NOPAD(hash)
-                    // For plain: challenge == verifier
-                    if pkce::code_challenge(code_verifier.as_bytes()) != *challenge {
-                        todo!("FIXME: Code challenge verification failed");
-                        // return Err(InvalidGrant("Invalid PKCE code verifier".to_string()));
+                    if now > expires_at {
+                        return Err(ExpiredAuthorizationCodeError);
                     }
-                } else if code_verifier.is_some() {
-                    // Code challenge was not set, but verifier was provided - this might be an error or ignored
-                    // depending on policy. Generally, if no challenge, no verifier should be expected.
                 }
 
-                // All checks passed, emit an event to mark as used and carry forward necessary data
+                // Validate Client ID.
+                if self.client_id != client_id {
+                    return Err(InvalidClientIdError);
+                }
+
+                // Validate redirect_uri.
+                if self.redirect_uri != redirect_uri {
+                    return Err(InvalidRedirectUriError);
+                }
+
+                // Validate PKCE code_verifier
+                if let Some(code_challenge) = &self.code_challenge {
+                    let code_verifier = code_verifier.ok_or(MissingCodeVerifierError)?;
+
+                    if pkce::code_challenge(code_verifier.as_bytes()) != *code_challenge {
+                        return Err(InvalidCodeVerifierError);
+                    }
+                }
+
                 Ok(vec![AuthorizationCodeRedeemed {
                     authorization_code_id: self.authorization_code_id.clone(),
                     redeemed: true,
@@ -155,8 +140,6 @@ impl Aggregate for AuthorizationCode {
                 issuer_state,
                 expires_at,
             } => {
-                // Here you would implement the logic to apply the event to the aggregate state
-                // For now, we just set the authorization_code_id
                 self.authorization_code_id = authorization_code_id;
                 self.client_id = client_id;
                 self.redirect_uri.replace(redirect_uri);
@@ -165,18 +148,14 @@ impl Aggregate for AuthorizationCode {
                 self.code_challenge = code_challenge;
                 self.code_challenge_method = code_challenge_method;
                 self.issuer_state = issuer_state;
-                self.expires_at = expires_at;
+                self.expires_at.replace(expires_at);
             }
             AuthorizationCodeRedeemed {
-                authorization_code_id: _,
+                authorization_code_id,
                 redeemed,
             } => {
-                // Mark the code as redeemed
+                self.authorization_code_id = authorization_code_id;
                 self.redeemed = redeemed;
-                // FIXME: comment below does probably not really make sense since we store all events.
-                // Optionally, you might want to clear sensitive data or set a used flag
-                // self.code_challenge = None; // Clear challenge if you don't want to keep it after use
-                // self.code_challenge_method = None; // Clear method if not needed anymore
             }
         }
     }
@@ -186,9 +165,322 @@ impl Aggregate for AuthorizationCode {
 pub mod authorization_code_tests {
     use super::test_utils::*;
     use super::*;
+    use crate::domain::oauth2_authorization_request::aggregate::test_utils::{
+        code_challenge, code_challenge_method, code_verifier, redirect_uri, scope,
+    };
+    use agent_authorization::domain::access_token::aggregate::test_utils::{client_id, issuer_state, user_id};
+    use cqrs_es::test::TestFramework;
+    use rstest::rstest;
+
+    type AccessTokenTestFramework = TestFramework<AuthorizationCode>;
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_authorization_code(
+        authorization_code_id: String,
+        user_id: String,
+        client_id: String,
+        scope: String,
+        code_challenge: String,
+        code_challenge_method: Option<String>,
+        redirect_uri: Option<Url>,
+        issuer_state: Option<String>,
+        expires_in: i64,
+        expires_at: i64,
+    ) {
+        AccessTokenTestFramework::with(())
+            .given_no_previous_events()
+            .when(AuthorizationCodeCommand::CreateAuthorizationCode {
+                authorization_code_id: authorization_code_id.clone(),
+                client_id: client_id.clone(),
+                user_id: user_id.clone(),
+                redirect_uri: redirect_uri.clone().unwrap(),
+                scope: Some(scope.clone()),
+                code_challenge: Some(code_challenge.clone()),
+                code_challenge_method: code_challenge_method.clone(),
+                issuer_state: issuer_state.clone(),
+                expires_in,
+            })
+            .then_expect_events(vec![AuthorizationCodeEvent::AuthorizationCodeCreated {
+                authorization_code_id,
+                client_id,
+                redirect_uri: redirect_uri.unwrap(),
+                scope: Some(scope),
+                user_id,
+                code_challenge: Some(code_challenge),
+                code_challenge_method,
+                issuer_state,
+                expires_at,
+            }]);
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_redeem_authorization_code(
+        authorization_code_id: String,
+        user_id: String,
+        client_id: String,
+        scope: String,
+        code_challenge: String,
+        code_challenge_method: Option<String>,
+        issuer_state: Option<String>,
+        redirect_uri: Option<Url>,
+        code_verifier: &[u8],
+        expires_at: i64,
+    ) {
+        AccessTokenTestFramework::with(())
+            .given(vec![AuthorizationCodeEvent::AuthorizationCodeCreated {
+                authorization_code_id: authorization_code_id.clone(),
+                client_id: client_id.clone(),
+                redirect_uri: redirect_uri.clone().unwrap(),
+                scope: Some(scope.clone()),
+                user_id: user_id.clone(),
+                code_challenge: Some(code_challenge),
+                code_challenge_method,
+                issuer_state,
+                expires_at,
+            }])
+            .when(AuthorizationCodeCommand::RedeemAuthorizationCode {
+                client_id,
+                redirect_uri,
+                code_verifier: Some(String::from_utf8(code_verifier.to_vec()).unwrap()),
+            })
+            .then_expect_events(vec![AuthorizationCodeEvent::AuthorizationCodeRedeemed {
+                authorization_code_id,
+                redeemed: true,
+            }]);
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_redeem_authorization_code_twice(
+        authorization_code_id: String,
+        user_id: String,
+        client_id: String,
+        scope: String,
+        code_challenge: String,
+        code_challenge_method: Option<String>,
+        issuer_state: Option<String>,
+        redirect_uri: Option<Url>,
+        code_verifier: &[u8],
+        expires_at: i64,
+    ) {
+        AccessTokenTestFramework::with(())
+            .given(vec![
+                AuthorizationCodeEvent::AuthorizationCodeCreated {
+                    authorization_code_id: authorization_code_id.clone(),
+                    client_id: client_id.clone(),
+                    redirect_uri: redirect_uri.clone().unwrap(),
+                    scope: Some(scope.clone()),
+                    user_id: user_id.clone(),
+                    code_challenge: Some(code_challenge),
+                    code_challenge_method,
+                    issuer_state,
+                    expires_at,
+                },
+                // The authorization code is already redeemed.
+                AuthorizationCodeEvent::AuthorizationCodeRedeemed {
+                    authorization_code_id,
+                    redeemed: true,
+                },
+            ])
+            .when(AuthorizationCodeCommand::RedeemAuthorizationCode {
+                client_id,
+                redirect_uri,
+                code_verifier: Some(String::from_utf8(code_verifier.to_vec()).unwrap()),
+            })
+            .then_expect_error_message(&AuthorizationCodeError::RedeemedAuthorizationCodeError.to_string());
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_redeem_expired_authorization_code(
+        authorization_code_id: String,
+        user_id: String,
+        client_id: String,
+        scope: String,
+        code_challenge: String,
+        code_challenge_method: Option<String>,
+        issuer_state: Option<String>,
+        redirect_uri: Option<Url>,
+        code_verifier: &[u8],
+    ) {
+        AccessTokenTestFramework::with(())
+            .given(vec![AuthorizationCodeEvent::AuthorizationCodeCreated {
+                authorization_code_id: authorization_code_id.clone(),
+                client_id: client_id.clone(),
+                redirect_uri: redirect_uri.clone().unwrap(),
+                scope: Some(scope.clone()),
+                user_id: user_id.clone(),
+                code_challenge: Some(code_challenge),
+                code_challenge_method,
+                issuer_state,
+                // The authorization code is immediately expired.
+                expires_at: -1,
+            }])
+            .when(AuthorizationCodeCommand::RedeemAuthorizationCode {
+                client_id,
+                redirect_uri,
+                code_verifier: Some(String::from_utf8(code_verifier.to_vec()).unwrap()),
+            })
+            .then_expect_error_message(&AuthorizationCodeError::ExpiredAuthorizationCodeError.to_string());
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_redeem_authorization_code_with_invalid_client_id(
+        authorization_code_id: String,
+        user_id: String,
+        client_id: String,
+        scope: String,
+        code_challenge: String,
+        code_challenge_method: Option<String>,
+        issuer_state: Option<String>,
+        redirect_uri: Option<Url>,
+        code_verifier: &[u8],
+        expires_at: i64,
+    ) {
+        AccessTokenTestFramework::with(())
+            .given(vec![AuthorizationCodeEvent::AuthorizationCodeCreated {
+                authorization_code_id: authorization_code_id.clone(),
+                client_id,
+                redirect_uri: redirect_uri.clone().unwrap(),
+                scope: Some(scope.clone()),
+                user_id: user_id.clone(),
+                code_challenge: Some(code_challenge),
+                code_challenge_method,
+                issuer_state,
+                expires_at,
+            }])
+            .when(AuthorizationCodeCommand::RedeemAuthorizationCode {
+                // Using an invalid client_id
+                client_id: "invalid_client_id".to_string(),
+                redirect_uri,
+                code_verifier: Some(String::from_utf8(code_verifier.to_vec()).unwrap()),
+            })
+            .then_expect_error_message(&AuthorizationCodeError::InvalidClientIdError.to_string());
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_redeem_authorization_code_with_invalid_redirect_uri(
+        authorization_code_id: String,
+        user_id: String,
+        client_id: String,
+        scope: String,
+        code_challenge: String,
+        code_challenge_method: Option<String>,
+        issuer_state: Option<String>,
+        redirect_uri: Option<Url>,
+        code_verifier: &[u8],
+        expires_at: i64,
+    ) {
+        AccessTokenTestFramework::with(())
+            .given(vec![AuthorizationCodeEvent::AuthorizationCodeCreated {
+                authorization_code_id: authorization_code_id.clone(),
+                client_id: client_id.clone(),
+                redirect_uri: redirect_uri.unwrap(),
+                scope: Some(scope.clone()),
+                user_id: user_id.clone(),
+                code_challenge: Some(code_challenge),
+                code_challenge_method,
+                issuer_state,
+                expires_at,
+            }])
+            .when(AuthorizationCodeCommand::RedeemAuthorizationCode {
+                client_id,
+                // Using an invalid redirect_uri
+                redirect_uri: Some(Url::parse("https://invalid-redirect-uri.test").unwrap()),
+                code_verifier: Some(String::from_utf8(code_verifier.to_vec()).unwrap()),
+            })
+            .then_expect_error_message(&AuthorizationCodeError::InvalidRedirectUriError.to_string());
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_redeem_authorization_code_with_missing_code_verifier(
+        authorization_code_id: String,
+        user_id: String,
+        client_id: String,
+        scope: String,
+        code_challenge: String,
+        code_challenge_method: Option<String>,
+        issuer_state: Option<String>,
+        redirect_uri: Option<Url>,
+        expires_at: i64,
+    ) {
+        AccessTokenTestFramework::with(())
+            .given(vec![AuthorizationCodeEvent::AuthorizationCodeCreated {
+                authorization_code_id: authorization_code_id.clone(),
+                client_id: client_id.clone(),
+                redirect_uri: redirect_uri.clone().unwrap(),
+                scope: Some(scope.clone()),
+                user_id: user_id.clone(),
+                code_challenge: Some(code_challenge),
+                code_challenge_method,
+                issuer_state,
+                expires_at,
+            }])
+            .when(AuthorizationCodeCommand::RedeemAuthorizationCode {
+                client_id,
+                redirect_uri,
+                // Missing code_verifier
+                code_verifier: None,
+            })
+            .then_expect_error_message(&AuthorizationCodeError::MissingCodeVerifierError.to_string());
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_redeem_authorization_code_with_invalid_code_verifier(
+        authorization_code_id: String,
+        user_id: String,
+        client_id: String,
+        scope: String,
+        code_challenge: String,
+        code_challenge_method: Option<String>,
+        issuer_state: Option<String>,
+        redirect_uri: Option<Url>,
+        expires_at: i64,
+    ) {
+        AccessTokenTestFramework::with(())
+            .given(vec![AuthorizationCodeEvent::AuthorizationCodeCreated {
+                authorization_code_id: authorization_code_id.clone(),
+                client_id: client_id.clone(),
+                redirect_uri: redirect_uri.clone().unwrap(),
+                scope: Some(scope.clone()),
+                user_id: user_id.clone(),
+                code_challenge: Some(code_challenge),
+                code_challenge_method,
+                issuer_state,
+                expires_at,
+            }])
+            .when(AuthorizationCodeCommand::RedeemAuthorizationCode {
+                client_id,
+                redirect_uri,
+                // Using an invalid code_verifier
+                code_verifier: Some("invalid_code_verifier".to_string()),
+            })
+            .then_expect_error_message(&AuthorizationCodeError::InvalidCodeVerifierError.to_string());
+    }
 }
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
-    use super::*;
+    use rstest::fixture;
+
+    #[fixture]
+    pub fn authorization_code_id() -> String {
+        "authorization_code_id".to_string()
+    }
+
+    #[fixture]
+    pub fn expires_in() -> i64 {
+        600 // 10 minutes
+    }
+
+    #[fixture]
+    pub fn expires_at(expires_in: i64) -> i64 {
+        0 + expires_in
+    }
 }
