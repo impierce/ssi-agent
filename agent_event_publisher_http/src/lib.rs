@@ -1,3 +1,7 @@
+use agent_authorization::domain::{
+    access_token::aggregate::AccessToken, authorization_code::aggregate::AuthorizationCode, client::aggregate::Client,
+    oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest,
+};
 use agent_identity::connection::aggregate::Connection;
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
@@ -18,6 +22,12 @@ use tracing::info;
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Default)]
 pub struct EventPublisherHttp {
+    // Authorization
+    pub access_token: Option<AggregateEventPublisherHttp<AccessToken>>,
+    pub authorization_code: Option<AggregateEventPublisherHttp<AuthorizationCode>>,
+    pub client: Option<AggregateEventPublisherHttp<Client>>,
+    pub oauth2_authorization_request: Option<AggregateEventPublisherHttp<OAuth2AuthorizationRequest>>,
+
     // Identity
     pub connection: Option<AggregateEventPublisherHttp<Connection>>,
 
@@ -42,6 +52,59 @@ impl EventPublisherHttp {
         if !event_publisher_http.enabled {
             return Ok(EventPublisherHttp::default());
         }
+
+        let access_token = (!event_publisher_http.events.access_token.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<AccessToken>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .access_token
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let authorization_code = (!event_publisher_http.events.authorization_code.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<AuthorizationCode>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .authorization_code
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let client = (!event_publisher_http.events.client.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Client>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .client
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let oauth2_authorization_request =
+            (!event_publisher_http.events.oauth2_authorization_request.is_empty()).then(|| {
+                AggregateEventPublisherHttp::<OAuth2AuthorizationRequest>::new(
+                    event_publisher_http.target_url.clone(),
+                    event_publisher_http.headers.clone(),
+                    event_publisher_http
+                        .events
+                        .oauth2_authorization_request
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                )
+            });
 
         let connection = (!event_publisher_http.events.connection.is_empty()).then(|| {
             AggregateEventPublisherHttp::<Connection>::new(
@@ -135,6 +198,10 @@ impl EventPublisherHttp {
         });
 
         let event_publisher: EventPublisherHttp = EventPublisherHttp {
+            access_token,
+            authorization_code,
+            client,
+            oauth2_authorization_request,
             server_config,
             credential,
             offer,

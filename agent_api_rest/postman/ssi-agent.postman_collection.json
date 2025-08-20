@@ -1,7 +1,7 @@
 {
 	"info": {
 		"_postman_id": "e9b3fbae-f20e-4957-9d3a-6a310f5fda62",
-		"name": "Authorization Code Flow",
+		"name": "ssi-agent",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "38461474"
 	},

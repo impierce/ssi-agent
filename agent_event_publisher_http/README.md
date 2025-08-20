@@ -21,6 +21,33 @@ event_publishers:
 
 ### Available events
 
+#### `access_token`
+
+```
+AccessTokenIssued
+```
+
+#### `authorization_code`
+
+```
+AuthorizationCodeCreated
+AuthorizationCodeRedeemed
+```
+
+#### `client`
+
+```
+ClientRegistered
+```
+
+#### `oauth2_authorization_request`
+
+```
+OAuth2AuthorizationRequestCreated
+ConsentGranted
+ConsentRejected
+```
+
 #### `connection`
 
 ```

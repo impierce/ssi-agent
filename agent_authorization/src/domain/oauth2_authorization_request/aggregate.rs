@@ -69,7 +69,8 @@ impl Aggregate for OAuth2AuthorizationRequest {
             } => Ok(vec![OAuth2AuthorizationRequestCreated {
                 oauth2_authorization_request_id,
                 response_type: pushed_authorization_request.response_type,
-                state: pushed_authorization_request.state.expect("FIXME"),
+                // TODO: required or optional?
+                state: pushed_authorization_request.state.unwrap_or_default(),
                 client_id: pushed_authorization_request.client_id,
                 redirect_uri: pushed_authorization_request.redirect_uri,
                 scope: pushed_authorization_request.scope,
@@ -260,7 +261,7 @@ pub mod test_utils {
             r#type: OpenidCredential::Type,
             locations: None,
             credential_configuration_or_format: CredentialConfigurationOrFormat::CredentialConfigurationId {
-                credential_configuration_id: "FIXME".to_string(),
+                credential_configuration_id: "001".to_string(),
                 parameters: None,
             },
             claims: None,
