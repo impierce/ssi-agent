@@ -1,9 +1,9 @@
 {
 	"info": {
-		"_postman_id": "2dba0799-3686-4508-ad9b-f774b154cc96",
-		"name": "ssi-agent",
+		"_postman_id": "e9b3fbae-f20e-4957-9d3a-6a310f5fda62",
+		"name": "Authorization Code Flow",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "37402219"
+		"_exporter_id": "38461474"
 	},
 	"item": [
 		{
@@ -289,7 +289,7 @@
 					"response": []
 				},
 				{
-					"name": "offers",
+					"name": "Create Offer with Pre-Authorized Code Grant Type",
 					"event": [
 						{
 							"listen": "test",
@@ -634,7 +634,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\n            \"VerifiableCredential\",\n            \"OpenBadgeCredential\"\n        ]\n    },\n    \"proof\": {\n        \"proof_type\": \"jwt\",\n        \"jwt\": \"eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1rdWlSS3ExZktyekFYZVNOaUd3cnBKUFB1Z1k4QXhKWUE1Y3BDdlpDWUJEN0IjejZNa3VpUktxMWZLcnpBWGVTTmlHd3JwSlBQdWdZOEF4SllBNWNwQ3ZaQ1lCRDdCIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWt1aVJLcTFmS3J6QVhlU05pR3dycEpQUHVnWThBeEpZQTVjcEN2WkNZQkQ3QiIsImF1ZCI6Imh0dHA6Ly8xOTIuMTY4LjEuMTI3OjMwMzMvIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoidW5zYWZlX2Nfbm9uY2UifQ.wR2e4VUnVjG6IK9cntcqvc_8KEJQUd3SEjsPZwDYDlYqijZ4ZaQLxyHtzNmLkIS3FpChLrZrcvIUJrZxrWcKAg\"\n    }\n}",
+							"raw": "{\n    \"format\": \"jwt_vc_json\",\n    \"credential_configuration_id\": \"001\",\n    \"proof\": {\n        \"proof_type\": \"jwt\",\n        \"jwt\": \"eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1rdWlSS3ExZktyekFYZVNOaUd3cnBKUFB1Z1k4QXhKWUE1Y3BDdlpDWUJEN0IjejZNa3VpUktxMWZLcnpBWGVTTmlHd3JwSlBQdWdZOEF4SllBNWNwQ3ZaQ1lCRDdCIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWt1aVJLcTFmS3J6QVhlU05pR3dycEpQUHVnWThBeEpZQTVjcEN2WkNZQkQ3QiIsImF1ZCI6Imh0dHA6Ly8xOTIuMTY4LjEuMTI3OjMwMzMvIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoidW5zYWZlX2Nfbm9uY2UifQ.wR2e4VUnVjG6IK9cntcqvc_8KEJQUd3SEjsPZwDYDlYqijZ4ZaQLxyHtzNmLkIS3FpChLrZrcvIUJrZxrWcKAg\"\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -698,6 +698,121 @@
 							"path": [
 								"openid4vci",
 								"notification"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "par",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = JSON.parse(responseBody);",
+									"",
+									"const requestUri = jsonData?.request_uri;",
+									"",
+									"if(requestUri){",
+									"    pm.collectionVariables.set(\"REQUEST_URI\",requestUri)",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "response_type",
+									"value": "code",
+									"type": "text"
+								},
+								{
+									"key": "client_id",
+									"value": "unime-client-id",
+									"type": "text"
+								},
+								{
+									"key": "state",
+									"value": "test_state",
+									"type": "text"
+								},
+								{
+									"key": "redirect_uri",
+									"value": "unime://callback",
+									"type": "text"
+								},
+								{
+									"key": "code_challenge",
+									"value": "HlFaQkK4ul1jGkl6QRsxKGRVeRpaBY8hDja4WwPWTtw",
+									"type": "text"
+								},
+								{
+									"key": "code_challenge_method",
+									"value": "S256",
+									"type": "text"
+								},
+								{
+									"key": "scope",
+									"value": "openid profile",
+									"type": "text"
+								},
+								{
+									"key": "issuer_state",
+									"value": "{{OFFER_ID}}",
+									"type": "text"
+								},
+								{
+									"key": "authorization_details",
+									"value": "[{\"type\":\"openid_credential\",\"credential_configuration_id\":\"001\"}]",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{HOST}}/auth/par",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"auth",
+								"par"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "authorize",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/auth/authorize?client_id=unime-client-id&request_uri={{REQUEST_URI}}",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"auth",
+								"authorize"
+							],
+							"query": [
+								{
+									"key": "client_id",
+									"value": "unime-client-id"
+								},
+								{
+									"key": "request_uri",
+									"value": "{{REQUEST_URI}}"
+								}
 							]
 						}
 					},
@@ -2114,6 +2229,11 @@
 		},
 		{
 			"key": "SERVICE_ID",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "REQUEST_URI",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		}
