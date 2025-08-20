@@ -143,7 +143,7 @@ impl Aggregate for Offer {
                         }),
                     });
                 } else {
-                    unreachable!();
+                    unreachable!("`credential_offer` is always a CredentialOffer::CredentialOffer");
                 }
 
                 let mut events = vec![GrantTypesUpdated {

@@ -14,6 +14,9 @@ use jsonwebtoken;
 use oid4vc_core::jwt;
 use oid4vci::{token_request::TokenRequest, token_response::TokenResponse};
 use thiserror::Error;
+use tracing::warn;
+
+const PLACEHOLDER_CLIENT_ID: &str = "client_id";
 
 // TODO: improve error handling
 #[derive(Debug, Error)]
@@ -60,7 +63,8 @@ impl TokenIssuanceService {
                 // we will use a placeholder client ID. This is not ideal, but it is ok for now since the Access Token
                 // is opaque to the Client, and it is validated by the Credential Issuer which for now is the same as
                 // the Authorization Server.
-                ("client_id".to_string(), issuer_state)
+                warn!("Using placeholder client_id: {}", PLACEHOLDER_CLIENT_ID);
+                (PLACEHOLDER_CLIENT_ID.to_string(), issuer_state)
             }
             TokenRequest::AuthorizationCode {
                 client_id,
