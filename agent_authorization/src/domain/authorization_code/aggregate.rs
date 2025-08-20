@@ -56,7 +56,7 @@ impl Aggregate for AuthorizationCode {
                 #[cfg(not(test))]
                 let expires_at = chrono::Utc::now().timestamp() + expires_in;
                 #[cfg(test)]
-                let expires_at = 0 + expires_in;
+                let expires_at = expires_in;
 
                 Ok(vec![AuthorizationCodeCreated {
                     authorization_code_id: authorization_code_id.clone(),
@@ -151,6 +151,7 @@ impl Aggregate for AuthorizationCode {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 #[cfg(test)]
 pub mod authorization_code_tests {
     use super::test_utils::*;
@@ -437,6 +438,6 @@ pub mod test_utils {
 
     #[fixture]
     pub fn expires_at(expires_in: i64) -> i64 {
-        0 + expires_in
+        expires_in
     }
 }

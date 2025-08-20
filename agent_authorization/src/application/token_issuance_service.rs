@@ -93,7 +93,7 @@ impl TokenIssuanceService {
                     .await
                     .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?
                     // This error should never happen, since we just redeemed the authorization code.
-                    .ok_or_else(|| TokenIssuanceError::MissingAuthorizationCodeError)?
+                    .ok_or(TokenIssuanceError::MissingAuthorizationCodeError)?
                     .issuer_state;
 
                 (client_id, issuer_state)
@@ -112,7 +112,7 @@ impl TokenIssuanceService {
             client_id,
             // TODO: support scopes
             scopes: None,
-            access_token_expires_in: access_token_expires_in.clone(),
+            access_token_expires_in,
             // TODO: support refresh tokens
             refresh_token_expires_in: None,
             issuer_state,
@@ -143,8 +143,8 @@ impl TokenIssuanceService {
             sub: user_id,
             // TODO: Could/should this be a DID?
             aud: config().public_url.to_string(),
-            exp: access_token_expires_at as u64,
-            iat: issued_at as u64,
+            exp: access_token_expires_at,
+            iat: issued_at,
             jti: access_token_id,
             scope: scopes,
             client_id,

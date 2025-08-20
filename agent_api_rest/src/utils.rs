@@ -112,8 +112,13 @@ where
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let query = parts.uri.query().unwrap_or_default();
-        let params = oid4vci::from_form_urlencoded_string(&query)
-            .map_err(|_| (StatusCode::BAD_REQUEST, format!("Failed to deserialize query string")).into_response())?;
+        let params = oid4vci::from_form_urlencoded_string(query).map_err(|err| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("Failed to deserialize query string: {err}"),
+            )
+                .into_response()
+        })?;
 
         Ok(StringifiedQuery(params))
     }

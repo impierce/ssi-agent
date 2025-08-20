@@ -103,9 +103,9 @@ impl OAuth2AuthorizationService {
             }
             ConsentStatus::Rejected => {
                 // TODO: where to redirect the user?
-                return Err(OAuth2AuthorizationError::Internal(
+                Err(OAuth2AuthorizationError::Internal(
                     "Consent was rejected, but no redirect URI is specified".to_string(),
-                ));
+                ))
             }
         }
     }

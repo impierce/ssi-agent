@@ -140,6 +140,7 @@ impl Aggregate for Client {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 #[cfg(test)]
 pub mod client_tests {
     use super::test_utils::*;

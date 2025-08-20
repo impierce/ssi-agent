@@ -1,11 +1,12 @@
+use crate::domain::oauth2_authorization_request::aggregate::ConsentStatus;
 use cqrs_es::DomainEvent;
 use oid4vci::authorization_details::AuthorizationDetailsObject;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 use url::Url;
 
-use crate::domain::oauth2_authorization_request::aggregate::ConsentStatus;
-
+// TODO: remove this clippy allow
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
 pub enum OAuth2AuthorizationRequestEvent {
     OAuth2AuthorizationRequestCreated {

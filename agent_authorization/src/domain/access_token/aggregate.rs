@@ -101,6 +101,7 @@ impl Aggregate for AccessToken {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 #[cfg(test)]
 pub mod token_tests {
     use super::test_utils::*;

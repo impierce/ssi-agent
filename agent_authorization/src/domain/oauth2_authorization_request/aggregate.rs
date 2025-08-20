@@ -212,6 +212,7 @@ pub mod oauth2_authorization_request_tests {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use std::sync::OnceLock;
@@ -295,7 +296,6 @@ pub mod test_utils {
     }
 
     #[fixture]
-    #[allow(clippy::too_many_arguments)]
     pub fn pushed_authorization_request(
         response_type: String,
         state: String,
