@@ -18,7 +18,7 @@ pub struct AuthorizationCode {
     pub code_challenge_method: Option<String>,
     pub issuer_state: Option<String>,
     pub expires_at: Option<i64>,
-    pub redeemed: bool,
+    pub is_redeemed: bool,
 }
 
 #[async_trait]
@@ -74,7 +74,7 @@ impl Aggregate for AuthorizationCode {
                 code_verifier,
             } => {
                 // Check if already used.
-                if self.redeemed {
+                if self.is_redeemed {
                     return Err(RedeemedAuthorizationCodeError);
                 }
 
@@ -145,7 +145,7 @@ impl Aggregate for AuthorizationCode {
                 redeemed,
             } => {
                 self.authorization_code_id = authorization_code_id;
-                self.redeemed = redeemed;
+                self.is_redeemed = redeemed;
             }
         }
     }

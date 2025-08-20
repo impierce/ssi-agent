@@ -32,7 +32,7 @@ impl View<AuthorizationCode> for AuthorizationCode {
                 redeemed,
             } => {
                 self.authorization_code_id.clone_from(authorization_code_id);
-                self.redeemed = *redeemed;
+                self.is_redeemed = *redeemed;
             }
         }
     }
