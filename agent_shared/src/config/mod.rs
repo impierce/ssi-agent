@@ -543,7 +543,7 @@ pub struct EventPublisherHttp {
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct Events {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub access_token: Vec<AcessTokenEvent>,
+    pub access_token: Vec<AccessTokenEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub authorization_code: Vec<AuthorizationCodeEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -571,7 +571,7 @@ pub struct Events {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum AcessTokenEvent {
+pub enum AccessTokenEvent {
     AccessTokenIssued,
 }
 

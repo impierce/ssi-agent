@@ -7,12 +7,12 @@ use std::collections::HashMap;
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllOAuth2AuthorizationRequestsView {
     #[serde(flatten)]
-    pub oauth2_authorization_reqests: HashMap<String, OAuth2AuthorizationRequestView>,
+    pub oauth2_authorization_requests: HashMap<String, OAuth2AuthorizationRequestView>,
 }
 
 impl View<OAuth2AuthorizationRequest> for AllOAuth2AuthorizationRequestsView {
     fn update(&mut self, event: &EventEnvelope<OAuth2AuthorizationRequest>) {
-        self.oauth2_authorization_reqests
+        self.oauth2_authorization_requests
             // Get the entry for the aggregate_id
             .entry(event.aggregate_id.clone())
             // or insert a new one if it doesn't exist
