@@ -10,16 +10,15 @@ use agent_shared::{
 };
 use cqrs_es::{persist::PersistedEventStore, CqrsFramework};
 use cqrs_es::{persist::ViewRepository, Aggregate, Query, View};
-use mongo_es::{MongoEventRepository, MongoViewRepository};
-use mongodb::Client;
+use mongo_es::{default_mongo_client, Client, MongoEventRepository, MongoViewRepository};
 use std::sync::Arc;
 
 impl<A> AggregateHandler<A, PersistedEventStore<MongoEventRepository, A>>
 where
     A: Aggregate,
 {
-    fn new(client: Client, services: A::Services) -> Self {
-        let repo = MongoEventRepository::new(client);
+    async fn new(client: Client, services: A::Services) -> Self {
+        let repo = MongoEventRepository::new(client).await.unwrap();
         let store = PersistedEventStore::new_event_store(repo);
         Self {
             cqrs: CqrsFramework::new(store, vec![], services),
@@ -45,9 +44,7 @@ impl CqrsComponentBuilder for MongoDB {
             "Missing config parameter `event_store.connection_string` or `UNICORE__EVENT_STORE__CONNECTION_STRING`",
         );
 
-        let client = mongodb::Client::with_uri_str(&connection_string)
-            .await
-            .expect("Failed to connect to MongoDB");
+        let client = default_mongo_client(&connection_string).await;
 
         let all_aggregates_name = format!("all_{}s", A::aggregate_type());
 
@@ -58,7 +55,7 @@ impl CqrsComponentBuilder for MongoDB {
             Arc::new(MongoViewRepository::new(&all_aggregates_name, client.clone()));
 
         (
-            Arc::new(AggregateHandler::new(client, services).with_parameters(
+            Arc::new(AggregateHandler::new(client, services).await.with_parameters(
                 aggregate.clone(),
                 all_aggregates.clone(),
                 event_publishers,
@@ -78,9 +75,7 @@ pub async fn issuance_state(
     let connection_string = config().event_store.connection_string.clone().expect(
         "Missing config parameter `event_store.connection_string` or `UNICORE__EVENT_STORE__CONNECTION_STRING`",
     );
-    let client = mongodb::Client::with_uri_str(&connection_string)
-        .await
-        .expect("Failed to connect to MongoDB");
+    let client = default_mongo_client(&connection_string).await;
 
     // Initialize the mongo repositories.
     let server_config = Arc::new(MongoViewRepository::new("server_config", client.clone()));
@@ -112,6 +107,7 @@ pub async fn issuance_state(
             server_config: Arc::new(
                 server_config_event_publishers.into_iter().fold(
                     AggregateHandler::new(client.clone(), ())
+                        .await
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(server_config.clone())),
                     |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
@@ -120,6 +116,7 @@ pub async fn issuance_state(
             credential: Arc::new(
                 credential_event_publishers.into_iter().fold(
                     AggregateHandler::new(client.clone(), issuance_services.clone())
+                        .await
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(credential.clone()))
                         .append_query(all_credentials_query),
@@ -129,6 +126,7 @@ pub async fn issuance_state(
             offer: Arc::new(
                 offer_event_publishers.into_iter().fold(
                     AggregateHandler::new(client.clone(), issuance_services.clone())
+                        .await
                         .append_query(SimpleLoggingQuery {})
                         .append_query(generic_query(offer.clone()))
                         .append_query(all_offers_query)
