@@ -51,7 +51,7 @@ impl CqrsComponentBuilder for MongoDB {
 
         let all_aggregates_name = format!("all_{}s", A::aggregate_type());
 
-        // Initialize the postgres repositories.
+        // Initialize the mongo repositories.
         let aggregate: Arc<MongoViewRepository<V, A>> =
             Arc::new(MongoViewRepository::new(&A::aggregate_type(), client.clone()));
         let all_aggregates: Arc<MongoViewRepository<AV, A>> =
@@ -82,7 +82,7 @@ pub async fn issuance_state(
         .await
         .expect("Failed to connect to MongoDB");
 
-    // Initialize the postgres repositories.
+    // Initialize the mongo repositories.
     let server_config = Arc::new(MongoViewRepository::new("server_config", client.clone()));
     let pre_authorized_code = Arc::new(MongoViewRepository::new("pre_authorized_code", client.clone()));
     let access_token = Arc::new(MongoViewRepository::new("access_token", client.clone()));
