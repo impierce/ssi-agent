@@ -7368,12 +7368,14 @@ dependencies = [
 
 [[package]]
 name = "mongo-es"
-version = "0.1.0"
-source = "git+https://github.com/impierce/mongo-es?rev=f75b93e#f75b93e7032e9059b8ff5ecf8d4d8cf6cfeb896b"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79e2cc82dfc3e6742f467c41b83cadfcf8f26049c92e46093d43223815733baf"
 dependencies = [
  "async-trait",
  "cqrs-es",
  "futures",
+ "log",
  "mongodb",
  "serde",
  "serde_json",
