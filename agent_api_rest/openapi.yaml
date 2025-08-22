@@ -322,7 +322,7 @@ paths:
                   type: string
                   example: "84266fdbd31d4c2c6d0665f7e8380fa3"
                 presentation_definition:
-                  // TODO: must be updated to OID4VP Draft 28
+                  #TODO: must be updated to OID4VP Draft 28
                   type: object
               required:
                 - nonce

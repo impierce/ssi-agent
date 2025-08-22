@@ -1,5 +1,6 @@
 use crate::generic_oid4vc::GenericAuthorizationRequest;
 use cqrs_es::DomainEvent;
+use oid4vp::oid4vp::DecodedVpToken;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, strum::Display)]
@@ -18,7 +19,7 @@ pub enum AuthorizationRequestEvent {
         state: Option<String>,
     },
     OID4VPAuthorizationResponseVerified {
-        vp_token: String,
+        vp_token: DecodedVpToken,
         state: Option<String>,
     },
 }

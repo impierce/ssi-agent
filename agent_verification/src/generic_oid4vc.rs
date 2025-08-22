@@ -41,20 +41,6 @@ impl GenericAuthorizationResponse {
     }
 }
 
-#[cfg(test)]
-impl GenericAuthorizationResponse {
-    pub fn token(&self) -> String {
-        match self {
-            GenericAuthorizationResponse::SIOPv2(authorization_response) => {
-                authorization_response.extension.id_token.clone()
-            }
-            GenericAuthorizationResponse::OID4VP(authorization_response) => {
-                format!("{:?}", authorization_response.extension.vp_token)
-            }
-        }
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum GenericAuthorizationRequest {

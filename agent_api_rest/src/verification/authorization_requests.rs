@@ -190,6 +190,7 @@ pub mod tests {
         form_url_encoded_authorization_request
     }
 
+    #[tracing_test::traced_test]
     #[tokio::test]
     async fn test_authorization_requests_endpoint() {
         let verification_state = verification_state::<InMemory>(Service::default(), Default::default()).await;

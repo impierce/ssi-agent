@@ -38,20 +38,12 @@ impl IntoApiErrorExt for AuthorizationRequestError {
                 ))
                 .source(self)
                 .finish(),
-            VpTokenValidationFailed(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Unexpected Error")
-                .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
-                ))
-                .source(self)
-                .finish(),
 
             // Public API Errors
 
             // `/redirect` endpoint
             InvalidSIOPv2AuthorizationResponse(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             InvalidOID4VPAuthorizationResponse(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-            UnsupportedAuthorizationResponseParameterError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
