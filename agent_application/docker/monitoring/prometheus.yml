@@ -15,3 +15,5 @@ scrape_configs:
     static_configs:
       - targets:
           - ssi-agent:9090
+          # Uncomment to scrape UniCore instance running on the host machine (macOS, Windows)
+          # - host.docker.internal:9091
