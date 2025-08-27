@@ -4,7 +4,6 @@ use agent_shared::config::{
 };
 use oid4vc_core::client_metadata::ClientMetadataResource;
 use oid4vc_manager::RelyingPartyManager;
-use oid4vp::ClaimFormatProperty;
 use serde_json::json;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
@@ -47,17 +46,9 @@ impl Service for VerificationServices {
             client_name,
             logo_uri,
             extension: oid4vp::authorization_request::ClientMetadataParameters {
-                vp_formats: config()
-                    .vp_formats
-                    .iter()
-                    .filter(|(_, opts)| opts.enabled)
-                    .map(|(c, _)| {
-                        (
-                            c.clone(),
-                            ClaimFormatProperty::Alg(signing_algorithms_supported.clone()),
-                        )
-                    })
-                    .collect(),
+                vp_formats_supported: config().vp_formats_supported.clone(),
+                encrypted_response_enc_values_supported: None,
+                jwks: None,
             },
             other: HashMap::from_iter([(
                 "subject_syntax_types_supported".to_string(),

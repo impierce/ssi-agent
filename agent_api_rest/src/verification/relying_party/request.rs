@@ -33,7 +33,8 @@ pub(crate) async fn request(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::verification::{authorization_requests::tests::authorization_requests, router};
+    use crate::verification::authorization_requests::tests::authorization_requests;
+    use crate::verification::router;
     use agent_secret_manager::service::Service;
     use agent_store::{in_memory::InMemory, verification_state};
     use axum::{
@@ -76,7 +77,7 @@ pub mod tests {
 
         let mut app = router(verification_state);
 
-        let form_url_encoded_authorization_request = authorization_requests(&mut app, false).await;
+        let form_url_encoded_authorization_request = authorization_requests(&mut app).await;
 
         // Extract the state from the form_url_encoded_authorization_request.
         let state = form_url_encoded_authorization_request

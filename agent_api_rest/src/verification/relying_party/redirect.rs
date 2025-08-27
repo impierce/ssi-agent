@@ -3,19 +3,25 @@ use agent_verification::{
     authorization_request::command::AuthorizationRequestCommand, generic_oid4vc::GenericAuthorizationResponse,
     state::VerificationState,
 };
+use anyhow::{self, Result};
 use axum::{
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Form,
 };
 use http_api_problem::ApiError;
+use oid4vc_core::utils::form_urlencoded::from_form_urlencoded_string;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn redirect(
     State(verification_state): State<VerificationState>,
-    Form(authorization_response): Form<GenericAuthorizationResponse>,
+    body: String,
 ) -> Result<Response, ApiError> {
+    let authorization_response: GenericAuthorizationResponse = from_form_urlencoded_string(&body).map_err(|e| {
+        tracing::error!("Failed to deserialize form data: {:?}", e);
+        ApiError::new(StatusCode::BAD_REQUEST)
+    })?;
+
     let authorization_request_id = if let Some(state) = authorization_response.state() {
         state.clone()
     } else {
@@ -155,7 +161,7 @@ pub mod tests {
 
         let mut app = router(verification_state);
 
-        let form_url_encoded_authorization_request = authorization_requests(&mut app, false).await;
+        let form_url_encoded_authorization_request = authorization_requests(&mut app).await;
 
         // Extract the state from the form_url_encoded_authorization_request.
         let state = form_url_encoded_authorization_request

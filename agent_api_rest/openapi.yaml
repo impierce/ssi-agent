@@ -322,6 +322,7 @@ paths:
                   type: string
                   example: "84266fdbd31d4c2c6d0665f7e8380fa3"
                 presentation_definition:
+                  #TODO: must be updated to OID4VP Draft 28
                   type: object
               required:
                 - nonce
@@ -335,6 +336,7 @@ paths:
                 value:
                   nonce: this is a nonce
                   presentation_definition:
+                    // TODO: must be updated to OID4VP Draft 28
                     id: Verifiable Presentation request for sign-on
                     input_descriptors:
                     - id: Request for Verifiable Credential
@@ -351,6 +353,7 @@ paths:
                 value:
                   nonce: this is a nonce
                   presentation_definition:
+                // TODO: must be updated to OID4VP Draft 28
                     id: Verifiable Presentation request for sign-on
                     input_descriptors:
                     - id: Request for Verifiable Credential

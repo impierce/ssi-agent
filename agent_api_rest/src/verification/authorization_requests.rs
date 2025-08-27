@@ -12,7 +12,7 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::header;
-use oid4vp::PresentationDefinition;
+use oid4vp::dcql::dcql_query::DcqlQuery;
 use serde::{Deserialize, Serialize};
 
 #[axum_macros::debug_handler]
@@ -46,15 +46,7 @@ pub(crate) async fn authorization_request(
 pub struct AuthorizationRequestsEndpointRequest {
     pub nonce: String,
     pub state: Option<String>,
-    #[serde(flatten)]
-    pub presentation_definition: Option<PresentationDefinitionResource>,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PresentationDefinitionResource {
-    PresentationDefinitionId(String),
-    PresentationDefinition(PresentationDefinition),
+    pub dcql_query: Option<DcqlQuery>,
 }
 
 #[axum_macros::debug_handler]
@@ -63,35 +55,15 @@ pub(crate) async fn authorization_requests(
     Json(AuthorizationRequestsEndpointRequest {
         nonce,
         state,
-        presentation_definition,
+        dcql_query,
     }): Json<AuthorizationRequestsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let state = state.unwrap_or(generate_random_string());
 
-    let presentation_definition = presentation_definition.map(|presentation_definition| {
-        match presentation_definition {
-            // TODO: This needs to be properly fixed instead of reading the presentation definitions from the file system
-            // everytime a request is made. `PresentationDefinition`'s should be implemented as a proper `Aggregate`. This
-            // current suboptimal solution requires the `./tmp:/app/agent_api_rest` volume to be mounted in the `docker-compose.yml`.
-            PresentationDefinitionResource::PresentationDefinitionId(presentation_definition_id) => {
-                let project_root_dir = env!("CARGO_MANIFEST_DIR");
-
-                serde_json::from_reader(
-                    std::fs::File::open(format!(
-                        "{project_root_dir}/../agent_verification/presentation_definitions/{presentation_definition_id}.json"
-                    ))
-                    .unwrap(),
-                )
-                .unwrap()
-            }
-            PresentationDefinitionResource::PresentationDefinition(presentation_definition) => presentation_definition,
-        }
-    });
-
     let command = AuthorizationRequestCommand::CreateAuthorizationRequest {
         nonce: nonce.to_string(),
         state: state.clone(),
-        presentation_definition,
+        dcql_query: dcql_query.clone(),
     };
 
     // Create the authorization request.
@@ -138,23 +110,36 @@ pub mod tests {
         http::{self, Request},
         Router,
     };
-    use rstest::rstest;
+    use lazy_static::lazy_static;
+    use serde_json::json;
     use tower::Service as _;
 
-    pub async fn authorization_requests(app: &mut Router, by_value: bool) -> String {
+    lazy_static! {
+        pub static ref DCQL_QUERY: DcqlQuery = serde_json::from_value(json!({
+            "credentials": [
+                {
+                    "id": "my_credential",
+                    "format": "jwt_vc_json",
+                    "meta": {
+                        "vct_values": [ "https://www.w3.org/2018/credentials/examples/v1#PersonalInformation" ]
+                    },
+                    "claims": [
+                        {"path": ["credentialSubject", "familyName"]},
+                        {"path": ["credentialSubject", "givenName"]},
+                        {"path": ["credentialSubject", "email"]},
+                        {"path": ["credentialSubject", "birthdate"]},
+                    ]
+                }
+            ]
+        }))
+        .unwrap();
+    }
+
+    pub async fn authorization_requests(app: &mut Router) -> String {
         let request_body = AuthorizationRequestsEndpointRequest {
             nonce: "nonce".to_string(),
             state: None,
-            presentation_definition: Some(if by_value {
-                PresentationDefinitionResource::PresentationDefinition(
-                    serde_json::from_str(include_str!(
-                        "../../../agent_verification/presentation_definitions/presentation_definition.json"
-                    ))
-                    .unwrap(),
-                )
-            } else {
-                PresentationDefinitionResource::PresentationDefinitionId("presentation_definition".to_string())
-            }),
+            dcql_query: Some(DCQL_QUERY.clone()),
         };
 
         let response = app
@@ -187,8 +172,7 @@ pub mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let form_url_encoded_authorization_request: String = String::from_utf8(body.to_vec()).unwrap();
-        assert_eq!(form_url_encoded_authorization_request, format!("openid://?client_id=did%3Akey%3Az6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt&request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2F{state}"));
-
+        assert_eq!(form_url_encoded_authorization_request, format!("openid://?client_id=decentralized_identifier%3Adid%3Akey%3Az6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt&request_uri=https%3A%2F%2Fmy-domain.example.org%2Frequest%2F{state}"));
         let response = app
             .call(
                 Request::builder()
@@ -206,16 +190,13 @@ pub mod tests {
         form_url_encoded_authorization_request
     }
 
-    #[rstest]
-    #[case::with_presentation_definition_by_value(true)]
-    #[case::with_presentation_definition_id(false)]
-    #[tokio::test]
     #[tracing_test::traced_test]
-    async fn test_authorization_requests_endpoint(#[case] by_value: bool) {
+    #[tokio::test]
+    async fn test_authorization_requests_endpoint() {
         let verification_state = verification_state::<InMemory>(Service::default(), Default::default()).await;
-
         let mut app = router(verification_state);
 
-        authorization_requests(&mut app, by_value).await;
+        let result = authorization_requests(&mut app).await;
+        assert!(!result.is_empty());
     }
 }

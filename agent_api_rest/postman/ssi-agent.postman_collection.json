@@ -883,7 +883,7 @@
 					"response": []
 				},
 				{
-					"name": "oid4vp_authorization_requests_with_presentation_definition",
+					"name": "oid4vp_authorization_requests_with_dcql_query",
 					"event": [
 						{
 							"listen": "test",
@@ -931,66 +931,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"presentation_definition\": {\n        \"id\":\"Verifiable Presentation request for sign-on\",\n        \"input_descriptors\":[\n            {\n                \"id\":\"Request for Verifiable Credential\",\n                \"constraints\":{\n                    \"fields\":[\n                        {\n                            \"path\":[\n                                \"$.vc.type\"\n                            ],\n                            \"filter\":{\n                                \"type\":\"array\",\n                                \"contains\":{\n                                    \"const\":\"VerifiableCredential\"\n                                }\n                            }\n                        }\n                    ]\n                }\n            }\n        ]\n    }\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{HOST}}/v0/authorization_requests",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"v0",
-								"authorization_requests"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "oid4vp_authorization_requests_with_presentation_definition_id",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"const location = pm.response.headers.get(\"LOCATION\");",
-									"",
-									"if(location){",
-									"    pm.collectionVariables.set(\"AUTHORIZATION_REQUEST_LOCATION\",location)",
-									"}",
-									"",
-									"const authorization_request = responseBody;",
-									"",
-									"const decodedString = decodeURIComponent(authorization_request);",
-									"",
-									"// Regular expression to match the value of request_uri",
-									"const regex = /request_uri=([^&]+)/;",
-									"",
-									"// Executing the regular expression on the input string",
-									"const match = regex.exec(decodedString);",
-									"",
-									"// Extracting the value of request_uri",
-									"const requestUri = match ? decodeURIComponent(match[1]) : null;",
-									"",
-									"pm.collectionVariables.set(\"REQUEST_URI\",requestUri)",
-									""
-								],
-								"type": "text/javascript",
-								"packages": {}
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"presentation_definition_id\": \"presentation_definition\"\n}",
+							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"dcql_query\":\n        {\n      \"credentials\": [\n        {\n          \"id\": \"CredentialQuery\",\n          \"format\": \"jwt_vc_json\",\n          \"meta\": {\n            \"type_values\": [\n                [\"VerifiableCredential\"],\n                [\"PersonalInformation\"]\n            ]\n          },\n          \"claims\": [\n              {\"path\": [\"credentialSubject\", \"givenName\"]},\n              {\"path\": [\"credentialSubject\", \"familyName\"]},\n              {\"path\": [\"credentialSubject\", \"email\"]},\n              {\"path\": [\"credentialSubject\", \"birthdate\"]}\n          ]\n        }\n      ]\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
