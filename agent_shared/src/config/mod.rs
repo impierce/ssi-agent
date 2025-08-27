@@ -436,6 +436,7 @@ pub struct EventStoreConfig {
 pub enum EventStoreType {
     InMemory,
     #[default]
+    #[serde(rename = "mongodb")]
     MongoDb,
     // Postgres(EventStorePostgresConfig), // <== TODO: "config-rs" panics with "unreachable code", other solution?
     Postgres,
