@@ -10,8 +10,7 @@ use agent_shared::{
 };
 use cqrs_es::{persist::PersistedEventStore, CqrsFramework};
 use cqrs_es::{persist::ViewRepository, Aggregate, Query, View};
-use mongo_es::{MongoEventRepository, MongoViewRepository};
-use mongodb::Client;
+use mongo_es::{Client, MongoEventRepository, MongoViewRepository};
 use std::sync::Arc;
 
 impl<A> AggregateHandler<A, PersistedEventStore<MongoEventRepository, A>>

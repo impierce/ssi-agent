@@ -386,7 +386,6 @@ dependencies = [
  "async-trait",
  "cqrs-es",
  "mongo-es",
- "mongodb",
  "postgres-es",
  "serde_json",
  "sqlx",
