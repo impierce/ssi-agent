@@ -38,6 +38,7 @@ pub mod tests {
         http::{self, Request},
         Router,
     };
+    use oid4vc_core::utils::form_urlencoded::to_form_urlencoded_string;
     use oid4vci::{
         authorization_details::{AuthorizationDetailsObject, CredentialConfigurationOrFormat, OpenidCredential},
         credential_format_profiles::CredentialFormats,
@@ -58,7 +59,7 @@ pub mod tests {
                         mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
                     )
                     .body(Body::from(
-                        oid4vci::to_form_urlencoded_string(&json!(AuthorizationRequest {
+                        to_form_urlencoded_string(&json!(AuthorizationRequest {
                             response_type: "code".to_string(),
                             state: Some("test_state".to_string()),
                             client_id: UNIME_CLIENT_ID.to_string(),

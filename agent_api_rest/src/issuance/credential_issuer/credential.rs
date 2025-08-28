@@ -298,7 +298,7 @@ pub mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body.get("credential"), Some(&json!(CREDENTIAL_JWT)));
+        assert_eq!(body["credentials"][0]["credential"], json!(CREDENTIAL_JWT));
 
         if let Some(external_server) = external_server {
             // Assert that the event was dispatched to the target URL.
@@ -414,7 +414,7 @@ pub mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body.get("credential"), Some(&json!(CREDENTIAL_JWT)));
+        assert_eq!(body["credentials"][0]["credential"], json!(CREDENTIAL_JWT));
 
         if let Some(external_server) = external_server {
             // Assert that the event was dispatched to the target URL.

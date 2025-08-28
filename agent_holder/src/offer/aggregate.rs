@@ -197,36 +197,39 @@ impl Aggregate for Offer {
                             .get(credential_configuration_id)
                             .ok_or(MissingCredentialConfigurationError)?;
 
-                        todo!("FIXME");
-                        // // Get the credential.
-                        // let credential_response = wallet
-                        //     .get_credential(
-                        //         credential_issuer_metadata,
-                        //         &token_response,
-                        //         credential_configuration_id.clone(),
-                        //         credential_configuration,
-                        //     )
-                        //     .await
-                        //     .map_err(|_| CredentialResponseError)?;
+                        // Get the credential.
+                        let credential_response = wallet
+                            .get_credential(
+                                credential_issuer_metadata,
+                                &token_response,
+                                // FIXME: implement `nonce`!
+                                None,
+                                credential_configuration_id.clone(),
+                                credential_configuration,
+                                // TODO: implement authorization code flow on the holder side.
+                                true,
+                            )
+                            .await
+                            .map_err(|_| CredentialResponseError)?;
 
-                        // let credential = match credential_response.credential {
-                        //     CredentialResponseType::Immediate { credential, .. } => {
-                        //         Jwt::from(credential.as_str().ok_or(UnsupportedCredentialFormatError)?.to_string())
-                        //     }
-                        //     CredentialResponseType::Deferred { .. } => {
-                        //         return Err(UnsupportedDeferredCredentialResponseError)
-                        //     }
-                        // };
+                        let credential = match credential_response.credential {
+                            CredentialResponseType::Immediate { credentials, .. } => {
+                                Jwt::from(credentials[0].credential.clone())
+                            }
+                            CredentialResponseType::Deferred { .. } => {
+                                return Err(UnsupportedDeferredCredentialResponseError)
+                            }
+                        };
 
-                        // #[cfg(not(feature = "test_utils"))]
-                        // let holder_credential_id = uuid::Uuid::new_v4().to_string();
-                        // #[cfg(feature = "test_utils")]
-                        // let holder_credential_id = test_utils::holder_credential_id();
+                        #[cfg(not(feature = "test_utils"))]
+                        let holder_credential_id = uuid::Uuid::new_v4().to_string();
+                        #[cfg(feature = "test_utils")]
+                        let holder_credential_id = test_utils::holder_credential_id();
 
-                        // vec![OfferCredential {
-                        //     holder_credential_id,
-                        //     credential,
-                        // }]
+                        vec![OfferCredential {
+                            holder_credential_id,
+                            credential,
+                        }]
                     }
                     _batch => {
                         return Err(BatchCredentialRequestError);

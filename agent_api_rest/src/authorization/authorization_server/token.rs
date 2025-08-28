@@ -47,9 +47,9 @@ pub mod tests {
         http::{self, Request},
         Router,
     };
+    use oid4vc_core::utils::form_urlencoded::to_form_urlencoded_string;
     use oid4vci::{
         credential_offer::{AuthorizationCode, PreAuthorizedCode},
-        to_form_urlencoded_string,
         token_response::TokenResponse,
     };
     use rstest::rstest;

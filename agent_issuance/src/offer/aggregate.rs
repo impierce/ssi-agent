@@ -633,7 +633,6 @@ pub mod test_utils {
     };
     use once_cell::sync::OnceCell;
     pub use rstest::*;
-    use serde_json::json;
     use std::collections::HashMap;
     use url::Url;
 
@@ -749,7 +748,9 @@ pub mod test_utils {
     pub fn credential_response(notification_id: String) -> CredentialResponse {
         CredentialResponse {
             credential: CredentialResponseType::Immediate {
-                credential: json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string()),
+                credentials: vec![CredentialResponseObject {
+                    credential: OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string(),
+                }],
                 notification_id: Some(notification_id.clone()),
             },
         }

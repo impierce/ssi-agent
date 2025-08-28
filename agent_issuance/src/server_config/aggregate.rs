@@ -312,8 +312,10 @@ pub mod server_config_tests {
     use cqrs_es::test::TestFramework;
     use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
     use oid4vci::credential_format_profiles::{w3c_verifiable_credentials, CredentialFormats, Parameters};
+    use oid4vci::credential_issuer::credential_configurations_supported::{
+        CredentialConfigurationsSupportedDisplay, Logo,
+    };
     use rstest::*;
-    use serde_json::json;
 
     type ServerConfigTestFramework = TestFramework<ServerConfig>;
 
@@ -368,14 +370,18 @@ pub mod server_config_tests {
                             },
                         },
                     }),
-                    display: vec![json!({
-                        "name": "Verifiable Credential",
-                        "locale": "en",
-                        "logo": {
-                            "uri": "https://www.impierce.com/external/impierce-logo.png",
-                            "alt_text": "Impierce Logo"
-                        }
-                    })],
+                    display: vec![CredentialConfigurationsSupportedDisplay {
+                        name: "Verifiable Credential".to_string(),
+                        locale: Some("en".to_string()),
+                        logo: Some(Logo {
+                            uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
+                            alt_text: Some("Impierce Logo".to_string()),
+                        }),
+                        description: None,
+                        background_image: None,
+                        background_color: None,
+                        text_color: None,
+                    }],
                     claims: vec![],
                 },
                 provisioned: false,
