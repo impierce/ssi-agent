@@ -5,7 +5,8 @@ use crate::{
     state::AuthorizationState,
 };
 use agent_shared::handlers::{command_handler, query_handler};
-use oid4vci::{to_form_urlencoded_string, wallet::AuthorizationRequestByReference};
+use oid4vc_core::utils::form_urlencoded::to_form_urlencoded_string;
+use oid4vci::wallet::AuthorizationRequestByReference;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;

@@ -4,6 +4,7 @@ use axum::{
     RequestExt as _,
 };
 use http::{request::Parts, StatusCode};
+use oid4vc_core::utils::form_urlencoded::from_form_urlencoded_string;
 use serde::de::DeserializeOwned;
 
 /// An Axum extractor for `application/x-www-form-urlencoded` data with a special deserialization strategy.
@@ -16,7 +17,7 @@ use serde::de::DeserializeOwned;
 /// # Deserialization Strategy
 ///
 /// Instead of `serde_urlencoded`'s default behavior which flattens nested objects,
-/// `StringifiedForm` uses a custom deserializer (`oid4vci::from_form_urlencoded_string`).
+/// `StringifiedForm` uses a custom deserializer (`from_form_urlencoded_string`).
 /// This function first decodes the form into a map of string keys and string values.
 /// It then iterates through the map, attempting to parse each string value as JSON.
 /// If successful, the parsed JSON value is used; otherwise, it falls back to treating
@@ -49,7 +50,7 @@ where
 
         match req.extract().await {
             Ok(RawForm(bytes)) => {
-                let value = oid4vci::from_form_urlencoded_string(
+                let value = from_form_urlencoded_string(
                     std::str::from_utf8(&bytes)
                         .map_err(|_| (StatusCode::BAD_REQUEST, "Failed to deserialize form").into_response())?,
                 )
@@ -83,7 +84,7 @@ where
 /// # Deserialization Strategy
 ///
 /// Instead of `serde_urlencoded`'s default behavior which flattens nested objects,
-/// `StringifiedQuery` uses a custom deserializer (`oid4vci::from_form_urlencoded_string`).
+/// `StringifiedQuery` uses a custom deserializer (`from_form_urlencoded_string`).
 /// This function first decodes the query string into a map of string keys and string values.
 /// It then iterates through the map, attempting to parse each string value as JSON.
 /// If successful, the parsed JSON value is used; otherwise, it falls back to treating
@@ -112,7 +113,7 @@ where
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let query = parts.uri.query().unwrap_or_default();
-        let params = oid4vci::from_form_urlencoded_string(query).map_err(|err| {
+        let params = from_form_urlencoded_string(query).map_err(|err| {
             (
                 StatusCode::BAD_REQUEST,
                 format!("Failed to deserialize query string: {err}"),

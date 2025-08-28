@@ -6,7 +6,7 @@ use oid4vci::credential_issuer::CredentialIssuer;
 use oid4vci::credential_offer::{
     AuthorizationCode, CredentialOffer, CredentialOfferParameters, GrantType, Grants, PreAuthorizedCode,
 };
-use oid4vci::credential_response::{CredentialResponse, CredentialResponseType};
+use oid4vci::credential_response::{CredentialResponse, CredentialResponseObject, CredentialResponseType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -271,7 +271,9 @@ impl Aggregate for Offer {
                 let (signed_credential, notification_id) = signed_credentials.pop().ok_or(MissingCredentialError)?;
                 let credential_response = CredentialResponse {
                     credential: CredentialResponseType::Immediate {
-                        credential: signed_credential,
+                        credentials: vec![CredentialResponseObject {
+                            credential: signed_credential.as_str().expect("FIXME").to_string(),
+                        }],
                         notification_id,
                     },
                 };

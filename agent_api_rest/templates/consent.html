@@ -48,14 +48,7 @@
 
                 {# Use `if let` to safely handle the optional claims vector #}
                 {% if let Some(claims) = &authorization_detail.claims %}
-                    {% if !claims.is_empty() %}
-                        <ul>
-                            {% for claim in claims %}
-                            {# The `path` is a Vec<String>, so join it for display #}
-                            <li>{{ claim.path | join(".") }}</li>
-                            {% endfor %}
-                        </ul>
-                    {% endif %}
+
                 {% endif %}
             </li>
             {% endfor %}

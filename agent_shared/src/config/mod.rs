@@ -9,6 +9,8 @@ use identity_iota::{
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
+use oid4vci::credential_issuer::credential_configurations_supported::ClaimDescription;
+use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedDisplay;
 use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported};
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -498,9 +500,9 @@ pub struct CredentialConfiguration {
     #[serde(flatten)]
     pub credential_format_with_parameters: CredentialFormats<WithParameters>,
     #[serde(default)]
-    pub display: Vec<serde_json::Value>,
+    pub display: Vec<CredentialConfigurationsSupportedDisplay>,
     #[serde(default)]
-    pub claims: Vec<IssuerMetadataClaim>,
+    pub claims: Vec<ClaimDescription>,
 }
 
 #[skip_serializing_none]
