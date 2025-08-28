@@ -11,8 +11,6 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use oid4vc_core::client_metadata::ClientMetadataResource;
 use oid4vc_core::{authorization_request::ByReference, scope::Scope};
-use oid4vp::dcql::dcql_query::DcqlQuery;
-use oid4vp::token::vp_token::VpToken;
 use oid4vp::token::vp_token_builder::VpTokenBuilder;
 use oid4vp::{authorization_request::ClientId, oid4vp::DecodedVpToken};
 use serde::{Deserialize, Serialize};
@@ -214,8 +212,19 @@ impl Aggregate for AuthorizationRequest {
                         };
                         let vp_token = &oid4vp_authorization_response.extension.vp_token;
 
-                        AuthorizationRequest::validate_vp_token_against_dcql_query(vp_token, dcql_query)?;
+                        let mut builder = VpTokenBuilder::builder_dcql_query(dcql_query.clone());
 
+                        // Add presentations from the received VP token
+                        for (credential_id, presentations) in vp_token.presentations() {
+                            for presentation in presentations {
+                                builder = builder.add_presentation(credential_id.clone(), presentation.clone());
+                            }
+                        }
+                        builder.build().map_err(|_| {
+                            AuthorizationRequestError::InvalidOID4VPAuthorizationResponse(anyhow::anyhow!(
+                                "VpToken validation failed against DCQL query"
+                            ))
+                        })?;
                         let decoded_vp_token = relying_party
                             .validate_response(&oid4vp_authorization_response)
                             .await
@@ -261,30 +270,6 @@ impl Aggregate for AuthorizationRequest {
                 self.state = state;
             }
         }
-    }
-}
-
-impl AuthorizationRequest {
-    pub fn validate_vp_token_against_dcql_query(
-        vp_token: &VpToken,
-        dcql_query: &DcqlQuery,
-    ) -> Result<(), AuthorizationRequestError> {
-        // Create a temporary builder to validate the VP token against the DCQL query
-        let mut builder = VpTokenBuilder::builder_dcql_query(dcql_query.clone());
-
-        // Add presentations from the received VP token
-        for (credential_id, presentations) in vp_token.presentations() {
-            for presentation in presentations {
-                builder = builder.add_presentation(credential_id.clone(), presentation.clone());
-            }
-        }
-        builder.build().map_err(|_| {
-            AuthorizationRequestError::InvalidOID4VPAuthorizationResponse(anyhow::anyhow!(
-                "VpToken validation failed against DCQL query"
-            ))
-        })?;
-
-        Ok(())
     }
 }
 

@@ -24,6 +24,7 @@ signing_algorithms_supported:
     enabled: false
 
 # TODO: required to be stated explicitly?
+# TODO: update to vp_formats_supported
 vp_formats:
   jwt_vc_json:
     enabled: true

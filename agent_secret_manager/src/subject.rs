@@ -247,7 +247,7 @@ impl oid4vc_core::Subject for Subject {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct StorageKey {
     pub did_method: SupportedDidMethod,
     pub algorithm: Algorithm,
