@@ -31,6 +31,7 @@ impl IntoApiErrorExt for AuthorizationRequestError {
                 ))
                 .source(self)
                 .finish(),
+
             // Public API Errors
 
             // `/redirect` endpoint
