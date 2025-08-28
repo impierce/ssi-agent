@@ -18,7 +18,9 @@ where
     A: Aggregate,
 {
     async fn new(client: Client, services: A::Services) -> Self {
-        let repo = MongoEventRepository::new(client).await.unwrap();
+        let repo = MongoEventRepository::new(client)
+            .await
+            .expect("Failed to create MongoEventRepository");
         let store = PersistedEventStore::new_event_store(repo);
         Self {
             cqrs: CqrsFramework::new(store, vec![], services),
@@ -48,7 +50,7 @@ impl CqrsComponentBuilder for MongoDB {
 
         let all_aggregates_name = format!("all_{}s", A::aggregate_type());
 
-        // Initialize the mongo repositories.
+        // Initialize the MongoDB repositories.
         let aggregate: Arc<MongoViewRepository<V, A>> =
             Arc::new(MongoViewRepository::new(&A::aggregate_type(), client.clone()));
         let all_aggregates: Arc<MongoViewRepository<AV, A>> =
@@ -77,7 +79,7 @@ pub async fn issuance_state(
     );
     let client = default_mongo_client(&connection_string).await;
 
-    // Initialize the mongo repositories.
+    // Initialize the MongoDB repositories.
     let server_config = Arc::new(MongoViewRepository::new("server_config", client.clone()));
     let pre_authorized_code = Arc::new(MongoViewRepository::new("pre_authorized_code", client.clone()));
     let access_token = Arc::new(MongoViewRepository::new("access_token", client.clone()));
