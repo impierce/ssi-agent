@@ -31,14 +31,6 @@ impl IntoApiErrorExt for AuthorizationRequestError {
                 ))
                 .source(self)
                 .finish(),
-            SerializationError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Unexpected Error")
-                .type_url(format!(
-                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
-                ))
-                .source(self)
-                .finish(),
-
             // Public API Errors
 
             // `/redirect` endpoint

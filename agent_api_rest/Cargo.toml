@@ -31,7 +31,6 @@ oid4vci.workspace = true
 oid4vp.workspace = true
 rand.workspace = true
 serde.workspace = true
-serde_urlencoded.workspace = true
 serde_with.workspace = true
 serde_json.workspace = true
 siopv2.workspace = true
@@ -45,7 +44,9 @@ uuid.workspace = true
 
 [dev-dependencies]
 agent_api_rest = { path = ".", features = ["test_utils"] }
-agent_event_publisher_http = { path = "../agent_event_publisher_http", features = ["test_utils"] }
+agent_event_publisher_http = { path = "../agent_event_publisher_http", features = [
+    "test_utils",
+] }
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_identity = { path = "../agent_identity", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }

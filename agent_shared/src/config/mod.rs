@@ -912,8 +912,8 @@ mod tests {
                   "preferred": true
                 },
                 "ES256": {
-                  "enabled": true,
-                },
+                  "enabled": true
+                }
               },
               "display": [
                 {

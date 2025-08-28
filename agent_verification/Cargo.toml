@@ -1,7 +1,7 @@
 [package]
 name = "agent_verification"
-edition.workspace = true
 version.workspace = true
+edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
@@ -12,7 +12,6 @@ anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
 cqrs-es.workspace = true
-did-key = "0.2"
 futures.workspace = true
 jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
@@ -30,13 +29,13 @@ tokio.workspace = true
 url.workspace = true
 
 [dev-dependencies]
-agent_shared = { path = "../agent_shared", features = ["test_utils"] }
-agent_verification = { path = ".", features = ["test_utils"] }
 agent_secret_manager = { path = "../agent_secret_manager", features = [
     "test_utils",
 ] }
-
+agent_shared = { path = "../agent_shared", features = ["test_utils"] }
+agent_verification = { path = ".", features = ["test_utils"] }
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
+did-key = "0.2"
 identity_core.workspace = true
 identity_credential.workspace = true
 lazy_static.workspace = true
