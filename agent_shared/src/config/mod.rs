@@ -928,7 +928,7 @@ mod tests {
               "event_publishers": {},
               "vp_formats_supported": {
                 "jwt_vc_json": {
-                  "alg_values": ["ES256", "EdDSA"],
+                  "alg_values": ["ES256", "EdDSA"]
                 },
                 "jwt_vp_json": {
                   "alg_values": ["ES256", "EdDSA"]
@@ -936,7 +936,7 @@ mod tests {
                 "dc+sd-jwt": {
                   "sd-jwt_alg_values": ["ES256"],
                   "kb-jwt_alg_values": ["ES256"]
-                },
+                }
               }
             })
         );
