@@ -13,6 +13,7 @@ agent_verification = { path = "../agent_verification" }
 
 async-trait.workspace = true
 cqrs-es.workspace = true
+mongo-es = "0.3"
 postgres-es = "0.4.12"
 serde_json.workspace = true
 sqlx = { version = "0.8", features = [

@@ -435,8 +435,10 @@ pub struct EventStoreConfig {
 #[serde(rename_all = "snake_case")]
 pub enum EventStoreType {
     InMemory,
-    // Postgres(EventStorePostgresConfig), // <== TODO: "config-rs" panics with "unreachable code", other solution?
     #[default]
+    #[serde(rename = "mongodb")]
+    MongoDb,
+    // Postgres(EventStorePostgresConfig), // <== TODO: "config-rs" panics with "unreachable code", other solution?
     Postgres,
 }
 

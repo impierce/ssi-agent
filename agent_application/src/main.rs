@@ -12,6 +12,7 @@ use agent_secret_manager::{service::Service as _, subject::Subject};
 use agent_shared::config::{config, EventStoreType};
 use agent_store::{
     in_memory::{self, InMemory},
+    mongodb::{self, MongoDB},
     postgres::{self, Postgres},
     EventPublisher,
 };
@@ -45,6 +46,12 @@ async fn main() -> io::Result<()> {
             postgres::issuance_state(issuance_services, issuance_event_publishers).await,
             agent_store::holder_state::<Postgres>(holder_services, holder_event_publishers).await,
             agent_store::verification_state::<Postgres>(verification_services, verification_event_publishers).await,
+        ),
+        EventStoreType::MongoDb => (
+            agent_store::identity_state::<MongoDB>(identity_services, identity_event_publishers).await,
+            mongodb::issuance_state(issuance_services, issuance_event_publishers).await,
+            agent_store::holder_state::<MongoDB>(holder_services, holder_event_publishers).await,
+            agent_store::verification_state::<MongoDB>(verification_services, verification_event_publishers).await,
         ),
         EventStoreType::InMemory => (
             agent_store::identity_state::<InMemory>(identity_services, identity_event_publishers).await,
