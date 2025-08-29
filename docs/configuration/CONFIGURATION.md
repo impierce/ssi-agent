@@ -249,7 +249,8 @@ The event store is used to persist events and serves as UniCore's persistence la
 
 ##### `type`
 
-- `postgres` _(default)_
+- `mongodb` _(default)_
+- `postgres`
 - `in_memory`
 
 ##### `connection_string`

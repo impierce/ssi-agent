@@ -3,7 +3,7 @@ use super::error::OAuth2AuthorizationRequestError;
 use super::event::OAuth2AuthorizationRequestEvent;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use oid4vci::authorization_details::AuthorizationDetailsObject;
+use oid4vci::{authorization_details::AuthorizationDetailsObject, authorization_request::CodeChallengeMethod};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 use url::Url;
@@ -34,7 +34,7 @@ pub struct OAuth2AuthorizationRequest {
     #[serde(default)]
     pub code_challenge: Option<String>,
     #[serde(default)]
-    pub code_challenge_method: Option<String>,
+    pub code_challenge_method: Option<CodeChallengeMethod>,
 
     pub expires_at: i64,
     pub consent_status: ConsentStatus,
@@ -305,7 +305,7 @@ pub mod test_utils {
         issuer_state: Option<String>,
         authorization_details: Vec<AuthorizationDetailsObject>,
         code_challenge: String,
-        code_challenge_method: Option<String>,
+        code_challenge_method: Option<CodeChallengeMethod>,
     ) -> AuthorizationRequest {
         AuthorizationRequest {
             response_type,

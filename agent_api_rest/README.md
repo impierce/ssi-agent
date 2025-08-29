@@ -119,8 +119,7 @@ Verifiable Credential(s) that will be requested from the Identity Wallet.
 ##### Parameters
 
 - `nonce`: **REQUIRED**: A unique identifier for the Authorization Request.
-- `dcql_query`: An object describing the Verifiable Credential(s) that will be requested from the Identity
-  Wallet to ensure a successful Authorization. In most cases, the `dcql_query` below will
+- `dcql_query`: **REQUIRED**: An object describing the Verifiable Credential(s) that will be requested from the Identity Wallet to ensure a successful Authorization. In most cases, the `dcql_query` format below will be sufficient for basic credential requests, but additional constraints can be added as needed.
 - `state`: **OPTIONAL**: A unique string representing the state of the Authorization Request.
 
 ```json

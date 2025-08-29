@@ -1,4 +1,5 @@
 use cqrs_es::DomainEvent;
+use oid4vci::authorization_request::CodeChallengeMethod;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 use url::Url;
@@ -10,7 +11,7 @@ pub enum AuthorizationCodeEvent {
         client_id: String,
         redirect_uri: Url,
         code_challenge: Option<String>,
-        code_challenge_method: Option<String>,
+        code_challenge_method: Option<CodeChallengeMethod>,
         issuer_state: Option<String>,
         expires_at: i64,
     },

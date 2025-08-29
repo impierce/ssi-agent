@@ -278,20 +278,20 @@ pub struct ApplicationConfiguration {
     #[config(default)]
     pub event_publishers: EventPublishers,
     #[config(default = "VpFormatsSupported {
-    jwt_vc_json: Some(JwtVcJsonParameters {
-        alg_values: Some(vec![Algorithm::ES256, Algorithm::EdDSA])
-    }),
-    jwt_vp_json: Some(JwtVpJsonParameters {
-        alg_values: Some(vec![Algorithm::ES256, Algorithm::EdDSA])
-    }),
-    dc_sd_jwt: Some(DcSdJwtParameters {
-        sd_jwt_alg_values: Some(vec![Algorithm::ES256]),
-        kb_jwt_alg_values: Some(vec![Algorithm::ES256])
-    }),
-    ldp_vc: None,
-    ldp_vp: None,
-    mso_mdoc: None,
-}")]
+        jwt_vc_json: Some(JwtVcJsonParameters {
+            alg_values: Some(vec![Algorithm::ES256, Algorithm::EdDSA])
+        }),
+        jwt_vp_json: Some(JwtVpJsonParameters {
+            alg_values: Some(vec![Algorithm::ES256, Algorithm::EdDSA])
+        }),
+        dc_sd_jwt: Some(DcSdJwtParameters {
+            sd_jwt_alg_values: Some(vec![Algorithm::ES256]),
+            kb_jwt_alg_values: Some(vec![Algorithm::ES256])
+                }),
+        ldp_vc: None,
+        ldp_vp: None,
+        mso_mdoc: None,
+    }")]
     pub vp_formats_supported: VpFormatsSupported,
     #[config(default)]
     pub iota_address: Option<String>,
@@ -434,8 +434,10 @@ pub struct EventStoreConfig {
 #[serde(rename_all = "snake_case")]
 pub enum EventStoreType {
     InMemory,
-    // Postgres(EventStorePostgresConfig), // <== TODO: "config-rs" panics with "unreachable code", other solution?
     #[default]
+    #[serde(rename = "mongodb")]
+    MongoDb,
+    // Postgres(EventStorePostgresConfig), // <== TODO: "config-rs" panics with "unreachable code", other solution?
     Postgres,
 }
 

@@ -1,3 +1,4 @@
+use oid4vci::authorization_request::CodeChallengeMethod;
 use serde::Deserialize;
 use url::Url;
 
@@ -9,7 +10,7 @@ pub enum AuthorizationCodeCommand {
         client_id: String,
         redirect_uri: Url,
         code_challenge: Option<String>,
-        code_challenge_method: Option<String>,
+        code_challenge_method: Option<CodeChallengeMethod>,
         issuer_state: Option<String>,
         expires_in: i64,
     },

@@ -3,7 +3,7 @@ use super::error::AuthorizationCodeError;
 use super::event::AuthorizationCodeEvent;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use oid4vci::pkce;
+use oid4vci::{authorization_request::CodeChallengeMethod, pkce};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 use url::Url;
@@ -15,7 +15,7 @@ pub struct AuthorizationCode {
     pub client_id: String,
     pub redirect_uri: Option<Url>,
     pub code_challenge: Option<String>,
-    pub code_challenge_method: Option<String>,
+    pub code_challenge_method: Option<CodeChallengeMethod>,
     pub issuer_state: Option<String>,
     pub expires_at: Option<i64>,
     pub is_redeemed: bool,
@@ -171,7 +171,7 @@ pub mod authorization_code_tests {
         authorization_code_id: String,
         client_id: String,
         code_challenge: String,
-        code_challenge_method: Option<String>,
+        code_challenge_method: Option<CodeChallengeMethod>,
         redirect_uri: Option<Url>,
         issuer_state: Option<String>,
         expires_in: i64,
@@ -205,7 +205,7 @@ pub mod authorization_code_tests {
         authorization_code_id: String,
         client_id: String,
         code_challenge: String,
-        code_challenge_method: Option<String>,
+        code_challenge_method: Option<CodeChallengeMethod>,
         issuer_state: Option<String>,
         redirect_uri: Option<Url>,
         code_verifier: &[u8],
@@ -238,7 +238,7 @@ pub mod authorization_code_tests {
         authorization_code_id: String,
         client_id: String,
         code_challenge: String,
-        code_challenge_method: Option<String>,
+        code_challenge_method: Option<CodeChallengeMethod>,
         issuer_state: Option<String>,
         redirect_uri: Option<Url>,
         code_verifier: &[u8],
@@ -275,7 +275,7 @@ pub mod authorization_code_tests {
         authorization_code_id: String,
         client_id: String,
         code_challenge: String,
-        code_challenge_method: Option<String>,
+        code_challenge_method: Option<CodeChallengeMethod>,
         issuer_state: Option<String>,
         redirect_uri: Option<Url>,
         code_verifier: &[u8],
@@ -305,7 +305,7 @@ pub mod authorization_code_tests {
         authorization_code_id: String,
         client_id: String,
         code_challenge: String,
-        code_challenge_method: Option<String>,
+        code_challenge_method: Option<CodeChallengeMethod>,
         issuer_state: Option<String>,
         redirect_uri: Option<Url>,
         code_verifier: &[u8],
@@ -336,7 +336,7 @@ pub mod authorization_code_tests {
         authorization_code_id: String,
         client_id: String,
         code_challenge: String,
-        code_challenge_method: Option<String>,
+        code_challenge_method: Option<CodeChallengeMethod>,
         issuer_state: Option<String>,
         redirect_uri: Option<Url>,
         code_verifier: &[u8],
@@ -367,7 +367,7 @@ pub mod authorization_code_tests {
         authorization_code_id: String,
         client_id: String,
         code_challenge: String,
-        code_challenge_method: Option<String>,
+        code_challenge_method: Option<CodeChallengeMethod>,
         issuer_state: Option<String>,
         redirect_uri: Option<Url>,
         expires_at: i64,
@@ -397,7 +397,7 @@ pub mod authorization_code_tests {
         authorization_code_id: String,
         client_id: String,
         code_challenge: String,
-        code_challenge_method: Option<String>,
+        code_challenge_method: Option<CodeChallengeMethod>,
         issuer_state: Option<String>,
         redirect_uri: Option<Url>,
         expires_at: i64,

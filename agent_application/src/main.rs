@@ -11,7 +11,7 @@ use agent_identity::services::IdentityServices;
 use agent_issuance::services::IssuanceServices;
 use agent_secret_manager::{service::Service as _, subject::Subject};
 use agent_shared::config::{config, EventStoreType};
-use agent_store::{in_memory::InMemory, postgres::Postgres, EventPublisher};
+use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use probes::liveness::healthz;
 use std::sync::Arc;
@@ -49,6 +49,13 @@ async fn main() -> io::Result<()> {
             agent_store::issuance_state::<Postgres>(issuance_services, issuance_event_publishers).await,
             agent_store::holder_state::<Postgres>(holder_services, holder_event_publishers).await,
             agent_store::verification_state::<Postgres>(verification_services, verification_event_publishers).await,
+        ),
+        EventStoreType::MongoDb => (
+            agent_store::identity_state::<MongoDB>(identity_services, identity_event_publishers).await,
+            agent_store::authorization_state::<MongoDB>(authorization_services, authorization_event_publishers).await,
+            agent_store::issuance_state::<MongoDB>(issuance_services, issuance_event_publishers).await,
+            agent_store::holder_state::<MongoDB>(holder_services, holder_event_publishers).await,
+            agent_store::verification_state::<MongoDB>(verification_services, verification_event_publishers).await,
         ),
         EventStoreType::InMemory => (
             agent_store::identity_state::<InMemory>(identity_services, identity_event_publishers).await,

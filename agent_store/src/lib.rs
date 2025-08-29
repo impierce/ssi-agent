@@ -52,6 +52,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 pub mod in_memory;
+pub mod mongodb;
 pub mod postgres;
 
 /// A generic command handler for a specific aggregate.

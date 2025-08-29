@@ -40,3 +40,4 @@ services:
 
     volumes:
       - ../example.config.yaml:/app/config.yaml
+      # - ../../agent_secret_manager/tests/res/test.stronghold:/app/stronghold.dat

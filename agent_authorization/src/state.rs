@@ -2,6 +2,7 @@ use agent_shared::application_state::CommandHandler;
 use agent_shared::handlers::{command_handler, query_handler};
 use cqrs_es::persist::ViewRepository;
 use oid4vc_core::Sign;
+use oid4vci::authorization_request::CodeChallengeMethod;
 use std::sync::Arc;
 use tracing::{debug, info};
 
@@ -102,7 +103,7 @@ async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
             response_types: vec!["code".to_string()],
             token_endpoint_auth_method: "none".to_string(),
             require_pkce: true,
-            code_challenge_methods_supported: vec!["S256".to_string()],
+            code_challenge_methods_supported: vec![CodeChallengeMethod::S256],
             require_pushed_authorization_request: true,
         };
 

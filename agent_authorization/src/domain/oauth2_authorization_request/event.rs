@@ -1,6 +1,6 @@
 use crate::domain::oauth2_authorization_request::aggregate::ConsentStatus;
 use cqrs_es::DomainEvent;
-use oid4vci::authorization_details::AuthorizationDetailsObject;
+use oid4vci::{authorization_details::AuthorizationDetailsObject, authorization_request::CodeChallengeMethod};
 use serde::{Deserialize, Serialize};
 use strum::Display;
 use url::Url;
@@ -25,7 +25,7 @@ pub enum OAuth2AuthorizationRequestEvent {
         #[serde(default)]
         code_challenge: Option<String>,
         #[serde(default)]
-        code_challenge_method: Option<String>,
+        code_challenge_method: Option<CodeChallengeMethod>,
 
         expires_at: i64,
     },

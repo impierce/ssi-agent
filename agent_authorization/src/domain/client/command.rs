@@ -1,3 +1,4 @@
+use oid4vci::authorization_request::CodeChallengeMethod;
 use serde::Deserialize;
 use url::Url;
 
@@ -17,7 +18,7 @@ pub enum ClientCommand {
         response_types: Vec<String>,
         token_endpoint_auth_method: String,
         require_pkce: bool,
-        code_challenge_methods_supported: Vec<String>,
+        code_challenge_methods_supported: Vec<CodeChallengeMethod>,
         require_pushed_authorization_request: bool,
     },
 }

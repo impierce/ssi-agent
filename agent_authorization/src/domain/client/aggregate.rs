@@ -3,6 +3,7 @@ use super::error::ClientError;
 use super::event::ClientEvent;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
+use oid4vci::authorization_request::CodeChallengeMethod;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 use url::Url;
@@ -38,7 +39,7 @@ pub struct Client {
     /// If `true`, the server will reject authorization requests that do not use PKCE.
     pub require_pkce: bool,
     /// A list of PKCE code challenge methods supported by the client (e.g., "S256").
-    pub code_challenge_methods_supported: Vec<String>,
+    pub code_challenge_methods_supported: Vec<CodeChallengeMethod>,
     /// If `true`, the server will reject authorization requests that do not use Pushed Authorization Requests (PAR).
     pub require_pushed_authorization_request: bool,
 }
