@@ -23,14 +23,6 @@ signing_algorithms_supported:
   eddsa:
     enabled: false
 
-# TODO: required to be stated explicitly?
-# TODO: update to vp_formats_supported
-vp_formats:
-  jwt_vc_json:
-    enabled: true
-  jwt_vp_json:
-    enabled: true
-
 # agent_event_publisher_http
 # Configure here to which events will be dispatched to a specific `target_url`. In the example below, the
 # `EventPublisherHttp` will listen for the `SIOPv2AuthorizationResponseVerified` event which is part of the `connection`
