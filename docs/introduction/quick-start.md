@@ -220,24 +220,14 @@ curl --location "$UNICORE__APPLICATION_URL/v0/authorization_requests" \
 --data '{
     "nonce": "this is a nonce",
     "state": "state_id",
-    "presentation_definition": {
-        "id":"Verifiable Presentation request for sign-on",
-        "input_descriptors":[
+    "dcql_query": {
+        "credentials": [
             {
-                "id":"Request for Verifiable Credential",
-                "constraints":{
-                    "fields":[
-                        {
-                            "path":[
-                                "$.vc.type"
-                            ],
-                            "filter":{
-                                "type":"array",
-                                "contains":{
-                                    "const":"VerifiableCredential"
-                                }
-                            }
-                        }
+                "id": "CredentialQuery",
+                "format": "jwt_vc_json",
+                "meta": {
+                    "type_values": [
+                        ["VerifiableCredential"]
                     ]
                 }
             }

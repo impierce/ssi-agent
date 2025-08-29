@@ -29,6 +29,4 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/agent_application /usr/local/bin/
 
-COPY ../../agent_verification/presentation_definitions agent_verification/presentation_definitions
-
 ENTRYPOINT ["/usr/local/bin/agent_application"]

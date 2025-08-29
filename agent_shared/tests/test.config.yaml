@@ -33,12 +33,6 @@ signing_algorithms_supported:
     enabled: true
     preferred: true
 
-vp_formats:
-  jwt_vc_json:
-    enabled: true
-  jwt_vp_json:
-    enabled: true
-
 event_publishers:
   http:
     enabled: true

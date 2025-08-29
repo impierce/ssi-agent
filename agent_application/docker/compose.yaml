@@ -41,7 +41,3 @@ services:
     volumes:
       - ../example.config.yaml:/app/config.yaml
       # - ../../agent_secret_manager/tests/res/test.stronghold:/app/stronghold.dat
-      # - ../../agent_verification/presentation_definitions:/app/agent_verification/presentation_definitions
-      # TODO: Remove this. This is a workaround that ensures that the `agent_verification/presentation_definitions`
-      # folder can be accessed by the agent from the `fn authorization_requests` endpoint.
-      # - ./tmp:/app/agent_api_rest

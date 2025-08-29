@@ -113,49 +113,38 @@ QR-Code can be scanned by an [Identity Wallet](https://github.com/impierce/ident
 
 Through this endpoint, we can create a URL-encoded Authorization Request that can be rendered as a QR-Code. This
 QR-Code can be scanned by an [Identity Wallet](https://github.com/impierce/identity-wallet) which in turn will answer
-the Authorization Request. The only extra required parameter is the `presentation_definition` which describes the
+the Authorization Request. The only extra required parameter is the `dcql_query` which describes the
 Verifiable Credential(s) that will be requested from the Identity Wallet.
 
 ##### Parameters
 
 - `nonce`: **REQUIRED**: A unique identifier for the Authorization Request.
-- `presentation_definition`: An object describing the Verifiable Credential(s) that will be requested from the Identity
-  Wallet to ensure a successful Authorization. In most cases, the `presentation_definition` below will
+- `dcql_query`: **REQUIRED**: An object describing the Verifiable Credential(s) that will be requested from the Identity Wallet to ensure a successful Authorization. In most cases, the `dcql_query` format below will be sufficient for basic credential requests, but additional constraints can be added as needed.
 - `state`: **OPTIONAL**: A unique string representing the state of the Authorization Request.
 
 ```json
 {
   "nonce": "this is a nonce",
-  "presentation_definition": {
-    "id": "Verifiable Presentation request for sign-on",
-    "input_descriptors": [
+  "dcql_query": {
+    "credentials": [
       {
-        "id": "Request for Verifiable Credential",
-        "constraints": {
-          "fields": [
-            {
-              "path": ["$.vc.type"],
-              "filter": {
-                "type": "array",
-                "contains": {
-                  "const": "VerifiableCredential"
-                  // "const":"OpenBadgesCredential" <-- for OpenBadges
-                }
-              }
-            }
-            // Extra constraints can be added to the Presentation Definition.
-            // {
-            //     "path":[
-            //         "$.vc.credentialSubject.first_name"
-            //     ]
-            // },
-            // {
-            //     "path":[
-            //         "$.vc.credentialSubject.last_name"
-            //     ]
-            // },
+        "id": "CredentialQuery",
+        "format": "jwt_vc_json",
+        "meta": {
+          "type_values": [
+            ["VerifiableCredential"]
+            // ["OpenBadgesCredential"] <-- for OpenBadges
           ]
-        }
+        },
+        "claims": [
+          // Extra constraints can be added to the DCQL query
+          // {
+          //   "path": ["credentialSubject", "first_name"]
+          // },
+          // {
+          //   "path": ["credentialSubject", "last_name"]
+          // }
+        ]
       }
     ]
   }

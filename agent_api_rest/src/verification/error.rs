@@ -37,7 +37,6 @@ impl IntoApiErrorExt for AuthorizationRequestError {
             // `/redirect` endpoint
             InvalidSIOPv2AuthorizationResponse(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             InvalidOID4VPAuthorizationResponse(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-            UnsupportedAuthorizationResponseParameterError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }

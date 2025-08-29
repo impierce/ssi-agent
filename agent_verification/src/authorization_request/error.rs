@@ -12,6 +12,4 @@ pub enum AuthorizationRequestError {
     InvalidSIOPv2AuthorizationResponse(#[source] anyhow::Error),
     #[error("Invalid OID4VP Authorization Response: {0}")]
     InvalidOID4VPAuthorizationResponse(#[source] anyhow::Error),
-    #[error("Authorization Responses containing `response` field are not supported yet")]
-    UnsupportedAuthorizationResponseParameterError,
 }

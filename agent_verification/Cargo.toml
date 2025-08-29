@@ -20,19 +20,23 @@ oid4vp.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+siopv2.workspace = true
 strum.workspace = true
 strum_macros.workspace = true
-siopv2.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-url.workspace = true
 tokio.workspace = true
+url.workspace = true
 
 [dev-dependencies]
+agent_secret_manager = { path = "../agent_secret_manager", features = [
+    "test_utils",
+] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_verification = { path = ".", features = ["test_utils"] }
 
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
+did-key = "0.2"
 identity_core.workspace = true
 identity_credential.workspace = true
 lazy_static.workspace = true

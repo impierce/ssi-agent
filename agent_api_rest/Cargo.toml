@@ -12,6 +12,7 @@ agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
 agent_verification = { path = "../agent_verification" }
 
+anyhow.workspace = true
 axum.workspace = true
 axum-auth = "0.8"
 axum-macros = "0.5"
@@ -43,7 +44,9 @@ uuid.workspace = true
 
 [dev-dependencies]
 agent_api_rest = { path = ".", features = ["test_utils"] }
-agent_event_publisher_http = { path = "../agent_event_publisher_http", features = ["test_utils"] }
+agent_event_publisher_http = { path = "../agent_event_publisher_http", features = [
+    "test_utils",
+] }
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_identity = { path = "../agent_identity", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }

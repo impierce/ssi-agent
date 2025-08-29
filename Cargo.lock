@@ -82,6 +82,7 @@ dependencies = [
  "agent_shared",
  "agent_store",
  "agent_verification",
+ "anyhow",
  "axum 0.8.3",
  "axum-auth 0.8.1",
  "axum-macros",
@@ -404,6 +405,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "cqrs-es",
+ "did-key",
  "futures",
  "identity_core",
  "identity_credential",
@@ -3169,21 +3171,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dif-presentation-exchange"
-version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=cdc02ba#cdc02ba1f37c78994191854641fcf9779e8fcd50"
-dependencies = [
- "getset",
- "jsonpath_lib",
- "jsonschema 0.17.1",
- "jsonwebtoken",
- "serde",
- "serde_json",
- "serde_with 3.13.0",
- "url",
-]
-
-[[package]]
 name = "digest"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3623,16 +3610,6 @@ dependencies = [
 
 [[package]]
 name = "fancy-regex"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b95f7c0680e4142284cf8b22c14a476e87d61b004a3a0861872b32ef7ead40a2"
-dependencies = [
- "bit-set",
- "regex",
-]
-
-[[package]]
-name = "fancy-regex"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "531e46835a22af56d1e3b66f04844bed63158bc094a628bec1d321d9b4c44bf2"
@@ -3916,16 +3893,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13624c2627564efccf4934284bdd98cbaa14e79b0b5a141218e507b3a823456"
 dependencies = [
  "percent-encoding",
-]
-
-[[package]]
-name = "fraction"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3027ae1df8d41b4bed2241c8fdad4acc1e7af60c8e17743534b545e77182d678"
-dependencies = [
- "lazy_static",
- "num",
 ]
 
 [[package]]
@@ -4992,7 +4959,7 @@ dependencies = [
  "identity_verification",
  "indexmap 2.9.0",
  "itertools 0.11.0",
- "jsonschema 0.19.1",
+ "jsonschema",
  "once_cell",
  "roaring",
  "sd-jwt-payload 0.2.1",
@@ -6548,17 +6515,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "jsonpath_lib"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eaa63191d68230cccb81c5aa23abd53ed64d83337cacbb25a7b8c7979523774f"
-dependencies = [
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "jsonrpsee"
 version = "0.24.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6731,36 +6687,6 @@ dependencies = [
 
 [[package]]
 name = "jsonschema"
-version = "0.17.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a071f4f7efc9a9118dfb627a0a94ef247986e1ab8606a4c806ae2b3aa3b6978"
-dependencies = [
- "ahash 0.8.12",
- "anyhow",
- "base64 0.21.7",
- "bytecount",
- "clap 4.5.40",
- "fancy-regex 0.11.0",
- "fraction 0.13.1",
- "getrandom 0.2.16",
- "iso8601",
- "itoa",
- "memchr",
- "num-cmp",
- "once_cell",
- "parking_lot 0.12.4",
- "percent-encoding",
- "regex",
- "reqwest 0.11.27",
- "serde",
- "serde_json",
- "time",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "jsonschema"
 version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14a655181740aa66dfcb182daca1bc8109fda5c7c0399c4f30dcb155ab0d32a6"
@@ -6769,8 +6695,8 @@ dependencies = [
  "anyhow",
  "base64 0.22.1",
  "bytecount",
- "fancy-regex 0.13.0",
- "fraction 0.15.3",
+ "fancy-regex",
+ "fraction",
  "getrandom 0.2.16",
  "iso8601",
  "itoa",
@@ -6849,6 +6775,27 @@ checksum = "ae0386ec98c26dd721aaa3412bf3a817156ff3ee7cb6959503f8d1095f4ccc51"
 dependencies = [
  "primitive-types 0.9.1",
  "tiny-keccak",
+]
+
+[[package]]
+name = "kinded"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce4bdbb2f423660b19f0e9f7115182214732d8dd5f840cd0a3aee3e22562f34c"
+dependencies = [
+ "kinded_macros",
+]
+
+[[package]]
+name = "kinded_macros"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a13b4ddc5dcb32f45dac3d6f606da2a52fdb9964a18427e63cd5ef6c0d13288d"
+dependencies = [
+ "convert_case 0.6.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.104",
 ]
 
 [[package]]
@@ -8212,6 +8159,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "nutype"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70587a780088c67dad31bf722b875c5616096b4d8c0ded8b7de03294ffb9bbb5"
+dependencies = [
+ "nutype_macros",
+]
+
+[[package]]
+name = "nutype_macros"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "148934b975faeddd8f0679d7cf11280b50c4c5495d6fe72bdaf07c932874b404"
+dependencies = [
+ "cfg-if",
+ "kinded",
+ "proc-macro2",
+ "quote",
+ "rustc_version",
+ "syn 2.0.104",
+ "urlencoding",
+]
+
+[[package]]
 name = "oauth_tsl"
 version = "0.1.0"
 source = "git+https://github.com/impierce/oauth-token-status-list?rev=0aa0228#0aa02282d7fedd1431fc7a709e55f047bb69aa3b"
@@ -8277,7 +8248,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=cdc02ba#cdc02ba1f37c78994191854641fcf9779e8fcd50"
+source = "git+https://github.com/impierce/openid4vc?rev=b4582de#b4582debc609c19063d3a73b8ec1e82858bca33c"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8290,6 +8261,7 @@ dependencies = [
  "is_empty",
  "jsonwebtoken",
  "lazy_static",
+ "nutype",
  "rand 0.8.5",
  "serde",
  "serde_json",
@@ -8301,7 +8273,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=cdc02ba#cdc02ba1f37c78994191854641fcf9779e8fcd50"
+source = "git+https://github.com/impierce/openid4vc?rev=b4582de#b4582debc609c19063d3a73b8ec1e82858bca33c"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8316,6 +8288,7 @@ dependencies = [
  "identity_core",
  "identity_credential",
  "jsonwebtoken",
+ "lazy_static",
  "oid4vc-core",
  "oid4vci",
  "oid4vp",
@@ -8334,11 +8307,10 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=cdc02ba#cdc02ba1f37c78994191854641fcf9779e8fcd50"
+source = "git+https://github.com/impierce/openid4vc?rev=b4582de#b4582debc609c19063d3a73b8ec1e82858bca33c"
 dependencies = [
  "anyhow",
  "derivative",
- "dif-presentation-exchange",
  "getset",
  "http 1.3.1",
  "jsonwebtoken",
@@ -8359,18 +8331,19 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=cdc02ba#cdc02ba1f37c78994191854641fcf9779e8fcd50"
+source = "git+https://github.com/impierce/openid4vc?rev=b4582de#b4582debc609c19063d3a73b8ec1e82858bca33c"
 dependencies = [
  "anyhow",
  "chrono",
- "dif-presentation-exchange",
  "futures",
  "getset",
  "identity_core",
  "identity_credential",
  "is_empty",
  "jsonwebtoken",
+ "lazy_static",
  "monostate",
+ "nutype",
  "oid4vc-core",
  "oid4vci",
  "reqwest 0.11.27",
@@ -8381,6 +8354,7 @@ dependencies = [
  "serde_with 3.13.0",
  "tokio",
  "url",
+ "validator",
 ]
 
 [[package]]
@@ -9563,9 +9537,9 @@ dependencies = [
 
 [[package]]
 name = "rayon"
-version = "1.10.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b418a60154510ca1a002a752ca9714984e21e4241e804d32555251faf8b78ffa"
+checksum = "368f01d005bf8fd9b1206fb6fa653e6c4a81ceb1466406b81792d87c5677a58f"
 dependencies = [
  "either",
  "rayon-core",
@@ -9573,9 +9547,9 @@ dependencies = [
 
 [[package]]
 name = "rayon-core"
-version = "1.12.1"
+version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1465873a3dfdaa8ae7cb14b4383657caab0b3e8a0aa9ae8e04b044854c8dfce2"
+checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
@@ -10516,7 +10490,7 @@ dependencies = [
 [[package]]
 name = "secret-storage"
 version = "0.3.0"
-source = "git+https://github.com/iotaledger/secret-storage?tag=v0.3.0#7dc13ddae8a7f2c8a931d3155f3cb9e9a27902fb"
+source = "git+https://github.com/iotaledger/secret-storage.git?tag=v0.3.0#7dc13ddae8a7f2c8a931d3155f3cb9e9a27902fb"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -11047,7 +11021,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=cdc02ba#cdc02ba1f37c78994191854641fcf9779e8fcd50"
+source = "git+https://github.com/impierce/openid4vc?rev=b4582de#b4582debc609c19063d3a73b8ec1e82858bca33c"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -12916,6 +12890,36 @@ dependencies = [
  "outref",
  "uuid",
  "vsimd",
+]
+
+[[package]]
+name = "validator"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0b4a29d8709210980a09379f27ee31549b73292c87ab9899beee1c0d3be6303"
+dependencies = [
+ "idna",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "url",
+ "validator_derive",
+]
+
+[[package]]
+name = "validator_derive"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bac855a2ce6f843beb229757e6e570a42e837bcb15e5f449dd48d5747d41bf77"
+dependencies = [
+ "darling 0.20.11",
+ "once_cell",
+ "proc-macro-error2",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.104",
 ]
 
 [[package]]
