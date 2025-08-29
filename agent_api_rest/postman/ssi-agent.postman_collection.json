@@ -816,8 +816,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"dcql_query\":\n        {\n      \"credentials\": [\n        {\n          \"id\": \"CredentialQuery\",\n          \"format\": \"jwt_vc_json\",\n          \"meta\": {\n            \"type_values\": [\n                [\"VerifiableCredential\"],\n                [\"PersonalInformation\"]\n            ]\n          },\n          \"claims\": [\n              {\"path\": [\"credentialSubject\", \"givenName\"]},\n              {\"path\": [\"credentialSubject\", \"familyName\"]},\n              {\"path\": [\"credentialSubject\", \"email\"]},\n              {\"path\": [\"credentialSubject\", \"birthdate\"]}\n          ]\n        }\n      ]\n    }\n}",
-							"options": {
+"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"dcql_query\": {\n        \"credentials\": [\n            {\n                \"id\": \"CredentialQuery\",\n                \"format\": \"jwt_vc_json\",\n                \"meta\": {\n                    \"type_values\": [\n                        [\"VerifiableCredential\"],\n                        [\"PersonalInformation\"]\n                    ]\n                },\n                \"claims\": [\n                    {\"path\": [\"credentialSubject\", \"givenName\"]},\n                    {\"path\": [\"credentialSubject\", \"familyName\"]},\n                    {\"path\": [\"credentialSubject\", \"email\"]},\n                    {\"path\": [\"credentialSubject\", \"birthdate\"]}\n                ]\n            }\n        ]\n    }\n}",							"options": {
 								"raw": {
 									"language": "json"
 								}

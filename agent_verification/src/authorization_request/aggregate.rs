@@ -525,7 +525,7 @@ pub mod tests {
             )),
             "vp_token" => GenericAuthorizationRequest::OID4VP(Box::new(
                 OID4VPAuthorizationRequest::builder()
-                    .dcql_query(MOCK_DCQL_QUERY.clone())
+                    .dcql_query(DCQL_QUERY.clone())
                     .client_id(
                         ClientId::from_str(&format!("decentralized_identifier:{}", verifier_did(did_method).await))
                             .unwrap(),
@@ -645,7 +645,7 @@ pub mod tests {
     lazy_static! {
         pub static ref VERIFIER: Subject = Subject::default();
         pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
-        pub static ref MOCK_DCQL_QUERY: DcqlQuery = DcqlQuery {
+        pub static ref DCQL_QUERY: DcqlQuery = DcqlQuery {
             credentials: vec![CredentialQuery {
                 id: CredentialQueryId::try_new("CredentialQuery".to_string()).unwrap(),
                 format: Format::JwtVcJson,

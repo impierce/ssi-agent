@@ -218,21 +218,21 @@ Then run:
 curl --location "$UNICORE__APPLICATION_URL/v0/authorization_requests" \
 --header 'Content-Type: application/json' \
 --data '{
-  "nonce": "this is a nonce",
-  "state": "state_id",
-  "dcql_query": {
-    "credentials": [
-      {
-        "id": "CredentialQuery",
-        "format": "jwt_vc_json",
-        "meta": {
-          "type_values": [
-            ["VerifiableCredential"]
-          ]
-        }
-      }
-    ]
-  }
+    "nonce": "this is a nonce",
+    "state": "state_id",
+    "dcql_query": {
+        "credentials": [
+            {
+                "id": "CredentialQuery",
+                "format": "jwt_vc_json",
+                "meta": {
+                    "type_values": [
+                        ["VerifiableCredential"]
+                    ]
+                }
+            }
+        ]
+    }
 }'
 ```
 
