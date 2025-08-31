@@ -286,8 +286,8 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn code_challenge_method() -> Option<String> {
-        Some("S256".to_string())
+    pub fn code_challenge_method() -> Option<CodeChallengeMethod> {
+        Some(CodeChallengeMethod::S256)
     }
 
     #[fixture]

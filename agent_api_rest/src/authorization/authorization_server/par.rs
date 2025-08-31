@@ -41,6 +41,7 @@ pub mod tests {
     use oid4vc_core::utils::form_urlencoded::to_form_urlencoded_string;
     use oid4vci::{
         authorization_details::{AuthorizationDetailsObject, CredentialConfigurationOrFormat, OpenidCredential},
+        authorization_request::CodeChallengeMethod,
         credential_format_profiles::CredentialFormats,
         credential_offer::AuthorizationCode,
         wallet::PushedAuthorizationResponse,
@@ -65,7 +66,7 @@ pub mod tests {
                             client_id: UNIME_CLIENT_ID.to_string(),
                             redirect_uri: Some("unime://callback".parse().unwrap()),
                             code_challenge: Some(code_challenge()),
-                            code_challenge_method: Some("S256".to_string()),
+                            code_challenge_method: Some(CodeChallengeMethod::S256),
                             scope: Some("openid profile".to_string()),
                             issuer_state: Some(issuer_state),
                             authorization_details: vec![AuthorizationDetailsObject {

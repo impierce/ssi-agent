@@ -165,7 +165,7 @@ pub mod client_tests {
         response_types: Vec<String>,
         token_endpoint_auth_method: String,
         require_pkce: bool,
-        code_challenge_methods_supported: Vec<String>,
+        code_challenge_methods_supported: Vec<CodeChallengeMethod>,
         require_pushed_authorization_request: bool,
     ) {
         ClientTestFramework::with(())
@@ -268,8 +268,8 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn code_challenge_methods_supported() -> Vec<String> {
-        vec!["S256".to_string()]
+    pub fn code_challenge_methods_supported() -> Vec<CodeChallengeMethod> {
+        vec![CodeChallengeMethod::S256]
     }
 
     #[fixture]
