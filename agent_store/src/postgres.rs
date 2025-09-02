@@ -25,7 +25,19 @@ where
     }
 }
 
-pub struct Postgres;
+pub struct Postgres {
+    pub pool: Pool<sqlx::Postgres>,
+}
+
+impl Postgres {
+    pub async fn new() -> Self {
+        let connection_string = config().event_store.connection_string.clone().expect(
+            "Missing config parameter `event_store.connection_string` or `UNICORE__EVENT_STORE__CONNECTION_STRING`",
+        );
+        let pool = default_postgress_pool(&connection_string).await;
+        Self { pool }
+    }
+}
 
 impl CqrsComponentBuilder for Postgres {
     async fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
@@ -40,21 +52,20 @@ impl CqrsComponentBuilder for Postgres {
     where
         <A as Aggregate>::Command: Send + Sync,
     {
-        let connection_string = config().event_store.connection_string.clone().expect(
-            "Missing config parameter `event_store.connection_string` or `UNICORE__EVENT_STORE__CONNECTION_STRING`",
-        );
-        let pool = default_postgress_pool(&connection_string).await;
-
         let all_aggregates_name = format!("all_{}s", A::aggregate_type());
 
         // Initialize the postgres repositories.
-        let aggregate: Arc<PostgresViewRepository<V, A>> =
-            Arc::new(PostgresViewRepository::<V, A>::new(&A::aggregate_type(), pool.clone()));
-        let all_aggregates: Arc<PostgresViewRepository<AV, A>> =
-            Arc::new(PostgresViewRepository::<AV, A>::new(&all_aggregates_name, pool.clone()));
+        let aggregate: Arc<PostgresViewRepository<V, A>> = Arc::new(PostgresViewRepository::<V, A>::new(
+            &A::aggregate_type(),
+            self.pool.clone(),
+        ));
+        let all_aggregates: Arc<PostgresViewRepository<AV, A>> = Arc::new(PostgresViewRepository::<AV, A>::new(
+            &all_aggregates_name,
+            self.pool.clone(),
+        ));
 
         (
-            Arc::new(AggregateHandler::new(pool, services).with_parameters(
+            Arc::new(AggregateHandler::new(self.pool.clone(), services).with_parameters(
                 aggregate.clone(),
                 all_aggregates.clone(),
                 event_publishers,
@@ -68,14 +79,10 @@ impl CqrsComponentBuilder for Postgres {
 
 // TODO: make a generic function for this and move it to `lib.rs`.
 pub async fn issuance_state(
+    pool: Pool<sqlx::Postgres>,
     issuance_services: Arc<IssuanceServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> IssuanceState {
-    let connection_string = config().event_store.connection_string.clone().expect(
-        "Missing config parameter `event_store.connection_string` or `UNICORE__EVENT_STORE__CONNECTION_STRING`",
-    );
-    let pool = default_postgress_pool(&connection_string).await;
-
     // Initialize the postgres repositories.
     let server_config = Arc::new(PostgresViewRepository::new("server_config", pool.clone()));
     let pre_authorized_code = Arc::new(PostgresViewRepository::new("pre_authorized_code", pool.clone()));
