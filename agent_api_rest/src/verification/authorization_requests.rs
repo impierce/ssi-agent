@@ -193,7 +193,7 @@ pub mod tests {
     #[tracing_test::traced_test]
     #[tokio::test]
     async fn test_authorization_requests_endpoint() {
-        let verification_state = verification_state::<InMemory>(Service::default(), Default::default()).await;
+        let verification_state = verification_state(&InMemory, Service::default(), Default::default()).await;
         let mut app = router(verification_state);
 
         let result = authorization_requests(&mut app).await;
