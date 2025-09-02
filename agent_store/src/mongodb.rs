@@ -28,7 +28,6 @@ where
     }
 }
 
-#[derive(Clone)]
 pub struct MongoDB {
     pub client: Client,
 }
