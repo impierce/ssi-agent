@@ -40,6 +40,7 @@ impl MongoDB {
         let client = default_mongo_client(&connection_string).await;
         Self { client }
     }
+    // TODO: Run [Client::shutdown] during graceful shutdown to close all open connections.
 }
 
 impl CqrsComponentBuilder for MongoDB {

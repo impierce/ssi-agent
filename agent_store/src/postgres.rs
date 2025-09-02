@@ -37,6 +37,7 @@ impl Postgres {
         let pool = default_postgress_pool(&connection_string).await;
         Self { pool }
     }
+    // TODO: Run [Pool::close] during graceful shutdown to close all open connections.
 }
 
 impl CqrsComponentBuilder for Postgres {
