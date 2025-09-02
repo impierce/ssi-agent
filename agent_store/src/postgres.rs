@@ -29,6 +29,7 @@ pub struct Postgres;
 
 impl CqrsComponentBuilder for Postgres {
     async fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
+        &self,
         services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
     ) -> (

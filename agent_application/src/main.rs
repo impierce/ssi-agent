@@ -41,24 +41,48 @@ async fn main() -> io::Result<()> {
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
     let (identity_state, issuance_state, holder_state, verification_state) = match config().event_store.type_ {
-        EventStoreType::Postgres => (
-            agent_store::identity_state::<Postgres>(identity_services, identity_event_publishers).await,
-            postgres::issuance_state(issuance_services, issuance_event_publishers).await,
-            agent_store::holder_state::<Postgres>(holder_services, holder_event_publishers).await,
-            agent_store::verification_state::<Postgres>(verification_services, verification_event_publishers).await,
-        ),
-        EventStoreType::MongoDb => (
-            agent_store::identity_state::<MongoDB>(identity_services, identity_event_publishers).await,
-            mongodb::issuance_state(issuance_services, issuance_event_publishers).await,
-            agent_store::holder_state::<MongoDB>(holder_services, holder_event_publishers).await,
-            agent_store::verification_state::<MongoDB>(verification_services, verification_event_publishers).await,
-        ),
-        EventStoreType::InMemory => (
-            agent_store::identity_state::<InMemory>(identity_services, identity_event_publishers).await,
-            in_memory::issuance_state(issuance_services, issuance_event_publishers).await,
-            agent_store::holder_state::<InMemory>(holder_services, holder_event_publishers).await,
-            agent_store::verification_state::<InMemory>(verification_services, verification_event_publishers).await,
-        ),
+        EventStoreType::Postgres => {
+            let builder = Postgres;
+            (
+                agent_store::identity_state::<Postgres>(&builder, identity_services, identity_event_publishers).await,
+                postgres::issuance_state(issuance_services, issuance_event_publishers).await,
+                agent_store::holder_state::<Postgres>(&builder, holder_services, holder_event_publishers).await,
+                agent_store::verification_state::<Postgres>(
+                    &builder,
+                    verification_services,
+                    verification_event_publishers,
+                )
+                .await,
+            )
+        }
+        EventStoreType::MongoDb => {
+            let builder = MongoDB::new().await;
+            (
+                agent_store::identity_state::<MongoDB>(&builder, identity_services, identity_event_publishers).await,
+                mongodb::issuance_state(builder.client.clone(), issuance_services, issuance_event_publishers).await,
+                agent_store::holder_state::<MongoDB>(&builder, holder_services, holder_event_publishers).await,
+                agent_store::verification_state::<MongoDB>(
+                    &builder,
+                    verification_services,
+                    verification_event_publishers,
+                )
+                .await,
+            )
+        }
+        EventStoreType::InMemory => {
+            let builder = InMemory;
+            (
+                agent_store::identity_state::<InMemory>(&builder, identity_services, identity_event_publishers).await,
+                in_memory::issuance_state(issuance_services, issuance_event_publishers).await,
+                agent_store::holder_state::<InMemory>(&builder, holder_services, holder_event_publishers).await,
+                agent_store::verification_state::<InMemory>(
+                    &builder,
+                    verification_services,
+                    verification_event_publishers,
+                )
+                .await,
+            )
+        }
     };
 
     info!("{:?}", config());
