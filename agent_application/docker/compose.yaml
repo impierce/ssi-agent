@@ -61,13 +61,14 @@ services:
     #   dockerfile: ./agent_application/docker/Dockerfile
     ports:
       - 3033:3033
-      - 9090:9090
+      - 9091:9091
     environment:
       UNICORE__PROFILE: development
       UNICORE__APPLICATION_URL: ${UNICORE__APPLICATION_URL}
       UNICORE__EVENT_STORE__CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo
       UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD: "secure_password"
-      UNICORE__METRICS_ENABLED: true
+      UNICORE__METRICS__ENABLED: true
+      UNICORE__METRICS__PORT: 9091
 
     volumes:
       - ../example.config.yaml:/app/config.yaml

@@ -14,6 +14,6 @@ scrape_configs:
     scrape_interval: 5s
     static_configs:
       - targets:
-          - ssi-agent:9090
+          - ssi-agent:9091
           # Uncomment to scrape UniCore instance running on the host machine (macOS, Windows)
           # - host.docker.internal:9091
