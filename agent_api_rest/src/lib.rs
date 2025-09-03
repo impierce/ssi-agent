@@ -2,6 +2,7 @@ pub mod authorization;
 pub mod holder;
 pub mod identity;
 pub mod issuance;
+pub mod metrics;
 pub mod verification;
 
 pub mod error;

@@ -156,6 +156,7 @@ pub type CqrsComponents<A, V, AV> = (
 /// including the command handler and view repositories.
 pub trait CqrsComponentBuilder {
     fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
+        &self,
         identity_services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
     ) -> impl std::future::Future<Output = CqrsComponents<A, V, AV>> + Send
@@ -164,6 +165,7 @@ pub trait CqrsComponentBuilder {
 }
 
 pub async fn identity_state<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
     services: Arc<IdentityServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> IdentityState {
@@ -175,20 +177,21 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
         ..
     } = partition_event_publishers(event_publishers);
 
-    let (connection_command_handler, connection, all_connections) = CCB::commands_and_queries::<
-        Connection,
-        Connection,
-        AllConnectionsView,
-    >(services.clone(), connection_event_publishers)
-    .await;
-    let (document_command_handler, document, all_documents) =
-        CCB::commands_and_queries::<Document, Document, AllDocumentsView>(services.clone(), document_event_publishers)
-            .await;
-    let (profile_command_handler, profile, _all_profiles) =
-        CCB::commands_and_queries::<Profile, Profile, Profile>(services.clone(), vec![]).await;
-    let (service_command_handler, service, all_services) =
-        CCB::commands_and_queries::<Service, Service, AllServicesView>(services.clone(), service_event_publishers)
-            .await;
+    let (connection_command_handler, connection, all_connections) = builder
+        .commands_and_queries::<Connection, Connection, AllConnectionsView>(
+            services.clone(),
+            connection_event_publishers,
+        )
+        .await;
+    let (document_command_handler, document, all_documents) = builder
+        .commands_and_queries::<Document, Document, AllDocumentsView>(services.clone(), document_event_publishers)
+        .await;
+    let (profile_command_handler, profile, _all_profiles) = builder
+        .commands_and_queries::<Profile, Profile, Profile>(services.clone(), vec![])
+        .await;
+    let (service_command_handler, service, all_services) = builder
+        .commands_and_queries::<Service, Service, AllServicesView>(services.clone(), service_event_publishers)
+        .await;
 
     IdentityState {
         command: agent_identity::state::CommandHandlers {
@@ -210,6 +213,7 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
 }
 
 pub async fn authorization_state<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
     services: Arc<AuthorizationServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> AuthorizationState {
@@ -222,27 +226,28 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
         ..
     } = partition_event_publishers(event_publishers);
 
-    let (authorization_code_command_handler, authorization_code, _all_authorization_codes) =
-        CCB::commands_and_queries::<AuthorizationCodeView, AuthorizationCode, AllAuthorizationCodesView>(
+    let (authorization_code_command_handler, authorization_code, _all_authorization_codes) = builder
+        .commands_and_queries::<AuthorizationCodeView, AuthorizationCode, AllAuthorizationCodesView>(
             (),
             authorization_code_event_publishers,
         )
         .await;
-    let (client_command_handler, client, _all_clients) =
-        CCB::commands_and_queries::<ClientView, Client, AllClientsView>((), client_event_publishers).await;
+    let (client_command_handler, client, _all_clients) = builder
+        .commands_and_queries::<ClientView, Client, AllClientsView>((), client_event_publishers)
+        .await;
     let (
         oauth2_authorization_request_command_handler,
         oauth2_authorization_request,
         _all_oauth2_authorization_requests,
-    ) = CCB::commands_and_queries::<
+    ) = builder.commands_and_queries::<
         OAuth2AuthorizationRequestView,
         OAuth2AuthorizationRequest,
         AllOAuth2AuthorizationRequestsView,
     >((), oauth2_authorization_request_event_publishers)
     .await;
-    let (token_command_handler, access_token, _all_access_tokens) =
-        CCB::commands_and_queries::<AccessTokenView, AccessToken, AllAccessTokensView>((), token_event_publishers)
-            .await;
+    let (token_command_handler, access_token, _all_access_tokens) = builder
+        .commands_and_queries::<AccessTokenView, AccessToken, AllAccessTokensView>((), token_event_publishers)
+        .await;
 
     AuthorizationState {
         command: agent_authorization::state::CommandHandlers {
@@ -262,6 +267,7 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
 }
 
 pub async fn issuance_state<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
     services: Arc<agent_issuance::services::IssuanceServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> agent_issuance::state::IssuanceState {
@@ -273,16 +279,17 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
         ..
     } = partition_event_publishers(event_publishers);
 
-    let (credential_command_handler, credential, all_credentials) = CCB::commands_and_queries::<
-        CredentialView,
-        Credential,
-        AllCredentialsView,
-    >(services.clone(), credential_event_publishers)
-    .await;
-    let (offer_command_handler, offer, all_offers) =
-        CCB::commands_and_queries::<OfferView, Offer, AllOffersView>(services.clone(), offer_event_publishers).await;
-    let (server_config_command_handler, server_config, _all_server_configs) =
-        CCB::commands_and_queries::<ServerConfigView, ServerConfig, ServerConfig>(
+    let (credential_command_handler, credential, all_credentials) = builder
+        .commands_and_queries::<CredentialView, Credential, AllCredentialsView>(
+            services.clone(),
+            credential_event_publishers,
+        )
+        .await;
+    let (offer_command_handler, offer, all_offers) = builder
+        .commands_and_queries::<OfferView, Offer, AllOffersView>(services.clone(), offer_event_publishers)
+        .await;
+    let (server_config_command_handler, server_config, _all_server_configs) = builder
+        .commands_and_queries::<ServerConfigView, ServerConfig, ServerConfig>(
             services.clone(),
             server_config_event_publishers,
         )
@@ -306,6 +313,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
 }
 
 pub async fn verification_state<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
     services: Arc<VerificationServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> VerificationState {
@@ -315,8 +323,8 @@ pub async fn verification_state<CCB: CqrsComponentBuilder>(
         ..
     } = partition_event_publishers(event_publishers);
 
-    let (authorization_request_command_handler, authorization_request, all_authorization_requests) =
-        CCB::commands_and_queries::<AuthorizationRequest, AuthorizationRequest, AllAuthorizationRequestsView>(
+    let (authorization_request_command_handler, authorization_request, all_authorization_requests) = builder
+        .commands_and_queries::<AuthorizationRequest, AuthorizationRequest, AllAuthorizationRequestsView>(
             services.clone(),
             authorization_request_event_publishers,
         )
@@ -334,6 +342,7 @@ pub async fn verification_state<CCB: CqrsComponentBuilder>(
 }
 
 pub async fn holder_state<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
     services: Arc<HolderServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> HolderState {
@@ -345,22 +354,22 @@ pub async fn holder_state<CCB: CqrsComponentBuilder>(
         ..
     } = partition_event_publishers(event_publishers);
 
-    let (holder_credential_command_handler, holder_credential, all_holder_credential) =
-        CCB::commands_and_queries::<HolderCredential, HolderCredential, AllHolderCredentialsView>(
+    let (holder_credential_command_handler, holder_credential, all_holder_credential) = builder
+        .commands_and_queries::<HolderCredential, HolderCredential, AllHolderCredentialsView>(
             services.clone(),
             holder_credential_publisher,
         )
         .await;
 
-    let (presentation_command_handler, presentation, all_presentations) =
-        CCB::commands_and_queries::<Presentation, Presentation, AllPresentationsView>(
+    let (presentation_command_handler, presentation, all_presentations) = builder
+        .commands_and_queries::<Presentation, Presentation, AllPresentationsView>(
             services.clone(),
             presentation_event_publishers,
         )
         .await;
 
-    let (received_offer_command_handler, received_offer, all_received_offers) =
-        CCB::commands_and_queries::<ReceivedOffer, ReceivedOffer, AllReceivedOffersView>(
+    let (received_offer_command_handler, received_offer, all_received_offers) = builder
+        .commands_and_queries::<ReceivedOffer, ReceivedOffer, AllReceivedOffersView>(
             services.clone(),
             received_offer_event_publishers,
         )

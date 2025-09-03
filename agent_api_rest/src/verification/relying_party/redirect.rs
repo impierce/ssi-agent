@@ -157,7 +157,7 @@ pub mod tests {
 
         let event_publishers = vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>];
 
-        let verification_state = verification_state::<InMemory>(Service::default(), event_publishers).await;
+        let verification_state = verification_state(&InMemory, Service::default(), event_publishers).await;
 
         let mut app = router(verification_state);
 

@@ -3,7 +3,11 @@
 mod metadata;
 mod probes;
 
-use agent_api_rest::{app, ApplicationState};
+use agent_api_rest::{
+    app,
+    metrics::{metrics, track_metrics},
+    ApplicationState,
+};
 use agent_authorization::services::AuthorizationServices;
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_holder::services::HolderServices;
@@ -43,26 +47,34 @@ async fn main() -> io::Result<()> {
         .event_store
         .type_
     {
-        EventStoreType::Postgres => (
-            agent_store::identity_state::<Postgres>(identity_services, identity_event_publishers).await,
-            agent_store::authorization_state::<Postgres>(authorization_services, authorization_event_publishers).await,
-            agent_store::issuance_state::<Postgres>(issuance_services, issuance_event_publishers).await,
-            agent_store::holder_state::<Postgres>(holder_services, holder_event_publishers).await,
-            agent_store::verification_state::<Postgres>(verification_services, verification_event_publishers).await,
-        ),
-        EventStoreType::MongoDb => (
-            agent_store::identity_state::<MongoDB>(identity_services, identity_event_publishers).await,
-            agent_store::authorization_state::<MongoDB>(authorization_services, authorization_event_publishers).await,
-            agent_store::issuance_state::<MongoDB>(issuance_services, issuance_event_publishers).await,
-            agent_store::holder_state::<MongoDB>(holder_services, holder_event_publishers).await,
-            agent_store::verification_state::<MongoDB>(verification_services, verification_event_publishers).await,
-        ),
+        EventStoreType::Postgres => {
+            let builder = Postgres::new().await;
+            (
+                agent_store::identity_state(&builder, identity_services, identity_event_publishers).await,
+                agent_store::authorization_state(&builder, authorization_services, authorization_event_publishers)
+                    .await,
+                agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await,
+                agent_store::holder_state(&builder, holder_services, holder_event_publishers).await,
+                agent_store::verification_state(&builder, verification_services, verification_event_publishers).await,
+            )
+        }
+        EventStoreType::MongoDb => {
+            let builder = MongoDB::new().await;
+            (
+                agent_store::identity_state(&builder, identity_services, identity_event_publishers).await,
+                agent_store::authorization_state(&builder, authorization_services, authorization_event_publishers)
+                    .await,
+                agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await,
+                agent_store::holder_state(&builder, holder_services, holder_event_publishers).await,
+                agent_store::verification_state(&builder, verification_services, verification_event_publishers).await,
+            )
+        }
         EventStoreType::InMemory => (
-            agent_store::identity_state::<InMemory>(identity_services, identity_event_publishers).await,
-            agent_store::authorization_state::<InMemory>(authorization_services, authorization_event_publishers).await,
-            agent_store::issuance_state::<InMemory>(issuance_services, issuance_event_publishers).await,
-            agent_store::holder_state::<InMemory>(holder_services, holder_event_publishers).await,
-            agent_store::verification_state::<InMemory>(verification_services, verification_event_publishers).await,
+            agent_store::identity_state(&InMemory, identity_services, identity_event_publishers).await,
+            agent_store::authorization_state(&InMemory, authorization_services, authorization_event_publishers).await,
+            agent_store::issuance_state(&InMemory, issuance_services, issuance_event_publishers).await,
+            agent_store::holder_state(&InMemory, holder_services, holder_event_publishers).await,
+            agent_store::verification_state(&InMemory, verification_services, verification_event_publishers).await,
         ),
     };
 
@@ -90,21 +102,45 @@ async fn main() -> io::Result<()> {
         startup_instant: std::time::Instant::now(),
     };
 
+    // Add metadata routes
     let metadata_router = axum::Router::new()
         .route("/version", axum::routing::get(metadata::version::version))
         .route("/info", axum::routing::get(metadata::info::info))
         .route("/v0/configuration", axum::routing::get(metadata::config::configuration))
         .with_state(metadata_state);
+
     let app = metadata_router.merge(app);
 
+    // Add probes routes
     let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
-    let app = probes_router.merge(app);
+    let mut app = probes_router.merge(app);
+
+    if config().metrics.enabled {
+        app = app.route_layer(axum::middleware::from_fn(track_metrics));
+    }
 
     let port = config().application_url.port().unwrap_or(3033);
 
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
-    info!("HTTP API served at {}", config().application_url);
-    axum::serve(listener, app).await?;
+    let app_handle = tokio::spawn(start_server("HTTP API".to_string(), app, port));
+
+    if config().metrics.enabled {
+        let metrics_handle = tokio::spawn(start_server("Metrics".to_string(), metrics(), config().metrics.port));
+        let _ = tokio::join!(app_handle, metrics_handle);
+    } else {
+        let _ = app_handle.await;
+    }
 
     Ok(())
+}
+
+/// Start a server for a given `Router` on a given port.
+async fn start_server(alias: String, router: axum::Router, port: u16) {
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await.unwrap();
+    // Log the URL defined in the config for the HTTP API
+    if alias == "HTTP API" {
+        info!("HTTP API served at {}", config().application_url);
+    } else {
+        info!("{alias} served at {}", listener.local_addr().unwrap());
+    }
+    axum::serve(listener, router).await.unwrap();
 }

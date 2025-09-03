@@ -27,6 +27,8 @@ hyper = { version = "1.2" }
 identity_core.workspace = true
 identity_credential.workspace = true
 identity_did.workspace = true
+metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.17", default-features = false }
 oauth_tsl.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true

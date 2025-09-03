@@ -20,10 +20,24 @@ where
     }
 }
 
-pub struct MongoDB;
+pub struct MongoDB {
+    pub client: Client,
+}
+
+impl MongoDB {
+    pub async fn new() -> Self {
+        let connection_string = config().event_store.connection_string.clone().expect(
+            "Missing config parameter `event_store.connection_string` or `UNICORE__EVENT_STORE__CONNECTION_STRING`",
+        );
+        let client = default_mongo_client(&connection_string).await;
+        Self { client }
+    }
+    // TODO: Run [Client::shutdown] during graceful shutdown to close all open connections.
+}
 
 impl CqrsComponentBuilder for MongoDB {
     async fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
+        &self,
         services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
     ) -> (
@@ -34,27 +48,25 @@ impl CqrsComponentBuilder for MongoDB {
     where
         <A as Aggregate>::Command: Send + Sync,
     {
-        let connection_string = config().event_store.connection_string.clone().expect(
-            "Missing config parameter `event_store.connection_string` or `UNICORE__EVENT_STORE__CONNECTION_STRING`",
-        );
-
-        let client = default_mongo_client(&connection_string).await;
-
         let all_aggregates_name = format!("all_{}s", A::aggregate_type());
 
         // Initialize the MongoDB repositories.
         let aggregate: Arc<MongoViewRepository<V, A>> =
-            Arc::new(MongoViewRepository::new(&A::aggregate_type(), client.clone()));
+            Arc::new(MongoViewRepository::new(&A::aggregate_type(), self.client.clone()));
         let all_aggregates: Arc<MongoViewRepository<AV, A>> =
-            Arc::new(MongoViewRepository::new(&all_aggregates_name, client.clone()));
+            Arc::new(MongoViewRepository::new(&all_aggregates_name, self.client.clone()));
 
         (
-            Arc::new(AggregateHandler::new(client, services).await.with_parameters(
-                aggregate.clone(),
-                all_aggregates.clone(),
-                event_publishers,
-                &all_aggregates_name,
-            )),
+            Arc::new(
+                AggregateHandler::new(self.client.clone(), services)
+                    .await
+                    .with_parameters(
+                        aggregate.clone(),
+                        all_aggregates.clone(),
+                        event_publishers,
+                        &all_aggregates_name,
+                    ),
+            ),
             aggregate,
             all_aggregates,
         )
