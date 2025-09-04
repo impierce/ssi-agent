@@ -296,7 +296,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_json_path_to_error",
- "serde_with 3.13.0",
  "serial_test",
  "strum 0.26.3",
  "strum_macros 0.26.4",
