@@ -231,6 +231,29 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                           "alt_text": "Impierce Logo"
                         }
                       }
+                    ],
+                    "claims": [
+                        {
+                            "path": ["credentialSubject", "first_name"],
+                            "display": [{
+                                "name": "First Name",
+                                "locale": "en"
+                            }],
+                        },
+                        {
+                            "path": ["credentialSubject", "last_name"],
+                            "display": [{
+                                "name": "Last Name",
+                                "locale": "en"
+                            }],
+                        },
+                        {
+                            "path": ["credentialSubject", "dob"],
+                            "display": [{
+                                "name": "Date of Birth",
+                                "locale": "en"
+                            }],
+                        }
                     ]
                   }
                 ]))

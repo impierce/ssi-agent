@@ -246,9 +246,7 @@ impl Aggregate for Credential {
                                 let name = credential_configuration
                                     .display
                                     .first()
-                                    .and_then(|display| display.get("name"))
-                                    .and_then(|name| name.as_str())
-                                    .map(ToString::to_string)
+                                    .map(|display| display.name.clone())
                                     .unwrap_or("OpenBadge Credential".to_string());
 
                                 let credential_subject = serde_json_path_to_error::from_value::<AchievementSubject>(
@@ -686,8 +684,8 @@ pub mod test_utils {
         credential_format_profiles::{
             w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, CredentialFormats, Parameters,
         },
-        proof::KeyProofMetadata,
-        ProofType,
+        credential_issuer::credential_configurations_supported::{CredentialConfigurationsSupportedDisplay, Logo},
+        proof::{KeyProofMetadata, ProofType},
     };
     use rstest::fixture;
     use serde_json::json;
@@ -711,14 +709,11 @@ pub mod test_utils {
         pub static ref OPENBADGE_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
             CredentialConfigurationsSupportedObject {
                 credential_format: CredentialFormats::JwtVcJson(Parameters {
-                    parameters: (
-                        CredentialDefinition {
-                            type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
-                            credential_subject: Default::default(),
-                        },
-                        None,
-                    )
-                        .into(),
+                    parameters: (CredentialDefinition {
+                        type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
+                        credential_subject: Default::default(),
+                    })
+                    .into(),
                 }),
                 cryptographic_binding_methods_supported: vec!["did:key".to_string(), "did:jwk".to_string(),],
                 credential_signing_alg_values_supported: vec!["EdDSA".to_string()],
@@ -728,25 +723,28 @@ pub mod test_utils {
                         proof_signing_alg_values_supported: vec![Algorithm::EdDSA],
                     },
                 )]),
-                display: vec![json!({
-                    "name": "Teamwork Badge",
-                    "logo": {
-                        "url": "https://example.com/logo.png"
-                    }
-                })],
+                display: vec![CredentialConfigurationsSupportedDisplay {
+                    name: "Teamwork Badge".to_string(),
+                    locale: None,
+                    logo: Some(Logo {
+                        uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
+                        alt_text: Some("Impierce Logo".to_string()),
+                    }),
+                    description: None,
+                    background_image: None,
+                    background_color: None,
+                    text_color: None,
+                }],
                 ..Default::default()
             };
         pub static ref W3C_VC_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
             CredentialConfigurationsSupportedObject {
                 credential_format: CredentialFormats::JwtVcJson(Parameters {
-                    parameters: (
-                        CredentialDefinition {
-                            type_: vec!["VerifiableCredential".to_string()],
-                            credential_subject: Default::default(),
-                        },
-                        None,
-                    )
-                        .into(),
+                    parameters: (CredentialDefinition {
+                        type_: vec!["VerifiableCredential".to_string()],
+                        credential_subject: Default::default(),
+                    })
+                    .into()
                 }),
                 cryptographic_binding_methods_supported: vec!["did:jwk".to_string(), "did:key".to_string(),],
                 credential_signing_alg_values_supported: vec!["ES256".to_string(), "EdDSA".to_string()],
@@ -756,14 +754,18 @@ pub mod test_utils {
                         proof_signing_alg_values_supported: vec![Algorithm::ES256, Algorithm::EdDSA],
                     },
                 )]),
-                display: vec![json!({
-                    "name": "Verifiable Credential",
-                    "locale": "en",
-                    "logo": {
-                        "uri": "https://www.impierce.com/external/impierce-logo.png",
-                        "alt_text": "Impierce Logo",
-                    }
-                })],
+                display: vec![CredentialConfigurationsSupportedDisplay {
+                    name: "Verifiable Credential".to_string(),
+                    locale: Some("en".to_string()),
+                    logo: Some(Logo {
+                        uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
+                        alt_text: Some("Impierce Logo".to_string()),
+                    }),
+                    description: None,
+                    background_image: None,
+                    background_color: None,
+                    text_color: None,
+                }],
                 ..Default::default()
             };
         pub static ref OPENBADGE_CREDENTIAL_SUBJECT: serde_json::Value = json!(

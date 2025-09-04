@@ -4,7 +4,7 @@ use cqrs_es::Aggregate;
 use oid4vc_core::Validator;
 use oid4vci::credential_issuer::CredentialIssuer;
 use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants, PreAuthorizedCode};
-use oid4vci::credential_response::{CredentialResponse, CredentialResponseType};
+use oid4vci::credential_response::{CredentialResponse, CredentialResponseObject, CredentialResponseType};
 use oid4vci::token_request::TokenRequest;
 use oid4vci::token_response::TokenResponse;
 use serde::{Deserialize, Serialize};
@@ -190,28 +190,19 @@ impl Aggregate for Offer {
             CreateTokenResponse {
                 offer_id,
                 token_request,
-            } => {
-                #[cfg(feature = "test_utils")]
-                let c_nonce = test_utils::c_nonce().await;
-                #[cfg(not(feature = "test_utils"))]
-                let c_nonce = agent_shared::generate_random_string();
-
-                match token_request {
-                    TokenRequest::PreAuthorizedCode { .. } => Ok(vec![TokenResponseCreated {
-                        offer_id,
-                        token_response: TokenResponse {
-                            access_token: self.access_token.clone(),
-                            token_type: "bearer".to_string(),
-                            expires_in: None,
-                            refresh_token: None,
-                            scope: None,
-                            c_nonce: Some(c_nonce),
-                            c_nonce_expires_in: None,
-                        },
-                    }]),
-                    _ => Err(UnsupportedTokenRequestGrantTypeError),
-                }
-            }
+            } => match token_request {
+                TokenRequest::PreAuthorizedCode { .. } => Ok(vec![TokenResponseCreated {
+                    offer_id,
+                    token_response: TokenResponse {
+                        access_token: self.access_token.clone(),
+                        token_type: "bearer".to_string(),
+                        expires_in: None,
+                        refresh_token: None,
+                        scope: None,
+                    },
+                }]),
+                _ => Err(UnsupportedTokenRequestGrantTypeError),
+            },
             VerifyCredentialRequest {
                 offer_id,
                 credential_issuer_metadata,
@@ -248,15 +239,15 @@ impl Aggregate for Offer {
                 offer_id,
                 mut signed_credentials,
             } => {
-                // TODO: support batch credentials.
                 let (signed_credential, notification_id) = signed_credentials.pop().ok_or(MissingCredentialError)?;
                 let credential_response = CredentialResponse {
                     credential: CredentialResponseType::Immediate {
-                        credential: signed_credential,
+                        credentials: vec![CredentialResponseObject {
+                            // TODO: Apply strong typing to signed credentials.
+                            credential: signed_credential.as_str().unwrap_or_default().to_string(),
+                        }],
                         notification_id,
                     },
-                    c_nonce: None,
-                    c_nonce_expires_in: None,
                 };
 
                 Ok(vec![CredentialResponseCreated {
@@ -658,23 +649,19 @@ pub mod test_utils {
     use jsonwebtoken::Algorithm;
     use oid4vc_core::Subject;
     use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
+    use oid4vci::credential_request::CredentialIdentifierOrCredentialConfigurationId::CredentialConfigurationId;
+    use oid4vci::proof::ProofType;
+    use oid4vci::Proof;
     use oid4vci::{
-        credential_format_profiles::{
-            w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, CredentialFormats, Parameters,
-        },
-        credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata,
-        credential_request::CredentialRequest,
-        KeyProofType, ProofType,
+        credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata, credential_request::CredentialRequest,
     };
     use once_cell::sync::OnceCell;
     pub use rstest::*;
-    use serde_json::json;
     use std::collections::HashMap;
     use url::Url;
 
     static PRE_AUTHORIZED_CODE: OnceCell<String> = OnceCell::new();
     static ACCESS_TOKEN: OnceCell<String> = OnceCell::new();
-    static C_NONCE: OnceCell<String> = OnceCell::new();
 
     #[fixture]
     pub async fn pre_authorized_code() -> String {
@@ -684,30 +671,6 @@ pub mod test_utils {
     #[fixture]
     pub async fn access_token() -> String {
         ACCESS_TOKEN.get_or_init(generate_random_string).clone()
-    }
-
-    #[fixture]
-    pub async fn c_nonce() -> String {
-        C_NONCE.get_or_init(generate_random_string).clone()
-    }
-
-    pub struct TestAttributes {
-        pub pre_authorized_code: String,
-        pub access_token: String,
-        pub c_nonce: String,
-    }
-
-    #[fixture]
-    pub async fn attributes(
-        #[future(awt)] pre_authorized_code: String,
-        #[future(awt)] access_token: String,
-        #[future(awt)] c_nonce: String,
-    ) -> TestAttributes {
-        TestAttributes {
-            pre_authorized_code,
-            access_token,
-            c_nonce,
-        }
     }
 
     #[fixture]
@@ -787,49 +750,40 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub async fn token_response(#[future(awt)] access_token: String, #[future(awt)] c_nonce: String) -> TokenResponse {
+    pub async fn token_response(#[future(awt)] access_token: String) -> TokenResponse {
         TokenResponse {
             access_token,
             token_type: "bearer".to_string(),
             expires_in: None,
             refresh_token: None,
             scope: None,
-            c_nonce: Some(c_nonce),
-            c_nonce_expires_in: None,
         }
     }
 
     #[fixture]
     pub async fn credential_request(
-        #[future(awt)] c_nonce: String,
+        credential_configuration_id: String,
         #[future(awt)] holder: Arc<dyn Subject>,
         static_issuer_url: Url,
     ) -> CredentialRequest {
         CredentialRequest {
-            credential_format: CredentialFormats::JwtVcJson(Parameters {
-                parameters: (
-                    CredentialDefinition {
-                        type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
-                        credential_subject: Default::default(),
-                    },
-                    None,
-                )
-                    .into(),
-            }),
+            credential_identifier_or_credential_configuration_id: CredentialConfigurationId(
+                credential_configuration_id,
+            ),
             proof: Some(
-                KeyProofType::builder()
+                Proof::builder()
                     .proof_type(ProofType::Jwt)
                     .algorithm(Algorithm::EdDSA)
                     .signer(holder.clone())
                     .iss(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap())
                     .aud(static_issuer_url.to_string())
                     .iat(1571324800)
-                    .nonce(c_nonce)
                     .subject_syntax_type("did:key")
                     .build()
                     .await
                     .unwrap(),
             ),
+            proofs: None,
         }
     }
 
@@ -837,11 +791,11 @@ pub mod test_utils {
     pub fn credential_response(notification_id: String) -> CredentialResponse {
         CredentialResponse {
             credential: CredentialResponseType::Immediate {
-                credential: json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string()),
+                credentials: vec![CredentialResponseObject {
+                    credential: OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string(),
+                }],
                 notification_id: Some(notification_id.clone()),
             },
-            c_nonce: None,
-            c_nonce_expires_in: None,
         }
     }
 }

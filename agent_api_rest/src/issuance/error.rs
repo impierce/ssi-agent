@@ -9,8 +9,8 @@ use axum::{response::IntoResponse, response::Response, Json};
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use oid4vci::errors::{
-    AuthorizationErrorResponse, BatchCredentialErrorResponse, CredentialErrorResponse, DeferredCredentialErrorResponse,
-    ErrorStatusCode, NotificationErrorResponse, OID4VCError, TokenErrorResponse,
+    AuthorizationErrorResponse, CredentialErrorResponse, DeferredCredentialErrorResponse, ErrorStatusCode,
+    NotificationErrorResponse, OID4VCError, TokenErrorResponse,
 };
 
 impl IntoApiErrorExt for CredentialError {
@@ -223,12 +223,6 @@ pub fn token_error(error: TokenErrorResponse) -> Response {
 }
 
 pub fn credential_error(error: CredentialErrorResponse) -> Response {
-    let error = OID4VCError::new(error);
-    let status = error.error.status_code();
-    (status, Json(error)).into_response()
-}
-
-pub fn batch_credential_error(error: BatchCredentialErrorResponse) -> Response {
     let error = OID4VCError::new(error);
     let status = error.error.status_code();
     (status, Json(error)).into_response()

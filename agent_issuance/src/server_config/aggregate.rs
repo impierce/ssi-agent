@@ -5,8 +5,7 @@ use oid4vci::credential_issuer::credential_configurations_supported::CredentialC
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
-use oid4vci::proof::KeyProofMetadata;
-use oid4vci::ProofType;
+use oid4vci::proof::{KeyProofMetadata, ProofType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{debug, info};
@@ -172,6 +171,7 @@ impl Aggregate for ServerConfig {
                     ),
                     proof_types_supported,
                     display: credential_configuration.display,
+                    claims: credential_configuration.claims,
                     ..Default::default()
                 };
 
@@ -309,8 +309,10 @@ pub mod server_config_tests {
     use cqrs_es::test::TestFramework;
     use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
     use oid4vci::credential_format_profiles::{w3c_verifiable_credentials, CredentialFormats, Parameters};
+    use oid4vci::credential_issuer::credential_configurations_supported::{
+        CredentialConfigurationsSupportedDisplay, Logo,
+    };
     use rstest::*;
-    use serde_json::json;
 
     type ServerConfigTestFramework = TestFramework<ServerConfig>;
 
@@ -363,17 +365,21 @@ pub mod server_config_tests {
                                 type_: vec!["VerifiableCredential".to_string()],
                                 credential_subject: Default::default(),
                             },
-                            order: None,
                         },
                     }),
-                    display: vec![json!({
-                        "name": "Verifiable Credential",
-                        "locale": "en",
-                        "logo": {
-                            "uri": "https://www.impierce.com/external/impierce-logo.png",
-                            "alt_text": "Impierce Logo"
-                        }
-                    })],
+                    display: vec![CredentialConfigurationsSupportedDisplay {
+                        name: "Verifiable Credential".to_string(),
+                        locale: Some("en".to_string()),
+                        logo: Some(Logo {
+                            uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
+                            alt_text: Some("Impierce Logo".to_string()),
+                        }),
+                        description: None,
+                        background_image: None,
+                        background_color: None,
+                        text_color: None,
+                    }],
+                    claims: vec![],
                 },
                 provisioned: false,
             })
@@ -451,7 +457,6 @@ pub mod test_utils {
         Box::new(CredentialIssuerMetadata {
             credential_issuer: static_issuer_url.clone(),
             credential_endpoint: static_issuer_url.join("credential").unwrap(),
-            batch_credential_endpoint: Some(static_issuer_url.join("batch_credential").unwrap()),
             ..Default::default()
         })
     }
