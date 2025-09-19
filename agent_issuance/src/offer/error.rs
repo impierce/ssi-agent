@@ -10,7 +10,7 @@ pub enum OfferError {
     MissingCredentialError,
     #[error("Missing `Proof` in Credential Request")]
     MissingProofError,
-    #[error("Invalid `Proof` in Credential Request")]
+    #[error("Invalid `Proof` in Credential Request: {0}")]
     InvalidProofError(String),
     #[error("Missing `iss` claim in `Proof`")]
     MissingProofIssuerError,

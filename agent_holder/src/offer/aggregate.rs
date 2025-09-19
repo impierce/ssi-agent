@@ -126,6 +126,7 @@ impl Aggregate for Offer {
                 let token_request = match credential_offer.grants.clone() {
                     Some(Grants {
                         pre_authorized_code: Some(pre_authorized_code),
+                        // TODO: support `authorization_code` grant type.
                         ..
                     }) => TokenRequest::PreAuthorizedCode {
                         pre_authorized_code: pre_authorized_code.pre_authorized_code,
@@ -182,6 +183,12 @@ impl Aggregate for Offer {
                     .await
                     .map_err(|_| CredentialIssuerMetadataRetrievalError)?;
 
+                // Get the authorization server metadata.
+                let authorization_server_metadata = wallet
+                    .get_authorization_server_metadata(credential_issuer_url.clone())
+                    .await
+                    .map_err(|_| AuthorizationServerMetadataRetrievalError)?;
+
                 let credential_configurations = self
                     .credential_configurations
                     .as_ref()
@@ -190,6 +197,21 @@ impl Aggregate for Offer {
                 let credentials: Vec<OfferCredential> = match credential_configuration_ids.len() {
                     0 => vec![],
                     1 => {
+                        // Get a nonce if the credential issuer metadata contains a nonce endpoint.
+                        let nonce = if let Some(nonce_endpoint) = &credential_issuer_metadata.nonce_endpoint {
+                            wallet.get_nonce(nonce_endpoint.clone()).await.ok()
+                        } else {
+                            None
+                        };
+
+                        info!("nonce: {nonce:?}");
+
+                        // Determine if anonymous access is supported.
+                        // See: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-15.html#section-8.2.1.1-2.2.2.2
+                        let with_anonymous_access = authorization_server_metadata
+                            .pre_authorized_grant_anonymous_access_supported
+                            .unwrap_or(false);
+
                         let credential_configuration_id = &credential_configuration_ids[0];
 
                         let credential_configuration = credential_configurations
@@ -198,13 +220,20 @@ impl Aggregate for Offer {
 
                         // Get the credential.
                         let credential_response = wallet
-                            .get_credential(credential_issuer_metadata, &token_response, credential_configuration)
+                            .get_credential(
+                                credential_issuer_metadata,
+                                &token_response,
+                                nonce,
+                                credential_configuration_id.clone(),
+                                credential_configuration,
+                                with_anonymous_access,
+                            )
                             .await
                             .map_err(|_| CredentialResponseError)?;
 
                         let credential = match credential_response.credential {
-                            CredentialResponseType::Immediate { credential, .. } => {
-                                Jwt::from(credential.as_str().ok_or(UnsupportedCredentialFormatError)?.to_string())
+                            CredentialResponseType::Immediate { credentials, .. } => {
+                                Jwt::from(credentials[0].credential.clone())
                             }
                             CredentialResponseType::Deferred { .. } => {
                                 return Err(UnsupportedDeferredCredentialResponseError)
@@ -226,7 +255,7 @@ impl Aggregate for Offer {
                     }
                 };
 
-                info!("credentials: {:?}", credentials);
+                info!("credentials: {credentials:?}");
 
                 Ok(vec![CredentialResponseReceived {
                     received_offer_id,

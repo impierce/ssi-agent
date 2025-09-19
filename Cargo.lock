@@ -8290,7 +8290,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=b4582de#b4582debc609c19063d3a73b8ec1e82858bca33c"
+source = "git+https://github.com/impierce/openid4vc?rev=8b024cb#8b024cb07ee39fd697d7acb275b61e41c114815b"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8315,7 +8315,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=b4582de#b4582debc609c19063d3a73b8ec1e82858bca33c"
+source = "git+https://github.com/impierce/openid4vc?rev=8b024cb#8b024cb07ee39fd697d7acb275b61e41c114815b"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8349,16 +8349,19 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=b4582de#b4582debc609c19063d3a73b8ec1e82858bca33c"
+source = "git+https://github.com/impierce/openid4vc?rev=8b024cb#8b024cb07ee39fd697d7acb275b61e41c114815b"
 dependencies = [
  "anyhow",
+ "chrono",
  "derivative",
  "getset",
  "http 1.3.1",
  "jsonwebtoken",
  "lazy_static",
+ "nutype",
  "oid4vc-core",
  "paste",
+ "pkce",
  "reqwest 0.11.27",
  "reqwest-middleware",
  "reqwest-retry",
@@ -8368,12 +8371,13 @@ dependencies = [
  "serde_with 3.13.0",
  "thiserror 1.0.69",
  "tokio",
+ "url",
 ]
 
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=b4582de#b4582debc609c19063d3a73b8ec1e82858bca33c"
+source = "git+https://github.com/impierce/openid4vc?rev=8b024cb#8b024cb07ee39fd697d7acb275b61e41c114815b"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8950,6 +8954,17 @@ dependencies = [
  "atomic-waker",
  "fastrand",
  "futures-io",
+]
+
+[[package]]
+name = "pkce"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e228dbe2aebd82de09c914fe28d36d3170ed5192e8d52b9c070ee0794519c2d3"
+dependencies = [
+ "base64 0.21.7",
+ "rand 0.8.5",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -11072,7 +11087,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=b4582de#b4582debc609c19063d3a73b8ec1e82858bca33c"
+source = "git+https://github.com/impierce/openid4vc?rev=8b024cb#8b024cb07ee39fd697d7acb275b61e41c114815b"
 dependencies = [
  "anyhow",
  "async-trait",
