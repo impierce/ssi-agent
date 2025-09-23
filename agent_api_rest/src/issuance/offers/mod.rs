@@ -15,6 +15,7 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::header;
+use oid4vci::credential_offer::GrantType;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize)]
@@ -62,7 +63,7 @@ pub(crate) async fn offers(
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
             credential_configuration_ids,
-            grant_types: vec![],
+            grant_types: vec![GrantType::PreAuthorizedCode],
             tx_code_constraints: None,
         };
 
