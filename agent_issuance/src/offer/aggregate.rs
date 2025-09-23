@@ -310,9 +310,8 @@ impl Aggregate for Offer {
                     status: Status::Issued,
                 }])
             }
-        } // <- Close the match statement
-    } // <- Close the handle method
-
+        }
+    }
     fn apply(&mut self, event: Self::Event) {
         use OfferEvent::*;
 
