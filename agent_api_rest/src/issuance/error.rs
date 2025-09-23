@@ -100,7 +100,6 @@ impl IntoApiErrorExt for OfferError {
             InvalidProofError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             MissingProofIssuerError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             MissingTxCodeError => ApiError::new(StatusCode::BAD_REQUEST),
-            TxCodeUnrequestedError => ApiError::new(StatusCode::BAD_REQUEST),
             InvalidTxCodeError => ApiError::new(StatusCode::BAD_REQUEST),
             InvalidPreAuthorizedCodeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
