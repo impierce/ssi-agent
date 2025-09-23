@@ -62,6 +62,8 @@ pub(crate) async fn offers(
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
             credential_configuration_ids,
+            grant_types: vec![],
+            tx_code_constraints: None,
         };
 
         command_handler(&offer_id, &state.command.offer, command).await?

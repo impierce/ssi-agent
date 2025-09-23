@@ -3,6 +3,7 @@ use oid4vci::{
         authorization_server_metadata::AuthorizationServerMetadata,
         credential_issuer_metadata::CredentialIssuerMetadata,
     },
+    credential_offer::{GrantType, TxCodeConstraints},
     credential_request::CredentialRequest,
     token_request::TokenRequest,
 };
@@ -15,6 +16,8 @@ pub enum OfferCommand {
     CreateCredentialOffer {
         offer_id: String,
         credential_configuration_ids: Vec<String>,
+        grant_types: Vec<GrantType>,
+        tx_code_constraints: Option<TxCodeConstraints>,
     },
     AddCredentials {
         offer_id: String,
@@ -25,7 +28,6 @@ pub enum OfferCommand {
         offer_id: String,
         target_url: Url,
     },
-
     // OpenID4VCI Pre-Authorized Code Flow
     CreateTokenResponse {
         offer_id: String,
@@ -37,7 +39,6 @@ pub enum OfferCommand {
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_request: CredentialRequest,
     },
-
     CreateCredentialResponse {
         offer_id: String,
         signed_credentials: Vec<(serde_json::Value, Option<String>)>,

@@ -6,6 +6,7 @@ use tracing::info;
 pub mod credential;
 pub mod offer;
 pub mod server_config;
+pub mod utils;
 
 pub mod services;
 pub mod state;
