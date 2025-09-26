@@ -49,6 +49,10 @@ pub enum OfferEvent {
         credential_response: CredentialResponse,
         status: Status,
     },
+    TxCodeGenerated {
+        offer_id: String,
+        tx_code: String,
+    },
 }
 
 impl DomainEvent for OfferEvent {

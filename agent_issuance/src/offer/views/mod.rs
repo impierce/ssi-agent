@@ -76,6 +76,10 @@ impl View<Offer> for Offer {
                 self.credential_response.replace(credential_response.clone());
                 self.status.clone_from(status);
             }
+            TxCodeGenerated { offer_id, tx_code } => {
+                self.offer_id.clone_from(offer_id);
+                self.tx_code.replace(tx_code.clone());
+            }
         }
     }
 }

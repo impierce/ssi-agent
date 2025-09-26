@@ -125,7 +125,7 @@ impl Aggregate for Offer {
                     credential_offer_uri.to_string()
                 };
 
-                Ok(vec![
+                let mut events = vec![
                     CredentialOfferCreated {
                         offer_id: offer_id.clone(),
                         grant_types,
@@ -137,11 +137,21 @@ impl Aggregate for Offer {
                         tx_code: tx_code.clone(),
                     },
                     FormUrlEncodedCredentialOfferCreated {
-                        offer_id,
+                        offer_id: offer_id.clone(),
                         form_url_encoded_credential_offer,
                         status: Status::Pending,
                     },
-                ])
+                ];
+
+                // Add TxCodeGenerated event if a transaction code was generated
+                if let Some(tx_code_value) = tx_code {
+                    events.push(TxCodeGenerated {
+                        offer_id: offer_id.clone(),
+                        tx_code: tx_code_value,
+                    });
+                }
+
+                Ok(events)
             }
             AddCredentials {
                 offer_id,
@@ -367,6 +377,9 @@ impl Aggregate for Offer {
                 credential_response, ..
             } => {
                 self.credential_response.replace(credential_response);
+            }
+            TxCodeGenerated { tx_code, .. } => {
+                self.tx_code.replace(tx_code);
             }
         }
     }

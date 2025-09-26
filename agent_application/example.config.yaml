@@ -36,6 +36,12 @@ event_publishers:
     events:
       server_config: []
       credential: [UnsignedCredentialCreated, CredentialSigned]
+  nats:
+    enabled: true
+    nats_client: "nats://localhost:4222"
+    subject: "email.commands"
+    events:
+      offer: [TxCodeGenerated]
 
 # These display parameters are interpreted by identity wallets.
 display:
