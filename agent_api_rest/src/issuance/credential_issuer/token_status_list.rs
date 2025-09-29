@@ -144,7 +144,7 @@ pub mod tests {
 
     #[tokio::test]
     pub async fn test_token_status_list() {
-        let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
         initialize(&issuance_state).await.unwrap();
 
         let relying_party_state = Subject::default();

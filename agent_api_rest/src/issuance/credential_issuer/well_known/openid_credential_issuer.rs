@@ -70,7 +70,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_openid_credential_issuer_endpoint() {
-        let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);

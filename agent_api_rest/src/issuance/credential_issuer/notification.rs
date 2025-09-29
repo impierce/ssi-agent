@@ -79,14 +79,14 @@ mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_valid_notification_request() {
-        let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let mut issuance_app = issuance::router(issuance_state.clone());
 
         credentials(&mut issuance_app).await;
         let grants = offers(&mut issuance_app, true).await.unwrap();
 
-        let authorization_state = authorization_state::<InMemory>(Service::default(), Default::default()).await;
+        let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
@@ -117,14 +117,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_notification_request() {
-        let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let mut issuance_app = issuance::router(issuance_state.clone());
 
         credentials(&mut issuance_app).await;
         let grants = offers(&mut issuance_app, true).await.unwrap();
 
-        let authorization_state = authorization_state::<InMemory>(Service::default(), Default::default()).await;
+        let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

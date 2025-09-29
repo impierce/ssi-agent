@@ -73,7 +73,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
-        let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);

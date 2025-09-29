@@ -109,7 +109,7 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_authorization_endpoint() {
-        let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
@@ -120,7 +120,7 @@ pub mod tests {
         let AuthorizationCode { issuer_state, .. } = authorization_code.unwrap();
         let issuer_state = issuer_state.unwrap();
 
-        let authorization_state = authorization_state::<InMemory>(Service::default(), Default::default()).await;
+        let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

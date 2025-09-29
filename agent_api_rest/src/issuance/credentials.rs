@@ -397,7 +397,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_patch_credential() {
-        let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
@@ -408,7 +408,7 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_credentials_endpoint() {
-        let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);

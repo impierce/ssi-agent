@@ -346,7 +346,7 @@ pub mod tests {
             (None, Default::default())
         };
 
-        let issuance_state = issuance_state::<InMemory>(Service::default(), issuance_event_publishers).await;
+        let issuance_state = issuance_state(&InMemory, Service::default(), issuance_event_publishers).await;
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let mut issuance_app = router(issuance_state.clone());
@@ -370,7 +370,7 @@ pub mod tests {
 
         let grants = offers(&mut issuance_app, is_pre_authorized).await.unwrap();
 
-        let authorization_state = authorization_state::<InMemory>(Service::default(), Default::default()).await;
+        let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

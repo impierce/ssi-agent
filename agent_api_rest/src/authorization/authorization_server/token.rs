@@ -139,7 +139,7 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_token_endpoint(#[case] is_pre_authorized: bool) {
-        let issuance_state = issuance_state::<InMemory>(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
@@ -148,7 +148,7 @@ pub mod tests {
         credentials(&mut app).await;
         let grants = offers(&mut app, is_pre_authorized).await.unwrap();
 
-        let authorization_state = authorization_state::<InMemory>(Service::default(), Default::default()).await;
+        let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;
 
         agent_authorization::state::initialize(&authorization_state)
             .await
