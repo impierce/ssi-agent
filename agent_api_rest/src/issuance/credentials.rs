@@ -158,9 +158,7 @@ pub(crate) async fn credentials(
             .as_ref()
             .and_then(|config| {
                 // Access the stored authorization grants
-                config
-                    .credential_authorization_grants // ← Use the new field
-                    .get(&credential_configuration_id)
+                config.credential_authorization_grants.get(&credential_configuration_id)
             })
             .and_then(|grant| match grant {
                 AuthorizationGrant::PreAuthorized { tx_code_constraints } => tx_code_constraints.clone(),
