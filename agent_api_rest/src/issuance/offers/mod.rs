@@ -8,6 +8,7 @@ use agent_issuance::{
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
+use agent_shared::config::AuthorizationGrant;
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -46,6 +47,8 @@ pub(crate) async fn offers(
         // Unreachable error
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
+    let server_config = query_handler(SERVER_CONFIG_ID, &state.query.server_config).await?;
+
     if let Some(credential_configuration_id) = credential_configuration_ids.iter().find(|credential_configuration_id| {
         !persisted_credential_configuration_ids.contains(*credential_configuration_id)
     }) {
@@ -58,13 +61,24 @@ pub(crate) async fn offers(
             .finish());
     }
 
+    let tx_code_constraints = credential_configuration_ids
+        .first()
+        .and_then(|credential_configuration_id| {
+            server_config
+                .as_ref()
+                .and_then(|config| config.credential_authorization_grants.get(credential_configuration_id))
+                .and_then(|grant| match grant {
+                    AuthorizationGrant::PreAuthorized { tx_code_constraints } => tx_code_constraints.clone(),
+                })
+        });
+
     // Create an offer if it does not exist yet.
     if query_handler(&offer_id, &state.query.offer).await?.is_none() {
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
             credential_configuration_ids,
             grant_types: vec![GrantType::PreAuthorizedCode],
-            tx_code_constraints: None,
+            tx_code_constraints,
         };
 
         command_handler(&offer_id, &state.command.offer, command).await?

@@ -22,6 +22,8 @@ pub enum OfferError {
     MissingTxCodeError,
     #[error("Wrong transaction code provided.")]
     InvalidTxCodeError,
+    #[error("TxCode not requested but provided.")]
+    UnrequestedTxCodeError,
     #[error("Pre-Authorized Code is invalid.")]
     InvalidPreAuthorizedCodeError,
 }

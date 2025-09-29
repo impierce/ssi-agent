@@ -8,9 +8,12 @@ use identity_iota::{
 };
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
-use oid4vci::credential_format_profiles::{CredentialFormats, WithParameters};
 use oid4vci::credential_issuer::credential_configurations_supported::ClaimDescription;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedDisplay;
+use oid4vci::{
+    credential_format_profiles::{CredentialFormats, WithParameters},
+    credential_offer::TxCodeConstraints,
+};
 use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported};
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -513,8 +516,15 @@ pub struct CredentialConfiguration {
     pub display: Vec<CredentialConfigurationsSupportedDisplay>,
     #[serde(default)]
     pub claims: Vec<ClaimDescription>,
+    pub authorization_grant: AuthorizationGrant,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+pub enum AuthorizationGrant {
+    PreAuthorized {
+        tx_code_constraints: Option<TxCodeConstraints>,
+    },
+}
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Logo {

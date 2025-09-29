@@ -221,20 +221,11 @@ impl Aggregate for Offer {
                         return Err(InvalidPreAuthorizedCodeError);
                     }
 
-                    let offer_requires_tx_code =
-                        if let Some(CredentialOffer::CredentialOffer(params)) = &self.credential_offer {
-                            params
-                                .grants
-                                .as_ref()
-                                .and_then(|grants| grants.pre_authorized_code.as_ref())
-                                .and_then(|pre_auth| pre_auth.tx_code.as_ref())
-                                .is_some()
-                        } else {
-                            false
-                        };
+                    let offer_requires_tx_code = self.tx_code.is_some();
 
                     match (offer_requires_tx_code, tx_code) {
                         (true, None) => return Err(MissingTxCodeError),
+                        (false, Some(_provided_tx_code)) => return Err(UnrequestedTxCodeError),
                         (true, Some(provided_tx_code)) => {
                             let expected_tx_code = self.tx_code.as_ref().ok_or(MissingTxCodeError)?;
 

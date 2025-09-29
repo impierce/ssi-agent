@@ -38,37 +38,49 @@ impl View<ServerConfig> for ServerConfigView {
                 cryptographic_binding_methods_supported,
                 credential_issuer_metadata,
                 credential_configurations,
+                credential_authorization_grants,
             } => {
                 self.cryptographic_binding_methods_supported
                     .clone_from(cryptographic_binding_methods_supported);
                 self.credential_issuer_metadata.clone_from(credential_issuer_metadata);
                 self.credential_configurations.clone_from(credential_configurations);
+                self.credential_authorization_grants
+                    .clone_from(credential_authorization_grants);
             }
             SigningAlgorithmsUpdated {
                 signing_algorithms_supported,
                 credential_issuer_metadata,
                 credential_configurations,
+                credential_authorization_grants,
             } => {
                 self.signing_algorithms_supported
                     .clone_from(signing_algorithms_supported);
                 self.credential_issuer_metadata.clone_from(credential_issuer_metadata);
                 self.credential_configurations.clone_from(credential_configurations);
+                self.credential_authorization_grants
+                    .clone_from(credential_authorization_grants);
             }
             CredentialConfigurationUpdated {
                 credential_configuration_id: _,
                 credential_issuer_metadata,
                 credential_configurations,
+                credential_authorization_grants,
             } => {
                 self.credential_issuer_metadata.clone_from(credential_issuer_metadata);
                 self.credential_configurations.clone_from(credential_configurations);
+                self.credential_authorization_grants
+                    .clone_from(credential_authorization_grants);
             }
             CredentialConfigurationRemoved {
                 credential_configuration_id: _,
                 credential_issuer_metadata,
                 credential_configurations,
+                credential_authorization_grants,
             } => {
                 self.credential_issuer_metadata.clone_from(credential_issuer_metadata);
                 self.credential_configurations.clone_from(credential_configurations);
+                self.credential_authorization_grants
+                    .clone_from(credential_authorization_grants);
             }
         }
     }
