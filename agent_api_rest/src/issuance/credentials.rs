@@ -157,7 +157,7 @@ pub(crate) async fn credentials(
         let tx_code_constraints = server_config
             .as_ref()
             .and_then(|config| {
-                // Access the stored authorization grants
+                // Access the authorization grants
                 config.credential_authorization_grants.get(&credential_configuration_id)
             })
             .and_then(|grant| match grant {
