@@ -216,47 +216,52 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
             ApplicationProfile::Development => {
                 info!("Using default development credential configurations.");
                 serde_json::from_value::<Vec<CredentialConfiguration>>(serde_json::json!([
-                  {
-                    "credential_configuration_id": "001",
-                    "format": "jwt_vc_json",
-                    "credential_definition": {
-                      "type": ["VerifiableCredential"]
-                    },
-                    "display": [
-                      {
-                        "name": "Verifiable Credential",
-                        "locale": "en",
-                        "logo": {
-                          "uri": "https://www.impierce.com/external/impierce-logo.png",
-                          "alt_text": "Impierce Logo"
-                        }
-                      }
-                    ],
-                    "claims": [
-                        {
-                            "path": ["credentialSubject", "first_name"],
-                            "display": [{
-                                "name": "First Name",
-                                "locale": "en"
-                            }],
-                        },
-                        {
-                            "path": ["credentialSubject", "last_name"],
-                            "display": [{
-                                "name": "Last Name",
-                                "locale": "en"
-                            }],
-                        },
-                        {
-                            "path": ["credentialSubject", "dob"],
-                            "display": [{
-                                "name": "Date of Birth",
-                                "locale": "en"
-                            }],
-                        }
-                    ]
+                          {
+                            "credential_configuration_id": "001",
+                            "format": "jwt_vc_json",
+                            "credential_definition": {
+                              "type": ["VerifiableCredential"]
+                            },
+                            "display": [
+                              {
+                                "name": "Verifiable Credential",
+                                "locale": "en",
+                                "logo": {
+                                  "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                  "alt_text": "Impierce Logo"
+                                }
+                              }
+                            ],
+                            "claims": [
+                                {
+                                    "path": ["credentialSubject", "first_name"],
+                                    "display": [{
+                                        "name": "First Name",
+                                        "locale": "en"
+                                    }],
+                                },
+                                {
+                                    "path": ["credentialSubject", "last_name"],
+                                    "display": [{
+                                        "name": "Last Name",
+                                        "locale": "en"
+                                    }],
+                                },
+                                {
+                                    "path": ["credentialSubject", "dob"],
+                                    "display": [{
+                                        "name": "Date of Birth",
+                                        "locale": "en"
+                                    }],
+                                }
+                            ],
+                            "authorization_grant": {
+                                "PreAuthorized": {
+                                    "tx_code_constraints": null
                   }
-                ]))
+                }
+                          }
+                        ]))
                 .expect("Failed to parse default development credential configurations")
             }
             ApplicationProfile::Production => {
