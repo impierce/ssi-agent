@@ -1,0 +1,28 @@
+[package]
+name = "agent_catalogue"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+agent_shared = { path = "../agent_shared", features = ["test_utils"] }
+
+async-trait.workspace = true
+cqrs-es.workspace = true
+serde.workspace = true
+strum.workspace = true
+strum_macros.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+# `test_utils` dependencies
+rstest = { workspace = true, optional = true }
+
+[dev-dependencies]
+agent_catalogue = { path = ".", features = ["test_utils"] }
+
+async-std = { version = "1.5", features = ["attributes", "tokio1"] }
+serial_test = "3.0"
+
+[features]
+test_utils = ["dep:rstest"]

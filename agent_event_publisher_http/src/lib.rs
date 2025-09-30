@@ -1,3 +1,4 @@
+use agent_catalogue::template::aggregate::Template;
 use agent_identity::connection::aggregate::Connection;
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
@@ -6,6 +7,7 @@ use agent_shared::config::config;
 use agent_store::{
     AuthorizationRequestEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, EventPublisher,
     HolderCredentialEventPublisher, OfferEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
+    TemplateEventPublisher,
 };
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use async_trait::async_trait;
@@ -20,6 +22,9 @@ use tracing::info;
 pub struct EventPublisherHttp {
     // Identity
     pub connection: Option<AggregateEventPublisherHttp<Connection>>,
+
+    // Catalogue
+    pub template: Option<AggregateEventPublisherHttp<Template>>,
 
     // Issuance
     pub server_config: Option<AggregateEventPublisherHttp<ServerConfig>>,
@@ -50,6 +55,19 @@ impl EventPublisherHttp {
                 event_publisher_http
                     .events
                     .connection
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let template = (!event_publisher_http.events.template.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Template>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .template
                     .iter()
                     .map(ToString::to_string)
                     .collect(),
@@ -135,12 +153,13 @@ impl EventPublisherHttp {
         });
 
         let event_publisher: EventPublisherHttp = EventPublisherHttp {
+            connection,
+            template,
             server_config,
             credential,
             offer,
             holder_credential,
             received_offer,
-            connection,
             authorization_request,
         };
 
@@ -155,6 +174,12 @@ impl EventPublisher for EventPublisherHttp {
         self.connection
             .take()
             .map(|publisher| Box::new(publisher) as ConnectionEventPublisher)
+    }
+
+    fn template(&mut self) -> Option<TemplateEventPublisher> {
+        self.template
+            .take()
+            .map(|publisher| Box::new(publisher) as TemplateEventPublisher)
     }
 
     fn server_config(&mut self) -> Option<ServerConfigEventPublisher> {

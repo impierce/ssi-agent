@@ -1,3 +1,6 @@
+use agent_catalogue::state::CatalogueState;
+use agent_catalogue::template::aggregate::Template;
+use agent_catalogue::template::views::all_templates::AllTemplatesView;
 use agent_holder::credential::aggregate::Credential as HolderCredential;
 use agent_holder::credential::queries::all_credentials::AllHolderCredentialsView;
 use agent_holder::offer::aggregate::Offer as ReceivedOffer;
@@ -193,6 +196,31 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
     }
 }
 
+pub async fn catalogue_state<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
+    event_publishers: Vec<Box<dyn EventPublisher>>,
+) -> CatalogueState {
+    // Partition the event_publishers into the different aggregates.
+    let Partitions {
+        template_event_publishers,
+        ..
+    } = partition_event_publishers(event_publishers);
+
+    let (template_command_handler, template, all_templates) = builder
+        .commands_and_queries::<Template, Template, AllTemplatesView>((), template_event_publishers)
+        .await;
+
+    CatalogueState {
+        command: agent_catalogue::state::CommandHandlers {
+            template: template_command_handler,
+        },
+        query: agent_catalogue::state::ViewRepositories {
+            template,
+            all_templates,
+        },
+    }
+}
+
 pub async fn verification_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<VerificationServices>,
@@ -277,6 +305,7 @@ pub type ConnectionEventPublisher = Box<dyn Query<Connection>>;
 pub type DocumentEventPublisher = Box<dyn Query<Document>>;
 pub type ProfileEventPublisher = Box<dyn Query<Profile>>;
 pub type ServiceEventPublisher = Box<dyn Query<Service>>;
+pub type TemplateEventPublisher = Box<dyn Query<Template>>;
 pub type ServerConfigEventPublisher = Box<dyn Query<ServerConfig>>;
 pub type CredentialEventPublisher = Box<dyn Query<Credential>>;
 pub type OfferEventPublisher = Box<dyn Query<Offer>>;
@@ -292,6 +321,7 @@ pub struct Partitions {
     pub document_event_publishers: Vec<DocumentEventPublisher>,
     pub profile_event_publishers: Vec<ProfileEventPublisher>,
     pub service_event_publishers: Vec<ServiceEventPublisher>,
+    pub template_event_publishers: Vec<TemplateEventPublisher>,
     pub server_config_event_publishers: Vec<ServerConfigEventPublisher>,
     pub credential_event_publishers: Vec<CredentialEventPublisher>,
     pub offer_event_publishers: Vec<OfferEventPublisher>,
@@ -316,6 +346,10 @@ pub trait EventPublisher {
         None
     }
     fn service(&mut self) -> Option<ServiceEventPublisher> {
+        None
+    }
+
+    fn template(&mut self) -> Option<TemplateEventPublisher> {
         None
     }
 
@@ -359,6 +393,10 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
             }
             if let Some(service) = event_publisher.service() {
                 partitions.service_event_publishers.push(service);
+            }
+
+            if let Some(template) = event_publisher.template() {
+                partitions.template_event_publishers.push(template);
             }
 
             if let Some(server_config) = event_publisher.server_config() {
@@ -447,6 +485,7 @@ mod test {
             document_event_publishers,
             profile_event_publishers,
             service_event_publishers,
+            template_event_publishers,
             server_config_event_publishers,
             credential_event_publishers,
             offer_event_publishers,
@@ -460,6 +499,7 @@ mod test {
         assert_eq!(document_event_publishers.len(), 0);
         assert_eq!(profile_event_publishers.len(), 0);
         assert_eq!(service_event_publishers.len(), 0);
+        assert_eq!(template_event_publishers.len(), 0);
         assert_eq!(server_config_event_publishers.len(), 1);
         assert_eq!(credential_event_publishers.len(), 0);
         assert_eq!(offer_event_publishers.len(), 0);

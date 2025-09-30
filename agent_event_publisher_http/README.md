@@ -45,6 +45,12 @@ DomainLinkageServiceDeleted
 LinkedVerifiablePresentationServiceCreated
 ```
 
+#### `template`
+
+```
+TemplateCreated
+```
+
 #### `credential`
 
 ```

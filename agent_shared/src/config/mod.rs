@@ -579,6 +579,8 @@ pub struct Events {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub service: Vec<ServiceEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub template: Vec<TemplateEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub server_config: Vec<ServerConfigEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub credential: Vec<CredentialEvent>,
@@ -611,6 +613,11 @@ pub enum ServiceEvent {
     DomainLinkageServiceCreated,
     DomainLinkageServiceDeleted,
     LinkedVerifiablePresentationServiceCreated,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum TemplateEvent {
+    CreateTemplate,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]

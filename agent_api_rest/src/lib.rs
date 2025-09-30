@@ -1,3 +1,4 @@
+pub mod catalogue;
 pub mod holder;
 pub mod identity;
 pub mod issuance;
@@ -8,6 +9,7 @@ pub mod error;
 pub mod handlers;
 pub mod utils;
 
+use agent_catalogue::state::CatalogueState;
 use agent_holder::state::HolderState;
 use agent_identity::state::IdentityState;
 use agent_issuance::state::IssuanceState;
@@ -35,6 +37,7 @@ pub const DOCUMENTATION_URL: &str = "https://beta.docs.impierce.com/unicore/";
 #[derive(Default)]
 pub struct ApplicationState {
     pub identity_state: Option<IdentityState>,
+    pub catalogue_state: Option<CatalogueState>,
     pub issuance_state: Option<IssuanceState>,
     pub holder_state: Option<HolderState>,
     pub verification_state: Option<VerificationState>,
@@ -43,6 +46,7 @@ pub struct ApplicationState {
 pub fn app(
     ApplicationState {
         identity_state,
+        catalogue_state,
         issuance_state,
         holder_state,
         verification_state,
@@ -50,6 +54,7 @@ pub fn app(
 ) -> Router {
     let app = Router::new()
         .merge(identity_state.map(identity::router).unwrap_or_default())
+        .merge(catalogue_state.map(catalogue::router).unwrap_or_default())
         .merge(issuance_state.map(issuance::router).unwrap_or_default())
         .merge(holder_state.map(holder::router).unwrap_or_default())
         .merge(verification_state.map(verification::router).unwrap_or_default())
