@@ -65,6 +65,12 @@ credential_configurations:
         logo:
           uri: https://www.impierce.com/external/impierce-logo.png
           alt_text: UniCore Logo
+    authorization_grant:
+      PreAuthorized:
+        tx_code_constraints:
+          input_mode: "numeric"
+          length: 6
+          description: "Enter the 6-digit code you received"
 
 # File-based key management
 secret_manager:

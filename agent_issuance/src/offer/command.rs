@@ -28,6 +28,7 @@ pub enum OfferCommand {
         offer_id: String,
         target_url: Url,
     },
+
     // OpenID4VCI Pre-Authorized Code Flow
     CreateTokenResponse {
         offer_id: String,
