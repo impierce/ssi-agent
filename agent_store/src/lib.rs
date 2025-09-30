@@ -336,46 +336,22 @@ pub struct Partitions {
 /// `Some` with the appropriate query.
 // TODO: move this to a separate crate that will include all the logic for event_publishers, i.e. `agent_event_publisher`.
 pub trait EventPublisher {
-    fn connection(&mut self) -> Option<ConnectionEventPublisher> {
-        None
-    }
-    fn document(&mut self) -> Option<DocumentEventPublisher> {
-        None
-    }
-    fn profile(&mut self) -> Option<ProfileEventPublisher> {
-        None
-    }
-    fn service(&mut self) -> Option<ServiceEventPublisher> {
-        None
-    }
+    fn connection(&mut self) -> Option<ConnectionEventPublisher>;
+    fn document(&mut self) -> Option<DocumentEventPublisher>;
+    fn profile(&mut self) -> Option<ProfileEventPublisher>;
+    fn service(&mut self) -> Option<ServiceEventPublisher>;
 
-    fn template(&mut self) -> Option<TemplateEventPublisher> {
-        None
-    }
+    fn template(&mut self) -> Option<TemplateEventPublisher>;
 
-    fn server_config(&mut self) -> Option<ServerConfigEventPublisher> {
-        None
-    }
-    fn credential(&mut self) -> Option<CredentialEventPublisher> {
-        None
-    }
-    fn offer(&mut self) -> Option<OfferEventPublisher> {
-        None
-    }
+    fn server_config(&mut self) -> Option<ServerConfigEventPublisher>;
+    fn credential(&mut self) -> Option<CredentialEventPublisher>;
+    fn offer(&mut self) -> Option<OfferEventPublisher>;
 
-    fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher> {
-        None
-    }
-    fn presentation(&mut self) -> Option<PresentationEventPublisher> {
-        None
-    }
-    fn received_offer(&mut self) -> Option<ReceivedOfferEventPublisher> {
-        None
-    }
+    fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher>;
+    fn presentation(&mut self) -> Option<PresentationEventPublisher>;
+    fn received_offer(&mut self) -> Option<ReceivedOfferEventPublisher>;
 
-    fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher> {
-        None
-    }
+    fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher>;
 }
 
 pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPublisher>>) -> Partitions {
@@ -457,12 +433,52 @@ mod test {
 
     // This event_publisher is interested in both server_config and connections.
     impl EventPublisher for FooEventPublisher {
+        fn connection(&mut self) -> Option<ConnectionEventPublisher> {
+            Some(Box::new(TestConnectionEventPublisher))
+        }
+
+        fn document(&mut self) -> Option<DocumentEventPublisher> {
+            None
+        }
+
+        fn profile(&mut self) -> Option<ProfileEventPublisher> {
+            None
+        }
+
+        fn service(&mut self) -> Option<ServiceEventPublisher> {
+            None
+        }
+
+        fn template(&mut self) -> Option<TemplateEventPublisher> {
+            None
+        }
+
         fn server_config(&mut self) -> Option<ServerConfigEventPublisher> {
             Some(Box::new(TestServerConfigEventPublisher))
         }
 
-        fn connection(&mut self) -> Option<ConnectionEventPublisher> {
-            Some(Box::new(TestConnectionEventPublisher))
+        fn credential(&mut self) -> Option<CredentialEventPublisher> {
+            None
+        }
+
+        fn offer(&mut self) -> Option<OfferEventPublisher> {
+            None
+        }
+
+        fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher> {
+            None
+        }
+
+        fn presentation(&mut self) -> Option<PresentationEventPublisher> {
+            None
+        }
+
+        fn received_offer(&mut self) -> Option<ReceivedOfferEventPublisher> {
+            None
+        }
+
+        fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher> {
+            None
         }
     }
 
@@ -472,6 +488,50 @@ mod test {
     impl EventPublisher for BarEventPublisher {
         fn connection(&mut self) -> Option<ConnectionEventPublisher> {
             Some(Box::new(TestConnectionEventPublisher))
+        }
+
+        fn document(&mut self) -> Option<DocumentEventPublisher> {
+            None
+        }
+
+        fn profile(&mut self) -> Option<ProfileEventPublisher> {
+            None
+        }
+
+        fn service(&mut self) -> Option<ServiceEventPublisher> {
+            None
+        }
+
+        fn template(&mut self) -> Option<TemplateEventPublisher> {
+            None
+        }
+
+        fn server_config(&mut self) -> Option<ServerConfigEventPublisher> {
+            None
+        }
+
+        fn credential(&mut self) -> Option<CredentialEventPublisher> {
+            None
+        }
+
+        fn offer(&mut self) -> Option<OfferEventPublisher> {
+            None
+        }
+
+        fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher> {
+            None
+        }
+
+        fn presentation(&mut self) -> Option<PresentationEventPublisher> {
+            None
+        }
+
+        fn received_offer(&mut self) -> Option<ReceivedOfferEventPublisher> {
+            None
+        }
+
+        fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher> {
+            None
         }
     }
 
