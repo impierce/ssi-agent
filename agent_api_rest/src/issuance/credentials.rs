@@ -157,8 +157,10 @@ pub(crate) async fn credentials(
         let tx_code_constraints = server_config
             .as_ref()
             .and_then(|config| {
-                // Access the authorization grants
-                config.credential_authorization_grants.get(&credential_configuration_id)
+                config
+                    .credential_configurations
+                    .get(&credential_configuration_id)
+                    .map(|(_, _, authorization_grant)| authorization_grant)
             })
             .and_then(|grant| match grant {
                 AuthorizationGrant::PreAuthorized { tx_code_constraints } => tx_code_constraints.clone(),

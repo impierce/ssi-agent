@@ -66,7 +66,8 @@ pub(crate) async fn offers(
         .and_then(|credential_configuration_id| {
             server_config
                 .as_ref()
-                .and_then(|config| config.credential_authorization_grants.get(credential_configuration_id))
+                .and_then(|config| config.credential_configurations.get(credential_configuration_id))
+                .map(|(_, _, authorization_grant)| authorization_grant)
                 .and_then(|grant| match grant {
                     AuthorizationGrant::PreAuthorized { tx_code_constraints } => tx_code_constraints.clone(),
                 })

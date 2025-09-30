@@ -44,7 +44,6 @@ pub(crate) async fn credential(
                 credential_issuer_metadata,
                 authorization_server_metadata,
                 credential_configurations: _,
-                credential_authorization_grants: _,
                 cryptographic_binding_methods_supported: _,
                 signing_algorithms_supported: _,
             }) => (

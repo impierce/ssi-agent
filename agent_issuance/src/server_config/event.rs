@@ -28,26 +28,22 @@ pub enum ServerConfigEvent {
     CryptographicBindingMethodsUpdated {
         cryptographic_binding_methods_supported: Vec<String>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject)>,
-        credential_authorization_grants: HashMap<String, AuthorizationGrant>,
+        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, AuthorizationGrant)>,
     },
     SigningAlgorithmsUpdated {
         signing_algorithms_supported: Vec<Algorithm>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject)>,
-        credential_authorization_grants: HashMap<String, AuthorizationGrant>,
+        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, AuthorizationGrant)>,
     },
     CredentialConfigurationUpdated {
         credential_configuration_id: String,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject)>,
-        credential_authorization_grants: HashMap<String, AuthorizationGrant>,
+        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, AuthorizationGrant)>,
     },
     CredentialConfigurationRemoved {
         credential_configuration_id: String,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject)>,
-        credential_authorization_grants: HashMap<String, AuthorizationGrant>,
+        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, AuthorizationGrant)>,
     },
 }
 

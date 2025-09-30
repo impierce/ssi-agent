@@ -16,12 +16,12 @@ use crate::server_config::error::ServerConfigError;
 use crate::server_config::event::ServerConfigEvent;
 
 fn into_credential_configurations_supported(
-    credential_configurations: &HashMap<String, (bool, CredentialConfigurationsSupportedObject)>,
+    credential_configurations: &HashMap<String, (bool, CredentialConfigurationsSupportedObject, AuthorizationGrant)>,
 ) -> HashMap<String, CredentialConfigurationsSupportedObject> {
     credential_configurations
         .iter()
         .map(
-            |(credential_configuration_id, (_provisioned, credential_configuration))| {
+            |(credential_configuration_id, (_provisioned, credential_configuration, _authorization_grant))| {
                 (credential_configuration_id.clone(), credential_configuration.clone())
             },
         )
@@ -53,8 +53,7 @@ fn into_proof_types_supported(signing_algorithms_supported: &[Algorithm]) -> Has
 pub struct ServerConfig {
     pub authorization_server_metadata: AuthorizationServerMetadata,
     pub credential_issuer_metadata: CredentialIssuerMetadata,
-    pub credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject)>,
-    pub credential_authorization_grants: HashMap<String, AuthorizationGrant>,
+    pub credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, AuthorizationGrant)>,
     pub cryptographic_binding_methods_supported: Vec<String>,
     pub signing_algorithms_supported: Vec<Algorithm>,
 }
@@ -118,7 +117,7 @@ impl Aggregate for ServerConfig {
             } => {
                 let mut credential_configurations = self.credential_configurations.clone();
 
-                for (_credential_configuration_id, (_provisioned, credential_configuration)) in
+                for (_credential_configuration_id, (_provisioned, credential_configuration, _authorization_grant)) in
                     credential_configurations.iter_mut()
                 {
                     credential_configuration.cryptographic_binding_methods_supported =
@@ -133,7 +132,6 @@ impl Aggregate for ServerConfig {
                     cryptographic_binding_methods_supported,
                     credential_issuer_metadata,
                     credential_configurations,
-                    credential_authorization_grants: self.credential_authorization_grants.clone(),
                 }])
             }
             UpdateSigningAlgorithms {
@@ -141,7 +139,7 @@ impl Aggregate for ServerConfig {
             } => {
                 let mut credential_configurations = self.credential_configurations.clone();
 
-                for (_credential_configuration_id, (_provisioned, credential_configuration)) in
+                for (_credential_configuration_id, (_provisioned, credential_configuration, _authorization_grant)) in
                     credential_configurations.iter_mut()
                 {
                     credential_configuration.credential_signing_alg_values_supported =
@@ -158,7 +156,6 @@ impl Aggregate for ServerConfig {
                     signing_algorithms_supported,
                     credential_issuer_metadata,
                     credential_configurations,
-                    credential_authorization_grants: self.credential_authorization_grants.clone(),
                 }])
             }
             UpdateCredentialConfiguration {
@@ -179,14 +176,8 @@ impl Aggregate for ServerConfig {
                     ..Default::default()
                 };
 
-                let mut credential_authorization_grants = self.credential_authorization_grants.clone();
-                credential_authorization_grants.insert(
-                    credential_configuration.credential_configuration_id.clone(),
-                    credential_configuration.authorization_grant.clone(),
-                );
-
                 let mut credential_configurations = self.credential_configurations.clone();
-                if let Some((existing_provisioned, existing_credential_configuration)) =
+                if let Some((existing_provisioned, existing_credential_configuration, existing_authorization_grant)) =
                     credential_configurations.get_mut(&credential_configuration.credential_configuration_id)
                 {
                     if !provisioned && *existing_provisioned {
@@ -195,10 +186,15 @@ impl Aggregate for ServerConfig {
 
                     *existing_credential_configuration = credential_configuration_object;
                     *existing_provisioned = provisioned;
+                    *existing_authorization_grant = credential_configuration.authorization_grant.clone();
                 } else {
                     credential_configurations.insert(
                         credential_configuration.credential_configuration_id.clone(),
-                        (provisioned, credential_configuration_object),
+                        (
+                            provisioned,
+                            credential_configuration_object,
+                            credential_configuration.authorization_grant.clone(),
+                        ),
                     );
                 }
 
@@ -210,21 +206,17 @@ impl Aggregate for ServerConfig {
                     credential_configuration_id: credential_configuration.credential_configuration_id,
                     credential_issuer_metadata,
                     credential_configurations,
-                    credential_authorization_grants,
                 }])
             }
             RemoveCredentialConfiguration {
                 credential_configuration_id,
                 provisioned,
             } => {
-                let mut credential_authorization_grants = self.credential_authorization_grants.clone();
-                credential_authorization_grants.remove(&credential_configuration_id);
-
                 let mut credential_configurations = self.credential_configurations.clone();
 
                 let existing_provisioned = credential_configurations
                     .get(&credential_configuration_id)
-                    .map(|(provisioned, _)| *provisioned)
+                    .map(|(provisioned, _, _)| *provisioned)
                     .unwrap_or(false);
 
                 if !provisioned && existing_provisioned {
@@ -241,7 +233,6 @@ impl Aggregate for ServerConfig {
                     credential_configuration_id,
                     credential_issuer_metadata,
                     credential_configurations,
-                    credential_authorization_grants,
                 }])
             }
         }
@@ -280,43 +271,35 @@ impl Aggregate for ServerConfig {
                 cryptographic_binding_methods_supported,
                 credential_issuer_metadata,
                 credential_configurations,
-                credential_authorization_grants,
             } => {
                 self.cryptographic_binding_methods_supported = cryptographic_binding_methods_supported;
                 self.credential_issuer_metadata = *credential_issuer_metadata;
                 self.credential_configurations = credential_configurations;
-                self.credential_authorization_grants = credential_authorization_grants;
             }
             SigningAlgorithmsUpdated {
                 signing_algorithms_supported,
                 credential_issuer_metadata,
                 credential_configurations,
-                credential_authorization_grants,
             } => {
                 self.signing_algorithms_supported = signing_algorithms_supported;
                 self.credential_issuer_metadata = *credential_issuer_metadata;
                 self.credential_configurations = credential_configurations;
-                self.credential_authorization_grants = credential_authorization_grants;
             }
             CredentialConfigurationUpdated {
                 credential_configuration_id: _,
                 credential_issuer_metadata,
                 credential_configurations,
-                credential_authorization_grants,
             } => {
                 self.credential_issuer_metadata = *credential_issuer_metadata;
                 self.credential_configurations = credential_configurations;
-                self.credential_authorization_grants = credential_authorization_grants;
             }
             CredentialConfigurationRemoved {
                 credential_configuration_id: _,
                 credential_issuer_metadata,
                 credential_configurations,
-                credential_authorization_grants,
             } => {
                 self.credential_issuer_metadata = *credential_issuer_metadata;
                 self.credential_configurations = credential_configurations;
-                self.credential_authorization_grants = credential_authorization_grants;
             }
         }
     }
@@ -369,9 +352,8 @@ pub mod server_config_tests {
         cryptographic_binding_methods_supported: Vec<String>,
         signing_algorithms_supported: Vec<Algorithm>,
         credential_configuration_id: String,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject)>,
+        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, AuthorizationGrant)>,
         credential_issuer_metadata_with_credential_configuration: Box<CredentialIssuerMetadata>,
-        credential_authorization_grants: HashMap<String, AuthorizationGrant>,
     ) {
         ServerConfigTestFramework::with(())
             .given(vec![ServerConfigEvent::ServerMetadataInitialized {
@@ -414,7 +396,6 @@ pub mod server_config_tests {
                 credential_configuration_id,
                 credential_issuer_metadata: credential_issuer_metadata_with_credential_configuration,
                 credential_configurations,
-                credential_authorization_grants,
             }]);
     }
 }
@@ -450,21 +431,27 @@ pub mod test_utils {
     #[fixture]
     pub fn credential_configurations(
         credential_configuration_id: String,
-    ) -> HashMap<String, (bool, CredentialConfigurationsSupportedObject)> {
+    ) -> HashMap<String, (bool, CredentialConfigurationsSupportedObject, AuthorizationGrant)> {
         HashMap::from_iter(vec![(
             credential_configuration_id,
-            (false, W3C_VC_CREDENTIAL_CONFIGURATION.clone()),
+            (
+                false,
+                W3C_VC_CREDENTIAL_CONFIGURATION.clone(),
+                AuthorizationGrant::PreAuthorized {
+                    tx_code_constraints: None,
+                },
+            ),
         )])
     }
 
     #[fixture]
     pub fn credential_configurations_supported(
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject)>,
+        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, AuthorizationGrant)>,
     ) -> HashMap<String, CredentialConfigurationsSupportedObject> {
         credential_configurations
             .into_iter()
             .map(
-                |(credential_configuration_id, (_provisioned, credential_configuration))| {
+                |(credential_configuration_id, (_provisioned, credential_configuration, _authorization_grant))| {
                     (credential_configuration_id, credential_configuration)
                 },
             )
@@ -478,16 +465,6 @@ pub mod test_utils {
             token_endpoint: Some(static_issuer_url.join("token").unwrap()),
             ..Default::default()
         })
-    }
-
-    #[fixture]
-    pub fn credential_authorization_grants(credential_configuration_id: String) -> HashMap<String, AuthorizationGrant> {
-        HashMap::from_iter(vec![(
-            credential_configuration_id,
-            AuthorizationGrant::PreAuthorized {
-                tx_code_constraints: None,
-            },
-        )])
     }
 
     #[fixture]
