@@ -1,7 +1,7 @@
 use oid4vci::credential_offer::{InputMode, TxCodeConstraints};
 use rand::Rng;
 
-/// This function generates a Transaction Code based on parameters defined in the TxCodeConstraints struct within a Credential offer.
+/// This function generates a Transaction Code based on parameters defined in the TxCodeConstraints struct within a Credential Offer.
 /// These parameters include input mode, length, and description. The generated Transaction Code (TxCode) will then be sent to the end user
 /// out-of-band, e.g. via e-mail.
 pub fn generate_tx_code(tx_code: &TxCodeConstraints) -> String {
@@ -11,7 +11,7 @@ pub fn generate_tx_code(tx_code: &TxCodeConstraints) -> String {
 
     match input_mode {
         InputMode::Numeric => {
-            // Generate 6 random digits
+            // Generate 6 random digits.
             (0..length).map(|_| rng.random_range(0..=9).to_string()).collect()
         }
         InputMode::Text => {
