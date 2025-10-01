@@ -1,45 +1,54 @@
-use agent_issuance::{offer::event::OfferEvent, Offer};
+use agent_issuance::{offer::event::OfferEvent, offer::aggregate::Offer};
+use agent_shared::config::config;
+use async_nats::Client;
 use cqrs_es::{Aggregate, DomainEvent, EventEnvelope, Query};
+use serde::{Deserialize};
+use std::error::Error;
 use cloudevents::{EventBuilder, EventBuilderV10};
 use serde_json::json;
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use tracing::info;
+use futures::StreamExt;
+use uuid::Uuid;
+use agent_store::{OfferEventPublisher, EventPublisher};
 
 /// This can be populated for each aggregate type, e.g. Credential, Received_Offer, etc.
-#[skip_serializing_none]
 #[derive(Default, Debug, Deserialize)]
 pub struct EventPublisherNats {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub offer: Option<AggregateEventPublisherNats<Offer>>,
 }
 
-/// This contains infrastructure data from the 
-#[skip_serializing_none]
+/// This contains infrastructure data from the config file.
 #[derive(Debug, Deserialize)]
         pub struct AggregateEventPublisherNats<A>
         where
             A: Aggregate,
         {
-            pub nats_client: async_nats::Client,
+            pub nats_url: String,
             pub subject: String, 
             pub target_events: Vec<String>,
+            #[serde(skip)]
+            _marker: std::marker::PhantomData<A>,
         }
 
+        // TODO!! CHAYE FIGURE OUT THE CLIENT SITUATION. SHOULD 
         impl<A> AggregateEventPublisherNats<A>
         where
             A: Aggregate,
         {
-            pub fn new(nats_client: async_nats::Client, subject: String, target_events: Vec<String>) -> Self {
+            pub fn new(nats_url: String, subject: String, target_events: Vec<String>) -> Self {
                 AggregateEventPublisherNats {
-                    nats_client,
+                    nats_url,
                     subject,
                     target_events,
+                    _marker: std::marker::PhantomData,
                 }
                 }
         }
 
 impl EventPublisherNats {
     pub fn load() -> anyhow::Result<Self> {
-// This loads configuration from the config file. 
+    // This loads configuration from the config file. 
         let event_publisher_nats = config().event_publishers.nats.clone().unwrap_or_default();
 
         // If NATS is not enabled, return an empty event publisher.
@@ -69,8 +78,8 @@ impl EventPublisherNats {
 
         Ok(event_publisher)
     }
+}
 
-    // This can be populated for each aggregate type. 
     impl EventPublisher for EventPublisherNats {
         fn offer(&mut self) -> Option<OfferEventPublisher> {
             self.offer
@@ -84,39 +93,59 @@ impl EventPublisherNats {
     where
         A: Aggregate,
         { 
-            async fn dispatch(&self, events: &[EventEnvelope<A>]) -> Result<(), Error> {
-                for event in events {
-                    if self.target_events.contains(&event.payload.event_type()) {
-                        match event.payload { 
-                            OfferEvent::TxCodeGenerated { offer_id, tx_code} => {
-                                self.dispatch_tx_code_generated(offer_id, tx_code).await?;
-                            }
-                            _ => { return Ok(()); } // For now, ignore other events
-                        }
-                    }
-                }
-                Ok(())
-            }
-        }
-
+        
             async fn dispatch(&self, events: &[EventEnvelope<A>]) -> Result<(), Error> {
                 for event in events {
                     if self.target_events.contains(&event.payload.event_type()) {
                         match event.payload {
                             OfferEvent::TxCodeGenerated { offer_id, tx_code, recipient_email } => {
-                                self.dispatch_tx_code_generated(offer_id, tx_code, recipient_email).await?;
+                                self.dispatch_tx_code_generated(offer_id.clone(), tx_code.clone(), recipient_email.clone()).await?;
                             }
+                        }
                             _ => { return Ok(()); }
                             // For now, ignore other events
                         }
                     }
                 }
+            
+            }
+impl<A> AggregateEventPublisherNats<A>
+where A: Aggregate,
+{
+                async fn dispatch_tx_code_generated(&self, offer_id, tx_code, recipient_email) -> Result<(), Error> {
+                    let template = "transaction_code";
+                    // Generate unique id for CloudEvent
+                    let event_id = format!("{}-{}", offer_id, Uuid::new_v4());
 
-                async fn dispatch_tx_code_generated(offer_id, tx_code, recipient_email) -> Result<(), Error> {
-                    let recipient = recipient_email.ok_or_else(|| Error::Other("Recipient email not provided".into()))?;
-                    self.nats_client.publish(&self.subject, message).await?;
+          // Construct the CloudEvent 
+                 let event = EventBuilderV10::new()
+                .id(&event_id)
+                .source("https://impierce.com/special-offer")
+                .ty("email.command.txcode.generated")
+                .specversion("1.0")
+                .data("application/json", json!({
+                    "recipient_email": recipient_email, 
+                    "template": "transaction_code",
+                    "values": tx_code,
+                }))
+                .build()?;
+
+                    self.nats_client.publish(&self.subject, event).await?;
                     Ok(())
                 }
-
-
             }
+    
+
+
+        #[cfg(test)]
+        pub mod tests {
+            use super::*; 
+            fn test_generate_event_id() {
+                let offer_id = "hotcakes_123";
+                let event_id = format!("{}-{}", offer_id, Uuid::new_v4());
+                assert!(event_id.starts_with(offer_id));
+
+                println!("Generated event_id: {}", event_id);
+            }
+        }
+    

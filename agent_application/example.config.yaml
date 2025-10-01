@@ -38,7 +38,7 @@ event_publishers:
       credential: [UnsignedCredentialCreated, CredentialSigned]
   nats:
     enabled: true
-    nats_client: "nats://localhost:4222"
+    nats_url: "nats://localhost:4222"
     subject: "email.commands"
     events:
       offer: [TxCodeGenerated]

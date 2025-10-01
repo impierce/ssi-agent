@@ -5,5 +5,20 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+agent_holder = { path = "../agent_holder" }
+agent_identity = { path = "../agent_identity" }
+agent_issuance = { path = "../agent_issuance" }
+agent_shared = { path = "../agent_shared" }
+agent_store = { path = "../agent_store" }
+agent_verification = { path = "../agent_verification" }
+
+
 async-nats = "0.42"
+anyhow.workspace = true
 cloudevents-sdk = "0.8"
+cqrs-es.workspace = true
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+uuid.workspace = true
