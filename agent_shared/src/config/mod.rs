@@ -516,6 +516,7 @@ pub struct CredentialConfiguration {
     pub display: Vec<CredentialConfigurationsSupportedDisplay>,
     #[serde(default)]
     pub claims: Vec<ClaimDescription>,
+    #[serde(default)]
     pub authorization: Authorization,
 }
 

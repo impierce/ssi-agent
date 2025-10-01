@@ -289,7 +289,8 @@ impl Aggregate for Offer {
                 let credential_response = CredentialResponse {
                     credential: CredentialResponseType::Immediate {
                         credentials: vec![CredentialResponseObject {
-                            credential: signed_credential.as_str().expect("FIXME").to_string(),
+                            // TODO: Apply strong typing to signed credentials.
+                            credential: signed_credential.as_str().unwrap_or_default().to_string(),
                         }],
                         notification_id,
                     },
@@ -303,6 +304,7 @@ impl Aggregate for Offer {
             }
         }
     }
+
     fn apply(&mut self, event: Self::Event) {
         use OfferEvent::*;
 
