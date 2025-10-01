@@ -187,7 +187,7 @@ impl IntoPublicError for OfferError {
                 PublicError::TokenError(OID4VCError::new(TokenErrorResponse::InvalidGrant))
             }
             UnrequestedTxCodeError => PublicError::TokenError(OID4VCError::new(TokenErrorResponse::InvalidRequest)),
-            // TODO: check for maissing error responses
+            // TODO: check for missing error responses
             _ => PublicError::InternalServerError,
         }
     }

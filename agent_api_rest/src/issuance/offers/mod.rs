@@ -8,7 +8,6 @@ use agent_issuance::{
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
-use agent_shared::config::AuthorizationGrant;
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -67,9 +66,13 @@ pub(crate) async fn offers(
             server_config
                 .as_ref()
                 .and_then(|config| config.credential_configurations.get(credential_configuration_id))
-                .map(|(_, _, authorization_grant)| authorization_grant)
-                .and_then(|grant| match grant {
-                    AuthorizationGrant::PreAuthorized { tx_code_constraints } => tx_code_constraints.clone(),
+                .map(|(_, _, authorization)| authorization)
+                .and_then(|authorization| {
+                    if authorization.pre_authorized {
+                        authorization.tx_code_constraints.clone()
+                    } else {
+                        None
+                    }
                 })
         });
 

@@ -11,11 +11,11 @@ pub fn generate_tx_code(tx_code: &TxCodeConstraints) -> String {
 
     match input_mode {
         InputMode::Numeric => {
-            // Generate 6 random digits.
+            // Generate random digits.
             (0..length).map(|_| rng.random_range(0..=9).to_string()).collect()
         }
         InputMode::Text => {
-            // Generate 6 random letters, both uppercase and lowercase.
+            // Generate random letters.
             const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
             (0..length)
                 .map(|_| {
