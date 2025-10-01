@@ -7,7 +7,6 @@ use agent_issuance::{
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
-use agent_shared::config::Authorization;
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -58,12 +57,11 @@ pub(crate) async fn credentials(
 ) -> Result<Response, ApiError> {
     let credential_id = uuid::Uuid::new_v4().to_string();
 
-    let credential_configuration = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+    let (_, credential_configuration, authorization) = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
         .await?
         .and_then(|server_config_view| {
             server_config_view
-                .credential_issuer_metadata
-                .credential_configurations_supported
+                .credential_configurations
                 .get(&credential_configuration_id)
                 .cloned()
         })
@@ -151,30 +149,12 @@ pub(crate) async fn credentials(
 
     // Create an offer if it does not exist yet.
     if query_handler(&offer_id, &state.query.offer).await?.is_none() {
-        let server_config = query_handler(SERVER_CONFIG_ID, &state.query.server_config).await?;
-
         // Extract the tx_code_constraints from the credential configuration if available.
-        let tx_code_constraints = server_config
-            .as_ref()
-            .and_then(|config| {
-                config
-                    .credential_configurations
-                    .get(&credential_configuration_id)
-                    .map(|(_, _, authorization)| authorization)
-            })
-            .and_then(|authorization| match authorization {
-                Authorization {
-                    pre_authorized: true,
-                    tx_code_constraints: Some(tx_code_constraints),
-                } => Some(tx_code_constraints.clone()),
-                Authorization {
-                    pre_authorized: true,
-                    tx_code_constraints: None,
-                } => None,
-                Authorization {
-                    pre_authorized: false, ..
-                } => None,
-            });
+        let tx_code_constraints = if authorization.pre_authorized {
+            authorization.tx_code_constraints.clone()
+        } else {
+            None
+        };
 
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
