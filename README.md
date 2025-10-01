@@ -1,4 +1,4 @@
-# SSI Agent
+# UniCore
 
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
 [![GitHub License](https://img.shields.io/github/license/impierce/ssi-agent)](https://github.com/impierce/ssi-agent/blob/HEAD/LICENSE)
@@ -16,11 +16,11 @@
 
 ## Build & Run
 
-Build and run the **SSI Agent** in a local Docker environment following [these steps](./agent_application/docker/README.md).
+Build and run **UniCore** in a local Docker environment following [these steps](./agent_application/docker/README.md).
 
 ## Configuration
 
-All configuration options are documented [here](./agent_application/CONFIGURATION.md).
+All configuration options are documented [here](./docs/configuration/CONFIGURATION.md).
 
 ## Breaking changes
 

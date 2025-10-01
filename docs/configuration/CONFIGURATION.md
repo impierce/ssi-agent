@@ -265,33 +265,32 @@ event_store:
   connection_string: postgresql://user:password@database:5432/demo
 ```
 
-<!--
-## More configuration options
+## Additional Configuration Options
 
-| Name                                                    | Description                                                       | Default value | Accepted values |
-| ------------------------------------------------------- | ----------------------------------------------------------------- | ------------- | --------------- |
-| `UNICORE__BASE_PATH`                                    | A base path can be set if needed.                                 | -             | string          |
-| `UNICORE__CORS_ENABLED`                                 | Enable CORS (permissive). Only required for browser-based access. | `false`       | boolean         |
-| `UNICORE__DID_METHODS__DID_WEB__ENABLED`                | Create and host a `did:web` DID document.                         | `false`       | boolean         |
-| `UNICORE__SIGNING_ALGORITHMS_SUPPORTED__EDDSA__ENABLED` | Toggles the algorithm allowed for cryptographic operations.       | `true`        | boolean         |
-| `UNICORE__DOMAIN_LINKAGE_ENABLED`                       | Enable domain linkage (only works with `did:web`).                | -             | boolean         |
-| `UNICORE__EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS`          | The timeout for external server responses (in milliseconds).      | `1000`        | integer         |
--->
+### CORS
+Enable CORS (permissive) for browser-based access.
 
-<!-- TODO: How to document all other DID methods? -->
-<!-- TODO: VP_FORMATS -->
-<!-- TODO: EVENT_PUBLISHERS: even configured through env vars? -->
+| Environment variable  | `config.yaml` |
+| --------------------- | ------------- |
+| `UNICORE__CORS_ENABLED` | `cors_enabled` |
 
-<!--
-## Secret Management
+Default: `false`
 
-| Name                                           | Description                                       | Default value | Accepted values               |
-| ---------------------------------------------- | ------------------------------------------------- | ------------- | ----------------------------- |
-| `UNICORE__SECRET_MANAGER__STRONGHOLD_PATH`     | The path to the stronghold file.                  | -             | `/var/lib/unicore/stronghold` |
-| `UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD` | The password to unlock the stronghold.            | -             | -                             |
-| `UNICORE__SECRET_MANAGER__ISSUER_EDDSA_KEY_ID` | The key ID of the EDDSA (Ed25519) key to be used. | -             | -                             |
-| `UNICORE__SECRET_MANAGER__ISSUER_ES256_KEY_ID` | The key ID of the ES256 key to be used.           | -             | -                             |
--->
+### Domain Linkage
+Enable domain linkage (only works with `did:web`).
+
+| Environment variable              | `config.yaml`         |
+| --------------------------------- | --------------------- |
+| `UNICORE__DOMAIN_LINKAGE_ENABLED` | `domain_linkage_enabled` |
+
+### External Server Response Timeout
+The timeout for external server responses (in milliseconds).
+
+| Environment variable                         | `config.yaml`                        |
+| -------------------------------------------- | ------------------------------------ |
+| `UNICORE__EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS` | `external_server_response_timeout_ms` |
+
+Default: `1000`
 
 ## Look and Feel
 
@@ -300,5 +299,3 @@ event_store:
 Setting display values is currently not supported through environment variables. Please refer to `config.yaml`.
 
 :::
-
-<!-- TODO: DISPLAY_0_NAME: even configured through env vars? -->
