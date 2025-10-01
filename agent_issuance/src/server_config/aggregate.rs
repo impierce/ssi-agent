@@ -1,4 +1,4 @@
-use agent_shared::config::AuthorizationGrant;
+use agent_shared::config::Authorization;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use jsonwebtoken::Algorithm;
@@ -16,7 +16,7 @@ use crate::server_config::error::ServerConfigError;
 use crate::server_config::event::ServerConfigEvent;
 
 fn into_credential_configurations_supported(
-    credential_configurations: &HashMap<String, (bool, CredentialConfigurationsSupportedObject, AuthorizationGrant)>,
+    credential_configurations: &HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
 ) -> HashMap<String, CredentialConfigurationsSupportedObject> {
     credential_configurations
         .iter()
@@ -53,7 +53,7 @@ fn into_proof_types_supported(signing_algorithms_supported: &[Algorithm]) -> Has
 pub struct ServerConfig {
     pub authorization_server_metadata: AuthorizationServerMetadata,
     pub credential_issuer_metadata: CredentialIssuerMetadata,
-    pub credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, AuthorizationGrant)>,
+    pub credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
     pub cryptographic_binding_methods_supported: Vec<String>,
     pub signing_algorithms_supported: Vec<Algorithm>,
 }
@@ -186,14 +186,14 @@ impl Aggregate for ServerConfig {
 
                     *existing_credential_configuration = credential_configuration_object;
                     *existing_provisioned = provisioned;
-                    *existing_authorization_grant = credential_configuration.authorization_grant.clone();
+                    *existing_authorization_grant = credential_configuration.authorization.clone();
                 } else {
                     credential_configurations.insert(
                         credential_configuration.credential_configuration_id.clone(),
                         (
                             provisioned,
                             credential_configuration_object,
-                            credential_configuration.authorization_grant.clone(),
+                            credential_configuration.authorization.clone(),
                         ),
                     );
                 }
@@ -311,7 +311,7 @@ pub mod server_config_tests {
     use super::*;
     use crate::server_config::aggregate::ServerConfig;
     use crate::server_config::event::ServerConfigEvent;
-    use agent_shared::config::{AuthorizationGrant, CredentialConfiguration};
+    use agent_shared::config::{Authorization, CredentialConfiguration};
     use cqrs_es::test::TestFramework;
     use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
     use oid4vci::credential_format_profiles::{w3c_verifiable_credentials, CredentialFormats, Parameters};
@@ -352,7 +352,7 @@ pub mod server_config_tests {
         cryptographic_binding_methods_supported: Vec<String>,
         signing_algorithms_supported: Vec<Algorithm>,
         credential_configuration_id: String,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, AuthorizationGrant)>,
+        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
         credential_issuer_metadata_with_credential_configuration: Box<CredentialIssuerMetadata>,
     ) {
         ServerConfigTestFramework::with(())
@@ -386,7 +386,8 @@ pub mod server_config_tests {
                         text_color: None,
                     }],
                     claims: vec![],
-                    authorization_grant: AuthorizationGrant::PreAuthorized {
+                    authorization: Authorization {
+                        pre_authorized: true,
                         tx_code_constraints: None,
                     },
                 },
@@ -431,13 +432,14 @@ pub mod test_utils {
     #[fixture]
     pub fn credential_configurations(
         credential_configuration_id: String,
-    ) -> HashMap<String, (bool, CredentialConfigurationsSupportedObject, AuthorizationGrant)> {
+    ) -> HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)> {
         HashMap::from_iter(vec![(
             credential_configuration_id,
             (
                 false,
                 W3C_VC_CREDENTIAL_CONFIGURATION.clone(),
-                AuthorizationGrant::PreAuthorized {
+                Authorization {
+                    pre_authorized: true,
                     tx_code_constraints: None,
                 },
             ),
@@ -446,7 +448,7 @@ pub mod test_utils {
 
     #[fixture]
     pub fn credential_configurations_supported(
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, AuthorizationGrant)>,
+        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
     ) -> HashMap<String, CredentialConfigurationsSupportedObject> {
         credential_configurations
             .into_iter()

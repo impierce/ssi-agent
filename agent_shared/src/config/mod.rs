@@ -516,15 +516,25 @@ pub struct CredentialConfiguration {
     pub display: Vec<CredentialConfigurationsSupportedDisplay>,
     #[serde(default)]
     pub claims: Vec<ClaimDescription>,
-    pub authorization_grant: AuthorizationGrant,
+    pub authorization: Authorization,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-pub enum AuthorizationGrant {
-    PreAuthorized {
-        tx_code_constraints: Option<TxCodeConstraints>,
-    },
+pub struct Authorization {
+    pub pre_authorized: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx_code_constraints: Option<TxCodeConstraints>,
 }
+
+impl Default for Authorization {
+    fn default() -> Self {
+        Self {
+            pre_authorized: true,
+            tx_code_constraints: None,
+        }
+    }
+}
+
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Logo {

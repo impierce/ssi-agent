@@ -7,7 +7,7 @@ use agent_issuance::{
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
-use agent_shared::config::AuthorizationGrant;
+use agent_shared::config::Authorization;
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -160,10 +160,20 @@ pub(crate) async fn credentials(
                 config
                     .credential_configurations
                     .get(&credential_configuration_id)
-                    .map(|(_, _, authorization_grant)| authorization_grant)
+                    .map(|(_, _, authorization)| authorization)
             })
-            .and_then(|grant| match grant {
-                AuthorizationGrant::PreAuthorized { tx_code_constraints } => tx_code_constraints.clone(),
+            .and_then(|authorization| match authorization {
+                Authorization {
+                    pre_authorized: true,
+                    tx_code_constraints: Some(tx_code_constraints),
+                } => Some(tx_code_constraints.clone()),
+                Authorization {
+                    pre_authorized: true,
+                    tx_code_constraints: None,
+                } => None,
+                Authorization {
+                    pre_authorized: false, ..
+                } => None,
             });
 
         let command = OfferCommand::CreateCredentialOffer {
