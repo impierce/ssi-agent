@@ -1,21 +1,118 @@
 openapi: 3.0.3
 info:
-  title: SSI Agent - REST API
-  description: A lightweight REST API for the SSI Agent
+  title: UniCore - SSI Agent REST API
+  description: |
+    UniCore's REST API is a lightweight REST API for the SSI Agent.
+    
+    UniCore's REST API is currently still in the pre-release stage meaning that the API is still under active development.
+    Breaking changes may occur before the API reaches a stable version.
+    
+    The current version of the REST API is `v0`.
   version: 0.1.0
+  contact:
+    name: Impierce
+    url: https://beta.docs.impierce.com/unicore/
+    email: support@impierce.com
+  license:
+    name: Apache 2.0
+    url: https://github.com/impierce/ssi-agent/blob/main/LICENSE
 
 servers:
   - url: http://localhost:3033
-    description: Development
+    description: Development server
 
 paths:
-  /v0/configurations/credential_configurations:
+  # Metadata endpoints
+  /version:
+    get:
+      tags:
+        - Metadata
+      summary: Get version information
+      description: Returns the version information of the SSI Agent
+      responses:
+        "200":
+          description: Version information retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                    example: "0.1.0"
+
+  /info:
+    get:
+      tags:
+        - Metadata
+      summary: Get application information
+      description: Returns application information including version, uptime, and other metadata
+      responses:
+        "200":
+          description: Application information retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  app:
+                    type: string
+                    example: "UniCore"
+                  profile:
+                    type: string
+                    enum: [issuer, holder, verifier, all]
+                    example: "all"
+                  version:
+                    type: string
+                    example: "0.1.0"
+                  release_channel:
+                    type: string
+                    example: "beta"
+                  docker_build_timestamp:
+                    type: string
+                    example: "2024-01-01T00:00:00Z"
+                  uptime:
+                    type: string
+                    example: "0 days, 00:05:23"
+
+  /v0/configuration:
+    get:
+      tags:
+        - Metadata
+      summary: Get application configuration
+      description: Returns the current application configuration
+      responses:
+        "200":
+          description: Configuration retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /healthz:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      description: Returns the health status of the application
+      responses:
+        "200":
+          description: Application is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "OK"
+
+  # Issuance endpoints
+  /v0/credential-configurations:
     post:
       tags:
-        - Configurations
+        - Issuance
       summary: Create a new Credential Configuration
-      # description: n/a
+      description: Creates a new credential configuration for the issuer
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -102,30 +199,39 @@ paths:
           description: A Credential Configuration has been successfully added to the Credential Issuer Metadata
 
   /v0/credentials:
+    get:
+      tags:
+        - Issuance
+      summary: Get all credentials
+      description: Retrieves all credentials created by the issuer
+      responses:
+        "200":
+          description: Credentials retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
     post:
       summary: Create a new Credential for a given Subject
-      # description: n/a
       tags:
-        - Creation
+        - Issuance
       requestBody:
-        # description: n/a
         required: true
         content:
           application/json:
             schema:
               type: object
               properties:
-                # $meta:
-                #   type: object
-                #   properties:
-                #     credentialTemplate:
-                #       type: string
-                #       description: The template to be used to create the credential
                 offerId:
                   type: string
+                  description: The offer ID associated with this credential
                 credentialConfigurationId:
                   type: string
+                  description: The credential configuration to use
                 credential:
+                  description: The credential data (can be an object or a signed string)
                   oneOf:
                     - type: object
                       properties:
@@ -134,6 +240,11 @@ paths:
                     - type: string
                 isSigned:
                   type: boolean
+                  default: false
+                  description: Whether the credential is already signed
+                expiresAt:
+                  type: object
+                  description: Credential expiration settings
               required:
                 - offerId
                 - credentialConfigurationId
@@ -167,7 +278,7 @@ paths:
                   offerId: "001"
       responses:
         "201":
-          description: An Open Badge 3.0 has successfully been created for the provided credentialSubject
+          description: Credential successfully created
           headers:
             Location:
               schema:
@@ -228,8 +339,7 @@ paths:
     get:
       summary: Get the Credential with the given Credential ID
       tags:
-        - Retrieval
-      # description: n/a
+        - Issuance
       parameters:
         - in: path
           name: credential_id
@@ -249,14 +359,52 @@ paths:
                 open-badges-3:
                   summary: Open Badges 3.0
                   externalValue: res/open-badge-response.json
+        "404":
+          description: Credential not found
+    patch:
+      summary: Update a credential
+      tags:
+        - Issuance
+      parameters:
+        - in: path
+          name: credential_id
+          required: true
+          schema:
+            type: string
+          description: The Credential ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Credential updated successfully
+        "404":
+          description: Credential not found
 
   /v0/offers:
+    get:
+      tags:
+        - Issuance
+      summary: Get all offers
+      description: Retrieves all credential offers
+      responses:
+        "200":
+          description: Offers retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
     post:
       summary: Create a new Offer for one or more Credentials
       tags:
-        - Distribution
+        - Issuance
       requestBody:
-        description: The id of the Subject
+        description: The offer request
         required: true
         content:
           application/json:
@@ -265,12 +413,18 @@ paths:
               properties:
                 offerId:
                   type: string
-                preAuthorizedCode:
-                  type: string
+                  description: Unique identifier for the offer
+                credentialConfigurationIds:
+                  type: array
+                  items:
+                    type: string
+                  description: List of credential configuration IDs to include in the offer
+                  default: []
               required:
                 - offerId
             example:
               offerId: "c86289fa-b105-4ec3-9326-a02436788f11"
+              credentialConfigurationIds: ["w3c_vc_credential"]
       responses:
         "200":
           description: Offer created successfully. Response value should be displayed to the user in the form of a QR code.
@@ -280,37 +434,64 @@ paths:
                 type: string
                 example: openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fcredential-issuer.example.com%2F%22%2C%22credentials%22%3A%5B%7B%22format%22%3A%22ldp_vc%22%2C%22credential_definition%22%3A%7B%22%40context%22%3A%5B%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fv1%22%2C%22https%3A%2F%2Fwww.w3.org%2F2018%2Fcredentials%2Fexamples%2Fv1%22%5D%2C%22type%22%3A%5B%22VerifiableCredential%22%2C%22UniversityDegreeCredential%22%5D%7D%7D%5D%7D
 
-  # (proxied)
-  /.well-known/oauth-authorization-server:
+  /v0/offers/{offer_id}:
     get:
-      summary: Standard OpenID Connect discovery endpoint for authorization metadata
-      description: Standard OpenID Connect discovery endpoint for authorization metadata
+      summary: Get a specific offer
       tags:
-        - (proxied)
-  /.well-known/openid-credential-issuer:
-    get:
-      summary: Standard OpenID Connect discovery endpoint for issuer metadata
-      tags:
-        - (proxied)
-  /auth/token:
-    post:
-      summary: Standard OAuth 2.0 endpoint for fetching a token
-      tags:
-        - (proxied)
-  /openid4vci/credential:
-    post:
-      summary: Standard OpenID Connect endpoint for redeeming a token for a credential
-      tags:
-        - (proxied)
+        - Issuance
+      parameters:
+        - in: path
+          name: offer_id
+          required: true
+          schema:
+            type: string
+          description: The Offer ID
+      responses:
+        "200":
+          description: Offer retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          description: Offer not found
 
+  /v0/offers/send:
+    post:
+      summary: Send an offer
+      tags:
+        - Issuance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Offer sent successfully
+
+  # Verification endpoints
   /v0/authorization_requests:
+    get:
+      tags:
+        - Verification
+      summary: Get all authorization requests
+      description: Retrieves all authorization requests
+      responses:
+        "200":
+          description: Authorization requests retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
     post:
       summary: Create a new Authorization Request
-      # description: n/a
       tags:
-        - Creation
+        - Verification
       requestBody:
-        # description: n/a
         required: true
         content:
           application/json:
@@ -319,13 +500,48 @@ paths:
               properties:
                 nonce:
                   type: string
+                  description: A unique identifier for the Authorization Request
                   example: "0d520cbe176ab9e1f7888c70888020d84a69672a4baabd3ce1c6aaad8f6420c0"
                 state:
                   type: string
+                  description: A unique string representing the state of the Authorization Request
                   example: "84266fdbd31d4c2c6d0665f7e8380fa3"
-                presentation_definition:
-                  # TODO: must be updated to OID4VP Draft 28
+                dcql_query:
                   type: object
+                  description: A DCQL query object describing the Verifiable Credential(s) that will be requested
+                  properties:
+                    credentials:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            example: "CredentialQuery"
+                          format:
+                            type: string
+                            example: "jwt_vc_json"
+                          meta:
+                            type: object
+                            properties:
+                              type_values:
+                                type: array
+                                items:
+                                  type: array
+                                  items:
+                                    type: string
+                                example:
+                                  - ["VerifiableCredential"]
+                          claims:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                path:
+                                  type: array
+                                  items:
+                                    type: string
+                                  example: ["credentialSubject", "first_name"]
               required:
                 - nonce
             examples:
@@ -333,40 +549,20 @@ paths:
                 summary: SIOPv2 Authorization Request
                 value:
                   nonce: this is a nonce
-              oid4vp-open-badges-3:
-                summary: OID4VP Open Badges 3.0
+              oid4vp-with-dcql:
+                summary: OID4VP with DCQL Query
                 value:
                   nonce: this is a nonce
-                  presentation_definition:
-                    # TODO: must be updated to OID4VP Draft 28
-                    id: Verifiable Presentation request for sign-on
-                    input_descriptors:
-                      - id: Request for Verifiable Credential
-                        constraints:
-                          fields:
-                            - path:
-                                - "$.vc.type"
-                              filter:
-                                type: array
-                                contains:
-                                  const: OpenBadgeCredential
-              oid4vp-w3c-vc-dm:
-                summary: OID4VP W3C VC Data Model
-                value:
-                  nonce: this is a nonce
-                  presentation_definition:
-                    # TODO: must be updated to OID4VP Draft 28
-                    id: Verifiable Presentation request for sign-on
-                    input_descriptors:
-                      - id: Request for Verifiable Credential
-                        constraints:
-                          fields:
-                            - path:
-                                - "$.vc.type"
-                              filter:
-                                type: array
-                                contains:
-                                  const: VerifiableCredential
+                  dcql_query:
+                    credentials:
+                      - id: "CredentialQuery"
+                        format: "jwt_vc_json"
+                        meta:
+                          type_values:
+                            - ["VerifiableCredential"]
+                        claims:
+                          - path: ["credentialSubject", "first_name"]
+                          - path: ["credentialSubject", "last_name"]
       responses:
         "201":
           description: An Authorization Request has successfully been created
@@ -374,22 +570,22 @@ paths:
             Location:
               schema:
                 type: string
-                example: "/request/43482b98aa2e071231082fc29db7a59f342a643b0c590f71083af3c7ae83f3c3"
+                example: "/v0/authorization_requests/43482b98aa2e071231082fc29db7a59f342a643b0c590f71083af3c7ae83f3c3"
               description: URL of the created resource
           content:
             application/x-www-form-urlencoded:
               schema:
                 type: string
                 example: "openid://?client_id=did%3Ajwk%3AeyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ&request_uri=http%3A%2F%2F192.168.1.127%3A3033%2Frequest%2F0fc2af709c435975ab5ebbc6dd2d5508c7f4a1cc3a59145a73a39e532bcbfdc7"
-  /v0/authorization_requests/{authorization_requests_id}:
+
+  /v0/authorization_requests/{authorization_request_id}:
     get:
       summary: Get the Authorization Request with the given Authorization Request ID
       tags:
-        - Retrieval
-      # description: n/a
+        - Verification
       parameters:
         - in: path
-          name: authorization_requests_id
+          name: authorization_request_id
           required: true
           schema:
             type: string
@@ -403,18 +599,750 @@ paths:
               schema:
                 type: object
               examples:
-                open-badges-3:
+                siopv2:
                   summary: SIOPv2 Authorization Request
                   externalValue: res/siopv2-authorization-request.json
+  # Holder endpoints
+  /v0/holder/credentials:
+    get:
+      tags:
+        - Holder
+      summary: Get all holder credentials
+      description: Retrieves all credentials held by the agent
+      responses:
+        "200":
+          description: Credentials retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+    post:
+      tags:
+        - Holder
+      summary: Add a credential to the holder's wallet
+      description: Adds a new credential to the holder's wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                credential:
+                  type: string
+                  description: The JWT credential to add
+              required:
+                - credential
+      responses:
+        "201":
+          description: Credential added successfully
+          content:
+            application/json:
+              schema:
+                type: object
 
-  # (proxied)
-  /request/{state}:
+  /v0/holder/credentials/{credential_id}:
+    get:
+      tags:
+        - Holder
+      summary: Get a specific holder credential
+      parameters:
+        - in: path
+          name: credential_id
+          required: true
+          schema:
+            type: string
+          description: The credential ID
+      responses:
+        "200":
+          description: Credential retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          description: Credential not found
+
+  /v0/holder/presentations:
+    get:
+      tags:
+        - Holder
+      summary: Get all presentations
+      description: Retrieves all presentations created by the holder
+      responses:
+        "200":
+          description: Presentations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+    post:
+      tags:
+        - Holder
+      summary: Create a new presentation
+      description: Creates a new verifiable presentation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Presentation created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v0/holder/presentations/{presentation_id}:
+    get:
+      tags:
+        - Holder
+      summary: Get a specific presentation
+      parameters:
+        - in: path
+          name: presentation_id
+          required: true
+          schema:
+            type: string
+          description: The presentation ID
+      responses:
+        "200":
+          description: Presentation retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          description: Presentation not found
+
+  /v0/holder/presentations/{presentation_id}/signed:
+    get:
+      tags:
+        - Holder
+      summary: Get a signed presentation
+      parameters:
+        - in: path
+          name: presentation_id
+          required: true
+          schema:
+            type: string
+          description: The presentation ID
+      responses:
+        "200":
+          description: Signed presentation retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          description: Presentation not found
+
+  /v0/holder/offers:
+    get:
+      tags:
+        - Holder
+      summary: Get all credential offers received by the holder
+      description: Retrieves all credential offers received by the holder
+      responses:
+        "200":
+          description: Offers retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /v0/holder/offers/{offer_id}:
+    get:
+      tags:
+        - Holder
+      summary: Get a specific credential offer
+      parameters:
+        - in: path
+          name: offer_id
+          required: true
+          schema:
+            type: string
+          description: The offer ID
+      responses:
+        "200":
+          description: Offer retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          description: Offer not found
+
+  /v0/holder/offers/{offer_id}/accept:
+    post:
+      tags:
+        - Holder
+      summary: Accept a credential offer
+      parameters:
+        - in: path
+          name: offer_id
+          required: true
+          schema:
+            type: string
+          description: The offer ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Offer accepted successfully
+
+  /v0/holder/offers/{offer_id}/reject:
+    post:
+      tags:
+        - Holder
+      summary: Reject a credential offer
+      parameters:
+        - in: path
+          name: offer_id
+          required: true
+          schema:
+            type: string
+          description: The offer ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Offer rejected successfully
+
+  # Identity endpoints
+  /v0/connections:
+    get:
+      tags:
+        - Identity
+      summary: Get all connections
+      description: Retrieves all DID connections
+      responses:
+        "200":
+          description: Connections retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+    post:
+      tags:
+        - Identity
+      summary: Create a new connection
+      description: Creates a new DID connection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Connection created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v0/connections/{connection_id}:
+    get:
+      tags:
+        - Identity
+      summary: Get a specific connection
+      parameters:
+        - in: path
+          name: connection_id
+          required: true
+          schema:
+            type: string
+          description: The connection ID
+      responses:
+        "200":
+          description: Connection retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          description: Connection not found
+
+  /v0/documents:
+    get:
+      tags:
+        - Identity
+      summary: Get all DID documents
+      description: Retrieves all DID documents, optionally filtered by DID method
+      parameters:
+        - in: query
+          name: did_method
+          schema:
+            type: string
+            enum: [did:key, did:web, did:jwk, did:iota]
+          description: Filter by DID method
+      responses:
+        "200":
+          description: Documents retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /v0/documents/{document_id}:
+    get:
+      tags:
+        - Identity
+      summary: Get a specific DID document
+      parameters:
+        - in: path
+          name: document_id
+          required: true
+          schema:
+            type: string
+          description: The document ID
+      responses:
+        "200":
+          description: Document retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          description: Document not found
+
+  /v0/profile:
+    get:
+      tags:
+        - Identity
+      summary: Get profile information
+      description: Retrieves the agent's profile information
+      responses:
+        "200":
+          description: Profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+    patch:
+      tags:
+        - Identity
+      summary: Update profile information
+      description: Updates the agent's profile information
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v0/services:
+    get:
+      tags:
+        - Identity
+      summary: Get all services
+      description: Retrieves all DID services
+      responses:
+        "200":
+          description: Services retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /v0/services/{service_id}:
+    get:
+      tags:
+        - Identity
+      summary: Get a specific service
+      parameters:
+        - in: path
+          name: service_id
+          required: true
+          schema:
+            type: string
+          description: The service ID
+      responses:
+        "200":
+          description: Service retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          description: Service not found
+
+  /v0/services/linked-vp:
+    post:
+      tags:
+        - Identity
+      summary: Create a linked verifiable presentation service
+      description: Creates a linked verifiable presentation service
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Linked VP service created successfully
+
+  # OpenID4VCI and Well-known endpoints (proxied)
+  /.well-known/oauth-authorization-server:
+    get:
+      summary: Standard OpenID Connect discovery endpoint for authorization metadata
+      description: Standard OpenID Connect discovery endpoint for authorization metadata
+      tags:
+        - OpenID4VCI
+      responses:
+        "200":
+          description: Authorization server metadata
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /.well-known/openid-credential-issuer:
+    get:
+      summary: Standard OpenID Connect discovery endpoint for issuer metadata
+      description: Standard OpenID Connect discovery endpoint for issuer metadata
+      tags:
+        - OpenID4VCI
+      responses:
+        "200":
+          description: Credential issuer metadata
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /.well-known/did.json:
+    get:
+      summary: DID document endpoint
+      description: Returns the DID document for the agent
+      tags:
+        - Identity
+      responses:
+        "200":
+          description: DID document
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /.well-known/did-configuration.json:
+    get:
+      summary: DID configuration endpoint
+      description: Returns the DID configuration for domain linkage
+      tags:
+        - Identity
+      responses:
+        "200":
+          description: DID configuration
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /auth/token:
+    post:
+      summary: Standard OAuth 2.0 endpoint for fetching a token
+      description: Standard OAuth 2.0 token endpoint for OpenID4VCI flow
+      tags:
+        - OpenID4VCI
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                  example: "urn:ietf:params:oauth:grant-type:pre-authorized_code"
+                pre-authorized_code:
+                  type: string
+      responses:
+        "200":
+          description: Access token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  token_type:
+                    type: string
+                    example: "Bearer"
+
+  /openid4vci/credential:
+    post:
+      summary: Standard OpenID Connect endpoint for redeeming a token for a credential
+      description: Standard OpenID4VCI credential endpoint
+      tags:
+        - OpenID4VCI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                credential_configuration_id:
+                  type: string
+                proof:
+                  type: object
+      responses:
+        "200":
+          description: Credential issued
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /openid4vci/notification:
+    post:
+      summary: OpenID4VCI notification endpoint
+      description: Receives notifications about credential status changes
+      tags:
+        - OpenID4VCI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Notification processed
+
+  /openid4vci/credential-offer/{offer_id}:
+    get:
+      summary: Get credential offer URI
+      description: Returns the credential offer for the given offer ID
+      tags:
+        - OpenID4VCI
+      parameters:
+        - in: path
+          name: offer_id
+          required: true
+          schema:
+            type: string
+          description: The offer ID
+      responses:
+        "200":
+          description: Credential offer URI
+          content:
+            application/x-www-form-urlencoded:
+              schema:
+                type: string
+
+  /ietf-oauth-token-status-list/{path}:
+    get:
+      summary: OAuth Token Status List endpoint
+      description: Returns the token status list for credential status verification
+      tags:
+        - OpenID4VCI
+      parameters:
+        - in: path
+          name: path
+          required: true
+          schema:
+            type: string
+          description: The status list path
+      responses:
+        "200":
+          description: Token status list
+          content:
+            application/jwt:
+              schema:
+                type: string
+
+  /request/{request_id}:
     get:
       summary: Standard request endpoint for fetching the Authorization Request object
+      description: Returns the authorization request object for the given request ID
       tags:
-        - (proxied)
+        - Verification
+      parameters:
+        - in: path
+          name: request_id
+          required: true
+          schema:
+            type: string
+          description: The request ID
+      responses:
+        "200":
+          description: Authorization request object
+          content:
+            application/json:
+              schema:
+                type: object
+
   /redirect:
     post:
       summary: Standard OAuth 2.0 redirection endpoint
+      description: Handles OAuth 2.0 authorization response redirections
       tags:
-        - (proxied)
+        - Verification
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Redirect processed successfully
+
+  # Holder-specific endpoints (alternative paths)
+  /credential_offer:
+    get:
+      summary: Credential offer endpoint (alternative)
+      description: Alternative endpoint for credential offers
+      tags:
+        - Holder
+      parameters:
+        - in: query
+          name: credential_offer_uri
+          schema:
+            type: string
+          description: The credential offer URI
+      responses:
+        "200":
+          description: Credential offer processed
+
+  /:
+    get:
+      summary: Root endpoint for credential offers
+      description: Root endpoint that can handle credential offer parameters
+      tags:
+        - Holder
+      parameters:
+        - in: query
+          name: credential_offer_uri
+          schema:
+            type: string
+          description: The credential offer URI
+      responses:
+        "200":
+          description: Credential offer processed
+
+  /linked-verifiable-presentations/{presentation_id}:
+    get:
+      summary: Get linked verifiable presentation
+      description: Returns a linked verifiable presentation by ID
+      tags:
+        - Holder
+      parameters:
+        - in: path
+          name: presentation_id
+          required: true
+          schema:
+            type: string
+          description: The presentation ID
+      responses:
+        "200":
+          description: Linked verifiable presentation
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          description: Presentation not found
+
+# Components section for reusable schemas
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        details:
+          type: string
+          description: Detailed error information
+    
+    CredentialConfiguration:
+      type: object
+      properties:
+        credentialConfigurationId:
+          type: string
+        format:
+          type: string
+          enum: [jwt_vc_json, ldp_vc]
+        credential_definition:
+          type: object
+        display:
+          type: array
+          items:
+            type: object
+    
+    DcqlQuery:
+      type: object
+      properties:
+        credentials:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              format:
+                type: string
+              meta:
+                type: object
+              claims:
+                type: array
+                items:
+                  type: object
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+tags:
+  - name: Metadata
+    description: Application metadata and configuration endpoints
+  - name: Health
+    description: Health check endpoints
+  - name: Issuance
+    description: Credential issuance endpoints
+  - name: Verification
+    description: Credential verification endpoints
+  - name: Holder
+    description: Credential holder endpoints
+  - name: Identity
+    description: Identity and DID management endpoints
+  - name: OpenID4VCI
+    description: OpenID for Verifiable Credential Issuance standard endpoints
