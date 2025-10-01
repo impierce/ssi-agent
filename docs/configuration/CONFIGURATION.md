@@ -47,8 +47,17 @@ This overview is still a work in progress. You can refer to the [example.config.
 
 ### Application URL
 
-UniCore's application URL. This value represents the self-aware URL of the application. It is used for internal
-communication and should not be exposed to clients or identity wallets.
+UniCore's application URL. This value represents the internal URL where the application listens for requests. It is used for:
+- Internal service communication
+- Health checks and monitoring
+- Administrative endpoints
+- Container-to-container communication in Docker environments
+
+:::warning
+
+The `APPLICATION_URL` should **not** be directly exposed to external clients or identity wallets for security reasons.
+
+:::
 
 :::note
 
@@ -63,15 +72,26 @@ The `UNICORE__APPLICATION_URL` may include a path segment, which will be treated
 #### Example
 
 ```yaml
-application_url: http://localhost:3033/my/base/path
+application_url: http://localhost:3033
 ```
 
 ### Public URL
 
-UniCore's public URL. This value is communicated to clients and identity wallets and should be publicly accessible. When
-not set, it defaults to the value of `UNICORE__APPLICATION_URL`.
+UniCore's public URL. This value is communicated to external clients and identity wallets and must be publicly accessible. It is used for:
+- Credential offers shared with wallets
+- Authorization endpoints accessed by external clients
+- DID document hosting (for did:web)
+- Public API endpoints
 
-<!-- TODO: In production, should we require that `UNICORE__PUBLIC_URL` is always explicitly set, rather than defaulting to the value of `UNICORE__APPLICATION_URL`? This would help prevent accidental exposure of internal URLs to clients. -->
+When not set, it defaults to the value of `UNICORE__APPLICATION_URL`.
+
+:::note
+
+In production deployments, the `PUBLIC_URL` typically differs from `APPLICATION_URL`. For example:
+- `APPLICATION_URL`: `http://unicore:3033` (internal container URL)
+- `PUBLIC_URL`: `https://issuer.example.com` (external domain with TLS)
+
+:::
 
 :::note
 
