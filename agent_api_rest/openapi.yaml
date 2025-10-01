@@ -271,7 +271,7 @@ paths:
                 value:
                   credential:
                     credentialSubject:
-                      dob: 1982-01-01
+                      dob: "1982-01-01"
                       first_name: Ferris
                       last_name: Crabman
                   credentialConfigurationId: w3c_vc_credential
