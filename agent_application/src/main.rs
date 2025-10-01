@@ -9,7 +9,6 @@ use agent_api_rest::{
     ApplicationState,
 };
 use agent_event_publisher_http::EventPublisherHttp;
-use agent_event_publisher_nats::EventPublisherNats;
 use agent_holder::services::HolderServices;
 use agent_identity::services::IdentityServices;
 use agent_issuance::services::IssuanceServices;

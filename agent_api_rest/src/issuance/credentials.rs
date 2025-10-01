@@ -43,6 +43,7 @@ pub struct CredentialsEndpointRequest {
     pub is_signed: bool,
     pub credential_configuration_id: String,
     pub expires_at: CredentialExpiry,
+    pub recipient_email: Option<String>,
 }
 
 #[axum_macros::debug_handler]
@@ -54,6 +55,7 @@ pub(crate) async fn credentials(
         is_signed,
         credential_configuration_id,
         expires_at,
+        recipient_email,
     }): Json<CredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let credential_id = uuid::Uuid::new_v4().to_string();
@@ -181,6 +183,7 @@ pub(crate) async fn credentials(
             credential_configuration_ids: vec![credential_configuration_id.clone()],
             grant_types: vec![GrantType::PreAuthorizedCode],
             tx_code_constraints,
+            recipient_email,
         };
 
         command_handler(&offer_id, &state.command.offer, command).await?

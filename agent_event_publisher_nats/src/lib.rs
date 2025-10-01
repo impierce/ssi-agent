@@ -80,6 +80,7 @@ impl EventPublisherNats {
     }
 
     impl<A> Query<A> for AggregateEventPublisherNats<A>
+    // The Query allows us to listen for events from the event store. 
     where
         A: Aggregate,
         { 
@@ -90,7 +91,7 @@ impl EventPublisherNats {
                             OfferEvent::TxCodeGenerated { offer_id, tx_code} => {
                                 self.dispatch_tx_code_generated(offer_id, tx_code).await?;
                             }
-                            _ => { return Ok(()); } // Ignore other events for now
+                            _ => { return Ok(()); } // For now, ignore other events
                         }
                     }
                 }
@@ -98,27 +99,24 @@ impl EventPublisherNats {
             }
         }
 
-        pub fn get_recipient_from_offer(event) -> String {
-            todo!()
-            // there needs to be some kind of matching or system which links the emails to the offer. 
-        }
             async fn dispatch(&self, events: &[EventEnvelope<A>]) -> Result<(), Error> {
                 for event in events {
                     if self.target_events.contains(&event.payload.event_type()) {
-                        match event.payload { 
-                            OfferEvent::TxCodeGenerated { offer_id, tx_code} => {
-                                self.dispatch_tx_code_generated(offer_id, tx_code).await?;
+                        match event.payload {
+                            OfferEvent::TxCodeGenerated { offer_id, tx_code, recipient_email } => {
+                                self.dispatch_tx_code_generated(offer_id, tx_code, recipient_email).await?;
                             }
-                            _ => { return ... not sure yet. }
+                            _ => { return Ok(()); }
+                            // For now, ignore other events
                         }
                     }
                 }
 
-                async fn dispatch_tx_code_generated(offer_id, tx_code) -> Result<(), Error> {
-                    let recipient = get_recipient_from_offer(offer_id);
+                async fn dispatch_tx_code_generated(offer_id, tx_code, recipient_email) -> Result<(), Error> {
+                    let recipient = recipient_email.ok_or_else(|| Error::Other("Recipient email not provided".into()))?;
                     self.nats_client.publish(&self.subject, message).await?;
                     Ok(())
                 }
 
 
-                
+            }

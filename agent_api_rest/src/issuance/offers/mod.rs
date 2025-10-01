@@ -24,6 +24,7 @@ pub struct OffersEndpointRequest {
     pub offer_id: String,
     #[serde(default)]
     pub credential_configuration_ids: Vec<String>,
+    pub recipient_email: Option<String>,
 }
 
 #[axum_macros::debug_handler]
@@ -32,6 +33,7 @@ pub(crate) async fn offers(
     Json(OffersEndpointRequest {
         offer_id,
         credential_configuration_ids,
+        recipient_email,
     }): Json<OffersEndpointRequest>,
 ) -> Result<Response, ApiError> {
     // Check if the credential configuration IDs are valid.
@@ -83,6 +85,7 @@ pub(crate) async fn offers(
             credential_configuration_ids,
             grant_types: vec![GrantType::PreAuthorizedCode],
             tx_code_constraints,
+            recipient_email: recipient_email.clone(),
         };
 
         command_handler(&offer_id, &state.command.offer, command).await?

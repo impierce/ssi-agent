@@ -44,6 +44,7 @@ pub struct Offer {
     pub credential_response: Option<CredentialResponse>,
     pub status: Status,
     pub tx_code: Option<String>,
+    pub recipient_email: Option<String>,
 }
 
 #[async_trait]
@@ -69,6 +70,7 @@ impl Aggregate for Offer {
                 grant_types,
                 credential_configuration_ids,
                 tx_code_constraints,
+                recipient_email,
             } => {
                 let credential_issuer = config().public_url.clone();
 
@@ -135,6 +137,7 @@ impl Aggregate for Offer {
                         access_token,
                         status: Status::Created,
                         tx_code: tx_code.clone(),
+                        recipient_email: recipient_email.clone(),
                     },
                     FormUrlEncodedCredentialOfferCreated {
                         offer_id: offer_id.clone(),
@@ -148,6 +151,7 @@ impl Aggregate for Offer {
                     events.push(TxCodeGenerated {
                         offer_id: offer_id.clone(),
                         tx_code: tx_code_value,
+                        recipient_email: recipient_email.clone(),
                     });
                 }
 
@@ -328,6 +332,7 @@ impl Aggregate for Offer {
                 credential_offer_uri,
                 status,
                 tx_code,
+                recipient_email,
             } => {
                 self.offer_id = offer_id;
                 self.grant_types = grant_types;
@@ -337,6 +342,7 @@ impl Aggregate for Offer {
                 self.credential_offer_uri.replace(credential_offer_uri);
                 self.status = status;
                 self.tx_code = tx_code;
+                self.recipient_email = recipient_email;
             }
             CredentialsAdded {
                 offer_id,
@@ -419,6 +425,7 @@ pub mod tests {
                 credential_configuration_ids: vec![],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
+                recipient_email: None,
             })
             .then_expect_events(vec![
                 OfferEvent::CredentialOfferCreated {
@@ -430,6 +437,7 @@ pub mod tests {
                     access_token,
                     status: Status::Created,
                     tx_code: None,
+                    recipient_email: None,
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: offer_id.clone(),
@@ -463,6 +471,7 @@ pub mod tests {
                 access_token,
                 status: Status::Created,
                 tx_code: None,
+                recipient_email: None,
             }])
             .when(OfferCommand::AddCredentials {
                 offer_id: offer_id.clone(),
@@ -510,6 +519,7 @@ pub mod tests {
                     access_token,
                     status: Status::Created,
                     tx_code: None,
+                    recipient_email: None,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: offer_id.clone(),
@@ -562,6 +572,7 @@ pub mod tests {
                     access_token,
                     status: Status::Created,
                     tx_code: None,
+                    recipient_email: None,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: offer_id.clone(),
@@ -619,6 +630,7 @@ pub mod tests {
                     access_token,
                     status: Status::Created,
                     tx_code: None,
+                    recipient_email: None,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: offer_id.clone(),
@@ -682,6 +694,7 @@ pub mod tests {
                     access_token,
                     status: Status::Created,
                     tx_code: None,
+                    recipient_email: None,
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: offer_id.clone(),

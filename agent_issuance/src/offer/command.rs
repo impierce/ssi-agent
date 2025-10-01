@@ -18,6 +18,7 @@ pub enum OfferCommand {
         credential_configuration_ids: Vec<String>,
         grant_types: Vec<GrantType>,
         tx_code_constraints: Option<TxCodeConstraints>,
+        recipient_email: Option<String>,
     },
     AddCredentials {
         offer_id: String,
