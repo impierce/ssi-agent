@@ -167,4 +167,28 @@ pub mod tests {
 
         println!("Generated event_id: {}", event_id);
     }
+
+    #[tokio::test]
+    async fn test_nats_payload_format() {
+        // Create a test CloudEvent
+        let event = EventBuilderV10::new()
+            .id("test-123")
+            .source("https://impierce.com/special-offer")
+            .ty("email.command.txcode.generated")
+            .data(
+                "application/json",
+                json!({
+                    "recipient_email": "andres@rocarey.com",
+                    "template": "transaction_code",
+                    "values": "997755",
+                }),
+            )
+            .build()
+            .unwrap();
+
+        let nats_event = NatsCloudEvent::from_event(event).unwrap();
+
+        println!("NATS Payload:");
+        println!("{}", String::from_utf8_lossy(&nats_event.payload));
+    }
 }
