@@ -3,7 +3,9 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use oid4vc_core::Validator;
 use oid4vci::credential_issuer::CredentialIssuer;
-use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants, PreAuthorizedCode};
+use oid4vci::credential_offer::{
+    AuthorizationCode, CredentialOffer, CredentialOfferParameters, GrantType, Grants, PreAuthorizedCode,
+};
 use oid4vci::credential_response::{CredentialResponse, CredentialResponseObject, CredentialResponseType};
 use oid4vci::token_request::TokenRequest;
 use oid4vci::token_response::TokenResponse;
@@ -16,6 +18,7 @@ use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError::{self, *};
 use crate::offer::event::OfferEvent;
 use crate::services::IssuanceServices;
+use crate::utils::generate_tx_code::generate_tx_code;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum Status {
@@ -29,6 +32,7 @@ pub enum Status {
 pub struct Offer {
     #[serde(rename = "id")]
     pub offer_id: String,
+    pub grant_types: Vec<GrantType>,
     pub credential_offer_uri: Option<CredentialOffer>,
     pub credential_offer: Option<CredentialOffer>,
     pub subject_id: Option<String>,
@@ -39,6 +43,7 @@ pub struct Offer {
     pub access_token: String,
     pub credential_response: Option<CredentialResponse>,
     pub status: Status,
+    pub tx_code: Option<String>,
 }
 
 #[async_trait]
@@ -61,7 +66,9 @@ impl Aggregate for Offer {
         match command {
             CreateCredentialOffer {
                 offer_id,
+                grant_types,
                 credential_configuration_ids,
+                tx_code_constraints,
             } => {
                 let credential_issuer = config().public_url.clone();
 
@@ -79,16 +86,29 @@ impl Aggregate for Offer {
                     )
                 };
 
+                let grants = Grants {
+                    authorization_code: grant_types.contains(&GrantType::AuthorizationCode).then(|| {
+                        AuthorizationCode {
+                            issuer_state: Some(offer_id.clone()),
+                            authorization_server: None,
+                        }
+                    }),
+                    pre_authorized_code: grant_types.contains(&GrantType::PreAuthorizedCode).then(|| {
+                        PreAuthorizedCode {
+                            pre_authorized_code: pre_authorized_code.clone(),
+                            tx_code: tx_code_constraints.clone(),
+                            ..Default::default()
+                        }
+                    }),
+                };
+
+                // If TxCode constraints are provided, generate a transaction code.
+                let tx_code = tx_code_constraints.as_ref().map(generate_tx_code);
+
                 let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
                     credential_issuer: credential_issuer.clone(),
                     credential_configuration_ids,
-                    grants: Some(Grants {
-                        authorization_code: None,
-                        pre_authorized_code: Some(PreAuthorizedCode {
-                            pre_authorized_code: pre_authorized_code.clone(),
-                            ..Default::default()
-                        }),
-                    }),
+                    grants: Some(grants),
                 }));
 
                 let mut credential_offer_uri = config().credential_offer_uri.clone();
@@ -108,11 +128,13 @@ impl Aggregate for Offer {
                 Ok(vec![
                     CredentialOfferCreated {
                         offer_id: offer_id.clone(),
+                        grant_types,
                         credential_offer_uri,
                         credential_offer,
                         pre_authorized_code,
                         access_token,
                         status: Status::Created,
+                        tx_code: tx_code.clone(),
                     },
                     FormUrlEncodedCredentialOfferCreated {
                         offer_id,
@@ -191,16 +213,40 @@ impl Aggregate for Offer {
                 offer_id,
                 token_request,
             } => match token_request {
-                TokenRequest::PreAuthorizedCode { .. } => Ok(vec![TokenResponseCreated {
-                    offer_id,
-                    token_response: TokenResponse {
-                        access_token: self.access_token.clone(),
-                        token_type: "bearer".to_string(),
-                        expires_in: None,
-                        refresh_token: None,
-                        scope: None,
-                    },
-                }]),
+                TokenRequest::PreAuthorizedCode {
+                    pre_authorized_code,
+                    tx_code,
+                } => {
+                    if self.pre_authorized_code != pre_authorized_code {
+                        return Err(InvalidPreAuthorizedCodeError);
+                    }
+
+                    let offer_requires_tx_code = self.tx_code.is_some();
+
+                    match (offer_requires_tx_code, tx_code) {
+                        (true, None) => return Err(MissingTxCodeError),
+                        (false, Some(_provided_tx_code)) => return Err(UnrequestedTxCodeError),
+                        (true, Some(provided_tx_code)) => {
+                            let expected_tx_code = self.tx_code.as_ref().ok_or(MissingTxCodeError)?;
+
+                            if provided_tx_code != *expected_tx_code {
+                                return Err(InvalidTxCodeError);
+                            }
+                        }
+                        (false, _) => {}
+                    }
+
+                    Ok(vec![TokenResponseCreated {
+                        offer_id,
+                        token_response: TokenResponse {
+                            access_token: self.access_token.clone(),
+                            token_type: "bearer".to_string(),
+                            expires_in: None,
+                            refresh_token: None,
+                            scope: None,
+                        },
+                    }])
+                }
                 _ => Err(UnsupportedTokenRequestGrantTypeError),
             },
             VerifyCredentialRequest {
@@ -267,18 +313,22 @@ impl Aggregate for Offer {
         match event {
             CredentialOfferCreated {
                 offer_id,
+                grant_types,
                 pre_authorized_code,
                 access_token,
                 credential_offer,
                 credential_offer_uri,
                 status,
+                tx_code,
             } => {
                 self.offer_id = offer_id;
+                self.grant_types = grant_types;
                 self.pre_authorized_code = pre_authorized_code;
                 self.access_token = access_token;
                 self.credential_offer.replace(credential_offer);
                 self.credential_offer_uri.replace(credential_offer_uri);
                 self.status = status;
+                self.tx_code = tx_code;
             }
             CredentialsAdded {
                 offer_id,
@@ -344,6 +394,7 @@ pub mod tests {
     #[serial_test::serial]
     async fn test_create_offer(
         offer_id: String,
+        grant_types: Vec<GrantType>,
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] access_token: String,
         #[future(awt)] credential_offer: CredentialOffer,
@@ -355,15 +406,19 @@ pub mod tests {
             .when(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
                 credential_configuration_ids: vec![],
+                grant_types: grant_types.clone(),
+                tx_code_constraints: None,
             })
             .then_expect_events(vec![
                 OfferEvent::CredentialOfferCreated {
                     offer_id: offer_id.clone(),
+                    grant_types,
                     credential_offer,
                     credential_offer_uri,
                     pre_authorized_code,
                     access_token,
                     status: Status::Created,
+                    tx_code: None,
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: offer_id.clone(),
@@ -378,6 +433,7 @@ pub mod tests {
     #[allow(clippy::too_many_arguments)]
     async fn test_add_credential(
         offer_id: String,
+        grant_types: Vec<GrantType>,
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] access_token: String,
         #[future(awt)] credential_offer: CredentialOffer,
@@ -389,11 +445,13 @@ pub mod tests {
         OfferTestFramework::with(Service::default())
             .given(vec![OfferEvent::CredentialOfferCreated {
                 offer_id: offer_id.clone(),
+                grant_types,
                 credential_offer_uri,
                 credential_offer,
                 pre_authorized_code,
                 access_token,
                 status: Status::Created,
+                tx_code: None,
             }])
             .when(OfferCommand::AddCredentials {
                 offer_id: offer_id.clone(),
@@ -420,6 +478,7 @@ pub mod tests {
     #[allow(clippy::too_many_arguments)]
     async fn test_create_token_response(
         offer_id: String,
+        grant_types: Vec<GrantType>,
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] access_token: String,
         #[future(awt)] credential_offer: CredentialOffer,
@@ -433,11 +492,13 @@ pub mod tests {
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
                     offer_id: offer_id.clone(),
+                    grant_types,
                     credential_offer,
                     credential_offer_uri,
                     pre_authorized_code,
                     access_token,
                     status: Status::Created,
+                    tx_code: None,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: offer_id.clone(),
@@ -466,6 +527,7 @@ pub mod tests {
     #[serial_test::serial]
     async fn test_verify_credential_response(
         offer_id: String,
+        grant_types: Vec<GrantType>,
         #[future(awt)] holder: Arc<dyn Subject>,
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] access_token: String,
@@ -482,11 +544,13 @@ pub mod tests {
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
                     offer_id: offer_id.clone(),
+                    grant_types,
                     credential_offer,
                     credential_offer_uri,
                     pre_authorized_code,
                     access_token,
                     status: Status::Created,
+                    tx_code: None,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: offer_id.clone(),
@@ -521,6 +585,7 @@ pub mod tests {
     #[serial_test::serial]
     async fn test_create_credential_response(
         offer_id: String,
+        grant_types: Vec<GrantType>,
         #[future(awt)] holder: Arc<dyn Subject>,
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] access_token: String,
@@ -536,11 +601,13 @@ pub mod tests {
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
                     offer_id: offer_id.clone(),
+                    grant_types,
                     credential_offer,
                     credential_offer_uri,
                     pre_authorized_code,
                     access_token,
                     status: Status::Created,
+                    tx_code: None,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: offer_id.clone(),
@@ -581,6 +648,7 @@ pub mod tests {
     #[serial_test::serial]
     async fn test_just_in_time_credential_flow(
         offer_id: String,
+        grant_types: Vec<GrantType>,
         #[future(awt)] holder: Arc<dyn Subject>,
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] access_token: String,
@@ -596,11 +664,13 @@ pub mod tests {
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
                     offer_id: offer_id.clone(),
+                    grant_types,
                     credential_offer,
                     credential_offer_uri,
                     pre_authorized_code,
                     access_token,
                     status: Status::Created,
+                    tx_code: None,
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: offer_id.clone(),
@@ -728,6 +798,11 @@ pub mod test_utils {
     #[fixture]
     pub async fn form_url_encoded_credential_offer(#[future(awt)] pre_authorized_code: String) -> String {
         format!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fmy-domain.example.org%2F%22%2C%22credential_configuration_ids%22%3A%5B%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%7D%7D%7D")
+    }
+
+    #[fixture]
+    pub fn grant_types() -> Vec<GrantType> {
+        vec![GrantType::PreAuthorizedCode]
     }
 
     #[fixture]

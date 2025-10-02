@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-
+use agent_shared::config::Authorization;
 use cqrs_es::DomainEvent;
 use jsonwebtoken::Algorithm;
 use oid4vci::credential_issuer::{
@@ -8,6 +7,7 @@ use oid4vci::credential_issuer::{
     credential_issuer_metadata::CredentialIssuerMetadata,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use strum::Display;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
@@ -28,22 +28,22 @@ pub enum ServerConfigEvent {
     CryptographicBindingMethodsUpdated {
         cryptographic_binding_methods_supported: Vec<String>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject)>,
+        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
     },
     SigningAlgorithmsUpdated {
         signing_algorithms_supported: Vec<Algorithm>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject)>,
+        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
     },
     CredentialConfigurationUpdated {
         credential_configuration_id: String,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject)>,
+        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
     },
     CredentialConfigurationRemoved {
         credential_configuration_id: String,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject)>,
+        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
     },
 }
 

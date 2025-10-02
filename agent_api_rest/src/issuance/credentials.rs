@@ -15,6 +15,7 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::header;
 use oauth_tsl::status_list::StatusType;
+use oid4vci::credential_offer::GrantType;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -56,6 +57,24 @@ pub(crate) async fn credentials(
 ) -> Result<Response, ApiError> {
     let credential_id = uuid::Uuid::new_v4().to_string();
 
+    let (_, credential_configuration, authorization) = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+        .await?
+        .and_then(|server_config_view| {
+            server_config_view
+                .credential_configurations
+                .get(&credential_configuration_id)
+                .cloned()
+        })
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::NOT_FOUND)
+                .title("No Credential Configuration Found")
+                .type_url(type_url("issuance#no-credential-configuration-found"))
+                .message(format!(
+                    "No Credential Configuration found with id: `{credential_configuration_id}`"
+                ))
+                .finish()
+        })?;
+
     let command = if is_signed {
         // For a signed credential, ensure that the credential is a string.
         if !credential.is_string() {
@@ -79,25 +98,6 @@ pub(crate) async fn credentials(
                 .message("For unsigned credentials, the credential must be an object.")
                 .finish());
         }
-
-        let credential_configuration = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
-            .await?
-            .and_then(|server_config_view| {
-                server_config_view
-                    .credential_issuer_metadata
-                    .credential_configurations_supported
-                    .get(&credential_configuration_id)
-                    .cloned()
-            })
-            .ok_or_else(|| {
-                ApiError::builder(StatusCode::NOT_FOUND)
-                    .title("No Credential Configuration Found")
-                    .type_url(type_url("issuance#no-credential-configuration-found"))
-                    .message(format!(
-                        "No Credential Configuration found with id: `{credential_configuration_id}`"
-                    ))
-                    .finish()
-            })?;
 
         // Create the new CredentialStatus index randomly.
         let random_index;
@@ -138,7 +138,7 @@ pub(crate) async fn credentials(
         CredentialCommand::CreateUnsignedCredential {
             credential_id: credential_id.clone(),
             data: Data { raw: credential },
-            credential_configuration: Box::new(credential_configuration),
+            credential_configuration: Box::new(credential_configuration.clone()),
             expires_at,
             credential_status_index: random_index,
         }
@@ -149,9 +149,18 @@ pub(crate) async fn credentials(
 
     // Create an offer if it does not exist yet.
     if query_handler(&offer_id, &state.query.offer).await?.is_none() {
+        // Extract the tx_code_constraints from the credential configuration if available.
+        let tx_code_constraints = if authorization.pre_authorized {
+            authorization.tx_code_constraints.clone()
+        } else {
+            None
+        };
+
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
-            credential_configuration_ids: vec![],
+            credential_configuration_ids: vec![credential_configuration_id.clone()],
+            grant_types: vec![GrantType::PreAuthorizedCode],
+            tx_code_constraints,
         };
 
         command_handler(&offer_id, &state.command.offer, command).await?

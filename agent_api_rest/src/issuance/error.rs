@@ -93,6 +93,10 @@ impl IntoApiErrorExt for OfferError {
 
             // `/auth/token` endpoint
             UnsupportedTokenRequestGrantTypeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            MissingTxCodeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            InvalidTxCodeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            InvalidPreAuthorizedCodeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            UnrequestedTxCodeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
 
             // `/openid4vci/credential` endpoint
             MissingCredentialError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
@@ -177,6 +181,12 @@ impl IntoPublicError for OfferError {
             MissingCredentialOfferError => {
                 PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::InvalidCredentialRequest))
             }
+            MissingTxCodeError => PublicError::TokenError(OID4VCError::new(TokenErrorResponse::InvalidRequest)),
+            InvalidTxCodeError => PublicError::TokenError(OID4VCError::new(TokenErrorResponse::InvalidGrant)),
+            InvalidPreAuthorizedCodeError => {
+                PublicError::TokenError(OID4VCError::new(TokenErrorResponse::InvalidGrant))
+            }
+            UnrequestedTxCodeError => PublicError::TokenError(OID4VCError::new(TokenErrorResponse::InvalidRequest)),
             // TODO: check for missing error responses
             _ => PublicError::InternalServerError,
         }

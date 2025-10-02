@@ -15,6 +15,7 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::header;
+use oid4vci::credential_offer::GrantType;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize)]
@@ -34,19 +35,17 @@ pub(crate) async fn offers(
     }): Json<OffersEndpointRequest>,
 ) -> Result<Response, ApiError> {
     // Check if the credential configuration IDs are valid.
-    let persisted_credential_configuration_ids = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+
+    let credential_configurations = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
         .await?
-        .map(|server_config_view| {
-            server_config_view
-                .credential_configurations
-                .into_keys()
-                .collect::<Vec<_>>()
-        })
+        .map(|server_config_view| server_config_view.credential_configurations)
         // Unreachable error
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
+    let persisted_credential_configuration_ids = credential_configurations.keys().collect::<Vec<_>>();
+
     if let Some(credential_configuration_id) = credential_configuration_ids.iter().find(|credential_configuration_id| {
-        !persisted_credential_configuration_ids.contains(*credential_configuration_id)
+        !persisted_credential_configuration_ids.contains(credential_configuration_id)
     }) {
         return Err(ApiError::builder(StatusCode::NOT_FOUND)
             .title("No Credential Configuration Found")
@@ -57,11 +56,28 @@ pub(crate) async fn offers(
             .finish());
     }
 
+    let tx_code_constraints = credential_configuration_ids
+        .iter()
+        .find_map(|credential_configuration_id| {
+            credential_configurations
+                .get(credential_configuration_id)
+                // TODO: find a way to bind the `authorization` to the Offer somehow
+                .and_then(|(_, _, authorization)| {
+                    if authorization.pre_authorized {
+                        authorization.tx_code_constraints.clone()
+                    } else {
+                        None
+                    }
+                })
+        });
+
     // Create an offer if it does not exist yet.
     if query_handler(&offer_id, &state.query.offer).await?.is_none() {
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
             credential_configuration_ids,
+            grant_types: vec![GrantType::PreAuthorizedCode],
+            tx_code_constraints,
         };
 
         command_handler(&offer_id, &state.command.offer, command).await?
