@@ -173,7 +173,7 @@ pub mod tests {
         // Create a test CloudEvent
         let event = EventBuilderV10::new()
             .id("test-123")
-            .source("https://impierce.com/special-offer")
+            .source("https://impierce.com/offer")
             .ty("email.command.txcode.generated")
             .data(
                 "application/json",
