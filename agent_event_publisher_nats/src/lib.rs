@@ -11,13 +11,13 @@ use std::error::Error;
 use tracing::info;
 use uuid::Uuid;
 
-/// This can be populated for each aggregate type, e.g. Credential, Received_Offer, etc.
+// This struct holds all the different aggregate event publishers. For now it only has Offer,
+// but in the future it could house others like Credential, Identity, etc.
 #[derive(Default, Debug)]
 pub struct EventPublisherNats {
     pub offer: Option<AggregateEventPublisherNats<Offer>>,
 }
 
-/// This contains infrastructure data from the config file.
 #[derive(Debug)]
 pub struct AggregateEventPublisherNats<A>
 where
@@ -49,7 +49,7 @@ where
 
 impl EventPublisherNats {
     pub async fn load() -> anyhow::Result<Self> {
-        // This loads configuration from the config file.
+        // Loads NATS configuration from the config file.
         let event_publisher_nats = config().event_publishers.nats.clone().unwrap_or_default();
 
         // If NATS is not enabled, return an empty event publisher.
@@ -59,7 +59,7 @@ impl EventPublisherNats {
 
         let offer = if !event_publisher_nats.events.offer.is_empty() {
             Some(
-                // Calling our new() constructor to populate the struct.
+                // Call the new() constructor to populate the struct.
                 AggregateEventPublisherNats::<Offer>::new(
                     event_publisher_nats.nats_url.clone(),
                     event_publisher_nats.subject.clone(),
@@ -115,6 +115,7 @@ impl Query<Offer> for AggregateEventPublisherNats<Offer> {
         }
     }
 }
+
 impl AggregateEventPublisherNats<Offer> {
     async fn dispatch_tx_code_generated(
         &self,
@@ -128,7 +129,7 @@ impl AggregateEventPublisherNats<Offer> {
         // Construct the CloudEvent
         let event = EventBuilderV10::new()
             .id(event_id)
-            .source("https://impierce.com/special-offer")
+            .source("https://issuer.impierce.com/oid4vci/issuance-service")
             .ty("email.command.txcode.generated")
             .data(
                 "application/json",
@@ -140,16 +141,20 @@ impl AggregateEventPublisherNats<Offer> {
             )
             .build()?;
 
-        // Convert Cloudevent to NATS bytes format then publish
+        // Convert Cloudevent into a format suitable for NATS
         let nats_event = NatsCloudEvent::from_event(event)?;
 
-        let payload = nats_event.payload.into();
+        println!(
+            "Publishing to NATS subject '{}': {}",
+            self.subject,
+            String::from_utf8_lossy(&nats_event.payload)
+        );
 
+        let payload = nats_event.payload.into();
         let subject = self.subject.clone();
 
         self.client.publish(subject, payload).await?;
-
-        info!("Published tx code event to NATS subject: {}", self.subject);
+        info!("Published transaction code to NATS subject: {}", self.subject);
 
         Ok(())
     }
@@ -161,7 +166,7 @@ pub mod tests {
 
     #[test]
     fn test_generate_event_id() {
-        let offer_id = "hotcakes_123";
+        let offer_id = "offer-123";
         let event_id = format!("{}-{}", offer_id, Uuid::new_v4());
         assert!(event_id.starts_with(offer_id));
 
@@ -190,5 +195,41 @@ pub mod tests {
 
         println!("NATS Payload:");
         println!("{}", String::from_utf8_lossy(&nats_event.payload));
+    }
+
+    #[tokio::test]
+    async fn test_integration() {
+        // Test creating publisher and publishing
+        // For this to run successfully, you should have a NATS server running locally.
+        // You can run one with Docker: `docker run -p 4222:4222 -ti nats:latest` in your terminal
+        // before running this test.
+
+        let publisher = AggregateEventPublisherNats::<Offer>::new(
+            "nats://localhost:4222".to_string(),
+            "test.commands".to_string(),
+            vec!["TxCodeGenerated".to_string()],
+        )
+        .await;
+
+        match publisher {
+            Ok(p) => {
+                println!("Connection to NATS successful");
+
+                // Test publishing
+                let result = p
+                    .dispatch_tx_code_generated(
+                        "offer-123".to_string(),
+                        "12345".to_string(),
+                        Some("sergey@kuryokhin.com".to_string()),
+                    )
+                    .await;
+
+                match result {
+                    Ok(_) => println!("Message published successfully and is now on its way to thy client! "),
+                    Err(e) => println!("Publishing failed: {}", e),
+                }
+            }
+            Err(e) => println!("NATS connection failed: {}", e),
+        }
     }
 }
