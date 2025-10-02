@@ -1,54 +1,55 @@
-use agent_issuance::{offer::event::OfferEvent, offer::aggregate::Offer};
+use agent_issuance::{offer::aggregate::Offer, offer::event::OfferEvent};
 use agent_shared::config::config;
+use agent_store::{EventPublisher, OfferEventPublisher};
 use async_nats::Client;
-use cqrs_es::{Aggregate, DomainEvent, EventEnvelope, Query};
-use serde::{Deserialize};
-use std::error::Error;
+use async_trait::async_trait;
+use cloudevents::binding::nats::NatsCloudEvent;
 use cloudevents::{EventBuilder, EventBuilderV10};
+use cqrs_es::{Aggregate, DomainEvent, EventEnvelope, Query};
 use serde_json::json;
+use std::error::Error;
 use tracing::info;
-use futures::StreamExt;
 use uuid::Uuid;
-use agent_store::{OfferEventPublisher, EventPublisher};
 
 /// This can be populated for each aggregate type, e.g. Credential, Received_Offer, etc.
-#[derive(Default, Debug, Deserialize)]
+#[derive(Default, Debug)]
 pub struct EventPublisherNats {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub offer: Option<AggregateEventPublisherNats<Offer>>,
 }
 
 /// This contains infrastructure data from the config file.
-#[derive(Debug, Deserialize)]
-        pub struct AggregateEventPublisherNats<A>
-        where
-            A: Aggregate,
-        {
-            pub nats_url: String,
-            pub subject: String, 
-            pub target_events: Vec<String>,
-            #[serde(skip)]
-            _marker: std::marker::PhantomData<A>,
-        }
+#[derive(Debug)]
+pub struct AggregateEventPublisherNats<A>
+where
+    A: Aggregate,
+{
+    pub nats_url: String,
+    pub subject: String,
+    pub target_events: Vec<String>,
+    pub client: Client,
+    _marker: std::marker::PhantomData<A>,
+}
 
-        // TODO!! CHAYE FIGURE OUT THE CLIENT SITUATION. SHOULD 
-        impl<A> AggregateEventPublisherNats<A>
-        where
-            A: Aggregate,
-        {
-            pub fn new(nats_url: String, subject: String, target_events: Vec<String>) -> Self {
-                AggregateEventPublisherNats {
-                    nats_url,
-                    subject,
-                    target_events,
-                    _marker: std::marker::PhantomData,
-                }
-                }
-        }
+impl<A> AggregateEventPublisherNats<A>
+where
+    A: Aggregate,
+{
+    pub async fn new(nats_url: String, subject: String, target_events: Vec<String>) -> Result<Self, Box<dyn Error>> {
+        let client = async_nats::connect(&nats_url).await?;
+
+        Ok(AggregateEventPublisherNats {
+            nats_url,
+            subject,
+            target_events,
+            client,
+            _marker: std::marker::PhantomData,
+        })
+    }
+}
 
 impl EventPublisherNats {
-    pub fn load() -> anyhow::Result<Self> {
-    // This loads configuration from the config file. 
+    pub async fn load() -> anyhow::Result<Self> {
+        // This loads configuration from the config file.
         let event_publisher_nats = config().event_publishers.nats.clone().unwrap_or_default();
 
         // If NATS is not enabled, return an empty event publisher.
@@ -56,23 +57,27 @@ impl EventPublisherNats {
             return Ok(EventPublisherNats::default());
         }
 
-       let offer = (!event_publisher_nats.events.offer.is_empty()).then(|| {
-        // Calling our new() constructor
-            AggregateEventPublisherNats::<Offer>::new(
-                event_publisher_nats.nats_client.clone(),
-                event_publisher_nats.subject.clone(),
-                event_publisher_nats
-                    .events
-                    .offer
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
+        let offer = if !event_publisher_nats.events.offer.is_empty() {
+            Some(
+                // Calling our new() constructor to populate the struct.
+                AggregateEventPublisherNats::<Offer>::new(
+                    event_publisher_nats.nats_url.clone(),
+                    event_publisher_nats.subject.clone(),
+                    event_publisher_nats
+                        .events
+                        .offer
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                )
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to create NATS client: {}", e))?,
             )
-        });
-
-        let event_publisher: EventPublisherNats = EventPublisherNats {
-            offer,
+        } else {
+            None
         };
+
+        let event_publisher: EventPublisherNats = EventPublisherNats { offer };
 
         info!("Loaded NATS event publisher: {:?}", event_publisher);
 
@@ -80,72 +85,86 @@ impl EventPublisherNats {
     }
 }
 
-    impl EventPublisher for EventPublisherNats {
-        fn offer(&mut self) -> Option<OfferEventPublisher> {
-            self.offer
-                .take() 
-                .map(|publisher| Box::new(publisher) as OfferEventPublisher)
-        }
+impl EventPublisher for EventPublisherNats {
+    fn offer(&mut self) -> Option<OfferEventPublisher> {
+        self.offer
+            .take()
+            .map(|publisher| Box::new(publisher) as OfferEventPublisher)
     }
+}
 
-    impl<A> Query<A> for AggregateEventPublisherNats<A>
-    // The Query allows us to listen for events from the event store. 
-    where
-        A: Aggregate,
-        { 
-        
-            async fn dispatch(&self, events: &[EventEnvelope<A>]) -> Result<(), Error> {
-                for event in events {
-                    if self.target_events.contains(&event.payload.event_type()) {
-                        match event.payload {
-                            OfferEvent::TxCodeGenerated { offer_id, tx_code, recipient_email } => {
-                                self.dispatch_tx_code_generated(offer_id.clone(), tx_code.clone(), recipient_email.clone()).await?;
-                            }
-                        }
-                            _ => { return Ok(()); }
-                            // For now, ignore other events
-                        }
+#[async_trait]
+impl Query<Offer> for AggregateEventPublisherNats<Offer> {
+    async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<Offer>]) {
+        for event in events {
+            if self.target_events.contains(&event.payload.event_type()) {
+                if let OfferEvent::TxCodeGenerated {
+                    offer_id,
+                    tx_code,
+                    recipient_email,
+                } = &event.payload
+                {
+                    if let Err(e) = self
+                        .dispatch_tx_code_generated(offer_id.clone(), tx_code.clone(), recipient_email.clone())
+                        .await
+                    {
+                        tracing::error!("Failed to dispatch tx code event for aggregate {}: {}", aggregate_id, e);
                     }
                 }
-            
-            }
-impl<A> AggregateEventPublisherNats<A>
-where A: Aggregate,
-{
-                async fn dispatch_tx_code_generated(&self, offer_id, tx_code, recipient_email) -> Result<(), Error> {
-                    let template = "transaction_code";
-                    // Generate unique id for CloudEvent
-                    let event_id = format!("{}-{}", offer_id, Uuid::new_v4());
-
-          // Construct the CloudEvent 
-                 let event = EventBuilderV10::new()
-                .id(&event_id)
-                .source("https://impierce.com/special-offer")
-                .ty("email.command.txcode.generated")
-                .specversion("1.0")
-                .data("application/json", json!({
-                    "recipient_email": recipient_email, 
-                    "template": "transaction_code",
-                    "values": tx_code,
-                }))
-                .build()?;
-
-                    self.nats_client.publish(&self.subject, event).await?;
-                    Ok(())
-                }
-            }
-    
-
-
-        #[cfg(test)]
-        pub mod tests {
-            use super::*; 
-            fn test_generate_event_id() {
-                let offer_id = "hotcakes_123";
-                let event_id = format!("{}-{}", offer_id, Uuid::new_v4());
-                assert!(event_id.starts_with(offer_id));
-
-                println!("Generated event_id: {}", event_id);
             }
         }
-    
+    }
+}
+impl AggregateEventPublisherNats<Offer> {
+    async fn dispatch_tx_code_generated(
+        &self,
+        offer_id: String,
+        tx_code: String,
+        recipient_email: Option<String>,
+    ) -> Result<(), Box<dyn Error>> {
+        // Generate unique id for CloudEvent
+        let event_id = format!("{}-{}", offer_id, Uuid::new_v4());
+
+        // Construct the CloudEvent
+        let event = EventBuilderV10::new()
+            .id(event_id)
+            .source("https://impierce.com/special-offer")
+            .ty("email.command.txcode.generated")
+            .data(
+                "application/json",
+                json!({
+                    "recipient_email": recipient_email,
+                    "template": "transaction_code",
+                    "values": tx_code,
+                }),
+            )
+            .build()?;
+
+        // Convert Cloudevent to NATS bytes format then publish
+        let nats_event = NatsCloudEvent::from_event(event)?;
+
+        let payload = nats_event.payload.into();
+
+        let subject = self.subject.clone();
+
+        self.client.publish(subject, payload).await?;
+
+        info!("Published tx code event to NATS subject: {}", self.subject);
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generate_event_id() {
+        let offer_id = "hotcakes_123";
+        let event_id = format!("{}-{}", offer_id, Uuid::new_v4());
+        assert!(event_id.starts_with(offer_id));
+
+        println!("Generated event_id: {}", event_id);
+    }
+}

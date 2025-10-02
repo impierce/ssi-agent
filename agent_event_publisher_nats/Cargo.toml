@@ -14,11 +14,13 @@ agent_verification = { path = "../agent_verification" }
 
 
 async-nats = "0.42"
+async-trait.workspace = true
 anyhow.workspace = true
-cloudevents-sdk = "0.8"
+cloudevents-sdk = { version = "0.8", features = ["nats"] }
 cqrs-es.workspace = true
 futures.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
+tokio.workspace = true
 uuid.workspace = true

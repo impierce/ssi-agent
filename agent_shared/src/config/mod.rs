@@ -556,6 +556,7 @@ pub struct Display {
 #[derive(Debug, Deserialize, Clone, Serialize, Default)]
 pub struct EventPublishers {
     pub http: Option<EventPublisherHttp>,
+    pub nats: Option<EventPublisherNats>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
@@ -564,6 +565,14 @@ pub struct EventPublisherHttp {
     pub target_url: String,
     #[serde(with = "http_serde::option::header_map", default)]
     pub headers: Option<reqwest::header::HeaderMap>,
+    pub events: Events,
+}
+
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
+pub struct EventPublisherNats {
+    pub enabled: bool,
+    pub nats_url: String,
+    pub subject: String,
     pub events: Events,
 }
 
@@ -632,6 +641,7 @@ pub enum OfferEvent {
     TokenResponseCreated,
     CredentialRequestVerified,
     CredentialResponseCreated,
+    TxCodeGenerated,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
