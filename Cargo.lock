@@ -178,12 +178,9 @@ dependencies = [
 name = "agent_event_publisher_nats"
 version = "0.1.0"
 dependencies = [
- "agent_holder",
- "agent_identity",
  "agent_issuance",
  "agent_shared",
  "agent_store",
- "agent_verification",
  "anyhow",
  "async-nats",
  "async-trait",
