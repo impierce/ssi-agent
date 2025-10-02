@@ -38,7 +38,8 @@ pub(crate) async fn offers(
 
     let credential_configurations = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
         .await?
-        .map(|server_config_view| server_config_view.credential_configurations) // Unreachable error
+        .map(|server_config_view| server_config_view.credential_configurations)
+        // Unreachable error
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
     let persisted_credential_configuration_ids = credential_configurations.keys().collect::<Vec<_>>();
@@ -60,7 +61,7 @@ pub(crate) async fn offers(
         .find_map(|credential_configuration_id| {
             credential_configurations
                 .get(credential_configuration_id)
-                // TODO: find a way to bind the `authentication` to the Offer somehow
+                // TODO: find a way to bind the `authorization` to the Offer somehow
                 .and_then(|(_, _, authorization)| {
                     if authorization.pre_authorized {
                         authorization.tx_code_constraints.clone()
