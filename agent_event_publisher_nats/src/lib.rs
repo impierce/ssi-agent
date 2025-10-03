@@ -123,7 +123,7 @@ impl AggregateEventPublisherNats<Offer> {
         tx_code: String,
         recipient_email: Option<String>,
     ) -> Result<(), Box<dyn Error>> {
-        // Generate unique id for CloudEvent
+        // Generate unique id for each CloudEvent
         let event_id = format!("{}-{}", offer_id, Uuid::new_v4());
 
         // Construct the CloudEvent
@@ -145,7 +145,7 @@ impl AggregateEventPublisherNats<Offer> {
             )
             .build()?;
 
-        // Convert Cloudevent into a format suitable for NATS
+        // Convert Cloudevent into a suitable NATS message format
         let nats_event = NatsCloudEvent::from_event(event)?;
 
         println!(

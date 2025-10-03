@@ -54,9 +54,9 @@ When a `TxCodeGenerated` event occurs, it publishes a CloudEvent like:
 
 ## Email Command Format
 
-**If NATS is being used to send emails with our email delivery service**,
+**If NATS is being used to send emails with our internal email delivery service**,
 
-it will expect to receive this enum, and events must be wrapped as such. See example published event above.
+it will expect to receive this enum, and data must must be wrapped as such. See the example published event `TxCodeGenerated` above.
 
 ```rust
 pub enum EmailCommand {
