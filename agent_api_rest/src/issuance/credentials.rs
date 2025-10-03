@@ -7,7 +7,6 @@ use agent_issuance::{
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
-use agent_shared::config::Authorization;
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
