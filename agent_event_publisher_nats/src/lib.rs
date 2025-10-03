@@ -11,7 +11,7 @@ use std::error::Error;
 use tracing::info;
 use uuid::Uuid;
 
-// This struct holds all the different aggregate event publishers. For now it only has Offer,
+// This struct holds all the different aggregate event publishers. For now it only contains Offer,
 // but in the future it could house others like Credential, Identity, etc.
 #[derive(Default, Debug)]
 pub struct EventPublisherNats {
@@ -134,9 +134,13 @@ impl AggregateEventPublisherNats<Offer> {
             .data(
                 "application/json",
                 json!({
-                    "recipient_email": recipient_email,
-                    "template": "transaction_code",
-                    "values": tx_code,
+                    "SendEmail": {
+                        "recipient_email": recipient_email,
+                        "template": "transaction_code",
+                        "values": {
+                            "transaction_code": tx_code
+                        }
+                    }
                 }),
             )
             .build()?;
@@ -183,14 +187,18 @@ pub mod tests {
             .data(
                 "application/json",
                 json!({
-                    "recipient_email": "andres@rocarey.com",
-                    "template": "transaction_code",
-                    "values": "997755",
+                    "SendEmail": {
+                        "recipient_email": "andres@rocarey.com",
+                        "template": "transaction_code",
+                        "values": {
+                            "transaction_code": "997755"
+                        }
+                    }
                 }),
             )
             .build()
             .unwrap();
-
+        // Wrap the CloudEvent into a NATS message format
         let nats_event = NatsCloudEvent::from_event(event).unwrap();
 
         println!("NATS Payload:");
@@ -225,7 +233,7 @@ pub mod tests {
                     .await;
 
                 match result {
-                    Ok(_) => println!("Message published successfully and is now on its way to thy client! "),
+                    Ok(_) => println!("Message published successfully and is now on its way to the client! "),
                     Err(e) => println!("Publishing failed: {}", e),
                 }
             }

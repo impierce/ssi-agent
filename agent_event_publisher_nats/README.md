@@ -1,11 +1,10 @@
 # agent_event_publisher_nats
 
 A simple NATS event publisher for the SSI Agent.
-To make use of this publisher you need to configure it by adding the `nats` object to your configuration file.
 
 ## Configuration
 
-Add the `nats` configuration to your `config.yaml`:
+To make use of this publisher you need to configure it by adding the `nats` object to your configuration file.
 
 ```yaml
 event_publishers:
@@ -28,7 +27,7 @@ use agent_event_publisher_nats::EventPublisherNats;
 let nats_publisher = EventPublisherNats::load().await?;
 ```
 
-The publisher implements the `Query<Offer>` trait and will automatically publish events when they occur.
+The publisher currently implements the `Query<Offer>` trait and will automatically publish those events when they occur.
 
 ### 3. Example published event
 
@@ -42,16 +41,36 @@ When a `TxCodeGenerated` event occurs, it publishes a CloudEvent like:
   "id": "offer-123-uuid",
   "datacontenttype": "application/json",
   "data": {
-    "recipient_email": "user@example.com",
-    "template": "transaction_code",
-    "values": "ABC123"
+    "SendEmail": {
+      "recipient_email": "user@example.com",
+      "template": "transaction_code",
+      "values": {
+        "transaction_code": "ABC123"
+      }
+    }
   }
+}
+```
+
+## Email Command Format
+
+**If NATS is being used to send emails with our email delivery service**,
+
+it will expect to receive this enum, and events must be wrapped as such. See example published event above.
+
+```rust
+pub enum EmailCommand {
+    SendEmail {
+        recipient_email: String,
+        template: String,
+        values: serde_json::Value,
+    },
 }
 ```
 
 ### Available events
 
-Currently, the nats publisher only listens for and publishes in response to one event:
+Currently, the nats publisher only listens to one event:
 
 #### `offer`
 
