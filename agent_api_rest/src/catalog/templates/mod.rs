@@ -65,7 +65,7 @@ pub(crate) async fn get_templates(
             let filtered_templates: Vec<_> = all_templates_view
                 .templates
                 .into_values()
-                .filter(|_template| 
+                .filter(|_template|
                     // TODO: Apply filtering logic based on request parameters
                     true)
                 .collect();
