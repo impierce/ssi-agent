@@ -1,4 +1,4 @@
-use agent_catalogue::template::aggregate::Template;
+use agent_catalog::template::aggregate::Template;
 use agent_holder::presentation::aggregate::Presentation;
 use agent_identity::{
     connection::aggregate::Connection, document::aggregate::Document, profile::aggregate::Profile,
@@ -31,7 +31,7 @@ pub struct EventPublisherHttp {
     pub profile: Option<AggregateEventPublisherHttp<Profile>>,
     pub service: Option<AggregateEventPublisherHttp<Service>>,
 
-    // Catalogue
+    // Catalog
     pub template: Option<AggregateEventPublisherHttp<Template>>,
 
     // Issuance

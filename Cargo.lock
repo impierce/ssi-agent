@@ -74,7 +74,7 @@ name = "agent_api_rest"
 version = "0.1.0"
 dependencies = [
  "agent_api_rest",
- "agent_catalogue",
+ "agent_catalog",
  "agent_event_publisher_http",
  "agent_holder",
  "agent_identity",
@@ -151,10 +151,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "agent_catalogue"
+name = "agent_catalog"
 version = "0.1.0"
 dependencies = [
- "agent_catalogue",
+ "agent_catalog",
  "agent_shared",
  "async-std",
  "async-trait",
@@ -172,7 +172,7 @@ dependencies = [
 name = "agent_event_publisher_http"
 version = "0.1.0"
 dependencies = [
- "agent_catalogue",
+ "agent_catalog",
  "agent_event_publisher_http",
  "agent_holder",
  "agent_identity",
@@ -402,7 +402,7 @@ dependencies = [
 name = "agent_store"
 version = "0.1.0"
 dependencies = [
- "agent_catalogue",
+ "agent_catalog",
  "agent_holder",
  "agent_identity",
  "agent_issuance",

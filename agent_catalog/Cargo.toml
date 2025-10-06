@@ -1,5 +1,5 @@
 [package]
-name = "agent_catalogue"
+name = "agent_catalog"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -19,7 +19,7 @@ tracing.workspace = true
 rstest = { workspace = true, optional = true }
 
 [dev-dependencies]
-agent_catalogue = { path = ".", features = ["test_utils"] }
+agent_catalog = { path = ".", features = ["test_utils"] }
 
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 serial_test = "3.0"
