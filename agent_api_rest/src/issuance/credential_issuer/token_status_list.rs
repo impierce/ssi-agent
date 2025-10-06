@@ -51,6 +51,8 @@ pub mod tests {
     use crate::issuance::router;
     use tower::Service as _;
 
+    /// This test calls the token status list endpoint which in turn calls the function above.
+    /// The remainder of the test breaks down the Token Status List response in various steps and checks these steps one by one.
     #[tokio::test]
     pub async fn test_token_status_list() {
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;

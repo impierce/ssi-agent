@@ -16,6 +16,11 @@ use thiserror::Error;
 
 use crate::{credential::aggregate::CredentialStatus, state::IssuanceState};
 
+/// This function creates a gzip compressed JWT token containing a status list for credentials.
+/// The status list is created just-in-time based on a slice of the credentials queried from the store.
+/// This slice is in turn derived from the status list number specified in the last path segment of the url used to call the endpoint.
+/// The status list is then filled up to 30% with random values to enhance privacy and security.
+/// At last the remaining steps are executed according to the OAuth TSL specification to encode and compress the Status List Token.
 pub async fn create_gzip_status_list_jwt_token(
     status_list_number: usize,
     state: IssuanceState,
