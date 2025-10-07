@@ -395,8 +395,12 @@ pub mod tests {
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "offerId": received_offer_id
-                        }))
+                                "offerId": received_offer_id,
+                                "credentialConfigurationIds": ["001"],
+                                "deliveryOptions": {
+                                          "recipientEmail": null
+                        }
+                            }))
                         .unwrap(),
                     ))
                     .unwrap(),

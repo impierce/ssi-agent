@@ -155,6 +155,9 @@ pub mod tests {
                         serde_json::to_vec(&json!({
                             "offerId": OFFER_ID,
                             "credentialConfigurationIds": ["001"],
+                            "deliveryOptions": {
+                                "recipient_email": null
+                            }
                         }))
                         .unwrap(),
                     ))
