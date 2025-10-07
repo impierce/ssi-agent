@@ -419,6 +419,7 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[allow(clippy::too_many_arguments)]
     async fn test_create_offer(
         offer_id: String,
         grant_types: Vec<GrantType>,
