@@ -1,4 +1,4 @@
-use agent_issuance::{offer::aggregate::Offer, offer::event::OfferEvent};
+use agent_issuance::offer::aggregate::Offer;
 use agent_shared::config::config;
 use agent_store::{EventPublisher, OfferEventPublisher};
 use async_nats::Client;
@@ -6,7 +6,6 @@ use async_trait::async_trait;
 use cloudevents::binding::nats::NatsCloudEvent;
 use cloudevents::{EventBuilder, EventBuilderV10};
 use cqrs_es::{Aggregate, DomainEvent, EventEnvelope, Query};
-use serde_json::json;
 use std::error::Error;
 use tracing::info;
 use uuid::Uuid;
@@ -94,62 +93,56 @@ impl EventPublisher for EventPublisherNats {
 }
 
 #[async_trait]
-impl Query<Offer> for AggregateEventPublisherNats<Offer> {
-    async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<Offer>]) {
+impl<A> Query<A> for AggregateEventPublisherNats<A>
+where
+    A: Aggregate,
+    A::Event: serde::Serialize + DomainEvent,
+{
+    async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<A>]) {
         for event in events {
             if self.target_events.contains(&event.payload.event_type()) {
-                if let OfferEvent::TxCodeGenerated {
-                    offer_id,
-                    tx_code,
-                    recipient_email,
-                } = &event.payload
-                {
-                    if let Err(e) = self
-                        .dispatch_tx_code_generated(offer_id.clone(), tx_code.clone(), recipient_email.clone())
-                        .await
-                    {
-                        tracing::error!("Failed to dispatch tx code event for aggregate {}: {}", aggregate_id, e);
-                    }
+                if let Err(e) = self.dispatch_event(aggregate_id, &event.payload).await {
+                    tracing::error!(
+                        "Failed to dispatch {} event for aggregate {}: {}",
+                        event.payload.event_type(),
+                        aggregate_id,
+                        e
+                    );
                 }
             }
         }
     }
 }
 
-impl AggregateEventPublisherNats<Offer> {
-    async fn dispatch_tx_code_generated(
-        &self,
-        offer_id: String,
-        tx_code: String,
-        recipient_email: Option<String>,
-    ) -> Result<(), Box<dyn Error>> {
+impl<A> AggregateEventPublisherNats<A>
+where
+    A: Aggregate,
+    A::Event: serde::Serialize,
+{
+    async fn dispatch_event(&self, aggregate_id: &str, event: &A::Event) -> Result<(), Box<dyn Error>>
+    where
+        A::Event: DomainEvent,
+    {
         // Generate unique id for each CloudEvent
-        let event_id = format!("{}-{}", offer_id, Uuid::new_v4());
+        let event_id = format!("{}-{}", aggregate_id, Uuid::new_v4());
+        let event_type = event.event_type();
+        let event_source = "https://test.ssi-agent.example.org".to_string();
 
         // Construct the CloudEvent
-        let event = EventBuilderV10::new()
+        let cloud_event = EventBuilderV10::new()
             .id(event_id)
-            .source("https://issuer.impierce.com/oid4vci/issuance-service")
-            .ty("email.command.txcode.generated")
-            .data(
-                "application/json",
-                json!({
-                    "SendEmail": {
-                        "recipient_email": recipient_email,
-                        "template": "transaction_code",
-                        "values": {
-                            "transaction_code": tx_code
-                        }
-                    }
-                }),
-            )
+            .source(event_source)
+            .ty(format!("offer.event.{}", event_type.to_lowercase()))
+            .data("application/json", serde_json::to_value(event)?)
             .build()?;
 
         // Convert Cloudevent into a suitable NATS message format
-        let nats_event = NatsCloudEvent::from_event(event)?;
+        let nats_event = NatsCloudEvent::from_event(cloud_event)?;
 
         println!(
-            "Publishing to NATS subject '{}': {}",
+            "Publishing {} for aggregate_id {} to NATS subject '{}': {}",
+            event_type,
+            aggregate_id,
             self.subject,
             String::from_utf8_lossy(&nats_event.payload)
         );
@@ -167,14 +160,15 @@ impl AggregateEventPublisherNats<Offer> {
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use agent_issuance::offer::aggregate::DeliveryOptions;
+    use agent_issuance::offer::event::OfferEvent;
+    use serde_json::json;
 
     #[test]
-    fn test_generate_event_id() {
-        let offer_id = "offer-123";
-        let event_id = format!("{}-{}", offer_id, Uuid::new_v4());
-        assert!(event_id.starts_with(offer_id));
-
-        println!("Generated event_id: {}", event_id);
+    fn generate_test_event_id() {
+        let aggregate_id = "aggregate-12345";
+        let event_id = format!("{}-{}", aggregate_id, Uuid::new_v4());
+        println!("Event-ID: {}", event_id);
     }
 
     #[tokio::test]
@@ -183,12 +177,14 @@ pub mod tests {
         let event = EventBuilderV10::new()
             .id("test-123")
             .source("https://impierce.com/offer")
-            .ty("email.command.txcode.generated")
+            .ty("email.command.txcodegenerated")
             .data(
                 "application/json",
                 json!({
-                    "SendEmail": {
-                        "recipient_email": "andres@rocarey.com",
+                    "TxCodeGenerated": {
+                        "delivery_options": {
+                            "recipient_email": "andres@rocarey.com"
+                        },
                         "template": "transaction_code",
                         "values": {
                             "transaction_code": "997755"
@@ -198,6 +194,7 @@ pub mod tests {
             )
             .build()
             .unwrap();
+
         // Wrap the CloudEvent into a NATS message format
         let nats_event = NatsCloudEvent::from_event(event).unwrap();
 
@@ -212,6 +209,8 @@ pub mod tests {
         // You can run one with Docker: `docker run -p 4222:4222 -ti nats:latest` in your terminal
         // before running this test.
 
+        std::env::set_var("UNICORE_CONFIG_PATH", "../agent_application/example.config.yaml");
+
         let publisher = AggregateEventPublisherNats::<Offer>::new(
             "nats://localhost:4222".to_string(),
             "test.commands".to_string(),
@@ -224,13 +223,15 @@ pub mod tests {
                 println!("Connection to NATS successful");
 
                 // Test publishing
-                let result = p
-                    .dispatch_tx_code_generated(
-                        "offer-123".to_string(),
-                        "12345".to_string(),
-                        Some("sergey@kuryokhin.com".to_string()),
-                    )
-                    .await;
+                let test_event = OfferEvent::TxCodeGenerated {
+                    offer_id: "offer-123".to_string(),
+                    tx_code: "12345".to_string(),
+                    delivery_options: DeliveryOptions {
+                        recipient_email: Some("sergey@kuryokhin.com".to_string()),
+                    },
+                };
+
+                let result = p.dispatch_event("offer-123", &test_event).await;
 
                 match result {
                     Ok(_) => println!("Message published successfully and is now on its way to the client! "),

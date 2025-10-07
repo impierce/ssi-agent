@@ -376,7 +376,10 @@ pub mod tests {
                                     }
                             }},
                             "credentialConfigurationId": "001",
-                            "expiresAt": "never"
+                            "expiresAt": "never",
+                            "deliveryOptions": {
+                                "recipientEmail": null
+                            }
                         }))
                         .unwrap(),
                     ))

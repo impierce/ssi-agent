@@ -19,7 +19,7 @@ impl View<Offer> for Offer {
                 credential_offer,
                 credential_offer_uri,
                 tx_code,
-                recipient_email,
+                delivery_options,
             } => {
                 self.offer_id.clone_from(offer_id);
                 self.grant_types.clone_from(grant_types);
@@ -29,7 +29,7 @@ impl View<Offer> for Offer {
                 self.credential_offer.replace(credential_offer.clone());
                 self.credential_offer_uri.replace(credential_offer_uri.clone());
                 self.tx_code.clone_from(tx_code);
-                self.recipient_email.clone_from(recipient_email);
+                self.delivery_options.clone_from(delivery_options);
             }
             CredentialsAdded {
                 offer_id,
@@ -81,11 +81,11 @@ impl View<Offer> for Offer {
             TxCodeGenerated {
                 offer_id,
                 tx_code,
-                recipient_email,
+                delivery_options,
             } => {
                 self.offer_id.clone_from(offer_id);
                 self.tx_code.replace(tx_code.clone());
-                self.recipient_email.clone_from(recipient_email);
+                self.delivery_options.clone_from(delivery_options);
             }
         }
     }

@@ -1,4 +1,5 @@
 use super::aggregate::Status;
+use crate::offer::aggregate::DeliveryOptions;
 use cqrs_es::DomainEvent;
 use oid4vci::{
     credential_offer::{CredentialOffer, GrantType},
@@ -20,7 +21,7 @@ pub enum OfferEvent {
         access_token: String,
         status: Status,
         tx_code: Option<String>,
-        recipient_email: Option<String>,
+        delivery_options: DeliveryOptions,
     },
     CredentialsAdded {
         offer_id: String,
@@ -53,7 +54,7 @@ pub enum OfferEvent {
     TxCodeGenerated {
         offer_id: String,
         tx_code: String,
-        recipient_email: Option<String>,
+        delivery_options: DeliveryOptions,
     },
 }
 

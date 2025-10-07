@@ -41,30 +41,16 @@ When a `TxCodeGenerated` event occurs, it publishes a CloudEvent like:
   "id": "offer-123-uuid",
   "datacontenttype": "application/json",
   "data": {
-    "SendEmail": {
-      "recipient_email": "user@example.com",
-      "template": "transaction_code",
-      "values": {
-        "transaction_code": "ABC123"
+    "TxCodeGenerated": {
+      "offer_id": "12345"
+      "tx_code": "1234",
+      "delivery_options": {
+        "recipient_email": "user@example.com"
+      },
+
       }
     }
   }
-}
-```
-
-## Email Command Format
-
-**If NATS is being used to send emails with our internal email delivery service**,
-
-it will expect to receive this enum, and data must must be wrapped as such. See the example published event `TxCodeGenerated` above.
-
-```rust
-pub enum EmailCommand {
-    SendEmail {
-        recipient_email: String,
-        template: String,
-        values: serde_json::Value,
-    },
 }
 ```
 

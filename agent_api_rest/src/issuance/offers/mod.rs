@@ -5,7 +5,7 @@ use crate::{
     handlers::{command_handler, query_handler},
 };
 use agent_issuance::{
-    offer::command::OfferCommand,
+    offer::{aggregate::DeliveryOptions, command::OfferCommand},
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
 use axum::{
@@ -24,7 +24,7 @@ pub struct OffersEndpointRequest {
     pub offer_id: String,
     #[serde(default)]
     pub credential_configuration_ids: Vec<String>,
-    pub recipient_email: Option<String>,
+    pub delivery_options: DeliveryOptions,
 }
 
 #[axum_macros::debug_handler]
@@ -33,7 +33,7 @@ pub(crate) async fn offers(
     Json(OffersEndpointRequest {
         offer_id,
         credential_configuration_ids,
-        recipient_email,
+        delivery_options,
     }): Json<OffersEndpointRequest>,
 ) -> Result<Response, ApiError> {
     // Check if the credential configuration IDs are valid.
@@ -80,7 +80,7 @@ pub(crate) async fn offers(
             credential_configuration_ids,
             grant_types: vec![GrantType::PreAuthorizedCode],
             tx_code_constraints,
-            recipient_email: recipient_email.clone(),
+            delivery_options,
         };
 
         command_handler(&offer_id, &state.command.offer, command).await?

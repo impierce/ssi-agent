@@ -143,7 +143,7 @@ pub mod tests {
     };
     use agent_event_publisher_http::EventPublisherHttp;
     use agent_issuance::credential::aggregate::CredentialExpiry;
-    use agent_issuance::{offer::event::OfferEvent, state::initialize};
+    use agent_issuance::{offer::aggregate::DeliveryOptions, offer::event::OfferEvent, state::initialize};
     use agent_secret_manager::service::Service;
     use agent_shared::config::{set_config, Events};
     use agent_store::{in_memory, EventPublisher};
@@ -207,7 +207,7 @@ pub mod tests {
                                         is_signed: true,
                                         credential_configuration_id: CREDENTIAL_CONFIGURATION_ID.to_string(),
                                         expires_at: CredentialExpiry::Never,
-                                        recipient_email: None,
+                                        delivery_options: DeliveryOptions { recipient_email: None },
                                     }
                                 } else {
                                     // ...or else, submitting the data that will be signed inside `UniCore`.
@@ -223,7 +223,7 @@ pub mod tests {
                                         is_signed: false,
                                         credential_configuration_id: CREDENTIAL_CONFIGURATION_ID.to_string(),
                                         expires_at: CredentialExpiry::Never,
-                                        recipient_email: None,
+                                        delivery_options: DeliveryOptions { recipient_email: None },
                                     }
                                 };
 
