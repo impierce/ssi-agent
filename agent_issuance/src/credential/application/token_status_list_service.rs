@@ -143,7 +143,7 @@ pub enum TokenStatusListError {
     StatusTypeError(OAuthTSLError),
     #[error("Invalid status size: {0:?}")]
     InvalidStatusSize(OAuthTSLError),
-    #[error("Failed to parse the sub url for the status list")]
+    #[error("Failed to parse the `sub` url for the status list")]
     SubUrlParsingError,
     #[error("Failed to encode the status list token as JWT.")]
     JwtEncodeError,
