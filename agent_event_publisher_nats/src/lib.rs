@@ -126,9 +126,9 @@ where
         // Generate unique id for each CloudEvent
         let event_id = format!("{}-{}", aggregate_id, Uuid::new_v4());
         let event_type = event.event_type();
-        let event_source = "https://test.ssi-agent.example.org".to_string();
 
-        // let event_source = config().application_url.to_string();
+        // Use application URL from the configuration as the event source
+        let event_source = config().application_url.to_string();
 
         // Construct the CloudEvent
         let cloud_event = EventBuilderV10::new()
@@ -184,13 +184,11 @@ pub mod tests {
                 "application/json",
                 json!({
                     "TxCodeGenerated": {
+                        "offer_id": "12345",
+                        "tx_code": "1234",
                         "delivery_options": {
                             "recipient_email": "andres@rocarey.com"
                         },
-                        "template": "transaction_code",
-                        "values": {
-                            "transaction_code": "997755"
-                        }
                     }
                 }),
             )
@@ -210,9 +208,6 @@ pub mod tests {
         // For this to run successfully, you should have a NATS server running locally.
         // You can run one with Docker: `docker run -p 4222:4222 -ti nats:latest` in your terminal
         // before running this test.
-
-        // std::env::set_var("UNICORE_CONFIG_PATH", "../agent_application/example.config.yaml");
-
         let publisher = AggregateEventPublisherNats::<Offer>::new(
             "nats://localhost:4222".to_string(),
             "test.commands".to_string(),
