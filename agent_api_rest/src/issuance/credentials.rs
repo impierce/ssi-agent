@@ -43,6 +43,7 @@ pub struct CredentialsEndpointRequest {
     pub is_signed: bool,
     pub credential_configuration_id: String,
     pub expires_at: CredentialExpiry,
+    #[serde(default)]
     pub delivery_options: DeliveryOptions,
 }
 
@@ -301,9 +302,6 @@ pub mod tests {
                             },
                             "credentialConfigurationId": CREDENTIAL_CONFIGURATION_ID,
                             "expiresAt": "never",
-                            "deliveryOptions": {
-                                "recipientEmail": null
-                            }
                         }))
                         .unwrap(),
                     ))
