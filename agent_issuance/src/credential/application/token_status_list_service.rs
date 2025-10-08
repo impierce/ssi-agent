@@ -97,7 +97,7 @@ impl TokenStatusListService {
         let mut sub_url = config().ietf_oauth_token_status_list_uri.clone();
         sub_url
             .path_segments_mut()
-            .map_err(|_| TokenStatusListError::SubUrlParsingError())?
+            .map_err(|_| TokenStatusListError::SubUrlParsingError)?
             .push(&status_list_number.to_string());
 
         let status_list_claims = StatusListTokenClaims {
@@ -144,7 +144,7 @@ pub enum TokenStatusListError {
     #[error("Invalid status size: {0:?}")]
     InvalidStatusSize(OAuthTSLError),
     #[error("Failed to parse the sub url for the status list")]
-    SubUrlParsingError(),
+    SubUrlParsingError,
     #[error("Failed to encode the status list token as JWT.")]
     JwtEncodeError,
     #[error("Failed to Gzip compress the JWT token.")]
