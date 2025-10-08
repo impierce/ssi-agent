@@ -24,7 +24,6 @@ pub struct OffersEndpointRequest {
     pub offer_id: String,
     #[serde(default)]
     pub credential_configuration_ids: Vec<String>,
-    #[serde(default)]
     pub delivery_options: DeliveryOptions,
 }
 
@@ -156,6 +155,9 @@ pub mod tests {
                         serde_json::to_vec(&json!({
                             "offerId": OFFER_ID,
                             "credentialConfigurationIds": ["001"],
+                            "deliveryOptions": {
+                                "recipient_email": null
+                            }
                         }))
                         .unwrap(),
                     ))
