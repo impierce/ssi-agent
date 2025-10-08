@@ -1,5 +1,5 @@
 use agent_issuance::{
-    credential::application::token_status_list_service::create_gzip_status_list_jwt_token, state::IssuanceState,
+    credential::application::token_status_list_service::TokenStatusListService, state::IssuanceState,
 };
 use axum::{
     extract::{Path, State},
@@ -15,7 +15,9 @@ pub async fn token_status_list(
     State(state): State<IssuanceState>,
     Path(status_list_number): Path<usize>,
 ) -> Result<Response, PublicError> {
-    let compressed_jwt_token = create_gzip_status_list_jwt_token(status_list_number, state)
+    let token_status_list_service = TokenStatusListService {};
+    let compressed_jwt_token = token_status_list_service
+        .create_gzip_status_list_jwt_token(status_list_number, state)
         .await
         .map_err(|_| PublicError::InternalServerError)?;
 
