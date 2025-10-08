@@ -128,6 +128,8 @@ where
         let event_type = event.event_type();
         let event_source = "https://test.ssi-agent.example.org".to_string();
 
+        // let event_source = config().application_url.to_string();
+
         // Construct the CloudEvent
         let cloud_event = EventBuilderV10::new()
             .id(event_id)
@@ -209,7 +211,7 @@ pub mod tests {
         // You can run one with Docker: `docker run -p 4222:4222 -ti nats:latest` in your terminal
         // before running this test.
 
-        std::env::set_var("UNICORE_CONFIG_PATH", "../agent_application/example.config.yaml");
+        // std::env::set_var("UNICORE_CONFIG_PATH", "../agent_application/example.config.yaml");
 
         let publisher = AggregateEventPublisherNats::<Offer>::new(
             "nats://localhost:4222".to_string(),

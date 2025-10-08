@@ -28,26 +28,26 @@ let nats_publisher = EventPublisherNats::load().await?;
 ```
 
 The publisher currently implements the `Query<Offer>` trait and will automatically publish those events when they occur.
+Using example configuration, NATS will publish the event to "email.commands".
 
 ### 3. Example published event
 
-When a `TxCodeGenerated` event occurs, it publishes a CloudEvent like:
+When a `TxCodeGenerated` event occurs, it publishes a CloudEvent to the defined subject.
+For example:
 
 ```json
 {
   "specversion": "1.0",
-  "type": "email.command.txcode.generated",
+  "type": "email.command.txcodegenerated",
   "source": "https://example.com/event",
   "id": "offer-123-uuid",
   "datacontenttype": "application/json",
   "data": {
     "TxCodeGenerated": {
-      "offer_id": "12345"
+      "offer_id": "12345",
       "tx_code": "1234",
       "delivery_options": {
         "recipient_email": "user@example.com"
-      },
-
       }
     }
   }
