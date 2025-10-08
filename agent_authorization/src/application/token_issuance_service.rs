@@ -27,6 +27,16 @@ pub enum TokenIssuanceError {
     InvalidAuthorizationCodeError(String),
     #[error("Missing authorization code")]
     MissingAuthorizationCodeError,
+
+    #[error("Transaction code is missing.")]
+    MissingTxCodeError,
+    #[error("Wrong transaction code provided.")]
+    InvalidTxCodeError,
+    #[error("TxCode not requested but provided.")]
+    UnrequestedTxCodeError,
+    #[error("Pre-Authorized Code is invalid.")]
+    InvalidPreAuthorizedCodeError,
+
     #[error("Missing access token")]
     MissingAccessTokenError,
     #[error("Internal error: {0}")]
@@ -41,21 +51,40 @@ impl TokenIssuanceService {
         issuance_state: &IssuanceState,
         token_request: TokenRequest,
     ) -> Result<TokenResponse, TokenIssuanceError> {
+        use TokenIssuanceError::*;
+
         let (client_id, issuer_state) = match token_request {
             TokenRequest::PreAuthorizedCode {
                 pre_authorized_code,
-                // TODO: Support Transaction Code
-                tx_code: _tx_code,
+                tx_code,
             } => {
-                let issuer_state = query_handler("all_offers", &issuance_state.query.all_offers)
+                let offer = query_handler("all_offers", &issuance_state.query.all_offers)
                     .await
                     .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?
-                    .unwrap_or_default()
-                    .offers
-                    .into_iter()
-                    .find_map(|(offer_id, offer)| {
-                        (offer.pre_authorized_code == pre_authorized_code).then_some(offer_id)
-                    });
+                    .and_then(|all_offers_view| {
+                        all_offers_view
+                            .offers
+                            .into_values()
+                            .find_map(|offer| (offer.pre_authorized_code == pre_authorized_code).then_some(offer))
+                    })
+                    .ok_or(InvalidPreAuthorizedCodeError)?;
+
+                let offer_requires_tx_code = offer.tx_code.is_some();
+
+                match (offer_requires_tx_code, tx_code) {
+                    (true, None) => return Err(MissingTxCodeError),
+                    (false, Some(_provided_tx_code)) => return Err(UnrequestedTxCodeError),
+                    (true, Some(provided_tx_code)) => {
+                        let expected_tx_code = offer.tx_code.as_ref().ok_or(MissingTxCodeError)?;
+
+                        if provided_tx_code != *expected_tx_code {
+                            return Err(InvalidTxCodeError);
+                        }
+                    }
+                    (false, _) => {}
+                }
+
+                let issuer_state = Some(offer.offer_id);
 
                 // TODO: The `client_id` claim in the Pre-Authorized Code request is optional (see https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-15.html#section-6.1-5),
                 // but it is required in the JSON Web Token (JWT) Profile for OAuth 2.0 Access Tokens

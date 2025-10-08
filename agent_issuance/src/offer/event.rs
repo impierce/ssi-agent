@@ -16,6 +16,7 @@ pub enum OfferEvent {
         credential_offer: CredentialOffer,
         credential_offer_uri: CredentialOffer,
         pre_authorized_code: String,
+        tx_code: Option<String>,
         status: Status,
     },
     GrantTypesUpdated {
@@ -23,6 +24,7 @@ pub enum OfferEvent {
         credential_offer: CredentialOffer,
         grant_types: Vec<GrantType>,
         status: Status,
+        tx_code: Option<String>,
     },
     CredentialsAdded {
         offer_id: String,

@@ -17,6 +17,7 @@ impl View<Offer> for Offer {
                 credential_offer,
                 credential_offer_uri,
                 pre_authorized_code,
+                tx_code,
             } => {
                 self.offer_id.clone_from(offer_id);
                 self.grant_types.clone_from(grant_types);
@@ -24,17 +25,20 @@ impl View<Offer> for Offer {
                 self.credential_offer.replace(credential_offer.clone());
                 self.credential_offer_uri.replace(credential_offer_uri.clone());
                 self.pre_authorized_code.clone_from(pre_authorized_code);
+                self.tx_code.clone_from(tx_code);
             }
             GrantTypesUpdated {
                 offer_id,
                 credential_offer,
                 grant_types,
                 status,
+                tx_code,
             } => {
                 self.offer_id.clone_from(offer_id);
                 self.credential_offer.replace(credential_offer.clone());
                 self.grant_types.clone_from(grant_types);
                 self.status.clone_from(status);
+                self.tx_code.clone_from(tx_code);
             }
             CredentialsAdded {
                 offer_id,

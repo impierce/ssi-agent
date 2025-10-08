@@ -21,7 +21,6 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
-# FIXME: make sure to update these `rev`s when https://github.com/impierce/openid4vc/pull/106 is merged.
 siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "8b024cb" }
 oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "8b024cb" }
 oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "8b024cb" }

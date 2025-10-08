@@ -183,6 +183,12 @@ impl Aggregate for Offer {
                     .await
                     .map_err(|_| CredentialIssuerMetadataRetrievalError)?;
 
+                // Get the authorization server metadata.
+                let authorization_server_metadata = wallet
+                    .get_authorization_server_metadata(credential_issuer_url.clone())
+                    .await
+                    .map_err(|_| AuthorizationServerMetadataRetrievalError)?;
+
                 let credential_configurations = self
                     .credential_configurations
                     .as_ref()
@@ -191,6 +197,21 @@ impl Aggregate for Offer {
                 let credentials: Vec<OfferCredential> = match credential_configuration_ids.len() {
                     0 => vec![],
                     1 => {
+                        // Get a nonce if the credential issuer metadata contains a nonce endpoint.
+                        let nonce = if let Some(nonce_endpoint) = &credential_issuer_metadata.nonce_endpoint {
+                            wallet.get_nonce(nonce_endpoint.clone()).await.ok()
+                        } else {
+                            None
+                        };
+
+                        info!("nonce: {nonce:?}");
+
+                        // Determine if anonymous access is supported.
+                        // See: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-15.html#section-8.2.1.1-2.2.2.2
+                        let with_anonymous_access = authorization_server_metadata
+                            .pre_authorized_grant_anonymous_access_supported
+                            .unwrap_or(false);
+
                         let credential_configuration_id = &credential_configuration_ids[0];
 
                         let credential_configuration = credential_configurations
@@ -202,12 +223,10 @@ impl Aggregate for Offer {
                             .get_credential(
                                 credential_issuer_metadata,
                                 &token_response,
-                                // FIXME: implement `nonce`!
-                                None,
+                                nonce,
                                 credential_configuration_id.clone(),
                                 credential_configuration,
-                                // TODO: implement authorization code flow on the holder side.
-                                true,
+                                with_anonymous_access,
                             )
                             .await
                             .map_err(|_| CredentialResponseError)?;

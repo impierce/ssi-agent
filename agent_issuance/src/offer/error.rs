@@ -18,4 +18,12 @@ pub enum OfferError {
     UnsupportedTokenRequestGrantTypeError,
     #[error("Invalid `credential_offer_uri`: {0}")]
     InvalidCredentialOfferUriError(#[source] url::ParseError),
+    #[error("Transaction code is missing.")]
+    MissingTxCodeError,
+    #[error("Wrong transaction code provided.")]
+    InvalidTxCodeError,
+    #[error("TxCode not requested but provided.")]
+    UnrequestedTxCodeError,
+    #[error("Pre-Authorized Code is invalid.")]
+    InvalidPreAuthorizedCodeError,
 }
