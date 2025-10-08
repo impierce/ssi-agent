@@ -111,9 +111,6 @@ impl Aggregate for Offer {
 
                 // If TxCode constraints are provided, generate a transaction code.
                 let tx_code = tx_code_constraints.as_ref().map(generate_tx_code);
-                if tx_code.is_some() && delivery_options.recipient_email.is_none() {
-                    return Err(MissingRecipientEmailError);
-                }
 
                 let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
                     credential_issuer: credential_issuer.clone(),
