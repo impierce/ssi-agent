@@ -87,6 +87,7 @@ impl View<Offer> for Offer {
                 self.tx_code.replace(tx_code.clone());
                 self.delivery_options.clone_from(delivery_options);
             }
+            OfferEmailRequested { .. } => {}
         }
     }
 }

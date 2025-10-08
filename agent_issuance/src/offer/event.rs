@@ -56,6 +56,12 @@ pub enum OfferEvent {
         tx_code: String,
         delivery_options: DeliveryOptions,
     },
+    OfferEmailRequested {
+        offer_id: String,
+        delivery_options: DeliveryOptions,
+        form_url_encoded_credential_offer: String,
+        credential_offer: CredentialOffer,
+    },
 }
 
 impl DomainEvent for OfferEvent {

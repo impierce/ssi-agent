@@ -312,6 +312,8 @@ pub struct ApplicationConfiguration {
     pub iota_node_username: Option<String>,
     #[config(default)]
     pub iota_node_password: Option<String>,
+    #[config(default)]
+    pub offer_delivery: OfferDeliveryConfig,
 }
 
 impl ApplicationConfiguration {
@@ -642,6 +644,12 @@ pub enum OfferEvent {
     CredentialRequestVerified,
     CredentialResponseCreated,
     TxCodeGenerated,
+}
+
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
+pub struct OfferDeliveryConfig {
+    #[serde(default)]
+    pub email_delivery_enabled: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]

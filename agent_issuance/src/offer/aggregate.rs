@@ -140,7 +140,7 @@ impl Aggregate for Offer {
                         offer_id: offer_id.clone(),
                         grant_types,
                         credential_offer_uri,
-                        credential_offer,
+                        credential_offer: credential_offer.clone(),
                         pre_authorized_code,
                         access_token,
                         status: Status::Created,
@@ -149,7 +149,7 @@ impl Aggregate for Offer {
                     },
                     FormUrlEncodedCredentialOfferCreated {
                         offer_id: offer_id.clone(),
-                        form_url_encoded_credential_offer,
+                        form_url_encoded_credential_offer: form_url_encoded_credential_offer.clone(),
                         status: Status::Pending,
                     },
                 ];
@@ -160,6 +160,15 @@ impl Aggregate for Offer {
                         offer_id: offer_id.clone(),
                         tx_code: tx_code_value,
                         delivery_options: delivery_options.clone(),
+                    });
+                }
+
+                if config().offer_delivery.email_delivery_enabled && delivery_options.recipient_email.is_some() {
+                    events.push(OfferEmailRequested {
+                        offer_id: offer_id.clone(),
+                        delivery_options,
+                        form_url_encoded_credential_offer: form_url_encoded_credential_offer.clone(),
+                        credential_offer: credential_offer.clone(),
                     });
                 }
 
@@ -388,6 +397,7 @@ impl Aggregate for Offer {
             TxCodeGenerated { tx_code, .. } => {
                 self.tx_code.replace(tx_code);
             }
+            OfferEmailRequested { .. } => {}
         }
     }
 }
