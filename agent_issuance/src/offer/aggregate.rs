@@ -163,6 +163,7 @@ impl Aggregate for Offer {
                     });
                 }
 
+                // If email delivery is enabled and a recipient email is provided, add an OfferEmailRequested event
                 if config().offer_delivery.email_delivery_enabled && delivery_options.recipient_email.is_some() {
                     events.push(OfferEmailRequested {
                         offer_id: offer_id.clone(),
