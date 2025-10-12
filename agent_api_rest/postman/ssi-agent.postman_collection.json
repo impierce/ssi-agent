@@ -289,7 +289,7 @@
 					"response": []
 				},
 				{
-					"name": "Create Offer with Pre-Authorized Code Grant Type",
+					"name": "offers",
 					"event": [
 						{
 							"listen": "test",
