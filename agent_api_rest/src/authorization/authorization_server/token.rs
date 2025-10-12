@@ -14,12 +14,9 @@ use oid4vci::token_request::TokenRequest;
 pub(crate) async fn token(
     State((authorization_state, issuance_state)): State<(AuthorizationState, IssuanceState)>,
     Form(token_request): Form<TokenRequest>,
-    // TODO: implement official oid4vci error response. This TODO is also in the `credential` endpoint.
 ) -> Result<Response, PublicError> {
-    let token_response = TokenIssuanceService::issue_token(&authorization_state, &issuance_state, token_request)
-        .await
-        // TODO: implement proper error handling
-        .map_err(|_err| PublicError::InternalServerError)?;
+    let token_response =
+        TokenIssuanceService::issue_token(&authorization_state, &issuance_state, token_request).await?;
 
     Ok((StatusCode::OK, Json(token_response)).into_response())
 }

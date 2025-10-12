@@ -18,7 +18,6 @@ use tracing::warn;
 
 const PLACEHOLDER_CLIENT_ID: &str = "client_id";
 
-// TODO: improve error handling
 #[derive(Debug, Error)]
 pub enum TokenIssuanceError {
     #[error("Invalid client ID")]

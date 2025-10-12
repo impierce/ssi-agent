@@ -1,5 +1,7 @@
 pub mod authorization_server;
 
+pub mod error;
+
 use crate::authorization::authorization_server::consent::{get_consent, post_consent};
 use crate::API_VERSION;
 use agent_authorization::state::AuthorizationState;
