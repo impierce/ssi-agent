@@ -129,51 +129,6 @@ impl Aggregate for Offer {
                     },
                 ])
             }
-            UpdateGrantTypes { offer_id, grant_types } => {
-                let mut credential_offer = self
-                    .credential_offer
-                    .clone()
-                    .ok_or_else(|| MissingCredentialOfferError)?;
-
-                if let CredentialOffer::CredentialOffer(credential_offer) = &mut credential_offer {
-                    credential_offer.grants = Some(Grants {
-                        authorization_code: grant_types.contains(&GrantType::AuthorizationCode).then(|| {
-                            AuthorizationCode {
-                                issuer_state: Some(offer_id.clone()),
-                                authorization_server: None,
-                            }
-                        }),
-                        pre_authorized_code: grant_types.contains(&GrantType::PreAuthorizedCode).then(|| {
-                            PreAuthorizedCode {
-                                pre_authorized_code: self.pre_authorized_code.clone(),
-                                ..Default::default()
-                            }
-                        }),
-                    });
-                } else {
-                    unreachable!("`credential_offer` is always a CredentialOffer::CredentialOffer");
-                }
-
-                let mut events = vec![GrantTypesUpdated {
-                    offer_id,
-                    credential_offer: credential_offer.clone(),
-                    grant_types,
-                    tx_code: self.tx_code.clone(),
-                    status: self.status.clone(),
-                }];
-
-                if config().credential_offer_by_value_enabled {
-                    let form_url_encoded_credential_offer = credential_offer.to_string();
-
-                    events.push(FormUrlEncodedCredentialOfferCreated {
-                        offer_id: self.offer_id.clone(),
-                        form_url_encoded_credential_offer,
-                        status: self.status.clone(),
-                    });
-                }
-
-                Ok(events)
-            }
             AddCredentials {
                 offer_id,
                 credential_ids,
@@ -316,19 +271,6 @@ impl Aggregate for Offer {
                 self.credential_offer.replace(credential_offer);
                 self.credential_offer_uri.replace(credential_offer_uri);
                 self.pre_authorized_code = pre_authorized_code;
-                self.status = status;
-                self.tx_code = tx_code;
-            }
-            GrantTypesUpdated {
-                offer_id,
-                credential_offer,
-                grant_types,
-                tx_code,
-                status,
-            } => {
-                self.offer_id = offer_id;
-                self.credential_offer.replace(credential_offer);
-                self.grant_types = grant_types;
                 self.status = status;
                 self.tx_code = tx_code;
             }

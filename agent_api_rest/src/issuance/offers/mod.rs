@@ -76,21 +76,16 @@ pub(crate) async fn offers(
     }];
 
     // Create an offer if it does not exist yet.
-    let command = if query_handler(&offer_id, &state.query.offer).await?.is_none() {
-        OfferCommand::CreateCredentialOffer {
+    if query_handler(&offer_id, &state.query.offer).await?.is_none() {
+        let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
             credential_configuration_ids,
             grant_types,
             tx_code_constraints,
-        }
-    } else {
-        OfferCommand::UpdateGrantTypes {
-            offer_id: offer_id.clone(),
-            grant_types,
-        }
-    };
+        };
 
-    command_handler(&offer_id, &state.command.offer, command).await?;
+        command_handler(&offer_id, &state.command.offer, command).await?;
+    }
 
     query_handler(&offer_id, &state.query.offer)
         .await?
@@ -186,7 +181,10 @@ pub mod tests {
 
         match CredentialOffer::from_str(&body).unwrap() {
             CredentialOffer::CredentialOffer(credential_offer) => {
-                assert_eq!(credential_offer.credential_configuration_ids, vec!["001".to_string()]);
+                assert_eq!(
+                    credential_offer.credential_configuration_ids,
+                    vec![credential_configuration_id.to_string()]
+                );
 
                 let CredentialOfferParameters {
                     grants:
@@ -225,7 +223,7 @@ pub mod tests {
 
         let mut app = router(issuance_state);
 
-        credentials(&mut app).await;
+        credentials(&mut app, "001").await;
         let (_authorization_code, _pre_authorized_code) = offers(&mut app, "001").await.unwrap();
     }
 
@@ -239,7 +237,7 @@ pub mod tests {
 
         let mut app = router(issuance_state);
 
-        credentials(&mut app).await;
+        credentials(&mut app, "001").await;
         let none = offers(&mut app, "001").await;
 
         // When `credential_offer_by_value_enabled` is false, we expect no grants to be returned from the `offers` test function.

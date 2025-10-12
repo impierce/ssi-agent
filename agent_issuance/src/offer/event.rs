@@ -19,13 +19,6 @@ pub enum OfferEvent {
         status: Status,
         tx_code: Option<String>,
     },
-    GrantTypesUpdated {
-        offer_id: String,
-        credential_offer: CredentialOffer,
-        grant_types: Vec<GrantType>,
-        status: Status,
-        tx_code: Option<String>,
-    },
     CredentialsAdded {
         offer_id: String,
         credential_ids: Vec<String>,
