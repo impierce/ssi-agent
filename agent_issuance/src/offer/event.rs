@@ -16,8 +16,8 @@ pub enum OfferEvent {
         credential_offer: CredentialOffer,
         credential_offer_uri: CredentialOffer,
         pre_authorized_code: String,
-        tx_code: Option<String>,
         status: Status,
+        tx_code: Option<String>,
     },
     GrantTypesUpdated {
         offer_id: String,

@@ -308,16 +308,16 @@ impl Aggregate for Offer {
                 credential_offer,
                 credential_offer_uri,
                 pre_authorized_code,
-                tx_code,
                 status,
+                tx_code,
             } => {
                 self.offer_id = offer_id;
                 self.grant_types = grant_types;
                 self.credential_offer.replace(credential_offer);
                 self.credential_offer_uri.replace(credential_offer_uri);
                 self.pre_authorized_code = pre_authorized_code;
-                self.tx_code = tx_code;
                 self.status = status;
+                self.tx_code = tx_code;
             }
             GrantTypesUpdated {
                 offer_id,
