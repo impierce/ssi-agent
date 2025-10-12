@@ -150,16 +150,21 @@ pub(crate) async fn credentials(
     // Create an offer if it does not exist yet.
     if query_handler(&offer_id, &state.query.offer).await?.is_none() {
         // Extract the tx_code_constraints from the credential configuration if available.
-        let tx_code_constraints = if authorization.pre_authorized {
-            authorization.tx_code_constraints.clone()
+        let tx_code_constraints = authorization
+            .pre_authorized
+            .then_some(authorization.tx_code_constraints)
+            .flatten();
+
+        let grant_types = vec![if authorization.pre_authorized {
+            GrantType::PreAuthorizedCode
         } else {
-            None
-        };
+            GrantType::AuthorizationCode
+        }];
 
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
             credential_configuration_ids: vec![credential_configuration_id.clone()],
-            grant_types: vec![GrantType::PreAuthorizedCode],
+            grant_types,
             tx_code_constraints,
         };
 
@@ -237,7 +242,7 @@ pub async fn patch_credential(
 pub mod tests {
     use super::*;
     use crate::issuance::router;
-    use crate::tests::{CREDENTIAL_CONFIGURATION_ID, OFFER_ID};
+    use crate::tests::OFFER_ID;
     use crate::API_VERSION;
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
@@ -284,7 +289,7 @@ pub mod tests {
     }
 
     /// This function creates and tests a credential and returns the endpoint where this credential can be accessed.
-    pub async fn credentials(app: &mut Router) -> String {
+    pub async fn credentials(app: &mut Router, credential_configuration_id: &str) -> String {
         let response = app
             .call(
                 Request::builder()
@@ -297,7 +302,7 @@ pub mod tests {
                             "credential": {
                                 "credentialSubject": CREDENTIAL_SUBJECT.clone(),
                             },
-                            "credentialConfigurationId": CREDENTIAL_CONFIGURATION_ID,
+                            "credentialConfigurationId": credential_configuration_id,
                             "expiresAt": "never"
                         }))
                         .unwrap(),
@@ -345,7 +350,7 @@ pub mod tests {
     }
 
     pub async fn patch_credential(app: &mut Router) {
-        let credential_endpoint = credentials(app).await;
+        let credential_endpoint = credentials(app, "001").await;
 
         let relying_party_state = Subject::default();
 
@@ -419,6 +424,6 @@ pub mod tests {
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
-        credentials(&mut app).await;
+        credentials(&mut app, "001").await;
     }
 }

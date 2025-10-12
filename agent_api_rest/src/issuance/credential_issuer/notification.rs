@@ -83,7 +83,7 @@ mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let mut issuance_app = issuance::router(issuance_state.clone());
 
-        credentials(&mut issuance_app).await;
+        credentials(&mut issuance_app, "001").await;
         let grants = offers(&mut issuance_app, "001").await.unwrap();
 
         let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;
@@ -121,7 +121,7 @@ mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let mut issuance_app = issuance::router(issuance_state.clone());
 
-        credentials(&mut issuance_app).await;
+        credentials(&mut issuance_app, "001").await;
         let grants = offers(&mut issuance_app, "001").await.unwrap();
 
         let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;

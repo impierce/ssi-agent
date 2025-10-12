@@ -115,7 +115,7 @@ pub mod tests {
 
         let mut app = issuance::router(issuance_state.clone());
 
-        credentials(&mut app).await;
+        credentials(&mut app, "002").await;
         let (authorization_code, _pre_authorized_code) = offers(&mut app, "002").await.unwrap();
         let AuthorizationCode { issuer_state, .. } = authorization_code.unwrap();
         let issuer_state = issuer_state.unwrap();

@@ -141,7 +141,7 @@ pub mod tests {
     use crate::API_VERSION;
     use crate::{
         issuance::{credentials::CredentialsEndpointRequest, offers::tests::offers},
-        tests::{CREDENTIAL_CONFIGURATION_ID, OFFER_ID},
+        tests::OFFER_ID,
     };
 
     use agent_event_publisher_http::EventPublisherHttp;
@@ -209,7 +209,7 @@ pub mod tests {
                                         offer_id: offer_id.clone(),
                                         credential: json!(CREDENTIAL_JWT),
                                         is_signed: true,
-                                        credential_configuration_id: CREDENTIAL_CONFIGURATION_ID.to_string(),
+                                        credential_configuration_id: "001".to_string(),
                                         expires_at: CredentialExpiry::Never,
                                     }
                                 } else {
@@ -224,7 +224,7 @@ pub mod tests {
                                             }
                                         }),
                                         is_signed: false,
-                                        credential_configuration_id: CREDENTIAL_CONFIGURATION_ID.to_string(),
+                                        credential_configuration_id: "001".to_string(),
                                         expires_at: CredentialExpiry::Never,
                                     }
                                 };
@@ -272,7 +272,7 @@ pub mod tests {
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_configuration_id": CREDENTIAL_CONFIGURATION_ID,
+                            "credential_configuration_id": "001",
                             "proof": {
                                 "proof_type": "jwt",
                                 "jwt": "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lk\
@@ -361,16 +361,17 @@ pub mod tests {
                 .await;
         }
 
+        let credential_configuration_id = is_pre_authorized
+            .then(|| "001".to_string())
+            .unwrap_or_else(|| "002".to_string());
+
         // When `with_external_server` is false, then the credentials endpoint does not need to be called before the
         // start of the flow, since the `external_server` will do this once it is triggered by the
         // `CredentialRequestVerified` event.
         if !with_external_server {
-            credentials(&mut issuance_app).await;
+            credentials(&mut issuance_app, &credential_configuration_id).await;
         }
 
-        let credential_configuration_id = is_pre_authorized
-            .then(|| "001".to_string())
-            .unwrap_or_else(|| "002".to_string());
         let grants = offers(&mut issuance_app, &credential_configuration_id).await.unwrap();
 
         let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;
@@ -391,7 +392,7 @@ pub mod tests {
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_configuration_id": CREDENTIAL_CONFIGURATION_ID,
+                            "credential_configuration_id": "001",
                             "proof": {
                                 "proof_type": "jwt",
                                 "jwt": "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lk\
