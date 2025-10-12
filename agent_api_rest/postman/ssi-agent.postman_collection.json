@@ -737,7 +737,7 @@
 								},
 								{
 									"key": "client_id",
-									"value": "unime-client-id",
+									"value": "unime",
 									"type": "text"
 								},
 								{
@@ -796,7 +796,7 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{HOST}}/auth/authorize?client_id=unime-client-id&request_uri={{REQUEST_URI}}",
+							"raw": "{{HOST}}/auth/authorize?client_id=unime&request_uri={{REQUEST_URI}}",
 							"host": [
 								"{{HOST}}"
 							],
@@ -807,7 +807,7 @@
 							"query": [
 								{
 									"key": "client_id",
-									"value": "unime-client-id"
+									"value": "unime"
 								},
 								{
 									"key": "request_uri",

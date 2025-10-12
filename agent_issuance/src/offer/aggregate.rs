@@ -83,21 +83,6 @@ impl Aggregate for Offer {
                     pre_authorized_code: grant_types.contains(&GrantType::PreAuthorizedCode).then(|| {
                         PreAuthorizedCode {
                             pre_authorized_code: pre_authorized_code.clone(),
-                            ..Default::default()
-                        }
-                    }),
-                };
-
-                let grants = Grants {
-                    authorization_code: grant_types.contains(&GrantType::AuthorizationCode).then(|| {
-                        AuthorizationCode {
-                            issuer_state: Some(offer_id.clone()),
-                            authorization_server: None,
-                        }
-                    }),
-                    pre_authorized_code: grant_types.contains(&GrantType::PreAuthorizedCode).then(|| {
-                        PreAuthorizedCode {
-                            pre_authorized_code: pre_authorized_code.clone(),
                             tx_code: tx_code_constraints.clone(),
                             ..Default::default()
                         }

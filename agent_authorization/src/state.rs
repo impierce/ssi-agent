@@ -16,8 +16,13 @@ use crate::domain::client::views::ClientView;
 use crate::domain::oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest;
 use crate::domain::oauth2_authorization_request::views::OAuth2AuthorizationRequestView;
 
-/// The client ID for the UniMe client.
-pub const UNIME_CLIENT_ID: &str = "unime-client-id";
+// TODO: usually in traditional OAuth2/OIDC apps the client_id is provided by the authorization server
+// when registering the app. For now we are hardcoding it here, but in the future we should provide a way to configure it.
+// See: https://github.com/openid/OpenID4VCI/issues/94
+pub const UNIME_CLIENT_ID: &str = "unime";
+
+// This is the custom URI scheme that the app will use to receive the authorization code from the authorization server.
+pub const UNIME_REDIRECT_URI: &str = "unime://callback";
 
 #[derive(Clone)]
 pub struct AuthorizationState {
@@ -92,10 +97,7 @@ async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
             logo_uri: None,
             policy_uri: None,
             tos_uri: None,
-            redirect_uris: vec![
-                // TODO: replace this with App/Universal Link?
-                "unime://callback".parse().unwrap(),
-            ],
+            redirect_uris: vec![UNIME_REDIRECT_URI.parse().unwrap()],
             grant_types: vec![
                 "authorization_code".to_string(),
                 "urn:ietf:params:oauth:grant-type:pre-authorized_code".to_string(),

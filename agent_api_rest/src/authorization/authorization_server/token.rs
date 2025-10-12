@@ -38,8 +38,10 @@ pub mod tests {
         },
         issuance::{self, credentials::tests::credentials, offers::tests::offers},
     };
-    use agent_authorization::domain::oauth2_authorization_request::aggregate::test_utils::code_verifier;
     use agent_authorization::state::UNIME_CLIENT_ID;
+    use agent_authorization::{
+        domain::oauth2_authorization_request::aggregate::test_utils::code_verifier, state::UNIME_REDIRECT_URI,
+    };
     use agent_secret_manager::service::Service;
     use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
     use axum::{
@@ -105,7 +107,7 @@ pub mod tests {
                 client_id: UNIME_CLIENT_ID.to_string(),
                 code,
                 code_verifier: Some(code_verifier),
-                redirect_uri: "unime://callback".parse().ok(),
+                redirect_uri: UNIME_REDIRECT_URI.parse().ok(),
             }
         };
 

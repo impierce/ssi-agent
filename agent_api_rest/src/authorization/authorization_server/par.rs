@@ -29,8 +29,10 @@ pub mod tests {
         authorization,
         issuance::{self, credentials::tests::credentials, offers::tests::offers},
     };
-    use agent_authorization::domain::oauth2_authorization_request::aggregate::test_utils::code_challenge;
     use agent_authorization::state::UNIME_CLIENT_ID;
+    use agent_authorization::{
+        domain::oauth2_authorization_request::aggregate::test_utils::code_challenge, state::UNIME_REDIRECT_URI,
+    };
     use agent_secret_manager::service::Service;
     use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
     use axum::{
@@ -64,7 +66,7 @@ pub mod tests {
                             response_type: "code".to_string(),
                             state: Some("test_state".to_string()),
                             client_id: UNIME_CLIENT_ID.to_string(),
-                            redirect_uri: Some("unime://callback".parse().unwrap()),
+                            redirect_uri: Some(UNIME_REDIRECT_URI.parse().unwrap()),
                             code_challenge: Some(code_challenge()),
                             code_challenge_method: Some(CodeChallengeMethod::S256),
                             scope: Some("openid profile".to_string()),
