@@ -368,7 +368,10 @@ pub mod tests {
             credentials(&mut issuance_app).await;
         }
 
-        let grants = offers(&mut issuance_app, is_pre_authorized).await.unwrap();
+        let credential_configuration_id = is_pre_authorized
+            .then(|| "001".to_string())
+            .unwrap_or_else(|| "002".to_string());
+        let grants = offers(&mut issuance_app, &credential_configuration_id).await.unwrap();
 
         let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;
         agent_authorization::state::initialize(&authorization_state)

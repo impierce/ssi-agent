@@ -196,6 +196,48 @@ mod tests {
                 }
                 ))
                 .unwrap()
+            ),
+            (
+                "002".to_string(),
+                serde_json::from_value(json!({
+                    "format": "jwt_vc_json",
+                    "cryptographic_binding_methods_supported": [
+                        "did:jwk",
+                        "did:key",
+                    ],
+                    "credential_signing_alg_values_supported": [
+                        "ES256",
+                        "EdDSA"
+                    ],
+                    "credential_definition":{
+                        "type": [
+                            "VerifiableCredential"
+                        ]
+                    },
+                    "proof_types_supported": {
+                        "jwt": {
+                            "proof_signing_alg_values_supported": [
+                                "ES256",
+                                "EdDSA"
+                            ],
+                        }
+                    },
+                    "display": [
+                        {
+                            "name": "Verifiable Credential",
+                            "locale": "en",
+                            "logo": {
+                                "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                "alt_text": "Impierce Logo",
+                            }
+                        }
+                    ],
+                    "authorization": {
+                        "pre_authorized": false
+                    }
+                }
+                ))
+                .unwrap()
             )]
             .into_iter()
             .collect();

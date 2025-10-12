@@ -24,12 +24,6 @@ pub struct OffersEndpointRequest {
     pub offer_id: String,
     #[serde(default)]
     pub credential_configuration_ids: Vec<String>,
-    #[serde(default = "true_as_default")]
-    pub is_pre_authorized: bool,
-}
-
-fn true_as_default() -> bool {
-    true
 }
 
 #[axum_macros::debug_handler]
@@ -38,7 +32,6 @@ pub(crate) async fn offers(
     Json(OffersEndpointRequest {
         offer_id,
         credential_configuration_ids,
-        is_pre_authorized,
     }): Json<OffersEndpointRequest>,
 ) -> Result<Response, ApiError> {
     // Check if the credential configuration IDs are valid.
@@ -62,33 +55,32 @@ pub(crate) async fn offers(
             .finish());
     }
 
-    let grant_types = if is_pre_authorized {
-        vec![GrantType::PreAuthorizedCode]
-    } else {
-        vec![GrantType::AuthorizationCode]
-    };
+    let authorization = credential_configurations
+        .into_iter()
+        .find_map(|(credential_configuration_id, (_, _, authorization))| {
+            credential_configuration_ids
+                .contains(&credential_configuration_id)
+                .then_some(authorization)
+        })
+        .unwrap_or_default();
 
-    let tx_code_constraints = credential_configuration_ids
-        .iter()
-        .find_map(|credential_configuration_id| {
-            credential_configurations
-                .get(credential_configuration_id)
-                // TODO: find a way to bind the `authorization` to the Offer somehow
-                .and_then(|(_, _, authorization)| {
-                    if authorization.pre_authorized {
-                        authorization.tx_code_constraints.clone()
-                    } else {
-                        None
-                    }
-                })
-        });
+    let tx_code_constraints = authorization
+        .pre_authorized
+        .then_some(authorization.tx_code_constraints)
+        .flatten();
+
+    let grant_types = vec![if authorization.pre_authorized {
+        GrantType::PreAuthorizedCode
+    } else {
+        GrantType::AuthorizationCode
+    }];
 
     // Create an offer if it does not exist yet.
     let command = if query_handler(&offer_id, &state.query.offer).await?.is_none() {
         OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
             credential_configuration_ids,
-            grant_types: vec![GrantType::PreAuthorizedCode],
+            grant_types,
             tx_code_constraints,
         }
     } else {
@@ -163,7 +155,7 @@ pub mod tests {
 
     pub async fn offers(
         app: &mut Router,
-        is_pre_authorized: bool,
+        credential_configuration_id: &str,
     ) -> Option<(Option<AuthorizationCode>, Option<PreAuthorizedCode>)> {
         let response = app
             .call(
@@ -174,8 +166,7 @@ pub mod tests {
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "offerId": OFFER_ID,
-                            "credentialConfigurationIds": ["001"],
-                            "isPreAuthorized": is_pre_authorized,
+                            "credentialConfigurationIds": [credential_configuration_id]
                         }))
                         .unwrap(),
                     ))
@@ -235,7 +226,7 @@ pub mod tests {
         let mut app = router(issuance_state);
 
         credentials(&mut app).await;
-        let (_authorization_code, _pre_authorized_code) = offers(&mut app, true).await.unwrap();
+        let (_authorization_code, _pre_authorized_code) = offers(&mut app, "001").await.unwrap();
     }
 
     #[serial_test::serial]
@@ -249,7 +240,7 @@ pub mod tests {
         let mut app = router(issuance_state);
 
         credentials(&mut app).await;
-        let none = offers(&mut app, true).await;
+        let none = offers(&mut app, "001").await;
 
         // When `credential_offer_by_value_enabled` is false, we expect no grants to be returned from the `offers` test function.
         assert!(none.is_none());
