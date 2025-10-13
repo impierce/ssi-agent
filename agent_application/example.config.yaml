@@ -39,9 +39,10 @@ event_publishers:
   nats:
     enabled: true
     nats_url: "nats://localhost:4222"
-    subject: "email.commands"
-    events:
-      offer: [TxCodeGenerated]
+    subjects:
+      - name: "email.commands"
+        events:
+          offer: [TxCodeGenerated]
 
 # These display parameters are interpreted by identity wallets.
 display:

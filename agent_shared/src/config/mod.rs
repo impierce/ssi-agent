@@ -572,7 +572,14 @@ pub struct EventPublisherHttp {
 pub struct EventPublisherNats {
     pub enabled: bool,
     pub nats_url: String,
-    pub subject: String,
+    #[serde(default)]
+    pub subjects: Vec<NatsSubject>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NatsSubject {
+    pub name: String,
+    #[serde(default)]
     pub events: Events,
 }
 
