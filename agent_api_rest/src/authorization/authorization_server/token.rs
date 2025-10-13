@@ -144,9 +144,11 @@ pub mod tests {
 
         let mut app = issuance::router(issuance_state.clone());
 
-        let credential_configuration_id = is_pre_authorized
-            .then(|| "001".to_string())
-            .unwrap_or_else(|| "002".to_string());
+        let credential_configuration_id = if is_pre_authorized {
+            "001".to_string()
+        } else {
+            "002".to_string()
+        };
 
         credentials(&mut app, &credential_configuration_id).await;
         let grants = offers(&mut app, &credential_configuration_id).await.unwrap();

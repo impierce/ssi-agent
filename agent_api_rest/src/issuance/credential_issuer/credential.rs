@@ -361,9 +361,11 @@ pub mod tests {
                 .await;
         }
 
-        let credential_configuration_id = is_pre_authorized
-            .then(|| "001".to_string())
-            .unwrap_or_else(|| "002".to_string());
+        let credential_configuration_id = if is_pre_authorized {
+            "001".to_string()
+        } else {
+            "002".to_string()
+        };
 
         // When `with_external_server` is false, then the credentials endpoint does not need to be called before the
         // start of the flow, since the `external_server` will do this once it is triggered by the
