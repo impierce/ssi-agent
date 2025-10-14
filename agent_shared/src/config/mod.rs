@@ -651,12 +651,17 @@ pub enum OfferEvent {
     CredentialRequestVerified,
     CredentialResponseCreated,
     TxCodeGenerated,
+    OfferEmailRequested,
 }
 
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct OfferDeliveryConfig {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub email_delivery_enabled: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !b
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -1017,7 +1022,8 @@ mod tests {
                   "sd-jwt_alg_values": ["ES256"],
                   "kb-jwt_alg_values": ["ES256"]
                 }
-              }
+              },
+              "offer_delivery": {},
             })
         );
 
