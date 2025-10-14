@@ -48,35 +48,38 @@ where
 
 impl EventPublisherNats {
     pub async fn load() -> anyhow::Result<Self> {
-        // Loads NATS configuration from the config file.
-        let event_publisher_nats = config().event_publishers.nats.clone().unwrap_or_default();
+        // Get the NATS configuration. it's an Option<EventPublisherNats>
+        let nats_config = match &config().event_publishers.nats {
+            Some(config) => config.clone(),
+            None => return Ok(EventPublisherNats::default()), // If no nats config found.
+        };
 
-        // If NATS is not enabled, return an empty event publisher.
-        if !event_publisher_nats.enabled {
+        // If nats is not enabled, return an empty event publisher.
+        if !nats_config.enabled {
             return Ok(EventPublisherNats::default());
         }
 
-        let offer = if !event_publisher_nats.events.offer.is_empty() {
-            Some(
-                // Call the new() constructor to populate the struct.
-                AggregateEventPublisherNats::<Offer>::new(
-                    event_publisher_nats.nats_url.clone(),
-                    event_publisher_nats.subject.clone(),
-                    event_publisher_nats
-                        .events
-                        .offer
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect(),
-                )
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to create NATS client: {}", e))?,
-            )
-        } else {
-            None
-        };
+        let mut offer = None;
 
-        let event_publisher: EventPublisherNats = EventPublisherNats { offer };
+        // Iterate through the list of subjects from the config.
+        for subject_config in &nats_config.subjects {
+            if !subject_config.events.offer.is_empty() {
+                offer = Some(
+                    AggregateEventPublisherNats::<Offer>::new(
+                        nats_config.nats_url.clone(),
+                        subject_config.name.clone(),
+                        subject_config.events.offer.iter().map(ToString::to_string).collect(),
+                    )
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to create NATS client: {}", e))?,
+                );
+                break;
+                // TODO: In the future, we can extend this to loop for multiple aggregates if needed.
+                // For now, this only handles our Offer aggregate.
+            }
+        }
+
+        let event_publisher = EventPublisherNats { offer };
 
         info!("Loaded NATS event publisher: {:?}", event_publisher);
 
@@ -187,7 +190,7 @@ pub mod tests {
                         "offer_id": "12345",
                         "tx_code": "1234",
                         "delivery_options": {
-                            "recipient_email": "andres@rocarey.com"
+                            "recipient_email": "andres-rocarey@example.test"
                         },
                     }
                 }),
@@ -224,7 +227,7 @@ pub mod tests {
                     offer_id: "offer-123".to_string(),
                     tx_code: "12345".to_string(),
                     delivery_options: DeliveryOptions {
-                        recipient_email: Some("sergey@kuryokhin.com".to_string()),
+                        recipient_email: Some("sergey.kuryokhin@example.test".to_string()),
                     },
                 };
 
