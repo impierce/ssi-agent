@@ -58,6 +58,15 @@ impl View<Offer> for Offer {
                 self.offer_id.clone_from(offer_id);
                 self.status.clone_from(status);
             }
+            CredentialOfferEmailSent {
+                offer_id,
+                recipient_email: _recipient_email,
+                form_url_encoded_credential_offer: _form_url_encoded_credential_offer,
+                status,
+            } => {
+                self.offer_id.clone_from(offer_id);
+                self.status.clone_from(status);
+            }
             CredentialRequestVerified { offer_id, subject_id } => {
                 self.offer_id.clone_from(offer_id);
                 self.subject_id.replace(subject_id.clone());
@@ -87,7 +96,6 @@ impl View<Offer> for Offer {
                 self.tx_code.replace(tx_code.clone());
                 self.delivery_options.clone_from(delivery_options);
             }
-            OfferEmailRequested { .. } => {}
         }
     }
 }

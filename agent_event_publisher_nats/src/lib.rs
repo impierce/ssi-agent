@@ -144,7 +144,7 @@ where
         // Convert Cloudevent into a suitable NATS message format
         let nats_event = NatsCloudEvent::from_event(cloud_event)?;
 
-        println!(
+        info!(
             "Publishing {} for aggregate_id {} to NATS subject '{}': {}",
             event_type,
             aggregate_id,

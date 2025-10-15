@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::{debug, info};
+use url::Url;
 
 use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError::{self, *};
@@ -50,6 +51,17 @@ pub struct Offer {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct DeliveryOptions {
     pub recipient_email: Option<String>,
+}
+
+/// Delivery methods for sending the credential offer. Not to be confused
+/// with the DeliveryOptions struct, which is used when creating the offer.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", tag = "deliveryMethod")]
+pub enum DeliveryMethod {
+    #[serde(rename = "targetUrl")]
+    TargetUrl { target_url: Url },
+    #[serde(rename = "email")]
+    Email { recipient_email: String },
 }
 
 #[async_trait]
@@ -163,16 +175,6 @@ impl Aggregate for Offer {
                     });
                 }
 
-                // If email delivery is enabled and a recipient email is provided, add an OfferEmailRequested event
-                if config().offer_delivery.email_delivery_enabled && delivery_options.recipient_email.is_some() {
-                    events.push(OfferEmailRequested {
-                        offer_id: offer_id.clone(),
-                        delivery_options,
-                        form_url_encoded_credential_offer: form_url_encoded_credential_offer.clone(),
-                        credential_offer: credential_offer.clone(),
-                    });
-                }
-
                 Ok(events)
             }
             AddCredentials {
@@ -218,28 +220,47 @@ impl Aggregate for Offer {
 
                 Ok(events)
             }
-            SendCredentialOffer { offer_id, target_url } => {
-                let client = reqwest::Client::new();
-                let target = self
+            SendCredentialOffer {
+                offer_id,
+                delivery_method,
+            } => {
+                let form_url_encoded_credential_offer = self
                     .form_url_encoded_credential_offer
                     .as_ref()
                     .ok_or_else(|| MissingCredentialOfferError)?
-                    .replace("openid-credential-offer://", target_url.as_str());
+                    .clone();
 
-                info!("Sending credential offer to: {}", target);
+                match delivery_method {
+                    DeliveryMethod::TargetUrl { target_url } => {
+                        let client = reqwest::Client::new();
+                        let target = form_url_encoded_credential_offer
+                            .replace("openid-credential-offer://", target_url.as_str());
 
-                client
-                    .get(target)
-                    .send()
-                    .await
-                    .and_then(|response| response.error_for_status())
-                    .map_err(SendCredentialOfferError)?;
+                        info!("Sending credential offer to: {}", target);
 
-                Ok(vec![CredentialOfferSent {
-                    offer_id,
-                    target_url,
-                    status: Status::Pending,
-                }])
+                        client
+                            .get(target)
+                            .send()
+                            .await
+                            .and_then(|response| response.error_for_status())
+                            .map_err(SendCredentialOfferError)?;
+
+                        Ok(vec![CredentialOfferSent {
+                            offer_id,
+                            target_url,
+                            status: Status::Pending,
+                        }])
+                    }
+                    DeliveryMethod::Email { recipient_email } => {
+                        info!("Sending credential offer via email to: {}", recipient_email);
+                        Ok(vec![CredentialOfferEmailSent {
+                            offer_id,
+                            recipient_email,
+                            form_url_encoded_credential_offer,
+                            status: Status::Pending,
+                        }])
+                    }
+                }
             }
             CreateTokenResponse {
                 offer_id,
@@ -384,6 +405,7 @@ impl Aggregate for Offer {
                 self.status = status;
             }
             CredentialOfferSent { .. } => {}
+            CredentialOfferEmailSent { .. } => {}
             CredentialRequestVerified { subject_id, .. } => {
                 self.subject_id.replace(subject_id);
             }
@@ -398,7 +420,6 @@ impl Aggregate for Offer {
             TxCodeGenerated { tx_code, .. } => {
                 self.tx_code.replace(tx_code);
             }
-            OfferEmailRequested { .. } => {}
         }
     }
 }

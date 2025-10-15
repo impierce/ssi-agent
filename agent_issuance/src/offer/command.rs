@@ -1,4 +1,4 @@
-use crate::offer::aggregate::DeliveryOptions;
+use crate::offer::aggregate::{DeliveryMethod, DeliveryOptions};
 use oid4vci::{
     credential_issuer::{
         authorization_server_metadata::AuthorizationServerMetadata,
@@ -9,7 +9,6 @@ use oid4vci::{
     token_request::TokenRequest,
 };
 use serde::Deserialize;
-use url::Url;
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -28,7 +27,7 @@ pub enum OfferCommand {
     },
     SendCredentialOffer {
         offer_id: String,
-        target_url: Url,
+        delivery_method: DeliveryMethod,
     },
 
     // OpenID4VCI Pre-Authorized Code Flow

@@ -1,5 +1,5 @@
 use crate::handlers::command_handler;
-use agent_issuance::{offer::command::OfferCommand, state::IssuanceState};
+use agent_issuance::{offer::aggregate::DeliveryMethod, offer::command::OfferCommand, state::IssuanceState};
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
@@ -8,26 +8,28 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SendOfferEndpointRequest {
     pub offer_id: String,
-    pub target_url: Url,
+    pub delivery_method: DeliveryMethod,
 }
 
 #[axum_macros::debug_handler]
 pub(crate) async fn send(
     State(state): State<IssuanceState>,
-    Json(SendOfferEndpointRequest { offer_id, target_url }): Json<SendOfferEndpointRequest>,
+    Json(SendOfferEndpointRequest {
+        offer_id,
+        delivery_method,
+    }): Json<SendOfferEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let command = OfferCommand::SendCredentialOffer {
         offer_id: offer_id.clone(),
-        target_url,
+        delivery_method,
     };
 
-    // Send the Credential Offer to the `target_url`.
+    // Send the Credential Offer to the `target_url` or to the email recipient.
     command_handler(&offer_id, &state.command.offer, command).await?;
 
     Ok(StatusCode::OK.into_response())
