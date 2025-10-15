@@ -1011,7 +1011,6 @@ mod tests {
                   "kb-jwt_alg_values": ["ES256"]
                 }
               },
-              "offer_delivery": {},
             })
         );
 
