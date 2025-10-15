@@ -42,7 +42,7 @@ event_publishers:
     subjects:
       - name: "email.commands"
         events:
-          offer: [TxCodeGenerated]
+          offer: [TxCodeGenerated, CredentialOfferEmailSent]
 
 # These display parameters are interpreted by identity wallets.
 display:
