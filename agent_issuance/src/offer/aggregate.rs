@@ -53,8 +53,8 @@ pub struct DeliveryOptions {
     pub recipient_email: Option<String>,
 }
 
-/// Delivery methods for sending the credential offer. Not to be confused
-/// with the DeliveryOptions struct, which is used when creating the offer.
+// Delivery methods for sending the credential offer. Not to be confused
+// with the DeliveryOptions struct, which is used when creating the offer.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", tag = "deliveryMethod")]
 pub enum DeliveryMethod {

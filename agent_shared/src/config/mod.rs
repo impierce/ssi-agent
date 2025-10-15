@@ -649,7 +649,7 @@ pub enum OfferEvent {
     CredentialRequestVerified,
     CredentialResponseCreated,
     TxCodeGenerated,
-    OfferEmailRequested,
+    CredentialOfferEmailSent,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
