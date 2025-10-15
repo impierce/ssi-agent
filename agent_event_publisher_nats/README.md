@@ -14,8 +14,7 @@ event_publishers:
     subjects:
       - name: "email.commands" # NATS subject to publish to
         events:
-        offer:
-          - "TxCodeGenerated" # Event types to publish
+          offer: [TxCodeGenerated, CredentialOfferEmailSent] # Event types to publish
 ```
 
 ## Usage
