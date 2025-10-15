@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct SendOfferEndpointRequest {
     pub offer_id: String,
+    #[serde(flatten)]
     pub delivery_method: DeliveryMethod,
 }
 

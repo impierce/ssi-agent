@@ -56,12 +56,16 @@ pub struct DeliveryOptions {
 // Delivery methods for sending the credential offer. Not to be confused
 // with the DeliveryOptions struct, which is used when creating the offer.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase", tag = "deliveryMethod")]
+#[serde(untagged)]
 pub enum DeliveryMethod {
-    #[serde(rename = "targetUrl")]
-    TargetUrl { target_url: Url },
-    #[serde(rename = "email")]
-    Email { recipient_email: String },
+    TargetUrl {
+        #[serde(rename = "targetUrl")]
+        target_url: Url,
+    },
+    Email {
+        #[serde(rename = "recipientEmail")]
+        recipient_email: String,
+    },
 }
 
 #[async_trait]
