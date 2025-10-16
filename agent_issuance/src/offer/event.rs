@@ -21,7 +21,7 @@ pub enum OfferEvent {
         access_token: String,
         status: Status,
         tx_code: Option<String>,
-        delivery_options: DeliveryOptions,
+        delivery_options: Option<DeliveryOptions>,
     },
     CredentialsAdded {
         offer_id: String,
@@ -54,7 +54,7 @@ pub enum OfferEvent {
     TxCodeGenerated {
         offer_id: String,
         tx_code: String,
-        delivery_options: DeliveryOptions,
+        delivery_options: Option<DeliveryOptions>,
     },
 }
 

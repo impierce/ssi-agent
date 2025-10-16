@@ -12,14 +12,15 @@ use serde::Deserialize;
 use url::Url;
 
 #[derive(Debug, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "type")]
 pub enum OfferCommand {
     CreateCredentialOffer {
         offer_id: String,
         credential_configuration_ids: Vec<String>,
         grant_types: Vec<GrantType>,
         tx_code_constraints: Option<TxCodeConstraints>,
-        delivery_options: DeliveryOptions,
+        #[serde(default)]
+        delivery_options: Option<DeliveryOptions>,
     },
     AddCredentials {
         offer_id: String,

@@ -44,7 +44,8 @@ pub struct Offer {
     pub credential_response: Option<CredentialResponse>,
     pub status: Status,
     pub tx_code: Option<String>,
-    pub delivery_options: DeliveryOptions,
+    #[serde(default)]
+    pub delivery_options: Option<DeliveryOptions>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -111,6 +112,14 @@ impl Aggregate for Offer {
 
                 // If TxCode constraints are provided, generate a transaction code.
                 let tx_code = tx_code_constraints.as_ref().map(generate_tx_code);
+                if tx_code.is_some()
+                    && delivery_options
+                        .as_ref()
+                        .and_then(|opts| opts.recipient_email.as_ref())
+                        .is_none()
+                {
+                    return Err(MissingRecipientEmailError);
+                }
 
                 let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
                     credential_issuer: credential_issuer.clone(),
@@ -339,7 +348,7 @@ impl Aggregate for Offer {
                 credential_offer_uri,
                 status,
                 tx_code,
-                delivery_options,
+                delivery_options: _,
             } => {
                 self.offer_id = offer_id;
                 self.grant_types = grant_types;
@@ -349,7 +358,7 @@ impl Aggregate for Offer {
                 self.credential_offer_uri.replace(credential_offer_uri);
                 self.status = status;
                 self.tx_code = tx_code;
-                self.delivery_options = delivery_options;
+                self.delivery_options = None;
             }
             CredentialsAdded {
                 offer_id,
@@ -420,7 +429,6 @@ pub mod tests {
     async fn test_create_offer(
         offer_id: String,
         grant_types: Vec<GrantType>,
-        delivery_options: DeliveryOptions,
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] access_token: String,
         #[future(awt)] credential_offer: CredentialOffer,
@@ -434,7 +442,7 @@ pub mod tests {
                 credential_configuration_ids: vec![],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
-                delivery_options: DeliveryOptions { recipient_email: None },
+                delivery_options: None,
             })
             .then_expect_events(vec![
                 OfferEvent::CredentialOfferCreated {
@@ -446,7 +454,7 @@ pub mod tests {
                     access_token,
                     status: Status::Created,
                     tx_code: None,
-                    delivery_options,
+                    delivery_options: None,
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: offer_id.clone(),
@@ -469,7 +477,6 @@ pub mod tests {
         credential_configuration_id: String,
         #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
         #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
-        delivery_options: DeliveryOptions,
     ) {
         OfferTestFramework::with(Service::default())
             .given(vec![OfferEvent::CredentialOfferCreated {
@@ -481,7 +488,7 @@ pub mod tests {
                 access_token,
                 status: Status::Created,
                 tx_code: None,
-                delivery_options,
+                delivery_options: None,
             }])
             .when(OfferCommand::AddCredentials {
                 offer_id: offer_id.clone(),
@@ -517,7 +524,6 @@ pub mod tests {
         #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
         #[future(awt)] token_request: TokenRequest,
         #[future(awt)] token_response: TokenResponse,
-        delivery_options: DeliveryOptions,
     ) {
         OfferTestFramework::with(Service::default())
             .given(vec![
@@ -530,7 +536,7 @@ pub mod tests {
                     access_token,
                     status: Status::Created,
                     tx_code: None,
-                    delivery_options,
+                    delivery_options: None,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: offer_id.clone(),
@@ -571,7 +577,6 @@ pub mod tests {
         #[future(awt)] credential_request: CredentialRequest,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
-        delivery_options: DeliveryOptions,
     ) {
         OfferTestFramework::with(Service::default())
             .given(vec![
@@ -584,7 +589,7 @@ pub mod tests {
                     access_token,
                     status: Status::Created,
                     tx_code: None,
-                    delivery_options,
+                    delivery_options: None,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: offer_id.clone(),
@@ -630,7 +635,6 @@ pub mod tests {
         #[future(awt)] token_response: TokenResponse,
         credential_response: CredentialResponse,
         notification_id: String,
-        delivery_options: DeliveryOptions,
     ) {
         OfferTestFramework::with(Service::default())
             .given(vec![
@@ -643,7 +647,7 @@ pub mod tests {
                     access_token,
                     status: Status::Created,
                     tx_code: None,
-                    delivery_options,
+                    delivery_options: None,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: offer_id.clone(),
@@ -695,7 +699,6 @@ pub mod tests {
         #[future(awt)] token_response: TokenResponse,
         credential_response: CredentialResponse,
         notification_id: String,
-        delivery_options: DeliveryOptions,
     ) {
         OfferTestFramework::with(Service::default())
             .given(vec![
@@ -708,7 +711,7 @@ pub mod tests {
                     access_token,
                     status: Status::Created,
                     tx_code: None,
-                    delivery_options,
+                    delivery_options: None,
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: offer_id.clone(),
