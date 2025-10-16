@@ -226,9 +226,9 @@ pub mod tests {
                 let test_event = OfferEvent::TxCodeGenerated {
                     offer_id: "offer-123".to_string(),
                     tx_code: "12345".to_string(),
-                    delivery_options: DeliveryOptions {
+                    delivery_options: Some(DeliveryOptions {
                         recipient_email: Some("sergey.kuryokhin@example.test".to_string()),
-                    },
+                    }),
                 };
 
                 let result = p.dispatch_event("offer-123", &test_event).await;

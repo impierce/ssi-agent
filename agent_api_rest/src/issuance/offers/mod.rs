@@ -25,7 +25,7 @@ pub struct OffersEndpointRequest {
     #[serde(default)]
     pub credential_configuration_ids: Vec<String>,
     #[serde(default)]
-    pub delivery_options: DeliveryOptions,
+    pub delivery_options: Option<DeliveryOptions>,
 }
 
 #[axum_macros::debug_handler]

@@ -43,7 +43,8 @@ pub struct CredentialsEndpointRequest {
     pub is_signed: bool,
     pub credential_configuration_id: String,
     pub expires_at: CredentialExpiry,
-    pub delivery_options: DeliveryOptions,
+    #[serde(default)]
+    pub delivery_options: Option<DeliveryOptions>,
 }
 
 #[axum_macros::debug_handler]
