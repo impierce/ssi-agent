@@ -302,9 +302,6 @@ pub mod tests {
                             },
                             "credentialConfigurationId": CREDENTIAL_CONFIGURATION_ID,
                             "expiresAt": "never",
-                            "deliveryOptions": {
-                                "recipientEmail": null
-                            }
                         }))
                         .unwrap(),
                     ))
