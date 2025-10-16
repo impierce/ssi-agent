@@ -649,6 +649,7 @@ pub enum OfferEvent {
     CredentialRequestVerified,
     CredentialResponseCreated,
     TxCodeGenerated,
+    CredentialOfferEmailSent,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -1009,7 +1010,7 @@ mod tests {
                   "sd-jwt_alg_values": ["ES256"],
                   "kb-jwt_alg_values": ["ES256"]
                 }
-              }
+              },
             })
         );
 

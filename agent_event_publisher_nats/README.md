@@ -11,10 +11,10 @@ event_publishers:
   nats:
     enabled: true
     nats_url: "nats://localhost:4222" # NATS server URL
-    subject: "email.commands" # NATS subject to publish to
-    events:
-      offer:
-        - "TxCodeGenerated" # Event types to publish
+    subjects:
+      - name: "email.commands" # NATS subject to publish to
+        events:
+          offer: [TxCodeGenerated, CredentialOfferEmailSent] # Event types to publish
 ```
 
 ## Usage
@@ -56,8 +56,6 @@ For example:
 
 ### Available events
 
-Currently, the nats publisher only listens to one event:
-
 #### `offer`
 
-TxCodeGenerated
+TxCodeGenerated, CredentialOfferEmailSent

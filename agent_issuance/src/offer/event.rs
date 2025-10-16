@@ -38,6 +38,12 @@ pub enum OfferEvent {
         target_url: Url,
         status: Status,
     },
+    CredentialOfferEmailSent {
+        offer_id: String,
+        recipient_email: String,
+        form_url_encoded_credential_offer: String,
+        status: Status,
+    },
     TokenResponseCreated {
         offer_id: String,
         token_response: TokenResponse,
