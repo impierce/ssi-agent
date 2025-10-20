@@ -13,7 +13,7 @@ use crate::{
     service::{aggregate::Service, command::ServiceCommand, views::ServiceView},
 };
 use agent_shared::config::{
-    config, config_mut, get_all_enabled_signing_algorithms_supported, SupportedDidMethod, ToggleOptions,
+    config, config_mut, get_all_enabled_signing_algorithms_supported, Display, SupportedDidMethod, ToggleOptions,
 };
 use agent_shared::handlers::command_handler;
 use agent_shared::{application_state::CommandHandler, handlers::query_handler};
@@ -121,9 +121,17 @@ pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
 pub async fn query_profile(state: &IdentityState) -> Result<(), PersistenceError> {
     match query_handler(PROFILE_ID, &state.query.profile).await? {
         Some(Profile { display_name, logo, .. }) => {
-            if let Some(display) = config_mut().display.first_mut() {
+            let application_url = config().application_url.to_string();
+            let display = &mut config_mut().display;
+            if let Some(display) = display.first_mut() {
                 display.name = display_name.unwrap_or_default();
                 display.logo = logo;
+            } else {
+                display.push(Display {
+                    name: display_name.unwrap_or(application_url),
+                    logo,
+                    ..Default::default()
+                });
             }
 
             Ok(())
