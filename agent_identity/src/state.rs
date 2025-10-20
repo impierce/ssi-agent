@@ -121,7 +121,7 @@ pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
 pub async fn query_profile(state: &IdentityState) -> Result<(), PersistenceError> {
     match query_handler(PROFILE_ID, &state.query.profile).await? {
         Some(Profile { display_name, logo, .. }) => {
-            let application_url = config().application_url.to_string();
+            let application_url = config().application_url.host_str().unwrap_or_default().to_string();
             let display = &mut config_mut().display;
             if let Some(display) = display.first_mut() {
                 display.name = display_name.unwrap_or_default();
