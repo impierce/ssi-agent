@@ -1,101 +1,369 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
-  title: SSI Agent - REST API
+  title: UniCore HTTP API
   description: |
-    UniCore's REST API is a lightweight REST API for the SSI Agent.
+    <!-- ![Banner](https://images.placeholders.dev/?width=1280&height=720) -->
 
-    UniCore's REST API is currently still in the pre-release stage meaning that the API is still under active development.
-    Breaking changes may occur before the API reaches a stable version.
+    Full HTTP API reference for UniCore, an open-source SSI Agent by [Impierce Technologies B.V.](https://www.impierce.com)
 
-    The current version of the REST API is `v0`.
-  version: 0.1.0
+    ## Overview
+
+    ### Management endpoints
+
+    UniCore offers a set of APIs to fulfill the requirements of all possible roles in a Self-Sovereign Identity ecosystem.
+
+    #### Issuance
+
+    UniCore can issue Verifiable Credentials to other entities. Credentials can be created and then offered to the recipient for acceptance.
+
+    #### Holder
+
+    UniCore can hold and present Verifiable Credentials to other entities. This is useful when UniCore wants to prove its own trustworthiness.
+
+    #### Verification
+
+    UniCore can verify Verifiable Credentials that are presented to it.
+
+    #### Identity
+
+    An easy way to manage UniCore's _own_ identity. Closely related to the Holder role.
+
+    ### Standardized endpoints
+
+    Some endpoints that UniCore offers follow a specification (such as the [OpenID4VC](https://openid.net/sg/openid4vc/specifications) protocol family). These endpoints have the **`(standardized)`** tag.
+
+    ### Public endpoints
+
+    Some endpoints should always be publicly accessible to allow identity wallets to interact with UniCore and follow standard protocol flows. These endpoints have the **`(public)`** tag.
+
+    > [!NOTE]
+    > Endpoints that should not sit behind some form of authentication are grouped under the `(public)` tag.
+
+    <!-- ```json
+    {
+      "foo": "bar"
+    }
+    ``` -->
+
+    ## Authentication & Authorization
+
+    UniCore has no user management or authentication built in by default. The API does not check for any roles or scopes. Currently, it is expected that the application which calls UniCore only performs calls which have been checked in the consumer business logic. If you want to make your UniCore deployment reachable via the internet, you **MUST** restrict direct access to the API by running it behind a reverse proxy or some form of API gateway and check for an API key or similar. In most cases, only the endpoints behind `/v0` need to be protected and all other non-sensitive endpoints can stay publicly accessible in order for other participants (such as wallets) to interact with UniCore.
+
+    ### Example reverse proxy configuration
+
+    Here is an example Nginx configuration that restricts access to the `/v0` endpoints by checking for a valid API key in the headers:
+
+    <details>
+      <summary>nginx.conf</summary>
+
+    ```
+    http {
+        server {
+            listen 8080;
+            gzip on;
+
+            location /v0 {
+                if ($http_x_api_key != "A041FE585C6F45CF841D20D47D329FA5") {
+                    return 403;
+                }
+
+                proxy_pass http://127.0.0.1:3033/v0;
+            }
+
+            location / {
+                proxy_pass http://127.0.0.1:3033;
+            }
+        }
+    }
+    ```
+
+    </details>
+  license:
+    name: ""
+  version: ""
 
 servers:
   - url: http://localhost:3033
     description: Development
 
 paths:
-  # Metadata endpoints
-  /version:
+  # OpenID4VCI and Well-known endpoints (proxied)
+  /.well-known/did-configuration.json:
     get:
+      summary: DID configuration endpoint
+      description: Returns the DID configuration for domain linkage
       tags:
-        - Metadata
-      summary: Get version information
-      description: Returns the version information of the SSI Agent
+        - (.well-known)
+        - (public)
       responses:
         "200":
-          description: Version information retrieved successfully
+          description: DID configuration
           content:
             application/json:
               schema:
                 type: object
-                properties:
-                  version:
-                    type: string
-                    example: "0.1.0"
 
-  /info:
+  /.well-known/did.json:
     get:
+      summary: DID document endpoint
+      description: Returns the DID document for the agent
       tags:
-        - Metadata
-      summary: Get application information
-      description: Returns application information including version, uptime, and other metadata
+        - (.well-known)
+        - (public)
       responses:
         "200":
-          description: Application information retrieved successfully
+          description: DID document
           content:
             application/json:
               schema:
                 type: object
-                properties:
-                  app:
-                    type: string
-                    example: "UniCore"
-                  profile:
-                    type: string
-                    enum: [issuer, holder, verifier, all]
-                    example: "all"
-                  version:
-                    type: string
-                    example: "0.1.0"
-                  release_channel:
-                    type: string
-                    example: "beta"
-                  docker_build_timestamp:
-                    type: string
-                    example: "2024-01-01T00:00:00Z"
-                  uptime:
-                    type: string
-                    example: "0 days, 00:05:23"
 
-  /v0/configuration:
+  /.well-known/oauth-authorization-server:
     get:
+      summary: Standard OpenID Connect discovery endpoint for authorization metadata
+      description: Standard OpenID Connect discovery endpoint for authorization metadata
       tags:
-        - Metadata
-      summary: Get application configuration
-      description: Returns the current application configuration
+        - (.well-known)
+        - (public)
       responses:
         "200":
-          description: Configuration retrieved successfully
+          description: Authorization server metadata
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Configuration"
+                type: object
 
-  /healthz:
+  /.well-known/openid-credential-issuer:
     get:
+      summary: Standard OpenID Connect discovery endpoint for issuer metadata
+      description: Standard OpenID Connect discovery endpoint for issuer metadata
       tags:
-        - Health
-      summary: Health check endpoint
-      description: Returns the health status of the application
+        - (.well-known)
+        - (public)
       responses:
         "200":
-          description: Application is healthy
+          description: Credential issuer metadata
           content:
-            text/plain:
+            application/json:
+              schema:
+                type: object
+
+  /openid4vci/credential:
+    post:
+      summary: Standard OpenID Connect endpoint for redeeming a token for a credential
+      description: Standard OpenID4VCI credential endpoint
+      tags:
+        - (public)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                credential_configuration_id:
+                  type: string
+                proof:
+                  type: object
+      responses:
+        "200":
+          description: Credential issued
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v0/authorization_requests:
+    get:
+      tags:
+        - Verification
+      summary: Get all authorization requests
+      description: Retrieves all authorization requests
+      responses:
+        "200":
+          description: Authorization requests retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+              examples:
+                example:
+                  summary: Example authorization requests
+                  value:
+                    - authorization_request:
+                        client_id: "decentralized_identifier:did:jwk:eyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJ4bS1weGxpdmhRMHNaTlIwUTdfRWVGOGdyRS0xU091b2ZwN2ItYk9GTUdFIiwia3R5IjoiT0tQIiwieCI6ImhuSzJuSno0cldhck5vdlhmSmxwWEItcFhVZmJCNkxaODRzV0xOWldsNlEifQ"
+                        response_uri: "http://localhost:3033/redirect"
+                        state: "6bdda4c31101ed940a043ee29e22f766ed0866b911fa253468f1a5b305d2e2d5"
+                        response_type: "vp_token"
+                        dcql_query:
+                          credentials:
+                            - id: "CredentialQuery"
+                              format: "jwt_vc_json"
+                              meta:
+                                type_values:
+                                  - ["VerifiableCredential"]
+                              require_cryptographic_holder_binding: true
+                              claims:
+                                - path: ["credentialSubject", "first_name"]
+                                - path: ["credentialSubject", "last_name"]
+                        response_mode: "direct_post"
+                        scope: "openid"
+                        nonce: "this is a nonce"
+                        client_metadata:
+                          client_name: "UniCore"
+                          logo_uri: "https://www.impierce.com/external/impierce-icon.png"
+                          vp_formats_supported:
+                            jwt_vc_json:
+                              alg_values: ["ES256", "EdDSA"]
+                            jwt_vp_json:
+                              alg_values: ["ES256", "EdDSA"]
+                            dc+sd-jwt:
+                              sd-jwt_alg_values: ["ES256"]
+                              kb-jwt_alg_values: ["ES256"]
+                          subject_syntax_types_supported:
+                            - "did:jwk"
+                            - "did:key"
+                      form_url_encoded_authorization_request: "openid://?client_id=decentralized_identifier%3Adid%3Ajwk%3AeyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJ4bS1weGxpdmhRMHNaTlIwUTdfRWVGOGdyRS0xU091b2ZwN2ItYk9GTUdFIiwieCI6ImhuSzJuSno0cldhck5vdlhmSmxwWEItcFhVZmJCNkxaODRzV0xOWldsNlEifQ&request_uri=http%3A%2F%2Flocalhost%3A3033%2Frequest%2F6bdda4c31101ed940a043ee29e22f766ed0866b911fa253468f1a5b305d2e2d5"
+                      signed_authorization_request_object: "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSjRiUzF3ZUd4cGRtaFJNSE5hVGxJd1VUZGZSV1ZHT0dkeVJTMHhVMDkxYjJad04ySXRZazlHVFVkRklpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNkltaHVTekp1U25vMGNsZGhjazV2ZGxobVNteHdXRUl0Y0ZoVlptSkNOa3hhT0RSelYweE9XbGRzTmxFaWZRIja2V5LTAifQ.eyJpc3MiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSjRiUzF3ZUd4cGRtaFJNSE5hVGxJd1VUZGZSV1ZHT0dkeVJTMHhVMDkxYjJad04ySXRZazlHVFVkRklpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNkltaHVTekp1U25vMGNsZGhjazV2ZGxobVNteHdXRUl0Y0ZoVlptSkNOa3hhT0RSelYweE9XbGRzTmxFaWZRIiwibmJmIjoxNzYxMzA5ODQ5LCJ2cCI6eyJAY29udGV4dCI6Imh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwidHlwZSI6IlZlcmlmaWFibGVQcmVzZW50YXRpb24iLCJ2ZXJpZmlhYmxlQ3JlZGVudGlhbCI6WyJleUowZVhBaU9pSktWMVFpTENKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNkltUnBaRHByWlhrNmVqWk5hMmRGT0RST1EwMXdUV1ZCZURscVN6bGpaalZYTkVjNFoyTmFPWGgxZDBwMlJ6RmxOM2RPYXpoTFEyZDBJM28yVFd0blJUZzBUa05OY0UxbFFYZzVha3M1WTJZMVZ6UkhPR2RqV2psNGRYZEtka2N4WlRkM1RtczRTME5uZENKOS5leUpwYzNNaU9pSmthV1E2YTJWNU9ubzJUV3RuUlRnMFRrTk5jRTFsUVhnNWFrczVZMlkxVnpSSE9HZGpXamw0ZFhkS2RrY3haVGQzVG1zNFMwTm5kQ0lzSW5OMVlpSTZJbVJwWkRwclpYazZlalpOYTJscFpYbHZURTFUVm5OS1FWcDJOMHBxWlRWM1YxTnJSRVY1YlZWbmEzbEdPR3RpWTNKcVduQllNM0ZrSWl3aVpYaHdJam81T1RrNU9UazVPVGs1TENKcFlYUWlPakFzSW5aaklqcDdJa0JqYjI1MFpYaDBJam9pYUhSMGNITTZMeTkzZDNjdWR6TXViM0puTHpJd01UZ3ZZM0psWkdWdWRHbGhiSE12ZGpFaUxDSjBlWEJsSWpwYklsWmxjbWxtYVdGaWJHVkRjbVZrWlc1MGFXRnNJbDBzSW1OeVpXUmxiblJwWVd4VGRXSnFaV04wSWpwN0ltbGtJam9pWkdsa09tdGxlVHA2TmsxcmFXbGxlVzlNVFZOV2MwcEJXblkzU21wbE5YZFhVMnRFUlhsdFZXZHJlVVk0YTJKamNtcGFjRmd6Y1dRaUxDSm1hWEp6ZEY5dVlXMWxJam9pUm1WeWNtbHpJaXdpYkdGemRGOXVZVzFsSWpvaVVuVnpkR0ZqWldGdUluMHNJbWx6YzNWbGNpSTZJbVJwWkRwclpYazZlalpOYTJkRk9EUk9RMDF3VFdWQmVEbHFTemxqWmpWWE5FYzRaMk5hT1hoMWQwcDJSekZsTjNkT2F6aExRMmQwSWl3aWFYTnpkV0Z1WTJWRVlYUmxJam9pTWpBeE1DMHdNUzB3TVZRd01Eb3dNRG93TUZvaWZYMC5kNFFONzN2RHRadTc5UlA2R2xkSE9idTZyR3NqaWRrTFlwMFhNUlFOYk5QWTc1TEpvU3YyaVhrMlJ6NU0tVk1CWkdTVTNZUFpIeXRscktCanhyMUlCUSJdfX0.GVO-BJ0j5Ef2JLvmyx8g5sLRSrwIIFVc1EuJpHqBWO3Dt5xcniLUUrFv5598y7FctZbQKkKD6SCzJHe0t4h7Dw"
+    post:
+      summary: Create a new Authorization Request
+      tags:
+        - Verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nonce:
+                  type: string
+                  description: A unique identifier for the Authorization Request
+                  example: "0d520cbe176ab9e1f7888c70888020d84a69672a4baabd3ce1c6aaad8f6420c0"
+                state:
+                  type: string
+                  description: A unique string representing the state of the Authorization Request
+                  example: "84266fdbd31d4c2c6d0665f7e8380fa3"
+                dcql_query:
+                  type: object
+                  description: A DCQL query object describing the Verifiable Credential(s) that will be requested
+                  properties:
+                    credentials:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            example: "CredentialQuery"
+                          format:
+                            type: string
+                            example: "jwt_vc_json"
+                          meta:
+                            type: object
+                            properties:
+                              type_values:
+                                type: array
+                                items:
+                                  type: array
+                                  items:
+                                    type: string
+                                example:
+                                  - ["VerifiableCredential"]
+                          claims:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                path:
+                                  type: array
+                                  items:
+                                    type: string
+                                  example: ["credentialSubject", "first_name"]
+              required:
+                - nonce
+            examples:
+              siopv2:
+                summary: SIOPv2 Authorization Request
+                value:
+                  nonce: this is a nonce
+              oid4vp-with-dcql:
+                summary: OID4VP with DCQL Query
+                value:
+                  nonce: this is a nonce
+                  dcql_query:
+                    credentials:
+                      - id: "CredentialQuery"
+                        format: "jwt_vc_json"
+                        meta:
+                          type_values:
+                            - ["VerifiableCredential"]
+                        claims:
+                          - path: ["credentialSubject", "first_name"]
+                          - path: ["credentialSubject", "last_name"]
+      responses:
+        "201":
+          description: An Authorization Request has successfully been created
+          headers:
+            Location:
               schema:
                 type: string
-                example: "OK"
+                example: "/v0/authorization_requests/43482b98aa2e071231082fc29db7a59f342a643b0c590f71083af3c7ae83f3c3"
+              description: URL of the created resource
+          content:
+            application/x-www-form-urlencoded:
+              schema:
+                type: string
+                example: "openid://?client_id=did%3Ajwk%3AeyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ&request_uri=http%3A%2F%2F192.168.1.127%3A3033%2Frequest%2F0fc2af709c435975ab5ebbc6dd2d5508c7f4a1cc3a59145a73a39e532bcbfdc7"
+
+  /v0/authorization_requests/{authorization_request_id}:
+    get:
+      summary: Get the Authorization Request with the given Authorization Request ID
+      tags:
+        - Verification
+      parameters:
+        - in: path
+          name: authorization_request_id
+          required: true
+          schema:
+            type: string
+            minimum: 1
+          description: The Authorization Request ID
+      responses:
+        "200":
+          description: An Authorization Request with the given Authorization Request ID has been successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+              example:
+                authorization_request:
+                  client_id: "did:jwk:eyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJ4bS1weGxpdmhRMHNaTlIwUTdfRWVGOGdyRS0xU091b2ZwN2ItYk9GTUdFIiwia3R5IjoiT0tQIiwieCI6ImhuSzJuSno0cldhck5vdlhmSmxwWEItcFhVZmJCNkxaODRzV0xOWldsNlEifQ"
+                  redirect_uri: "http://localhost:3033/redirect"
+                  state: "f013ad664a141409b76860b825880f3b6cdaf6100ed6eb9126291865faa76af0"
+                  response_type: "id_token"
+                  scope: "openid"
+                  response_mode: "direct_post"
+                  nonce: "this is a nonce"
+                  client_metadata:
+                    client_name: "UniCore"
+                    logo_uri: "https://www.impierce.com/external/impierce-icon.png"
+                    subject_syntax_types_supported:
+                      - "did:jwk"
+                      - "did:key"
+                    id_token_signed_response_alg: "ES256"
+                    id_token_signing_alg_values_supported:
+                      - "ES256"
+                      - "EdDSA"
+                form_url_encoded_authorization_request: "openid://?client_id=did%3Ajwk%3AeyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJ4bS1weGxpdmhRMHNaTlIwUTdfRWVGOGdyRS0xU091b2ZwN2ItYk9GTUdFIiwieCI6ImhuSzJuSno0cldhck5vdlhmSmxwWEItcFhVZmJCNkxaODRzV0xOWldsNlEifQ&request_uri=http%3A%2F%2Flocalhost%3A3033%2Frequest%2Ff013ad664a141409b76860b825880f3b6cdaf6100ed6eb9126291865faa76af0"
+                signed_authorization_request_object: "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSjRiUzF3ZUd4cGRtaFJNSE5hVGxJd1VUZGZSV1ZHT0dkeVJTMHhVMDkxYjJad04ySXRZazlHVFVkRklpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNkltaHVTekp1U25vMGNsZGhjazV2ZGxobVNteHdXRUl0Y0ZoVlptSkNOa3hhT0RSelYweE9XbGRzTmxFaWZRIiwicmVkaXJlY3RfdXJpIjoiaHR0cDovL2xvY2FsaG9zdDozMDMzL3JlZGlyZWN0Iiwic3RhdGUiOiJmMDEzYWQ2NjRhMTQxNDA5Yjc2ODYwYjgyNTg4MGYzYjZjZGFmNjEwMGVkNmViOTEyNjI5MTg2NWZhYTc2YWYwIiwicmVzcG9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6InRoaXMgaXMgYSBub25jZSIsImNsaWVudF9tZXRhZGF0YSI6eyJjbGllbnRfbmFtZSI6IlVuaUNvcmUiLCJsb2dvX3VyaSI6Imh0dHBzOi8vd3d3LmltcGllcmNlLmNvbS9leHRlcm5hbC9pbXBpZXJjZS1pY29uLnBuZyIsInN1YmplY3Rfc3ludGF4X3R5cGVzX3N1cHBvcnRlZCI6WyJkaWQ6andrIiwiZGlkOmtleSJdLCJpZF90b2tlbl9zaWduZWRfcmVzcG9uc2VfYWxnIjoiRVMyNTYiLCJpZF90b2tlbl9zaWduaW5nX2FsZ192YWx1ZXNfc3VwcG9ydGVkIjpbIkVTMjU2IiwiRWREU0EiXX19.iMmcwZqT3iCJAy7WxqfxGSbeGoarRyK_mXqtkyO6K-gIHaeEb30HXmJhmkhbsye7BCVxlNIpkrcNMds8Ldqmaw"
+                id_token: null
+                vp_token: null
+                state: null
+        "404":
+          description: Authorization Request not found
 
   # Issuance endpoints
   /v0/credential-configurations:
@@ -190,6 +458,21 @@ paths:
       responses:
         "200":
           description: A Credential Configuration has been successfully added to the Credential Issuer Metadata
+
+  /v0/offers/send:
+    post:
+      summary: Send an offer
+      tags:
+        - Issuance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Offer sent successfully
 
   /v0/credentials:
     get:
@@ -577,213 +860,87 @@ paths:
         "404":
           description: Offer not found
 
-  /v0/offers/send:
-    post:
-      summary: Send an offer
-      tags:
-        - Issuance
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        "200":
-          description: Offer sent successfully
-
-  # Verification endpoints
-  /v0/authorization_requests:
+  # Metadata endpoints
+  /version:
     get:
       tags:
-        - Verification
-      summary: Get all authorization requests
-      description: Retrieves all authorization requests
+        - Metadata
+      summary: Get version information
+      description: Returns the version information of the SSI Agent
       responses:
         "200":
-          description: Authorization requests retrieved successfully
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-              examples:
-                example:
-                  summary: Example authorization requests
-                  value:
-                    - authorization_request:
-                        client_id: "decentralized_identifier:did:jwk:eyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJ4bS1weGxpdmhRMHNaTlIwUTdfRWVGOGdyRS0xU091b2ZwN2ItYk9GTUdFIiwia3R5IjoiT0tQIiwieCI6ImhuSzJuSno0cldhck5vdlhmSmxwWEItcFhVZmJCNkxaODRzV0xOWldsNlEifQ"
-                        response_uri: "http://localhost:3033/redirect"
-                        state: "6bdda4c31101ed940a043ee29e22f766ed0866b911fa253468f1a5b305d2e2d5"
-                        response_type: "vp_token"
-                        dcql_query:
-                          credentials:
-                            - id: "CredentialQuery"
-                              format: "jwt_vc_json"
-                              meta:
-                                type_values:
-                                  - ["VerifiableCredential"]
-                              require_cryptographic_holder_binding: true
-                              claims:
-                                - path: ["credentialSubject", "first_name"]
-                                - path: ["credentialSubject", "last_name"]
-                        response_mode: "direct_post"
-                        scope: "openid"
-                        nonce: "this is a nonce"
-                        client_metadata:
-                          client_name: "UniCore"
-                          logo_uri: "https://www.impierce.com/external/impierce-icon.png"
-                          vp_formats_supported:
-                            jwt_vc_json:
-                              alg_values: ["ES256", "EdDSA"]
-                            jwt_vp_json:
-                              alg_values: ["ES256", "EdDSA"]
-                            dc+sd-jwt:
-                              sd-jwt_alg_values: ["ES256"]
-                              kb-jwt_alg_values: ["ES256"]
-                          subject_syntax_types_supported:
-                            - "did:jwk"
-                            - "did:key"
-                      form_url_encoded_authorization_request: "openid://?client_id=decentralized_identifier%3Adid%3Ajwk%3AeyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJ4bS1weGxpdmhRMHNaTlIwUTdfRWVGOGdyRS0xU091b2ZwN2ItYk9GTUdFIiwieCI6ImhuSzJuSno0cldhck5vdlhmSmxwWEItcFhVZmJCNkxaODRzV0xOWldsNlEifQ&request_uri=http%3A%2F%2Flocalhost%3A3033%2Frequest%2F6bdda4c31101ed940a043ee29e22f766ed0866b911fa253468f1a5b305d2e2d5"
-                      signed_authorization_request_object: "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSjRiUzF3ZUd4cGRtaFJNSE5hVGxJd1VUZGZSV1ZHT0dkeVJTMHhVMDkxYjJad04ySXRZazlHVFVkRklpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNkltaHVTekp1U25vMGNsZGhjazV2ZGxobVNteHdXRUl0Y0ZoVlptSkNOa3hhT0RSelYweE9XbGRzTmxFaWZRIja2V5LTAifQ.eyJpc3MiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSjRiUzF3ZUd4cGRtaFJNSE5hVGxJd1VUZGZSV1ZHT0dkeVJTMHhVMDkxYjJad04ySXRZazlHVFVkRklpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNkltaHVTekp1U25vMGNsZGhjazV2ZGxobVNteHdXRUl0Y0ZoVlptSkNOa3hhT0RSelYweE9XbGRzTmxFaWZRIiwibmJmIjoxNzYxMzA5ODQ5LCJ2cCI6eyJAY29udGV4dCI6Imh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwidHlwZSI6IlZlcmlmaWFibGVQcmVzZW50YXRpb24iLCJ2ZXJpZmlhYmxlQ3JlZGVudGlhbCI6WyJleUowZVhBaU9pSktWMVFpTENKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNkltUnBaRHByWlhrNmVqWk5hMmRGT0RST1EwMXdUV1ZCZURscVN6bGpaalZYTkVjNFoyTmFPWGgxZDBwMlJ6RmxOM2RPYXpoTFEyZDBJM28yVFd0blJUZzBUa05OY0UxbFFYZzVha3M1WTJZMVZ6UkhPR2RqV2psNGRYZEtka2N4WlRkM1RtczRTME5uZENKOS5leUpwYzNNaU9pSmthV1E2YTJWNU9ubzJUV3RuUlRnMFRrTk5jRTFsUVhnNWFrczVZMlkxVnpSSE9HZGpXamw0ZFhkS2RrY3haVGQzVG1zNFMwTm5kQ0lzSW5OMVlpSTZJbVJwWkRwclpYazZlalpOYTJscFpYbHZURTFUVm5OS1FWcDJOMHBxWlRWM1YxTnJSRVY1YlZWbmEzbEdPR3RpWTNKcVduQllNM0ZrSWl3aVpYaHdJam81T1RrNU9UazVPVGs1TENKcFlYUWlPakFzSW5aaklqcDdJa0JqYjI1MFpYaDBJam9pYUhSMGNITTZMeTkzZDNjdWR6TXViM0puTHpJd01UZ3ZZM0psWkdWdWRHbGhiSE12ZGpFaUxDSjBlWEJsSWpwYklsWmxjbWxtYVdGaWJHVkRjbVZrWlc1MGFXRnNJbDBzSW1OeVpXUmxiblJwWVd4VGRXSnFaV04wSWpwN0ltbGtJam9pWkdsa09tdGxlVHA2TmsxcmFXbGxlVzlNVFZOV2MwcEJXblkzU21wbE5YZFhVMnRFUlhsdFZXZHJlVVk0YTJKamNtcGFjRmd6Y1dRaUxDSm1hWEp6ZEY5dVlXMWxJam9pUm1WeWNtbHpJaXdpYkdGemRGOXVZVzFsSWpvaVVuVnpkR0ZqWldGdUluMHNJbWx6YzNWbGNpSTZJbVJwWkRwclpYazZlalpOYTJkRk9EUk9RMDF3VFdWQmVEbHFTemxqWmpWWE5FYzRaMk5hT1hoMWQwcDJSekZsTjNkT2F6aExRMmQwSWl3aWFYTnpkV0Z1WTJWRVlYUmxJam9pTWpBeE1DMHdNUzB3TVZRd01Eb3dNRG93TUZvaWZYMC5kNFFONzN2RHRadTc5UlA2R2xkSE9idTZyR3NqaWRrTFlwMFhNUlFOYk5QWTc1TEpvU3YyaVhrMlJ6NU0tVk1CWkdTVTNZUFpIeXRscktCanhyMUlCUSJdfX0.GVO-BJ0j5Ef2JLvmyx8g5sLRSrwIIFVc1EuJpHqBWO3Dt5xcniLUUrFv5598y7FctZbQKkKD6SCzJHe0t4h7Dw"
-    post:
-      summary: Create a new Authorization Request
-      tags:
-        - Verification
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                nonce:
-                  type: string
-                  description: A unique identifier for the Authorization Request
-                  example: "0d520cbe176ab9e1f7888c70888020d84a69672a4baabd3ce1c6aaad8f6420c0"
-                state:
-                  type: string
-                  description: A unique string representing the state of the Authorization Request
-                  example: "84266fdbd31d4c2c6d0665f7e8380fa3"
-                dcql_query:
-                  type: object
-                  description: A DCQL query object describing the Verifiable Credential(s) that will be requested
-                  properties:
-                    credentials:
-                      type: array
-                      items:
-                        type: object
-                        properties:
-                          id:
-                            type: string
-                            example: "CredentialQuery"
-                          format:
-                            type: string
-                            example: "jwt_vc_json"
-                          meta:
-                            type: object
-                            properties:
-                              type_values:
-                                type: array
-                                items:
-                                  type: array
-                                  items:
-                                    type: string
-                                example:
-                                  - ["VerifiableCredential"]
-                          claims:
-                            type: array
-                            items:
-                              type: object
-                              properties:
-                                path:
-                                  type: array
-                                  items:
-                                    type: string
-                                  example: ["credentialSubject", "first_name"]
-              required:
-                - nonce
-            examples:
-              siopv2:
-                summary: SIOPv2 Authorization Request
-                value:
-                  nonce: this is a nonce
-              oid4vp-with-dcql:
-                summary: OID4VP with DCQL Query
-                value:
-                  nonce: this is a nonce
-                  dcql_query:
-                    credentials:
-                      - id: "CredentialQuery"
-                        format: "jwt_vc_json"
-                        meta:
-                          type_values:
-                            - ["VerifiableCredential"]
-                        claims:
-                          - path: ["credentialSubject", "first_name"]
-                          - path: ["credentialSubject", "last_name"]
-      responses:
-        "201":
-          description: An Authorization Request has successfully been created
-          headers:
-            Location:
-              schema:
-                type: string
-                example: "/v0/authorization_requests/43482b98aa2e071231082fc29db7a59f342a643b0c590f71083af3c7ae83f3c3"
-              description: URL of the created resource
-          content:
-            application/x-www-form-urlencoded:
-              schema:
-                type: string
-                example: "openid://?client_id=did%3Ajwk%3AeyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ&request_uri=http%3A%2F%2F192.168.1.127%3A3033%2Frequest%2F0fc2af709c435975ab5ebbc6dd2d5508c7f4a1cc3a59145a73a39e532bcbfdc7"
-
-  /v0/authorization_requests/{authorization_request_id}:
-    get:
-      summary: Get the Authorization Request with the given Authorization Request ID
-      tags:
-        - Verification
-      parameters:
-        - in: path
-          name: authorization_request_id
-          required: true
-          schema:
-            type: string
-            minimum: 1
-          description: The Authorization Request ID
-      responses:
-        "200":
-          description: An Authorization Request with the given Authorization Request ID has been successfully retrieved
+          description: Version information retrieved successfully
           content:
             application/json:
               schema:
                 type: object
-              example:
-                authorization_request:
-                  client_id: "did:jwk:eyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJ4bS1weGxpdmhRMHNaTlIwUTdfRWVGOGdyRS0xU091b2ZwN2ItYk9GTUdFIiwia3R5IjoiT0tQIiwieCI6ImhuSzJuSno0cldhck5vdlhmSmxwWEItcFhVZmJCNkxaODRzV0xOWldsNlEifQ"
-                  redirect_uri: "http://localhost:3033/redirect"
-                  state: "f013ad664a141409b76860b825880f3b6cdaf6100ed6eb9126291865faa76af0"
-                  response_type: "id_token"
-                  scope: "openid"
-                  response_mode: "direct_post"
-                  nonce: "this is a nonce"
-                  client_metadata:
-                    client_name: "UniCore"
-                    logo_uri: "https://www.impierce.com/external/impierce-icon.png"
-                    subject_syntax_types_supported:
-                      - "did:jwk"
-                      - "did:key"
-                    id_token_signed_response_alg: "ES256"
-                    id_token_signing_alg_values_supported:
-                      - "ES256"
-                      - "EdDSA"
-                form_url_encoded_authorization_request: "openid://?client_id=did%3Ajwk%3AeyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJ4bS1weGxpdmhRMHNaTlIwUTdfRWVGOGdyRS0xU091b2ZwN2ItYk9GTUdFIiwieCI6ImhuSzJuSno0cldhck5vdlhmSmxwWEItcFhVZmJCNkxaODRzV0xOWldsNlEifQ&request_uri=http%3A%2F%2Flocalhost%3A3033%2Frequest%2Ff013ad664a141409b76860b825880f3b6cdaf6100ed6eb9126291865faa76af0"
-                signed_authorization_request_object: "eyJ0eXAiOiJvYXV0aC1hdXRoei1yZXErand0IiwiYWxnIjoiRVMyNTYiLCJraWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSjRiUzF3ZUd4cGRtaFJNSE5hVGxJd1VUZGZSV1ZHT0dkeVJTMHhVMDkxYjJad04ySXRZazlHVFVkRklpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNkltaHVTekp1U25vMGNsZGhjazV2ZGxobVNteHdXRUl0Y0ZoVlptSkNOa3hhT0RSelYweE9XbGRzTmxFaWZRIiwicmVkaXJlY3RfdXJpIjoiaHR0cDovL2xvY2FsaG9zdDozMDMzL3JlZGlyZWN0Iiwic3RhdGUiOiJmMDEzYWQ2NjRhMTQxNDA5Yjc2ODYwYjgyNTg4MGYzYjZjZGFmNjEwMGVkNmViOTEyNjI5MTg2NWZhYTc2YWYwIiwicmVzcG9uc2VfdHlwZSI6ImlkX3Rva2VuIiwic2NvcGUiOiJvcGVuaWQiLCJyZXNwb25zZV9tb2RlIjoiZGlyZWN0X3Bvc3QiLCJub25jZSI6InRoaXMgaXMgYSBub25jZSIsImNsaWVudF9tZXRhZGF0YSI6eyJjbGllbnRfbmFtZSI6IlVuaUNvcmUiLCJsb2dvX3VyaSI6Imh0dHBzOi8vd3d3LmltcGllcmNlLmNvbS9leHRlcm5hbC9pbXBpZXJjZS1pY29uLnBuZyIsInN1YmplY3Rfc3ludGF4X3R5cGVzX3N1cHBvcnRlZCI6WyJkaWQ6andrIiwiZGlkOmtleSJdLCJpZF90b2tlbl9zaWduZWRfcmVzcG9uc2VfYWxnIjoiRVMyNTYiLCJpZF90b2tlbl9zaWduaW5nX2FsZ192YWx1ZXNfc3VwcG9ydGVkIjpbIkVTMjU2IiwiRWREU0EiXX19.iMmcwZqT3iCJAy7WxqfxGSbeGoarRyK_mXqtkyO6K-gIHaeEb30HXmJhmkhbsye7BCVxlNIpkrcNMds8Ldqmaw"
-                id_token: null
-                vp_token: null
-                state: null
-        "404":
-          description: Authorization Request not found
+                properties:
+                  version:
+                    type: string
+                    example: "0.1.0"
+
+  /info:
+    get:
+      tags:
+        - Metadata
+      summary: Get application information
+      description: Returns application information including version, uptime, and other metadata
+      responses:
+        "200":
+          description: Application information retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  app:
+                    type: string
+                    example: "UniCore"
+                  profile:
+                    type: string
+                    enum: [issuer, holder, verifier, all]
+                    example: "all"
+                  version:
+                    type: string
+                    example: "0.1.0"
+                  release_channel:
+                    type: string
+                    example: "beta"
+                  docker_build_timestamp:
+                    type: string
+                    example: "2024-01-01T00:00:00Z"
+                  uptime:
+                    type: string
+                    example: "0 days, 00:05:23"
+
+  /v0/configuration:
+    get:
+      tags:
+        - Metadata
+      summary: Get application configuration
+      description: Returns the current application configuration
+      responses:
+        "200":
+          description: Configuration retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Configuration"
+
+  /healthz:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      description: Returns the health status of the application
+      responses:
+        "200":
+          description: Application is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "OK"
 
   # Holder endpoints
   /v0/holder/credentials:
@@ -1239,69 +1396,12 @@ paths:
         "201":
           description: Linked VP service created successfully
 
-  # OpenID4VCI and Well-known endpoints (proxied)
-  /.well-known/oauth-authorization-server:
-    get:
-      summary: Standard OpenID Connect discovery endpoint for authorization metadata
-      description: Standard OpenID Connect discovery endpoint for authorization metadata
-      tags:
-        - OpenID4VCI
-      responses:
-        "200":
-          description: Authorization server metadata
-          content:
-            application/json:
-              schema:
-                type: object
-
-  /.well-known/openid-credential-issuer:
-    get:
-      summary: Standard OpenID Connect discovery endpoint for issuer metadata
-      description: Standard OpenID Connect discovery endpoint for issuer metadata
-      tags:
-        - OpenID4VCI
-      responses:
-        "200":
-          description: Credential issuer metadata
-          content:
-            application/json:
-              schema:
-                type: object
-
-  /.well-known/did.json:
-    get:
-      summary: DID document endpoint
-      description: Returns the DID document for the agent
-      tags:
-        - Identity
-      responses:
-        "200":
-          description: DID document
-          content:
-            application/json:
-              schema:
-                type: object
-
-  /.well-known/did-configuration.json:
-    get:
-      summary: DID configuration endpoint
-      description: Returns the DID configuration for domain linkage
-      tags:
-        - Identity
-      responses:
-        "200":
-          description: DID configuration
-          content:
-            application/json:
-              schema:
-                type: object
-
   /auth/token:
     post:
       summary: Standard OAuth 2.0 endpoint for fetching a token
       description: Standard OAuth 2.0 token endpoint for OpenID4VCI flow
       tags:
-        - OpenID4VCI
+        - (public)
       requestBody:
         required: true
         content:
@@ -1328,37 +1428,12 @@ paths:
                     type: string
                     example: "Bearer"
 
-  /openid4vci/credential:
-    post:
-      summary: Standard OpenID Connect endpoint for redeeming a token for a credential
-      description: Standard OpenID4VCI credential endpoint
-      tags:
-        - OpenID4VCI
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                credential_configuration_id:
-                  type: string
-                proof:
-                  type: object
-      responses:
-        "200":
-          description: Credential issued
-          content:
-            application/json:
-              schema:
-                type: object
-
   /openid4vci/notification:
     post:
       summary: OpenID4VCI notification endpoint
       description: Receives notifications about credential status changes
       tags:
-        - OpenID4VCI
+        - (public)
       requestBody:
         required: true
         content:
@@ -1374,7 +1449,7 @@ paths:
       summary: Get credential offer URI
       description: Returns the credential offer for the given offer ID
       tags:
-        - OpenID4VCI
+        - (public)
       parameters:
         - in: path
           name: offer_id
@@ -1395,7 +1470,7 @@ paths:
       summary: OAuth Token Status List endpoint
       description: Returns the token status list for credential status verification
       tags:
-        - OpenID4VCI
+        - (public)
       parameters:
         - in: path
           name: path
@@ -1657,13 +1732,21 @@ tags:
     description: Application metadata and configuration endpoints
   - name: Health
     description: Health check endpoints
+  - name: (public)
+    description: A collection of endpoints that should be publicly accessible without authentication. They are used to resolve metadata or allow communication with wallets.
+  - name: (.well-known)
+    description: Well-known endpoints provide metadata about the server.
   - name: Issuance
-    description: Credential issuance endpoints
-  - name: Verification
-    description: Credential verification endpoints
+    description: Issue credentials to holders that will store them in their wallets.
+    externalDocs:
+      url: https://docs.impierce.com
+      description: Issuance API Documentation
   - name: Holder
     description: Credential holder endpoints
+  - name: Verification
+    description: Request holders to present credentials that meet certain criteria and verify the received presentations.
   - name: Identity
     description: Identity and DID management endpoints
-  - name: OpenID4VCI
-    description: OpenID for Verifiable Credential Issuance standard endpoints
+externalDocs:
+  url: https://beta.docs.impierce.com
+  description: Official Documentation
