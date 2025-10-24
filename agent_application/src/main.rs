@@ -24,6 +24,7 @@ use agent_verification::services::VerificationServices;
 use probes::liveness::healthz;
 use std::sync::Arc;
 use tokio::io;
+use tower_http::cors::CorsLayer;
 use tracing::info;
 
 #[tokio::main]
@@ -131,5 +132,14 @@ async fn start_server(alias: String, router: axum::Router, port: u16) {
     } else {
         info!("{alias} served at {}", listener.local_addr().unwrap());
     }
+
+    // CORS
+    let router = if config().cors_enabled {
+        info!("CORS (permissive) enabled for all routes");
+        router.layer(CorsLayer::permissive())
+    } else {
+        router
+    };
+
     axum::serve(listener, router).await.unwrap();
 }
