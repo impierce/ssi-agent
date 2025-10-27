@@ -25,7 +25,7 @@ use http_body_util::BodyExt as _;
 use hyper::StatusCode;
 use std::time::Duration;
 use tower::ServiceBuilder;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::trace::TraceLayer;
 use tracing::{debug, info, info_span, Span};
 
 pub const API_VERSION: &str = "/v0";
