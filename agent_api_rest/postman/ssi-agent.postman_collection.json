@@ -1871,7 +1871,7 @@
 								"header": [],
 								"body": {
 									"mode": "raw",
-									"raw": "{}",
+									"raw": "{\n    \"title\": \"My Template\",\n    \"credentialFormat\": \"w3c_vc_data_model_v1-1\",\n    \"holderType\": \"organization\"\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -1977,6 +1977,34 @@
 								"body": {
 									"mode": "formdata",
 									"formdata": []
+								},
+								"url": {
+									"raw": "{{HOST}}/v0/templates/{{TEMPLATE_ID}}",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"templates",
+										"{{TEMPLATE_ID}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update Template",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"status\": \"published\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
 								},
 								"url": {
 									"raw": "{{HOST}}/v0/templates/{{TEMPLATE_ID}}",
