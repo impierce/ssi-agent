@@ -189,10 +189,7 @@ pub mod tests {
                 .and(
                     move |request: &wiremock::Request| match request.body_json::<OfferEvent>().unwrap() {
                         // Validate that the event is a `CredentialRequestVerified` event.
-                        OfferEvent::CredentialRequestVerified {
-                            offer_id,
-                            subject_id: _,
-                        } => {
+                        OfferEvent::CredentialRequestVerified { offer_id, subject_id } => {
                             let app_clone = app.clone();
 
                             futures::executor::block_on(async {
@@ -219,7 +216,7 @@ pub mod tests {
                                             "credentialSubject": {
                                                 "first_name": "Ferris",
                                                 "last_name": "Rustacean",
-                                                "id": "did:example:test-subject-id"
+                                                "id": subject_id
                                             }
                                         }),
                                         is_signed: false,

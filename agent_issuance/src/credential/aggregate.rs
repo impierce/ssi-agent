@@ -416,8 +416,8 @@ impl Aggregate for Credential {
                         .iss(issuer_did)
                         .iat(iat)
                         .nbf(iat)
+                        // TODO: setting the `nbf` to `iat` makes the JWT immediately usable
                         .jti(credential_id_for_jti);
-                    // TODO: setting the `nbf` to `iat` makes the JWT immediately usable
 
                     let vc_jwt_builder = if let Some(exp) = exp {
                         vc_jwt_builder.exp(exp)
