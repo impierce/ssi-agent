@@ -59,6 +59,17 @@ LinkedVerifiablePresentationServiceCreated
 
 ```
 TemplateCreated
+TitleUpdated
+DisplayUpdated
+CredentialFormatUpdated
+CreatorUpdated
+HolderTypeUpdated
+TagsUpdated
+StatusUpdated
+VisibilityUpdated
+DescriptionUpdated
+TypeUpdated
+SchemaUpdated
 ```
 
 #### `server_config`

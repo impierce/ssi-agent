@@ -630,7 +630,18 @@ pub enum ServiceEvent {
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum TemplateEvent {
-    CreateTemplate,
+    TemplateCreated,
+    TitleUpdated,
+    DisplayUpdated,
+    CredentialFormatUpdated,
+    CreatorUpdated,
+    HolderTypeUpdated,
+    TagsUpdated,
+    StatusUpdated,
+    VisibilityUpdated,
+    DescriptionUpdated,
+    TypeUpdated,
+    SchemaUpdated,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
