@@ -8,7 +8,7 @@ use crate::template::{
 };
 
 #[derive(Clone)]
-pub struct CatalogState {
+pub struct LibraryState {
     pub command: CommandHandlers,
     pub query: Queries,
 }

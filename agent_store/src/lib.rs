@@ -1,6 +1,3 @@
-use agent_catalog::state::CatalogState;
-use agent_catalog::template::aggregate::Template;
-use agent_catalog::template::views::all_templates::AllTemplatesView;
 use agent_holder::credential::aggregate::Credential as HolderCredential;
 use agent_holder::credential::queries::all_credentials::AllHolderCredentialsView;
 use agent_holder::offer::aggregate::Offer as ReceivedOffer;
@@ -22,6 +19,9 @@ use agent_issuance::SimpleLoggingQuery;
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
+use agent_library::state::LibraryState;
+use agent_library::template::aggregate::Template;
+use agent_library::template::views::all_templates::AllTemplatesView;
 use agent_shared::application_state::Command;
 use agent_shared::custom_queries::ListAllQuery;
 use agent_shared::generic_query::generic_query;
@@ -196,10 +196,10 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
     }
 }
 
-pub async fn catalog_state<CCB: CqrsComponentBuilder>(
+pub async fn library_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     event_publishers: Vec<Box<dyn EventPublisher>>,
-) -> CatalogState {
+) -> LibraryState {
     // Partition the event_publishers into the different aggregates.
     let Partitions {
         template_event_publishers,
@@ -210,11 +210,11 @@ pub async fn catalog_state<CCB: CqrsComponentBuilder>(
         .commands_and_queries::<Template, Template, AllTemplatesView>((), template_event_publishers)
         .await;
 
-    CatalogState {
-        command: agent_catalog::state::CommandHandlers {
+    LibraryState {
+        command: agent_library::state::CommandHandlers {
             template: template_command_handler,
         },
-        query: agent_catalog::state::ViewRepositories {
+        query: agent_library::state::ViewRepositories {
             template,
             all_templates,
         },

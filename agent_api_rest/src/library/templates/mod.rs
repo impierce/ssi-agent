@@ -1,7 +1,7 @@
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
-use agent_catalog::state::CatalogState;
-use agent_catalog::template::command::TemplateCommand;
+use agent_library::state::LibraryState;
+use agent_library::template::command::TemplateCommand;
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
@@ -20,7 +20,7 @@ pub struct PostTemplatesEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn post_templates(
-    State(state): State<CatalogState>,
+    State(state): State<LibraryState>,
     Json(PostTemplatesEndpointRequest {}): Json<PostTemplatesEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let template_id = uuid::Uuid::new_v4().to_string();
@@ -54,7 +54,7 @@ pub struct GetTemplatesEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn get_templates(
-    State(state): State<CatalogState>,
+    State(state): State<LibraryState>,
     Form(GetTemplatesEndpointRequest {}): Form<GetTemplatesEndpointRequest>,
 ) -> Result<Response, ApiError> {
     debug!("Request Params - ");
@@ -79,7 +79,7 @@ pub(crate) async fn get_templates(
 
 #[axum_macros::debug_handler]
 pub(crate) async fn get_template(
-    State(state): State<CatalogState>,
+    State(state): State<LibraryState>,
     Path(template_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&template_id, &state.query.template)

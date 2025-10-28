@@ -40,13 +40,13 @@ async fn main() -> io::Result<()> {
     // between `agent_application` and `agent_store` that will provide a cleaner way of initializing the event
     // publishers and sending them over to `agent_store`.
     let identity_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
-    let catalog_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
+    let library_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
     let issuance_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
     let holder_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
     let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
-    let (identity_state, catalog_state, issuance_state, holder_state, verification_state) = match config()
+    let (identity_state, library_state, issuance_state, holder_state, verification_state) = match config()
         .event_store
         .type_
     {
@@ -54,7 +54,7 @@ async fn main() -> io::Result<()> {
             let builder = Postgres::new().await;
             (
                 agent_store::identity_state(&builder, identity_services, identity_event_publishers).await,
-                agent_store::catalog_state(&builder, catalog_event_publishers).await,
+                agent_store::library_state(&builder, library_event_publishers).await,
                 postgres::issuance_state(builder.pool.clone(), issuance_services, issuance_event_publishers).await,
                 agent_store::holder_state(&builder, holder_services, holder_event_publishers).await,
                 agent_store::verification_state(&builder, verification_services, verification_event_publishers).await,
@@ -64,7 +64,7 @@ async fn main() -> io::Result<()> {
             let builder = MongoDB::new().await;
             (
                 agent_store::identity_state(&builder, identity_services, identity_event_publishers).await,
-                agent_store::catalog_state(&builder, catalog_event_publishers).await,
+                agent_store::library_state(&builder, library_event_publishers).await,
                 mongodb::issuance_state(builder.client.clone(), issuance_services, issuance_event_publishers).await,
                 agent_store::holder_state(&builder, holder_services, holder_event_publishers).await,
                 agent_store::verification_state(&builder, verification_services, verification_event_publishers).await,
@@ -72,7 +72,7 @@ async fn main() -> io::Result<()> {
         }
         EventStoreType::InMemory => (
             agent_store::identity_state(&InMemory, identity_services, identity_event_publishers).await,
-            agent_store::catalog_state(&InMemory, catalog_event_publishers).await,
+            agent_store::library_state(&InMemory, library_event_publishers).await,
             in_memory::issuance_state(issuance_services, issuance_event_publishers).await,
             agent_store::holder_state(&InMemory, holder_services, holder_event_publishers).await,
             agent_store::verification_state(&InMemory, verification_services, verification_event_publishers).await,
@@ -90,7 +90,7 @@ async fn main() -> io::Result<()> {
 
     let app = app(ApplicationState {
         identity_state: Some(identity_state),
-        catalog_state: Some(catalog_state),
+        library_state: Some(library_state),
         issuance_state: Some(issuance_state),
         holder_state: Some(holder_state),
         verification_state: Some(verification_state),

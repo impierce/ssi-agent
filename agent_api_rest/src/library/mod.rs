@@ -1,15 +1,15 @@
 pub mod error;
 pub mod templates;
 
-use agent_catalog::state::CatalogState;
+use agent_library::state::LibraryState;
 use axum::{routing::get, Router};
 
 use crate::{
-    catalog::templates::{get_template, get_templates, post_templates},
+    library::templates::{get_template, get_templates, post_templates},
     API_VERSION,
 };
 
-pub fn router(catalog_state: CatalogState) -> Router {
+pub fn router(library_state: LibraryState) -> Router {
     Router::new()
         .nest(
             API_VERSION,
@@ -17,5 +17,5 @@ pub fn router(catalog_state: CatalogState) -> Router {
                 .route("/templates", get(get_templates).post(post_templates))
                 .route("/templates/{template_id}", get(get_template)),
         )
-        .with_state(catalog_state)
+        .with_state(library_state)
 }

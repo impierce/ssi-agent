@@ -1,4 +1,3 @@
-use agent_catalog::template::aggregate::Template;
 use agent_holder::presentation::aggregate::Presentation;
 use agent_identity::{
     connection::aggregate::Connection, document::aggregate::Document, profile::aggregate::Profile,
@@ -7,6 +6,7 @@ use agent_identity::{
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
+use agent_library::template::aggregate::Template;
 use agent_shared::config::config;
 use agent_store::{
     AuthorizationRequestEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher,
@@ -31,7 +31,7 @@ pub struct EventPublisherHttp {
     pub profile: Option<AggregateEventPublisherHttp<Profile>>,
     pub service: Option<AggregateEventPublisherHttp<Service>>,
 
-    // Catalog
+    // Library
     pub template: Option<AggregateEventPublisherHttp<Template>>,
 
     // Issuance

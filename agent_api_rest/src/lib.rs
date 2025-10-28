@@ -1,7 +1,7 @@
-pub mod catalog;
 pub mod holder;
 pub mod identity;
 pub mod issuance;
+pub mod library;
 pub mod metrics;
 pub mod verification;
 
@@ -9,10 +9,10 @@ pub mod error;
 pub mod handlers;
 pub mod utils;
 
-use agent_catalog::state::CatalogState;
 use agent_holder::state::HolderState;
 use agent_identity::state::IdentityState;
 use agent_issuance::state::IssuanceState;
+use agent_library::state::LibraryState;
 use agent_shared::config::config;
 use agent_verification::state::VerificationState;
 use axum::{
@@ -37,7 +37,7 @@ pub const DOCUMENTATION_URL: &str = "https://beta.docs.impierce.com/unicore/";
 #[derive(Default)]
 pub struct ApplicationState {
     pub identity_state: Option<IdentityState>,
-    pub catalog_state: Option<CatalogState>,
+    pub library_state: Option<LibraryState>,
     pub issuance_state: Option<IssuanceState>,
     pub holder_state: Option<HolderState>,
     pub verification_state: Option<VerificationState>,
@@ -46,7 +46,7 @@ pub struct ApplicationState {
 pub fn app(
     ApplicationState {
         identity_state,
-        catalog_state,
+        library_state,
         issuance_state,
         holder_state,
         verification_state,
@@ -54,7 +54,7 @@ pub fn app(
 ) -> Router {
     let app = Router::new()
         .merge(identity_state.map(identity::router).unwrap_or_default())
-        .merge(catalog_state.map(catalog::router).unwrap_or_default())
+        .merge(library_state.map(library::router).unwrap_or_default())
         .merge(issuance_state.map(issuance::router).unwrap_or_default())
         .merge(holder_state.map(holder::router).unwrap_or_default())
         .merge(verification_state.map(verification::router).unwrap_or_default())
