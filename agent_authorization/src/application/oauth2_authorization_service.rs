@@ -71,6 +71,7 @@ impl OAuth2AuthorizationService {
                     "/auth/consent?{encoded}"
                 )))
             }
+            ConsentStatus::Expired => Err(OAuth2AuthorizationError::ExpiredAuthorizationRequestError),
             ConsentStatus::Granted => {
                 let redirect_uri = oauth2_authorization_request
                     .redirect_uri

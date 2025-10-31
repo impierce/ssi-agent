@@ -37,6 +37,14 @@ impl View<OAuth2AuthorizationRequest> for OAuth2AuthorizationRequest {
                 self.code_challenge_method.clone_from(code_challenge_method);
                 self.expires_at = *expires_at;
             }
+            OAuth2AuthorizationRequestExpired {
+                oauth2_authorization_request_id,
+                consent_status,
+            } => {
+                self.oauth2_authorization_request_id
+                    .clone_from(oauth2_authorization_request_id);
+                self.consent_status = consent_status.clone();
+            }
             ConsentGranted {
                 oauth2_authorization_request_id,
                 consent_status,

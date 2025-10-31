@@ -29,6 +29,10 @@ pub enum OAuth2AuthorizationRequestEvent {
 
         expires_at: i64,
     },
+    OAuth2AuthorizationRequestExpired {
+        oauth2_authorization_request_id: String,
+        consent_status: ConsentStatus,
+    },
     ConsentGranted {
         oauth2_authorization_request_id: String,
         consent_status: ConsentStatus,

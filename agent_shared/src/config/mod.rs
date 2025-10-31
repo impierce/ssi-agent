@@ -616,6 +616,7 @@ pub enum ClientEvent {
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum OAuth2AuthorizationRequestEvent {
     OAuth2AuthorizationRequestCreated,
+    OAuth2AuthorizationRequestExpired,
     ConsentGranted,
     ConsentRejected,
 }

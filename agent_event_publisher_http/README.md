@@ -44,6 +44,7 @@ ClientRegistered
 
 ```
 OAuth2AuthorizationRequestCreated
+OAuth2AuthorizationRequestExpired
 ConsentGranted
 ConsentRejected
 ```

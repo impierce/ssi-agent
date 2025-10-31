@@ -14,6 +14,7 @@ pub enum ConsentStatus {
     Pending,
     Granted,
     Rejected,
+    Expired,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -80,14 +81,34 @@ impl Aggregate for OAuth2AuthorizationRequest {
                 code_challenge_method: pushed_authorization_request.code_challenge_method,
                 expires_at,
             }]),
-            GrantConsent => Ok(vec![ConsentGranted {
-                oauth2_authorization_request_id: self.oauth2_authorization_request_id.clone(),
-                consent_status: ConsentStatus::Granted,
-            }]),
-            RejectConsent => Ok(vec![ConsentRejected {
-                oauth2_authorization_request_id: self.oauth2_authorization_request_id.clone(),
-                consent_status: ConsentStatus::Rejected,
-            }]),
+            GrantConsent => {
+                let now = chrono::Utc::now().timestamp();
+                if now > self.expires_at {
+                    Ok(vec![OAuth2AuthorizationRequestExpired {
+                        oauth2_authorization_request_id: self.oauth2_authorization_request_id.clone(),
+                        consent_status: ConsentStatus::Expired,
+                    }])
+                } else {
+                    Ok(vec![ConsentGranted {
+                        oauth2_authorization_request_id: self.oauth2_authorization_request_id.clone(),
+                        consent_status: ConsentStatus::Granted,
+                    }])
+                }
+            }
+            RejectConsent => {
+                let now = chrono::Utc::now().timestamp();
+                if now > self.expires_at {
+                    Ok(vec![OAuth2AuthorizationRequestExpired {
+                        oauth2_authorization_request_id: self.oauth2_authorization_request_id.clone(),
+                        consent_status: ConsentStatus::Expired,
+                    }])
+                } else {
+                    Ok(vec![ConsentRejected {
+                        oauth2_authorization_request_id: self.oauth2_authorization_request_id.clone(),
+                        consent_status: ConsentStatus::Rejected,
+                    }])
+                }
+            }
         }
     }
 
@@ -121,6 +142,13 @@ impl Aggregate for OAuth2AuthorizationRequest {
                 self.code_challenge = code_challenge;
                 self.code_challenge_method = code_challenge_method;
                 self.expires_at = expires_at;
+            }
+            OAuth2AuthorizationRequestExpired {
+                oauth2_authorization_request_id,
+                consent_status,
+            } => {
+                self.oauth2_authorization_request_id = oauth2_authorization_request_id;
+                self.consent_status = consent_status;
             }
             ConsentGranted {
                 oauth2_authorization_request_id,
