@@ -55,16 +55,18 @@ services:
       - monitoring
 
   ssi-agent:
-    image: impiercetechnologies/ssi-agent:1.0.0-beta.8
-    # build:
-    #   context: ../..
-    #   dockerfile: ./agent_application/docker/Dockerfile
+    build:
+      context: ../..
+      dockerfile: ./agent_application/docker/Dockerfile
+    depends_on:
+      - cqrs-postgres-db
     ports:
       - 3033:3033
       - 9091:9091
     environment:
       UNICORE__PROFILE: development
       UNICORE__APPLICATION_URL: ${UNICORE__APPLICATION_URL}
+      UNICORE__EVENT_STORE__TYPE: postgres
       UNICORE__EVENT_STORE__CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo
       UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD: "secure_password"
       UNICORE__METRICS__ENABLED: true
