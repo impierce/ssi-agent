@@ -163,9 +163,81 @@ pub(crate) mod serde_explicit_null {
 
 #[cfg(test)]
 mod tests {
-    use super::serde_explicit_null;
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Method, Request};
+    use oid4vc_core::utils::form_urlencoded::to_form_urlencoded_string;
     use serde::{Deserialize, Serialize};
     use serde_json::json;
+
+    #[derive(Debug, Serialize, Deserialize, PartialEq)]
+    struct TestObject {
+        foo: String,
+        bar: Vec<i32>,
+    }
+
+    #[derive(Debug, Serialize, Deserialize, PartialEq)]
+    struct TestData {
+        object: TestObject,
+        array: Vec<TestObject>,
+    }
+
+    #[tokio::test]
+    async fn test_stringified_form_extractor() {
+        // Simulate a form where 'object' and 'array' fields are stringified JSON
+        let params = TestData {
+            object: TestObject {
+                foo: "TestObject A".to_string(),
+                bar: vec![1, 2, 3],
+            },
+            array: vec![TestObject {
+                foo: "TestObject B".to_string(),
+                bar: vec![1, 2, 3],
+            }],
+        };
+
+        let form_body = to_form_urlencoded_string(&params).unwrap();
+
+        assert_eq!(
+            form_body,
+            "object=%7B%22foo%22%3A%22TestObject+A%22%2C%22bar%22%3A%5B1%2C2%2C3%5D%7D&array=%5B%7B%22foo%22%3A%22TestObject+B%22%2C%22bar%22%3A%5B1%2C2%2C3%5D%7D%5D"
+        );
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(Body::from(form_body))
+            .unwrap();
+
+        let extracted = StringifiedForm::<TestData>::from_request(req, &()).await.unwrap();
+        assert_eq!(extracted.0, params);
+    }
+
+    #[tokio::test]
+    async fn test_stringified_query_extractor() {
+        // Simulate a query string where 'object' and 'array' fields are stringified JSON
+        let params = TestData {
+            object: TestObject {
+                foo: "TestObject A".to_string(),
+                bar: vec![1, 2, 3],
+            },
+            array: vec![TestObject {
+                foo: "TestObject B".to_string(),
+                bar: vec![1, 2, 3],
+            }],
+        };
+        let query_string = to_form_urlencoded_string(&params).unwrap();
+        assert_eq!(
+            query_string,
+            "object=%7B%22foo%22%3A%22TestObject+A%22%2C%22bar%22%3A%5B1%2C2%2C3%5D%7D&array=%5B%7B%22foo%22%3A%22TestObject+B%22%2C%22bar%22%3A%5B1%2C2%2C3%5D%7D%5D"
+        );
+        let uri = format!("/test_endpoint?{query_string}");
+        let mut parts = http::Request::builder().uri(uri).body(()).unwrap().into_parts().0;
+        let extracted = StringifiedQuery::<TestData>::from_request_parts(&mut parts, &())
+            .await
+            .unwrap();
+        assert_eq!(extracted.0, params);
+    }
 
     #[derive(Deserialize, Serialize, Debug, PartialEq)]
     struct TestStruct {
