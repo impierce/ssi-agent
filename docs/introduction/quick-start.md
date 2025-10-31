@@ -35,31 +35,31 @@ Create a new `compose.yaml` file with the following content:
 name: ssi-agent
 
 services:
-  cqrs-postgres-db:
-    container_name: cqrs-postgres-db
-    image: postgres
+  mongodb:
+    image: mongo:8
     restart: always
     ports:
-      - 5432:5432
-    environment:
-      POSTGRES_DB: demo
-      POSTGRES_USER: demo_user
-      POSTGRES_PASSWORD: demo_pass
-    volumes:
-      - "./db:/docker-entrypoint-initdb.d"
+      - 27017:27017
+    command: "mongod --replSet rs0"
+    healthcheck:
+      test: |
+        mongosh --quiet --eval "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }"
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   ssi-agent:
     image: impiercetechnologies/ssi-agent:1.0.0-beta.13
     depends_on:
-      - cqrs-postgres-db
+      - mongodb
     ports:
       - 3033:3033
       - 9091:9091
     environment:
       UNICORE__PROFILE: development
       UNICORE__APPLICATION_URL: ${UNICORE__APPLICATION_URL}
-      UNICORE__EVENT_STORE__TYPE: postgres
-      UNICORE__EVENT_STORE__CONNECTION_STRING: postgresql://demo_user:demo_pass@cqrs-postgres-db:5432/demo
+      UNICORE__EVENT_STORE__TYPE: mongodb
+      UNICORE__EVENT_STORE__CONNECTION_STRING: mongodb://mongodb:27017/ssi-agent?directConnection=true&retryWrites=false&replicaSet=rs0
       UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD: "secure_password"
       UNICORE__METRICS__ENABLED: true
       UNICORE__METRICS__PORT: 9091
