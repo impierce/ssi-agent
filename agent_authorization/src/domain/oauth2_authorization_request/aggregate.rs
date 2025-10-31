@@ -12,7 +12,7 @@ use url::Url;
 pub enum ConsentStatus {
     #[default]
     Pending,
-    Given,
+    Granted,
     Rejected,
 }
 
@@ -82,7 +82,7 @@ impl Aggregate for OAuth2AuthorizationRequest {
             }]),
             GrantConsent => Ok(vec![ConsentGranted {
                 oauth2_authorization_request_id: self.oauth2_authorization_request_id.clone(),
-                consent_status: ConsentStatus::Given,
+                consent_status: ConsentStatus::Granted,
             }]),
             RejectConsent => Ok(vec![ConsentRejected {
                 oauth2_authorization_request_id: self.oauth2_authorization_request_id.clone(),
@@ -192,7 +192,7 @@ pub mod oauth2_authorization_request_tests {
             .when(OAuth2AuthorizationRequestCommand::GrantConsent)
             .then_expect_events(vec![OAuth2AuthorizationRequestEvent::ConsentGranted {
                 oauth2_authorization_request_id,
-                consent_status: ConsentStatus::Given,
+                consent_status: ConsentStatus::Granted,
             }]);
     }
 

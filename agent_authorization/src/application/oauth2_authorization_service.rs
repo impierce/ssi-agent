@@ -71,7 +71,7 @@ impl OAuth2AuthorizationService {
                     "/auth/consent?{encoded}"
                 )))
             }
-            ConsentStatus::Given => {
+            ConsentStatus::Granted => {
                 let redirect_uri = oauth2_authorization_request
                     .redirect_uri
                     .ok_or(OAuth2AuthorizationError::MissingRedirectUriError)?;
