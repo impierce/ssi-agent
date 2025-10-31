@@ -57,6 +57,7 @@ impl TokenIssuanceService {
                 pre_authorized_code,
                 tx_code,
             } => {
+                // TODO: make sure that the Pre-Authorized Code is short-lived and single-use.
                 let offer = query_handler("all_offers", &issuance_state.query.all_offers)
                     .await
                     .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?
