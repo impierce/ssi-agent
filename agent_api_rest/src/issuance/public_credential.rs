@@ -9,7 +9,8 @@ use axum::{
     Json,
 };
 use http_api_problem::ApiError;
-use jsonwebtoken::{decode_header, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use oid4vc_core::authentication::verify::Verify;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -40,7 +41,7 @@ pub async fn public_credential(
     })?;
 
     // sub = jti = credential_id - fetch the credential
-    let credential = query_handler(&sub, &state.query.credential).await?.ok_or_else(|| {
+    let credential = query_handler(sub, &state.query.credential).await?.ok_or_else(|| {
         ApiError::builder(StatusCode::NOT_FOUND)
             .title("Invalid Token")
             .message("Token sub does not correspond to a valid credential")
@@ -100,40 +101,40 @@ pub async fn public_credential(
             .finish());
     }
 
-    // let relying_party_state = Subject::default();
+    let relying_party_state = Subject::default();
 
-    // // Fetch the public key using the kid
-    // let public_key = relying_party.public_key(&kid).await.map_err(|_| {
-    //     ApiError::builder(StatusCode::UNAUTHORIZED)
-    //         .title("Invalid Token")
-    //         .message("Could not retrieve public key for kid")
-    //         .finish()
-    // })?;
+    // Fetch the public key using the kid
+    let public_key = relying_party_state.public_key(&kid).await.map_err(|_| {
+        ApiError::builder(StatusCode::UNAUTHORIZED)
+            .title("Invalid Token")
+            .message("Could not retrieve public key for kid")
+            .finish()
+    })?;
 
-    // // Create decoding key based on the algorithm
-    // let decoding_key = match jwt_header.alg {
-    //     Algorithm::EdDSA => DecodingKey::from_ed_der(&public_key),
-    //     Algorithm::ES256 => DecodingKey::from_ec_der(&public_key),
-    //     _ => {
-    //         return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
-    //             .title("Invalid Token")
-    //             .message(format!("Unsupported algorithm: {:?}", jwt_header.alg))
-    //             .finish());
-    //     }
-    // };
+    // Create decoding key based on the algorithm
+    let decoding_key = match jwt_header.alg {
+        Algorithm::EdDSA => DecodingKey::from_ed_der(&public_key),
+        Algorithm::ES256 => DecodingKey::from_ec_der(&public_key),
+        _ => {
+            return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
+                .title("Invalid Token")
+                .message(format!("Unsupported algorithm: {:?}", jwt_header.alg))
+                .finish());
+        }
+    };
 
-    // let mut validation = Validation::new(jwt_header.alg);
-    // validation.set_issuer(&[credential_subject_id]);
-    // validation.sub = Some(sub.clone());
+    let mut validation = Validation::new(jwt_header.alg);
+    validation.set_issuer(&[credential_subject_id]);
+    validation.sub = Some(sub.to_string());
 
-    // // Decode and verify the JWT signature
-    // let _token_data = decode::<serde_json::Value>(&jwt, &decoding_key, &validation).map_err(|e| {
-    //     ApiError::builder(StatusCode::UNAUTHORIZED)
-    //         .title("Invalid Token")
-    //         .message(format!("JWT verification failed: {}", e))
-    //         .finish()
-    // })?;
+    // Decode and verify the JWT signature
+    let _token_data = decode::<serde_json::Value>(&jwt, &decoding_key, &validation).map_err(|e| {
+        ApiError::builder(StatusCode::UNAUTHORIZED)
+            .title("Invalid Token")
+            .message(format!("JWT verification failed: {}", e))
+            .finish()
+    })?;
 
-    // Return the credential if all validation passes
+    // Return the credential if all validations pass
     Ok((StatusCode::OK, Json(credential)).into_response())
 }
