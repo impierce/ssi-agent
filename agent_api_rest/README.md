@@ -1,6 +1,6 @@
-# agent_api_rest
+# UniCore REST API
 
-A lightweight REST API for the SSI Agent.
+A lightweight REST API for UniCore.
 
 UniCore's REST API is currently still in the pre-release stage meaning that the API is still under active development.
 Breaking changes may occur before the API reaches a stable version.

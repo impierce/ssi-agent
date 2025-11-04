@@ -47,8 +47,17 @@ This overview is still a work in progress. You can refer to the [example.config.
 
 ### Application URL
 
-UniCore's application URL. This value represents the self-aware URL of the application. It is used for internal
-communication and should not be exposed to clients or identity wallets.
+UniCore's application URL. This value represents the internal URL where the application listens for requests. It is used for:
+- Internal service communication
+- Health checks and monitoring
+- Administrative endpoints
+- Container-to-container communication in Docker environments
+
+:::warning
+
+The `APPLICATION_URL` should **not** be directly exposed to external clients or identity wallets for security reasons.
+
+:::
 
 :::note
 
@@ -63,15 +72,26 @@ The `UNICORE__APPLICATION_URL` may include a path segment, which will be treated
 #### Example
 
 ```yaml
-application_url: http://localhost:3033/my/base/path
+application_url: http://localhost:3033
 ```
 
 ### Public URL
 
-UniCore's public URL. This value is communicated to clients and identity wallets and should be publicly accessible. When
-not set, it defaults to the value of `UNICORE__APPLICATION_URL`.
+UniCore's public URL. This value is communicated to external clients and identity wallets and must be publicly accessible. It is used for:
+- Credential offers shared with wallets
+- Authorization endpoints accessed by external clients
+- DID document hosting (for did:web)
+- Public API endpoints
 
-<!-- TODO: In production, should we require that `UNICORE__PUBLIC_URL` is always explicitly set, rather than defaulting to the value of `UNICORE__APPLICATION_URL`? This would help prevent accidental exposure of internal URLs to clients. -->
+When not set, it defaults to the value of `UNICORE__APPLICATION_URL`.
+
+:::note
+
+In production deployments, the `PUBLIC_URL` typically differs from `APPLICATION_URL`. For example:
+- `APPLICATION_URL`: `http://unicore:3033` (internal container URL)
+- `PUBLIC_URL`: `https://issuer.example.com` (external domain with TLS)
+
+:::
 
 :::note
 
@@ -265,33 +285,32 @@ event_store:
   connection_string: postgresql://user:password@database:5432/demo
 ```
 
-<!--
-## More configuration options
+## Additional Configuration Options
 
-| Name                                                    | Description                                                       | Default value | Accepted values |
-| ------------------------------------------------------- | ----------------------------------------------------------------- | ------------- | --------------- |
-| `UNICORE__BASE_PATH`                                    | A base path can be set if needed.                                 | -             | string          |
-| `UNICORE__CORS_ENABLED`                                 | Enable CORS (permissive). Only required for browser-based access. | `false`       | boolean         |
-| `UNICORE__DID_METHODS__DID_WEB__ENABLED`                | Create and host a `did:web` DID document.                         | `false`       | boolean         |
-| `UNICORE__SIGNING_ALGORITHMS_SUPPORTED__EDDSA__ENABLED` | Toggles the algorithm allowed for cryptographic operations.       | `true`        | boolean         |
-| `UNICORE__DOMAIN_LINKAGE_ENABLED`                       | Enable domain linkage (only works with `did:web`).                | -             | boolean         |
-| `UNICORE__EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS`          | The timeout for external server responses (in milliseconds).      | `1000`        | integer         |
--->
+### CORS
+Enable CORS (permissive) for browser-based access.
 
-<!-- TODO: How to document all other DID methods? -->
-<!-- TODO: VP_FORMATS -->
-<!-- TODO: EVENT_PUBLISHERS: even configured through env vars? -->
+| Environment variable  | `config.yaml` |
+| --------------------- | ------------- |
+| `UNICORE__CORS_ENABLED` | `cors_enabled` |
 
-<!--
-## Secret Management
+Default: `false`
 
-| Name                                           | Description                                       | Default value | Accepted values               |
-| ---------------------------------------------- | ------------------------------------------------- | ------------- | ----------------------------- |
-| `UNICORE__SECRET_MANAGER__STRONGHOLD_PATH`     | The path to the stronghold file.                  | -             | `/var/lib/unicore/stronghold` |
-| `UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD` | The password to unlock the stronghold.            | -             | -                             |
-| `UNICORE__SECRET_MANAGER__ISSUER_EDDSA_KEY_ID` | The key ID of the EDDSA (Ed25519) key to be used. | -             | -                             |
-| `UNICORE__SECRET_MANAGER__ISSUER_ES256_KEY_ID` | The key ID of the ES256 key to be used.           | -             | -                             |
--->
+### Domain Linkage
+Enable domain linkage (only works with `did:web`).
+
+| Environment variable              | `config.yaml`         |
+| --------------------------------- | --------------------- |
+| `UNICORE__DOMAIN_LINKAGE_ENABLED` | `domain_linkage_enabled` |
+
+### External Server Response Timeout
+The timeout for external server responses (in milliseconds).
+
+| Environment variable                         | `config.yaml`                        |
+| -------------------------------------------- | ------------------------------------ |
+| `UNICORE__EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS` | `external_server_response_timeout_ms` |
+
+Default: `1000`
 
 ## Look and Feel
 
@@ -300,5 +319,3 @@ event_store:
 Setting display values is currently not supported through environment variables. Please refer to `config.yaml`.
 
 :::
-
-<!-- TODO: DISPLAY_0_NAME: even configured through env vars? -->

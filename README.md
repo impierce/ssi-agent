@@ -1,4 +1,4 @@
-# SSI Agent
+# UniCore
 
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
 [![GitHub License](https://img.shields.io/github/license/impierce/ssi-agent)](https://github.com/impierce/ssi-agent/blob/HEAD/LICENSE)
@@ -8,7 +8,16 @@
 
 [![twelve-factor-app](https://img.shields.io/badge/factors-twelve-blue)](https://12factor.net)
 
+**UniCore** is an eIDAS 2.0-compliant Self-Sovereign Identity (SSI) agent that enables organizations to issue, verify, and manage verifiable credentials. It connects European Identity Wallets to your IT systems using open standards like OpenID4VCI, OpenID4VP, and W3C Verifiable Credentials.
+
 ---
+
+## Getting Started
+
+1. **Quick Start**: Follow the [quick start guide](./docs/introduction/quick-start.md) to deploy UniCore locally and issue your first credential
+2. **API Specification**: [Explore the REST API](./agent_api_rest/README.md) to understand available endpoints
+3. **Configuration**: Review [configuration options](./docs/configuration/CONFIGURATION.md) for customizing your deployment
+4. **Build & Run**: [Deploy with Docker](./agent_application/docker/README.md) for local development
 
 ## API specification
 
@@ -16,11 +25,11 @@
 
 ## Build & Run
 
-Build and run the **SSI Agent** in a local Docker environment following [these steps](./agent_application/docker/README.md).
+Build and run **UniCore** in a local Docker environment following [these steps](./agent_application/docker/README.md).
 
 ## Configuration
 
-All configuration options are documented [here](./agent_application/CONFIGURATION.md).
+All configuration options are documented [here](./docs/configuration/CONFIGURATION.md).
 
 ## Breaking changes
 

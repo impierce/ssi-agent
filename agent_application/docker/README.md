@@ -5,7 +5,7 @@
 In case you want to build the image in isolation, you can run the following command from within the directory `/agent_application`:
 
 ```bash
-docker build -f docker/Dockerfile -t ssi-agent ..
+docker build -f docker/Dockerfile -t unicore ..
 ```
 
 ## Local development
@@ -28,7 +28,7 @@ volumes:
 3. _(optional)_ In case you are interested in the events that UniCore produces, you can configure a HTTP Event Publisher that sends
    certain events to a URL of your choice. More information about the HTTP Event Publisher [can be found here](../../agent_event_publisher_http/README.md).
 
-4. To start the **SSI Agent**, a **Postgres** database along with **pgadmin** (Postgres Admin Interface) simply run:
+4. To start **UniCore**, a **Postgres** database along with **pgadmin** (Postgres Admin Interface) simply run:
 
 ```bash
 docker compose up
@@ -64,4 +64,4 @@ To integrate just-in-time data request events into your workflow, adhere to the 
 3. The HTTP Event Publisher dispatches the event to the external system. Leveraging the provided identifiers, the external system generates and signs the credential, then submits it to UniCore's `/v0/credentials` endpoint. Refer to the [API specification](../../agent_api_rest/README.md)) for additional details on endpoint usage.
 
 By default, UniCore will wait up to 1000 ms for the signed credential to arrive. This parameter can be changed by
-setting the `AGENT_API_REST_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS` environment variable.
+setting the `UNICORE__EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS` environment variable.

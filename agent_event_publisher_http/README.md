@@ -1,6 +1,6 @@
-# agent_event_publisher_http
+# UniCore HTTP Event Publisher
 
-A simple HTTP event publisher for the SSI Agent.
+A simple HTTP event publisher for UniCore.
 
 To make use of this publisher you need to configure it by adding the `http` object to your configuration file.
 
