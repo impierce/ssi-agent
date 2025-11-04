@@ -42,7 +42,7 @@ pub enum OfferEvent {
     },
     CredentialRequestVerified {
         offer_id: String,
-        subject_id: String,
+        subject_id: Option<String>,
     },
     CredentialResponseCreated {
         offer_id: String,
