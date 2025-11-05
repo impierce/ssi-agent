@@ -203,7 +203,7 @@ pub mod tests {
 
     #[tokio::test]
     #[tracing_test::traced_test]
-    async fn test_public_credential_endpoint() {
+    async fn test_public_credential_endpoint_invalid_parameter() {
         let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
         initialize(&issuance_state).await.unwrap();
 
@@ -214,7 +214,7 @@ pub mod tests {
                 Request::builder()
                     .method(http::Method::GET)
                     .uri(format!(
-                        "{API_VERSION}/public-credential?public_credential_token=invalid_token"
+                        "{API_VERSION}/public-credential?public_credential_token=invalid"
                     ))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::empty())
@@ -223,6 +223,6 @@ pub mod tests {
             .await
             .unwrap();
 
-        println!("Response: {:?}", response);
+        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
     }
 }
