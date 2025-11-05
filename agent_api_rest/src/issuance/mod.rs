@@ -40,7 +40,7 @@ pub fn router(issuance_state: IssuanceState) -> Router {
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send", post(send))
-                .route("/public-credential/", get(public_credential)),
+                .route("/public-credential", get(public_credential)),
         )
         .route(
             "/.well-known/oauth-authorization-server",

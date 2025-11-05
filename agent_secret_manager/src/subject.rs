@@ -223,6 +223,53 @@ impl StorageKey {
     }
 }
 
+// Helpers
+
+pub async fn get_public_key_from_kid(did_url: &str) -> anyhow::Result<Vec<u8>> {
+    let did_url =
+        identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
+
+    let resolver = Resolver::new().await;
+
+    let document = resolver
+        .resolve(did_url.did().as_str())
+        .await
+        .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
+
+    let verification_method = document
+        .resolve_method(DIDUrlQuery::from(&did_url), None)
+        .ok_or(anyhow!(
+            "Failed to resolve verification method for DID URL: `{did_url}`"
+        ))?;
+
+    // Try decode from `MethodData` directly, else use public JWK params.
+    verification_method.data().try_decode().or_else(|_| {
+        verification_method
+            .data()
+            .public_key_jwk()
+            .and_then(|public_key_jwk| match public_key_jwk.params() {
+                JwkParams::Okp(okp_params) => URL_SAFE_NO_PAD.decode(&okp_params.x).ok(),
+                JwkParams::Ec(ec_params) => {
+                    let x_bytes = URL_SAFE_NO_PAD.decode(&ec_params.x).ok()?;
+                    let y_bytes = URL_SAFE_NO_PAD.decode(&ec_params.y).ok()?;
+
+                    let encoded_point = p256::EncodedPoint::from_affine_coordinates(
+                        p256::FieldBytes::from_slice(&x_bytes),
+                        p256::FieldBytes::from_slice(&y_bytes),
+                        false, // false for uncompressed point
+                    );
+
+                    let verifying_key = p256::ecdsa::VerifyingKey::from_encoded_point(&encoded_point)
+                        .expect("Failed to create verifying key from encoded point");
+
+                    Some(verifying_key.to_encoded_point(false).as_bytes().to_vec())
+                }
+                _ => None,
+            })
+            .ok_or(anyhow!("Failed to decode public key for DID URL: `{did_url}`"))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
