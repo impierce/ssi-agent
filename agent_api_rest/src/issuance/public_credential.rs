@@ -2,6 +2,7 @@ use crate::handlers::query_handler;
 use agent_holder::credential::aggregate::get_unverified_jwt_claims;
 use agent_issuance::state::IssuanceState;
 use agent_secret_manager::subject::get_public_key_from_kid;
+use agent_shared::config::{get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported};
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -91,13 +92,37 @@ pub async fn public_credential(
             .finish()
     })?;
 
-    // Validate that the `aud` matches the DID of this owns Unicorn instance
-    // if aud != state.command.server_config?? {
-    //     return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
-    //         .title("Invalid Token")
-    //         .message("Public Credential Token audience does not match this holder's DID")
-    //         .finish());
-    // }
+    // Validate that the `aud` matches an enabled DID of this Unicorn instance
+    let supported_signing_algorithms = get_all_enabled_signing_algorithms_supported();
+    let enabled_did_methods = get_all_enabled_did_methods();
+
+    let mut dids = Vec::new();
+
+    // TODO: this is ugly but for now the easiest way for me to get all did_methods for the hackathon
+    // In fact i don't need the full identifier (kid), just the DID.
+    for did_method in &enabled_did_methods {
+        for alg in &supported_signing_algorithms {
+            let did = state
+                .subject
+                .identifier(did_method.to_string().as_ref(), *alg)
+                .await
+                .map_err(|_| ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR).finish())?;
+
+            dids.push(
+                did.split('#')
+                    .next()
+                    .ok_or(ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR))?
+                    .to_string(),
+            );
+        }
+    }
+
+    if !dids.contains(&aud.to_string()) {
+        return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
+            .title("Invalid Token")
+            .message("Public Credential Token audience does not match this holder's DID")
+            .finish());
+    }
 
     // Decode header to get kid
     let jwt_header = decode_header(&jwt).map_err(|_| {
@@ -161,4 +186,43 @@ pub async fn public_credential(
 
     // Return the credential if all validations pass
     Ok((StatusCode::OK, Json(credential)).into_response())
+}
+
+#[cfg(test)]
+pub mod tests {
+    use crate::issuance::router;
+    use crate::API_VERSION;
+    use agent_issuance::state::initialize;
+    use agent_secret_manager::service::Service;
+    use agent_store::in_memory;
+    use axum::{
+        body::Body,
+        http::{self, Request},
+    };
+    use tower::Service as _;
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn test_public_credential_endpoint() {
+        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
+        initialize(&issuance_state).await.unwrap();
+
+        let mut app = router(issuance_state);
+
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri(format!(
+                        "{API_VERSION}/public-credential?public_credential_token=invalid_token"
+                    ))
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        println!("Response: {:?}", response);
+    }
 }
