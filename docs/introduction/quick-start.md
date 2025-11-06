@@ -212,7 +212,7 @@ The key requirement is to generate a QR code from the URL-encoded Credential Off
 - Open the UniMe app on your mobile device.
 - Scan the QR code to accept the Credential Offer.
 
-![Credential Offer](../res/unime-credential-offer.png)
+<img src="../res/unime-credential-offer.png" alt="Credential Offer" width="324"/>
 
 After accepting, the Credential will appear in the UniMe app.
 
@@ -289,7 +289,7 @@ Offer.
 - Now scan the QR code using the UniMe app.
 - The app will prompt to share the Credential.
 
-![Authorization Request](../res/unime-authorization-request.png)
+<img src="../res/unime-authorization-request.png" alt="Credential Offer" width="324"/>
 
 Upon acceptance, UniCore will verify the validity of the Credential.
 
