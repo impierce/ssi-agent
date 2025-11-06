@@ -86,8 +86,10 @@ dependencies = [
  "axum 0.8.3",
  "axum-auth 0.8.1",
  "axum-macros",
+ "base64 0.22.1",
  "chrono",
  "cqrs-es",
+ "did_manager",
  "futures",
  "http 1.3.1",
  "http-api-problem",
@@ -96,24 +98,28 @@ dependencies = [
  "identity_core",
  "identity_credential",
  "identity_did",
+ "identity_iota",
+ "identity_jose",
  "jsonwebtoken",
  "lazy_static",
  "metrics",
  "metrics-exporter-prometheus",
  "mime",
  "oauth_tsl",
- "oid4vc-core",
- "oid4vc-manager",
- "oid4vci",
- "oid4vp",
+ "oid4vc",
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
+ "oid4vc-manager 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
+ "oid4vci 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
+ "oid4vp 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
  "rand 0.9.1",
+ "reqwest 0.12.20",
  "rstest",
  "serde",
  "serde_json",
  "serde_urlencoded",
  "serde_with 3.13.0",
  "serial_test",
- "siopv2",
+ "siopv2 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
  "thiserror 1.0.69",
  "tokio",
  "tower 0.4.13",
@@ -195,8 +201,8 @@ dependencies = [
  "lazy_static",
  "mime",
  "names",
- "oid4vc-core",
- "oid4vci",
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
+ "oid4vci 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
  "rand 0.9.1",
  "reqwest 0.12.20",
  "rstest",
@@ -247,7 +253,7 @@ dependencies = [
  "lazy_static",
  "mime",
  "names",
- "oid4vc-core",
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
  "product_common",
  "rand 0.9.1",
  "reqwest 0.12.20",
@@ -288,8 +294,8 @@ dependencies = [
  "jsonwebtoken",
  "lazy_static",
  "oauth_tsl",
- "oid4vc-core",
- "oid4vci",
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
+ "oid4vci 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
  "once_cell",
  "rand 0.9.1",
  "reqwest 0.12.20",
@@ -336,7 +342,7 @@ dependencies = [
  "jsonwebtoken",
  "lazy_static",
  "log",
- "oid4vc-core",
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
  "p256 0.13.2",
  "ring",
  "serde",
@@ -359,9 +365,9 @@ dependencies = [
  "http-serde",
  "identity_iota",
  "jsonwebtoken",
- "oid4vc-core",
- "oid4vci",
- "oid4vp",
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
+ "oid4vci 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
+ "oid4vp 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
  "once_cell",
  "rand 0.9.1",
  "reqwest 0.12.20",
@@ -414,16 +420,16 @@ dependencies = [
  "identity_credential",
  "jsonwebtoken",
  "lazy_static",
- "oid4vc-core",
- "oid4vc-manager",
- "oid4vci",
- "oid4vp",
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
+ "oid4vc-manager 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
+ "oid4vci 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
+ "oid4vp 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
  "reqwest 0.12.20",
  "rstest",
  "serde",
  "serde_json",
  "serial_test",
- "siopv2",
+ "siopv2 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "thiserror 1.0.69",
@@ -3039,6 +3045,15 @@ dependencies = [
  "ssi-dids 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ssi-jwk 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio",
+]
+
+[[package]]
+name = "did_manager"
+version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.6#e8f68b575a3ee354ac4b08663939917977974556"
+dependencies = [
+ "consumer",
+ "producer",
 ]
 
 [[package]]
@@ -8186,6 +8201,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "oid4vc"
+version = "0.1.0"
+source = "git+https://github.com/impierce/openid4vc?rev=4cbf854#4cbf854a51a2b3b1e7441804addae9785091990c"
+dependencies = [
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc?rev=4cbf854)",
+ "oid4vc-manager 0.1.0 (git+https://github.com/impierce/openid4vc?rev=4cbf854)",
+ "oid4vci 0.1.0 (git+https://github.com/impierce/openid4vc?rev=4cbf854)",
+ "oid4vp 0.1.0 (git+https://github.com/impierce/openid4vc?rev=4cbf854)",
+ "siopv2 0.1.0 (git+https://github.com/impierce/openid4vc?rev=4cbf854)",
+]
+
+[[package]]
+name = "oid4vc-core"
+version = "0.1.0"
+source = "git+https://github.com/impierce/openid4vc?rev=4cbf854#4cbf854a51a2b3b1e7441804addae9785091990c"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64-url",
+ "derivative",
+ "derive_more 0.99.20",
+ "did_url",
+ "ed25519-dalek 2.1.1",
+ "getset",
+ "is_empty",
+ "jsonwebtoken",
+ "lazy_static",
+ "nutype",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "serde_with 2.3.3",
+ "url",
+]
+
+[[package]]
 name = "oid4vc-core"
 version = "0.1.0"
 source = "git+https://github.com/impierce/openid4vc?rev=99fc7be#99fc7be1b86aec38c2d7fbe4ba64d17d9800c050"
@@ -8213,6 +8265,39 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
+source = "git+https://github.com/impierce/openid4vc?rev=4cbf854#4cbf854a51a2b3b1e7441804addae9785091990c"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum 0.6.20",
+ "axum-auth 0.4.1",
+ "chrono",
+ "derivative",
+ "did-key",
+ "did_url",
+ "futures",
+ "getset",
+ "identity_credential",
+ "jsonwebtoken",
+ "lazy_static",
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc?rev=4cbf854)",
+ "oid4vci 0.1.0 (git+https://github.com/impierce/openid4vc?rev=4cbf854)",
+ "oid4vp 0.1.0 (git+https://github.com/impierce/openid4vc?rev=4cbf854)",
+ "paste",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "serde_with 3.13.0",
+ "siopv2 0.1.0 (git+https://github.com/impierce/openid4vc?rev=4cbf854)",
+ "tokio",
+ "tower-http 0.4.4",
+ "url",
+]
+
+[[package]]
+name = "oid4vc-manager"
+version = "0.1.0"
 source = "git+https://github.com/impierce/openid4vc?rev=99fc7be#99fc7be1b86aec38c2d7fbe4ba64d17d9800c050"
 dependencies = [
  "anyhow",
@@ -8228,18 +8313,46 @@ dependencies = [
  "identity_credential",
  "jsonwebtoken",
  "lazy_static",
- "oid4vc-core",
- "oid4vci",
- "oid4vp",
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
+ "oid4vci 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
+ "oid4vp 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
  "paste",
  "reqwest 0.11.27",
  "serde",
  "serde_json",
  "serde_urlencoded",
  "serde_with 3.13.0",
- "siopv2",
+ "siopv2 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
  "tokio",
  "tower-http 0.4.4",
+ "url",
+]
+
+[[package]]
+name = "oid4vci"
+version = "0.1.0"
+source = "git+https://github.com/impierce/openid4vc?rev=4cbf854#4cbf854a51a2b3b1e7441804addae9785091990c"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "derivative",
+ "getset",
+ "http 1.3.1",
+ "jsonwebtoken",
+ "lazy_static",
+ "nutype",
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc?rev=4cbf854)",
+ "paste",
+ "pkce",
+ "reqwest 0.11.27",
+ "reqwest-middleware",
+ "reqwest-retry",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "serde_with 3.13.0",
+ "thiserror 1.0.69",
+ "tokio",
  "url",
 ]
 
@@ -8256,7 +8369,7 @@ dependencies = [
  "jsonwebtoken",
  "lazy_static",
  "nutype",
- "oid4vc-core",
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
  "paste",
  "pkce",
  "reqwest 0.11.27",
@@ -8274,6 +8387,34 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
+source = "git+https://github.com/impierce/openid4vc?rev=4cbf854#4cbf854a51a2b3b1e7441804addae9785091990c"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "futures",
+ "getset",
+ "identity_credential",
+ "is_empty",
+ "jsonwebtoken",
+ "lazy_static",
+ "monostate",
+ "nutype",
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc?rev=4cbf854)",
+ "oid4vci 0.1.0 (git+https://github.com/impierce/openid4vc?rev=4cbf854)",
+ "reqwest 0.11.27",
+ "reqwest-middleware",
+ "reqwest-retry",
+ "serde",
+ "serde_json",
+ "serde_with 3.13.0",
+ "tokio",
+ "url",
+ "validator",
+]
+
+[[package]]
+name = "oid4vp"
+version = "0.1.0"
 source = "git+https://github.com/impierce/openid4vc?rev=99fc7be#99fc7be1b86aec38c2d7fbe4ba64d17d9800c050"
 dependencies = [
  "anyhow",
@@ -8286,8 +8427,8 @@ dependencies = [
  "lazy_static",
  "monostate",
  "nutype",
- "oid4vc-core",
- "oid4vci",
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
+ "oid4vci 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
  "reqwest 0.11.27",
  "reqwest-middleware",
  "reqwest-retry",
@@ -9173,6 +9314,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02b3e5e68a3a1a02aad3ec490a98007cbc13c37cbe84a3cd7b8e406d76e7f778"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "producer"
+version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.6#e8f68b575a3ee354ac4b08663939917977974556"
+dependencies = [
+ "did_iota",
+ "did_jwk",
+ "did_key",
+ "did_web",
+ "identity_iota",
+ "identity_storage",
+ "identity_stronghold",
+ "identity_stronghold_ext",
+ "iota-sdk 1.1.5",
+ "iota_stronghold",
+ "log",
+ "serde",
+ "serde_json",
+ "shared",
+ "url",
 ]
 
 [[package]]
@@ -11005,6 +11168,34 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
+source = "git+https://github.com/impierce/openid4vc?rev=4cbf854#4cbf854a51a2b3b1e7441804addae9785091990c"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64-url",
+ "chrono",
+ "derive_more 0.99.20",
+ "did_url",
+ "futures",
+ "getset",
+ "is_empty",
+ "jsonwebtoken",
+ "monostate",
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc?rev=4cbf854)",
+ "reqwest 0.11.27",
+ "reqwest-middleware",
+ "reqwest-retry",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "serde_with 3.13.0",
+ "tokio",
+ "url",
+]
+
+[[package]]
+name = "siopv2"
+version = "0.1.0"
 source = "git+https://github.com/impierce/openid4vc?rev=99fc7be#99fc7be1b86aec38c2d7fbe4ba64d17d9800c050"
 dependencies = [
  "anyhow",
@@ -11018,7 +11209,7 @@ dependencies = [
  "is_empty",
  "jsonwebtoken",
  "monostate",
- "oid4vc-core",
+ "oid4vc-core 0.1.0 (git+https://github.com/impierce/openid4vc?rev=99fc7be)",
  "reqwest 0.11.27",
  "reqwest-middleware",
  "reqwest-retry",

@@ -15,6 +15,7 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct PublicLinkQuery {
+    #[serde(rename = "public-credential-token")]
     public_credential_token: String,
 }
 
@@ -83,6 +84,8 @@ pub async fn public_credential(
             .message("Public Credential Token issuer does not match requested credential subject")
             .finish());
     }
+
+    // TODO: validate status
 
     // Extract the `aud` claim
     let aud = claims.get("aud").and_then(|v| v.as_str()).ok_or_else(|| {
