@@ -5,8 +5,12 @@ use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported}
 use agent_shared::config::{config_mut, SupportedDidMethod};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
+use identity_core::{
+    convert::{FromJson, ToJson},
+};
 use identity_did::{CoreDID, DIDUrl, DID as _};
 use identity_document::document::CoreDocument;
+use identity_document::service::{Service as DocumentService, ServiceEndpoint};
 use identity_iota::iota::rebased::client::{IdentityClient, IdentityClientReadOnly};
 use identity_iota::iota::IotaDID;
 use identity_iota::storage::{Storage, StorageSigner};
@@ -206,6 +210,24 @@ impl Aggregate for Document {
                             // Any other error is unexpected and should be handled.
                             Err(err) => return Err(DocumentError::IotaIdentityError(err)),
                         };
+
+                        // Create and add the PublicCredential service.
+                        let service_endpoint = ServiceEndpoint::from_json_value(json!({
+                            "origins": [origin]
+                        }))
+                        .map_err(|err| GenerateDidError(err.to_string()))?;
+
+                        let service = DocumentService::builder(Default::default())
+                            // This service is DID method-agnostic. When added to an enabled DID Document,
+                            // its placeholder value is replaced with the appropriate DID method-specific identifier.
+                            .id(format!("did:place:holder#public-credential-service")
+                                .parse::<DIDUrl>()
+                                .map_err(|err| InvalidDidError(err.to_string()))?)
+                            .type_("LinkedVerifiablePresentation")
+                            .service_endpoint(service_endpoint)
+                            .build()
+                            .map_err(|err| ServiceBuilderError(err.to_string()))?;
+
 
                         info!("DID Document created: {document:#?}");
 
