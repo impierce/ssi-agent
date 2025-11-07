@@ -1,6 +1,6 @@
 use agent_holder::credential::aggregate::get_unverified_jwt_claims;
 use agent_secret_manager::subject::get_public_key_from_kid;
-use agent_shared::config::config;
+use agent_shared::config::{get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported};
 use agent_verification::state::VerificationState;
 use axum::{
     extract::{Query, State},
@@ -35,10 +35,10 @@ pub struct ValidationResult {
 #[derive(Serialize, Default)]
 pub struct PublicVerificationResponse {
     pub credential: Option<serde_json::Value>,
-    pub proof: String,
-    pub status: String,
-    pub trust_relation: String,
-    pub linked_vp: String,
+    pub proof: ValidationResult,
+    pub status: ValidationResult,
+    pub trust_relation: ValidationResult,
+    pub linked_vp: ValidationResult,
     pub domain_linkage: ValidationResult,
 }
 
@@ -51,7 +51,9 @@ pub async fn public_verification(
     Query(parameter): Query<PublicVerificationQuery>,
 ) -> Result<Response, ApiError> {
     let jwt = parameter.public_credential_token;
+    // Initialize response to "invalid" default, if a check passes the response is updated accordingly
     let mut public_verification_response = PublicVerificationResponse::default();
+    public_verification_response.proof.payload = Some("Unable to validate the credential".to_string());
 
     // Get unverified claims
     let jwt_value = serde_json::Value::String(jwt.clone());
@@ -99,46 +101,70 @@ pub async fn public_verification(
     }
 
     // Validate the issuers linked verifiable presentations and then check if any of them were issued to this verifier to establish a trust relation.
-    let linked_verifiable_credentials = validate_linked_verifiable_presentations(&resolver, &issuer_did_document)
-        .await
-        .into_iter()
-        .flatten()
-        .filter(|linked_verifiable_credential| {
-            // Check if the issuer of the linked verifiable credential matches the DID of this verifier to establish a trust relation
-            linked_verifiable_credential.issuer_linked_domains.iter().any(|domain| {
+
+    // Get this instance's DID's
+    // TODO: this is ugly but for now the easiest way for me to get all did_methods for the hackathon
+    let supported_signing_algorithms = get_all_enabled_signing_algorithms_supported();
+    let enabled_did_methods = get_all_enabled_did_methods();
+
+    let mut dids = Vec::new();
+
+    // TODO: In fact i don't need the full identifier (kid), just the DID.
+    for did_method in &enabled_did_methods {
+        for alg in &supported_signing_algorithms {
+            let did = state
+                .subject
+                .identifier(did_method.to_string().as_ref(), *alg)
+                .await
+                .map_err(|_| ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR).finish())?;
+
+            dids.push(
+                did.split('#')
+                    .next()
+                    .ok_or(ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR))?
+                    .to_string(),
+            );
+        }
+    }
+
+    let linked_verifiable_credentials: Vec<_> =
+        validate_linked_verifiable_presentations(&resolver, &issuer_did_document)
+            .await
+            .into_iter()
+            .flatten()
+            .filter(|linked_verifiable_credential| {
+                // Check if the issuer of the linked verifiable credential matches the DID of this verifier to establish a trust relation
                 let claims = match get_unverified_jwt_claims(&linked_verifiable_credential.data) {
                     Ok(claims) => claims,
                     Err(_) => return false,
                 };
-                // TODO: How to get the UniCores own DID('s)?
 
-                // TODO: this is ugly but for now the easiest way for me to get all did_methods for the hackathon
-                // In fact i don't need the full identifier (kid), just the DID.
-                // for did_method in &enabled_did_methods {
-                //     for alg in &supported_signing_algorithms {
-                //         let did = state
-                //             .subject
-                //             .identifier(did_method.to_string().as_ref(), *alg)
-                //             .await
-                //             .map_err(|_| ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR).finish())?;
-
-                //         dids.push(
-                //             did.split('#')
-                //                 .next()
-                //                 .ok_or(ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR))?
-                //                 .to_string(),
-                //         );
-                //     }
-                // }
                 claims
-                    .get("aud")
-                    .map(|aud| aud.as_str() == config().did_methods)
+                    .get("iss")
+                    .map(|iss| dids.contains(&iss.to_string()))
                     .unwrap_or(false)
             })
-        })
-        .collect();
+            .collect();
+
+    if !linked_verifiable_credentials.is_empty() {
+        public_verification_response.linked_vp.status = ValidationStatus::Success;
+        public_verification_response.linked_vp.payload = Some(format!("{:#?}", linked_verifiable_credentials));
+        public_verification_response.trust_relation.status = ValidationStatus::Success;
+    } else {
+        public_verification_response.linked_vp = ValidationResult {
+            status: ValidationStatus::Failure,
+            // TODO: this is a hackathon specific message
+            payload: Some("No valid certifications found for the issuer".to_string()),
+        };
+        public_verification_response.trust_relation = ValidationResult {
+            status: ValidationStatus::Failure,
+            // TODO: this is a hackathon specific message
+            payload: Some("Trust relation between this verifier and the issuer could not be established".to_string()),
+        };
+    }
 
     // TODO: validate status of Public Credential Token
+    // Invalid = BAD_REQUEST
 
     // Decode header to get kid
     let jwt_header = decode_header(&jwt).map_err(|_| {
@@ -261,13 +287,14 @@ pub async fn public_verification(
         })?;
 
     if sub != jti {
-        return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
+        return Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
             .title("Invalid Token")
             .message("Public Credential Token `sub` claim does not match Public Credential `jti` claim")
             .finish());
     }
 
     // TODO: none of this works with sd-jwt yet
+
     // Extract credential subject ID
     let credential_subject_id = verifiable_credential_claims.get("vc")
         .and_then(|data| data.get("credentialSubject"))
@@ -301,6 +328,7 @@ pub async fn public_verification(
     }
 
     // TODO: validate status
+    public_verification_response.status.status = ValidationStatus::Success;
 
     // Decode header to get kid
     let jwt_header = decode_header(&verifiable_credential.to_string()).map_err(|_| {
@@ -361,6 +389,8 @@ pub async fn public_verification(
             .message(format!("JWT verification failed: {}", e))
             .finish()
     })?;
+
+    public_verification_response.proof.status = ValidationStatus::Success;
 
     // Return the credential if all validations pass
     Ok((StatusCode::OK, Json(public_verification_response)).into_response())
