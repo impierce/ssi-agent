@@ -40,6 +40,42 @@ impl View<Service> for Service {
                 self.presentation_ids.clone_from(presentation_ids);
                 self.service.replace(service.clone());
             }
+            PublicCredentialServiceCreated {
+                service_id,
+                service,
+                is_deleted,
+            } => {
+                self.service_id.clone_from(service_id);
+                self.service.replace(service.clone());
+                self.is_deleted.clone_from(is_deleted);
+            }
+            PublicCredentialServiceDeleted {
+                service_id,
+                service,
+                is_deleted,
+            } => {
+                self.service_id.clone_from(service_id);
+                self.service.clone_from(service);
+                self.is_deleted.clone_from(is_deleted);
+            }
+            PublicVerificationServiceCreated {
+                service_id,
+                service,
+                is_deleted,
+            } => {
+                self.service_id.clone_from(service_id);
+                self.service.replace(service.clone());
+                self.is_deleted.clone_from(is_deleted);
+            }
+            PublicVerificationServiceDeleted {
+                service_id,
+                service,
+                is_deleted,
+            } => {
+                self.service_id.clone_from(service_id);
+                self.service.clone_from(service);
+                self.is_deleted.clone_from(is_deleted);
+            }
         }
     }
 }

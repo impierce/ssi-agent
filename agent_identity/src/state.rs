@@ -97,6 +97,12 @@ pub const DOMAIN_LINKAGE_SERVICE_ID: &str = "linked-domain-service";
 /// The unique identifier for the linked verifiable presentation service.
 pub const LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID: &str = "linked-verifiable-presentation-service";
 
+/// The unique identifier for the public credential endpoint service.
+pub const PUBLIC_CREDENTIAL_SERVICE_ID: &str = "public-credential-endpoint-service";
+
+/// The unique identifier for the public verification endpoint service.
+pub const PUBLIC_VERIFICATION_SERVICE_ID: &str = "public-verification-endpoint-service";
+
 /// Initialize the identity state.
 pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
     info!("Initializing the identity state ...");
@@ -105,6 +111,8 @@ pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
     initialize_documents(state).await?;
     initialize_domain_linkage(state).await?;
     initialize_linked_verifiable_presentations(state).await?;
+    initialize_public_credential_endpoint(state).await?;
+    initialize_public_verification_endpoint(state).await?;
     publish_decentrally_hosted_documents(state).await?;
 
     Ok(())
@@ -510,6 +518,158 @@ pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -
 
             command_handler(document_id, &state.command.document, command).await?;
         }
+    }
+
+    Ok(())
+}
+
+/// Initializes the Public Credential Endpoint service based on the current configuration and document state.
+///
+/// This asynchronous function performs the following steps:
+///
+/// 1. Query Documents: It retrieves all documents that are not disabled and whose DID methods support updates.
+/// 2. Conditional Service Creation:
+///    - If domain linkage is enabled in the configuration and there exists at least one update-supporting document,
+///      it creates the Public Credential Endpoint service.
+///    - It then queries for the created service. If found, it adds the service to all update-supporting documents.
+/// 3. Service Deletion:
+///    - If the Public Credential Endpoint service is disabled or no update-supporting documents exist, the function sends a command
+///      to disable the Public Credential Endpoint service.
+pub async fn initialize_public_credential_endpoint(state: &IdentityState) -> anyhow::Result<()> {
+    // Get all the Documents that are not disabled and support updates.
+    let update_supporting_documents = query_all_documents(state, |(_, document)| {
+        document.status != Status::Disabled
+            && document
+                .did_method
+                .as_ref()
+                .map(SupportedDidMethod::supports_update)
+                .unwrap_or_default()
+            && document
+                .iota_metadata
+                .as_ref()
+                .map(|iota_metadata| iota_metadata.is_funded)
+                .unwrap_or(true)
+    })
+    .await?;
+
+    // Check whether Public Credential Endpoint service is enabled and whether there are any enabled update-supporting Documents.
+    if config().public_credential_endpoint_enabled && !update_supporting_documents.is_empty() {
+        info!(
+            "Creating public credential endpoint service with documents: {:?}",
+            update_supporting_documents
+        );
+
+        // Create the Public Credential Endpoint service.
+        let command = ServiceCommand::CreatePublicCredentialEndpointService {
+            service_id: PUBLIC_CREDENTIAL_SERVICE_ID.to_string(),
+        };
+
+        command_handler(PUBLIC_CREDENTIAL_SERVICE_ID, &state.command.service, command).await?;
+
+        info!("Created Linked Domain service");
+
+        match query_handler(PUBLIC_CREDENTIAL_SERVICE_ID, &state.query.service).await {
+            Ok(Some(Service {
+                service: Some(service), ..
+            })) => {
+                info!("Found Public Credential Endpoint service: {service}");
+
+                // Add the Public Credential Endpoint service to all the enabled update supporting Documents.
+                for document_id in update_supporting_documents.keys() {
+                    let command = DocumentCommand::AddService {
+                        service_id: PUBLIC_CREDENTIAL_SERVICE_ID.to_string(),
+                        service: Box::new(service.clone()),
+                    };
+
+                    command_handler(document_id, &state.command.document, command).await?;
+                }
+            }
+            _ => anyhow::bail!("Failed to retrieve Public Credential Endpoint service"),
+        };
+    } else {
+        // If Public Credential Endpoint service is disabled and/or there are no enabled update supporting Documents, then disable the Public Credential Endpoint service.
+        let command = ServiceCommand::DeletePublicCredentialEndpointService {
+            service_id: PUBLIC_CREDENTIAL_SERVICE_ID.to_string(),
+        };
+
+        command_handler(PUBLIC_CREDENTIAL_SERVICE_ID, &state.command.service, command).await?;
+
+        info!("Disabled Public Credential Endpoint service");
+    }
+
+    Ok(())
+}
+
+/// Initializes the Public Verification Endpoint service based on the current configuration and document state.
+///
+/// This asynchronous function performs the following steps:
+/// 1. Query Documents: It retrieves all documents that are not disabled and whose DID methods support updates.
+/// 2. Conditional Service Creation:
+///    - If public verification endpoint is enabled in the configuration and there exists at least one update-supporting document,
+///      it creates the Public Verification Endpoint service.
+///    - It then queries for the created service. If found, it adds the service to all update-supporting documents.
+/// 3. Service Deletion:
+///    - If the Public Verification Endpoint service is disabled or no update-supporting documents exist, the function sends a command
+///      to disable the Public Verification Endpoint service.
+pub async fn initialize_public_verification_endpoint(state: &IdentityState) -> anyhow::Result<()> {
+    // Get all the Documents that are not disabled and support updates.
+    let update_supporting_documents = query_all_documents(state, |(_, document)| {
+        document.status != Status::Disabled
+            && document
+                .did_method
+                .as_ref()
+                .map(SupportedDidMethod::supports_update)
+                .unwrap_or_default()
+            && document
+                .iota_metadata
+                .as_ref()
+                .map(|iota_metadata| iota_metadata.is_funded)
+                .unwrap_or(true)
+    })
+    .await?;
+
+    // Check whether Public Verification Endpoint service is enabled and whether there are any enabled update-supporting Documents.
+    if config().public_credential_endpoint_enabled && !update_supporting_documents.is_empty() {
+        info!(
+            "Creating public credential endpoint service with documents: {:?}",
+            update_supporting_documents
+        );
+
+        // Create the Public Verification Endpoint service.
+        let command = ServiceCommand::CreatePublicVerificationEndpointService {
+            service_id: PUBLIC_VERIFICATION_SERVICE_ID.to_string(),
+        };
+
+        command_handler(PUBLIC_VERIFICATION_SERVICE_ID, &state.command.service, command).await?;
+        info!("Created Linked Domain service");
+
+        match query_handler(PUBLIC_VERIFICATION_SERVICE_ID, &state.query.service).await {
+            Ok(Some(Service {
+                service: Some(service), ..
+            })) => {
+                info!("Found Public Verification Endpoint service: {service}");
+
+                // Add the Public Verification Endpoint service to all the enabled update supporting Documents.
+                for document_id in update_supporting_documents.keys() {
+                    let command = DocumentCommand::AddService {
+                        service_id: PUBLIC_VERIFICATION_SERVICE_ID.to_string(),
+                        service: Box::new(service.clone()),
+                    };
+
+                    command_handler(document_id, &state.command.document, command).await?;
+                }
+            }
+            _ => anyhow::bail!("Failed to retrieve Public Verification Endpoint service"),
+        };
+    } else {
+        // If Public Verification Endpoint service is disabled and/or there are no enabled update supporting Documents, then disable the Public Verification Endpoint service.
+        let command = ServiceCommand::DeletePublicVerificationEndpointService {
+            service_id: PUBLIC_VERIFICATION_SERVICE_ID.to_string(),
+        };
+
+        command_handler(PUBLIC_VERIFICATION_SERVICE_ID, &state.command.service, command).await?;
+
+        info!("Disabled Public Verification Endpoint service");
     }
 
     Ok(())

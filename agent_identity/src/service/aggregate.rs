@@ -55,6 +55,70 @@ impl Aggregate for Service {
         info!("Handling command: {:?}", command);
 
         match command {
+            CreatePublicVerificationEndpointService { service_id } => {
+                let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
+                    .map_err(|err| InvalidUrlError(err.to_string()))?;
+
+                let endpoint_url = format!("{origin}/public-verification")
+                    .parse::<identity_core::common::Url>()
+                    .map_err(|err| InvalidUrlError(err.to_string()))?;
+                let service_endpoint = ServiceEndpoint::from(endpoint_url);
+
+                // Create a new service.
+                let service = DocumentService::builder(Default::default())
+                    // This service is DID method-agnostic. When added to an enabled DID Document,
+                    // its placeholder value is replaced with the appropriate DID method-specific identifier.
+                    .id(format!("did:place:holder#{service_id}")
+                        .parse::<DIDUrl>()
+                        .map_err(|err| InvalidDidError(err.to_string()))?)
+                    .type_("PublicVerificationEndpoint")
+                    .service_endpoint(service_endpoint)
+                    .build()
+                    .map_err(|err| ServiceBuilderError(err.to_string()))?;
+
+                Ok(vec![PublicVerificationServiceCreated {
+                    service_id,
+                    service,
+                    is_deleted: false,
+                }])
+            }
+            DeletePublicVerificationEndpointService { service_id } => Ok(vec![PublicVerificationServiceDeleted {
+                service_id,
+                service: None,
+                is_deleted: true,
+            }]),
+            CreatePublicCredentialEndpointService { service_id } => {
+                let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
+                    .map_err(|err| InvalidUrlError(err.to_string()))?;
+
+                let endpoint_url = format!("{origin}/public-credential")
+                    .parse::<identity_core::common::Url>()
+                    .map_err(|err| InvalidUrlError(err.to_string()))?;
+                let service_endpoint = ServiceEndpoint::from(endpoint_url);
+
+                // Create a new service.
+                let service = DocumentService::builder(Default::default())
+                    // This service is DID method-agnostic. When added to an enabled DID Document,
+                    // its placeholder value is replaced with the appropriate DID method-specific identifier.
+                    .id(format!("did:place:holder#{service_id}")
+                        .parse::<DIDUrl>()
+                        .map_err(|err| InvalidDidError(err.to_string()))?)
+                    .type_("PublicCredentialEndpoint")
+                    .service_endpoint(service_endpoint)
+                    .build()
+                    .map_err(|err| ServiceBuilderError(err.to_string()))?;
+
+                Ok(vec![PublicCredentialServiceCreated {
+                    service_id,
+                    service,
+                    is_deleted: false,
+                }])
+            }
+            DeletePublicCredentialEndpointService { service_id } => Ok(vec![PublicCredentialServiceDeleted {
+                service_id,
+                service: None,
+                is_deleted: true,
+            }]),
             CreateDomainLinkageService {
                 service_id,
                 verification_methods,
@@ -252,6 +316,42 @@ impl Aggregate for Service {
                 self.service_id = service_id;
                 self.presentation_ids = presentation_ids;
                 self.service.replace(service);
+            }
+            PublicVerificationServiceCreated {
+                service_id,
+                service,
+                is_deleted,
+            } => {
+                self.service_id = service_id;
+                self.service.replace(service);
+                self.is_deleted = is_deleted;
+            }
+            PublicVerificationServiceDeleted {
+                service_id,
+                service,
+                is_deleted,
+            } => {
+                self.service_id = service_id;
+                self.service = service;
+                self.is_deleted = is_deleted;
+            }
+            PublicCredentialServiceCreated {
+                service_id,
+                service,
+                is_deleted,
+            } => {
+                self.service_id = service_id;
+                self.service.replace(service);
+                self.is_deleted = is_deleted;
+            }
+            PublicCredentialServiceDeleted {
+                service_id,
+                service,
+                is_deleted,
+            } => {
+                self.service_id = service_id;
+                self.service = service;
+                self.is_deleted = is_deleted;
             }
         }
     }

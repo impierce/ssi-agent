@@ -15,4 +15,16 @@ pub enum ServiceCommand {
         service_id: String,
         presentation_ids: Vec<String>,
     },
+    CreatePublicCredentialEndpointService {
+        service_id: String,
+    },
+    DeletePublicCredentialEndpointService {
+        service_id: String,
+    },
+    CreatePublicVerificationEndpointService {
+        service_id: String,
+    },
+    DeletePublicVerificationEndpointService {
+        service_id: String,
+    },
 }
