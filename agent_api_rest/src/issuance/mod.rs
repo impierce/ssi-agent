@@ -1,9 +1,9 @@
 pub mod credential_configurations;
 pub mod credential_issuer;
 pub mod credentials;
-pub mod offers;
-
 pub mod error;
+pub mod offers;
+pub mod public_credential;
 
 use crate::issuance::{
     credential_configurations::credential_configurations,
@@ -19,6 +19,7 @@ use crate::issuance::{
     },
     credentials::{all_credentials, credentials, patch_credential},
     offers::{all_offers, offer, offers, send::send},
+    public_credential::public_credential,
 };
 use crate::API_VERSION;
 use agent_issuance::state::IssuanceState;
@@ -38,7 +39,8 @@ pub fn router(issuance_state: IssuanceState) -> Router {
                 .route("/credential-configurations", post(credential_configurations))
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
-                .route("/offers/send", post(send)),
+                .route("/offers/send", post(send))
+                .route("/public-credential", get(public_credential)),
         )
         .route(
             "/.well-known/oauth-authorization-server",

@@ -156,5 +156,6 @@ pub async fn issuance_state(
             all_offers,
         },
         signer: issuance_services.issuer.clone(),
+        subject: issuance_services.issuer.clone(),
     }
 }
