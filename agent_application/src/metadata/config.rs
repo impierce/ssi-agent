@@ -21,3 +21,17 @@ pub async fn configuration(params: Query<QueryParams>) -> impl IntoResponse {
         Json(serde_json::json!(config().clone()))
     }
 }
+
+// FIXME!!
+pub async fn sponsoring_configuration() -> impl IntoResponse {
+    let configuration = config().clone();
+
+    let display = configuration.display.clone().pop().unwrap();
+    let iota_address = configuration.iota_address.unwrap();
+
+    Json(serde_json::json!({
+        "name": display.name,
+        "logo_uri": display.logo.unwrap().uri,
+        "iota_address": iota_address,
+    }))
+}

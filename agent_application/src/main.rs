@@ -114,6 +114,11 @@ async fn main() -> io::Result<()> {
         .route("/version", axum::routing::get(metadata::version::version))
         .route("/info", axum::routing::get(metadata::info::info))
         .route("/v0/configuration", axum::routing::get(metadata::config::configuration))
+        // FIXME
+        .route(
+            "/.well-known/sponsoring-configuration",
+            axum::routing::get(metadata::config::sponsoring_configuration),
+        )
         .with_state(metadata_state);
 
     let app = metadata_router.merge(app);

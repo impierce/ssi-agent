@@ -49,6 +49,8 @@ identity_document = { git = "https://github.com/iotaledger/identity", tag = "v1.
 identity_iota = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.7" }
 identity_storage = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.7" }
 identity_verification = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.7", default-features = false }
+# iota-gas-station = { path = "../iota-sponsoring-service/submodules/gas-station" }
+iota-json-rpc-types = { git = "https://github.com/iotaledger/iota", package = "iota-json-rpc-types", tag = "v1.6.1" }
 iota-sdk = { git = "https://github.com/iotaledger/iota", package = "iota-sdk", tag = "v1.6.1" }
 # TODO: Check if this is still needed.
 iota-sdk-legacy = { version = "1.0", package = "iota-sdk", default-features = false, features = [
@@ -56,12 +58,16 @@ iota-sdk-legacy = { version = "1.0", package = "iota-sdk", default-features = fa
     "client",
     "stronghold",
 ] }
+iota-types = { git = "https://github.com/iotaledger/iota", package = "iota-types", tag = "v1.6.1" }
 jsonwebtoken = "9.3"
 lazy_static = "1.4"
 mime = { version = "0.3" }
 oauth_tsl = { git = "https://github.com/impierce/oauth-token-status-list", rev = "0aa0228" }
 once_cell = { version = "1.19" }
-product_common = { git = "https://github.com/iotaledger/product-core", tag = "v0.8.2", package = "product_common" }
+product_common = { git = "https://github.com/iotaledger/product-core", tag = "v0.8.2", package = "product_common", features = [
+    "gas-station",
+    "default-http-client",
+] }
 rand = "0.9"
 reqwest = { version = "0.12", default-features = false, features = [
     "json",
