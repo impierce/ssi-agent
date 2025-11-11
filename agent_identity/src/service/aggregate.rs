@@ -59,7 +59,8 @@ impl Aggregate for Service {
                 let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
-                let endpoint_url = format!("{origin}/public-verification")
+                let endpoint_url = origin.to_string().trim_end_matches('/').to_string() + "/public-verification";
+                let endpoint_url = endpoint_url
                     .parse::<identity_core::common::Url>()
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
                 let service_endpoint = ServiceEndpoint::from(endpoint_url);
@@ -91,7 +92,8 @@ impl Aggregate for Service {
                 let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
-                let endpoint_url = format!("{origin}/public-credential")
+                let endpoint_url = origin.to_string().trim_end_matches('/').to_string() + "/public-credential";
+                let endpoint_url = endpoint_url
                     .parse::<identity_core::common::Url>()
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
                 let service_endpoint = ServiceEndpoint::from(endpoint_url);

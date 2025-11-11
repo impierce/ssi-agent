@@ -115,6 +115,11 @@ pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
     initialize_public_verification_endpoint(state).await?;
     publish_decentrally_hosted_documents(state).await?;
 
+    info!(
+        "All DID documents: {:#?}",
+        query_all_documents(state, |(_, _)| true).await?
+    );
+
     Ok(())
 }
 
@@ -566,7 +571,7 @@ pub async fn initialize_public_credential_endpoint(state: &IdentityState) -> any
 
         command_handler(PUBLIC_CREDENTIAL_SERVICE_ID, &state.command.service, command).await?;
 
-        info!("Created Linked Domain service");
+        info!("Created Public Credential Endpoint service");
 
         match query_handler(PUBLIC_CREDENTIAL_SERVICE_ID, &state.query.service).await {
             Ok(Some(Service {
