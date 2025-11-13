@@ -55,6 +55,7 @@ pub(crate) async fn linked_vp(
         })
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
 
+    // here?
     let command = DocumentCommand::AddService {
         service_id,
         service: Box::new(linked_verifiable_presentation_service),

@@ -406,18 +406,24 @@ impl Aggregate for Credential {
                             .timestamp()
                     });
 
+                    // The jti must be a URL which is the same as the credential ID, as per https://www.w3.org/TR/2023/WD-vc-jwt-20230427/#jwt-encoding
                     #[cfg(feature = "test_utils")]
-                    let credential_id_for_jti = "test-credential-id-12345".to_string();
+                    let jti = "http://example.org/1234".to_string();
                     #[cfg(not(feature = "test_utils"))]
-                    let credential_id_for_jti = credential_id.clone();
+                    let jti = if let Some(id) = id {
+                        id.to_string()
+                    } else {
+                        config().public_url.to_string().trim_end_matches('/').to_string() + "/" + &credential_id
+                    };
+
                     // Add standard claims
                     let vc_jwt_builder = VerifiableCredentialJwt::builder()
                         .sub(subject_id)
                         .iss(issuer_did)
                         .iat(iat)
-                        .nbf(iat)
                         // TODO: setting the `nbf` to `iat` makes the JWT immediately usable
-                        .jti(credential_id_for_jti);
+                        .nbf(iat)
+                        .jti(jti);
 
                     let vc_jwt_builder = if let Some(exp) = exp {
                         vc_jwt_builder.exp(exp)

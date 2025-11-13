@@ -35,6 +35,8 @@ pub use provisioned::load_provisioned_config;
 pub const BITS_PER_STATUS: u8 = 2; // Amount of bits per status
 pub const STATUS_LIST_BYTES_AMOUNT: usize = 2048; // Amount of bytes in the status list. Equates to 8192 statuses for BITS_PER_STATUS = 2.
 
+pub const API_VERSION: &str = "/v0";
+
 static STRONGHOLD_PATH: &str = "./stronghold.dat";
 
 // TODO: Once we have a proper state implementation for `agent_secret_manager` we can make use of randomly generated Key
@@ -248,6 +250,10 @@ pub struct ApplicationConfiguration {
     pub external_server_response_timeout_ms: u64,
     #[config(default, production_default = "true")]
     pub domain_linkage_enabled: bool,
+    #[config(default = "true", production_default = "true")]
+    pub public_credential_endpoint_enabled: bool,
+    #[config(default = "true", production_default = "true")]
+    pub public_verification_endpoint_enabled: bool,
     #[config(default)]
     pub credential_offer_by_value_enabled: bool,
     #[config(development_default = "SecretManagerConfig::development_default()")]

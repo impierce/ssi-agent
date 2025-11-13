@@ -331,9 +331,9 @@ impl Aggregate for Document {
                     let verification_method = VerificationMethod::new_from_jwk(
                         did.clone(),
                         public_key_jwk,
-                        (did_method == SupportedDidMethod::Key)
-                            .then_some(did.method_id())
-                            .or(did_method.fragment()),
+                        Some("key-0"), // TODO: (did_method == SupportedDidMethod::Key)
+                                       //     .then_some(did.method_id())
+                                       //     .or(did_method.fragment()),
                     )
                     .map_err(|err| VerificationMethodBuilderError(err.to_string()))?;
 

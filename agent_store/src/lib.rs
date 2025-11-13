@@ -219,6 +219,7 @@ pub async fn verification_state<CCB: CqrsComponentBuilder>(
             authorization_request,
             all_authorization_requests,
         },
+        subject: services.verifier.clone(),
     }
 }
 

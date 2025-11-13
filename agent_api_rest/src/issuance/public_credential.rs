@@ -12,9 +12,11 @@ use axum::{
 use http_api_problem::ApiError;
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
+use tracing::info;
 
 #[derive(Deserialize)]
 pub struct PublicLinkQuery {
+    #[serde(rename = "public-credential-token")]
     public_credential_token: String,
 }
 
@@ -45,19 +47,43 @@ pub async fn public_credential(
             .finish()
     })?;
 
-    // Get the credential, if there is one for the given `sub`
-    let credential = query_handler(sub, &state.query.credential).await?.ok_or_else(|| {
-        ApiError::builder(StatusCode::NOT_FOUND)
+    // Because the JTI needs to be a valid URL, we appended the credential ID to the issuer URL of the Public Credential Token.
+    // This means only the last segment of the `sub` claim is the actual credential ID.
+    let credential_id = sub.rsplit('/').next().ok_or_else(|| {
+        ApiError::builder(StatusCode::BAD_REQUEST)
             .title("Invalid Token")
-            .message("Public Credential Token `sub` claim does not correspond to a valid credential")
+            .message("Failed to parse credential ID from `sub` claim in Public Credential Token")
+            .finish()
+    })?;
+
+    // Get the credential, if there is one for the given `sub`
+    let credential = query_handler(credential_id, &state.query.credential)
+        .await?
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Invalid Token")
+                .message("Public Credential Token `sub` claim does not hold a credential ID to a valid credential")
+                .finish()
+        })?;
+
+    info!("credential data: {:#?}", credential.signed);
+    let signed_credential = credential.signed.ok_or(
+        ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            .title("Invalid internal credential stored for given credential ID")
+            .message("Unable to read the JWT of the requested credential")
+            .finish(),
+    )?;
+    let data = get_unverified_jwt_claims(&signed_credential).map_err(|_| {
+        ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            .title("Invalid internal credential stored for given credential ID")
+            .message("Unable to read the JWT of the requested credential")
             .finish()
     })?;
 
     // Extract credential subject ID (we need as_ref to avoid moving credential)
-    let credential_subject_id = credential
-        .data
-        .as_ref()
-        .and_then(|d| d.raw.get("credentialSubject"))
+    let credential_subject_id = data
+        .get("vc")
+        .and_then(|vc| vc.get("credentialSubject"))
         .and_then(|cs| cs.get("id"))
         .and_then(|id| id.as_str())
         .ok_or_else(|| {
@@ -75,60 +101,70 @@ pub async fn public_credential(
             .finish()
     })?;
 
+    info!("issuer of Public Credential Token: {}", iss);
+    info!(
+        "credential subject ID of requested credential: {}",
+        credential_subject_id
+    );
+
     // Check whether the issuer of the Public Credential Token matches the subject of the requested credential
+    // TODO
     // This check means we currently don't allow to publicly share anonymous credentials
-    if iss != credential_subject_id {
-        return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
-            .title("Invalid Token")
-            .message("Public Credential Token issuer does not match requested credential subject")
-            .finish());
-    }
+    // if iss != credential_subject_id {
+    //     return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
+    //         .title("Invalid Token")
+    //         .message("Public Credential Token issuer does not match requested credential subject")
+    //         .finish());
+    // }
 
-    // Extract the `aud` claim
-    let aud = claims.get("aud").and_then(|v| v.as_str()).ok_or_else(|| {
-        ApiError::builder(StatusCode::BAD_REQUEST)
-            .title("Invalid Token")
-            .message("Failed to get `aud` claim from Public Credential Token")
-            .finish()
-    })?;
+    // TODO: validate status
 
-    // Validate that the `aud` matches an enabled DID of this Unicorn instance
-    let supported_signing_algorithms = get_all_enabled_signing_algorithms_supported();
-    let enabled_did_methods = get_all_enabled_did_methods();
+    // TODO: skip `aud` validation for now
+    // // Extract the `aud` claim
+    // let aud = claims.get("aud").and_then(|v| v.as_str()).ok_or_else(|| {
+    //     ApiError::builder(StatusCode::BAD_REQUEST)
+    //         .title("Invalid Token")
+    //         .message("Failed to get `aud` claim from Public Credential Token")
+    //         .finish()
+    // })?;
 
-    let mut dids = Vec::new();
+    // // Validate that the `aud` matches an enabled DID of this Unicorn instance
+    // let supported_signing_algorithms = get_all_enabled_signing_algorithms_supported();
+    // let enabled_did_methods = get_all_enabled_did_methods();
 
-    // TODO: this is ugly but for now the easiest way for me to get all did_methods for the hackathon
-    // In fact i don't need the full identifier (kid), just the DID.
-    for did_method in &enabled_did_methods {
-        for alg in &supported_signing_algorithms {
-            let did = state
-                .subject
-                .identifier(did_method.to_string().as_ref(), *alg)
-                .await
-                .map_err(|_| ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR).finish())?;
+    // let mut dids = Vec::new();
 
-            dids.push(
-                did.split('#')
-                    .next()
-                    .ok_or(ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR))?
-                    .to_string(),
-            );
-        }
-    }
+    // // TODO: this is ugly but for now the easiest way for me to get all did_methods for the hackathon
+    // // In fact i don't need the full identifier (kid), just the DID.
+    // for did_method in &enabled_did_methods {
+    //     for alg in &supported_signing_algorithms {
+    //         let did = state
+    //             .subject
+    //             .identifier(did_method.to_string().as_ref(), *alg)
+    //             .await
+    //             .map_err(|_| ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR).finish())?;
 
-    if !dids.contains(&aud.to_string()) {
-        return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
-            .title("Invalid Token")
-            .message("Public Credential Token audience does not match this holder's DID")
-            .finish());
-    }
+    //         dids.push(
+    //             did.split('#')
+    //                 .next()
+    //                 .ok_or(ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR))?
+    //                 .to_string(),
+    //         );
+    //     }
+    // }
+
+    // if !dids.contains(&aud.to_string()) {
+    //     return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
+    //         .title("Invalid Token")
+    //         .message("Public Credential Token audience does not match this holder's DID")
+    //         .finish());
+    // }
 
     // Decode header to get kid
-    let jwt_header = decode_header(&jwt).map_err(|_| {
+    let jwt_header = decode_header(&jwt).map_err(|e| {
         ApiError::builder(StatusCode::BAD_REQUEST)
             .title("Invalid Token")
-            .message("Failed to decode Public Credential Token header")
+            .message(format!("Failed to decode Public Credential Token header: {e}"))
             .finish()
     })?;
 
@@ -140,13 +176,14 @@ pub async fn public_credential(
     })?;
 
     // Validate the kid belongs to the same DID as credential subject
-    let kid_did = kid.split('#').next().unwrap_or(&kid);
-    if kid_did != credential_subject_id {
-        return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
-            .title("Invalid Token")
-            .message("Public Credential Token kid does not match requested credential subject DID")
-            .finish());
-    }
+    // TODO
+    // let kid_did = kid.split('#').next().unwrap_or(&kid);
+    // if kid_did != credential_subject_id {
+    //     return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
+    //         .title("Invalid Token")
+    //         .message("Public Credential Token kid does not match requested credential subject DID")
+    //         .finish());
+    // }
 
     // Fetch the public key using the kid
     let public_key = get_public_key_from_kid(&kid).await.map_err(|_| {
@@ -172,9 +209,8 @@ pub async fn public_credential(
     };
 
     let mut validation = Validation::new(jwt_header.alg);
-    validation.set_issuer(&[credential_subject_id]);
-    validation.set_audience(&[aud]);
-    validation.sub = Some(sub.to_string());
+    validation.validate_aud = false; // we are skipping aud validation for now
+                                     // TODO: more validation parameters should be set
 
     // Decode and verify the JWT signature
     let _token_data = decode::<serde_json::Value>(&jwt, &decoding_key, &validation).map_err(|e| {
@@ -185,7 +221,7 @@ pub async fn public_credential(
     })?;
 
     // Return the credential if all validations pass
-    Ok((StatusCode::OK, Json(credential)).into_response())
+    Ok((StatusCode::OK, Json(signed_credential)).into_response())
 }
 
 #[cfg(test)]

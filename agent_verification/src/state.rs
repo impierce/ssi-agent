@@ -1,5 +1,6 @@
 use agent_shared::application_state::CommandHandler;
 use cqrs_es::persist::ViewRepository;
+use oid4vc_core::Subject;
 use std::sync::Arc;
 
 use crate::authorization_request::aggregate::AuthorizationRequest;
@@ -10,6 +11,7 @@ use crate::authorization_request::views::AuthorizationRequestView;
 pub struct VerificationState {
     pub command: CommandHandlers,
     pub query: Queries,
+    pub subject: Arc<dyn Subject>,
 }
 
 /// The command handlers are used to execute commands on the aggregates.
