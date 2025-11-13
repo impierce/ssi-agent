@@ -11,7 +11,7 @@ pub mod utils;
 use agent_holder::state::HolderState;
 use agent_identity::state::IdentityState;
 use agent_issuance::state::IssuanceState;
-use agent_shared::config::config;
+use agent_shared::config::{config, API_VERSION};
 use agent_verification::state::VerificationState;
 use axum::{
     body::{Body, Bytes},
@@ -27,8 +27,6 @@ use std::time::Duration;
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, info, info_span, Span};
-
-pub const API_VERSION: &str = "/v0";
 
 pub const DOCUMENTATION_URL: &str = "https://beta.docs.impierce.com/unicore/";
 

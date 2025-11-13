@@ -315,13 +315,12 @@ pub mod tests {
     use super::test_utils::*;
     use super::*;
     use agent_api_rest::issuance;
-    use agent_api_rest::API_VERSION;
     use agent_issuance::offer::aggregate::test_utils::token_response;
     use agent_issuance::server_config::aggregate::test_utils::credential_configurations_supported;
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
-    use agent_shared::config::config;
     use agent_shared::config::config_mut;
+    use agent_shared::config::{config, API_VERSION};
     use agent_shared::generate_random_string;
     use agent_store::in_memory;
     use axum::{

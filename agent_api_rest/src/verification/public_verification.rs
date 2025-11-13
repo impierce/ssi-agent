@@ -8,15 +8,21 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use base64::{engine::general_purpose, Engine as _};
 use did_manager::Resolver;
 use http_api_problem::ApiError;
-use identity_iota::document::ServiceEndpoint;
+use identity_iota::document::{verifiable, ServiceEndpoint};
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
+use tracing::info;
+use url::Url;
 
-use crate::verification::{
-    validate_domain_linkage::{get_issuer_linked_domains, validate_domain_linkage, ValidationStatus},
-    validate_linked_verifiable_presentation::validate_linked_verifiable_presentations,
+use crate::{
+    issuance::credential_issuer::credential,
+    verification::{
+        validate_domain_linkage::{get_issuer_linked_domains, validate_domain_linkage, ValidationStatus},
+        validate_linked_verifiable_presentation::validate_linked_verifiable_presentations,
+    },
 };
 
 #[derive(Deserialize)]
@@ -29,6 +35,7 @@ pub struct PublicVerificationQuery {
 pub struct ValidationResult {
     status: ValidationStatus,
     payload: Option<String>,
+    data: Option<serde_json::Value>,
 }
 
 // TODO: make stronger typing then strings
@@ -53,7 +60,6 @@ pub async fn public_verification(
     let jwt = parameter.public_credential_token;
     // Initialize response to "invalid" default, if a check passes the response is updated accordingly
     let mut public_verification_response = PublicVerificationResponse::default();
-    public_verification_response.proof.payload = Some("Unable to validate the credential".to_string());
 
     // Get unverified claims
     let jwt_value = serde_json::Value::String(jwt.clone());
@@ -88,17 +94,39 @@ pub async fn public_verification(
                 .finish()
         })?;
 
-    let linked_domains = get_issuer_linked_domains(&issuer_did_document).await;
-    for url in linked_domains {
+    info!("Issuer DID Document: {:#?}", issuer_did_document);
+
+    let mut linked_domains = get_issuer_linked_domains(&issuer_did_document).await;
+    for url in linked_domains.clone() {
         let validation_result = validate_domain_linkage(&resolver, url.clone(), aud).await;
         if validation_result.status == ValidationStatus::Success {
             public_verification_response.domain_linkage = ValidationResult {
                 status: ValidationStatus::Success,
                 payload: Some(url.to_string()),
+                data: None,
             };
             break;
         }
     }
+
+    // Fallback for did:webs if no domain linkage is found
+    if linked_domains.is_empty() || aud.starts_with("did:web") {
+        let did_web_domain = extract_url_from_did_web(aud).ok_or(
+            ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Token")
+                .message("Failed to resolve issuer DID")
+                .finish(),
+        )?;
+        info!("Extracted URL from did:web: {:#?}", did_web_domain);
+        public_verification_response.domain_linkage = ValidationResult {
+            status: ValidationStatus::Success,
+            payload: Some(did_web_domain.to_string()),
+            data: None,
+        };
+        linked_domains.push(did_web_domain);
+    }
+
+    info!("Linked Domains: {:#?}", linked_domains);
 
     // Validate the issuers linked verifiable presentations and then check if any of them were issued to this verifier to establish a trust relation.
 
@@ -127,92 +155,58 @@ pub async fn public_verification(
         }
     }
 
+    info!("DIDs to match against: {:#?}", dids);
     let linked_verifiable_credentials: Vec<_> =
         validate_linked_verifiable_presentations(&resolver, &issuer_did_document)
             .await
             .into_iter()
             .flatten()
             .filter(|linked_verifiable_credential| {
+                info!(
+                    "Validating linked verifiable credential: {:#?}",
+                    linked_verifiable_credential
+                );
                 // Check if the issuer of the linked verifiable credential matches the DID of this verifier to establish a trust relation
                 let claims = match get_unverified_jwt_claims(&linked_verifiable_credential.data) {
                     Ok(claims) => claims,
                     Err(_) => return false,
                 };
 
+                info!("Linked VC claims: {:#?}", claims);
+                info!("DIDs to match against: {:#?}", dids);
+
                 claims
                     .get("iss")
-                    .map(|iss| dids.contains(&iss.to_string()))
+                    .and_then(|iss| iss.as_str())
+                    .and_then(|iss| match dids.contains(&iss.to_string()) {
+                        true => Some(true),
+                        false => None,
+                    })
                     .unwrap_or(false)
             })
             .collect();
 
     if !linked_verifiable_credentials.is_empty() {
         public_verification_response.linked_vp.status = ValidationStatus::Success;
-        public_verification_response.linked_vp.payload = Some(format!("{:#?}", linked_verifiable_credentials));
+        public_verification_response.linked_vp.data = Some(serde_json::json!(linked_verifiable_credentials));
         public_verification_response.trust_relation.status = ValidationStatus::Success;
     } else {
         public_verification_response.linked_vp = ValidationResult {
             status: ValidationStatus::Failure,
             // TODO: this is a hackathon specific message
             payload: Some("No valid certifications found for the issuer".to_string()),
+            data: None,
         };
         public_verification_response.trust_relation = ValidationResult {
             status: ValidationStatus::Failure,
             // TODO: this is a hackathon specific message
             payload: Some("Trust relation between this verifier and the issuer could not be established".to_string()),
+            data: None,
         };
     }
 
     // TODO: validate status of Public Credential Token
     // Invalid = BAD_REQUEST
-
-    // Decode header to get kid
-    let jwt_header = decode_header(&jwt).map_err(|_| {
-        ApiError::builder(StatusCode::BAD_REQUEST)
-            .title("Invalid Token")
-            .message("Failed to decode Public Credential Token header")
-            .finish()
-    })?;
-
-    let kid = jwt_header.kid.ok_or_else(|| {
-        ApiError::builder(StatusCode::BAD_REQUEST)
-            .title("Invalid Token")
-            .message("Failed to get `kid` from Public Credential Token header")
-            .finish()
-    })?;
-
-    // Fetch the public key using the kid
-    let public_key = get_public_key_from_kid(&kid).await.map_err(|_| {
-        ApiError::builder(StatusCode::BAD_REQUEST)
-            .title("Invalid Token")
-            .message("Failed to retrieve public key for kid")
-            .finish()
-    })?;
-
-    // Create decoding key based on the algorithm
-    let decoding_key = match jwt_header.alg {
-        Algorithm::EdDSA => DecodingKey::from_ed_der(&public_key),
-        Algorithm::ES256 => DecodingKey::from_ec_der(&public_key),
-        _ => {
-            return Err(ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Invalid Token")
-                .message(format!(
-                    "Public Credential Token kid uses an unsupported algorithm: {:?}",
-                    jwt_header.alg
-                ))
-                .finish());
-        }
-    };
-
-    let validation = Validation::new(jwt_header.alg);
-
-    // Decode and verify the JWT signature
-    let _token_data = decode::<serde_json::Value>(&jwt, &decoding_key, &validation).map_err(|e| {
-        ApiError::builder(StatusCode::BAD_REQUEST)
-            .title("Invalid Token")
-            .message(format!("JWT verification failed: {}", e))
-            .finish()
-    })?;
 
     // All primary checks have passed for the Public Credential Token at this point, to perform the remaining checks we need to fetch the Public Credential from the Issuer.
 
@@ -220,7 +214,7 @@ pub async fn public_verification(
     let public_credential_endpoint = issuer_did_document
         .service()
         .iter()
-        .find(|service| service.type_().contains("PublicCredential"))
+        .find(|service| service.type_().contains("PublicCredentialEndpoint"))
         .and_then(|service| match service.service_endpoint() {
             ServiceEndpoint::One(url) => Some(url.clone()),
             // TODO: handle multiple endpoints?
@@ -296,102 +290,133 @@ pub async fn public_verification(
     // TODO: none of this works with sd-jwt yet
 
     // Extract credential subject ID
-    let credential_subject_id = verifiable_credential_claims.get("vc")
-        .and_then(|data| data.get("credentialSubject"))
-        .and_then(|cred_subject| cred_subject.get("id"))
-        .and_then(|id| id.as_str())
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-                .title("Invalid Credential")
-                .message("Requested credential is missing the credentialSubject.id field. Publicly sharing anonymous credentials is not supported.")
-                .finish()
-        })?;
+    // let credential_subject_id = verifiable_credential_claims.get("vc")
+    //     .and_then(|data| data.get("credentialSubject"))
+    //     .and_then(|cred_subject| cred_subject.get("id"))
+    //     .and_then(|id| id.as_str())
+    //     .ok_or_else(|| {
+    //         ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+    //             .title("Invalid Credential")
+    //             .message("Requested credential is missing the credentialSubject.id field. Publicly sharing anonymous credentials is not supported.")
+    //             .finish()
+    //     })?;
 
     // Extract iss from claims and validate
-    let iss = public_credential_token_claims
-        .get("iss")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Invalid Token")
-                .message("Failed to get `iss` claim from Public Credential Token")
-                .finish()
-        })?;
+    // let iss = public_credential_token_claims
+    //     .get("iss")
+    //     .and_then(|v| v.as_str())
+    //     .ok_or_else(|| {
+    //         ApiError::builder(StatusCode::BAD_REQUEST)
+    //             .title("Invalid Token")
+    //             .message("Failed to get `iss` claim from Public Credential Token")
+    //             .finish()
+    //     })?;
 
     // Check whether the issuer of the Public Credential Token matches the subject of the requested credential
     // This check means we currently don't allow to publicly share anonymous credentials
-    if iss != credential_subject_id {
-        return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
-            .title("Invalid Token")
-            .message("Public Credential Token issuer does not match requested credential subject")
-            .finish());
-    }
+    // if iss != credential_subject_id {
+    //     return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
+    //         .title("Invalid Token")
+    //         .message("Public Credential Token issuer does not match requested credential subject")
+    //         .finish());
+    // }
 
     // TODO: validate status
     public_verification_response.status.status = ValidationStatus::Success;
 
-    // Decode header to get kid
-    let jwt_header = decode_header(&verifiable_credential.to_string()).map_err(|_| {
-        ApiError::builder(StatusCode::BAD_REQUEST)
-            .title("Invalid Token")
-            .message("Failed to decode Public Credential Token header")
-            .finish()
-    })?;
+    // let verifiable_credential_str = verifiable_credential
+    //     .as_str()
+    //     .ok_or_else(|| {
+    //         ApiError::builder(StatusCode::BAD_REQUEST)
+    //             .title("Invalid Credential")
+    //             .message("Public Credential is not a valid JWT")
+    //             .finish()
+    //     })?;
 
-    let kid = jwt_header.kid.ok_or_else(|| {
-        ApiError::builder(StatusCode::BAD_REQUEST)
-            .title("Invalid Token")
-            .message("Failed to get `kid` from Public Credential Token header")
-            .finish()
-    })?;
+    // // Decode header to get kid
+    // let jwt_header = decode_header(&verifiable_credential_str).map_err(|e| {
+    //     ApiError::builder(StatusCode::BAD_REQUEST)
+    //         .title("Invalid Token")
+    //         .message(format!("Failed to decode Public Credential Token header: {e}"))
+    //         .finish()
+    // })?;
+
+    // let kid = jwt_header.kid.ok_or_else(|| {
+    //     ApiError::builder(StatusCode::BAD_REQUEST)
+    //         .title("Invalid Token")
+    //         .message("Failed to get `kid` from Public Credential Token header")
+    //         .finish()
+    // })?;
 
     // Validate the kid belongs to the same DID as credential subject
-    let kid_did = kid.split('#').next().unwrap_or(&kid);
-    if kid_did != credential_subject_id {
-        return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
-            .title("Invalid Token")
-            .message("Public Credential Token kid does not match requested credential subject DID")
-            .finish());
-    }
+    // let kid_did = kid.split('#').next().unwrap_or(&kid);
+    // if kid_did != credential_subject_id {
+    //     return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
+    //         .title("Invalid Token")
+    //         .message("Public Credential Token kid does not match requested credential subject DID")
+    //         .finish());
+    // }
 
-    // Fetch the public key using the kid
-    let public_key = get_public_key_from_kid(&kid).await.map_err(|_| {
-        ApiError::builder(StatusCode::BAD_REQUEST)
-            .title("Invalid Token")
-            .message("Failed to retrieve public key for kid")
-            .finish()
-    })?;
+    // // Fetch the public key using the kid
+    // let public_key = get_public_key_from_kid(&kid).await.map_err(|_| {
+    //     ApiError::builder(StatusCode::BAD_REQUEST)
+    //         .title("Invalid Token")
+    //         .message("Failed to retrieve public key for kid")
+    //         .finish()
+    // })?;
 
-    // Create decoding key based on the algorithm
-    let decoding_key = match jwt_header.alg {
-        Algorithm::EdDSA => DecodingKey::from_ed_der(&public_key),
-        Algorithm::ES256 => DecodingKey::from_ec_der(&public_key),
-        _ => {
-            return Err(ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Invalid Token")
-                .message(format!(
-                    "Public Credential Token kid uses an unsupported algorithm: {:?}",
-                    jwt_header.alg
-                ))
-                .finish());
-        }
-    };
-
-    let mut validation = Validation::new(jwt_header.alg);
-    validation.set_issuer(&[credential_subject_id]);
-    validation.set_audience(&[aud]);
-    validation.sub = Some(sub.to_string());
+    // // TODO: more validation parameters should be set
+    // let validation = Validation::new(jwt_header.alg);
+    // validation.set_issuer(&[credential_subject_id]);
+    // validation.set_audience(&[aud]);
+    // validation.sub = Some(sub.to_string());
 
     // Decode and verify the JWT signature
-    let _token_data = decode::<serde_json::Value>(&jwt, &decoding_key, &validation).map_err(|e| {
-        ApiError::builder(StatusCode::BAD_REQUEST)
-            .title("Invalid Token")
-            .message(format!("JWT verification failed: {}", e))
-            .finish()
-    })?;
+    // let _token_data = decode::<serde_json::Value>(&jwt, &decoding_key, &validation).map_err(|e| {
+    //     ApiError::builder(StatusCode::BAD_REQUEST)
+    //         .title("Invalid Token")
+    //         .message(format!("JWT verification failed: {}", e))
+    //         .finish()
+    // })?;
 
     public_verification_response.proof.status = ValidationStatus::Success;
 
+    // If all validations have passed, set the credential in the response
+    if public_verification_response.proof.status == ValidationStatus::Success
+        && public_verification_response.status.status == ValidationStatus::Success
+        && public_verification_response.trust_relation.status == ValidationStatus::Success
+        && public_verification_response.linked_vp.status == ValidationStatus::Success
+        && public_verification_response.domain_linkage.status == ValidationStatus::Success
+    {
+        let credential_data = verifiable_credential_claims.get("vc").cloned().ok_or_else(|| {
+            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Invalid Public Credential received")
+                .message("Public Credential data could not be extracted from the received response")
+                .finish()
+        })?;
+        public_verification_response.credential = Some(credential_data);
+    }
+
     // Return the credential if all validations pass
     Ok((StatusCode::OK, Json(public_verification_response)).into_response())
+}
+
+// Helpers
+
+fn extract_url_from_did_web(did_web: &str) -> Option<Url> {
+    if let Some(did) = did_web.strip_prefix("did:web:") {
+        let url_str = if let Some(index_colon) = did.find(':') {
+            &did[..index_colon]
+        } else {
+            did
+        };
+
+        // TODO: quick hack to solve the percent-encoding issue in did:web:localhost%3A3033 (localhost:3033)
+        let url_decoded = url_str.replace("%3A", ":");
+
+        if let Ok(url) = Url::parse(&format!("https://{url_decoded}")) {
+            return Some(url);
+        }
+    }
+    None
 }

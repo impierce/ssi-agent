@@ -1,6 +1,6 @@
 use super::{command::ServiceCommand, error::ServiceError, event::ServiceEvent};
 use crate::services::IdentityServices;
-use agent_shared::config::config;
+use agent_shared::config::{config, API_VERSION};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::Aggregate;
@@ -59,7 +59,8 @@ impl Aggregate for Service {
                 let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
-                let endpoint_url = origin.to_string().trim_end_matches('/').to_string() + "/public-verification";
+                let endpoint_url =
+                    origin.to_string().trim_end_matches('/').to_string() + API_VERSION + "/public-verification";
                 let endpoint_url = endpoint_url
                     .parse::<identity_core::common::Url>()
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
@@ -92,7 +93,8 @@ impl Aggregate for Service {
                 let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
-                let endpoint_url = origin.to_string().trim_end_matches('/').to_string() + "/public-credential";
+                let endpoint_url =
+                    origin.to_string().trim_end_matches('/').to_string() + API_VERSION + "/public-credential";
                 let endpoint_url = endpoint_url
                     .parse::<identity_core::common::Url>()
                     .map_err(|err| InvalidUrlError(err.to_string()))?;

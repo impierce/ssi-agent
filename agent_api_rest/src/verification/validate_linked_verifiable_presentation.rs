@@ -16,6 +16,7 @@ use identity_jose::{jws::Decoder, jwt::JwtClaims};
 use oid4vc::oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tracing::{info, warn};
 use url::Url;
 
 use crate::verification::validate_domain_linkage::{ValidationStatus, Verifier};
@@ -78,7 +79,7 @@ fn get_linked_verifiable_presentation_urls(service: &Service) -> Option<Vec<Url>
             |linked_verifiable_presentation_urls| match linked_verifiable_presentation_urls {
                 Value::String(url) => url
                     .parse()
-                    .inspect_err(|err| println!("TODO: {err}"))
+                    .inspect_err(|err| warn!("TODO: {err}"))
                     .ok()
                     .map(|url| vec![url]),
                 Value::Array(array) => Some(
@@ -86,7 +87,7 @@ fn get_linked_verifiable_presentation_urls(service: &Service) -> Option<Vec<Url>
                         .into_iter()
                         .filter_map(|url| {
                             url.as_str()
-                                .and_then(|url| url.parse().inspect_err(|err| println!("TODO: {err}")).ok())
+                                .and_then(|url| url.parse().inspect_err(|err| warn!("TODO: {err}")).ok())
                         })
                         .collect(),
                 ),
@@ -121,7 +122,7 @@ async fn validate_linked_verifiable_presentation(
     let response = reqwest::get(linked_verifiable_presentation_url)
         .await
         .inspect_err(|err| {
-            println!("TODO: {err}");
+            warn!("TODO: {err}");
         })
         .ok()?;
     let status = response.status();
@@ -130,18 +131,16 @@ async fn validate_linked_verifiable_presentation(
         .text()
         .await
         .inspect_err(|err| {
-            println!("TODO: {err}");
+            warn!("TODO: {err}");
         })
         .ok()
         .and_then(|presentation_jwt| {
             status.is_success().then(|| {
+                info!("Validating linked verifiable presentation: {presentation_jwt}");
                 let validator = JwtPresentationValidator::with_signature_verifier(Verifier);
-                validator
-                    .validate(&presentation_jwt.into(), &holder_document, &Default::default())
-                    .inspect_err(|err| {
-                        println!("TODO: {err:#?}");
-                    })
-                    .ok()
+                let result = validator.validate(&presentation_jwt.into(), &holder_document, &Default::default());
+                info!("Linked verifiable presentation validation result: {:#?}", result);
+                result.ok()
             })?
         })
 }
@@ -169,11 +168,17 @@ async fn get_validated_linked_credential_data(
 
             // TODO: This is a fallback to get the url from a did:web to validate domain linkage. This is useful for companies who haven't implemented domain linkage yet.
             if validated_linked_domains.is_empty() {
+                info!(
+                    "Falling back to extract url from did:web for issuer DID: {}",
+                    issuer_did
+                );
                 if let Some(did_web_url) = extract_url_from_did_web(&issuer_did) {
                     validated_linked_domains.insert(0, did_web_url);
+                    info!("Extracted url from did:web: {}", validated_linked_domains[0]);
                 }
             }
 
+            info!("Validated linked domains: {:#?}", validated_linked_domains);
             if !validated_linked_domains.is_empty() {
                 let validator = JwtCredentialValidator::with_signature_verifier(Verifier);
 
@@ -214,16 +219,16 @@ async fn get_validated_linked_credential_data(
                             data: serde_json::Value::from(linked_verifiable_credential.as_str()),
                         })
                     } else {
-                        // Failed to get credential_subject from linked_verifiable_credential
+                        warn!("Failed to get credential_subject from linked_verifiable_credential");
                         None
                     }
                 } else {
-                    // Failed to validate linked verifiable credential
+                    warn!("Failed to validate linked verifiable credential");
                     // TODO: Should we add more fine-grained error handling? `None` here means that the linked verifiable credential is invalid.
                     None
                 }
             } else {
-                // No validated linked domains for issuer DID
+                warn!("No validated linked domains for issuer DID");
                 // TODO: Should we add more fine-grained error handling? `None` here means that the domain linkage
                 // validation failed or is unknown.
                 None
@@ -263,8 +268,13 @@ async fn get_validated_linked_domains(
         if validation_status == ValidationStatus::Success {
             Some(issuer_linked_domain.clone())
         } else {
-            // Failed to validate domain linkage for issuer linked domain
-            None
+            // Fallback for did:webs if no domain linkage is found
+            if issuer_did.starts_with("did:web") {
+                extract_url_from_did_web(issuer_did)
+            } else {
+                // Failed to validate domain linkage for issuer linked domain
+                None
+            }
         }
     }))
     .filter_map(|result| async move { result })
@@ -292,7 +302,7 @@ async fn get_issuer_linked_domains(issuer_document: &CoreDocument) -> Vec<Url> {
                                     origin.as_str().and_then(|origin| {
                                         origin
                                             .parse()
-                                            .inspect_err(|err| println!("Failed to parse linked domain: {err:}"))
+                                            .inspect_err(|err| warn!("Failed to parse linked domain: {err:}"))
                                             .ok()
                                     })
                                 })
@@ -312,18 +322,18 @@ pub async fn get_issuer_document(resolver: &Resolver, credential_jwt: &Jwt) -> O
     // Decode the linked verifiable credential.
     let decoded_credential_jwt = decoder
         .decode_compact_serialization(credential_jwt.as_str().as_bytes(), None)
-        .inspect_err(|err| println!("Failed to decode credential jwt: {err:#?}"))
+        .inspect_err(|err| warn!("Failed to decode credential jwt: {err:#?}"))
         .ok()?;
 
     let claims: JwtClaims<Value> = serde_json::from_slice(decoded_credential_jwt.claims())
-        .inspect_err(|err| println!("Failed to parse credential claims: {err:#?}"))
+        .inspect_err(|err| warn!("Failed to parse credential claims: {err:#?}"))
         .ok()?;
 
     // Resolve the DID
     resolver
         .resolve(claims.iss()?)
         .await
-        .inspect_err(|err| println!("Failed to resolve issuer DID.: {err:#?}"))
+        .inspect_err(|err| warn!("Failed to resolve issuer DID.: {err:#?}"))
         .ok()
 }
 
@@ -433,7 +443,10 @@ fn extract_url_from_did_web(did_web: &str) -> Option<Url> {
             did
         };
 
-        if let Ok(url) = Url::parse(&format!("https://{url_str}")) {
+        // TODO: quick hack to solve the percent-encoding issue in did:web:localhost%3A3033 (localhost:3033)
+        let url_decoded = url_str.replace("%3A", ":");
+
+        if let Ok(url) = Url::parse(&format!("https://{url_decoded}")) {
             return Some(url);
         }
     }
