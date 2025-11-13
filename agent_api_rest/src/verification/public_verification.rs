@@ -187,8 +187,17 @@ pub async fn public_verification(
             .collect();
 
     if !linked_verifiable_credentials.is_empty() {
+        // TODO: this is hardcoded logic for the hackathon demo
+        let data = get_unverified_jwt_claims(&linked_verifiable_credentials[0].data).map_err(|_| {
+            ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Linked Verifiable Presentation")
+                .message("Failed to get the credential data from the linked verifiable presentation")
+                .finish()
+        })?["vc"]
+            .clone();
+
         public_verification_response.linked_vp.status = ValidationStatus::Success;
-        public_verification_response.linked_vp.data = Some(serde_json::json!(linked_verifiable_credentials));
+        public_verification_response.linked_vp.data = Some(data);
         public_verification_response.trust_relation.status = ValidationStatus::Success;
     } else {
         public_verification_response.linked_vp = ValidationResult {
