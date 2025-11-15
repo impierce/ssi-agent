@@ -8,11 +8,14 @@ pub mod error;
 
 use agent_identity::state::IdentityState;
 use axum::{
+    extract::State,
+    response::{IntoResponse as _, Response},
     routing::{get, post},
     Router,
 };
 use connections::{get_connection, get_connections, post_connections};
 use documents::{get_document, get_documents};
+use http::StatusCode;
 use services::{linked_vp::linked_vp, service, services};
 use well_known::{did::did, did_configuration::did_configuration};
 
@@ -33,9 +36,16 @@ pub fn router(identity_state: IdentityState) -> Router {
                 .route("/profile", get(get_profile).patch(patch_profile))
                 .route("/services", get(services))
                 .route("/services/{service_id}", get(service))
-                .route("/services/linked-vp", post(linked_vp)),
+                .route("/services/linked-vp", post(linked_vp))
+                .route("/trigger-transaction", post(trigger_transaction)),
         )
         .route("/.well-known/did.json", get(did))
         .route("/.well-known/did-configuration.json", get(did_configuration))
         .with_state(identity_state)
+}
+
+async fn trigger_transaction(State(state): State<IdentityState>) -> Response {
+    agent_identity::state::initialize(&state).await.unwrap();
+
+    StatusCode::OK.into_response()
 }

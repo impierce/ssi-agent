@@ -516,12 +516,17 @@ impl Aggregate for Document {
                                 iota_sponsoring_service_auth
                                     .map(|auth| GasStationOptions::default().with_auth_token(auth)),
                             )
-                            .await
-                            .unwrap();
+                            .await;
+
+                        if res.is_err() {
+                            warn!("Failed to publish DID Document with sponsorship, falling back to normal publishing: {:?}", res.as_ref().err());
+
+                            return Ok(vec![]);
+                        }
 
                         info!("Transaction execution result: {:?}", res);
 
-                        res.output
+                        res.unwrap().output
                     } else {
                         warn!("No IOTA sponsoring service configured, proceeding without sponsorship.");
 
