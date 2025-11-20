@@ -10,8 +10,7 @@ use std::error::Error;
 use tracing::info;
 use uuid::Uuid;
 
-// This struct holds all the different aggregate event publishers. For now it only contains Offer,
-// but in the future it could house others like Credential, Identity, etc.
+// This struct holds all the different aggregate event publishers. For now it only handles the Offer aggregate.
 #[derive(Default, Debug)]
 pub struct EventPublisherNats {
     pub offer: Option<AggregateEventPublisherNats<Offer>>,
@@ -51,7 +50,8 @@ impl EventPublisherNats {
         // Get the NATS configuration. it's an Option<EventPublisherNats>
         let nats_config = match &config().event_publishers.nats {
             Some(config) => config.clone(),
-            None => return Ok(EventPublisherNats::default()), // If no nats config found.
+            // Return default if no NATS configuration is provided.
+            None => return Ok(EventPublisherNats::default()),
         };
 
         // If nats is not enabled, return an empty event publisher.
@@ -74,8 +74,7 @@ impl EventPublisherNats {
                     .map_err(|e| anyhow::anyhow!("Failed to create NATS client: {}", e))?,
                 );
                 break;
-                // TODO: In the future, we can extend this to loop for multiple aggregates if needed.
-                // For now, this only handles our Offer aggregate.
+                // TODO: Extend this to loop for other aggregates if added.
             }
         }
 
@@ -126,7 +125,7 @@ where
     where
         A::Event: DomainEvent,
     {
-        // Generate unique id for each CloudEvent
+        // Generate a unique Id for each CloudEvent
         let event_id = format!("{}-{}", aggregate_id, Uuid::new_v4());
         let event_type = event.event_type();
 
@@ -141,7 +140,7 @@ where
             .data("application/json", serde_json::to_value(event)?)
             .build()?;
 
-        // Convert Cloudevent into a suitable NATS message format
+        // Convert Cloudevent into a formatted NATS message
         let nats_event = NatsCloudEvent::from_event(cloud_event)?;
 
         info!(
@@ -177,7 +176,7 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn test_nats_payload_format() {
+    async fn generate_test_nats_payload() {
         // Create a test CloudEvent
         let event = EventBuilderV10::new()
             .id("test-123")
@@ -200,9 +199,14 @@ pub mod tests {
 
         // Wrap the CloudEvent into a NATS message format
         let nats_event = NatsCloudEvent::from_event(event).unwrap();
+        let payload_str = String::from_utf8_lossy(&nats_event.payload);
+
+        assert!(!payload_str.is_empty());
+        assert!(payload_str.contains("TxCodeGenerated"));
+        assert!(payload_str.contains("1234"));
 
         println!("NATS Payload:");
-        println!("{}", String::from_utf8_lossy(&nats_event.payload));
+        println!("{}", payload_str);
     }
 
     #[tokio::test]
@@ -220,7 +224,7 @@ pub mod tests {
 
         match publisher {
             Ok(p) => {
-                println!("Connection to NATS successful");
+                info!("Connection to NATS successful");
 
                 // Test publishing
                 let test_event = OfferEvent::TxCodeGenerated {
@@ -234,11 +238,11 @@ pub mod tests {
                 let result = p.dispatch_event("offer-123", &test_event).await;
 
                 match result {
-                    Ok(_) => println!("Message published successfully and is now on its way to the client! "),
-                    Err(e) => println!("Publishing failed: {}", e),
+                    Ok(_) => info!("Message published successfully and is now on its way to the client! "),
+                    Err(e) => info!("Publishing failed: {}", e),
                 }
             }
-            Err(e) => println!("NATS connection failed: {}", e),
+            Err(e) => info!("NATS connection failed: {}", e),
         }
     }
 }
