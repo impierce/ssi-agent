@@ -27,35 +27,61 @@ Download the UniMe app on your mobile device:
 
 ## Configuration
 
-### 1. Clone the UniCore repository
+### 1. Create a Docker Compose file
 
-Open a terminal and clone the UniCore repository:
+Create a new `compose.yaml` file with the following content:
 
-```bash
-git clone https://github.com/impierce/ssi-agent.git && cd ssi-agent
-```
+```yaml
+name: ssi-agent
 
-### 2. Navigate to the Docker directory
+services:
+  mongodb:
+    image: mongo:8
+    restart: always
+    ports:
+      - 27017:27017
+    command: "mongod --replSet rs0"
+    healthcheck:
+      test: |
+        mongosh --quiet --eval "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }"
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-```bash
-cd agent_application/docker
-```
-
-### 3. Copy the example environment file
-
-```bash
-cp .env.example .env
+  ssi-agent:
+    image: impiercetechnologies/ssi-agent:1.0.0-beta.13
+    depends_on:
+      - mongodb
+    ports:
+      - 3033:3033
+      - 9091:9091
+    environment:
+      UNICORE__PROFILE: development
+      UNICORE__APPLICATION_URL: ${UNICORE__APPLICATION_URL}
+      UNICORE__EVENT_STORE__TYPE: mongodb
+      UNICORE__EVENT_STORE__CONNECTION_STRING: mongodb://mongodb:27017/ssi-agent?directConnection=true&retryWrites=false&replicaSet=rs0
+      UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD: "secure_password"
+      UNICORE__METRICS__ENABLED: true
+      UNICORE__METRICS__PORT: 9091
 ```
 
 :::info
 
-This enables UniCore's **development mode**, which requires less initial configuration and enables a more verbose API and debugging information.
+`UNICORE__PROFILE: development` enables UniCore's **development mode**, which requires less initial configuration and enables a more verbose API and debugging information.
 
 :::
 
-### 4. Set the `UNICORE__APPLICATION_URL` environment variable
+### 2. Create an `.env` file
 
-First, set the `UNICORE__APPLICATION_URL` environment variable in your shell that contains your local IP address:
+Create a new `.env` file in the same directory as the `compose.yaml` file with the following content:
+
+```env
+UNICORE__APPLICATION_URL=${UNICORE__APPLICATION_URL}
+```
+
+### 3. Set the `UNICORE__APPLICATION_URL` environment variable
+
+Set the `UNICORE__APPLICATION_URL` environment variable in your shell that contains your local IP address:
 
 ```bash
 export UNICORE__APPLICATION_URL=http://<your-local-ip-address>:3033
@@ -93,14 +119,6 @@ up`, or ensure that the variable is available in your environment.
 
 :::
 
-### 5. Update the Docker Compose file
-
-Open the `compose.yaml` file in a text editor and update the `image` value for the `ssi-agent` service to `impiercetechnologies/ssi-agent:1.0.0-beta.8` [(or a newer version)](https://github.com/impierce/ssi-agent/releases).
-
-```yaml
-ssi-agent: impiercetechnologies/ssi-agent:1.0.0-beta.8
-```
-
 ---
 
 ## Deployment
@@ -128,7 +146,7 @@ curl --location "$UNICORE__APPLICATION_URL/v0/credentials" \
 --header 'Content-Type: application/json' \
 --data '{
     "offerId":"001",
-    "credentialConfigurationId": "w3c_vc_credential",
+    "credentialConfigurationId": "001",
     "credential": {
         "credentialSubject": {
             "first_name": "John",
