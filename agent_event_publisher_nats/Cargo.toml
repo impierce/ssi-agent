@@ -12,7 +12,10 @@ agent_store = { path = "../agent_store" }
 anyhow.workspace = true
 async-nats = "0.42"
 async-trait.workspace = true
-cloudevents-sdk = { version = "0.8", features = ["nats"] }
+# TODO: Bump to next release after 0.8.0, where feature `async-nats` is available.
+cloudevents-sdk = { git = "https://github.com/cloudevents/sdk-rust", rev = "6f02d23", features = [
+    "nats",
+] }
 cqrs-es.workspace = true
 futures.workspace = true
 serde.workspace = true
