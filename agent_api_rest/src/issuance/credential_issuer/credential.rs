@@ -207,7 +207,6 @@ pub mod tests {
                                         is_signed: true,
                                         credential_configuration_id: CREDENTIAL_CONFIGURATION_ID.to_string(),
                                         expires_at: CredentialExpiry::Never,
-                                        delivery_options: None,
                                     }
                                 } else {
                                     // ...or else, submitting the data that will be signed inside `UniCore`.
@@ -223,7 +222,6 @@ pub mod tests {
                                         is_signed: false,
                                         credential_configuration_id: CREDENTIAL_CONFIGURATION_ID.to_string(),
                                         expires_at: CredentialExpiry::Never,
-                                        delivery_options: None,
                                     }
                                 };
 

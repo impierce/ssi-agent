@@ -2,7 +2,6 @@ use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_issuance::credential::aggregate::CredentialStatus;
-use agent_issuance::offer::aggregate::DeliveryOptions;
 use agent_issuance::{
     credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data},
     offer::command::OfferCommand,
@@ -43,8 +42,6 @@ pub struct CredentialsEndpointRequest {
     pub is_signed: bool,
     pub credential_configuration_id: String,
     pub expires_at: CredentialExpiry,
-    #[serde(default)]
-    pub delivery_options: Option<DeliveryOptions>,
 }
 
 #[axum_macros::debug_handler]
@@ -56,7 +53,6 @@ pub(crate) async fn credentials(
         is_signed,
         credential_configuration_id,
         expires_at,
-        delivery_options,
     }): Json<CredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let credential_id = uuid::Uuid::new_v4().to_string();
@@ -165,7 +161,7 @@ pub(crate) async fn credentials(
             credential_configuration_ids: vec![credential_configuration_id.clone()],
             grant_types: vec![GrantType::PreAuthorizedCode],
             tx_code_constraints,
-            delivery_options,
+            delivery_options: None,
         };
 
         command_handler(&offer_id, &state.command.offer, command).await?
