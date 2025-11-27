@@ -1,3 +1,7 @@
+use agent_authorization::domain::{
+    access_token::aggregate::AccessToken, authorization_code::aggregate::AuthorizationCode, client::aggregate::Client,
+    oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest,
+};
 use agent_holder::presentation::aggregate::Presentation;
 use agent_identity::{
     connection::aggregate::Connection, document::aggregate::Document, profile::aggregate::Profile,
@@ -9,10 +13,11 @@ use agent_issuance::{
 use agent_library::template::aggregate::Template;
 use agent_shared::config::config;
 use agent_store::{
-    AuthorizationRequestEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher,
-    EventPublisher, HolderCredentialEventPublisher, OfferEventPublisher, PresentationEventPublisher,
-    ProfileEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher, ServiceEventPublisher,
-    TemplateEventPublisher,
+    AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
+    ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
+    HolderCredentialEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
+    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
+    ServiceEventPublisher, TemplateEventPublisher,
 };
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use async_trait::async_trait;
@@ -25,6 +30,12 @@ use tracing::info;
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Default)]
 pub struct EventPublisherHttp {
+    // Authorization
+    pub access_token: Option<AggregateEventPublisherHttp<AccessToken>>,
+    pub authorization_code: Option<AggregateEventPublisherHttp<AuthorizationCode>>,
+    pub client: Option<AggregateEventPublisherHttp<Client>>,
+    pub oauth2_authorization_request: Option<AggregateEventPublisherHttp<OAuth2AuthorizationRequest>>,
+
     // Identity
     pub connection: Option<AggregateEventPublisherHttp<Connection>>,
     pub document: Option<AggregateEventPublisherHttp<Document>>,
@@ -56,6 +67,59 @@ impl EventPublisherHttp {
         if !event_publisher_http.enabled {
             return Ok(EventPublisherHttp::default());
         }
+
+        let access_token = (!event_publisher_http.events.access_token.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<AccessToken>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .access_token
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let authorization_code = (!event_publisher_http.events.authorization_code.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<AuthorizationCode>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .authorization_code
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let client = (!event_publisher_http.events.client.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Client>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .client
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let oauth2_authorization_request =
+            (!event_publisher_http.events.oauth2_authorization_request.is_empty()).then(|| {
+                AggregateEventPublisherHttp::<OAuth2AuthorizationRequest>::new(
+                    event_publisher_http.target_url.clone(),
+                    event_publisher_http.headers.clone(),
+                    event_publisher_http
+                        .events
+                        .oauth2_authorization_request
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                )
+            });
 
         let connection = (!event_publisher_http.events.connection.is_empty()).then(|| {
             AggregateEventPublisherHttp::<Connection>::new(
@@ -214,6 +278,10 @@ impl EventPublisherHttp {
         });
 
         let event_publisher: EventPublisherHttp = EventPublisherHttp {
+            access_token,
+            authorization_code,
+            client,
+            oauth2_authorization_request,
             connection,
             document,
             profile,
@@ -263,6 +331,27 @@ impl EventPublisher for EventPublisherHttp {
         self.template
             .take()
             .map(|publisher| Box::new(publisher) as TemplateEventPublisher)
+    }
+
+    fn authorization_code(&mut self) -> Option<AuthorizationCodeEventPublisher> {
+        self.authorization_code
+            .take()
+            .map(|publisher| Box::new(publisher) as AuthorizationCodeEventPublisher)
+    }
+    fn client(&mut self) -> Option<ClientEventPublisher> {
+        self.client
+            .take()
+            .map(|publisher| Box::new(publisher) as ClientEventPublisher)
+    }
+    fn oauth2_authorization_request(&mut self) -> Option<OAuth2AuthorizationRequestEventPublisher> {
+        self.oauth2_authorization_request
+            .take()
+            .map(|publisher| Box::new(publisher) as OAuth2AuthorizationRequestEventPublisher)
+    }
+    fn access_token(&mut self) -> Option<AccessTokenEventPublisher> {
+        self.access_token
+            .take()
+            .map(|publisher| Box::new(publisher) as AccessTokenEventPublisher)
     }
 
     fn server_config(&mut self) -> Option<ServerConfigEventPublisher> {
@@ -444,7 +533,7 @@ mod tests {
         // A new event for the `Offer` aggregate that the publisher is not interested in.
         let offer_event = OfferEvent::CredentialRequestVerified {
             offer_id: Default::default(),
-            subject_id: "subject_id".to_string(),
+            subject_id: Some("subject_id".to_string()),
         };
 
         let events = [EventEnvelope::<Offer> {

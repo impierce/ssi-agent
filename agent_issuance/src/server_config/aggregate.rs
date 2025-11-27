@@ -9,11 +9,13 @@ use oid4vci::credential_issuer::{
 use oid4vci::proof::{KeyProofMetadata, ProofType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::{debug, info};
 
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::error::ServerConfigError;
 use crate::server_config::event::ServerConfigEvent;
+use crate::services::IssuanceServices;
 
 fn into_credential_configurations_supported(
     credential_configurations: &HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
@@ -63,7 +65,7 @@ impl Aggregate for ServerConfig {
     type Command = ServerConfigCommand;
     type Event = ServerConfigEvent;
     type Error = ServerConfigError;
-    type Services = ();
+    type Services = Arc<IssuanceServices>;
 
     fn aggregate_type() -> String {
         "server_config".to_string()
@@ -311,6 +313,7 @@ pub mod server_config_tests {
     use super::*;
     use crate::server_config::aggregate::ServerConfig;
     use crate::server_config::event::ServerConfigEvent;
+    use agent_secret_manager::service::Service;
     use agent_shared::config::{Authorization, CredentialConfiguration};
     use cqrs_es::test::TestFramework;
     use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
@@ -329,7 +332,7 @@ pub mod server_config_tests {
         cryptographic_binding_methods_supported: Vec<String>,
         signing_algorithms_supported: Vec<Algorithm>,
     ) {
-        ServerConfigTestFramework::with(())
+        ServerConfigTestFramework::with(Service::default())
             .given_no_previous_events()
             .when(ServerConfigCommand::InitializeServerMetadata {
                 authorization_server_metadata: authorization_server_metadata.clone(),
@@ -355,7 +358,7 @@ pub mod server_config_tests {
         credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
         credential_issuer_metadata_with_credential_configuration: Box<CredentialIssuerMetadata>,
     ) {
-        ServerConfigTestFramework::with(())
+        ServerConfigTestFramework::with(Service::default())
             .given(vec![ServerConfigEvent::ServerMetadataInitialized {
                 authorization_server_metadata,
                 credential_issuer_metadata,

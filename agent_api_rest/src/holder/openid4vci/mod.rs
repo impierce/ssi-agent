@@ -14,6 +14,7 @@ use tracing::info;
 #[axum_macros::debug_handler]
 pub(crate) async fn offers_params(
     State(state): State<HolderState>,
+    // TODO: Can this be changed to `StringifiedForm`?
     Form(payload): Form<serde_json::Value>,
 ) -> Result<Response, ApiError> {
     let credential_offer_result: Result<CredentialOffer, _> =

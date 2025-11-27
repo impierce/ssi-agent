@@ -5,7 +5,6 @@ use oid4vci::{
     },
     credential_offer::{GrantType, TxCodeConstraints},
     credential_request::CredentialRequest,
-    token_request::TokenRequest,
 };
 use serde::Deserialize;
 use url::Url;
@@ -30,10 +29,6 @@ pub enum OfferCommand {
     },
 
     // OpenID4VCI Pre-Authorized Code Flow
-    CreateTokenResponse {
-        offer_id: String,
-        token_request: TokenRequest,
-    },
     VerifyCredentialRequest {
         offer_id: String,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,

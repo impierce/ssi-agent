@@ -6,6 +6,7 @@ use crate::{
     issuance::error::PublicError,
 };
 use agent_issuance::{
+    application::access_token_validation_service::AccessTokenValidationService,
     credential::{command::CredentialCommand, views::CredentialView},
     offer::{command::OfferCommand, views::OfferView},
     server_config::views::ServerConfigView,
@@ -31,11 +32,12 @@ pub(crate) async fn credential(
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> Result<Response, PublicError> {
-    // Use the `access_token` to get the `offer_id` from the `AccessTokenView`.
-    let offer_id = query_handler(&access_token, &state.query.access_token)
-        .await?
-        .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidToken))?
-        .offer_id;
+    let offer_id = AccessTokenValidationService::validate(&state, &access_token)
+        .await
+        .ok()
+        // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
+        .and_then(|claims| claims.issuer_state)
+        .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidToken))?;
 
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
     let (credential_issuer_metadata, authorization_server_metadata) =
@@ -81,9 +83,11 @@ pub(crate) async fn credential(
             }
             Some(OfferView {
                 credential_ids,
-                subject_id: Some(subject_id),
+                subject_id,
                 ..
-            }) => break (credential_ids, subject_id),
+            }) => {
+                break (credential_ids, subject_id);
+            }
             _ => {
                 return Err(internal_server_error());
             }
@@ -132,21 +136,23 @@ pub(crate) async fn credential(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::authorization;
+    use crate::authorization::authorization_server::token::tests::token;
     use crate::issuance::credentials::tests::credentials;
     use crate::issuance::router;
     use crate::API_VERSION;
     use crate::{
-        issuance::{
-            credential_issuer::token::tests::token, credentials::CredentialsEndpointRequest, offers::tests::offers,
-        },
-        tests::{CREDENTIAL_CONFIGURATION_ID, OFFER_ID},
+        issuance::{credentials::CredentialsEndpointRequest, offers::tests::offers},
+        tests::OFFER_ID,
     };
+
     use agent_event_publisher_http::EventPublisherHttp;
     use agent_issuance::credential::aggregate::CredentialExpiry;
-    use agent_issuance::{offer::event::OfferEvent, state::initialize};
+    use agent_issuance::offer::event::OfferEvent;
     use agent_secret_manager::service::Service;
     use agent_shared::config::{set_config, Events};
-    use agent_store::{in_memory, EventPublisher};
+    use agent_store::authorization_state;
+    use agent_store::{in_memory::InMemory, issuance_state, EventPublisher};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -163,6 +169,7 @@ pub mod tests {
     };
 
     const CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsiaWQiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4ifSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ0eXBlIjoic3RhdHVzbGlzdCtqd3QiLCJpZHgiOjEyMywidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIn19LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsiaWR4IjoxMjMsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCJ9fX0.LpNq8l-qqqCA-htsB8KZLaVoNCfxqTrsPxVmEj0dsPAGFhOqO8lXI7DU0FhNwzWedxJ1ySS_Vq7ChBW-TgY7Bw";
+    const ANONYMOUS_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsIm5iZiI6MTI2MjMwNDAwMCwiaWF0IjoxMjYyMzA0MDAwLCJ2YyI6eyJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSJdLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4ifSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ0eXBlIjoic3RhdHVzbGlzdCtqd3QiLCJpZHgiOjEyMywidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIn19LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsiaWR4IjoxMjMsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCJ9fX0.SxT7dwfIdkqTTYnSDzAEE5-csEUb9ucWWEcgIgDEEiK7VwsdW9k7ozLvi79Yfa71Q1buILLJdzLYf1mHE-V2Bg";
     const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
 
     trait CredentialEventTrigger {
@@ -205,7 +212,7 @@ pub mod tests {
                                         offer_id: offer_id.clone(),
                                         credential: json!(CREDENTIAL_JWT),
                                         is_signed: true,
-                                        credential_configuration_id: CREDENTIAL_CONFIGURATION_ID.to_string(),
+                                        credential_configuration_id: "001".to_string(),
                                         expires_at: CredentialExpiry::Never,
                                     }
                                 } else {
@@ -220,7 +227,7 @@ pub mod tests {
                                             }
                                         }),
                                         is_signed: false,
-                                        credential_configuration_id: CREDENTIAL_CONFIGURATION_ID.to_string(),
+                                        credential_configuration_id: "001".to_string(),
                                         expires_at: CredentialExpiry::Never,
                                     }
                                 };
@@ -254,63 +261,12 @@ pub mod tests {
         }
     }
 
-    #[rstest]
-    #[case::without_external_server(false, false, 0)]
-    #[case::with_external_server(true, false, 0)]
-    #[case::with_external_server_and_self_signed_credential(true, true, 0)]
-    #[should_panic(expected = "assertion `left == right` failed\n  left: 500\n right: 200")]
-    #[case::should_panic_due_to_timeout(true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100)]
-    #[serial_test::serial]
-    #[tokio::test(flavor = "multi_thread")]
-    #[tracing_test::traced_test]
-    async fn test_credential_endpoint(
-        #[case] with_external_server: bool,
-        #[case] is_self_signed: bool,
-        #[case] delay: u64,
-    ) {
-        let (external_server, issuance_event_publishers) = if with_external_server {
-            let external_server = MockServer::start().await;
-
-            let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
-
-            set_config().enable_event_publisher_http();
-            set_config().set_event_publisher_http_target_url(target_url.clone());
-            set_config().set_event_publisher_http_target_events(Events {
-                offer: vec![agent_shared::config::OfferEvent::CredentialRequestVerified],
-                ..Default::default()
-            });
-
-            (
-                Some(external_server),
-                vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>],
-            )
-        } else {
-            (None, Default::default())
-        };
-
-        let issuance_state = in_memory::issuance_state(Service::default(), issuance_event_publishers).await;
-        initialize(&issuance_state).await.unwrap();
-
-        let mut app = router(issuance_state);
-
-        if let Some(external_server) = &external_server {
-            external_server
-                .prepare_credential_event_trigger(Arc::new(Mutex::new(Some(app.clone()))), is_self_signed, delay)
-                .await;
-        }
-
-        // When `with_external_server` is false, then the credentials endpoint does not need to be called before the
-        // start of the flow, since the `external_server` will do this once it is triggered by the
-        // `CredentialRequestVerified` event.
-        if !with_external_server {
-            credentials(&mut app).await;
-        }
-
-        let pre_authorized_code = offers(&mut app).await.unwrap();
-
-        let access_token: String = token(&mut app, pre_authorized_code).await;
-
-        let response = app
+    pub async fn credential(
+        issuance_app: &mut Router,
+        access_token: String,
+        external_server: Option<MockServer>,
+    ) -> (String, String) {
+        let response = issuance_app
             .oneshot(
                 Request::builder()
                     .method(http::Method::POST)
@@ -319,7 +275,7 @@ pub mod tests {
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_configuration_id": CREDENTIAL_CONFIGURATION_ID,
+                            "credential_configuration_id": "001",
                             "proof": {
                                 "proof_type": "jwt",
                                 "jwt": "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lk\
@@ -351,45 +307,132 @@ pub mod tests {
             // Assert that the event was dispatched to the target URL.
             assert!(external_server.received_requests().await.unwrap().len() == 1);
         }
+
+        let notification_id = body.get("notification_id").and_then(|v| v.as_str()).unwrap();
+
+        (access_token, notification_id.to_string())
     }
 
-    pub async fn credential(app: &mut Router) -> (String, String) {
-        credentials(app).await;
-        let pre_authorized_code = offers(app).await.unwrap();
-        let access_token: String = token(app, pre_authorized_code).await;
+    #[rstest]
+    #[case::pre_authorized_code(true, false, false, false, 0)]
+    #[case::authorization_code(false, false, false, false, 0)]
+    #[case::with_external_server(true, false, true, false, 0)]
+    #[case::with_anonymous_access(true, true, false, false, 0)]
+    #[case::with_external_server_and_self_signed_credential(true, false, true, true, 0)]
+    #[should_panic(expected = "assertion `left == right` failed\n  left: 500\n right: 200")]
+    #[case::should_panic_due_to_timeout(true, false, true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100)]
+    #[serial_test::serial]
+    #[tokio::test(flavor = "multi_thread")]
+    #[tracing_test::traced_test]
+    async fn test_credential_endpoint(
+        #[case] is_pre_authorized: bool,
+        #[case] with_anonymous_access: bool,
+        #[case] with_external_server: bool,
+        #[case] is_self_signed: bool,
+        #[case] delay: u64,
+    ) {
+        let (external_server, issuance_event_publishers) = if with_external_server {
+            let external_server = MockServer::start().await;
 
-        let request_body = json!({
-            "credential_configuration_id": CREDENTIAL_CONFIGURATION_ID,
-                "proof": {
-                    "proof_type": "jwt",
-                    "jwt": "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBY\
-                                    tgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"
-                }
-        });
+            let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
 
-        let response = app
+            set_config().enable_event_publisher_http();
+            set_config().set_event_publisher_http_target_url(target_url.clone());
+            set_config().set_event_publisher_http_target_events(Events {
+                offer: vec![agent_shared::config::OfferEvent::CredentialRequestVerified],
+                ..Default::default()
+            });
+
+            (
+                Some(external_server),
+                vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>],
+            )
+        } else {
+            (None, Default::default())
+        };
+
+        let issuance_state = issuance_state(&InMemory, Service::default(), issuance_event_publishers).await;
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+
+        let mut issuance_app = router(issuance_state.clone());
+
+        if let Some(external_server) = &external_server {
+            external_server
+                .prepare_credential_event_trigger(
+                    Arc::new(Mutex::new(Some(issuance_app.clone()))),
+                    is_self_signed,
+                    delay,
+                )
+                .await;
+        }
+
+        let credential_configuration_id = if is_pre_authorized {
+            "001".to_string()
+        } else {
+            "002".to_string()
+        };
+
+        // When `with_external_server` is false, then the credentials endpoint does not need to be called before the
+        // start of the flow, since the `external_server` will do this once it is triggered by the
+        // `CredentialRequestVerified` event.
+        if !with_external_server {
+            credentials(&mut issuance_app, &credential_configuration_id).await;
+        }
+
+        let grants = offers(&mut issuance_app, &credential_configuration_id).await.unwrap();
+
+        let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
+
+        let mut authorization_app = authorization::router((authorization_state, issuance_state));
+
+        let access_token: String = token(&mut authorization_app, is_pre_authorized, grants).await;
+
+        let jwt = if with_anonymous_access {
+            "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1rcHc2OGh1OVFnTUFDNmJDOE0xeFo0cDZ4VXNFeUs0bUtZdEtNYkpnTmRrSjIjejZNa3B3NjhodTlRZ01BQzZiQzhNMXhaNHA2eFVzRXlLNG1LWXRLTWJKZ05ka0oyIn0.eyJhdWQiOiJodHRwOi8vMTI3LjAuMC4xOjQwNzI1LyIsImlhdCI6MTc2MjI2NTgxMH0.GuGCIl-0VGkADdbWkcL56P5jXZjGKBzYbr-gPfQ5Yl7u4KltF1pjle52RuTVInxIQXeP9GuDL1Ag52B6Y0NSAg"
+        } else {
+            "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"
+        };
+
+        let response = issuance_app
             .oneshot(
                 Request::builder()
                     .method(http::Method::POST)
                     .uri("/openid4vci/credential")
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
-                    .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "credential_configuration_id": "001",
+                            "proof": {
+                                "proof_type": "jwt",
+                                "jwt": jwt
+                            }
+                        }))
+                        .unwrap(),
+                    ))
                     .unwrap(),
             )
             .await
             .unwrap();
 
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get("Content-Type").unwrap(), "application/json");
+
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let body_value: Value = serde_json::from_slice(&body).unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(body_value["credentials"][0]["credential"], json!(CREDENTIAL_JWT));
+        if with_anonymous_access {
+            assert_eq!(body["credentials"][0]["credential"], json!(ANONYMOUS_CREDENTIAL_JWT));
+        } else {
+            assert_eq!(body["credentials"][0]["credential"], json!(CREDENTIAL_JWT));
+        }
 
-        let notification_id = body_value
-            .get("notification_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default();
-
-        (access_token, notification_id.to_string())
+        if let Some(external_server) = external_server {
+            // Assert that the event was dispatched to the target URL.
+            assert!(external_server.received_requests().await.unwrap().len() == 1);
+        }
     }
 }

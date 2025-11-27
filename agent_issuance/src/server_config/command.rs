@@ -9,6 +9,7 @@ use serde::Deserialize;
 #[serde(untagged)]
 pub enum ServerConfigCommand {
     InitializeServerMetadata {
+        // TODO: Move this to `agent_authorization`.
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         cryptographic_binding_methods_supported: Vec<String>,

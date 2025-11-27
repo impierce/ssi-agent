@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap"
+      rel="stylesheet"
+    />
+
+    <title>Consent to Data Access</title>
+    <style>
+      body {
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, Helvetica, Arial, sans-serif;
+        margin: 0;
+        background-color: #f8fafc; /* slate-50 */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 480px;
+        width: 100%;
+        background-color: white;
+        padding: 2em;
+        border: 1px solid #dee2e6;
+        border-radius: 32px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 1.5em;
+      }
+      .client-logo {
+        max-width: 80px;
+        max-height: 80px;
+        margin-bottom: 1em;
+      }
+      h1 {
+        font-size: 1.5em;
+        color: #333;
+        margin: 0;
+      }
+      p {
+        color: #555;
+        line-height: 1.6;
+      }
+      strong {
+        color: #0284c7; /* sky-600 */
+      }
+      .permissions {
+        margin-top: 1.5em;
+      }
+      h2 {
+        font-size: 1.1em;
+        color: #333;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 0.5em;
+        margin-bottom: 1em;
+      }
+      ul {
+        list-style: none;
+        padding: 0;
+      }
+      li {
+        display: flex;
+        align-items: center;
+        background-color: #f8f9fa;
+        margin-bottom: 0.5em;
+        padding: 0.75em;
+        border-radius: 5px;
+      }
+      li::before {
+        content: "✓";
+        color: #28a745;
+        margin-right: 0.75em;
+        font-weight: bold;
+      }
+      .form-actions {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 2em;
+      }
+      button {
+        flex-grow: 1;
+        padding: 0.6em 1.2em;
+        border: none;
+        border-radius: 9999px;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 1em;
+        font-weight: 500;
+        /* letter-spacing: 0.5px; */
+      }
+      .authorize {
+        background-color: #0ea5e9; /* sky-500 */
+        color: white;
+      }
+      .authorize:hover {
+        background-color: #0284c7; /* sky-600 */
+      }
+      .deny {
+        background-color: #f1f5f9; /* slate-100 */
+        color: #64748b; /* slate-500 */
+        margin-right: 0.5em;
+      }
+      .deny:hover {
+        background-color: #e2e8f0; /* slate-200 */
+      }
+      .error {
+        color: #dc3545;
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        padding: 1em;
+        border-radius: 5px;
+        margin-bottom: 1.5em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1 style="text-align: center">Consent to Data Access</h1>
+
+      <div style="height: 96px; margin: 2em; text-align: center">
+        <img
+          src="https://storage.googleapis.com/public-logo-assets-f9d25b6/unime.png"
+          alt="unime"
+          style="height: 100%"
+        />
+      </div>
+
+      <p>
+        The application <strong>{{ client_id }}</strong> is requesting access to
+        the following data:
+      </p>
+
+      <h2>Credentials to be Shared</h2>
+      <ul>
+        {% for authorization_detail in authorization_details %}
+        <li>
+          {# Use a match statement to handle the enum and get the ID #} {% match
+          &authorization_detail.credential_configuration_or_format %} {# FIX:
+          Add `..` to ignore the other fields in the struct variant #} {% when
+          CredentialConfigurationOrFormat::CredentialConfigurationId with {
+          credential_configuration_id, .. } %}
+          <strong>{{ credential_configuration_id }}</strong>
+          {% when CredentialConfigurationOrFormat::CredentialFormat with
+          (format) %} {# Fallback for when a format is provided instead of an ID
+          #}
+          <strong>Credential defined by format</strong>
+          {% endmatch %} {# Use `if let` to safely handle the optional claims
+          vector #} {% if let Some(claims) = &authorization_detail.claims %} {%
+          endif %}
+        </li>
+        {% endfor %}
+      </ul>
+
+      <p>Do you want to allow this application to access your data?</p>
+
+      <form
+        action="/auth/consent"
+        method="post"
+        style="justify-self: end; margin-top: 32px"
+      >
+        <input type="hidden" name="client_id" value="{{ client_id }}" />
+        <input type="hidden" name="request_uri" value="{{ request_uri }}" />
+
+        <button type="submit" name="consent_given" value="false" class="deny">
+          Deny
+        </button>
+
+        <button
+          type="submit"
+          name="consent_given"
+          value="true"
+          class="authorize"
+        >
+          Authorize
+        </button>
+      </form>
+    </div>
+  </body>
+</html>

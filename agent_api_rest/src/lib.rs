@@ -1,3 +1,4 @@
+pub mod authorization;
 pub mod holder;
 pub mod identity;
 pub mod issuance;
@@ -9,6 +10,7 @@ pub mod error;
 pub mod handlers;
 pub mod utils;
 
+use agent_authorization::state::AuthorizationState;
 use agent_holder::state::HolderState;
 use agent_identity::state::IdentityState;
 use agent_issuance::state::IssuanceState;
@@ -38,6 +40,7 @@ pub const DOCUMENTATION_URL: &str = "https://beta.docs.impierce.com/unicore/";
 pub struct ApplicationState {
     pub identity_state: Option<IdentityState>,
     pub library_state: Option<LibraryState>,
+    pub authorization_state: Option<AuthorizationState>,
     pub issuance_state: Option<IssuanceState>,
     pub holder_state: Option<HolderState>,
     pub verification_state: Option<VerificationState>,
@@ -47,6 +50,7 @@ pub fn app(
     ApplicationState {
         identity_state,
         library_state,
+        authorization_state,
         issuance_state,
         holder_state,
         verification_state,
@@ -55,6 +59,15 @@ pub fn app(
     let app = Router::new()
         .merge(identity_state.map(identity::router).unwrap_or_default())
         .merge(library_state.map(library::router).unwrap_or_default())
+        .merge(
+            authorization_state
+                // The `IssuanceState` is cloned here to ensure that the authorization router can access it. This is
+                // necessary since for the Pre-Authorized Code flow, the Token Endpoint requires a shared state with
+                // the Issuance Bounded Context.
+                .zip(issuance_state.clone())
+                .map(authorization::router)
+                .unwrap_or_default(),
+        )
         .merge(issuance_state.map(issuance::router).unwrap_or_default())
         .merge(holder_state.map(holder::router).unwrap_or_default())
         .merge(verification_state.map(verification::router).unwrap_or_default())
@@ -137,7 +150,6 @@ mod tests {
     use serde_json::json;
     use std::collections::HashMap;
 
-    pub const CREDENTIAL_CONFIGURATION_ID: &str = "001";
     pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
 
     lazy_static::lazy_static! {
@@ -177,6 +189,48 @@ mod tests {
                             }
                         }
                     ]
+                }
+                ))
+                .unwrap()
+            ),
+            (
+                "002".to_string(),
+                serde_json::from_value(json!({
+                    "format": "jwt_vc_json",
+                    "cryptographic_binding_methods_supported": [
+                        "did:jwk",
+                        "did:key",
+                    ],
+                    "credential_signing_alg_values_supported": [
+                        "ES256",
+                        "EdDSA"
+                    ],
+                    "credential_definition":{
+                        "type": [
+                            "VerifiableCredential"
+                        ]
+                    },
+                    "proof_types_supported": {
+                        "jwt": {
+                            "proof_signing_alg_values_supported": [
+                                "ES256",
+                                "EdDSA"
+                            ],
+                        }
+                    },
+                    "display": [
+                        {
+                            "name": "Verifiable Credential",
+                            "locale": "en",
+                            "logo": {
+                                "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                "alt_text": "Impierce Logo",
+                            }
+                        }
+                    ],
+                    "authorization": {
+                        "pre_authorized": false
+                    }
                 }
                 ))
                 .unwrap()
