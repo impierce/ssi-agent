@@ -195,7 +195,7 @@ impl Aggregate for AuthorizationRequest {
                         }])
                     }
                     GenericAuthorizationResponse::OID4VP(oid4vp_authorization_response) => {
-                        let _ = relying_party
+                        let decoded_vp_token = relying_party
                             .validate_response(&oid4vp_authorization_response)
                             .await
                             .map_err(InvalidOID4VPAuthorizationResponse)?;
@@ -220,15 +220,12 @@ impl Aggregate for AuthorizationRequest {
                                 builder = builder.add_presentation(credential_id.clone(), presentation.clone());
                             }
                         }
+
                         builder.build().map_err(|_| {
                             AuthorizationRequestError::InvalidOID4VPAuthorizationResponse(anyhow::anyhow!(
                                 "VpToken validation failed against DCQL query"
                             ))
                         })?;
-                        let decoded_vp_token = relying_party
-                            .validate_response(&oid4vp_authorization_response)
-                            .await
-                            .map_err(InvalidOID4VPAuthorizationResponse)?;
 
                         Ok(vec![OID4VPAuthorizationResponseVerified {
                             vp_token: decoded_vp_token,

@@ -215,12 +215,7 @@ impl Aggregate for Offer {
                     .await
                     .map_err(|e| InvalidProofError(e.to_string()))?;
 
-                let subject_did = proof
-                    .rfc7519_claims
-                    .iss()
-                    .as_ref()
-                    .ok_or(MissingProofIssuerError)?
-                    .clone();
+                let subject_did = proof.rfc7519_claims.iss().as_ref().cloned();
 
                 Ok(vec![CredentialRequestVerified {
                     offer_id,
@@ -295,7 +290,7 @@ impl Aggregate for Offer {
             }
             CredentialOfferSent { .. } => {}
             CredentialRequestVerified { subject_id, .. } => {
-                self.subject_id.replace(subject_id);
+                self.subject_id = subject_id;
             }
             CredentialResponseCreated {
                 credential_response, ..
@@ -457,7 +452,7 @@ pub mod tests {
             })
             .then_expect_events(vec![OfferEvent::CredentialRequestVerified {
                 offer_id: offer_id.clone(),
-                subject_id: holder.identifier("did:key", Algorithm::EdDSA).await.unwrap(),
+                subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
             }]);
     }
 
@@ -500,7 +495,7 @@ pub mod tests {
                 },
                 OfferEvent::CredentialRequestVerified {
                     offer_id: offer_id.clone(),
-                    subject_id: holder.identifier("did:key", Algorithm::EdDSA).await.unwrap(),
+                    subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
                 },
             ])
             .when(OfferCommand::CreateCredentialResponse {
@@ -551,7 +546,7 @@ pub mod tests {
                 },
                 OfferEvent::CredentialRequestVerified {
                     offer_id: offer_id.clone(),
-                    subject_id: holder.identifier("did:key", Algorithm::EdDSA).await.unwrap(),
+                    subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
                 },
                 // Credentials are only added after the credential request is verified (JIT)
                 OfferEvent::CredentialsAdded {

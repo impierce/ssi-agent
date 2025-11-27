@@ -27,7 +27,7 @@ use http_body_util::BodyExt as _;
 use hyper::StatusCode;
 use std::time::Duration;
 use tower::ServiceBuilder;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::trace::TraceLayer;
 use tracing::{debug, info, info_span, Span};
 
 pub const API_VERSION: &str = "/v0";
@@ -100,19 +100,11 @@ pub fn app(
 
     // Note: since version 0.8 axum does not allow nesting routers with an empty base path. We must explicitly check
     // for an empty base path before nesting.
-    let app = if application_base_path == "/" {
+    if application_base_path == "/" {
         app
     } else {
         // TODO: This breaks Domain Linkage. We need to fix this.
         Router::new().nest(&application_base_path, app)
-    };
-
-    // CORS
-    if config().cors_enabled {
-        info!("CORS (permissive) enabled for all routes");
-        app.layer(CorsLayer::permissive())
-    } else {
-        app
     }
 }
 

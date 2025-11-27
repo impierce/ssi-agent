@@ -397,7 +397,7 @@ mod tests {
         // A new event for the `Offer` aggregate that the publisher is not interested in.
         let offer_event = OfferEvent::CredentialRequestVerified {
             offer_id: Default::default(),
-            subject_id: "subject_id".to_string(),
+            subject_id: Some("subject_id".to_string()),
         };
 
         let events = [EventEnvelope::<Offer> {

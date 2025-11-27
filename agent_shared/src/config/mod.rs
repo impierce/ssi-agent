@@ -274,7 +274,9 @@ pub struct ApplicationConfiguration {
             ]
         )")]
     pub signing_algorithms_supported: HashMap<Algorithm, ToggleOptions>,
-    #[config(development_default = r#"vec![
+    #[config(
+        default,
+        development_default = r#"vec![
             Display {
                 name: "UniCore".to_string(),
                 locale: Some("en".to_string()),
@@ -284,7 +286,8 @@ pub struct ApplicationConfiguration {
                 }),
                 country: None
             }
-        ]"#)]
+        ]"#
+    )]
     pub display: Vec<Display>,
     #[config(default)]
     pub event_publishers: EventPublishers,
