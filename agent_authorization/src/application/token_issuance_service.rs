@@ -58,6 +58,7 @@ impl TokenIssuanceService {
                 tx_code,
             } => {
                 // TODO: make sure that the Pre-Authorized Code is short-lived and single-use.
+                // See https://github.com/impierce/ssi-agent/issues/240
                 let offer = query_handler("all_offers", &issuance_state.query.all_offers)
                     .await
                     .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?
