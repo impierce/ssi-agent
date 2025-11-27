@@ -55,8 +55,8 @@ agent_secret_manager = { path = "../agent_secret_manager", features = [
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
 
+async-std.workspace = true
 axum.workspace = true
-async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 lazy_static.workspace = true
 mime.workspace = true
 names = { version = "0.14", default-features = false }

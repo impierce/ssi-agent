@@ -35,7 +35,7 @@ agent_secret_manager = { path = "../agent_secret_manager", features = [
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_verification = { path = ".", features = ["test_utils"] }
 
-async-std = { version = "1.5", features = ["attributes", "tokio1"] }
+async-std.workspace = true
 did-key = "0.2"
 identity_core.workspace = true
 identity_credential.workspace = true

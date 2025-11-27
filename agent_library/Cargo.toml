@@ -24,7 +24,7 @@ rstest = { workspace = true, optional = true }
 [dev-dependencies]
 agent_library = { path = ".", features = ["test_utils"] }
 
-async-std = { version = "1.5", features = ["attributes", "tokio1"] }
+async-std.workspace = true
 serial_test = "3.0"
 
 [features]
