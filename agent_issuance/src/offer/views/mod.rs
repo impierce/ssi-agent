@@ -58,7 +58,7 @@ impl View<Offer> for Offer {
             }
             CredentialRequestVerified { offer_id, subject_id } => {
                 self.offer_id.clone_from(offer_id);
-                self.subject_id.replace(subject_id.clone());
+                self.subject_id.clone_from(subject_id);
             }
             TokenResponseCreated {
                 offer_id,

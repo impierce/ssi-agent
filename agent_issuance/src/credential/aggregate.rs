@@ -373,7 +373,10 @@ impl Aggregate for Credential {
 
                     // Create a new Map and insert the id field first
                     let mut new_credential_subject = serde_json::Map::new();
-                    new_credential_subject.insert("id".to_string(), json!(subject_id));
+
+                    if let Some(subject_id) = &subject_id {
+                        new_credential_subject.insert("id".to_string(), json!(subject_id));
+                    }
 
                     // Insert the rest of the fields
                     for (key, value) in credential_subject {
@@ -407,11 +410,11 @@ impl Aggregate for Credential {
                     });
 
                     // Add standard claims
-                    let vc_jwt_builder = VerifiableCredentialJwt::builder()
-                        .sub(subject_id)
-                        .iss(issuer_did)
-                        .iat(iat)
-                        .nbf(iat); // TODO: setting the `nbf` to `iat` makes the JWT immediately usable
+                    let mut vc_jwt_builder = VerifiableCredentialJwt::builder().iss(issuer_did).iat(iat).nbf(iat); // TODO: setting the `nbf` to `iat` makes the JWT immediately usable
+
+                    if let Some(subject_id) = subject_id {
+                        vc_jwt_builder = vc_jwt_builder.sub(subject_id);
+                    }
 
                     let vc_jwt_builder = if let Some(exp) = exp {
                         vc_jwt_builder.exp(exp)
@@ -651,7 +654,7 @@ pub mod credential_tests {
             }])
             .when(CredentialCommand::SignCredential {
                 credential_id: credential_id.clone(),
-                subject_id: holder.identifier("did:key", Algorithm::EdDSA).await.unwrap(),
+                subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
                 overwrite: false,
             })
             .then_expect_events(vec![CredentialEvent::CredentialSigned {
