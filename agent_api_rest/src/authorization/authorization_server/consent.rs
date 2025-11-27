@@ -45,6 +45,7 @@ pub struct ConsentForm {
     pub consent_given: bool,
 }
 
+// TODO: investigate replay attacks as described here: https://github.com/impierce/ssi-agent/issues/241
 pub async fn post_consent(
     State(state): State<AuthorizationState>,
     Form(ConsentForm {
