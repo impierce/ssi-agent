@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-agent_shared = { path = "../agent_shared", features = ["test_utils"] }
+agent_shared = { path = "../agent_shared" }
 
 async-trait.workspace = true
 chrono.workspace = true
