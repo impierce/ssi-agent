@@ -13,20 +13,18 @@ impl View<Offer> for Offer {
             CredentialOfferCreated {
                 offer_id,
                 grant_types,
-                pre_authorized_code,
-                access_token,
                 status,
                 credential_offer,
                 credential_offer_uri,
+                pre_authorized_code,
                 tx_code,
             } => {
                 self.offer_id.clone_from(offer_id);
                 self.grant_types.clone_from(grant_types);
-                self.pre_authorized_code.clone_from(pre_authorized_code);
-                self.access_token.clone_from(access_token);
                 self.status.clone_from(status);
                 self.credential_offer.replace(credential_offer.clone());
                 self.credential_offer_uri.replace(credential_offer_uri.clone());
+                self.pre_authorized_code.clone_from(pre_authorized_code);
                 self.tx_code.clone_from(tx_code);
             }
             CredentialsAdded {
@@ -59,13 +57,6 @@ impl View<Offer> for Offer {
             CredentialRequestVerified { offer_id, subject_id } => {
                 self.offer_id.clone_from(offer_id);
                 self.subject_id.clone_from(subject_id);
-            }
-            TokenResponseCreated {
-                offer_id,
-                token_response,
-            } => {
-                self.offer_id.clone_from(offer_id);
-                self.token_response.replace(token_response.clone());
             }
             CredentialResponseCreated {
                 offer_id,

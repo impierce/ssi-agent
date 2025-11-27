@@ -119,7 +119,7 @@ impl TokenStatusListService {
         let default_did_method = get_preferred_did_method().to_string();
 
         let jwt_token = encode(
-            state.signer,
+            state.subject,
             status_list_token.header,
             status_list_token.claims,
             &default_did_method,

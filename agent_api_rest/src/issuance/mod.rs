@@ -11,7 +11,6 @@ use crate::issuance::{
         credential::credential,
         credential_offer::credential_offer_uri,
         notification::notification,
-        token::token,
         token_status_list::token_status_list,
         well_known::{
             oauth_authorization_server::oauth_authorization_server, openid_credential_issuer::openid_credential_issuer,
@@ -45,7 +44,6 @@ pub fn router(issuance_state: IssuanceState) -> Router {
             get(oauth_authorization_server),
         )
         .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
-        .route("/auth/token", post(token))
         .route("/openid4vci/credential", post(credential))
         .route("/openid4vci/notification", post(notification))
         .route("/openid4vci/credential-offer/{offer_id}", get(credential_offer_uri))

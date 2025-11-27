@@ -573,6 +573,14 @@ pub struct EventPublisherHttp {
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct Events {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub access_token: Vec<AccessTokenEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub authorization_code: Vec<AuthorizationCodeEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub client: Vec<ClientEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub oauth2_authorization_request: Vec<OAuth2AuthorizationRequestEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub connection: Vec<ConnectionEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub document: Vec<DocumentEvent>,
@@ -590,6 +598,30 @@ pub struct Events {
     pub received_offer: Vec<ReceivedOfferEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub authorization_request: Vec<AuthorizationRequestEvent>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum AccessTokenEvent {
+    AccessTokenIssued,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum AuthorizationCodeEvent {
+    AuthorizationCodeCreated,
+    AuthorizationCodeRedeemed,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum ClientEvent {
+    ClientRegistered,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum OAuth2AuthorizationRequestEvent {
+    OAuth2AuthorizationRequestCreated,
+    OAuth2AuthorizationRequestExpired,
+    ConsentGranted,
+    ConsentRejected,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]

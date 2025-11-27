@@ -1,3 +1,4 @@
+use agent_secret_manager::subject::SubjectExt;
 use agent_shared::application_state::CommandHandler;
 use agent_shared::config::{
     config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, CredentialConfiguration,
@@ -6,7 +7,6 @@ use agent_shared::handlers::{command_handler, query_handler};
 use agent_shared::profile::ApplicationProfile;
 use agent_shared::UrlAppendHelpers;
 use cqrs_es::persist::ViewRepository;
-use oid4vc_core::Sign;
 use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use std::sync::Arc;
@@ -16,8 +16,6 @@ use crate::credential::aggregate::Credential;
 use crate::credential::views::all_credentials::AllCredentialsView;
 use crate::credential::views::CredentialView;
 use crate::offer::aggregate::Offer;
-use crate::offer::queries::access_token::AccessTokenView;
-use crate::offer::queries::pre_authorized_code::PreAuthorizedCodeView;
 use crate::offer::views::all_offers::AllOffersView;
 use crate::offer::views::OfferView;
 use crate::server_config::aggregate::ServerConfig;
@@ -28,7 +26,7 @@ use crate::server_config::views::ServerConfigView;
 pub struct IssuanceState {
     pub command: CommandHandlers,
     pub query: Queries,
-    pub signer: Arc<dyn Sign>,
+    pub subject: Arc<dyn SubjectExt>,
 }
 
 /// The command handlers are used to execute commands on the aggregates.
@@ -48,27 +46,21 @@ type Queries = ViewRepositories<
     dyn ViewRepository<AllCredentialsView, Credential>,
     dyn ViewRepository<OfferView, Offer>,
     dyn ViewRepository<AllOffersView, Offer>,
-    dyn ViewRepository<PreAuthorizedCodeView, Offer>,
-    dyn ViewRepository<AccessTokenView, Offer>,
 >;
 
-pub struct ViewRepositories<SC, C, C1, O, O1, O2, O3>
+pub struct ViewRepositories<SC, C, C1, O, O1>
 where
     SC: ViewRepository<ServerConfigView, ServerConfig> + ?Sized,
     C: ViewRepository<CredentialView, Credential> + ?Sized,
     C1: ViewRepository<AllCredentialsView, Credential> + ?Sized,
     O: ViewRepository<OfferView, Offer> + ?Sized,
     O1: ViewRepository<AllOffersView, Offer> + ?Sized,
-    O2: ViewRepository<PreAuthorizedCodeView, Offer> + ?Sized,
-    O3: ViewRepository<AccessTokenView, Offer> + ?Sized,
 {
     pub server_config: Arc<SC>,
     pub credential: Arc<C>,
     pub all_credentials: Arc<C1>,
     pub offer: Arc<O>,
     pub all_offers: Arc<O1>,
-    pub pre_authorized_code: Arc<O2>,
-    pub access_token: Arc<O3>,
 }
 
 impl Clone for Queries {
@@ -79,8 +71,6 @@ impl Clone for Queries {
             all_credentials: self.all_credentials.clone(),
             offer: self.offer.clone(),
             all_offers: self.all_offers.clone(),
-            pre_authorized_code: self.pre_authorized_code.clone(),
-            access_token: self.access_token.clone(),
         }
     }
 }
@@ -139,9 +129,13 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
             info!("Initializing server metadata ...");
 
             let command = ServerConfigCommand::InitializeServerMetadata {
+                // TODO: Move this to `agent_authorization`.
                 authorization_server_metadata: Box::new(AuthorizationServerMetadata {
                     issuer: public_url.clone(),
+                    authorization_endpoint: Some(public_url.append_path_segment("auth/authorize")),
                     token_endpoint: Some(public_url.append_path_segment("auth/token")),
+                    pushed_authorization_request_endpoint: Some(public_url.append_path_segment("auth/par")),
+                    require_pushed_authorization_requests: Some(true),
                     ..Default::default()
                 }),
                 credential_issuer_metadata: Box::new(CredentialIssuerMetadata {

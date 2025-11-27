@@ -1,3 +1,17 @@
+use agent_authorization::domain::access_token::aggregate::AccessToken;
+use agent_authorization::domain::access_token::views::all_tokens::AllAccessTokensView;
+use agent_authorization::domain::access_token::views::AccessTokenView;
+use agent_authorization::domain::authorization_code::aggregate::AuthorizationCode;
+use agent_authorization::domain::authorization_code::views::all_authorization_codes::AllAuthorizationCodesView;
+use agent_authorization::domain::authorization_code::views::AuthorizationCodeView;
+use agent_authorization::domain::client::aggregate::Client;
+use agent_authorization::domain::client::views::all_clients::AllClientsView;
+use agent_authorization::domain::client::views::ClientView;
+use agent_authorization::domain::oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest;
+use agent_authorization::domain::oauth2_authorization_request::views::all_oauth2_authorization_requests::AllOAuth2AuthorizationRequestsView;
+use agent_authorization::domain::oauth2_authorization_request::views::OAuth2AuthorizationRequestView;
+use agent_authorization::services::AuthorizationServices;
+use agent_authorization::state::AuthorizationState;
 use agent_holder::credential::aggregate::Credential as HolderCredential;
 use agent_holder::credential::queries::all_credentials::AllHolderCredentialsView;
 use agent_holder::offer::aggregate::Offer as ReceivedOffer;
@@ -15,6 +29,11 @@ use agent_identity::{
     connection::aggregate::Connection, document::aggregate::Document, profile::aggregate::Profile,
     service::aggregate::Service,
 };
+use agent_issuance::credential::views::all_credentials::AllCredentialsView;
+use agent_issuance::credential::views::CredentialView;
+use agent_issuance::offer::views::all_offers::AllOffersView;
+use agent_issuance::offer::views::OfferView;
+use agent_issuance::server_config::views::ServerConfigView;
 use agent_issuance::SimpleLoggingQuery;
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
@@ -193,6 +212,106 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
     }
 }
 
+pub async fn authorization_state<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
+    services: Arc<AuthorizationServices>,
+    event_publishers: Vec<Box<dyn EventPublisher>>,
+) -> AuthorizationState {
+    // Partition the event_publishers into the different aggregates.
+    let Partitions {
+        authorization_code_event_publishers,
+        client_event_publishers,
+        oauth2_authorization_request_event_publishers,
+        access_token_event_publishers: token_event_publishers,
+        ..
+    } = partition_event_publishers(event_publishers);
+
+    let (authorization_code_command_handler, authorization_code, _all_authorization_codes) = builder
+        .commands_and_queries::<AuthorizationCodeView, AuthorizationCode, AllAuthorizationCodesView>(
+            (),
+            authorization_code_event_publishers,
+        )
+        .await;
+    let (client_command_handler, client, _all_clients) = builder
+        .commands_and_queries::<ClientView, Client, AllClientsView>((), client_event_publishers)
+        .await;
+    let (
+        oauth2_authorization_request_command_handler,
+        oauth2_authorization_request,
+        _all_oauth2_authorization_requests,
+    ) = builder.commands_and_queries::<
+        OAuth2AuthorizationRequestView,
+        OAuth2AuthorizationRequest,
+        AllOAuth2AuthorizationRequestsView,
+    >((), oauth2_authorization_request_event_publishers)
+    .await;
+    let (token_command_handler, access_token, _all_access_tokens) = builder
+        .commands_and_queries::<AccessTokenView, AccessToken, AllAccessTokensView>((), token_event_publishers)
+        .await;
+
+    AuthorizationState {
+        command: agent_authorization::state::CommandHandlers {
+            authorization_code: authorization_code_command_handler,
+            client: client_command_handler,
+            oauth2_authorization_request: oauth2_authorization_request_command_handler,
+            access_token: token_command_handler,
+        },
+        query: agent_authorization::state::ViewRepositories {
+            client,
+            oauth2_authorization_request,
+            authorization_code,
+            access_token,
+        },
+        signer: services.signer.clone(),
+    }
+}
+
+pub async fn issuance_state<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
+    services: Arc<agent_issuance::services::IssuanceServices>,
+    event_publishers: Vec<Box<dyn EventPublisher>>,
+) -> agent_issuance::state::IssuanceState {
+    // Partition the event_publishers into the different aggregates.
+    let Partitions {
+        credential_event_publishers,
+        offer_event_publishers,
+        server_config_event_publishers,
+        ..
+    } = partition_event_publishers(event_publishers);
+
+    let (credential_command_handler, credential, all_credentials) = builder
+        .commands_and_queries::<CredentialView, Credential, AllCredentialsView>(
+            services.clone(),
+            credential_event_publishers,
+        )
+        .await;
+    let (offer_command_handler, offer, all_offers) = builder
+        .commands_and_queries::<OfferView, Offer, AllOffersView>(services.clone(), offer_event_publishers)
+        .await;
+    let (server_config_command_handler, server_config, _all_server_configs) = builder
+        .commands_and_queries::<ServerConfigView, ServerConfig, ServerConfig>(
+            services.clone(),
+            server_config_event_publishers,
+        )
+        .await;
+
+    agent_issuance::state::IssuanceState {
+        command: agent_issuance::state::CommandHandlers {
+            credential: credential_command_handler,
+            offer: offer_command_handler,
+            server_config: server_config_command_handler,
+        },
+        query: agent_issuance::state::ViewRepositories {
+            server_config,
+            credential,
+            all_credentials,
+            offer,
+            all_offers,
+        },
+        subject: services.issuer.clone(),
+    }
+}
+
 pub async fn verification_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<VerificationServices>,
@@ -277,6 +396,10 @@ pub type ConnectionEventPublisher = Box<dyn Query<Connection>>;
 pub type DocumentEventPublisher = Box<dyn Query<Document>>;
 pub type ProfileEventPublisher = Box<dyn Query<Profile>>;
 pub type ServiceEventPublisher = Box<dyn Query<Service>>;
+pub type AuthorizationCodeEventPublisher = Box<dyn Query<AuthorizationCode>>;
+pub type ClientEventPublisher = Box<dyn Query<Client>>;
+pub type OAuth2AuthorizationRequestEventPublisher = Box<dyn Query<OAuth2AuthorizationRequest>>;
+pub type AccessTokenEventPublisher = Box<dyn Query<AccessToken>>;
 pub type ServerConfigEventPublisher = Box<dyn Query<ServerConfig>>;
 pub type CredentialEventPublisher = Box<dyn Query<Credential>>;
 pub type OfferEventPublisher = Box<dyn Query<Offer>>;
@@ -292,6 +415,10 @@ pub struct Partitions {
     pub document_event_publishers: Vec<DocumentEventPublisher>,
     pub profile_event_publishers: Vec<ProfileEventPublisher>,
     pub service_event_publishers: Vec<ServiceEventPublisher>,
+    pub authorization_code_event_publishers: Vec<AuthorizationCodeEventPublisher>,
+    pub client_event_publishers: Vec<ClientEventPublisher>,
+    pub oauth2_authorization_request_event_publishers: Vec<OAuth2AuthorizationRequestEventPublisher>,
+    pub access_token_event_publishers: Vec<AccessTokenEventPublisher>,
     pub server_config_event_publishers: Vec<ServerConfigEventPublisher>,
     pub credential_event_publishers: Vec<CredentialEventPublisher>,
     pub offer_event_publishers: Vec<OfferEventPublisher>,
@@ -316,6 +443,19 @@ pub trait EventPublisher {
         None
     }
     fn service(&mut self) -> Option<ServiceEventPublisher> {
+        None
+    }
+
+    fn authorization_code(&mut self) -> Option<AuthorizationCodeEventPublisher> {
+        None
+    }
+    fn client(&mut self) -> Option<ClientEventPublisher> {
+        None
+    }
+    fn oauth2_authorization_request(&mut self) -> Option<OAuth2AuthorizationRequestEventPublisher> {
+        None
+    }
+    fn access_token(&mut self) -> Option<AccessTokenEventPublisher> {
         None
     }
 
@@ -359,6 +499,21 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
             }
             if let Some(service) = event_publisher.service() {
                 partitions.service_event_publishers.push(service);
+            }
+
+            if let Some(authorization_code) = event_publisher.authorization_code() {
+                partitions.authorization_code_event_publishers.push(authorization_code);
+            }
+            if let Some(client) = event_publisher.client() {
+                partitions.client_event_publishers.push(client);
+            }
+            if let Some(oauth2_authorization_request) = event_publisher.oauth2_authorization_request() {
+                partitions
+                    .oauth2_authorization_request_event_publishers
+                    .push(oauth2_authorization_request);
+            }
+            if let Some(access_token) = event_publisher.access_token() {
+                partitions.access_token_event_publishers.push(access_token);
             }
 
             if let Some(server_config) = event_publisher.server_config() {
@@ -447,6 +602,10 @@ mod test {
             document_event_publishers,
             profile_event_publishers,
             service_event_publishers,
+            authorization_code_event_publishers,
+            client_event_publishers,
+            oauth2_authorization_request_event_publishers,
+            access_token_event_publishers: token_event_publishers,
             server_config_event_publishers,
             credential_event_publishers,
             offer_event_publishers,
@@ -460,6 +619,10 @@ mod test {
         assert_eq!(document_event_publishers.len(), 0);
         assert_eq!(profile_event_publishers.len(), 0);
         assert_eq!(service_event_publishers.len(), 0);
+        assert_eq!(authorization_code_event_publishers.len(), 0);
+        assert_eq!(client_event_publishers.len(), 0);
+        assert_eq!(oauth2_authorization_request_event_publishers.len(), 0);
+        assert_eq!(token_event_publishers.len(), 0);
         assert_eq!(server_config_event_publishers.len(), 1);
         assert_eq!(credential_event_publishers.len(), 0);
         assert_eq!(offer_event_publishers.len(), 0);

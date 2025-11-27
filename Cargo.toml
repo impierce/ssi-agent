@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "agent_api_rest",
     "agent_application",
+    "agent_authorization",
     "agent_event_publisher_http",
     "agent_holder",
     "agent_identity",
@@ -31,7 +32,7 @@ async-trait = "0.1"
 axum = "0.8"
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
-cqrs-es = "0.4.2"
+cqrs-es = "0.4.12"
 derivative = "2.2"
 futures = "0.3"
 identity_core = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.7" }
@@ -68,6 +69,7 @@ rstest = "0.22"
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_json_path_to_error = { version = "0.1" }
+serde_urlencoded = "0.7"
 serde_with = "3.13"
 strum = "0.26"
 strum_macros = "0.26"

@@ -208,6 +208,7 @@ impl From<CredentialErrorResponse> for PublicError {
         PublicError::CredentialError(OID4VCError::new(err))
     }
 }
+
 impl From<TokenErrorResponse> for PublicError {
     fn from(err: TokenErrorResponse) -> Self {
         PublicError::TokenError(OID4VCError::new(err))
