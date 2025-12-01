@@ -16,7 +16,6 @@ use tracing::debug;
 #[derive(Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct PostTemplatesEndpointRequest {
-    pub id: Option<String>,
     pub title: Option<String>,
     pub display: Option<Display>,
     pub credential_format: Option<CredentialFormat>,
@@ -34,7 +33,6 @@ pub struct PostTemplatesEndpointRequest {
 pub(crate) async fn post_templates(
     State(state): State<LibraryState>,
     Json(PostTemplatesEndpointRequest {
-        id,
         title,
         display,
         credential_format,
@@ -48,7 +46,7 @@ pub(crate) async fn post_templates(
         schema,
     }): Json<PostTemplatesEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    let template_id = id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let template_id = uuid::Uuid::new_v4().to_string();
 
     let command = TemplateCommand::CreateTemplate {
         template_id: template_id.clone(),
