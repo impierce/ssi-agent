@@ -22,10 +22,13 @@ pub struct Display {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum CredentialFormat {
+    // See https://www.w3.org/TR/vc-data-model-1.1/
     #[serde(rename = "w3c_vc_data_model_v1-1")]
     W3CVcDataModelV11,
-    #[serde(rename = "ldp_vc_data_model_v2-0")]
-    LdpVcDataModelV20,
+    // See https://www.w3.org/TR/vc-data-model-2.0/
+    #[serde(rename = "w3c_vc_data_model_v2-0")]
+    W3CVcDataModelV20,
+    // See https://www.imsglobal.org/spec/ob/v3p0/
     #[serde(rename = "open_badges_3-0")]
     OpenBadges30,
 }
