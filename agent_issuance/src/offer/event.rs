@@ -42,6 +42,7 @@ pub enum OfferEvent {
         offer_id: String,
         recipient_email: String,
         form_url_encoded_credential_offer: String,
+        offer_link: Url,
         status: Status,
     },
     TokenResponseCreated {

@@ -47,6 +47,7 @@ pub struct Offer {
     pub tx_code: Option<String>,
     #[serde(default)]
     pub delivery_options: Option<DeliveryOptions>,
+    pub offer_link: Option<Url>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -263,10 +264,17 @@ impl Aggregate for Offer {
                     }
                     DeliveryMethod::Email { recipient_email } => {
                         info!("Sending credential offer via email to: {}", recipient_email);
+
+                        let offer_link = config()
+                            .application_url
+                            .join(&format!("offer/{}", offer_id))
+                            .expect("Failed to construct offer link URL");
+
                         Ok(vec![CredentialOfferEmailSent {
                             offer_id,
                             recipient_email,
                             form_url_encoded_credential_offer,
+                            offer_link,
                             status: Status::Pending,
                         }])
                     }

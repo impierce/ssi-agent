@@ -62,6 +62,7 @@ impl View<Offer> for Offer {
                 offer_id,
                 recipient_email: _recipient_email,
                 form_url_encoded_credential_offer: _form_url_encoded_credential_offer,
+                offer_link: _offer_link,
                 status,
             } => {
                 self.offer_id.clone_from(offer_id);
