@@ -65,12 +65,46 @@ ServiceAdded
 DocumentPublished
 ```
 
+#### `profile`
+
+```
+ProfileCreated,
+DisplayNameUpdated,
+LogoUpdated,
+CountryUpdated,
+SourceUpdated,
+```
+
 #### `service`
 
 ```
 DomainLinkageServiceCreated
 DomainLinkageServiceDeleted
 LinkedVerifiablePresentationServiceCreated
+```
+
+#### `template`
+
+```
+TemplateCreated
+TitleUpdated
+DisplayUpdated
+CredentialFormatUpdated
+CreatorUpdated
+HolderTypeUpdated
+TagsUpdated
+StatusUpdated
+VisibilityUpdated
+DescriptionUpdated
+TypeUpdated
+SchemaUpdated
+```
+
+#### `server_config`
+
+```
+ServerMetadataLoaded
+CredentialConfigurationUpdated
 ```
 
 #### `credential`
@@ -91,13 +125,6 @@ FormUrlEncodedCredentialOfferCreated
 TokenResponseCreated
 CredentialRequestVerified
 CredentialResponseCreated
-```
-
-#### `server_config`
-
-```
-ServerMetadataLoaded
-CredentialConfigurationUpdated
 ```
 
 #### `holder_credential`

@@ -8,6 +8,7 @@ members = [
     "agent_holder",
     "agent_identity",
     "agent_issuance",
+    "agent_library",
     "agent_macros",
     "agent_secret_manager",
     "agent_shared",
@@ -28,6 +29,7 @@ oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "99fc7be
 oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "99fc7be" }
 
 anyhow = "1.0"
+async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 async-trait = "0.1"
 axum = "0.8"
 base64 = "0.22"

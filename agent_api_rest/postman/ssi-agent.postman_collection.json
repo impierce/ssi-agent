@@ -931,7 +931,8 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"dcql_query\": {\n        \"credentials\": [\n            {\n                \"id\": \"CredentialQuery\",\n                \"format\": \"jwt_vc_json\",\n                \"meta\": {\n                    \"type_values\": [\n                        [\"VerifiableCredential\"],\n                        [\"PersonalInformation\"]\n                    ]\n                },\n                \"claims\": [\n                    {\"path\": [\"credentialSubject\", \"givenName\"]},\n                    {\"path\": [\"credentialSubject\", \"familyName\"]},\n                    {\"path\": [\"credentialSubject\", \"email\"]},\n                    {\"path\": [\"credentialSubject\", \"birthdate\"]}\n                ]\n            }\n        ]\n    }\n}",							"options": {
+							"raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"dcql_query\": {\n        \"credentials\": [\n            {\n                \"id\": \"CredentialQuery\",\n                \"format\": \"jwt_vc_json\",\n                \"meta\": {\n                    \"type_values\": [\n                        [\"VerifiableCredential\"],\n                        [\"PersonalInformation\"]\n                    ]\n                },\n                \"claims\": [\n                    {\"path\": [\"credentialSubject\", \"givenName\"]},\n                    {\"path\": [\"credentialSubject\", \"familyName\"]},\n                    {\"path\": [\"credentialSubject\", \"email\"]},\n                    {\"path\": [\"credentialSubject\", \"birthdate\"]}\n                ]\n            }\n        ]\n    }\n}",
+							"options": {
 								"raw": {
 									"language": "json"
 								}
@@ -1973,6 +1974,172 @@
 			]
 		},
 		{
+			"name": "Library",
+			"item": [
+				{
+					"name": "Template",
+					"item": [
+						{
+							"name": "Create a new Template",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"title\": \"My Template\",\n    \"credentialFormat\": \"w3c_vc_data_model_v1-1\",\n    \"holderType\": \"organization\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{HOST}}/v0/templates",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"templates"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "List all Templates",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"const jsonData = JSON.parse(responseBody);",
+											"",
+											"if (Array.isArray(jsonData) && jsonData.length > 0) {",
+											"    const lastItem = jsonData[jsonData.length - 1];",
+											"",
+											"    if (lastItem && typeof lastItem === 'object') {",
+											"        const templateId = lastItem.id;",
+											"",
+											"        if (templateId) {",
+											"            pm.collectionVariables.set(\"TEMPLATE_ID\", templateId);",
+											"        }",
+											"    }",
+											"}",
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{HOST}}/v0/templates",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"templates"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Template by ID",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"method": "GET",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": []
+								},
+								"url": {
+									"raw": "{{HOST}}/v0/templates/{{TEMPLATE_ID}}",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"templates",
+										"{{TEMPLATE_ID}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update Template",
+							"request": {
+								"method": "PATCH",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"status\": \"published\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{HOST}}/v0/templates/{{TEMPLATE_ID}}",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"templates",
+										"{{TEMPLATE_ID}}"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
 			"name": "_monitoring",
 			"item": [
 				{
@@ -2201,6 +2368,11 @@
 		},
 		{
 			"key": "SERVICE_ID",
+			"value": "INITIAL_VALUE",
+			"type": "string"
+		},
+		{
+			"key": "TEMPLATE_ID",
 			"value": "INITIAL_VALUE",
 			"type": "string"
 		},

@@ -130,6 +130,22 @@ CREATE TABLE all_services
     PRIMARY KEY (view_id)
 );
 
+CREATE TABLE template
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
+CREATE TABLE all_templates
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
 CREATE TABLE offer
 (
     view_id           text                        NOT NULL,

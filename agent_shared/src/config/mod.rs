@@ -585,7 +585,11 @@ pub struct Events {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub document: Vec<DocumentEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub profile: Vec<ProfileEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub service: Vec<ServiceEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub template: Vec<TemplateEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub server_config: Vec<ServerConfigEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -594,6 +598,8 @@ pub struct Events {
     pub offer: Vec<OfferEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub holder_credential: Vec<HolderCredentialEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub presentation: Vec<PresentationEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub received_offer: Vec<ReceivedOfferEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -639,10 +645,35 @@ pub enum DocumentEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum ProfileEvent {
+    ProfileCreated,
+    DisplayNameUpdated,
+    LogoUpdated,
+    CountryUpdated,
+    SourceUpdated,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum ServiceEvent {
     DomainLinkageServiceCreated,
     DomainLinkageServiceDeleted,
     LinkedVerifiablePresentationServiceCreated,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum TemplateEvent {
+    TemplateCreated,
+    TitleUpdated,
+    DisplayUpdated,
+    CredentialFormatUpdated,
+    CreatorUpdated,
+    HolderTypeUpdated,
+    TagsUpdated,
+    StatusUpdated,
+    VisibilityUpdated,
+    DescriptionUpdated,
+    TypeUpdated,
+    SchemaUpdated,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -672,6 +703,11 @@ pub enum OfferEvent {
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum HolderCredentialEvent {
     CredentialAdded,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum PresentationEvent {
+    PresentationCreated,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]

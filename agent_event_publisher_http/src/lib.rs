@@ -2,14 +2,22 @@ use agent_authorization::domain::{
     access_token::aggregate::AccessToken, authorization_code::aggregate::AuthorizationCode, client::aggregate::Client,
     oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest,
 };
-use agent_identity::connection::aggregate::Connection;
+use agent_holder::presentation::aggregate::Presentation;
+use agent_identity::{
+    connection::aggregate::Connection, document::aggregate::Document, profile::aggregate::Profile,
+    service::aggregate::Service,
+};
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
+use agent_library::template::aggregate::Template;
 use agent_shared::config::config;
 use agent_store::{
-    AuthorizationRequestEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, EventPublisher,
-    HolderCredentialEventPublisher, OfferEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
+    AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
+    ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
+    HolderCredentialEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
+    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
+    ServiceEventPublisher, TemplateEventPublisher,
 };
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use async_trait::async_trait;
@@ -30,6 +38,12 @@ pub struct EventPublisherHttp {
 
     // Identity
     pub connection: Option<AggregateEventPublisherHttp<Connection>>,
+    pub document: Option<AggregateEventPublisherHttp<Document>>,
+    pub profile: Option<AggregateEventPublisherHttp<Profile>>,
+    pub service: Option<AggregateEventPublisherHttp<Service>>,
+
+    // Library
+    pub template: Option<AggregateEventPublisherHttp<Template>>,
 
     // Issuance
     pub server_config: Option<AggregateEventPublisherHttp<ServerConfig>>,
@@ -38,6 +52,7 @@ pub struct EventPublisherHttp {
 
     // Holder
     pub holder_credential: Option<AggregateEventPublisherHttp<agent_holder::credential::aggregate::Credential>>,
+    pub presentation: Option<AggregateEventPublisherHttp<Presentation>>,
     pub received_offer: Option<AggregateEventPublisherHttp<agent_holder::offer::aggregate::Offer>>,
 
     // Verification
@@ -119,6 +134,58 @@ impl EventPublisherHttp {
             )
         });
 
+        let document = (!event_publisher_http.events.document.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Document>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .document
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let profile = (!event_publisher_http.events.profile.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Profile>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .profile
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let service = (!event_publisher_http.events.service.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Service>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .service
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let template = (!event_publisher_http.events.template.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Template>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .template
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
         let server_config = (!event_publisher_http.events.server_config.is_empty()).then(|| {
             AggregateEventPublisherHttp::<ServerConfig>::new(
                 event_publisher_http.target_url.clone(),
@@ -171,6 +238,19 @@ impl EventPublisherHttp {
             )
         });
 
+        let presentation = (!event_publisher_http.events.presentation.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Presentation>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .presentation
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
         let received_offer = (!event_publisher_http.events.received_offer.is_empty()).then(|| {
             AggregateEventPublisherHttp::<agent_holder::offer::aggregate::Offer>::new(
                 event_publisher_http.target_url.clone(),
@@ -202,12 +282,17 @@ impl EventPublisherHttp {
             authorization_code,
             client,
             oauth2_authorization_request,
+            connection,
+            document,
+            profile,
+            service,
+            template,
             server_config,
             credential,
             offer,
             holder_credential,
+            presentation,
             received_offer,
-            connection,
             authorization_request,
         };
 
@@ -222,6 +307,51 @@ impl EventPublisher for EventPublisherHttp {
         self.connection
             .take()
             .map(|publisher| Box::new(publisher) as ConnectionEventPublisher)
+    }
+
+    fn document(&mut self) -> Option<DocumentEventPublisher> {
+        self.document
+            .take()
+            .map(|publisher| Box::new(publisher) as DocumentEventPublisher)
+    }
+
+    fn profile(&mut self) -> Option<ProfileEventPublisher> {
+        self.profile
+            .take()
+            .map(|publisher| Box::new(publisher) as ProfileEventPublisher)
+    }
+
+    fn service(&mut self) -> Option<ServiceEventPublisher> {
+        self.service
+            .take()
+            .map(|publisher| Box::new(publisher) as ServiceEventPublisher)
+    }
+
+    fn template(&mut self) -> Option<TemplateEventPublisher> {
+        self.template
+            .take()
+            .map(|publisher| Box::new(publisher) as TemplateEventPublisher)
+    }
+
+    fn authorization_code(&mut self) -> Option<AuthorizationCodeEventPublisher> {
+        self.authorization_code
+            .take()
+            .map(|publisher| Box::new(publisher) as AuthorizationCodeEventPublisher)
+    }
+    fn client(&mut self) -> Option<ClientEventPublisher> {
+        self.client
+            .take()
+            .map(|publisher| Box::new(publisher) as ClientEventPublisher)
+    }
+    fn oauth2_authorization_request(&mut self) -> Option<OAuth2AuthorizationRequestEventPublisher> {
+        self.oauth2_authorization_request
+            .take()
+            .map(|publisher| Box::new(publisher) as OAuth2AuthorizationRequestEventPublisher)
+    }
+    fn access_token(&mut self) -> Option<AccessTokenEventPublisher> {
+        self.access_token
+            .take()
+            .map(|publisher| Box::new(publisher) as AccessTokenEventPublisher)
     }
 
     fn server_config(&mut self) -> Option<ServerConfigEventPublisher> {
@@ -246,6 +376,12 @@ impl EventPublisher for EventPublisherHttp {
         self.holder_credential
             .take()
             .map(|publisher| Box::new(publisher) as HolderCredentialEventPublisher)
+    }
+
+    fn presentation(&mut self) -> Option<PresentationEventPublisher> {
+        self.presentation
+            .take()
+            .map(|publisher| Box::new(publisher) as PresentationEventPublisher)
     }
 
     fn received_offer(&mut self) -> Option<ReceivedOfferEventPublisher> {
