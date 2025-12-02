@@ -47,6 +47,7 @@ pub enum Status {
     Draft,
     Published,
     Archived,
+    Deleted,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Eq, PartialEq)]

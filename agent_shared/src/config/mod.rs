@@ -315,6 +315,8 @@ pub struct ApplicationConfiguration {
     pub iota_node_username: Option<String>,
     #[config(default)]
     pub iota_node_password: Option<String>,
+    #[config(default)]
+    pub skip_template_enforcement: bool,
 }
 
 impl ApplicationConfiguration {
