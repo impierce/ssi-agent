@@ -24,7 +24,7 @@ pub enum CredentialCommand {
     },
     SignCredential {
         credential_id: String,
-        subject_id: String,
+        subject_id: Option<String>,
         // When true, a credential will be re-signed if it already exists.
         overwrite: bool,
     },

@@ -29,6 +29,9 @@ rstest = { workspace = true, optional = true }
 
 [dev-dependencies]
 agent_api_rest = { path = "../agent_api_rest", features = ["test_utils"] }
+agent_authorization = { path = "../agent_authorization", features = [
+    "test_utils",
+] }
 agent_holder = { path = ".", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
 agent_secret_manager = { path = "../agent_secret_manager", features = [
@@ -37,7 +40,7 @@ agent_secret_manager = { path = "../agent_secret_manager", features = [
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
 
-async-std = { version = "1.5", features = ["attributes", "tokio1"] }
+async-std.workspace = true
 axum.workspace = true
 lazy_static.workspace = true
 mime.workspace = true

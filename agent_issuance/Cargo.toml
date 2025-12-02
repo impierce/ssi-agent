@@ -25,6 +25,7 @@ reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_json_path_to_error.workspace = true
+serde_with.workspace = true
 strum.workspace = true
 strum_macros.workspace = true
 thiserror.workspace = true
@@ -43,9 +44,9 @@ agent_secret_manager = { path = "../agent_secret_manager", features = [
     "test_utils",
 ] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
+async-std.workspace = true
 serial_test = "3.0"
 tracing-test.workspace = true
-async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 
 [features]
 test_utils = ["dep:lazy_static", "dep:once_cell", "dep:rstest"]

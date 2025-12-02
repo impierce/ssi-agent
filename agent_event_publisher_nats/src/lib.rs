@@ -1,6 +1,12 @@
 use agent_issuance::offer::aggregate::Offer;
 use agent_shared::config::config;
-use agent_store::{EventPublisher, OfferEventPublisher};
+use agent_store::{
+    AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
+    ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
+    HolderCredentialEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
+    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
+    ServiceEventPublisher, TemplateEventPublisher,
+};
 use async_nats::Client;
 use async_trait::async_trait;
 use cloudevents::binding::nats::NatsCloudEvent;
@@ -91,6 +97,65 @@ impl EventPublisher for EventPublisherNats {
         self.offer
             .take()
             .map(|publisher| Box::new(publisher) as OfferEventPublisher)
+    }
+    fn document(&mut self) -> Option<DocumentEventPublisher> {
+        None
+    }
+
+    fn profile(&mut self) -> Option<ProfileEventPublisher> {
+        None
+    }
+
+    fn service(&mut self) -> Option<ServiceEventPublisher> {
+        None
+    }
+
+    fn template(&mut self) -> Option<TemplateEventPublisher> {
+        None
+    }
+
+    fn authorization_code(&mut self) -> Option<AuthorizationCodeEventPublisher> {
+        None
+    }
+
+    fn client(&mut self) -> Option<ClientEventPublisher> {
+        None
+    }
+
+    fn oauth2_authorization_request(&mut self) -> Option<OAuth2AuthorizationRequestEventPublisher> {
+        None
+    }
+
+    fn access_token(&mut self) -> Option<AccessTokenEventPublisher> {
+        None
+    }
+
+    fn server_config(&mut self) -> Option<ServerConfigEventPublisher> {
+        None
+    }
+
+    fn connection(&mut self) -> Option<ConnectionEventPublisher> {
+        None
+    }
+
+    fn credential(&mut self) -> Option<CredentialEventPublisher> {
+        None
+    }
+
+    fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher> {
+        None
+    }
+
+    fn presentation(&mut self) -> Option<PresentationEventPublisher> {
+        None
+    }
+
+    fn received_offer(&mut self) -> Option<ReceivedOfferEventPublisher> {
+        None
+    }
+
+    fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher> {
+        None
     }
 }
 

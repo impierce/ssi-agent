@@ -38,7 +38,6 @@ pub(crate) async fn offers(
     }): Json<OffersEndpointRequest>,
 ) -> Result<Response, ApiError> {
     // Check if the credential configuration IDs are valid.
-
     let credential_configurations = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
         .await?
         .map(|server_config_view| server_config_view.credential_configurations)
@@ -59,33 +58,38 @@ pub(crate) async fn offers(
             .finish());
     }
 
-    let tx_code_constraints = credential_configuration_ids
-        .iter()
-        .find_map(|credential_configuration_id| {
-            credential_configurations
-                .get(credential_configuration_id)
-                // TODO: find a way to bind the `authorization` to the Offer somehow
-                .and_then(|(_, _, authorization)| {
-                    if authorization.pre_authorized {
-                        authorization.tx_code_constraints.clone()
-                    } else {
-                        None
-                    }
-                })
-        });
+    let authorization = credential_configurations
+        .into_iter()
+        .find_map(|(credential_configuration_id, (_, _, authorization))| {
+            credential_configuration_ids
+                .contains(&credential_configuration_id)
+                .then_some(authorization)
+        })
+        .unwrap_or_default();
+
+    let tx_code_constraints = authorization
+        .pre_authorized
+        .then_some(authorization.tx_code_constraints)
+        .flatten();
+
+    let grant_types = vec![if authorization.pre_authorized {
+        GrantType::PreAuthorizedCode
+    } else {
+        GrantType::AuthorizationCode
+    }];
 
     // Create an offer if it does not exist yet.
     if query_handler(&offer_id, &state.query.offer).await?.is_none() {
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
             credential_configuration_ids,
-            grant_types: vec![GrantType::PreAuthorizedCode],
+            grant_types,
             tx_code_constraints,
             delivery_options,
         };
 
-        command_handler(&offer_id, &state.command.offer, command).await?
-    };
+        command_handler(&offer_id, &state.command.offer, command).await?;
+    }
 
     query_handler(&offer_id, &state.query.offer)
         .await?
@@ -134,18 +138,24 @@ pub mod tests {
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
     use agent_shared::config::set_config;
-    use agent_store::in_memory;
+    use agent_store::in_memory::InMemory;
+    use agent_store::issuance_state;
     use axum::{
         body::Body,
         http::{self, Request},
         Router,
     };
-    use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants, PreAuthorizedCode};
+    use oid4vci::credential_offer::{
+        AuthorizationCode, CredentialOffer, CredentialOfferParameters, Grants, PreAuthorizedCode,
+    };
     use serde_json::json;
     use std::str::FromStr;
     use tower::Service as _;
 
-    pub async fn offers(app: &mut Router) -> Option<String> {
+    pub async fn offers(
+        app: &mut Router,
+        credential_configuration_id: &str,
+    ) -> Option<(Option<AuthorizationCode>, Option<PreAuthorizedCode>)> {
         let response = app
             .call(
                 Request::builder()
@@ -155,7 +165,7 @@ pub mod tests {
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "offerId": OFFER_ID,
-                            "credentialConfigurationIds": ["001"],
+                            "credentialConfigurationIds": [credential_configuration_id]
                         }))
                         .unwrap(),
                     ))
@@ -175,16 +185,16 @@ pub mod tests {
 
         match CredentialOffer::from_str(&body).unwrap() {
             CredentialOffer::CredentialOffer(credential_offer) => {
-                assert_eq!(credential_offer.credential_configuration_ids, vec!["001".to_string()]);
+                assert_eq!(
+                    credential_offer.credential_configuration_ids,
+                    vec![credential_configuration_id.to_string()]
+                );
 
                 let CredentialOfferParameters {
                     grants:
                         Some(Grants {
-                            pre_authorized_code:
-                                Some(PreAuthorizedCode {
-                                    pre_authorized_code, ..
-                                }),
-                            ..
+                            authorization_code,
+                            pre_authorized_code,
                         }),
                     ..
                 } = *credential_offer
@@ -192,7 +202,7 @@ pub mod tests {
                     unreachable!()
                 };
 
-                Some(pre_authorized_code)
+                Some((authorization_code, pre_authorized_code))
             }
             CredentialOffer::CredentialOfferUri(credential_offer_uri) => {
                 assert_eq!(
@@ -212,13 +222,13 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_offers_endpoint() {
-        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
 
-        credentials(&mut app).await;
-        let _pre_authorized_code = offers(&mut app).await;
+        credentials(&mut app, "001").await;
+        let (_authorization_code, _pre_authorized_code) = offers(&mut app, "001").await.unwrap();
     }
 
     #[serial_test::serial]
@@ -226,13 +236,17 @@ pub mod tests {
     #[tracing_test::traced_test]
     async fn test_offers_endpoint_by_reference() {
         set_config().credential_offer_by_value_enabled = false;
-        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
 
-        credentials(&mut app).await;
-        let _pre_authorized_code = offers(&mut app).await;
+        credentials(&mut app, "001").await;
+        let none = offers(&mut app, "001").await;
+
+        // When `credential_offer_by_value_enabled` is false, we expect no grants to be returned from the `offers` test function.
+        assert!(none.is_none());
+
         set_config().credential_offer_by_value_enabled = true;
     }
 }

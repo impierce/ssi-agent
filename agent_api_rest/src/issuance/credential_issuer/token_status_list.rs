@@ -40,7 +40,7 @@ pub mod tests {
     use agent_issuance::state::initialize;
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
-    use agent_store::in_memory;
+    use agent_store::{in_memory::InMemory, issuance_state};
     use axum::body::{self, Body};
     use http::{Request, StatusCode};
     use jsonwebtoken::{decode_header, Algorithm, DecodingKey};
@@ -57,7 +57,7 @@ pub mod tests {
     /// The remainder of the test breaks down the Token Status List response in various steps and checks these steps one by one.
     #[tokio::test]
     pub async fn test_token_status_list() {
-        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
+        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
         initialize(&issuance_state).await.unwrap();
 
         let relying_party_state = Subject::default();

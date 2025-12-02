@@ -4,7 +4,6 @@ use cqrs_es::DomainEvent;
 use oid4vci::{
     credential_offer::{CredentialOffer, GrantType},
     credential_response::CredentialResponse,
-    token_response::TokenResponse,
 };
 use serde::{Deserialize, Serialize};
 use strum::Display;
@@ -18,7 +17,6 @@ pub enum OfferEvent {
         credential_offer: CredentialOffer,
         credential_offer_uri: CredentialOffer,
         pre_authorized_code: String,
-        access_token: String,
         status: Status,
         tx_code: Option<String>,
         delivery_options: Option<DeliveryOptions>,
@@ -45,13 +43,9 @@ pub enum OfferEvent {
         offer_link: Url,
         status: Status,
     },
-    TokenResponseCreated {
-        offer_id: String,
-        token_response: TokenResponse,
-    },
     CredentialRequestVerified {
         offer_id: String,
-        subject_id: String,
+        subject_id: Option<String>,
     },
     CredentialResponseCreated {
         offer_id: String,

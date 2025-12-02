@@ -21,6 +21,34 @@ event_publishers:
 
 ### Available events
 
+#### `access_token`
+
+```
+AccessTokenIssued
+```
+
+#### `authorization_code`
+
+```
+AuthorizationCodeCreated
+AuthorizationCodeRedeemed
+```
+
+#### `client`
+
+```
+ClientRegistered
+```
+
+#### `oauth2_authorization_request`
+
+```
+OAuth2AuthorizationRequestCreated
+OAuth2AuthorizationRequestExpired
+ConsentGranted
+ConsentRejected
+```
+
 #### `connection`
 
 ```
@@ -37,12 +65,46 @@ ServiceAdded
 DocumentPublished
 ```
 
+#### `profile`
+
+```
+ProfileCreated,
+DisplayNameUpdated,
+LogoUpdated,
+CountryUpdated,
+SourceUpdated,
+```
+
 #### `service`
 
 ```
 DomainLinkageServiceCreated
 DomainLinkageServiceDeleted
 LinkedVerifiablePresentationServiceCreated
+```
+
+#### `template`
+
+```
+TemplateCreated
+TitleUpdated
+DisplayUpdated
+CredentialFormatUpdated
+CreatorUpdated
+HolderTypeUpdated
+TagsUpdated
+StatusUpdated
+VisibilityUpdated
+DescriptionUpdated
+TypeUpdated
+SchemaUpdated
+```
+
+#### `server_config`
+
+```
+ServerMetadataLoaded
+CredentialConfigurationUpdated
 ```
 
 #### `credential`
@@ -63,13 +125,6 @@ FormUrlEncodedCredentialOfferCreated
 TokenResponseCreated
 CredentialRequestVerified
 CredentialResponseCreated
-```
-
-#### `server_config`
-
-```
-ServerMetadataLoaded
-CredentialConfigurationUpdated
 ```
 
 #### `holder_credential`
