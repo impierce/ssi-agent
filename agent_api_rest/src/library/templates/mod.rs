@@ -17,6 +17,7 @@ use tracing::debug;
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TemplateDto {
+    #[serde(rename = "id")]
     pub template_id: String,
     pub title: Option<String>,
     pub display: Option<Display>,
@@ -316,7 +317,7 @@ mod tests {
         let response = TemplateDto::from(template);
         let json = serde_json::json!(&response);
 
-        assert_eq!(json["templateId"], "test-id");
+        assert_eq!(json["id"], "test-id");
         assert_eq!(json["title"], "Test Title");
         assert_eq!(json["holderType"], "individual");
     }
