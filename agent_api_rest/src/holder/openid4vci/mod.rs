@@ -9,11 +9,12 @@ use http_api_problem::ApiError;
 use hyper::StatusCode;
 use oid4vci::credential_offer::CredentialOffer;
 use serde_json::Value;
+use std::sync::Arc;
 use tracing::info;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn offers_params(
-    State(state): State<HolderState>,
+    State(state): State<Arc<HolderState>>,
     // TODO: Can this be changed to `StringifiedForm`?
     Form(payload): Form<serde_json::Value>,
 ) -> Result<Response, ApiError> {

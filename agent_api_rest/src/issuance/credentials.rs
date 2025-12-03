@@ -18,13 +18,14 @@ use oauth_tsl::status_list::StatusType;
 use oid4vci::credential_offer::GrantType;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::Arc;
 
 #[cfg(feature = "test_utils")]
 pub const TESTINDEX: usize = 123;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
-    State(state): State<IssuanceState>,
+    State(state): State<Arc<IssuanceState>>,
     Path(credential_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&credential_id, &state.query.credential)
@@ -46,7 +47,7 @@ pub struct CredentialsEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
-    State(state): State<IssuanceState>,
+    State(state): State<Arc<IssuanceState>>,
     Json(CredentialsEndpointRequest {
         offer_id,
         credential,
@@ -196,7 +197,7 @@ pub(crate) async fn credentials(
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn all_credentials(State(state): State<IssuanceState>) -> Result<Response, ApiError> {
+pub(crate) async fn all_credentials(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
     let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
         .await?
         .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
@@ -213,7 +214,7 @@ pub struct PatchCredentialEndpointRequest {
 
 /// Currently, this endpoint only supports patching the CredentialStatus of a credential according to the IETF OAuth Token Status List spec.
 pub async fn patch_credential(
-    State(state): State<IssuanceState>,
+    State(state): State<Arc<IssuanceState>>,
     Path(credential_id): Path<String>,
     Json(PatchCredentialEndpointRequest {
         credential_status: status,
@@ -409,7 +410,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_patch_credential() {
-        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
+        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
@@ -420,7 +421,7 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_credentials_endpoint() {
-        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
+        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);

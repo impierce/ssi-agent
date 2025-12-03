@@ -6,6 +6,8 @@ pub mod well_known;
 
 pub mod error;
 
+use std::sync::Arc;
+
 use agent_identity::state::IdentityState;
 use axum::{
     routing::{get, post},
@@ -21,7 +23,7 @@ use crate::{
     API_VERSION,
 };
 
-pub fn router(identity_state: IdentityState) -> Router {
+pub fn router(identity_state: Arc<IdentityState>) -> Router {
     Router::new()
         .nest(
             API_VERSION,

@@ -11,6 +11,7 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::debug;
 
 /// Data transfer object for Templates.
@@ -71,7 +72,7 @@ pub struct PostTemplatesEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn post_templates(
-    State(state): State<LibraryState>,
+    State(state): State<Arc<LibraryState>>,
     Json(PostTemplatesEndpointRequest {
         title,
         display,
@@ -138,7 +139,7 @@ pub struct PatchTemplatesEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn patch_template(
-    State(state): State<LibraryState>,
+    State(state): State<Arc<LibraryState>>,
     Path(template_id): Path<String>,
     Json(PatchTemplatesEndpointRequest {
         title,
@@ -253,7 +254,7 @@ pub struct GetTemplatesEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn get_templates(
-    State(state): State<LibraryState>,
+    State(state): State<Arc<LibraryState>>,
     Form(GetTemplatesEndpointRequest {}): Form<GetTemplatesEndpointRequest>,
 ) -> Result<Response, ApiError> {
     debug!("Request Params - ");
@@ -279,7 +280,7 @@ pub(crate) async fn get_templates(
 
 #[axum_macros::debug_handler]
 pub(crate) async fn get_template(
-    State(state): State<LibraryState>,
+    State(state): State<Arc<LibraryState>>,
     Path(template_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&template_id, &state.query.template)

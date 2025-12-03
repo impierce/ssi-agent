@@ -9,9 +9,10 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
+use std::sync::Arc;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn services(State(state): State<IdentityState>) -> Result<Response, ApiError> {
+pub(crate) async fn services(State(state): State<Arc<IdentityState>>) -> Result<Response, ApiError> {
     let all_services = query_handler("all_services", &state.query.all_services)
         .await?
         .map(|all_services_view| all_services_view.services.into_values().collect::<Vec<_>>())
@@ -22,7 +23,7 @@ pub(crate) async fn services(State(state): State<IdentityState>) -> Result<Respo
 
 #[axum_macros::debug_handler]
 pub(crate) async fn service(
-    State(state): State<IdentityState>,
+    State(state): State<Arc<IdentityState>>,
     Path(service_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&service_id, &state.query.service)

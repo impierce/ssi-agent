@@ -9,6 +9,7 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::debug;
 
 #[derive(Deserialize, Serialize)]
@@ -18,7 +19,7 @@ pub struct GetDocumentsEndpoint {
 }
 
 pub(crate) async fn get_documents(
-    State(state): State<IdentityState>,
+    State(state): State<Arc<IdentityState>>,
     Form(GetDocumentsEndpoint { did_method }): Form<GetDocumentsEndpoint>,
 ) -> Result<Response, ApiError> {
     debug!("Request Params - did_method: {did_method:?}");
@@ -45,7 +46,7 @@ pub(crate) async fn get_documents(
 
 #[axum_macros::debug_handler]
 pub(crate) async fn get_document(
-    State(state): State<IdentityState>,
+    State(state): State<Arc<IdentityState>>,
     Path(document_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&document_id, &state.query.document)

@@ -9,8 +9,9 @@ use agent_issuance::state::IssuanceState;
 use authorization_server::{authorize::authorize, par::par, token::token};
 use axum::routing::get;
 use axum::{routing::post, Router};
+use std::sync::Arc;
 
-pub fn router((authorization_state, issuance_state): (AuthorizationState, IssuanceState)) -> Router {
+pub fn router((authorization_state, issuance_state): (Arc<AuthorizationState>, Arc<IssuanceState>)) -> Router {
     Router::new()
         .nest(API_VERSION, Router::new())
         .route("/auth/consent", get(get_consent).post(post_consent))

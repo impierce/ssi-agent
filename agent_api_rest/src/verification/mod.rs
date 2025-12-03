@@ -7,6 +7,7 @@ use agent_verification::state::VerificationState;
 use authorization_requests::all_authorization_requests;
 use axum::routing::get;
 use axum::{routing::post, Router};
+use std::sync::Arc;
 
 use crate::verification::{
     authorization_requests::authorization_request, authorization_requests::authorization_requests,
@@ -14,7 +15,7 @@ use crate::verification::{
 };
 use crate::API_VERSION;
 
-pub fn router(verification_state: VerificationState) -> Router {
+pub fn router(verification_state: Arc<VerificationState>) -> Router {
     Router::new()
         .nest(
             API_VERSION,

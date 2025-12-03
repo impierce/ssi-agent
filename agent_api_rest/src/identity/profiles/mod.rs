@@ -15,6 +15,7 @@ use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
+use std::sync::Arc;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,7 +30,7 @@ pub struct PatchProfileEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn patch_profile(
-    State(state): State<IdentityState>,
+    State(state): State<Arc<IdentityState>>,
     Json(PatchProfileEndpointRequest {
         display_name,
         logo,
@@ -81,7 +82,7 @@ struct GetProfileEndpointResponse {
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn get_profile(State(state): State<IdentityState>) -> Result<Response, ApiError> {
+pub(crate) async fn get_profile(State(state): State<Arc<IdentityState>>) -> Result<Response, ApiError> {
     query_handler(PROFILE_ID, &state.query.profile)
         .await?
         .map(|profile_view| {
