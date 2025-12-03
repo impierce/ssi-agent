@@ -12,11 +12,13 @@ use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
+use uuid::Uuid;
 
 #[derive(Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct PostTemplatesEndpointRequest {
     pub id: Option<String>,
+    pub duplicate_from: Option<String>,
     pub title: Option<String>,
     pub display: Option<Display>,
     pub credential_format: Option<CredentialFormat>,
@@ -35,6 +37,7 @@ pub(crate) async fn post_templates(
     State(state): State<LibraryState>,
     Json(PostTemplatesEndpointRequest {
         id,
+        duplicate_from,
         title,
         display,
         credential_format,
@@ -48,6 +51,51 @@ pub(crate) async fn post_templates(
         schema,
     }): Json<PostTemplatesEndpointRequest>,
 ) -> Result<Response, ApiError> {
+    if let Some(old_template_id) = duplicate_from {
+        let new_template_id = Uuid::new_v4().to_string();
+
+        let command = TemplateCommand::DuplicateTemplate {
+            duplicate_from: old_template_id.clone(),
+            new_template_id: new_template_id.clone(),
+        };
+        command_handler(&old_template_id, &state.command.template, command).await?;
+
+        // Fetch original template data.
+        let original_template = query_handler(&old_template_id, &state.query.template)
+            .await?
+            .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
+
+        let create_command = TemplateCommand::CreateTemplate {
+            template_id: new_template_id.clone(),
+            title: original_template.title.map(|t| format!("{} Copy", t)),
+            display: original_template.display.clone(),
+            credential_format: original_template.credential_format.clone(),
+            creator: original_template.creator.clone(),
+            holder_type: original_template.holder_type.clone(),
+            tags: original_template.tags.clone(),
+            status: Status::Draft,
+            visibility: original_template.visibility.clone(),
+            description: original_template.description.clone(),
+            r#type: original_template.r#type.clone(),
+            schema: original_template.schema.clone(),
+        };
+
+        command_handler(&new_template_id, &state.command.template, create_command).await?;
+
+        // Return the duplicated template.
+        let new_template = query_handler(&new_template_id, &state.query.template)
+            .await?
+            .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
+
+        return Ok((
+            StatusCode::CREATED,
+            [(header::LOCATION, &format!("{API_VERSION}/templates/{new_template_id}"))],
+            Json(new_template),
+        )
+            .into_response());
+    }
+
+    // If `duplicate_from` field is not provided, create a fresh new template.
     let template_id = id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
     let command = TemplateCommand::CreateTemplate {
@@ -247,4 +295,17 @@ pub(crate) async fn get_template(
         .await?
         .map(|template_view| (StatusCode::OK, Json(template_view)).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+}
+
+#[axum_macros::debug_handler]
+pub(crate) async fn delete_template(
+    State(state): State<LibraryState>,
+    Path(template_id): Path<String>,
+) -> Result<Response, ApiError> {
+    let command = TemplateCommand::DeleteTemplate {
+        template_id: template_id.clone(),
+    };
+
+    command_handler(&template_id, &state.command.template, command).await?;
+    Ok(StatusCode::NO_CONTENT.into_response())
 }

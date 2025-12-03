@@ -76,6 +76,13 @@ pub enum TemplateEvent {
         schema: serde_json::Value,
         modified_at: String,
     },
+    TemplateDeleted {
+        template_id: String,
+    },
+    TemplateDuplicated {
+        duplicate_from: String,
+        new_template_id: String,
+    },
 }
 
 impl DomainEvent for TemplateEvent {

@@ -62,11 +62,11 @@ pub enum TemplateCommand {
         template_id: String,
         schema: serde_json::Value,
     },
-    RemoveTemplate {
+    DeleteTemplate {
         template_id: String,
     },
     DuplicateTemplate {
-        template_id: String,
+        duplicate_from: String,
         new_template_id: String,
     },
 }

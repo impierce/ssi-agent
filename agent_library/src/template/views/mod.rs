@@ -1,7 +1,7 @@
 pub mod all_templates;
 
 use super::event::TemplateEvent;
-use crate::template::aggregate::Template;
+use crate::template::aggregate::{Status, Template};
 use cqrs_es::{EventEnvelope, View};
 
 pub type TemplateView = Template;
@@ -128,6 +128,10 @@ impl View<Template> for Template {
                 self.schema.replace(schema.clone());
                 self.modified_at.replace(modified_at.clone());
             }
+            TemplateDeleted { template_id: _ } => {
+                self.status = Status::Deleted;
+            }
+            TemplateDuplicated { .. } => {}
         }
     }
 }

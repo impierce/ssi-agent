@@ -278,6 +278,14 @@ impl Aggregate for Template {
                     modified_at,
                 }])
             }
+            DeleteTemplate { template_id } => Ok(vec![TemplateDeleted { template_id }]),
+            DuplicateTemplate {
+                duplicate_from,
+                new_template_id,
+            } => Ok(vec![TemplateDuplicated {
+                duplicate_from,
+                new_template_id,
+            }]),
         }
     }
 
@@ -404,6 +412,10 @@ impl Aggregate for Template {
                 self.schema = Some(schema);
                 self.modified_at.replace(modified_at);
             }
+            TemplateDeleted { template_id: _ } => {
+                self.status = Status::Deleted;
+            }
+            TemplateDuplicated { .. } => {}
         }
     }
 }
@@ -467,8 +479,41 @@ pub mod document_tests {
                 schema,
             }])
     }
-}
 
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_duplicate_template() {
+        let original_id = "template-123".to_string();
+        let new_id = "template-456".to_string();
+
+        let creation_event = vec![TemplateEvent::TemplateCreated {
+            template_id: original_id.clone(),
+            title: Some("Original Template".to_string()),
+            display: None,
+            credential_format: None,
+            creator: None,
+            holder_type: None,
+            modified_at: "2024-01-01T00:00:00Z".to_string(),
+            tags: vec![],
+            status: Status::Published,
+            visibility: Visibility::Public,
+            description: None,
+            r#type: vec![],
+            schema: None,
+        }];
+
+        TemplateTestFramework::with(())
+            .given(creation_event)
+            .when(TemplateCommand::DuplicateTemplate {
+                duplicate_from: original_id.clone(),
+                new_template_id: new_id.clone(),
+            })
+            .then_expect_events(vec![TemplateEvent::TemplateDuplicated {
+                duplicate_from: original_id,
+                new_template_id: new_id,
+            }])
+    }
+}
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::*;
