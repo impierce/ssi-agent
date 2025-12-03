@@ -1064,8 +1064,9 @@ mod tests {
                 "dc+sd-jwt": {
                   "sd-jwt_alg_values": ["ES256"],
                   "kb-jwt_alg_values": ["ES256"]
-                }
-              }
+                },
+            },
+            "skip_template_enforcement": false,
             })
         );
 
