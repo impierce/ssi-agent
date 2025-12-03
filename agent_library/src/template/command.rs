@@ -6,6 +6,7 @@ use serde::Deserialize;
 pub enum TemplateCommand {
     CreateTemplate {
         template_id: String,
+        duplicate_from: Option<String>,
         title: Option<String>,
         display: Option<Display>,
         credential_format: Option<CredentialFormat>,

@@ -61,6 +61,7 @@ pub(crate) async fn post_templates(
 
         let create_command = TemplateCommand::CreateTemplate {
             template_id: new_template_id.clone(),
+            duplicate_from: Some(old_template_id),
             title: original_template.title.map(|t| format!("{} Copy", t)),
             display: original_template.display.clone(),
             credential_format: original_template.credential_format.clone(),
@@ -94,6 +95,7 @@ pub(crate) async fn post_templates(
 
     let command = TemplateCommand::CreateTemplate {
         template_id: template_id.clone(),
+        duplicate_from: None,
         title,
         display,
         credential_format,

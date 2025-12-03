@@ -13,6 +13,7 @@ impl View<Template> for Template {
         match &event.payload {
             TemplateCreated {
                 template_id,
+                duplicate_from,
                 title,
                 display,
                 credential_format,
@@ -27,6 +28,7 @@ impl View<Template> for Template {
                 schema,
             } => {
                 self.template_id.clone_from(template_id);
+                self.duplicate_from.clone_from(duplicate_from);
                 self.title.clone_from(title);
                 self.display.clone_from(display);
                 self.credential_format.clone_from(credential_format);

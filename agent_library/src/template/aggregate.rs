@@ -63,6 +63,7 @@ pub enum Visibility {
 pub struct Template {
     #[serde(rename = "id")]
     pub template_id: String,
+    pub duplicate_from: Option<String>,
     pub title: Option<String>,
     pub display: Option<Display>,
     pub credential_format: Option<CredentialFormat>,
@@ -101,6 +102,7 @@ impl Aggregate for Template {
         match command {
             CreateTemplate {
                 template_id,
+                duplicate_from,
                 title,
                 display,
                 credential_format,
@@ -120,6 +122,7 @@ impl Aggregate for Template {
 
                 Ok(vec![TemplateCreated {
                     template_id,
+                    duplicate_from,
                     title,
                     display,
                     credential_format,
@@ -297,6 +300,7 @@ impl Aggregate for Template {
         match event {
             TemplateCreated {
                 template_id,
+                duplicate_from,
                 title,
                 display,
                 credential_format,
@@ -311,6 +315,7 @@ impl Aggregate for Template {
                 schema,
             } => {
                 self.template_id = template_id;
+                self.duplicate_from = duplicate_from;
                 self.title = title;
                 self.display = display;
                 self.credential_format = credential_format;
@@ -453,6 +458,7 @@ pub mod document_tests {
             .given_no_previous_events()
             .when(TemplateCommand::CreateTemplate {
                 template_id: template_id.clone(),
+                duplicate_from: None,
                 title: title.clone(),
                 display: display.clone(),
                 credential_format: credential_format.clone(),
@@ -467,6 +473,7 @@ pub mod document_tests {
             })
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
                 template_id,
+                duplicate_from: None,
                 title,
                 display,
                 credential_format,
@@ -490,6 +497,7 @@ pub mod document_tests {
 
         let creation_event = vec![TemplateEvent::TemplateCreated {
             template_id: original_id.clone(),
+            duplicate_from: Some("template-123".to_string()),
             title: Some("Original Template".to_string()),
             display: None,
             credential_format: None,
