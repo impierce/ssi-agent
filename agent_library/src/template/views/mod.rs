@@ -23,11 +23,12 @@ impl View<Template> for Template {
                 status,
                 visibility,
                 description,
+                authorization,
                 r#type,
                 schema,
             } => {
                 self.template_id.clone_from(template_id);
-                self.title.clone_from(title);
+                self.title.replace(title.clone());
                 self.display.clone_from(display);
                 self.credential_format.clone_from(credential_format);
                 self.creator.clone_from(creator);
@@ -37,6 +38,7 @@ impl View<Template> for Template {
                 self.status.clone_from(status);
                 self.visibility.clone_from(visibility);
                 self.description.clone_from(description);
+                self.authorization.clone_from(authorization);
                 self.r#type.clone_from(r#type);
                 self.schema.clone_from(schema);
             }
@@ -110,6 +112,14 @@ impl View<Template> for Template {
                 modified_at,
             } => {
                 self.description.replace(description.clone());
+                self.modified_at.replace(modified_at.clone());
+            }
+            AuthorizationUpdated {
+                template_id: _,
+                authorization,
+                modified_at,
+            } => {
+                self.authorization.clone_from(authorization);
                 self.modified_at.replace(modified_at.clone());
             }
             TypeUpdated {

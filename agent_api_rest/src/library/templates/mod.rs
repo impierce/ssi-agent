@@ -3,6 +3,7 @@ use crate::API_VERSION;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{CredentialFormat, Display, HolderType, Status, Template, Visibility};
 use agent_library::template::command::TemplateCommand;
+use agent_library::template::event::Authorization;
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
@@ -57,7 +58,7 @@ impl From<Template> for TemplateDto {
 #[derive(Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct PostTemplatesEndpointRequest {
-    pub title: Option<String>,
+    pub title: String,
     pub display: Option<Display>,
     pub credential_format: Option<CredentialFormat>,
     pub creator: Option<String>,
@@ -66,6 +67,7 @@ pub struct PostTemplatesEndpointRequest {
     pub status: Status,
     pub visibility: Visibility,
     pub description: Option<String>,
+    pub authorization: Option<Authorization>,
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
 }
@@ -83,6 +85,7 @@ pub(crate) async fn post_templates(
         status,
         visibility,
         description,
+        authorization,
         r#type,
         schema,
     }): Json<PostTemplatesEndpointRequest>,
@@ -100,6 +103,7 @@ pub(crate) async fn post_templates(
         status,
         visibility,
         description,
+        authorization: authorization.unwrap_or_default(),
         r#type,
         schema,
     };
@@ -311,6 +315,7 @@ mod tests {
             status: Default::default(),
             visibility: Default::default(),
             description: None,
+            authorization: Default::default(),
             r#type: vec![],
             schema: None,
         };

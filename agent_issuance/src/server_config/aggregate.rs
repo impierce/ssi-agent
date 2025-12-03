@@ -1,4 +1,4 @@
-use agent_shared::config::Authorization;
+use agent_library::template::event::Authorization;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use jsonwebtoken::Algorithm;
@@ -18,12 +18,12 @@ use crate::server_config::event::ServerConfigEvent;
 use crate::services::IssuanceServices;
 
 fn into_credential_configurations_supported(
-    credential_configurations: &HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
+    credential_configurations: &HashMap<String, (String, CredentialConfigurationsSupportedObject, Authorization)>,
 ) -> HashMap<String, CredentialConfigurationsSupportedObject> {
     credential_configurations
         .iter()
         .map(
-            |(credential_configuration_id, (_provisioned, credential_configuration, _authorization_grant))| {
+            |(_template_id, (credential_configuration_id, credential_configuration, _authorization))| {
                 (credential_configuration_id.clone(), credential_configuration.clone())
             },
         )
@@ -55,7 +55,7 @@ fn into_proof_types_supported(signing_algorithms_supported: &[Algorithm]) -> Has
 pub struct ServerConfig {
     pub authorization_server_metadata: AuthorizationServerMetadata,
     pub credential_issuer_metadata: CredentialIssuerMetadata,
-    pub credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
+    pub credential_configurations: HashMap<String, (String, CredentialConfigurationsSupportedObject, Authorization)>,
     pub cryptographic_binding_methods_supported: Vec<String>,
     pub signing_algorithms_supported: Vec<Algorithm>,
 }
@@ -77,7 +77,6 @@ impl Aggregate for ServerConfig {
         _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         use ServerConfigCommand::*;
-        use ServerConfigError::*;
         use ServerConfigEvent::*;
 
         info!("Handling command: {:?}", command);
@@ -119,7 +118,7 @@ impl Aggregate for ServerConfig {
             } => {
                 let mut credential_configurations = self.credential_configurations.clone();
 
-                for (_credential_configuration_id, (_provisioned, credential_configuration, _authorization_grant)) in
+                for (_template_id, (_credential_configuration_id, credential_configuration, _authorization)) in
                     credential_configurations.iter_mut()
                 {
                     credential_configuration.cryptographic_binding_methods_supported =
@@ -141,7 +140,7 @@ impl Aggregate for ServerConfig {
             } => {
                 let mut credential_configurations = self.credential_configurations.clone();
 
-                for (_credential_configuration_id, (_provisioned, credential_configuration, _authorization_grant)) in
+                for (_template_id, (_credential_configuration_id, credential_configuration, _authorization)) in
                     credential_configurations.iter_mut()
                 {
                     credential_configuration.credential_signing_alg_values_supported =
@@ -160,42 +159,42 @@ impl Aggregate for ServerConfig {
                     credential_configurations,
                 }])
             }
-            UpdateCredentialConfiguration {
-                credential_configuration,
-                provisioned,
+
+            CreateCredentialConfiguration {
+                template_id,
+                credential_configuration_id,
+                credential_format_with_parameters,
+                display,
+                claims,
+                authorization,
             } => {
                 let proof_types_supported = into_proof_types_supported(&self.signing_algorithms_supported);
 
                 let credential_configuration_object = CredentialConfigurationsSupportedObject {
-                    credential_format: credential_configuration.credential_format_with_parameters,
+                    credential_format: credential_format_with_parameters,
                     cryptographic_binding_methods_supported: self.cryptographic_binding_methods_supported.clone(),
                     credential_signing_alg_values_supported: into_credential_signing_alg_values_supported(
                         &self.signing_algorithms_supported,
                     ),
                     proof_types_supported,
-                    display: credential_configuration.display,
-                    claims: credential_configuration.claims,
+                    display,
+                    claims,
                     ..Default::default()
                 };
 
                 let mut credential_configurations = self.credential_configurations.clone();
-                if let Some((existing_provisioned, existing_credential_configuration, existing_authorization_grant)) =
-                    credential_configurations.get_mut(&credential_configuration.credential_configuration_id)
+                if let Some((existing_credential_configuration_id, existing_credential_configuration, _authorization)) =
+                    credential_configurations.get_mut(&template_id)
                 {
-                    if !provisioned && *existing_provisioned {
-                        return Err(UpdateProvisionedCredentialConfigurationError);
-                    }
-
+                    *existing_credential_configuration_id = credential_configuration_id.clone();
                     *existing_credential_configuration = credential_configuration_object;
-                    *existing_provisioned = provisioned;
-                    *existing_authorization_grant = credential_configuration.authorization.clone();
                 } else {
                     credential_configurations.insert(
-                        credential_configuration.credential_configuration_id.clone(),
+                        template_id,
                         (
-                            provisioned,
+                            credential_configuration_id.clone(),
                             credential_configuration_object,
-                            credential_configuration.authorization.clone(),
+                            authorization,
                         ),
                     );
                 }
@@ -204,35 +203,79 @@ impl Aggregate for ServerConfig {
                 credential_issuer_metadata.credential_configurations_supported =
                     into_credential_configurations_supported(&credential_configurations);
 
-                Ok(vec![CredentialConfigurationUpdated {
-                    credential_configuration_id: credential_configuration.credential_configuration_id,
+                Ok(vec![CredentialConfigurationCreated {
+                    credential_configuration_id,
                     credential_issuer_metadata,
                     credential_configurations,
                 }])
             }
-            RemoveCredentialConfiguration {
+            UpdateCredentialConfigurationId {
+                template_id,
                 credential_configuration_id,
-                provisioned,
             } => {
                 let mut credential_configurations = self.credential_configurations.clone();
-
-                let existing_provisioned = credential_configurations
-                    .get(&credential_configuration_id)
-                    .map(|(provisioned, _, _)| *provisioned)
-                    .unwrap_or(false);
-
-                if !provisioned && existing_provisioned {
-                    return Err(RemoveProvisionedCredentialConfigurationError);
-                } else {
-                    credential_configurations.remove(&credential_configuration_id);
+                if let Some((
+                    existing_credential_configuration_id,
+                    _existing_credential_configuration,
+                    _authorization,
+                )) = credential_configurations.get_mut(&template_id)
+                {
+                    *existing_credential_configuration_id = credential_configuration_id;
                 }
 
                 let mut credential_issuer_metadata = Box::new(self.credential_issuer_metadata.clone());
                 credential_issuer_metadata.credential_configurations_supported =
                     into_credential_configurations_supported(&credential_configurations);
 
+                Ok(vec![CredentialConfigurationIdUpdated {
+                    credential_issuer_metadata,
+                    credential_configurations,
+                }])
+            }
+            UpdateCredentialConfigurationDisplay { template_id, display } => {
+                let mut credential_configurations = self.credential_configurations.clone();
+                if let Some((_, existing_credential_configuration, _authorization)) =
+                    credential_configurations.get_mut(&template_id)
+                {
+                    existing_credential_configuration.display = vec![display];
+                }
+
+                let mut credential_issuer_metadata = Box::new(self.credential_issuer_metadata.clone());
+                credential_issuer_metadata.credential_configurations_supported =
+                    into_credential_configurations_supported(&credential_configurations);
+
+                Ok(vec![CredentialConfigurationDisplayUpdated {
+                    credential_issuer_metadata,
+                    credential_configurations,
+                }])
+            }
+            UpdateCredentialConfigurationAuthorization {
+                template_id,
+                authorization,
+            } => {
+                let mut credential_configurations = self.credential_configurations.clone();
+                if let Some((_, _, existing_authorization)) = credential_configurations.get_mut(&template_id) {
+                    *existing_authorization = authorization;
+                }
+
+                let mut credential_issuer_metadata = Box::new(self.credential_issuer_metadata.clone());
+                credential_issuer_metadata.credential_configurations_supported =
+                    into_credential_configurations_supported(&credential_configurations);
+
+                Ok(vec![CredentialConfigurationAuthorizationUpdated {
+                    credential_issuer_metadata,
+                    credential_configurations,
+                }])
+            }
+            RemoveCredentialConfiguration { template_id } => {
+                let mut credential_configurations = self.credential_configurations.clone();
+                credential_configurations.remove(&template_id);
+
+                let mut credential_issuer_metadata = Box::new(self.credential_issuer_metadata.clone());
+                credential_issuer_metadata.credential_configurations_supported =
+                    into_credential_configurations_supported(&credential_configurations);
+
                 Ok(vec![CredentialConfigurationRemoved {
-                    credential_configuration_id,
                     credential_issuer_metadata,
                     credential_configurations,
                 }])
@@ -287,7 +330,8 @@ impl Aggregate for ServerConfig {
                 self.credential_issuer_metadata = *credential_issuer_metadata;
                 self.credential_configurations = credential_configurations;
             }
-            CredentialConfigurationUpdated {
+
+            CredentialConfigurationCreated {
                 credential_configuration_id: _,
                 credential_issuer_metadata,
                 credential_configurations,
@@ -295,8 +339,28 @@ impl Aggregate for ServerConfig {
                 self.credential_issuer_metadata = *credential_issuer_metadata;
                 self.credential_configurations = credential_configurations;
             }
+            CredentialConfigurationIdUpdated {
+                credential_issuer_metadata,
+                credential_configurations,
+            } => {
+                self.credential_issuer_metadata = *credential_issuer_metadata;
+                self.credential_configurations = credential_configurations;
+            }
+            CredentialConfigurationDisplayUpdated {
+                credential_issuer_metadata,
+                credential_configurations,
+            } => {
+                self.credential_issuer_metadata = *credential_issuer_metadata;
+                self.credential_configurations = credential_configurations;
+            }
+            CredentialConfigurationAuthorizationUpdated {
+                credential_issuer_metadata,
+                credential_configurations,
+            } => {
+                self.credential_issuer_metadata = *credential_issuer_metadata;
+                self.credential_configurations = credential_configurations;
+            }
             CredentialConfigurationRemoved {
-                credential_configuration_id: _,
                 credential_issuer_metadata,
                 credential_configurations,
             } => {
@@ -314,13 +378,7 @@ pub mod server_config_tests {
     use crate::server_config::aggregate::ServerConfig;
     use crate::server_config::event::ServerConfigEvent;
     use agent_secret_manager::service::Service;
-    use agent_shared::config::{Authorization, CredentialConfiguration};
     use cqrs_es::test::TestFramework;
-    use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
-    use oid4vci::credential_format_profiles::{w3c_verifiable_credentials, CredentialFormats, Parameters};
-    use oid4vci::credential_issuer::credential_configurations_supported::{
-        CredentialConfigurationsSupportedDisplay, Logo,
-    };
     use rstest::*;
 
     type ServerConfigTestFramework = TestFramework<ServerConfig>;
@@ -345,61 +403,6 @@ pub mod server_config_tests {
                 credential_issuer_metadata,
                 cryptographic_binding_methods_supported,
                 signing_algorithms_supported,
-            }]);
-    }
-
-    #[rstest]
-    fn test_add_credential_configuration(
-        authorization_server_metadata: Box<AuthorizationServerMetadata>,
-        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        cryptographic_binding_methods_supported: Vec<String>,
-        signing_algorithms_supported: Vec<Algorithm>,
-        credential_configuration_id: String,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
-        credential_issuer_metadata_with_credential_configuration: Box<CredentialIssuerMetadata>,
-    ) {
-        ServerConfigTestFramework::with(Service::default())
-            .given(vec![ServerConfigEvent::ServerMetadataInitialized {
-                authorization_server_metadata,
-                credential_issuer_metadata,
-                cryptographic_binding_methods_supported,
-                signing_algorithms_supported,
-            }])
-            .when(ServerConfigCommand::UpdateCredentialConfiguration {
-                credential_configuration: CredentialConfiguration {
-                    credential_configuration_id: credential_configuration_id.clone(),
-                    credential_format_with_parameters: CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
-                        parameters: w3c_verifiable_credentials::jwt_vc_json::JwtVcJsonParameters {
-                            credential_definition: w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition {
-                                type_: vec!["VerifiableCredential".to_string()],
-                                credential_subject: Default::default(),
-                            },
-                        },
-                    }),
-                    display: vec![CredentialConfigurationsSupportedDisplay {
-                        name: "Verifiable Credential".to_string(),
-                        locale: Some("en".to_string()),
-                        logo: Some(Logo {
-                            uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
-                            alt_text: Some("Impierce Logo".to_string()),
-                        }),
-                        description: None,
-                        background_image: None,
-                        background_color: None,
-                        text_color: None,
-                    }],
-                    claims: vec![],
-                    authorization: Authorization {
-                        pre_authorized: true,
-                        tx_code_constraints: None,
-                    },
-                },
-                provisioned: false,
-            })
-            .then_expect_events(vec![ServerConfigEvent::CredentialConfigurationUpdated {
-                credential_configuration_id,
-                credential_issuer_metadata: credential_issuer_metadata_with_credential_configuration,
-                credential_configurations,
             }]);
     }
 }

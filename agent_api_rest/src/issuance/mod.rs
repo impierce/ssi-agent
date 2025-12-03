@@ -1,4 +1,3 @@
-pub mod credential_configurations;
 pub mod credential_issuer;
 pub mod credentials;
 pub mod offers;
@@ -6,7 +5,6 @@ pub mod offers;
 pub mod error;
 
 use crate::issuance::{
-    credential_configurations::credential_configurations,
     credential_issuer::{
         credential::credential,
         credential_offer::credential_offer_uri,
@@ -35,7 +33,6 @@ pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
                     "/credentials/{credential_id}",
                     get(credentials::credential).patch(patch_credential),
                 )
-                .route("/credential-configurations", post(credential_configurations))
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send", post(send)),

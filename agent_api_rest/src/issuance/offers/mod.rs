@@ -57,8 +57,8 @@ pub(crate) async fn offers(
     }
 
     let authorization = credential_configurations
-        .into_iter()
-        .find_map(|(credential_configuration_id, (_, _, authorization))| {
+        .into_values()
+        .find_map(|(credential_configuration_id, _, authorization)| {
             credential_configuration_ids
                 .contains(&credential_configuration_id)
                 .then_some(authorization)

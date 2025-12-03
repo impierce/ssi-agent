@@ -10,6 +10,8 @@ agent_shared = { path = "../agent_shared" }
 async-trait.workspace = true
 chrono.workspace = true
 cqrs-es.workspace = true
+# TODO: remove this when moving `Authorization` to `agent_issuance`.
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "99fc7be" }
 serde.workspace = true
 serde_json.workspace = true
 serde_with.workspace = true

@@ -1,4 +1,4 @@
-pub use super::aggregate::{CredentialFormat, Display, HolderType, Status, Visibility};
+pub use super::aggregate::{Authorization, CredentialFormat, Display, HolderType, Status, Visibility};
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 use strum::Display;
@@ -8,8 +8,7 @@ use strum::Display;
 pub enum TemplateEvent {
     TemplateCreated {
         template_id: String,
-        // TODO: Make this a required field.
-        title: Option<String>,
+        title: String,
         display: Option<Display>,
         credential_format: Option<CredentialFormat>,
         creator: Option<String>,
@@ -19,6 +18,7 @@ pub enum TemplateEvent {
         status: Status,
         visibility: Visibility,
         description: Option<String>,
+        authorization: Authorization,
         r#type: Vec<String>,
         schema: Option<serde_json::Value>,
     },
@@ -65,6 +65,11 @@ pub enum TemplateEvent {
     DescriptionUpdated {
         template_id: String,
         description: String,
+        modified_at: String,
+    },
+    AuthorizationUpdated {
+        template_id: String,
+        authorization: Authorization,
         modified_at: String,
     },
     TypeUpdated {

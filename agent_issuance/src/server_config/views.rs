@@ -54,7 +54,8 @@ impl View<ServerConfig> for ServerConfigView {
                 self.credential_issuer_metadata.clone_from(credential_issuer_metadata);
                 self.credential_configurations.clone_from(credential_configurations);
             }
-            CredentialConfigurationUpdated {
+
+            CredentialConfigurationCreated {
                 credential_configuration_id: _,
                 credential_issuer_metadata,
                 credential_configurations,
@@ -62,8 +63,28 @@ impl View<ServerConfig> for ServerConfigView {
                 self.credential_issuer_metadata.clone_from(credential_issuer_metadata);
                 self.credential_configurations.clone_from(credential_configurations);
             }
+            CredentialConfigurationIdUpdated {
+                credential_issuer_metadata,
+                credential_configurations,
+            } => {
+                self.credential_issuer_metadata.clone_from(credential_issuer_metadata);
+                self.credential_configurations.clone_from(credential_configurations);
+            }
+            CredentialConfigurationDisplayUpdated {
+                credential_issuer_metadata,
+                credential_configurations,
+            } => {
+                self.credential_issuer_metadata.clone_from(credential_issuer_metadata);
+                self.credential_configurations.clone_from(credential_configurations);
+            }
+            CredentialConfigurationAuthorizationUpdated {
+                credential_issuer_metadata,
+                credential_configurations,
+            } => {
+                self.credential_issuer_metadata.clone_from(credential_issuer_metadata);
+                self.credential_configurations.clone_from(credential_configurations);
+            }
             CredentialConfigurationRemoved {
-                credential_configuration_id: _,
                 credential_issuer_metadata,
                 credential_configurations,
             } => {

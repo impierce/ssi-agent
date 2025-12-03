@@ -1,3 +1,5 @@
+use crate::template::aggregate::Authorization;
+
 pub use super::aggregate::{CredentialFormat, Display, HolderType, Status, Visibility};
 use serde::Deserialize;
 
@@ -6,7 +8,7 @@ use serde::Deserialize;
 pub enum TemplateCommand {
     CreateTemplate {
         template_id: String,
-        title: Option<String>,
+        title: String,
         display: Option<Display>,
         credential_format: Option<CredentialFormat>,
         creator: Option<String>,
@@ -15,6 +17,7 @@ pub enum TemplateCommand {
         status: Status,
         visibility: Visibility,
         description: Option<String>,
+        authorization: Authorization,
         r#type: Vec<String>,
         schema: Option<serde_json::Value>,
     },

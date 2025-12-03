@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
+use oid4vci::credential_offer::TxCodeConstraints;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use tracing::{debug, info};
@@ -40,6 +41,23 @@ pub enum HolderType {
     Organization,
 }
 
+// TODO: This should be moved to `agent_issuance`
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+pub struct Authorization {
+    pub pre_authorized: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx_code_constraints: Option<TxCodeConstraints>,
+}
+
+impl Default for Authorization {
+    fn default() -> Self {
+        Self {
+            pre_authorized: true,
+            tx_code_constraints: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
@@ -72,6 +90,7 @@ pub struct Template {
     pub status: Status,
     pub visibility: Visibility,
     pub description: Option<String>,
+    pub authorization: Authorization,
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
 }
@@ -109,6 +128,7 @@ impl Aggregate for Template {
                 status,
                 visibility,
                 description,
+                authorization,
                 r#type,
                 schema,
             } => {
@@ -129,6 +149,7 @@ impl Aggregate for Template {
                     status,
                     visibility,
                     description,
+                    authorization,
                     r#type,
                     schema,
                 }])
@@ -298,11 +319,12 @@ impl Aggregate for Template {
                 status,
                 visibility,
                 description,
+                authorization,
                 r#type,
                 schema,
             } => {
                 self.template_id = template_id;
-                self.title = title;
+                self.title.replace(title);
                 self.display = display;
                 self.credential_format = credential_format;
                 self.creator = creator;
@@ -312,6 +334,7 @@ impl Aggregate for Template {
                 self.status = status;
                 self.visibility = visibility;
                 self.description = description;
+                self.authorization = authorization;
                 self.r#type = r#type;
                 self.schema = schema;
             }
@@ -387,6 +410,14 @@ impl Aggregate for Template {
                 self.description = Some(description);
                 self.modified_at.replace(modified_at);
             }
+            AuthorizationUpdated {
+                template_id: _,
+                authorization,
+                modified_at,
+            } => {
+                self.authorization = authorization;
+                self.modified_at.replace(modified_at);
+            }
             TypeUpdated {
                 template_id: _,
                 r#type,
@@ -421,7 +452,7 @@ pub mod document_tests {
     #[serial_test::serial]
     async fn test_create_template(
         template_id: String,
-        title: Option<String>,
+        title: String,
         display: Option<Display>,
         credential_format: Option<CredentialFormat>,
         creator: Option<String>,
@@ -431,6 +462,7 @@ pub mod document_tests {
         status: Status,
         visibility: Visibility,
         description: Option<String>,
+        authorization: Authorization,
         r#type: Vec<String>,
         schema: Option<serde_json::Value>,
     ) {
@@ -447,6 +479,7 @@ pub mod document_tests {
                 status: status.clone(),
                 visibility: visibility.clone(),
                 description: description.clone(),
+                authorization: authorization.clone(),
                 r#type: r#type.clone(),
                 schema: schema.clone(),
             })
@@ -462,6 +495,7 @@ pub mod document_tests {
                 status,
                 visibility,
                 description,
+                authorization,
                 r#type,
                 schema,
             }])
@@ -479,8 +513,8 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn title() -> Option<String> {
-        Some("Sample Template".to_string())
+    pub fn title() -> String {
+        "Sample Template".to_string()
     }
 
     #[fixture]
@@ -529,6 +563,11 @@ pub mod test_utils {
     #[fixture]
     pub fn description() -> Option<String> {
         Some("Sample description".to_string())
+    }
+
+    #[fixture]
+    pub fn authorization() -> Authorization {
+        Authorization::default()
     }
 
     #[fixture]

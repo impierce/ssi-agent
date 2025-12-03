@@ -8,12 +8,6 @@ use identity_iota::{
 };
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
-use oid4vci::credential_issuer::credential_configurations_supported::ClaimDescription;
-use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedDisplay;
-use oid4vci::{
-    credential_format_profiles::{CredentialFormats, WithParameters},
-    credential_offer::TxCodeConstraints,
-};
 use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported};
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -22,7 +16,6 @@ use serde_json::json;
 use serde_with::{skip_serializing_none, SerializeDisplay};
 use std::{
     collections::HashMap,
-    path::PathBuf,
     sync::{RwLock, RwLockReadGuard},
 };
 use strum::VariantArray;
@@ -252,8 +245,6 @@ pub struct ApplicationConfiguration {
     pub credential_offer_by_value_enabled: bool,
     #[config(development_default = "SecretManagerConfig::development_default()")]
     pub secret_manager: SecretManagerConfig,
-    #[config(default)]
-    pub credential_configuration_file: Option<Box<PathBuf>>,
     #[config(default = "
         HashMap::from(
             [
@@ -508,35 +499,6 @@ pub fn default_issuer_eddsa_key_id() -> KeyId {
 
 pub fn default_issuer_es256_key_id() -> KeyId {
     KeyId::new(ES256_KEY_ID)
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct CredentialConfiguration {
-    pub credential_configuration_id: String,
-    #[serde(flatten)]
-    pub credential_format_with_parameters: CredentialFormats<WithParameters>,
-    #[serde(default)]
-    pub display: Vec<CredentialConfigurationsSupportedDisplay>,
-    #[serde(default)]
-    pub claims: Vec<ClaimDescription>,
-    #[serde(default)]
-    pub authorization: Authorization,
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-pub struct Authorization {
-    pub pre_authorized: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tx_code_constraints: Option<TxCodeConstraints>,
-}
-
-impl Default for Authorization {
-    fn default() -> Self {
-        Self {
-            pre_authorized: true,
-            tx_code_constraints: None,
-        }
-    }
 }
 
 #[skip_serializing_none]
@@ -1383,9 +1345,6 @@ mod tests {
 
         // Some display information is set
         assert_eq!(config.display.len(), 1);
-
-        // The Credential Configuration file is set to `None`
-        assert!(config.credential_configuration_file.is_none());
     }
 
     #[test]

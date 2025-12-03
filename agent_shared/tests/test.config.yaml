@@ -50,8 +50,6 @@ display:
       uri: https://www.impierce.com/external/impierce-icon.png
       alt_text: Impierce Icon
 
-credential_configuration_file: "../agent_shared/tests/test_credential_configurations.json"
-
 secret_manager:
   stronghold_path: ../agent_secret_manager/tests/res/test.stronghold.dat
   # stronghold_password: <defined in .env.test>
