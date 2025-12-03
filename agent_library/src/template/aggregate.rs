@@ -412,7 +412,9 @@ impl Aggregate for Template {
                 self.schema = Some(schema);
                 self.modified_at.replace(modified_at);
             }
-            TemplateDeleted { template_id: _ } => {
+            TemplateDeleted { template_id } => {
+                *self = Self::default();
+                self.template_id = template_id;
                 self.status = Status::Deleted;
             }
             TemplateDuplicated { .. } => {}

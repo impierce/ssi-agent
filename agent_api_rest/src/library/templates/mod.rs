@@ -54,12 +54,6 @@ pub(crate) async fn post_templates(
     if let Some(old_template_id) = duplicate_from {
         let new_template_id = Uuid::new_v4().to_string();
 
-        let command = TemplateCommand::DuplicateTemplate {
-            duplicate_from: old_template_id.clone(),
-            new_template_id: new_template_id.clone(),
-        };
-        command_handler(&old_template_id, &state.command.template, command).await?;
-
         // Fetch original template data.
         let original_template = query_handler(&old_template_id, &state.query.template)
             .await?
@@ -274,9 +268,10 @@ pub(crate) async fn get_templates(
             let filtered_templates: Vec<_> = all_templates_view
                 .templates
                 .into_values()
-                .filter(|_template|
+                .filter(|template| {
+                    template.status != Status::Deleted
                     // TODO: Apply filtering logic based on request parameters
-                    true)
+                })
                 .collect();
 
             filtered_templates
@@ -293,6 +288,13 @@ pub(crate) async fn get_template(
 ) -> Result<Response, ApiError> {
     query_handler(&template_id, &state.query.template)
         .await?
+        .and_then(|template_view| {
+            if template_view.status == Status::Deleted {
+                None
+            } else {
+                Some(template_view)
+            }
+        })
         .map(|template_view| (StatusCode::OK, Json(template_view)).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
