@@ -106,7 +106,7 @@ pub(crate) async fn post_templates(
         visibility,
         description,
         r#type,
-        schema,
+        schema: Box::new(schema),
     };
 
     command_handler(&template_id, &state.command.template, command).await?;

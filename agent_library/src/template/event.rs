@@ -20,7 +20,7 @@ pub enum TemplateEvent {
         visibility: Visibility,
         description: Option<String>,
         r#type: Vec<String>,
-        schema: Option<serde_json::Value>,
+        schema: Box<Option<serde_json::Value>>,
     },
     TitleUpdated {
         template_id: String,

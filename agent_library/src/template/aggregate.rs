@@ -75,7 +75,7 @@ pub struct Template {
     pub visibility: Visibility,
     pub description: Option<String>,
     pub r#type: Vec<String>,
-    pub schema: Option<serde_json::Value>,
+    pub schema: Box<Option<serde_json::Value>>,
 }
 
 #[async_trait]
@@ -414,7 +414,7 @@ impl Aggregate for Template {
                 schema,
                 modified_at,
             } => {
-                self.schema = Some(schema);
+                *self.schema = Some(schema);
                 self.modified_at.replace(modified_at);
             }
             TemplateDeleted { template_id } => {
@@ -469,7 +469,7 @@ pub mod document_tests {
                 visibility: visibility.clone(),
                 description: description.clone(),
                 r#type: r#type.clone(),
-                schema: schema.clone(),
+                schema: Box::new(schema.clone()),
             })
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
                 template_id,
@@ -485,7 +485,7 @@ pub mod document_tests {
                 visibility,
                 description,
                 r#type,
-                schema,
+                schema: Box::new(schema),
             }])
     }
 
@@ -509,7 +509,7 @@ pub mod document_tests {
             visibility: Visibility::Public,
             description: None,
             r#type: vec![],
-            schema: None,
+            schema: Box::new(None),
         }];
 
         TemplateTestFramework::with(())

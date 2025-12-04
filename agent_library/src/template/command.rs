@@ -17,7 +17,7 @@ pub enum TemplateCommand {
         visibility: Visibility,
         description: Option<String>,
         r#type: Vec<String>,
-        schema: Option<serde_json::Value>,
+        schema: Box<Option<serde_json::Value>>,
     },
     UpdateTitle {
         template_id: String,
