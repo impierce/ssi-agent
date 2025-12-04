@@ -126,6 +126,7 @@ impl Aggregate for Credential {
                 #[cfg(not(feature = "test_utils"))]
                 let notification_id = agent_shared::generate_random_string();
 
+                // Check if template enforcement is to be skipped.
                 let skip_template_enforcement = std::env::var("SKIP_TEMPLATE_ENFORCEMENT").is_ok();
                 if skip_template_enforcement {
                     info!("Skipping template enforcement for credential creation");

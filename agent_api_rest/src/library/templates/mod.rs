@@ -51,6 +51,7 @@ pub(crate) async fn post_templates(
         schema,
     }): Json<PostTemplatesEndpointRequest>,
 ) -> Result<Response, ApiError> {
+    // Handle template duplication if `duplicate_from` field is provided.
     if let Some(old_template_id) = duplicate_from {
         let new_template_id = Uuid::new_v4().to_string();
 
@@ -62,6 +63,7 @@ pub(crate) async fn post_templates(
         let create_command = TemplateCommand::CreateTemplate {
             template_id: new_template_id.clone(),
             duplicate_from: Some(old_template_id),
+            // Duplicate the template's original fields, appending "Copy" to the title.
             title: original_template.title.map(|t| format!("{} Copy", t)),
             display: original_template.display.clone(),
             credential_format: original_template.credential_format.clone(),
@@ -90,7 +92,7 @@ pub(crate) async fn post_templates(
             .into_response());
     }
 
-    // If `duplicate_from` field is not provided, create a fresh new template.
+    // If `duplicate_from` field is not provided, create a new template.
     let template_id = id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
     let command = TemplateCommand::CreateTemplate {
