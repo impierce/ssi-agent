@@ -63,7 +63,7 @@ pub enum Visibility {
 pub struct Template {
     #[serde(rename = "id")]
     pub template_id: String,
-    pub duplicate_from: Option<String>,
+    pub source_template_id: Option<String>,
     pub title: Option<String>,
     pub display: Option<Display>,
     pub credential_format: Option<CredentialFormat>,
@@ -102,7 +102,7 @@ impl Aggregate for Template {
         match command {
             CreateTemplate {
                 template_id,
-                duplicate_from,
+                source_template_id,
                 title,
                 display,
                 credential_format,
@@ -122,7 +122,7 @@ impl Aggregate for Template {
 
                 Ok(vec![TemplateCreated {
                     template_id,
-                    duplicate_from,
+                    source_template_id,
                     title,
                     display,
                     credential_format,
@@ -282,13 +282,6 @@ impl Aggregate for Template {
                 }])
             }
             DeleteTemplate { template_id } => Ok(vec![TemplateDeleted { template_id }]),
-            DuplicateTemplate {
-                duplicate_from,
-                new_template_id,
-            } => Ok(vec![TemplateDuplicated {
-                duplicate_from,
-                new_template_id,
-            }]),
         }
     }
 
@@ -300,7 +293,7 @@ impl Aggregate for Template {
         match event {
             TemplateCreated {
                 template_id,
-                duplicate_from,
+                source_template_id,
                 title,
                 display,
                 credential_format,
@@ -315,7 +308,7 @@ impl Aggregate for Template {
                 schema,
             } => {
                 self.template_id = template_id;
-                self.duplicate_from = duplicate_from;
+                self.source_template_id = source_template_id;
                 self.title = title;
                 self.display = display;
                 self.credential_format = credential_format;
@@ -422,7 +415,6 @@ impl Aggregate for Template {
                 self.template_id = template_id;
                 self.status = Status::Deleted;
             }
-            TemplateDuplicated { .. } => {}
         }
     }
 }
@@ -458,7 +450,7 @@ pub mod document_tests {
             .given_no_previous_events()
             .when(TemplateCommand::CreateTemplate {
                 template_id: template_id.clone(),
-                duplicate_from: None,
+                source_template_id: None,
                 title: title.clone(),
                 display: display.clone(),
                 credential_format: credential_format.clone(),
@@ -473,7 +465,7 @@ pub mod document_tests {
             })
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
                 template_id,
-                duplicate_from: None,
+                source_template_id: None,
                 title,
                 display,
                 credential_format,
@@ -488,42 +480,8 @@ pub mod document_tests {
                 schema: Box::new(schema),
             }])
     }
-
-    #[rstest]
-    #[serial_test::serial]
-    async fn test_duplicate_template() {
-        let original_id = "template-123".to_string();
-        let new_id = "template-456".to_string();
-
-        let creation_event = vec![TemplateEvent::TemplateCreated {
-            template_id: original_id.clone(),
-            duplicate_from: Some("template-123".to_string()),
-            title: Some("Original Template".to_string()),
-            display: None,
-            credential_format: None,
-            creator: None,
-            holder_type: None,
-            modified_at: "2024-01-01T00:00:00Z".to_string(),
-            tags: vec![],
-            status: Status::Published,
-            visibility: Visibility::Public,
-            description: None,
-            r#type: vec![],
-            schema: Box::new(None),
-        }];
-
-        TemplateTestFramework::with(())
-            .given(creation_event)
-            .when(TemplateCommand::DuplicateTemplate {
-                duplicate_from: original_id.clone(),
-                new_template_id: new_id.clone(),
-            })
-            .then_expect_events(vec![TemplateEvent::TemplateDuplicated {
-                duplicate_from: original_id,
-                new_template_id: new_id,
-            }])
-    }
 }
+
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::*;

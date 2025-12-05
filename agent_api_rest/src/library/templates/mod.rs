@@ -17,8 +17,7 @@ use uuid::Uuid;
 #[derive(Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct PostTemplatesEndpointRequest {
-    pub id: Option<String>,
-    pub duplicate_from: Option<String>,
+    pub source_template_id: Option<String>,
     pub title: Option<String>,
     pub display: Option<Display>,
     pub credential_format: Option<CredentialFormat>,
@@ -36,8 +35,7 @@ pub struct PostTemplatesEndpointRequest {
 pub(crate) async fn post_templates(
     State(state): State<LibraryState>,
     Json(PostTemplatesEndpointRequest {
-        id,
-        duplicate_from,
+        source_template_id,
         title,
         display,
         credential_format,
@@ -51,8 +49,8 @@ pub(crate) async fn post_templates(
         schema,
     }): Json<PostTemplatesEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    // Handle template duplication if `duplicate_from` field is provided.
-    if let Some(old_template_id) = duplicate_from {
+    // Handle template duplication if `source_template_id` field is provided.
+    if let Some(old_template_id) = source_template_id {
         let new_template_id = Uuid::new_v4().to_string();
 
         // Fetch original template data.
@@ -62,19 +60,19 @@ pub(crate) async fn post_templates(
 
         let create_command = TemplateCommand::CreateTemplate {
             template_id: new_template_id.clone(),
-            duplicate_from: Some(old_template_id),
+            source_template_id: Some(old_template_id),
             // Duplicate the template's original fields, appending "Copy" to the title.
             title: original_template.title.map(|t| format!("{} Copy", t)),
-            display: original_template.display.clone(),
-            credential_format: original_template.credential_format.clone(),
-            creator: original_template.creator.clone(),
-            holder_type: original_template.holder_type.clone(),
-            tags: original_template.tags.clone(),
+            display: original_template.display,
+            credential_format: original_template.credential_format,
+            creator: original_template.creator,
+            holder_type: original_template.holder_type,
+            tags: original_template.tags,
             status: Status::Draft,
-            visibility: original_template.visibility.clone(),
-            description: original_template.description.clone(),
-            r#type: original_template.r#type.clone(),
-            schema: original_template.schema.clone(),
+            visibility: original_template.visibility,
+            description: original_template.description,
+            r#type: original_template.r#type,
+            schema: original_template.schema,
         };
 
         command_handler(&new_template_id, &state.command.template, create_command).await?;
@@ -92,12 +90,12 @@ pub(crate) async fn post_templates(
             .into_response());
     }
 
-    // If `duplicate_from` field is not provided, create a new template.
-    let template_id = id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    // If the `source_template_id` field is not provided, create a new template.
+    let template_id = uuid::Uuid::new_v4().to_string();
 
     let command = TemplateCommand::CreateTemplate {
         template_id: template_id.clone(),
-        duplicate_from: None,
+        source_template_id: None,
         title,
         display,
         credential_format,

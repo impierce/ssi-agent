@@ -2160,7 +2160,7 @@
 								"header": [],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"duplicateFrom\": \"{{template_id}}\"\n}",
+									"raw": "{\n    \"duplicateFrom\": \"{{TEMPLATE_ID}}\"\n}",
 									"options": {
 										"raw": {
 											"language": "json"

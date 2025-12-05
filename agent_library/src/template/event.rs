@@ -8,7 +8,7 @@ use strum::Display;
 pub enum TemplateEvent {
     TemplateCreated {
         template_id: String,
-        duplicate_from: Option<String>,
+        source_template_id: Option<String>,
         title: Option<String>,
         display: Option<Display>,
         credential_format: Option<CredentialFormat>,
@@ -79,10 +79,6 @@ pub enum TemplateEvent {
     },
     TemplateDeleted {
         template_id: String,
-    },
-    TemplateDuplicated {
-        duplicate_from: String,
-        new_template_id: String,
     },
 }
 

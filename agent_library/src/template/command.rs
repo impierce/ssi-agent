@@ -6,7 +6,7 @@ use serde::Deserialize;
 pub enum TemplateCommand {
     CreateTemplate {
         template_id: String,
-        duplicate_from: Option<String>,
+        source_template_id: Option<String>,
         title: Option<String>,
         display: Option<Display>,
         credential_format: Option<CredentialFormat>,
@@ -65,9 +65,5 @@ pub enum TemplateCommand {
     },
     DeleteTemplate {
         template_id: String,
-    },
-    DuplicateTemplate {
-        duplicate_from: String,
-        new_template_id: String,
     },
 }
