@@ -1,3 +1,4 @@
+use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
@@ -56,8 +57,16 @@ pub(crate) async fn post_templates(
         // Fetch original template data.
         let original_template = query_handler(&old_template_id, &state.query.template)
             .await?
-            .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
+            .ok_or_else(|| {
+                ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                    .title("Source Template Not Found")
+                    .type_url(type_url("library#source-template-not-found"))
+                    .message(format!("No Source Template found with id: `{old_template_id}`"))
+                    .finish()
+            })?;
 
+        // TODO: Create a DuplicateTemplate command which takes care of duplication logic.
+        // This would require defining a LibraryService that acts as a Domain Service.
         let create_command = TemplateCommand::CreateTemplate {
             template_id: new_template_id.clone(),
             source_template_id: Some(old_template_id),

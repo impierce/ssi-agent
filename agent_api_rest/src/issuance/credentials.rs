@@ -66,6 +66,7 @@ pub(crate) async fn credentials(
                 .cloned()
         })
         .ok_or_else(|| {
+            // TODO: Use 422 Unprocessable Content instead
             ApiError::builder(StatusCode::NOT_FOUND)
                 .title("No Credential Configuration Found")
                 .type_url(type_url("issuance#no-credential-configuration-found"))
