@@ -1,5 +1,7 @@
-pub mod error;
+// Endpoint handlers
 pub mod templates;
+
+pub mod error;
 
 use agent_library::state::LibraryState;
 use axum::{routing::get, Router};

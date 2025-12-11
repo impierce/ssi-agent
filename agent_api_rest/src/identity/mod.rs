@@ -1,3 +1,4 @@
+// Endpoint handlers
 pub mod connections;
 pub mod documents;
 pub mod profiles;
@@ -5,8 +6,6 @@ pub mod services;
 pub mod well_known;
 
 pub mod error;
-
-use std::sync::Arc;
 
 use agent_identity::state::IdentityState;
 use axum::{
@@ -16,6 +15,7 @@ use axum::{
 use connections::{get_connection, get_connections, post_connections};
 use documents::{get_document, get_documents};
 use services::{linked_vp::linked_vp, service, services};
+use std::sync::Arc;
 use well_known::{did::did, did_configuration::did_configuration};
 
 use crate::{

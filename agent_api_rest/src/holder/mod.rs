@@ -1,5 +1,6 @@
 // TODO: further refactor the API's folder structure to reflect the API's routes.
 #[allow(clippy::module_inception)]
+// Endpoint handlers
 pub mod holder;
 pub mod openid4vci;
 

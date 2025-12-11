@@ -1,3 +1,4 @@
+// Endpoint handlers
 pub mod credential_configurations;
 pub mod credential_issuer;
 pub mod credentials;
