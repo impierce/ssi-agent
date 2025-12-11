@@ -318,6 +318,7 @@ pub struct ApplicationConfiguration {
     #[config(default)]
     pub iota_sponsoring_service: Option<Url>,
     #[config(default)]
+    #[serde(serialize_with = "redact")]
     pub iota_sponsoring_service_auth: Option<String>,
 }
 
