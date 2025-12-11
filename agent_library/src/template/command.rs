@@ -13,6 +13,7 @@ pub enum TemplateCommand {
         holder_type: Option<HolderType>,
         tags: Vec<String>,
         status: Status,
+        require_pin_code: Option<bool>,
         visibility: Visibility,
         description: Option<String>,
         r#type: Vec<String>,
@@ -61,5 +62,9 @@ pub enum TemplateCommand {
     UpdateSchema {
         template_id: String,
         schema: serde_json::Value,
+    },
+    RequirePinCode {
+        template_id: String,
+        require_pin_code: bool,
     },
 }

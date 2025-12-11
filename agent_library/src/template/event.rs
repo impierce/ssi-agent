@@ -16,6 +16,7 @@ pub enum TemplateEvent {
         modified_at: String,
         tags: Vec<String>,
         status: Status,
+        require_pin_code: Option<bool>,
         visibility: Visibility,
         description: Option<String>,
         r#type: Vec<String>,
@@ -74,6 +75,11 @@ pub enum TemplateEvent {
     SchemaUpdated {
         template_id: String,
         schema: serde_json::Value,
+        modified_at: String,
+    },
+    PinCodeRequired {
+        template_id: String,
+        require_pin_code: bool,
         modified_at: String,
     },
 }

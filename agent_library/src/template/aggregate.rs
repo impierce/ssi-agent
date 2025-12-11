@@ -1,3 +1,5 @@
+use std::pin::Pin;
+
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use serde::{Deserialize, Serialize};
@@ -70,6 +72,7 @@ pub struct Template {
     pub modified_at: Option<String>,
     pub tags: Vec<String>,
     pub status: Status,
+    pub require_pin_code: Option<bool>,
     pub visibility: Visibility,
     pub description: Option<String>,
     pub r#type: Vec<String>,
@@ -107,6 +110,7 @@ impl Aggregate for Template {
                 holder_type,
                 tags,
                 status,
+                require_pin_code,
                 visibility,
                 description,
                 r#type,
@@ -127,6 +131,7 @@ impl Aggregate for Template {
                     modified_at,
                     tags,
                     status,
+                    require_pin_code,
                     visibility,
                     description,
                     r#type,
@@ -277,6 +282,21 @@ impl Aggregate for Template {
                     modified_at,
                 }])
             }
+            RequirePinCode {
+                template_id,
+                require_pin_code,
+            } => {
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![PinCodeRequired {
+                    template_id,
+                    require_pin_code,
+                    modified_at,
+                }])
+            }
         }
     }
 
@@ -296,6 +316,7 @@ impl Aggregate for Template {
                 modified_at,
                 tags,
                 status,
+                require_pin_code,
                 visibility,
                 description,
                 r#type,
@@ -310,6 +331,7 @@ impl Aggregate for Template {
                 self.modified_at.replace(modified_at);
                 self.tags = tags;
                 self.status = status;
+                self.require_pin_code = require_pin_code;
                 self.visibility = visibility;
                 self.description = description;
                 self.r#type = r#type;
@@ -403,6 +425,14 @@ impl Aggregate for Template {
                 self.schema = Some(schema);
                 self.modified_at.replace(modified_at);
             }
+            PinCodeRequired {
+                template_id: _,
+                require_pin_code,
+                modified_at,
+            } => {
+                self.require_pin_code = Some(require_pin_code);
+                self.modified_at.replace(modified_at);
+            }
         }
     }
 }
@@ -429,6 +459,7 @@ pub mod document_tests {
         modified_at: String,
         tags: Vec<String>,
         status: Status,
+        require_pin_code: Option<bool>,
         visibility: Visibility,
         description: Option<String>,
         r#type: Vec<String>,
@@ -445,6 +476,7 @@ pub mod document_tests {
                 holder_type: holder_type.clone(),
                 tags: tags.clone(),
                 status: status.clone(),
+                require_pin_code: require_pin_code.clone(),
                 visibility: visibility.clone(),
                 description: description.clone(),
                 r#type: r#type.clone(),
@@ -460,6 +492,7 @@ pub mod document_tests {
                 modified_at,
                 tags,
                 status,
+                require_pin_code,
                 visibility,
                 description,
                 r#type,
@@ -519,6 +552,11 @@ pub mod test_utils {
     #[fixture]
     pub fn status() -> Status {
         Status::Draft
+    }
+
+    #[fixture]
+    pub fn require_pin_code() -> Option<bool> {
+        Some(true)
     }
 
     #[fixture]

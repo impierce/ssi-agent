@@ -23,6 +23,7 @@ pub struct PostTemplatesEndpointRequest {
     pub holder_type: Option<HolderType>,
     pub tags: Vec<String>,
     pub status: Status,
+    pub require_pin_code: Option<bool>,
     pub visibility: Visibility,
     pub description: Option<String>,
     pub r#type: Vec<String>,
@@ -40,6 +41,7 @@ pub(crate) async fn post_templates(
         holder_type,
         tags,
         status,
+        require_pin_code,
         visibility,
         description,
         r#type,
@@ -57,6 +59,7 @@ pub(crate) async fn post_templates(
         holder_type,
         tags,
         status,
+        require_pin_code,
         visibility,
         description,
         r#type,
@@ -201,6 +204,30 @@ pub(crate) async fn patch_template(
         };
         command_handler(&template_id, &state.command.template, command).await?;
     }
+
+    Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirePinCodeRequest {
+    pub template_id: String,
+    pub require_pin_code: bool,
+}
+
+#[axum_macros::debug_handler]
+pub(crate) async fn require_pin_code(
+    State(state): State<LibraryState>,
+    Json(RequirePinCodeRequest {
+        template_id,
+        require_pin_code,
+    }): Json<RequirePinCodeRequest>,
+) -> Result<Response, ApiError> {
+    let command = TemplateCommand::RequirePinCode {
+        template_id: template_id.clone(),
+        require_pin_code,
+    };
+    command_handler(&template_id, &state.command.template, command).await?;
 
     Ok(StatusCode::NO_CONTENT.into_response())
 }

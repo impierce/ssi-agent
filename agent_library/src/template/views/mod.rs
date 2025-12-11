@@ -21,6 +21,7 @@ impl View<Template> for Template {
                 modified_at,
                 tags,
                 status,
+                require_pin_code,
                 visibility,
                 description,
                 r#type,
@@ -35,6 +36,7 @@ impl View<Template> for Template {
                 self.modified_at.replace(modified_at.clone());
                 self.tags.clone_from(tags);
                 self.status.clone_from(status);
+                self.require_pin_code.clone_from(require_pin_code);
                 self.visibility.clone_from(visibility);
                 self.description.clone_from(description);
                 self.r#type.clone_from(r#type);
@@ -126,6 +128,14 @@ impl View<Template> for Template {
                 modified_at,
             } => {
                 self.schema.replace(schema.clone());
+                self.modified_at.replace(modified_at.clone());
+            }
+            PinCodeRequired {
+                template_id: _,
+                require_pin_code,
+                modified_at,
+            } => {
+                self.require_pin_code.replace(require_pin_code.clone());
                 self.modified_at.replace(modified_at.clone());
             }
         }
