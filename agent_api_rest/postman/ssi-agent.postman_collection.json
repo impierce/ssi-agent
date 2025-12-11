@@ -1024,6 +1024,24 @@
 						}
 					},
 					"response": []
+				},
+				{
+					"name": "sponsoring-configuration",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/.well-known/sponsoring-configuration",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								".well-known",
+								"sponsoring-configuration"
+							]
+						}
+					},
+					"response": []
 				}
 			]
 		},
