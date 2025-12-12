@@ -8,9 +8,10 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
+use std::sync::Arc;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn did(State(state): State<IdentityState>) -> Result<Response, ApiError> {
+pub(crate) async fn did(State(state): State<Arc<IdentityState>>) -> Result<Response, ApiError> {
     query_handler("all_documents", &state.query.all_documents)
         .await?
         .and_then(|all_documents_view| {

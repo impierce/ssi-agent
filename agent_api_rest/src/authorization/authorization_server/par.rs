@@ -7,10 +7,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use oid4vci::authorization_request::AuthorizationRequest;
+use std::sync::Arc;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn par(
-    State(state): State<AuthorizationState>,
+    State(state): State<Arc<AuthorizationState>>,
     StringifiedForm(pushed_authorization_request): StringifiedForm<AuthorizationRequest>,
 ) -> Result<Response, PublicError> {
     let pushed_authorization_response =
@@ -103,7 +104,7 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_pushed_authorization_request_endpoint() {
-        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
+        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
@@ -114,7 +115,8 @@ pub mod tests {
         let AuthorizationCode { issuer_state, .. } = authorization_code.unwrap();
         let issuer_state = issuer_state.unwrap();
 
-        let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;
+        let authorization_state =
+            Arc::new(authorization_state(&InMemory, Service::default(), Default::default()).await);
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

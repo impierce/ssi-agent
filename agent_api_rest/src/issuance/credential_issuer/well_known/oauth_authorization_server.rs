@@ -9,10 +9,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use http_api_problem::ApiError;
+use std::sync::Arc;
 
 // TODO: move this to `authorization/authorization_server/well_known.rs`!
 #[axum_macros::debug_handler]
-pub(crate) async fn oauth_authorization_server(State(state): State<IssuanceState>) -> Result<Response, ApiError> {
+pub(crate) async fn oauth_authorization_server(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
     match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
         Some(ServerConfigView {
             authorization_server_metadata,
@@ -73,7 +74,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
-        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
+        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);

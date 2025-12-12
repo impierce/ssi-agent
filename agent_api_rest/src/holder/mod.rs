@@ -1,5 +1,6 @@
 // TODO: further refactor the API's folder structure to reflect the API's routes.
 #[allow(clippy::module_inception)]
+// Endpoint handlers
 pub mod holder;
 pub mod openid4vci;
 
@@ -17,8 +18,9 @@ use holder::{
     credentials::{credential, post_credentials},
     presentations::{get_presentations, post_presentations, presentation, presentation_signed::presentation_signed},
 };
+use std::sync::Arc;
 
-pub fn router(holder_state: HolderState) -> Router {
+pub fn router(holder_state: Arc<HolderState>) -> Router {
     Router::new()
         .nest(
             API_VERSION,

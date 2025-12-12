@@ -1,3 +1,4 @@
+// Endpoint handlers
 pub mod connections;
 pub mod documents;
 pub mod profiles;
@@ -14,6 +15,7 @@ use axum::{
 use connections::{get_connection, get_connections, post_connections};
 use documents::{get_document, get_documents};
 use services::{linked_vp::linked_vp, service, services};
+use std::sync::Arc;
 use well_known::{did::did, did_configuration::did_configuration};
 
 use crate::{
@@ -21,7 +23,7 @@ use crate::{
     API_VERSION,
 };
 
-pub fn router(identity_state: IdentityState) -> Router {
+pub fn router(identity_state: Arc<IdentityState>) -> Router {
     Router::new()
         .nest(
             API_VERSION,

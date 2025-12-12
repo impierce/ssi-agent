@@ -12,9 +12,10 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn get_presentations(State(state): State<HolderState>) -> Result<Response, ApiError> {
+pub(crate) async fn get_presentations(State(state): State<Arc<HolderState>>) -> Result<Response, ApiError> {
     let all_presentations = query_handler("all_presentations", &state.query.all_presentations)
         .await?
         .map(|all_presentations_view| all_presentations_view.presentations.into_values().collect::<Vec<_>>())
@@ -25,7 +26,7 @@ pub(crate) async fn get_presentations(State(state): State<HolderState>) -> Resul
 
 #[axum_macros::debug_handler]
 pub(crate) async fn presentation(
-    State(state): State<HolderState>,
+    State(state): State<Arc<HolderState>>,
     Path(presentation_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&presentation_id, &state.query.presentation)
@@ -42,7 +43,7 @@ pub struct PresentationsEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn post_presentations(
-    State(state): State<HolderState>,
+    State(state): State<Arc<HolderState>>,
     Json(PresentationsEndpointRequest { credential_ids }): Json<PresentationsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let mut credentials = vec![];

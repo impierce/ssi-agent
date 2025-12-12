@@ -9,10 +9,11 @@ use axum::{
     Form,
 };
 use oid4vci::token_request::TokenRequest;
+use std::sync::Arc;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn token(
-    State((authorization_state, issuance_state)): State<(AuthorizationState, IssuanceState)>,
+    State((authorization_state, issuance_state)): State<(Arc<AuthorizationState>, Arc<IssuanceState>)>,
     Form(token_request): Form<TokenRequest>,
 ) -> Result<Response, PublicError> {
     let token_response =
@@ -138,7 +139,7 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_token_endpoint(#[case] is_pre_authorized: bool) {
-        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
+        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
@@ -153,7 +154,8 @@ pub mod tests {
         credentials(&mut app, &credential_configuration_id).await;
         let grants = offers(&mut app, &credential_configuration_id).await.unwrap();
 
-        let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;
+        let authorization_state =
+            Arc::new(authorization_state(&InMemory, Service::default(), Default::default()).await);
 
         agent_authorization::state::initialize(&authorization_state)
             .await

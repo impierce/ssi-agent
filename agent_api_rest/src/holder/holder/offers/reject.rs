@@ -6,10 +6,11 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
+use std::sync::Arc;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn reject(
-    State(state): State<HolderState>,
+    State(state): State<Arc<HolderState>>,
     Path(received_offer_id): Path<String>,
 ) -> Result<Response, ApiError> {
     let command = OfferCommand::RejectCredentialOffer {

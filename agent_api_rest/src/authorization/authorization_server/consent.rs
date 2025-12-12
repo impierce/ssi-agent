@@ -12,11 +12,12 @@ use axum::{
 };
 use http::{header, StatusCode};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::info;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn get_consent(
-    State(state): State<AuthorizationState>,
+    State(state): State<Arc<AuthorizationState>>,
     StringifiedQuery(GetConsentQuery { request_uri }): StringifiedQuery<GetConsentQuery>,
 ) -> Result<Response, PublicError> {
     let ConsentPageViewModel {
@@ -47,7 +48,7 @@ pub struct ConsentForm {
 
 // TODO: investigate replay attacks as described here: https://github.com/impierce/ssi-agent/issues/241
 pub async fn post_consent(
-    State(state): State<AuthorizationState>,
+    State(state): State<Arc<AuthorizationState>>,
     Form(ConsentForm {
         client_id,
         request_uri,

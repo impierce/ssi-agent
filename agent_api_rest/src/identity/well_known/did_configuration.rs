@@ -10,9 +10,10 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
+use std::sync::Arc;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn did_configuration(State(state): State<IdentityState>) -> Result<Response, ApiError> {
+pub(crate) async fn did_configuration(State(state): State<Arc<IdentityState>>) -> Result<Response, ApiError> {
     // Get the DID Configuration Resource if it exists.
     match query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await? {
         Some(ServiceView {

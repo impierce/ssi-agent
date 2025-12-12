@@ -7,13 +7,14 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::header;
+use std::sync::Arc;
 
 /// Instead of directly embedding the Authorization Request into a QR-code or deeplink, the `Relying Party` can embed a
 /// `request_uri` that points to this endpoint from where the Authorization Request Object can be retrieved.
 /// As described here: https://www.rfc-editor.org/rfc/rfc9101.html#name-passing-a-request-object-by-
 #[axum_macros::debug_handler]
 pub(crate) async fn request(
-    State(verification_state): State<VerificationState>,
+    State(verification_state): State<Arc<VerificationState>>,
     Path(request_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&request_id, &verification_state.query.authorization_request)
@@ -73,7 +74,7 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_request_endpoint() {
-        let verification_state = verification_state(&InMemory, Service::default(), Default::default()).await;
+        let verification_state = Arc::new(verification_state(&InMemory, Service::default(), Default::default()).await);
 
         let mut app = router(verification_state);
 

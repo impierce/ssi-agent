@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_identity::{connection::command::ConnectionCommand, state::IdentityState};
@@ -28,7 +30,7 @@ pub struct PostConnectionsEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn post_connections(
-    State(state): State<IdentityState>,
+    State(state): State<Arc<IdentityState>>,
     Json(PostConnectionsEndpointRequest {
         alias,
         domain,
@@ -76,7 +78,7 @@ pub struct GetConnectionsEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connections(
-    State(state): State<IdentityState>,
+    State(state): State<Arc<IdentityState>>,
     Form(GetConnectionsEndpointRequest { alias, domain, did }): Form<GetConnectionsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     debug!("Request Params - alias: {alias:?}, domain: {domain:?}, did: {did:?}");
@@ -107,7 +109,7 @@ pub(crate) async fn get_connections(
 
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connection(
-    State(state): State<IdentityState>,
+    State(state): State<Arc<IdentityState>>,
     Path(connection_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&connection_id, &state.query.connection)
