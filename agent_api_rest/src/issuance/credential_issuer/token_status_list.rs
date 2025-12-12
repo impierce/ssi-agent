@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use agent_issuance::{
     credential::application::token_status_list_service::TokenStatusListService, state::IssuanceState,
 };
@@ -12,12 +14,12 @@ use oauth_tsl::relying_party::StatusListTokenResponseType;
 use crate::issuance::error::PublicError;
 
 pub async fn token_status_list(
-    State(state): State<IssuanceState>,
+    State(state): State<Arc<IssuanceState>>,
     Path(status_list_number): Path<usize>,
 ) -> Result<Response, PublicError> {
     let token_status_list_service = TokenStatusListService {};
     let compressed_jwt_token = token_status_list_service
-        .create_gzip_status_list_jwt_token(status_list_number, state)
+        .create_gzip_status_list_jwt_token(status_list_number, &state)
         .await
         .map_err(|_| PublicError::InternalServerError)?;
 
@@ -37,6 +39,8 @@ pub async fn token_status_list(
 
 #[cfg(test)]
 pub mod tests {
+    use std::sync::Arc;
+
     use agent_issuance::state::initialize;
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
@@ -57,7 +61,7 @@ pub mod tests {
     /// The remainder of the test breaks down the Token Status List response in various steps and checks these steps one by one.
     #[tokio::test]
     pub async fn test_token_status_list() {
-        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
+        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let relying_party_state = Subject::default();

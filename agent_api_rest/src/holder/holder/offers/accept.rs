@@ -11,10 +11,11 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
+use std::sync::Arc;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn accept(
-    State(state): State<HolderState>,
+    State(state): State<Arc<HolderState>>,
     Path(received_offer_id): Path<String>,
 ) -> Result<Response, ApiError> {
     // TODO: General note that also applies to other endpoints: currently we are using Application Layer logic in the

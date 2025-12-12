@@ -349,11 +349,12 @@ pub mod tests {
         config_mut().credential_endpoint = application_url.join("openid4vci/credential").unwrap();
         config_mut().credential_offer_uri = application_url.join("openid4vci/credential-offer/").unwrap();
 
-        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
+        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let mut credential_isser = issuance::router(issuance_state.clone());
 
-        let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;
+        let authorization_state =
+            Arc::new(authorization_state(&InMemory, Service::default(), Default::default()).await);
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

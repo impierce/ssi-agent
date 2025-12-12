@@ -14,9 +14,12 @@ use http_api_problem::ApiError;
 use hyper::header;
 use oid4vp::dcql::dcql_query::DcqlQuery;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn all_authorization_requests(State(state): State<VerificationState>) -> Result<Response, ApiError> {
+pub(crate) async fn all_authorization_requests(
+    State(state): State<Arc<VerificationState>>,
+) -> Result<Response, ApiError> {
     let all_authorization_requests =
         query_handler("all_authorization_requests", &state.query.all_authorization_requests)
             .await?
@@ -33,7 +36,7 @@ pub(crate) async fn all_authorization_requests(State(state): State<VerificationS
 
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_request(
-    State(state): State<VerificationState>,
+    State(state): State<Arc<VerificationState>>,
     Path(authorization_request_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&authorization_request_id, &state.query.authorization_request)
@@ -51,7 +54,7 @@ pub struct AuthorizationRequestsEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_requests(
-    State(verification_state): State<VerificationState>,
+    State(verification_state): State<Arc<VerificationState>>,
     Json(AuthorizationRequestsEndpointRequest {
         nonce,
         state,
@@ -193,7 +196,7 @@ pub mod tests {
     #[tracing_test::traced_test]
     #[tokio::test]
     async fn test_authorization_requests_endpoint() {
-        let verification_state = verification_state(&InMemory, Service::default(), Default::default()).await;
+        let verification_state = Arc::new(verification_state(&InMemory, Service::default(), Default::default()).await);
         let mut app = router(verification_state);
 
         let result = authorization_requests(&mut app).await;

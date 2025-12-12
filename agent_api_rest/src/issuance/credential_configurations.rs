@@ -8,10 +8,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use http_api_problem::ApiError;
+use std::sync::Arc;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential_configurations(
-    State(state): State<IssuanceState>,
+    State(state): State<Arc<IssuanceState>>,
     Json(credential_configuration): Json<CredentialConfiguration>,
 ) -> Result<Response, ApiError> {
     let command = ServerConfigCommand::UpdateCredentialConfiguration {

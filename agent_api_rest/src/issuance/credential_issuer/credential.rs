@@ -21,6 +21,7 @@ use axum::{
 use axum_auth::AuthBearer;
 use oid4vci::credential_request::CredentialRequest;
 use oid4vci::errors::CredentialErrorResponse;
+use std::sync::Arc;
 use tokio::time::sleep;
 use tracing::error;
 
@@ -28,7 +29,7 @@ const POLLING_INTERVAL_MS: u64 = 100;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
-    State(state): State<IssuanceState>,
+    State(state): State<Arc<IssuanceState>>,
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> Result<Response, PublicError> {
@@ -351,7 +352,7 @@ pub mod tests {
             (None, Default::default())
         };
 
-        let issuance_state = issuance_state(&InMemory, Service::default(), issuance_event_publishers).await;
+        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), issuance_event_publishers).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let mut issuance_app = router(issuance_state.clone());
@@ -381,7 +382,8 @@ pub mod tests {
 
         let grants = offers(&mut issuance_app, &credential_configuration_id).await.unwrap();
 
-        let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;
+        let authorization_state =
+            Arc::new(authorization_state(&InMemory, Service::default(), Default::default()).await);
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

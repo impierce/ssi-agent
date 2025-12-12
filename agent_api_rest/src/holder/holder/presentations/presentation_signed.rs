@@ -6,10 +6,11 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
+use std::sync::Arc;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn presentation_signed(
-    State(state): State<HolderState>,
+    State(state): State<Arc<HolderState>>,
     Path(presentation_id): Path<String>,
 ) -> Result<Response, ApiError> {
     match query_handler(&presentation_id, &state.query.presentation).await? {

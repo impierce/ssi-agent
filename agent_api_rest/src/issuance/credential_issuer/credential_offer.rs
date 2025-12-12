@@ -8,10 +8,11 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use oid4vci::credential_offer::CredentialOffer;
+use std::sync::Arc;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential_offer_uri(
-    State(state): State<IssuanceState>,
+    State(state): State<Arc<IssuanceState>>,
     Path(offer_id): Path<String>,
 ) -> Result<Response, ApiError> {
     match query_handler(&offer_id, &state.query.offer).await? {
