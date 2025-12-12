@@ -41,7 +41,6 @@ pub struct Offer {
     pub credential_response: Option<CredentialResponse>,
     pub status: Status,
     pub tx_code: Option<String>,
-    #[serde(default)]
     pub delivery_options: Option<DeliveryOptions>,
     pub offer_link: Option<Url>,
 }
@@ -116,14 +115,6 @@ impl Aggregate for Offer {
 
                 // If TxCode constraints are provided, generate a transaction code.
                 let tx_code = tx_code_constraints.as_ref().map(generate_tx_code);
-                if tx_code.is_some()
-                    && delivery_options
-                        .as_ref()
-                        .and_then(|opts| opts.recipient_email.as_ref())
-                        .is_none()
-                {
-                    return Err(MissingRecipientEmailError);
-                }
 
                 let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
                     credential_issuer: credential_issuer.clone(),
@@ -251,6 +242,7 @@ impl Aggregate for Offer {
                     DeliveryMethod::Email { recipient_email } => {
                         info!("Sending credential offer via email to: {}", recipient_email);
 
+                        // TODO: Remove this client-side logic.
                         let offer_link = config()
                             .application_url
                             .join(&format!("offer/{}", offer_id))
@@ -433,6 +425,46 @@ pub mod tests {
                     status: Status::Created,
                     tx_code: None,
                     delivery_options: None,
+                },
+                OfferEvent::FormUrlEncodedCredentialOfferCreated {
+                    offer_id: offer_id.clone(),
+                    form_url_encoded_credential_offer,
+                    status: Status::Pending,
+                },
+            ]);
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[allow(clippy::too_many_arguments)]
+    async fn test_create_offer_with_recipient_email(
+        offer_id: String,
+        grant_types: Vec<GrantType>,
+        #[future(awt)] pre_authorized_code: String,
+        #[future(awt)] credential_offer: CredentialOffer,
+        #[future(awt)] credential_offer_uri: CredentialOffer,
+        #[future(awt)] form_url_encoded_credential_offer: String,
+        delivery_options: DeliveryOptions,
+    ) {
+        OfferTestFramework::with(Service::default())
+            .given_no_previous_events()
+            .when(OfferCommand::CreateCredentialOffer {
+                offer_id: offer_id.clone(),
+                credential_configuration_ids: vec![],
+                grant_types: grant_types.clone(),
+                tx_code_constraints: None,
+                delivery_options: Some(delivery_options.clone()),
+            })
+            .then_expect_events(vec![
+                OfferEvent::CredentialOfferCreated {
+                    offer_id: offer_id.clone(),
+                    grant_types,
+                    credential_offer,
+                    credential_offer_uri,
+                    pre_authorized_code,
+                    status: Status::Created,
+                    tx_code: None,
+                    delivery_options: Some(delivery_options.clone()),
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: offer_id.clone(),
@@ -685,7 +717,9 @@ pub mod test_utils {
 
     #[fixture]
     pub fn delivery_options() -> DeliveryOptions {
-        DeliveryOptions { recipient_email: None }
+        DeliveryOptions {
+            recipient_email: Some("testemail@test.com".to_string()),
+        }
     }
 
     #[fixture]

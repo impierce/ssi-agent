@@ -10,14 +10,12 @@ use oid4vci::{
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
-#[serde(tag = "type")]
 pub enum OfferCommand {
     CreateCredentialOffer {
         offer_id: String,
         credential_configuration_ids: Vec<String>,
         grant_types: Vec<GrantType>,
         tx_code_constraints: Option<TxCodeConstraints>,
-        #[serde(default)]
         delivery_options: Option<DeliveryOptions>,
     },
     AddCredentials {
