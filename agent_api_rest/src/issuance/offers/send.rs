@@ -30,7 +30,7 @@ pub(crate) async fn send(
         delivery_method,
     };
 
-    // Send the Credential Offer to the `target_url` to the recipient's email.
+    // Send the Credential Offer to the `target_url` or to the recipient's email.
     command_handler(&offer_id, &state.command.offer, command).await?;
 
     Ok(StatusCode::OK.into_response())
