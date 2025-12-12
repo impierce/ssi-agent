@@ -22,6 +22,8 @@ use agent_holder::services::HolderServices;
 use agent_holder::state::HolderState;
 use agent_identity::connection::views::all_connections::AllConnectionsView;
 use agent_identity::document::views::all_documents::AllDocumentsView;
+use agent_identity::managed_key::aggregate::ManagedKey;
+use agent_identity::managed_key::views::all_managed_keys::AllManagedKeysView;
 use agent_identity::service::views::all_services::AllServicesView;
 use agent_identity::services::IdentityServices;
 use agent_identity::state::IdentityState;
@@ -176,6 +178,7 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
     let Partitions {
         connection_event_publishers,
         document_event_publishers,
+        managed_key_event_publishers,
         service_event_publishers,
         ..
     } = partition_event_publishers(event_publishers);
@@ -195,6 +198,9 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
     let (service_command_handler, service, all_services) = builder
         .commands_and_queries::<Service, Service, AllServicesView>(services.clone(), service_event_publishers)
         .await;
+    let (managed_key_command_handler, managed_key, all_managed_keys) = builder
+        .commands_and_queries::<ManagedKey, ManagedKey, AllManagedKeysView>((), managed_key_event_publishers)
+        .await;
 
     IdentityState {
         command: agent_identity::state::CommandHandlers {
@@ -202,6 +208,7 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
             document: document_command_handler,
             profile: profile_command_handler,
             service: service_command_handler,
+            managed_key: managed_key_command_handler,
         },
         query: agent_identity::state::ViewRepositories {
             connection,
@@ -210,6 +217,8 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
             all_documents,
             service,
             all_services,
+            managed_key,
+            all_managed_keys,
             profile,
         },
     }
@@ -429,6 +438,7 @@ pub type ConnectionEventPublisher = Box<dyn Query<Connection>>;
 pub type DocumentEventPublisher = Box<dyn Query<Document>>;
 pub type ProfileEventPublisher = Box<dyn Query<Profile>>;
 pub type ServiceEventPublisher = Box<dyn Query<Service>>;
+pub type ManagedKeyEventPublisher = Box<dyn Query<ManagedKey>>;
 pub type TemplateEventPublisher = Box<dyn Query<Template>>;
 pub type AuthorizationCodeEventPublisher = Box<dyn Query<AuthorizationCode>>;
 pub type ClientEventPublisher = Box<dyn Query<Client>>;
@@ -449,6 +459,7 @@ pub struct Partitions {
     pub document_event_publishers: Vec<DocumentEventPublisher>,
     pub profile_event_publishers: Vec<ProfileEventPublisher>,
     pub service_event_publishers: Vec<ServiceEventPublisher>,
+    pub managed_key_event_publishers: Vec<ManagedKeyEventPublisher>,
     pub template_event_publishers: Vec<TemplateEventPublisher>,
     pub authorization_code_event_publishers: Vec<AuthorizationCodeEventPublisher>,
     pub client_event_publishers: Vec<ClientEventPublisher>,
@@ -472,6 +483,7 @@ pub trait EventPublisher {
     fn document(&mut self) -> Option<DocumentEventPublisher>;
     fn profile(&mut self) -> Option<ProfileEventPublisher>;
     fn service(&mut self) -> Option<ServiceEventPublisher>;
+    fn managed_key(&mut self) -> Option<ManagedKeyEventPublisher>;
 
     fn template(&mut self) -> Option<TemplateEventPublisher>;
 
@@ -601,6 +613,10 @@ mod test {
             None
         }
 
+        fn managed_key(&mut self) -> Option<ManagedKeyEventPublisher> {
+            None
+        }
+
         fn template(&mut self) -> Option<TemplateEventPublisher> {
             None
         }
@@ -667,6 +683,10 @@ mod test {
             None
         }
 
+        fn managed_key(&mut self) -> Option<ManagedKeyEventPublisher> {
+            None
+        }
+
         fn template(&mut self) -> Option<TemplateEventPublisher> {
             None
         }
@@ -723,6 +743,7 @@ mod test {
             document_event_publishers,
             profile_event_publishers,
             service_event_publishers,
+            managed_key_event_publishers,
             template_event_publishers,
             authorization_code_event_publishers,
             client_event_publishers,
@@ -741,6 +762,7 @@ mod test {
         assert_eq!(document_event_publishers.len(), 0);
         assert_eq!(profile_event_publishers.len(), 0);
         assert_eq!(service_event_publishers.len(), 0);
+        assert_eq!(managed_key_event_publishers.len(), 0);
         assert_eq!(template_event_publishers.len(), 0);
         assert_eq!(authorization_code_event_publishers.len(), 0);
         assert_eq!(client_event_publishers.len(), 0);
