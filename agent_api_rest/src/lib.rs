@@ -27,7 +27,7 @@ use axum::{
 };
 use http_body_util::BodyExt as _;
 use hyper::StatusCode;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, info, info_span, Span};
@@ -38,12 +38,12 @@ pub const DOCUMENTATION_URL: &str = "https://beta.docs.impierce.com/unicore/";
 
 #[derive(Default)]
 pub struct ApplicationState {
-    pub identity_state: Option<IdentityState>,
-    pub library_state: Option<LibraryState>,
-    pub authorization_state: Option<AuthorizationState>,
-    pub issuance_state: Option<IssuanceState>,
-    pub holder_state: Option<HolderState>,
-    pub verification_state: Option<VerificationState>,
+    pub identity_state: Option<Arc<IdentityState>>,
+    pub library_state: Option<Arc<LibraryState>>,
+    pub authorization_state: Option<Arc<AuthorizationState>>,
+    pub issuance_state: Option<Arc<IssuanceState>>,
+    pub holder_state: Option<Arc<HolderState>>,
+    pub verification_state: Option<Arc<VerificationState>>,
 }
 
 pub fn app(

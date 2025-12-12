@@ -1,3 +1,4 @@
+// Endpoint handlers
 pub mod credential_configurations;
 pub mod credential_issuer;
 pub mod credentials;
@@ -23,8 +24,9 @@ use crate::API_VERSION;
 use agent_issuance::state::IssuanceState;
 use axum::routing::get;
 use axum::{routing::post, Router};
+use std::sync::Arc;
 
-pub fn router(issuance_state: IssuanceState) -> Router {
+pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
     Router::new()
         .nest(
             API_VERSION,

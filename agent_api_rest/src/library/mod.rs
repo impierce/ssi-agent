@@ -1,15 +1,18 @@
-pub mod error;
+// Endpoint handlers
 pub mod templates;
+
+pub mod error;
 
 use agent_library::state::LibraryState;
 use axum::{routing::get, Router};
+use std::sync::Arc;
 
 use crate::{
     library::templates::{get_template, get_templates, patch_template, post_templates},
     API_VERSION,
 };
 
-pub fn router(library_state: LibraryState) -> Router {
+pub fn router(library_state: Arc<LibraryState>) -> Router {
     Router::new()
         .nest(
             API_VERSION,

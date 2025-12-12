@@ -13,6 +13,7 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,7 +23,7 @@ pub struct LinkedVPEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn linked_vp(
-    State(state): State<IdentityState>,
+    State(state): State<Arc<IdentityState>>,
     Json(LinkedVPEndpointRequest { presentation_ids }): Json<LinkedVPEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let service_id = "linked-verifiable-presentation-service".to_string();

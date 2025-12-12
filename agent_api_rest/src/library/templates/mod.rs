@@ -1,7 +1,7 @@
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
-pub use agent_library::template::aggregate::{CredentialFormat, Display, HolderType, Status, Visibility};
+use agent_library::template::aggregate::{CredentialFormat, Display, HolderType, Status, Template, Visibility};
 use agent_library::template::command::TemplateCommand;
 use axum::{
     extract::{Path, State},
@@ -11,7 +11,48 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::debug;
+
+/// Data transfer object for Templates.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateDto {
+    #[serde(rename = "id")]
+    pub template_id: String,
+    pub title: Option<String>,
+    pub display: Option<Display>,
+    pub credential_format: Option<CredentialFormat>,
+    pub creator: Option<String>,
+    pub holder_type: Option<HolderType>,
+    pub modified_at: Option<String>,
+    pub tags: Vec<String>,
+    pub status: Status,
+    pub visibility: Visibility,
+    pub description: Option<String>,
+    pub r#type: Vec<String>,
+    pub schema: Option<serde_json::Value>,
+}
+
+impl From<Template> for TemplateDto {
+    fn from(value: Template) -> Self {
+        Self {
+            template_id: value.template_id,
+            title: value.title,
+            display: value.display,
+            credential_format: value.credential_format,
+            creator: value.creator,
+            holder_type: value.holder_type,
+            modified_at: value.modified_at,
+            tags: value.tags,
+            status: value.status,
+            visibility: value.visibility,
+            description: value.description,
+            r#type: value.r#type,
+            schema: value.schema,
+        }
+    }
+}
 
 #[derive(Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
@@ -31,7 +72,7 @@ pub struct PostTemplatesEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn post_templates(
-    State(state): State<LibraryState>,
+    State(state): State<Arc<LibraryState>>,
     Json(PostTemplatesEndpointRequest {
         title,
         display,
@@ -72,7 +113,7 @@ pub(crate) async fn post_templates(
             (
                 StatusCode::CREATED,
                 [(header::LOCATION, &format!("{API_VERSION}/templates/{template_id}"))],
-                Json(template_view),
+                Json(TemplateDto::from(template_view)),
             )
                 .into_response()
         })
@@ -98,7 +139,7 @@ pub struct PatchTemplatesEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn patch_template(
-    State(state): State<LibraryState>,
+    State(state): State<Arc<LibraryState>>,
     Path(template_id): Path<String>,
     Json(PatchTemplatesEndpointRequest {
         title,
@@ -213,7 +254,7 @@ pub struct GetTemplatesEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn get_templates(
-    State(state): State<LibraryState>,
+    State(state): State<Arc<LibraryState>>,
     Form(GetTemplatesEndpointRequest {}): Form<GetTemplatesEndpointRequest>,
 ) -> Result<Response, ApiError> {
     debug!("Request Params - ");
@@ -221,12 +262,13 @@ pub(crate) async fn get_templates(
     let filtered_templates = query_handler("all_templates", &state.query.all_templates)
         .await?
         .map(|all_templates_view| {
-            let filtered_templates: Vec<_> = all_templates_view
+            let filtered_templates: Vec<TemplateDto> = all_templates_view
                 .templates
                 .into_values()
                 .filter(|_template|
                     // TODO: Apply filtering logic based on request parameters
                     true)
+                .map(TemplateDto::from)
                 .collect();
 
             filtered_templates
@@ -238,11 +280,46 @@ pub(crate) async fn get_templates(
 
 #[axum_macros::debug_handler]
 pub(crate) async fn get_template(
-    State(state): State<LibraryState>,
+    State(state): State<Arc<LibraryState>>,
     Path(template_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&template_id, &state.query.template)
         .await?
-        .map(|template_view| (StatusCode::OK, Json(template_view)).into_response())
+        .map(|template_view| (StatusCode::OK, Json(TemplateDto::from(template_view))).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use {Display, Template};
+
+    #[test]
+    fn test_template_response_serialization() {
+        let template = Template {
+            template_id: "test-id".to_string(),
+            title: Some("Test Title".to_string()),
+            display: Some(Display {
+                name: "Test Display".to_string(),
+                logo: None,
+            }),
+            credential_format: None,
+            creator: None,
+            holder_type: Some(HolderType::Individual),
+            modified_at: None,
+            tags: vec![],
+            status: Default::default(),
+            visibility: Default::default(),
+            description: None,
+            r#type: vec![],
+            schema: None,
+        };
+
+        let response = TemplateDto::from(template);
+        let json = serde_json::json!(&response);
+
+        assert_eq!(json["id"], "test-id");
+        assert_eq!(json["title"], "Test Title");
+        assert_eq!(json["holderType"], "individual");
+    }
 }

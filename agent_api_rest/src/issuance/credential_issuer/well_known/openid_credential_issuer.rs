@@ -11,9 +11,10 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use serde_json::json;
+use std::sync::Arc;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn openid_credential_issuer(State(state): State<IssuanceState>) -> Result<Response, ApiError> {
+pub(crate) async fn openid_credential_issuer(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
     match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
         Some(ServerConfigView {
             mut credential_issuer_metadata,
@@ -70,7 +71,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_openid_credential_issuer_endpoint() {
-        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
+        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);

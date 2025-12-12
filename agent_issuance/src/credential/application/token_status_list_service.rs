@@ -27,7 +27,7 @@ impl TokenStatusListService {
     pub async fn create_gzip_status_list_jwt_token(
         self,
         status_list_number: usize,
-        state: IssuanceState,
+        state: &IssuanceState,
     ) -> Result<Vec<u8>, TokenStatusListError> {
         let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
             .await?
@@ -119,7 +119,7 @@ impl TokenStatusListService {
         let default_did_method = get_preferred_did_method().to_string();
 
         let jwt_token = encode(
-            state.subject,
+            state.subject.clone(),
             status_list_token.header,
             status_list_token.claims,
             &default_did_method,

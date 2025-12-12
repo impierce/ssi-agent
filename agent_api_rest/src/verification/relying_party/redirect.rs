@@ -11,10 +11,11 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use oid4vc_core::utils::form_urlencoded::from_form_urlencoded_string;
+use std::sync::Arc;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn redirect(
-    State(verification_state): State<VerificationState>,
+    State(verification_state): State<Arc<VerificationState>>,
     body: String,
 ) -> Result<Response, ApiError> {
     let authorization_response: GenericAuthorizationResponse = from_form_urlencoded_string(&body).map_err(|e| {
@@ -157,7 +158,7 @@ pub mod tests {
 
         let event_publishers = vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>];
 
-        let verification_state = verification_state(&InMemory, Service::default(), event_publishers).await;
+        let verification_state = Arc::new(verification_state(&InMemory, Service::default(), event_publishers).await);
 
         let mut app = router(verification_state);
 

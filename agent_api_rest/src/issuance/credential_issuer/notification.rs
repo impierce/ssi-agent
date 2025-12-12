@@ -11,6 +11,7 @@ use axum_auth::AuthBearer;
 use oid4vci::errors::NotificationErrorResponse;
 use oid4vci::notification_request::NotificationRequest;
 use serde_json::json;
+use std::sync::Arc;
 
 use tracing::info;
 /// The HTTP response MUST use the HTTP status code 400 (Bad Request) and set the content type to application/json.
@@ -18,7 +19,7 @@ use tracing::info;
 
 #[axum_macros::debug_handler]
 pub async fn notification(
-    State(state): State<IssuanceState>,
+    State(state): State<Arc<IssuanceState>>,
     AuthBearer(access_token): AuthBearer,
     Json(raw_value): Json<serde_json::Value>,
 ) -> Result<Response, PublicError> {
@@ -79,14 +80,15 @@ mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_valid_notification_request() {
-        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
+        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let mut issuance_app = issuance::router(issuance_state.clone());
 
         credentials(&mut issuance_app, "001").await;
         let grants = offers(&mut issuance_app, "001").await.unwrap();
 
-        let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;
+        let authorization_state =
+            Arc::new(authorization_state(&InMemory, Service::default(), Default::default()).await);
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
@@ -117,14 +119,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_notification_request() {
-        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
+        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let mut issuance_app = issuance::router(issuance_state.clone());
 
         credentials(&mut issuance_app, "001").await;
         let grants = offers(&mut issuance_app, "001").await.unwrap();
 
-        let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;
+        let authorization_state =
+            Arc::new(authorization_state(&InMemory, Service::default(), Default::default()).await);
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

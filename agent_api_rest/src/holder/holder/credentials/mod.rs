@@ -9,9 +9,10 @@ use http_api_problem::ApiError;
 use hyper::StatusCode;
 use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn credentials(State(state): State<HolderState>) -> Result<Response, ApiError> {
+pub(crate) async fn credentials(State(state): State<Arc<HolderState>>) -> Result<Response, ApiError> {
     let all_credentials = query_handler("all_holder_credentials", &state.query.all_holder_credentials)
         .await?
         .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
@@ -28,7 +29,7 @@ pub struct HolderCredentialsEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn post_credentials(
-    State(state): State<HolderState>,
+    State(state): State<Arc<HolderState>>,
     Json(HolderCredentialsEndpointRequest { credential }): Json<HolderCredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let holder_credential_id = uuid::Uuid::new_v4().to_string();
@@ -50,7 +51,7 @@ pub(crate) async fn post_credentials(
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
-    State(state): State<HolderState>,
+    State(state): State<Arc<HolderState>>,
     Path(holder_credential_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&holder_credential_id, &state.query.holder_credential)

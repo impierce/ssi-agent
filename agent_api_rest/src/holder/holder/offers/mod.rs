@@ -10,9 +10,10 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
+use std::sync::Arc;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn offers(State(state): State<HolderState>) -> Result<Response, ApiError> {
+pub(crate) async fn offers(State(state): State<Arc<HolderState>>) -> Result<Response, ApiError> {
     let all_received_offers = query_handler("all_received_offers", &state.query.all_received_offers)
         .await?
         .map(|all_received_offers_view| {
@@ -28,7 +29,7 @@ pub(crate) async fn offers(State(state): State<HolderState>) -> Result<Response,
 
 #[axum_macros::debug_handler]
 pub(crate) async fn offer(
-    State(state): State<HolderState>,
+    State(state): State<Arc<HolderState>>,
     Path(received_offer_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&received_offer_id, &state.query.received_offer)
