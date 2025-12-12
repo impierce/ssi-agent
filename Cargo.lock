@@ -425,6 +425,7 @@ dependencies = [
  "p256 0.13.2",
  "ring",
  "serde",
+ "thiserror 1.0.69",
  "tokio",
  "url",
 ]

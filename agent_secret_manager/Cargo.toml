@@ -33,6 +33,7 @@ oid4vc-core.workspace = true
 p256 = { version = "0.13", features = ["jwk"] }
 serde.workspace = true
 tokio.workspace = true
+thiserror.workspace = true
 url.workspace = true
 
 [dev-dependencies]
