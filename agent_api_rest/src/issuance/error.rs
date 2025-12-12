@@ -97,7 +97,6 @@ impl IntoApiErrorExt for OfferError {
             InvalidTxCodeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             InvalidPreAuthorizedCodeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             UnrequestedTxCodeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-            MissingRecipientEmailError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
 
             // `/openid4vci/credential` endpoint
             MissingCredentialError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),

@@ -26,6 +26,4 @@ pub enum OfferError {
     UnrequestedTxCodeError,
     #[error("Pre-Authorized Code is invalid.")]
     InvalidPreAuthorizedCodeError,
-    #[error("Recipient email is required ")]
-    MissingRecipientEmailError,
 }
