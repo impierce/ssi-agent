@@ -15,7 +15,7 @@ pub enum KeyCommand {
         old_alias: String,
         new_alias: String,
     },
-    SetPreferredKey {
+    SetSigningKey {
         alias: String,
     },
 }

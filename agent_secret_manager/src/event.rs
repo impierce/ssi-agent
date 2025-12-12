@@ -18,7 +18,7 @@ pub enum KeyEvent {
         new_alias: String,
         modified_at: String,
     },
-    PreferredKeySet {
+    SigningKeySet {
         alias: String,
         modified_at: String,
     },
