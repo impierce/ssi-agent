@@ -154,7 +154,7 @@ impl Aggregate for Offer {
                     },
                 ];
 
-                // Add TxCodeGenerated event if a transaction code was generated
+                // Emit TxCodeGenerated event if a transaction code was generated
                 if let Some(tx_code_value) = tx_code {
                     events.push(TxCodeGenerated {
                         offer_id: offer_id.clone(),
@@ -437,7 +437,7 @@ pub mod tests {
     #[rstest]
     #[serial_test::serial]
     #[allow(clippy::too_many_arguments)]
-    async fn test_create_offer_with_recipient_email(
+    async fn test_create_offer_with_delivery_options(
         offer_id: String,
         grant_types: Vec<GrantType>,
         #[future(awt)] pre_authorized_code: String,
