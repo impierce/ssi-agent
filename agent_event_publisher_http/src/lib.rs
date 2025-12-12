@@ -4,8 +4,8 @@ use agent_authorization::domain::{
 };
 use agent_holder::presentation::aggregate::Presentation;
 use agent_identity::{
-    connection::aggregate::Connection, document::aggregate::Document, profile::aggregate::Profile,
-    service::aggregate::Service,
+    connection::aggregate::Connection, document::aggregate::Document, managed_key::aggregate::ManagedKey,
+    profile::aggregate::Profile, service::aggregate::Service,
 };
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
@@ -15,9 +15,9 @@ use agent_shared::config::config;
 use agent_store::{
     AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
     ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
-    HolderCredentialEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
-    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
-    ServiceEventPublisher, TemplateEventPublisher,
+    HolderCredentialEventPublisher, ManagedKeyEventPublisher, OAuth2AuthorizationRequestEventPublisher,
+    OfferEventPublisher, PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher,
+    ServerConfigEventPublisher, ServiceEventPublisher, TemplateEventPublisher,
 };
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use async_trait::async_trait;
@@ -41,6 +41,7 @@ pub struct EventPublisherHttp {
     pub document: Option<AggregateEventPublisherHttp<Document>>,
     pub profile: Option<AggregateEventPublisherHttp<Profile>>,
     pub service: Option<AggregateEventPublisherHttp<Service>>,
+    pub managed_key: Option<AggregateEventPublisherHttp<ManagedKey>>,
 
     // Library
     pub template: Option<AggregateEventPublisherHttp<Template>>,
@@ -173,6 +174,19 @@ impl EventPublisherHttp {
             )
         });
 
+        let managed_key = (!event_publisher_http.events.managed_key.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<ManagedKey>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .managed_key
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
         let template = (!event_publisher_http.events.template.is_empty()).then(|| {
             AggregateEventPublisherHttp::<Template>::new(
                 event_publisher_http.target_url.clone(),
@@ -286,6 +300,7 @@ impl EventPublisherHttp {
             document,
             profile,
             service,
+            managed_key,
             template,
             server_config,
             credential,
@@ -325,6 +340,12 @@ impl EventPublisher for EventPublisherHttp {
         self.service
             .take()
             .map(|publisher| Box::new(publisher) as ServiceEventPublisher)
+    }
+
+    fn managed_key(&mut self) -> Option<ManagedKeyEventPublisher> {
+        self.managed_key
+            .take()
+            .map(|publisher| Box::new(publisher) as ManagedKeyEventPublisher)
     }
 
     fn template(&mut self) -> Option<TemplateEventPublisher> {
