@@ -8,6 +8,7 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,7 +20,7 @@ pub struct SendOfferEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn send(
-    State(state): State<IssuanceState>,
+    State(state): State<Arc<IssuanceState>>,
     Json(SendOfferEndpointRequest {
         offer_id,
         delivery_method,
