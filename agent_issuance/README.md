@@ -54,3 +54,9 @@ You are required to set the expiration of a credential by providing an expiratio
 Expiration dates need to contain date and time (relative to UTC) following the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) standard, such as `2024-12-09T10:15:00Z`.
 
 > If you want the credential to be valid forever, you can set the expiration to `never`. The `exp` claim in the JWT will then be omitted.
+
+### Credential Offer Delivery
+
+Credential offers can be delivered either B2C (via a recipient email) or B2B between other business Wallets via a Target Url. These delivery options are specified under the DeliveryMethod field in offer issuance.
+
+When email delivery is selected, the issuance publishes a `CredentialOfferEmailSent` event containing the recipient email and credential offer details. External email delivery services can subscribe to these events and handle the actual email transmission.

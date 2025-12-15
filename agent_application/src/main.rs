@@ -10,6 +10,7 @@ use agent_api_http::{
 };
 use agent_authorization::services::AuthorizationServices;
 use agent_event_publisher_http::EventPublisherHttp;
+use agent_event_publisher_nats::EventPublisherNats;
 use agent_holder::services::HolderServices;
 use agent_identity::services::IdentityServices;
 use agent_issuance::{
@@ -40,10 +41,13 @@ async fn main() -> io::Result<()> {
     // between `agent_application` and `agent_store` that will provide a cleaner way of initializing the event
     // publishers and sending them over to `agent_store`.
     let identity_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
+    let issuance_event_publishers: Vec<Box<dyn EventPublisher>> = vec![
+        Box::new(EventPublisherHttp::load().unwrap()),
+        Box::new(EventPublisherNats::load().await.unwrap()),
+    ];
     let library_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
     let authorization_event_publishers: Vec<Box<dyn EventPublisher>> =
         vec![Box::new(EventPublisherHttp::load().unwrap())];
-    let issuance_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
     let holder_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
     let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
         vec![Box::new(EventPublisherHttp::load().unwrap())];

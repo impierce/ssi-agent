@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::{debug, info};
+use url::Url;
 
 use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError::{self, *};
@@ -40,6 +41,28 @@ pub struct Offer {
     pub credential_response: Option<CredentialResponse>,
     pub status: Status,
     pub tx_code: Option<String>,
+    pub delivery_options: Option<DeliveryOptions>,
+    pub offer_link: Option<Url>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct DeliveryOptions {
+    pub recipient_email: Option<String>,
+}
+
+// Delivery methods for sending the credential offer. Not to be confused
+// with the DeliveryOptions struct, which is used when creating the offer.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum DeliveryMethod {
+    TargetUrl {
+        #[serde(rename = "targetUrl")]
+        target_url: Url,
+    },
+    Email {
+        #[serde(rename = "recipientEmail")]
+        recipient_email: String,
+    },
 }
 
 #[async_trait]
@@ -65,6 +88,7 @@ impl Aggregate for Offer {
                 grant_types,
                 credential_configuration_ids,
                 tx_code_constraints,
+                delivery_options,
             } => {
                 let credential_issuer = config().public_url.clone();
 
@@ -112,22 +136,34 @@ impl Aggregate for Offer {
                     credential_offer_uri.to_string()
                 };
 
-                Ok(vec![
+                let mut events = vec![
                     CredentialOfferCreated {
                         offer_id: offer_id.clone(),
                         grant_types,
                         credential_offer_uri,
-                        credential_offer,
+                        credential_offer: credential_offer.clone(),
                         pre_authorized_code,
                         status: Status::Created,
                         tx_code: tx_code.clone(),
+                        delivery_options: delivery_options.clone(),
                     },
                     FormUrlEncodedCredentialOfferCreated {
-                        offer_id,
-                        form_url_encoded_credential_offer,
+                        offer_id: offer_id.clone(),
+                        form_url_encoded_credential_offer: form_url_encoded_credential_offer.clone(),
                         status: Status::Pending,
                     },
-                ])
+                ];
+
+                // Emit TxCodeGenerated event if a transaction code was generated
+                if let Some(tx_code_value) = tx_code {
+                    events.push(TxCodeGenerated {
+                        offer_id: offer_id.clone(),
+                        tx_code: tx_code_value,
+                        delivery_options: delivery_options.clone(),
+                    });
+                }
+
+                Ok(events)
             }
             AddCredentials {
                 offer_id,
@@ -172,28 +208,55 @@ impl Aggregate for Offer {
 
                 Ok(events)
             }
-            SendCredentialOffer { offer_id, target_url } => {
-                let client = reqwest::Client::new();
-                let target = self
+            SendCredentialOffer {
+                offer_id,
+                delivery_method,
+            } => {
+                let form_url_encoded_credential_offer = self
                     .form_url_encoded_credential_offer
                     .as_ref()
                     .ok_or_else(|| MissingCredentialOfferError)?
-                    .replace("openid-credential-offer://", target_url.as_str());
+                    .clone();
 
-                info!("Sending credential offer to: {}", target);
+                match delivery_method {
+                    DeliveryMethod::TargetUrl { target_url } => {
+                        let client = reqwest::Client::new();
+                        let target = form_url_encoded_credential_offer
+                            .replace("openid-credential-offer://", target_url.as_str());
 
-                client
-                    .get(target)
-                    .send()
-                    .await
-                    .and_then(|response| response.error_for_status())
-                    .map_err(SendCredentialOfferError)?;
+                        info!("Sending credential offer to: {}", target);
 
-                Ok(vec![CredentialOfferSent {
-                    offer_id,
-                    target_url,
-                    status: Status::Pending,
-                }])
+                        client
+                            .get(target)
+                            .send()
+                            .await
+                            .and_then(|response| response.error_for_status())
+                            .map_err(SendCredentialOfferError)?;
+
+                        Ok(vec![CredentialOfferSent {
+                            offer_id,
+                            target_url,
+                            status: Status::Pending,
+                        }])
+                    }
+                    DeliveryMethod::Email { recipient_email } => {
+                        info!("Sending credential offer via email to: {}", recipient_email);
+
+                        // TODO: Remove this client-side logic.
+                        let offer_link = config()
+                            .application_url
+                            .join(&format!("offer/{}", offer_id))
+                            .expect("Failed to construct offer link URL");
+
+                        Ok(vec![CredentialOfferEmailSent {
+                            offer_id,
+                            recipient_email,
+                            form_url_encoded_credential_offer,
+                            offer_link,
+                            status: Status::Pending,
+                        }])
+                    }
+                }
             }
             VerifyCredentialRequest {
                 offer_id,
@@ -260,6 +323,7 @@ impl Aggregate for Offer {
                 pre_authorized_code,
                 status,
                 tx_code,
+                delivery_options: _,
             } => {
                 self.offer_id = offer_id;
                 self.grant_types = grant_types;
@@ -268,6 +332,7 @@ impl Aggregate for Offer {
                 self.pre_authorized_code = pre_authorized_code;
                 self.status = status;
                 self.tx_code = tx_code;
+                self.delivery_options = None;
             }
             CredentialsAdded {
                 offer_id,
@@ -289,6 +354,7 @@ impl Aggregate for Offer {
                 self.status = status;
             }
             CredentialOfferSent { .. } => {}
+            CredentialOfferEmailSent { .. } => {}
             CredentialRequestVerified { subject_id, .. } => {
                 self.subject_id = subject_id;
             }
@@ -296,6 +362,9 @@ impl Aggregate for Offer {
                 credential_response, ..
             } => {
                 self.credential_response.replace(credential_response);
+            }
+            TxCodeGenerated { tx_code, .. } => {
+                self.tx_code.replace(tx_code);
             }
         }
     }
@@ -328,6 +397,7 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[allow(clippy::too_many_arguments)]
     async fn test_create_offer(
         offer_id: String,
         grant_types: Vec<GrantType>,
@@ -343,6 +413,7 @@ pub mod tests {
                 credential_configuration_ids: vec![],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
+                delivery_options: None,
             })
             .then_expect_events(vec![
                 OfferEvent::CredentialOfferCreated {
@@ -353,6 +424,47 @@ pub mod tests {
                     pre_authorized_code,
                     status: Status::Created,
                     tx_code: None,
+                    delivery_options: None,
+                },
+                OfferEvent::FormUrlEncodedCredentialOfferCreated {
+                    offer_id: offer_id.clone(),
+                    form_url_encoded_credential_offer,
+                    status: Status::Pending,
+                },
+            ]);
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[allow(clippy::too_many_arguments)]
+    async fn test_create_offer_with_delivery_options(
+        offer_id: String,
+        grant_types: Vec<GrantType>,
+        #[future(awt)] pre_authorized_code: String,
+        #[future(awt)] credential_offer: CredentialOffer,
+        #[future(awt)] credential_offer_uri: CredentialOffer,
+        #[future(awt)] form_url_encoded_credential_offer: String,
+        delivery_options: DeliveryOptions,
+    ) {
+        OfferTestFramework::with(Service::default())
+            .given_no_previous_events()
+            .when(OfferCommand::CreateCredentialOffer {
+                offer_id: offer_id.clone(),
+                credential_configuration_ids: vec![],
+                grant_types: grant_types.clone(),
+                tx_code_constraints: None,
+                delivery_options: Some(delivery_options.clone()),
+            })
+            .then_expect_events(vec![
+                OfferEvent::CredentialOfferCreated {
+                    offer_id: offer_id.clone(),
+                    grant_types,
+                    credential_offer,
+                    credential_offer_uri,
+                    pre_authorized_code,
+                    status: Status::Created,
+                    tx_code: None,
+                    delivery_options: Some(delivery_options.clone()),
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: offer_id.clone(),
@@ -384,6 +496,7 @@ pub mod tests {
                 pre_authorized_code,
                 status: Status::Created,
                 tx_code: None,
+                delivery_options: None,
             }])
             .when(OfferCommand::AddCredentials {
                 offer_id: offer_id.clone(),
@@ -431,6 +544,7 @@ pub mod tests {
                     pre_authorized_code,
                     status: Status::Created,
                     tx_code: None,
+                    delivery_options: None,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: offer_id.clone(),
@@ -481,6 +595,7 @@ pub mod tests {
                     pre_authorized_code,
                     status: Status::Created,
                     tx_code: None,
+                    delivery_options: None,
                 },
                 OfferEvent::CredentialsAdded {
                     offer_id: offer_id.clone(),
@@ -537,6 +652,7 @@ pub mod tests {
                     pre_authorized_code,
                     status: Status::Created,
                     tx_code: None,
+                    delivery_options: None,
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: offer_id.clone(),
@@ -597,6 +713,13 @@ pub mod test_utils {
     #[fixture]
     pub async fn pre_authorized_code() -> String {
         PRE_AUTHORIZED_CODE.get_or_init(generate_random_string).clone()
+    }
+
+    #[fixture]
+    pub fn delivery_options() -> DeliveryOptions {
+        DeliveryOptions {
+            recipient_email: Some("testemail@test.com".to_string()),
+        }
     }
 
     #[fixture]
