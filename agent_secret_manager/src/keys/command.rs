@@ -8,14 +8,9 @@ pub enum KeyCommand {
         alias: String,
         signature_algorithm: Algorithm,
     },
-    RemoveKey {
-        alias: String,
-    },
+    RemoveKey {},
     RenameAlias {
-        old_alias: String,
         new_alias: String,
     },
-    SetSigningKey {
-        alias: String,
-    },
+    SetSigningKey {},
 }

@@ -7,9 +7,7 @@ use identity_iota::{
 use iota_sdk_legacy::client::secret::stronghold::StrongholdSecretManager;
 use log::info;
 
-pub mod command;
-pub mod error;
-pub mod event;
+pub mod keys;
 pub mod service;
 pub mod subject;
 
