@@ -10,16 +10,13 @@ pub enum KeyEvent {
         modified_at: String,
     },
     KeyRemoved {
-        alias: String,
         modified_at: String,
     },
     AliasRenamed {
-        old_alias: String,
         new_alias: String,
         modified_at: String,
     },
     SigningKeySet {
-        alias: String,
         modified_at: String,
     },
 }
