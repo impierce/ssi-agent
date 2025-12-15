@@ -1,0 +1,25 @@
+[package]
+name = "agent_event_publisher_nats"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+agent_issuance = { path = "../agent_issuance" }
+agent_shared = { path = "../agent_shared" }
+agent_store = { path = "../agent_store" }
+
+anyhow.workspace = true
+async-nats = "0.42"
+async-trait.workspace = true
+# TODO: Bump to next release after 0.8.0, where feature `async-nats` is available.
+cloudevents-sdk = { git = "https://github.com/cloudevents/sdk-rust", rev = "6f02d23", features = [
+    "nats",
+] }
+cqrs-es.workspace = true
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true

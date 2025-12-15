@@ -404,13 +404,41 @@
 					"response": []
 				},
 				{
-					"name": "Send Offer",
+					"name": "Send Offer by Target Url",
 					"request": {
 						"method": "POST",
 						"header": [],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"offerId\": \"{{OFFER_ID}}\",\n    \"targetUrl\": \"{{HOST}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/offers/send",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"offers",
+								"send"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Send Offer by Email",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"offerId\": \"{{OFFER_ID}}\",\n    \"recipientEmail\": \"cheyenne@example.test\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"

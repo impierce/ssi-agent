@@ -167,6 +167,7 @@ pub(crate) async fn credentials(
             credential_configuration_ids: vec![credential_configuration_id.clone()],
             grant_types,
             tx_code_constraints,
+            delivery_options: None,
         };
 
         command_handler(&offer_id, &state.command.offer, command).await?

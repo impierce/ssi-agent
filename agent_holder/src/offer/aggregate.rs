@@ -381,7 +381,7 @@ pub mod tests {
                                     }
                             }},
                             "credentialConfigurationId": "001",
-                            "expiresAt": "never"
+                            "expiresAt": "never",
                         }))
                         .unwrap(),
                     ))
@@ -398,7 +398,7 @@ pub mod tests {
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "offerId": received_offer_id,
-                            "credentialConfigurationIds": ["001"]
+                            "credentialConfigurationIds": ["001"],
                         }))
                         .unwrap(),
                     ))
