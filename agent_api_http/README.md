@@ -21,7 +21,7 @@ If you want to access UniCore's API from a browser, you can set the `UNICORE__CO
 
 ## Usage
 
-Below we describe a typical usage of the REST API for UniCore.
+Below we describe a typical usage of the HTTP API for UniCore.
 
 ### Issuance
 

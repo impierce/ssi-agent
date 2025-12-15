@@ -34,7 +34,7 @@ volumes:
 docker compose up
 ```
 
-5. The REST API will be served at the value you set in `UNICORE__APPLICATION_URL` (and also at `http://0.0.0.0:3033`).
+5. The HTTP API will be served at the value you set in `UNICORE__APPLICATION_URL` (and also at `http://0.0.0.0:3033`).
 
 > [!NOTE]
 > In case you need a base bath (for example when running behind a reverse proxy), you can set the `UNICORE__BASE_PATH` to a value such as `ssi-agent`.
@@ -64,4 +64,4 @@ To integrate just-in-time data request events into your workflow, adhere to the 
 3. The HTTP Event Publisher dispatches the event to the external system. Leveraging the provided identifiers, the external system generates and signs the credential, then submits it to UniCore's `/v0/credentials` endpoint. Refer to the [API specification](../../agent_api_http/README.md)) for additional details on endpoint usage.
 
 By default, UniCore will wait up to 1000 ms for the signed credential to arrive. This parameter can be changed by
-setting the `AGENT_API_HTTP_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS` environment variable.
+setting the `UNICORE__EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS` environment variable.
