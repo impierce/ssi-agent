@@ -11,7 +11,7 @@ The `agent_issuance` module is configured via the `issuance-config.yml` file. Th
   - `credential_configurations`: **REQUIRED** An array of Credential Configurations. As of now, UniCore **requires the
     array to contain exactly one Credential Configuration**. The Credential Configuration has the following properties:
     - `credential_configuration_id`: **REQUIRED** The ID of the Credential Configuration. This ID will be used to
-      reference the Credential Configuration in the REST API's `/v0/credentials` endpoint.
+      reference the Credential Configuration in the HTTP API's `/v0/credentials` endpoint.
     - `format`: **REQUIRED** The format of the Credential. As of now, UniCore only supports `jwt_vc_json`.
     - `credential_definition`: **REQUIRED** An object describing the properties of the Credentials that will be
       issued. This object contains the following properties:
