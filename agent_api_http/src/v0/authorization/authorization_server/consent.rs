@@ -1,6 +1,6 @@
-use crate::authorization::authorization_server::templates::{ConsentPageTemplate, HtmlTemplate};
-use crate::issuance::error::PublicError;
 use crate::utils::StringifiedQuery;
+use crate::v0::authorization::authorization_server::templates::{ConsentPageTemplate, HtmlTemplate};
+use crate::v0::issuance::error::PublicError;
 use agent_authorization::application::consent_query_service::{ConsentPageViewModel, ConsentQueryService};
 use agent_authorization::application::consent_service::{ConsentService, ConsentServiceResponse};
 use agent_authorization::application::oauth2_authorization_service::GetConsentQuery;
@@ -71,7 +71,7 @@ pub async fn post_consent(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::authorization::authorization_server::consent::ConsentForm;
+    use crate::v0::authorization::authorization_server::consent::ConsentForm;
     use agent_authorization::state::UNIME_CLIENT_ID;
     use axum::{
         body::Body,

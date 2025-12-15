@@ -133,8 +133,8 @@ pub mod tests {
     use super::*;
     use crate::API_VERSION;
     use crate::{
-        issuance::{credentials::tests::credentials, router},
         tests::OFFER_ID,
+        v0::issuance::{credentials::tests::credentials, router},
     };
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;

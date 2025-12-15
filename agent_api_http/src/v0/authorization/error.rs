@@ -1,4 +1,4 @@
-use crate::issuance::error::{IntoPublicError, PublicError};
+use crate::v0::issuance::error::{IntoPublicError, PublicError};
 use agent_authorization::application::token_issuance_service::TokenIssuanceError;
 use oid4vci::errors::TokenErrorResponse;
 

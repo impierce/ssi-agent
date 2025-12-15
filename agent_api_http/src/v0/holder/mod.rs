@@ -6,7 +6,7 @@ pub mod openid4vci;
 
 pub mod error;
 
-use crate::holder::holder::{
+use crate::v0::holder::holder::{
     credentials::credentials,
     offers::{accept::accept, reject::reject, *},
 };

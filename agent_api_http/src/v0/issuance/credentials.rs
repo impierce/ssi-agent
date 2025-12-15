@@ -243,8 +243,8 @@ pub async fn patch_credential(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::issuance::router;
     use crate::tests::OFFER_ID;
+    use crate::v0::issuance::router;
     use crate::API_VERSION;
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;

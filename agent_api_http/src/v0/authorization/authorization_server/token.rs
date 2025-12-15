@@ -1,5 +1,5 @@
-use crate::authorization::AuthorizationState;
-use crate::issuance::error::PublicError;
+use crate::v0::authorization::AuthorizationState;
+use crate::v0::issuance::error::PublicError;
 use agent_authorization::application::token_issuance_service::TokenIssuanceService;
 use agent_issuance::state::IssuanceState;
 use axum::{
@@ -25,7 +25,7 @@ pub(crate) async fn token(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::{
+    use crate::v0::{
         authorization::{
             self,
             authorization_server::{

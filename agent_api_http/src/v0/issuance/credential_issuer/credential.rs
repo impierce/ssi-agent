@@ -2,8 +2,8 @@ use std::time::{Duration, Instant};
 
 use crate::{
     handlers::{command_handler, query_handler},
-    issuance::error::internal_server_error,
-    issuance::error::PublicError,
+    v0::issuance::error::internal_server_error,
+    v0::issuance::error::PublicError,
 };
 use agent_issuance::{
     application::access_token_validation_service::AccessTokenValidationService,
@@ -137,14 +137,14 @@ pub(crate) async fn credential(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::authorization;
-    use crate::authorization::authorization_server::token::tests::token;
-    use crate::issuance::credentials::tests::credentials;
-    use crate::issuance::router;
+    use crate::v0::authorization;
+    use crate::v0::authorization::authorization_server::token::tests::token;
+    use crate::v0::issuance::credentials::tests::credentials;
+    use crate::v0::issuance::router;
     use crate::API_VERSION;
     use crate::{
-        issuance::{credentials::CredentialsEndpointRequest, offers::tests::offers},
         tests::OFFER_ID,
+        v0::issuance::{credentials::CredentialsEndpointRequest, offers::tests::offers},
     };
 
     use agent_event_publisher_http::EventPublisherHttp;

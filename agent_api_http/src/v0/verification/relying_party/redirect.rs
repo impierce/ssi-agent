@@ -60,7 +60,7 @@ pub mod tests {
     use std::{str::FromStr, sync::Arc};
 
     use super::*;
-    use crate::verification::{
+    use crate::v0::verification::{
         authorization_requests::tests::authorization_requests, relying_party::request::tests::request, router,
     };
     use agent_event_publisher_http::EventPublisherHttp;

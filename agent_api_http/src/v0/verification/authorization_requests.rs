@@ -104,7 +104,7 @@ pub(crate) async fn authorization_requests(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::verification::router;
+    use crate::v0::verification::router;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
     use agent_store::verification_state;

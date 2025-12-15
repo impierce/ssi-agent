@@ -10,7 +10,7 @@ use axum::routing::get;
 use axum::{routing::post, Router};
 use std::sync::Arc;
 
-use crate::verification::{
+use crate::v0::verification::{
     authorization_requests::authorization_request, authorization_requests::authorization_requests,
     relying_party::redirect::redirect, relying_party::request::request,
 };

@@ -33,7 +33,7 @@ pub(crate) async fn openid_credential_issuer(State(state): State<Arc<IssuanceSta
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{issuance::router, tests::CREDENTIAL_ISSUER_METADATA};
+    use crate::{tests::CREDENTIAL_ISSUER_METADATA, v0::issuance::router};
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
     use agent_store::{in_memory::InMemory, issuance_state};

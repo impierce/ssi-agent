@@ -6,7 +6,7 @@ pub mod offers;
 
 pub mod error;
 
-use crate::issuance::{
+use crate::v0::issuance::{
     credential_configurations::credential_configurations,
     credential_issuer::{
         credential::credential,

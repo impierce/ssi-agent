@@ -26,7 +26,7 @@ pub(crate) async fn oauth_authorization_server(State(state): State<Arc<IssuanceS
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::issuance::router;
+    use crate::v0::issuance::router;
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
     use agent_store::{in_memory::InMemory, issuance_state};

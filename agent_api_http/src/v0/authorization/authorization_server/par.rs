@@ -1,4 +1,4 @@
-use crate::{issuance::error::PublicError, utils::StringifiedForm};
+use crate::{utils::StringifiedForm, v0::issuance::error::PublicError};
 use agent_authorization::application::pushed_authorization_service::PushedAuthorizationService;
 use agent_authorization::state::AuthorizationState;
 use axum::{
@@ -26,7 +26,7 @@ pub(crate) async fn par(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::{
+    use crate::v0::{
         authorization,
         issuance::{self, credentials::tests::credentials, offers::tests::offers},
     };

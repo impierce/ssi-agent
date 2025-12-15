@@ -11,7 +11,7 @@ use http::StatusCode;
 use hyper::header;
 use oauth_tsl::relying_party::StatusListTokenResponseType;
 
-use crate::issuance::error::PublicError;
+use crate::v0::issuance::error::PublicError;
 
 pub async fn token_status_list(
     State(state): State<Arc<IssuanceState>>,
@@ -54,7 +54,7 @@ pub mod tests {
     };
     use oid4vc_core::authentication::verify::Verify;
 
-    use crate::issuance::router;
+    use crate::v0::issuance::router;
     use tower::Service as _;
 
     /// This test calls the token status list endpoint which in turn calls the function above.

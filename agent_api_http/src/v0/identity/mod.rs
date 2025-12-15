@@ -19,7 +19,7 @@ use std::sync::Arc;
 use well_known::{did::did, did_configuration::did_configuration};
 
 use crate::{
-    identity::profiles::{get_profile, patch_profile},
+    v0::identity::profiles::{get_profile, patch_profile},
     API_VERSION,
 };
 

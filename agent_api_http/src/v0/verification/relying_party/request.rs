@@ -34,8 +34,8 @@ pub(crate) async fn request(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::verification::authorization_requests::tests::authorization_requests;
-    use crate::verification::router;
+    use crate::v0::verification::authorization_requests::tests::authorization_requests;
+    use crate::v0::verification::router;
     use agent_secret_manager::service::Service;
     use agent_store::{in_memory::InMemory, verification_state};
     use axum::{

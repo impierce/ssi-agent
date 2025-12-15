@@ -1,4 +1,4 @@
-use crate::issuance::error::PublicError;
+use crate::v0::issuance::error::PublicError;
 use agent_authorization::application::oauth2_authorization_service::{
     OAuth2AuthorizationService, OAuth2AuthorizationServiceResponse,
 };
@@ -34,11 +34,11 @@ pub(crate) async fn authorize(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::authorization::authorization_server::consent::tests::{get_consent, post_consent};
-    use crate::authorization::authorization_server::par::tests::par;
-    use crate::issuance::credentials::tests::credentials;
-    use crate::issuance::offers::tests::offers;
-    use crate::{authorization, issuance};
+    use crate::v0::authorization::authorization_server::consent::tests::{get_consent, post_consent};
+    use crate::v0::authorization::authorization_server::par::tests::par;
+    use crate::v0::issuance::credentials::tests::credentials;
+    use crate::v0::issuance::offers::tests::offers;
+    use crate::v0::{authorization, issuance};
     use agent_authorization::state::UNIME_CLIENT_ID;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;

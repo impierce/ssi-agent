@@ -1,5 +1,5 @@
 use crate::handlers::{command_handler, query_handler};
-use crate::issuance::error::{internal_server_error, PublicError};
+use crate::v0::issuance::error::{internal_server_error, PublicError};
 use agent_issuance::application::access_token_validation_service::AccessTokenValidationService;
 use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
 use axum::response::{IntoResponse, Response};
@@ -63,11 +63,11 @@ pub async fn notification(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::authorization::authorization_server::token::tests::token;
-    use crate::issuance::credential_issuer::credential::tests::credential;
-    use crate::issuance::credentials::tests::credentials;
-    use crate::issuance::offers::tests::offers;
-    use crate::{authorization, issuance};
+    use crate::v0::authorization::authorization_server::token::tests::token;
+    use crate::v0::issuance::credential_issuer::credential::tests::credential;
+    use crate::v0::issuance::credentials::tests::credentials;
+    use crate::v0::issuance::offers::tests::offers;
+    use crate::v0::{authorization, issuance};
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
     use agent_store::{authorization_state, issuance_state};

@@ -1,5 +1,4 @@
 // Endpoint handlers
-pub mod templates;
 
 pub mod error;
 
@@ -8,7 +7,7 @@ use axum::{routing::get, Router};
 use std::sync::Arc;
 
 use crate::{
-    library::templates::{get_template, get_templates, patch_template, post_templates},
+    v0::templates::{get_template, get_templates, patch_template, post_templates},
     API_VERSION,
 };
 
