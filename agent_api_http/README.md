@@ -1,11 +1,11 @@
-# agent_api_rest
+# agent_api_http
 
-A lightweight REST API for the SSI Agent.
+A lightweight HTTP API for the SSI Agent.
 
-UniCore's REST API is currently still in the pre-release stage meaning that the API is still under active development.
+UniCore's HTTP API is currently still in the pre-release stage meaning that the API is still under active development.
 Breaking changes may occur before the API reaches a stable version.
 
-The current version of the REST API is `v0`.
+The current version of the HTTP API is `v0`.
 
 ### OpenAPI specification (Swagger UI)
 

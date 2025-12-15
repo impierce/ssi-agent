@@ -61,7 +61,7 @@ To integrate just-in-time data request events into your workflow, adhere to the 
    ```
 
 2. Upon initiation of the OpenID4VCI flow by a Wallet, the CredentialRequestVerified event is triggered, containing relevant identifiers.
-3. The HTTP Event Publisher dispatches the event to the external system. Leveraging the provided identifiers, the external system generates and signs the credential, then submits it to UniCore's `/v0/credentials` endpoint. Refer to the [API specification](../../agent_api_rest/README.md)) for additional details on endpoint usage.
+3. The HTTP Event Publisher dispatches the event to the external system. Leveraging the provided identifiers, the external system generates and signs the credential, then submits it to UniCore's `/v0/credentials` endpoint. Refer to the [API specification](../../agent_api_http/README.md)) for additional details on endpoint usage.
 
 By default, UniCore will wait up to 1000 ms for the signed credential to arrive. This parameter can be changed by
-setting the `AGENT_API_REST_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS` environment variable.
+setting the `AGENT_API_HTTP_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS` environment variable.

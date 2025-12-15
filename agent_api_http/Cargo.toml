@@ -1,5 +1,5 @@
 [package]
-name = "agent_api_rest"
+name = "agent_api_http"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -48,7 +48,7 @@ url.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-agent_api_rest = { path = ".", features = ["test_utils"] }
+agent_api_http = { path = ".", features = ["test_utils"] }
 agent_authorization = { path = "../agent_authorization", features = [
     "test_utils",
 ] }

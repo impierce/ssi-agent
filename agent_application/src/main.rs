@@ -3,7 +3,7 @@
 mod metadata;
 mod probes;
 
-use agent_api_rest::{
+use agent_api_http::{
     app,
     metrics::{metrics, track_metrics},
     ApplicationState,
