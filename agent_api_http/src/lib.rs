@@ -1,4 +1,5 @@
 pub mod v0;
+pub mod v1;
 
 pub mod error;
 pub mod handlers;
@@ -62,6 +63,7 @@ pub fn app(
 ) -> Router {
     let app = Router::new()
         .merge(identity_state.map(v0::identity::router).unwrap_or_default())
+        .merge(identity_state.map(v1::identity::router).unwrap_or_default())
         .merge(library_state.map(v0::library::router).unwrap_or_default())
         .merge(
             authorization_state

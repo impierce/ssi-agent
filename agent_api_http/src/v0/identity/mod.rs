@@ -7,6 +7,10 @@ pub mod well_known;
 
 pub mod error;
 
+use crate::{
+    v0::identity::profiles::{get_profile, patch_profile},
+    API_VERSION,
+};
 use agent_identity::state::IdentityState;
 use axum::{
     routing::{get, post},
@@ -17,11 +21,6 @@ use documents::{get_document, get_documents};
 use services::{linked_vp::linked_vp, service, services};
 use std::sync::Arc;
 use well_known::{did::did, did_configuration::did_configuration};
-
-use crate::{
-    v0::identity::profiles::{get_profile, patch_profile},
-    API_VERSION,
-};
 
 pub fn router(identity_state: Arc<IdentityState>) -> Router {
     Router::new()
