@@ -14,9 +14,30 @@ event_publishers:
   http:
     enabled: false
     target_url: "https://my-domain.example.org/event-subscriber"
-    events:
+    headers:
+      authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
+    target_events:
       server_config: []
       credential: [UnsignedCredentialCreated, CredentialSigned]
+```
+
+### Request format
+
+The events will be sent as a POST request with the event as JSON in the body.
+
+Example:
+
+```http
+POST /<target_url>
+Content-Type: application/json
+
+{
+  "SignedCredentialCreated": {
+    "credential_id": "1c69e4cb-e75f-4f56-9418-f46cb441e639",
+    "signed_credential": [...]
+    "notification_id": "6327889a-7c72-4ba3-bb84-f7da3c3d82cb"
+  }
+}
 ```
 
 ### Available events
