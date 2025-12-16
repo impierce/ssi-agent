@@ -1,4 +1,4 @@
-use crate::v0::issuance::error::{IntoPublicError, PublicError};
+use crate::issuance::error::{IntoPublicError, PublicError};
 use crate::DOCUMENTATION_URL;
 use cqrs_es::{persist::PersistenceError, AggregateError};
 use http_api_problem::ApiError;
