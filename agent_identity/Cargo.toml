@@ -45,7 +45,7 @@ futures = { workspace = true, optional = true }
 rstest = { workspace = true, optional = true }
 
 [dev-dependencies]
-agent_api_rest = { path = "../agent_api_rest" }
+agent_api_http = { path = "../agent_api_http" }
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_identity = { path = ".", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
