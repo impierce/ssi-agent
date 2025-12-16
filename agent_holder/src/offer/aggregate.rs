@@ -314,8 +314,8 @@ impl Aggregate for Offer {
 pub mod tests {
     use super::test_utils::*;
     use super::*;
+    use agent_api_http::v0::{authorization, issuance};
     use agent_api_http::API_VERSION;
-    use agent_api_http::{authorization, issuance};
     use agent_issuance::server_config::aggregate::test_utils::credential_configurations_supported;
     use agent_secret_manager::service::Service;
     use agent_shared::config::config;
