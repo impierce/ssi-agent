@@ -1,8 +1,13 @@
-pub mod v0;
+pub mod authorization;
+pub mod holder;
+pub mod identity;
+pub mod issuance;
+pub mod library;
+pub mod metrics;
+pub mod verification;
 
 pub mod error;
 pub mod handlers;
-pub mod metrics;
 pub mod utils;
 
 use agent_authorization::state::AuthorizationState;
@@ -52,20 +57,20 @@ pub fn app(
     }: ApplicationState,
 ) -> Router {
     let app = Router::new()
-        .merge(identity_state.map(v0::identity::router).unwrap_or_default())
-        .merge(library_state.map(v0::library::router).unwrap_or_default())
+        .merge(identity_state.map(identity::router).unwrap_or_default())
+        .merge(library_state.map(library::router).unwrap_or_default())
         .merge(
             authorization_state
                 // The `IssuanceState` is cloned here to ensure that the authorization router can access it. This is
                 // necessary since for the Pre-Authorized Code flow, the Token Endpoint requires a shared state with
                 // the Issuance Bounded Context.
                 .zip(issuance_state.clone())
-                .map(v0::authorization::router)
+                .map(authorization::router)
                 .unwrap_or_default(),
         )
-        .merge(issuance_state.map(v0::issuance::router).unwrap_or_default())
-        .merge(holder_state.map(v0::holder::router).unwrap_or_default())
-        .merge(verification_state.map(v0::verification::router).unwrap_or_default())
+        .merge(issuance_state.map(issuance::router).unwrap_or_default())
+        .merge(holder_state.map(holder::router).unwrap_or_default())
+        .merge(verification_state.map(verification::router).unwrap_or_default())
         // Trace layers
         .layer(
             ServiceBuilder::new()
