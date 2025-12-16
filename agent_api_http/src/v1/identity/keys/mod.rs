@@ -123,6 +123,3 @@ pub(crate) async fn get_keys(
 
     Ok((StatusCode::OK, Json(keys)))
 }
-
-//NANDER Q: What is crate fn thingy.
-//The alias and key_id are interchangable? iN THE FUTURE? How do we make them belong to the same "entity"?
