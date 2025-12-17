@@ -15,6 +15,7 @@ use crate::{
 };
 use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct KeyGenerationSaga {
     identity_state: Arc<IdentityState>,
     identity_services: Arc<IdentityServices>,
