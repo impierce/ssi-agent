@@ -16,7 +16,7 @@ event_publishers:
     target_url: "https://my-domain.example.org/event-subscriber"
     headers:
       authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
-    target_events:
+    events:
       server_config: []
       credential: [UnsignedCredentialCreated, CredentialSigned]
 ```
