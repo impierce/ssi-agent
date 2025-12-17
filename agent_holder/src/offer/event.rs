@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use strum::Display;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
+#[serde(tag = "type")]
 pub enum OfferEvent {
     CredentialOfferReceived {
         received_offer_id: String,

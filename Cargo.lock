@@ -2439,7 +2439,6 @@ checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.6#e8f68b575a3ee354ac4b08663939917977974556"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -3198,7 +3197,6 @@ dependencies = [
 [[package]]
 name = "did_iota"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.6#e8f68b575a3ee354ac4b08663939917977974556"
 dependencies = [
  "anyhow",
  "identity_iota",
@@ -3213,7 +3211,6 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.6#e8f68b575a3ee354ac4b08663939917977974556"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -3230,7 +3227,6 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.6#e8f68b575a3ee354ac4b08663939917977974556"
 dependencies = [
  "did-method-key",
  "identity_iota",
@@ -3277,7 +3273,6 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.6#e8f68b575a3ee354ac4b08663939917977974556"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -5281,7 +5276,6 @@ dependencies = [
 [[package]]
 name = "identity_stronghold_ext"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.6#e8f68b575a3ee354ac4b08663939917977974556"
 dependencies = [
  "async-trait",
  "elliptic-curve 0.13.8",
@@ -5292,6 +5286,7 @@ dependencies = [
  "k256",
  "log",
  "p256 0.13.2",
+ "rand 0.8.5",
  "secret-storage",
  "serde_json",
  "stronghold_ext",
@@ -10738,7 +10733,7 @@ dependencies = [
 [[package]]
 name = "secret-storage"
 version = "0.3.0"
-source = "git+https://github.com/iotaledger/secret-storage.git?tag=v0.3.0#7dc13ddae8a7f2c8a931d3155f3cb9e9a27902fb"
+source = "git+https://github.com/iotaledger/secret-storage?tag=v0.3.0#7dc13ddae8a7f2c8a931d3155f3cb9e9a27902fb"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -11171,7 +11166,6 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.6#e8f68b575a3ee354ac4b08663939917977974556"
 dependencies = [
  "identity_iota",
  "identity_storage",

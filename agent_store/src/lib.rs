@@ -199,7 +199,7 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
         .commands_and_queries::<Service, Service, AllServicesView>(services.clone(), service_event_publishers)
         .await;
     let (managed_key_command_handler, managed_key, all_managed_keys) = builder
-        .commands_and_queries::<ManagedKey, ManagedKey, AllManagedKeysView>((), managed_key_event_publishers)
+        .commands_and_queries::<ManagedKey, ManagedKey, AllManagedKeysView>(services, managed_key_event_publishers)
         .await;
 
     IdentityState {

@@ -7,7 +7,10 @@ pub mod utils;
 
 use agent_authorization::state::AuthorizationState;
 use agent_holder::state::HolderState;
-use agent_identity::state::IdentityState;
+use agent_identity::{
+    application::sagas::{key_generation_saga::KeyGenerationSaga, key_removal_saga::KeyRemovalSaga},
+    state::IdentityState,
+};
 use agent_issuance::state::IssuanceState;
 use agent_library::state::LibraryState;
 use agent_shared::config::config;
@@ -39,6 +42,9 @@ pub struct ApplicationState {
     pub issuance_state: Option<Arc<IssuanceState>>,
     pub holder_state: Option<Arc<HolderState>>,
     pub verification_state: Option<Arc<VerificationState>>,
+
+    pub key_generation_saga: Option<KeyGenerationSaga>,
+    pub key_removal_saga: Option<KeyRemovalSaga>,
 }
 
 pub fn app(
@@ -49,6 +55,9 @@ pub fn app(
         issuance_state,
         holder_state,
         verification_state,
+
+        key_generation_saga: _,
+        key_removal_saga: _,
     }: ApplicationState,
 ) -> Router {
     let app = Router::new()

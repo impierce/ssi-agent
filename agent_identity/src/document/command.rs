@@ -1,3 +1,5 @@
+use crate::managed_key::aggregate::SigningAlgorithm;
+
 use super::aggregate::Status;
 use agent_shared::config::SupportedDidMethod;
 use identity_document::service::Service as DocumentService;
@@ -18,6 +20,13 @@ pub enum DocumentCommand {
     },
     UpdatePublicKeys {
         public_key_jwks: Vec<Jwk>,
+    },
+    AddVerificationMethod {
+        key_id: String,
+        signing_algorithm: SigningAlgorithm,
+    },
+    RemoveVerificationMethod {
+        key_id: String,
     },
     AddService {
         service_id: String,

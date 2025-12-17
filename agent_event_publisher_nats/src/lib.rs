@@ -3,9 +3,9 @@ use agent_shared::config::config;
 use agent_store::{
     AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
     ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
-    HolderCredentialEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
-    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
-    ServiceEventPublisher, TemplateEventPublisher,
+    HolderCredentialEventPublisher, ManagedKeyEventPublisher, OAuth2AuthorizationRequestEventPublisher,
+    OfferEventPublisher, PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher,
+    ServerConfigEventPublisher, ServiceEventPublisher, TemplateEventPublisher,
 };
 use async_nats::Client;
 use async_trait::async_trait;
@@ -107,6 +107,10 @@ impl EventPublisher for EventPublisherNats {
     }
 
     fn service(&mut self) -> Option<ServiceEventPublisher> {
+        None
+    }
+
+    fn managed_key(&mut self) -> Option<ManagedKeyEventPublisher> {
         None
     }
 
