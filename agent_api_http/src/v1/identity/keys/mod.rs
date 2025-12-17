@@ -1,5 +1,4 @@
 use agent_identity::state::IdentityState;
-use agent_secret_manager::keys::command::KeyCommand;
 use agent_shared::handlers::{command_handler, query_handler};
 use axum::extract::{Json, State};
 use http_api_problem::ApiError;
@@ -112,7 +111,7 @@ pub(crate) async fn set_signing_key(
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn get_keys(
+pub(crate) async fn list_all(
     State(secret_manager): State<Arc<IdentityState>>,
 ) -> Result<(StatusCode, Json<Vec<ManagedKeyDto>>), ApiError> {
     let keys = query_handler(&(), &secret_manager.query.managed_keys)
