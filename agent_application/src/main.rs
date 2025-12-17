@@ -12,7 +12,13 @@ use agent_authorization::services::AuthorizationServices;
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_event_publisher_nats::EventPublisherNats;
 use agent_holder::services::HolderServices;
-use agent_identity::services::IdentityServices;
+use agent_identity::{
+    application::sagas::{
+        key_generation_saga::{self, KeyGenerationSaga},
+        key_removal_saga::{self, KeyRemovalSaga},
+    },
+    services::IdentityServices,
+};
 use agent_issuance::{
     application::policies::issuer_metadata_synchronization_policy::IssuerMetadataSynchronizationPolicy,
     services::IssuanceServices,
@@ -65,7 +71,10 @@ async fn main() -> io::Result<()> {
                     IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
 
                 (
-                    Arc::new(agent_store::identity_state(&builder, identity_services, identity_event_publishers).await),
+                    Arc::new(
+                        agent_store::identity_state(&builder, identity_services.clone(), identity_event_publishers)
+                            .await,
+                    ),
                     Arc::new(
                         agent_store::library_state(
                             &builder,
@@ -100,7 +109,10 @@ async fn main() -> io::Result<()> {
                     IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
 
                 (
-                    Arc::new(agent_store::identity_state(&builder, identity_services, identity_event_publishers).await),
+                    Arc::new(
+                        agent_store::identity_state(&builder, identity_services.clone(), identity_event_publishers)
+                            .await,
+                    ),
                     Arc::new(
                         agent_store::library_state(
                             &builder,
@@ -135,7 +147,8 @@ async fn main() -> io::Result<()> {
 
                 (
                     Arc::new(
-                        agent_store::identity_state(&InMemory, identity_services, identity_event_publishers).await,
+                        agent_store::identity_state(&InMemory, identity_services.clone(), identity_event_publishers)
+                            .await,
                     ),
                     Arc::new(
                         agent_store::library_state(
@@ -179,6 +192,9 @@ async fn main() -> io::Result<()> {
     agent_identity::state::initialize(&identity_state).await.unwrap();
     agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
+    let key_generation_saga = KeyGenerationSaga::new(identity_state.clone(), identity_services.clone());
+    let key_removal_saga = KeyRemovalSaga::new(identity_state.clone(), identity_services.clone());
+
     let app = app(ApplicationState {
         identity_state: Some(identity_state),
         library_state: Some(library_state),
@@ -186,6 +202,9 @@ async fn main() -> io::Result<()> {
         issuance_state: Some(issuance_state),
         holder_state: Some(holder_state),
         verification_state: Some(verification_state),
+
+        key_generation_saga: Some(key_generation_saga),
+        key_removal_saga: Some(key_removal_saga),
     });
 
     let metadata_state = metadata::MetadataState {

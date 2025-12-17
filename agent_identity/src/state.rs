@@ -361,13 +361,13 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
         if let Some((document_id, command)) = document_id_and_command {
             command_handler(&document_id, &state.command.document, command).await?;
 
-            if enabled {
-                let command = DocumentCommand::UpdatePublicKeys {
-                    public_key_jwks: vec![],
-                };
+            // if enabled {
+            //     let command = DocumentCommand::UpdatePublicKeys {
+            //         public_key_jwks: vec![],
+            //     };
 
-                command_handler(&document_id, &state.command.document, command).await?;
-            }
+            //     command_handler(&document_id, &state.command.document, command).await?;
+            // }
         }
     }
 

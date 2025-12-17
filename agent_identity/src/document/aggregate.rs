@@ -1,4 +1,5 @@
 use super::{command::DocumentCommand, error::DocumentError, event::DocumentEvent};
+use crate::managed_key::aggregate::SigningAlgorithm;
 use crate::services::IdentityServices;
 use agent_secret_manager::subject::StorageKey;
 use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported};
@@ -17,6 +18,7 @@ use identity_iota::{
     iota::IotaDocument,
     verification::{MethodScope, MethodType, VerificationMethod},
 };
+use identity_storage::KeyId;
 use identity_storage::{JwkStorage, KeyIdStorage};
 use iota_sdk::types::base_types::IotaAddress;
 use iota_sdk::{IotaClient, IotaClientBuilder};
@@ -29,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use ssi_dids::DIDMethod;
 use ssi_dids::Source;
+use std::collections::HashMap;
 use std::{collections::BTreeMap, sync::Arc};
 use tracing::{debug, info, warn};
 use url::Url;
@@ -60,6 +63,7 @@ pub enum Status {
     Disabled,
 }
 
+// TODO: `Document` most likely should not be an Aggregate, but rather a Read Model that is built from events emitted by other Aggregates, such as `ManagedKey` and `Service`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Document {
     #[serde(rename = "id")]
@@ -71,6 +75,7 @@ pub struct Document {
     pub with_fixed_algorithm: Option<Algorithm>,
     // Applicable only for DID methods that are based on the IOTA ledger.
     pub iota_metadata: Option<IotaMetadata>,
+    pub verification_method_ids: HashMap<String, DIDUrl>,
     pub status: Status,
 }
 
@@ -378,6 +383,61 @@ impl Aggregate for Document {
                 document_id: self.document_id.clone(),
                 status,
             }]),
+            AddVerificationMethod {
+                key_id,
+                signing_algorithm,
+            } => {
+                let subject = &services.subject;
+                let stronghold_storage = &subject.stronghold_storage;
+
+                let mut document = self.document.clone().ok_or(MissingDocumentError)?;
+                let did = document.id().clone();
+
+                let did_method = self.did_method.ok_or(MissingDidMethodError)?;
+
+                let key_id = KeyId::new(&key_id);
+
+                let jwk = match signing_algorithm {
+                    SigningAlgorithm::EdDSA => stronghold_storage.get_ed25519_public_key(&key_id).await.unwrap(),
+                    SigningAlgorithm::ES256 => stronghold_storage.get_es256_public_key(&key_id).await.unwrap(),
+                };
+
+                let verification_method = VerificationMethod::new_from_jwk(
+                    did.clone(),
+                    jwk,
+                    (did_method == SupportedDidMethod::Key)
+                        .then_some(did.method_id())
+                        .or(did_method.fragment()),
+                )
+                .map_err(|err| VerificationMethodBuilderError(err.to_string()))?;
+
+                let mut verification_method_ids = self.verification_method_ids.clone();
+                verification_method_ids.insert(key_id.to_string(), verification_method.id().clone());
+
+                document
+                    .insert_method(verification_method, MethodScope::VerificationMethod) // TODO: add relationships, also TODO: adjust KID insertion elsewhere
+                    .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
+
+                Ok(vec![VerificationMethodAdded {
+                    document_id: self.document_id.clone(),
+                    verification_method_ids,
+                    document,
+                }])
+            }
+            RemoveVerificationMethod { key_id } => {
+                let mut document = self.document.clone().ok_or(MissingDocumentError)?;
+
+                let mut verification_method_ids = self.verification_method_ids.clone();
+                let verification_method_id = verification_method_ids.remove(&key_id.to_string()).unwrap();
+
+                document.remove_method(&verification_method_id);
+
+                Ok(vec![VerificationMethodRemoved {
+                    document_id: self.document_id.clone(),
+                    document,
+                    verification_method_ids,
+                }])
+            }
             AddService {
                 service_id,
                 mut service,
@@ -615,6 +675,24 @@ impl Aggregate for Document {
             ServiceAdded { document_id, document } => {
                 self.document_id = document_id;
                 self.document.replace(document);
+            }
+            VerificationMethodAdded {
+                document_id,
+                document,
+                verification_method_ids,
+            } => {
+                self.document_id = document_id;
+                self.document.replace(document);
+                self.verification_method_ids = verification_method_ids;
+            }
+            VerificationMethodRemoved {
+                document_id,
+                document,
+                verification_method_ids,
+            } => {
+                self.document_id = document_id;
+                self.document.replace(document);
+                self.verification_method_ids = verification_method_ids;
             }
             DocumentPublished {
                 document_id,
