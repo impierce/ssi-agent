@@ -1,4 +1,8 @@
-use agent_identity::state::IdentityState;
+use agent_identity::managed_key::{IdentityState, ManagedKeyCommand};
+use agent_identity::managed_key::aggregate::SigningAlgorithm;
+
+
+
 use agent_shared::handlers::{command_handler, query_handler};
 use axum::extract::{Json, State};
 use http_api_problem::ApiError;
@@ -13,7 +17,7 @@ pub struct ManagedKeyDto {
     pub managed_key_id: String,
     pub key_id: String,
     pub alias: Option<String>,
-    pub signing_algorithm: Option<String>,
+    pub signing_algorithm: Option<SigningAlgorithm>,
 }
 
 impl From<ManagedKey> for ManagedKeyDto {
@@ -31,21 +35,30 @@ impl From<ManagedKey> for ManagedKeyDto {
 #[serde(default, rename_all = "camelCase")]
 pub struct PostGenerateKey {
     pub alias: String,
-    pub signature_algorithm: Option<String>,
-    // Update with the new algorithm enum.
+    pub signature_algorithm: Option<SigningAlgorithm>,
 }
 
 #[axum_macros::debug_handler]
 pub(crate) async fn generate_key(
-    State(state): State<Arc<IdentityState>>,
+    State(state): State<AppState>,
     Json(payload): Json<PostGenerateKey>,
 ) -> Result<(StatusCode, String), ApiError> {
-    let managed_key_id = state
-        .generate_key(&payload.alias, payload.signature_algorithm)
-        .await
-        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
-    Ok((StatusCode::CREATED, managed_key_id))
+    let new_managed_key_id = uuid::Uuid::new_v4().to_string();
+
+    let command = ManagedKeyCommand::GenerateKey {
+        managed_key_id: new_managed_key_id.clone(),
+        alias: payload.alias,
+        signing_algorithm: payload
+            .signature_algorithm
+            .unwrap_or_else(|| SigningAlgorithm::ES256), 
+    };
+
+    state.key_generation_saga.execute(command).await
+    .map_err(|e| { tracing::error!("Saga failed: {:?}", e);
+        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+    Ok((StatusCode::CREATED, new_managed_key_id))
 }
 
 #[derive(Deserialize)]
