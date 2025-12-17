@@ -36,8 +36,6 @@ impl From<ManagedKey> for ManagedKeyDto {
 //             managed_key_id: view.managed_key_id,
 //             key_id: view.key_id,
 //             alias: view.alias,
-//             // Check if the view stores the algorithm as a String or Enum
-//             // You might need .map(|a| a.to_string()) if it's an Option<Enum>
 //             signing_algorithm: view.signing_algorithm.map(|alg| alg.to_string()),
 //         }
 //     }
