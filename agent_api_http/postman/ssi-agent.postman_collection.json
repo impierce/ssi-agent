@@ -1,9 +1,10 @@
 {
 	"info": {
-		"_postman_id": "e9b3fbae-f20e-4957-9d3a-6a310f5fda62",
+		"_postman_id": "4da8f32a-5645-4785-911d-5c2c729e2092",
 		"name": "ssi-agent",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "38461474"
+		"_exporter_id": "41786572",
+		"_collection_link": "https://impierce-technologies-bv.postman.co/workspace/New-Team-Workspace~1aa38760-77fc-4608-a1f5-e8a6fdaa0ad9/collection/41786572-4da8f32a-5645-4785-911d-5c2c729e2092?action=share&source=collection_link&creator=41786572"
 	},
 	"item": [
 		{
@@ -2279,6 +2280,152 @@
 						}
 					},
 					"response": []
+				}
+			]
+		},
+		{
+			"name": "v1",
+			"item": [
+				{
+					"name": "Identity",
+					"item": [
+						{
+							"name": "Keys",
+							"item": [
+								{
+									"name": "Generate Key",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"alias\": \"An Example Alias\",\n    \"signingAlgorithm\": \"ES256\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{HOST}}/v0/keys/generate-new-key",
+											"host": [
+												"{{HOST}}"
+											],
+											"path": [
+												"v0",
+												"keys",
+												"generate-new-key"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Remove Key",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"keyId\": \"your-managed-key-id\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{HOST}}/v0/keys/remove-key",
+											"host": [
+												"{{HOST}}"
+											],
+											"path": [
+												"v0",
+												"keys",
+												"remove-key"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Rename Key Alias",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"keyId\": \"your-managed-key-id\",\n    \"newAlias\": \"new-key-alias\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{HOST}}/v0/keys/rename-key-alias",
+											"host": [
+												"{{HOST}}"
+											],
+											"path": [
+												"v0",
+												"keys",
+												"rename-key-alias"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Set Signing Key",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"keyId\": \"your-managed-key-id\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{HOST}}/v0/keys/set-signing-key",
+											"host": [
+												"{{HOST}}"
+											],
+											"path": [
+												"v0",
+												"keys",
+												"set-signing-key"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "List all Keys",
+									"request": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{HOST}}/v0/keys/list-all",
+											"host": [
+												"{{HOST}}"
+											],
+											"path": [
+												"v0",
+												"keys",
+												"list-all"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						}
+					]
 				}
 			]
 		}
