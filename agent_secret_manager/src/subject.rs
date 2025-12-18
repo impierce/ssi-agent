@@ -21,6 +21,7 @@ use tokio::sync::Mutex;
 pub struct Subject {
     pub stronghold_storage: StrongholdExtStorage,
     pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DIDUrl>>>,
+    pub resolver: Resolver,
 }
 
 impl Subject {
@@ -31,6 +32,7 @@ impl Subject {
         Self {
             stronghold_storage,
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
+            resolver: Resolver::new().await,
         }
     }
 
@@ -73,10 +75,8 @@ impl SubjectExt for Subject {
         let did_url =
             identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
 
-        // TODO: Make sure the resolver only needs to be created once.
-        let resolver = Resolver::new().await;
-
-        let document = resolver
+        let document = self
+            .resolver
             .resolve(did_url.did().as_str())
             .await
             .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
@@ -139,6 +139,7 @@ mod default_subject {
                 Self {
                     stronghold_storage,
                     verification_method_ids,
+                    resolver: Resolver::new().await,
                 }
             })
         }
@@ -151,10 +152,8 @@ impl Verify for Subject {
         let did_url =
             identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
 
-        // TODO: Make sure the resolver only needs to be created once.
-        let resolver = Resolver::new().await;
-
-        let document = resolver
+        let document = self
+            .resolver
             .resolve(did_url.did().as_str())
             .await
             .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
