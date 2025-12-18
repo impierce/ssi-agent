@@ -1396,6 +1396,95 @@ paths:
         "201":
           description: Linked VP service created successfully
 
+  /v0/keys/generate-new-key:
+    post:
+      tags:
+        - Identity
+      summary: Generate a new key
+      description: Generates a new cryptographic key and stores it in the key management system.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - alias
+              properties:
+                alias:
+                  type: string
+                  description: A human-readable name for this key.
+                  example: "my-signing-key-01"
+                signatureAlgorithm:
+                  type: string
+                  description: The signature algorithm to use for this key. Defaults to Ed25519 if not specified.
+                  example: "Ed25519"
+
+  /v0/keys/remove-key:
+    post:
+      tags:
+        - Identity
+      summary: Remove an existing key
+      description: Removes an existing cryptographic key from the key management system.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - keyId
+              properties:
+                keyId:
+                  type: string
+                  description: The ID of the key to remove.
+                  example: "a81bc81b-d7a7-4e5d-abff-90865d1e13b1"
+
+  /v0/keys/rename-key-alias:
+    post:
+      tags:
+        - Identity
+      summary: Rename the alias of a key
+      description: Renames the human-readable alias of an existing cryptographic key in the key management system.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - keyId
+                - newAlias
+              properties:
+                keyId:
+                  type: string
+                  description: The ID of the key to rename.
+                  example: "a81bc81b-d7a7-4e5d-abff-90865d1e13b1"
+                newAlias:
+                  type: string
+                  description: The new alias for the key.
+                  example: "my-new-key-alias"
+
+  /v0/keys/set-signing-key:
+    post:
+      tags:
+        - Identity
+      summary: Set a key as the active signing key
+      description: Designates a specific managed key to be used for signing operations.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - keyId
+              properties:
+                keyId:
+                  type: string
+                  description: The ID of the key to set as the signing key.
+                  example: "a81bc81b-abcd-4e5d-abff-90865d1e13b1"
+
   /auth/token:
     post:
       summary: Standard OAuth 2.0 endpoint for fetching a token
