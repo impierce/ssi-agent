@@ -459,21 +459,6 @@ paths:
         "200":
           description: A Credential Configuration has been successfully added to the Credential Issuer Metadata
 
-  /v0/offers/send:
-    post:
-      summary: Send an offer
-      tags:
-        - Issuance
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        "200":
-          description: Offer sent successfully
-
   /v0/credentials:
     get:
       tags:
@@ -859,6 +844,44 @@ paths:
                 type: object
         "404":
           description: Offer not found
+
+  /v0/offers/send:
+    post:
+      summary: Send an offer
+      description: |
+        Send an offer to a recipient.
+        You must provide EITHER `recipientEmail` (for individuals) OR `targetUrl` (for organizations).
+      tags:
+        - Issuance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                offerId:
+                  type: string
+                  description: Unique identifier for the offer
+                  example: "c86289fa-b105-4ec3-9326-a02436788f11"
+                recipientEmail:
+                  type: string
+                  format: email
+                  description: Required if sending to an individual.
+                  example: "email@example.test"
+                targetUrl:
+                  type: string
+                  format: uri
+                  description: Required if sending to an organization.
+                  example: "https://example.com/api/receive"
+              required:
+                - offerId
+              oneOf:
+                - required: [recipientEmail]
+                - required: [targetUrl]
+      responses:
+        "200":
+          description: Offer sent successfully
 
   # Metadata endpoints
   /version:
