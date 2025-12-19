@@ -1,4 +1,3 @@
-use crate::v0::issuance::error::PublicError;
 use agent_shared::config::config;
 use axum::{
     response::{IntoResponse as _, Response},
@@ -19,15 +18,15 @@ pub struct SponsoringConfiguration {
 }
 
 #[axum_macros::debug_handler]
-pub async fn sponsoring_configuration() -> Result<Response, PublicError> {
+pub async fn sponsoring_configuration() -> Result<Response, StatusCode> {
     let configuration = config().clone();
 
     let display = configuration
         .display
         .clone()
         .pop()
-        .ok_or(PublicError::InternalServerError)?;
-    let iota_address = configuration.iota_address.ok_or(PublicError::InternalServerError)?;
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    let iota_address = configuration.iota_address.ok_or(StatusCode::NOT_FOUND)?;
 
     Ok((
         StatusCode::OK,

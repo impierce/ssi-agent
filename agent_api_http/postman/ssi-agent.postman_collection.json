@@ -1052,24 +1052,6 @@
 						}
 					},
 					"response": []
-				},
-				{
-					"name": "sponsoring-configuration",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/.well-known/sponsoring-configuration",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								".well-known",
-								"sponsoring-configuration"
-							]
-						}
-					},
-					"response": []
 				}
 			]
 		},
@@ -2293,6 +2275,29 @@
 							],
 							"path": [
 								"metrics"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "public",
+			"item": [
+				{
+					"name": "Show sponsoring configuration",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/public/sponsoring-configuration",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"public",
+								"sponsoring-configuration"
 							]
 						}
 					},

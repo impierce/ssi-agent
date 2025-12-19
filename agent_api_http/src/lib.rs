@@ -1,3 +1,4 @@
+pub mod public;
 pub mod v0;
 
 pub mod error;
@@ -66,6 +67,7 @@ pub fn app(
         .merge(issuance_state.map(v0::issuance::router).unwrap_or_default())
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())
         .merge(verification_state.map(v0::verification::router).unwrap_or_default())
+        .merge(public::router())
         // Trace layers
         .layer(
             ServiceBuilder::new()

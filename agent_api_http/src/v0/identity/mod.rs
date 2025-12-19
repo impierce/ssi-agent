@@ -19,10 +19,7 @@ use std::sync::Arc;
 use well_known::{did::did, did_configuration::did_configuration};
 
 use crate::{
-    v0::identity::{
-        profiles::{get_profile, patch_profile},
-        well_known::sponsoring_configuration::sponsoring_configuration,
-    },
+    v0::identity::profiles::{get_profile, patch_profile},
     API_VERSION,
 };
 
@@ -42,6 +39,5 @@ pub fn router(identity_state: Arc<IdentityState>) -> Router {
         )
         .route("/.well-known/did.json", get(did))
         .route("/.well-known/did-configuration.json", get(did_configuration))
-        .route("/.well-known/sponsoring-configuration", get(sponsoring_configuration))
         .with_state(identity_state)
 }
