@@ -18,7 +18,7 @@ The Beta version of the documentation is available [here](https://beta.docs.impi
 
 ## API specification
 
-[Follow these instructions](./agent_api_rest/README.md) to inspect the REST API.
+[Follow these instructions](./agent_api_http/README.md) to inspect the HTTP API.
 
 ## Build & Run
 

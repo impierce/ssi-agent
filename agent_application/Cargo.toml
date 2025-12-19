@@ -5,9 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-agent_api_rest = { path = "../agent_api_rest" }
+agent_api_http = { path = "../agent_api_http" }
 agent_authorization = { path = "../agent_authorization" }
 agent_event_publisher_http = { path = "../agent_event_publisher_http" }
+agent_event_publisher_nats = { path = "../agent_event_publisher_nats" }
 agent_holder = { path = "../agent_holder" }
 agent_identity = { path = "../agent_identity" }
 agent_issuance = { path = "../agent_issuance" }

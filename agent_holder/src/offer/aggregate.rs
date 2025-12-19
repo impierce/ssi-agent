@@ -314,8 +314,8 @@ impl Aggregate for Offer {
 pub mod tests {
     use super::test_utils::*;
     use super::*;
-    use agent_api_rest::API_VERSION;
-    use agent_api_rest::{authorization, issuance};
+    use agent_api_http::v0::{authorization, issuance};
+    use agent_api_http::API_VERSION;
     use agent_issuance::server_config::aggregate::test_utils::credential_configurations_supported;
     use agent_secret_manager::service::Service;
     use agent_shared::config::config;
@@ -349,11 +349,12 @@ pub mod tests {
         config_mut().credential_endpoint = application_url.join("openid4vci/credential").unwrap();
         config_mut().credential_offer_uri = application_url.join("openid4vci/credential-offer/").unwrap();
 
-        let issuance_state = issuance_state(&InMemory, Service::default(), Default::default()).await;
+        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let mut credential_isser = issuance::router(issuance_state.clone());
 
-        let authorization_state = authorization_state(&InMemory, Service::default(), Default::default()).await;
+        let authorization_state =
+            Arc::new(authorization_state(&InMemory, Service::default(), Default::default()).await);
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
@@ -380,7 +381,7 @@ pub mod tests {
                                     }
                             }},
                             "credentialConfigurationId": "001",
-                            "expiresAt": "never"
+                            "expiresAt": "never",
                         }))
                         .unwrap(),
                     ))
@@ -397,7 +398,7 @@ pub mod tests {
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "offerId": received_offer_id,
-                            "credentialConfigurationIds": ["001"]
+                            "credentialConfigurationIds": ["001"],
                         }))
                         .unwrap(),
                     ))

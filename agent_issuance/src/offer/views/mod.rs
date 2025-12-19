@@ -18,6 +18,7 @@ impl View<Offer> for Offer {
                 credential_offer_uri,
                 pre_authorized_code,
                 tx_code,
+                delivery_options,
             } => {
                 self.offer_id.clone_from(offer_id);
                 self.grant_types.clone_from(grant_types);
@@ -26,6 +27,7 @@ impl View<Offer> for Offer {
                 self.credential_offer_uri.replace(credential_offer_uri.clone());
                 self.pre_authorized_code.clone_from(pre_authorized_code);
                 self.tx_code.clone_from(tx_code);
+                self.delivery_options.clone_from(delivery_options);
             }
             CredentialsAdded {
                 offer_id,
@@ -54,6 +56,16 @@ impl View<Offer> for Offer {
                 self.offer_id.clone_from(offer_id);
                 self.status.clone_from(status);
             }
+            CredentialOfferEmailSent {
+                offer_id,
+                recipient_email: _recipient_email,
+                form_url_encoded_credential_offer: _form_url_encoded_credential_offer,
+                offer_link: _offer_link,
+                status,
+            } => {
+                self.offer_id.clone_from(offer_id);
+                self.status.clone_from(status);
+            }
             CredentialRequestVerified { offer_id, subject_id } => {
                 self.offer_id.clone_from(offer_id);
                 self.subject_id.clone_from(subject_id);
@@ -66,6 +78,15 @@ impl View<Offer> for Offer {
                 self.offer_id.clone_from(offer_id);
                 self.credential_response.replace(credential_response.clone());
                 self.status.clone_from(status);
+            }
+            TxCodeGenerated {
+                offer_id,
+                tx_code,
+                delivery_options,
+            } => {
+                self.offer_id.clone_from(offer_id);
+                self.tx_code.replace(tx_code.clone());
+                self.delivery_options.clone_from(delivery_options);
             }
         }
     }

@@ -11,7 +11,7 @@ The `agent_issuance` module is configured via the `issuance-config.yml` file. Th
   - `credential_configurations`: **REQUIRED** An array of Credential Configurations. As of now, UniCore **requires the
     array to contain exactly one Credential Configuration**. The Credential Configuration has the following properties:
     - `credential_configuration_id`: **REQUIRED** The ID of the Credential Configuration. This ID will be used to
-      reference the Credential Configuration in the REST API's `/v0/credentials` endpoint.
+      reference the Credential Configuration in the HTTP API's `/v0/credentials` endpoint.
     - `format`: **REQUIRED** The format of the Credential. As of now, UniCore only supports `jwt_vc_json`.
     - `credential_definition`: **REQUIRED** An object describing the properties of the Credentials that will be
       issued. This object contains the following properties:
@@ -54,3 +54,9 @@ You are required to set the expiration of a credential by providing an expiratio
 Expiration dates need to contain date and time (relative to UTC) following the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) standard, such as `2024-12-09T10:15:00Z`.
 
 > If you want the credential to be valid forever, you can set the expiration to `never`. The `exp` claim in the JWT will then be omitted.
+
+### Credential Offer Delivery
+
+Credential offers can be delivered either B2C (via a recipient email) or B2B between other business Wallets via a Target Url. These delivery options are specified under the DeliveryMethod field in offer issuance.
+
+When email delivery is selected, the issuance publishes a `CredentialOfferEmailSent` event containing the recipient email and credential offer details. External email delivery services can subscribe to these events and handle the actual email transmission.
