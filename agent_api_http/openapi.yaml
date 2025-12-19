@@ -858,27 +858,37 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                offerId:
-                  type: string
-                  description: Unique identifier for the offer
-                  example: "c86289fa-b105-4ec3-9326-a02436788f11"
-                recipientEmail:
-                  type: string
-                  format: email
-                  description: Required if sending to an individual.
-                  example: "email@example.test"
-                targetUrl:
-                  type: string
-                  format: uri
-                  description: Required if sending to an organization.
-                  example: "https://example.com/api/receive"
-              required:
-                - offerId
               oneOf:
-                - required: [recipientEmail]
-                - required: [targetUrl]
+                - type: object
+                  title: Send via email
+                  properties:
+                    offerId:
+                      type: string
+                      description: Unique identifier for the offer
+                      example: "c86289fa-b105-4ec3-9326-a02436788f11"
+                    recipientEmail:
+                      type: string
+                      format: email
+                      description: The email address of the individual recipient
+                      example: "email@example.test"
+                  required:
+                    - offerId
+                    - recipientEmail
+                - type: object
+                  title: Send to an organization
+                  properties:
+                    offerId:
+                      type: string
+                      description: Unique identifier for the offer
+                      example: "c86289fa-b105-4ec3-9326-a02436788f11"
+                    targetUrl:
+                      type: string
+                      format: uri
+                      description: The URL of the receiving organizational wallet.
+                      example: "https://example.com/api/receive"
+                  required:
+                    - offerId
+                    - targetUrl
       responses:
         "200":
           description: Offer sent successfully
