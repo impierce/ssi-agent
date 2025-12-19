@@ -875,7 +875,7 @@ paths:
                     - offerId
                     - recipientEmail
                 - type: object
-                  title: Send to Organization
+                  title: Send to an organization
                   properties:
                     offerId:
                       type: string
