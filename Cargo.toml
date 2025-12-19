@@ -1,10 +1,11 @@
 [workspace]
 resolver = "2"
 members = [
-    "agent_api_rest",
+    "agent_api_http",
     "agent_application",
     "agent_authorization",
     "agent_event_publisher_http",
+    "agent_event_publisher_nats",
     "agent_holder",
     "agent_identity",
     "agent_issuance",

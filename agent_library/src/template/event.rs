@@ -8,6 +8,7 @@ use strum::Display;
 pub enum TemplateEvent {
     TemplateCreated {
         template_id: String,
+        // TODO: Make this a required field.
         title: Option<String>,
         display: Option<Display>,
         credential_format: Option<CredentialFormat>,

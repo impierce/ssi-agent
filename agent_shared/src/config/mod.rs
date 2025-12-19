@@ -564,6 +564,7 @@ pub struct Display {
 #[derive(Debug, Deserialize, Clone, Serialize, Default)]
 pub struct EventPublishers {
     pub http: Option<EventPublisherHttp>,
+    pub nats: Option<EventPublisherNats>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
@@ -572,6 +573,21 @@ pub struct EventPublisherHttp {
     pub target_url: String,
     #[serde(with = "http_serde::option::header_map", default)]
     pub headers: Option<reqwest::header::HeaderMap>,
+    pub events: Events,
+}
+
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
+pub struct EventPublisherNats {
+    pub enabled: bool,
+    pub nats_url: String,
+    #[serde(default)]
+    pub subjects: Vec<NatsSubject>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NatsSubject {
+    pub name: String,
+    #[serde(default)]
     pub events: Events,
 }
 
@@ -703,6 +719,8 @@ pub enum OfferEvent {
     TokenResponseCreated,
     CredentialRequestVerified,
     CredentialResponseCreated,
+    TxCodeGenerated,
+    CredentialOfferEmailSent,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -1079,7 +1097,7 @@ mod tests {
                   "sd-jwt_alg_values": ["ES256"],
                   "kb-jwt_alg_values": ["ES256"]
                 }
-              }
+              },
             })
         );
 
