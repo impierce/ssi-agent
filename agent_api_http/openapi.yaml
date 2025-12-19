@@ -860,7 +860,7 @@ paths:
             schema:
               oneOf:
                 - type: object
-                  title: Send to Email
+                  title: Send via email
                   properties:
                     offerId:
                       type: string
@@ -884,7 +884,7 @@ paths:
                     targetUrl:
                       type: string
                       format: uri
-                      description: The webhook URL for the organization
+                      description: The URL of the receiving organizational wallet.
                       example: "https://example.com/api/receive"
                   required:
                     - offerId
