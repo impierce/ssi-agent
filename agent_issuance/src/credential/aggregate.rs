@@ -311,6 +311,8 @@ impl Aggregate for Credential {
                                     credential_status,
                                 }]);
                             }
+                            // TODO add ELM builder here
+                            // ask nander where the json schemas are used?
                             _ => continue,
                         }
                     }
