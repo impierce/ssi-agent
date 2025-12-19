@@ -130,26 +130,24 @@ pub(crate) async fn set_signing_key(
     Ok(StatusCode::NO_CONTENT)
 }
 
-// #[axum_macros::debug_handler]
-// pub(crate) async fn list_all(
-//     State(context): State<IdentityContext>,
-// ) -> Result<(StatusCode, Json<Vec<ManagedKeyDto>>), ApiError> {
-//     let view = query_handler(&(), &context.state.query.all_managed_keys).await?;
+#[axum_macros::debug_handler]
+pub(crate) async fn list_all(
+    State(context): State<IdentityContext>,
+) -> Result<(StatusCode, Json<Vec<ManagedKeyDto>>), ApiError> {
+    let view = query_handler(&(), &context.state.query.all_managed_keys).await?;
 
-//     // AllManagedKeysView contains a HashMap of ManagedKeyViews
-//     let keys = view
-//         .managed_keys
-//         .into_values() // Iterate over the 'ManagedKeyView' items inside
-//         .map(|key_view| ManagedKeyDto {
-//             // Map the fields manually (safest way)
-//             // Assuming ManagedKeyView has similar fields to ManagedKey
-//             managed_key_id: key_view.managed_key_id,
-//             key_id: key_view.key_id,
-//             alias: key_view.alias,
-//             // Handle the enum-to-string conversion
-//             signing_algorithm: key_view.signing_algorithm.map(|alg| alg.to_string()),
-//         })
-//         .collect();
+    // AllManagedKeysView contains a HashMap of ManagedKeyViews
+    let keys = view
+        .unwrap()
+        .managed_keys
+        .into_values() // Iterate over the 'ManagedKeyView' items inside
+        .map(|key_view| ManagedKeyDto {
+            managed_key_id: key_view.managed_key_id,
+            key_id: key_view.key_id,
+            alias: key_view.alias,
+            signing_algorithm: key_view.signing_algorithm.map(|alg| alg.to_string()),
+        })
+        .collect();
 
-//     Ok((StatusCode::OK, Json(keys)))
-// }
+    Ok((StatusCode::OK, Json(keys)))
+}
