@@ -172,7 +172,7 @@ impl Aggregate for Document {
                             IotaDocument::new(&network_name)
                         });
 
-                        let document = if config().iota_sponsoring_service.is_none() {
+                        let document = if config().iota_sponsoring_service_url.is_none() {
                             info!("Testing whether a DID Document can be published...");
 
                             // This code block is doing a dummy publish to ensure that the DID Document is created and can
@@ -462,10 +462,10 @@ impl Aggregate for Document {
                     .and_then(|network_name| NetworkName::try_from(network_name).ok())
                     .ok_or(MissingNetworkNameError(did_method))?;
 
-                let iota_sponsoring_service = config().iota_sponsoring_service.clone();
+                let iota_sponsoring_service_url = config().iota_sponsoring_service_url.clone();
                 let iota_sponsoring_service_auth = config().iota_sponsoring_service_auth.clone();
 
-                if !iota_metadata.is_funded && iota_sponsoring_service.is_none() {
+                if !iota_metadata.is_funded && iota_sponsoring_service_url.is_none() {
                     warn!(
                         "Skipping publishing DID Document for DID method `{did_method}` because it is not sufficiently funded",  
                     );
@@ -494,7 +494,7 @@ impl Aggregate for Document {
                         document.clone(),
                         wallet_address,
                         MIN_GAS_BUDGET,
-                        &iota_sponsoring_service,
+                        &iota_sponsoring_service_url,
                         iota_sponsoring_service_auth.as_deref(),
                     )
                     .await?;
@@ -514,7 +514,7 @@ impl Aggregate for Document {
                                 &identity_client,
                                 document.clone(),
                                 MIN_GAS_BUDGET,
-                                &iota_sponsoring_service,
+                                &iota_sponsoring_service_url,
                                 iota_sponsoring_service_auth.as_deref(),
                             )
                             .await?;
@@ -530,7 +530,7 @@ impl Aggregate for Document {
                                 &identity_client,
                                 document.clone(),
                                 MIN_GAS_BUDGET,
-                                &iota_sponsoring_service,
+                                &iota_sponsoring_service_url,
                                 iota_sponsoring_service_auth.as_deref(),
                             )
                             .await?;
@@ -672,21 +672,21 @@ async fn publish_did_document<K, I>(
     document: IotaDocument,
     wallet_address: IotaAddress,
     gas_budget: u64,
-    iota_sponsoring_service: &Option<Url>,
+    iota_sponsoring_service_url: &Option<Url>,
     iota_sponsoring_service_auth: Option<&str>,
 ) -> Result<IotaDocument, DocumentError>
 where
     K: JwkStorage,
     I: KeyIdStorage,
 {
-    let document = if let Some(iota_sponsoring_service) = iota_sponsoring_service {
+    let document = if let Some(iota_sponsoring_service_url) = iota_sponsoring_service_url {
         info!("Publishing DID Document using IOTA Gas Station...");
 
         TransactionBuilder::new(PublishDidDocument::new(document, wallet_address))
             .with_gas_budget(MIN_GAS_BUDGET)
             .execute_with_gas_station(
                 identity_client,
-                iota_sponsoring_service.as_str(),
+                iota_sponsoring_service_url.as_str(),
                 iota_sponsoring_service_auth.map(|auth| GasStationOptions::default().with_auth_token(auth)),
             )
             .await
@@ -711,14 +711,14 @@ async fn update_did_document<K, I>(
     identity_client: &IdentityClient<StorageSigner<'_, K, I>>,
     document: IotaDocument,
     gas_budget: u64,
-    iota_sponsoring_service: &Option<Url>,
+    iota_sponsoring_service_url: &Option<Url>,
     iota_sponsoring_service_auth: Option<&str>,
 ) -> Result<(), DocumentError>
 where
     K: JwkStorage,
     I: KeyIdStorage,
 {
-    if let Some(iota_sponsoring_service) = iota_sponsoring_service {
+    if let Some(iota_sponsoring_service_url) = iota_sponsoring_service_url {
         info!("Updating DID Document using IOTA Gas Station...");
 
         let (mut oci, controller_token) = get_oci_and_controller_token(identity_client, &document).await?;
@@ -729,7 +729,7 @@ where
             .with_gas_budget(gas_budget)
             .execute_with_gas_station(
                 identity_client,
-                iota_sponsoring_service.as_str(),
+                iota_sponsoring_service_url.as_str(),
                 iota_sponsoring_service_auth.map(|auth| GasStationOptions::default().with_auth_token(auth)),
             )
             .await
@@ -749,14 +749,14 @@ async fn deactivate_did<K, I>(
     identity_client: &IdentityClient<StorageSigner<'_, K, I>>,
     document: IotaDocument,
     gas_budget: u64,
-    iota_sponsoring_service: &Option<Url>,
+    iota_sponsoring_service_url: &Option<Url>,
     iota_sponsoring_service_auth: Option<&str>,
 ) -> Result<(), DocumentError>
 where
     K: JwkStorage,
     I: KeyIdStorage,
 {
-    if let Some(iota_sponsoring_service) = iota_sponsoring_service {
+    if let Some(iota_sponsoring_service_url) = iota_sponsoring_service_url {
         info!("Deactivating DID using IOTA Gas Station...");
 
         let (mut oci, controller_token) = get_oci_and_controller_token(identity_client, &document).await?;
@@ -767,7 +767,7 @@ where
             .with_gas_budget(gas_budget)
             .execute_with_gas_station(
                 identity_client,
-                iota_sponsoring_service.as_str(),
+                iota_sponsoring_service_url.as_str(),
                 iota_sponsoring_service_auth.map(|auth| GasStationOptions::default().with_auth_token(auth)),
             )
             .await
