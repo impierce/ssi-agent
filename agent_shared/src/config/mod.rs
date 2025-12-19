@@ -3,7 +3,7 @@ mod provisioned;
 use agent_macros::Config;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use identity_iota::{
-    iota_interaction::{IOTA_DEVNET_URL, IOTA_MAINNET_URL},
+    iota_interaction::{IOTA_DEVNET_URL, IOTA_MAINNET_URL, IOTA_TESTNET_URL},
     storage::KeyId,
 };
 use jsonwebtoken::Algorithm;
@@ -315,6 +315,11 @@ pub struct ApplicationConfiguration {
     pub iota_node_username: Option<String>,
     #[config(default)]
     pub iota_node_password: Option<String>,
+    #[config(default)]
+    pub iota_sponsoring_service_url: Option<Url>,
+    #[config(default)]
+    #[serde(serialize_with = "redact")]
+    pub iota_sponsoring_service_auth: Option<String>,
 }
 
 impl ApplicationConfiguration {
@@ -802,6 +807,9 @@ pub enum SupportedDidMethod {
     #[serde(alias = "did_iota_dev", alias = "did:iota:dev", rename = "did_iota_dev")]
     #[strum(serialize = "did:iota:dev")]
     IotaDev,
+    #[serde(alias = "did_iota_test", alias = "did:iota:test", rename = "did_iota_test")]
+    #[strum(serialize = "did:iota:test")]
+    IotaTest,
 }
 
 /// (A subset of) DID method traits. The methods follow a naming convention that expresses boolean predicates as verb
@@ -810,7 +818,10 @@ pub enum SupportedDidMethod {
 impl SupportedDidMethod {
     pub fn supports_update(&self) -> bool {
         match self {
-            SupportedDidMethod::Web | SupportedDidMethod::Iota | SupportedDidMethod::IotaDev => true,
+            SupportedDidMethod::Web
+            | SupportedDidMethod::Iota
+            | SupportedDidMethod::IotaDev
+            | SupportedDidMethod::IotaTest => true,
             SupportedDidMethod::Jwk | SupportedDidMethod::Key => false,
         }
     }
@@ -820,7 +831,8 @@ impl SupportedDidMethod {
             SupportedDidMethod::Jwk
             | SupportedDidMethod::Key
             | SupportedDidMethod::Iota
-            | SupportedDidMethod::IotaDev => false,
+            | SupportedDidMethod::IotaDev
+            | SupportedDidMethod::IotaTest => false,
             SupportedDidMethod::Web => true,
         }
     }
@@ -828,13 +840,14 @@ impl SupportedDidMethod {
     pub fn hosted_decentrally(&self) -> bool {
         match self {
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => false,
-            SupportedDidMethod::Iota | SupportedDidMethod::IotaDev => true,
+            SupportedDidMethod::Iota | SupportedDidMethod::IotaDev | SupportedDidMethod::IotaTest => true,
         }
     }
 }
 
 const IOTA_NETWORK: &str = "iota";
 const IOTA_DEV_NETWORK: &str = "dev";
+const IOTA_TEST_NETWORK: &str = "test";
 
 // See specification: "Since did:jwk only contains a single key, the DID URL fragment identifier is always a fixed #0 value."
 const JWK_FRAGMENT: &str = "0";
@@ -844,6 +857,7 @@ impl SupportedDidMethod {
         match self {
             SupportedDidMethod::Iota => Some(IOTA_MAINNET_URL),
             SupportedDidMethod::IotaDev => Some(IOTA_DEVNET_URL),
+            SupportedDidMethod::IotaTest => Some(IOTA_TESTNET_URL),
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
         }
     }
@@ -852,6 +866,7 @@ impl SupportedDidMethod {
         match self {
             SupportedDidMethod::Iota => Some(IOTA_NETWORK),
             SupportedDidMethod::IotaDev => Some(IOTA_DEV_NETWORK),
+            SupportedDidMethod::IotaTest => Some(IOTA_TEST_NETWORK),
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
         }
     }
@@ -861,6 +876,7 @@ impl SupportedDidMethod {
             SupportedDidMethod::Jwk => Some(JWK_FRAGMENT),
             SupportedDidMethod::Iota
             | SupportedDidMethod::IotaDev
+            | SupportedDidMethod::IotaTest
             | SupportedDidMethod::Key
             | SupportedDidMethod::Web => None,
         }
