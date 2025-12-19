@@ -848,7 +848,9 @@ paths:
   /v0/offers/send:
     post:
       summary: Send an offer
-      description: Send an offer either to an individual recipient via email OR to an organization via a target URL.
+      description: |
+        Send an offer to a recipient.
+        You must provide EITHER `recipientEmail` (for individuals) OR `targetUrl` (for organizations).
       tags:
         - Issuance
       requestBody:
