@@ -1,10 +1,10 @@
 {
 	"info": {
-		"_postman_id": "3ae416a5-ccb0-430a-8512-d5cc218a8702",
+		"_postman_id": "4da8f32a-5645-4785-911d-5c2c729e2092",
 		"name": "ssi-agent",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "41786572",
-		"_collection_link": "https://impierce-technologies-bv.postman.co/workspace/New-Team-Workspace~1aa38760-77fc-4608-a1f5-e8a6fdaa0ad9/collection/41786572-3ae416a5-ccb0-430a-8512-d5cc218a8702?action=share&source=collection_link&creator=41786572"
+		"_collection_link": "https://impierce-technologies-bv.postman.co/workspace/New-Team-Workspace~1aa38760-77fc-4608-a1f5-e8a6fdaa0ad9/collection/41786572-4da8f32a-5645-4785-911d-5c2c729e2092?action=share&source=collection_link&creator=41786572"
 	},
 	"item": [
 		{
@@ -2010,23 +2010,6 @@
 					"item": [
 						{
 							"name": "Create a new Template",
-							"event": [
-								{
-									"listen": "test",
-									"script": {
-										"exec": [
-											"if (pm.response.code === 201) {",
-											"    const response = pm.response.json();",
-											"    pm.collectionVariables.set(\"template_id\", response.id);",
-											"    console.log(\"Saved template_id: \" + response.id);",
-											"}"
-										],
-										"type": "text/javascript",
-										"packages": {},
-										"requests": {}
-									}
-								}
-							],
 							"request": {
 								"method": "POST",
 								"header": [],
@@ -2075,7 +2058,8 @@
 											""
 										],
 										"type": "text/javascript",
-										"packages": {}
+										"packages": {},
+										"requests": {}
 									}
 								},
 								{
@@ -2085,7 +2069,8 @@
 											""
 										],
 										"type": "text/javascript",
-										"packages": {}
+										"packages": {},
+										"requests": {}
 									}
 								}
 							],
@@ -2093,13 +2078,14 @@
 								"method": "GET",
 								"header": [],
 								"url": {
-									"raw": "{{HOST}}/v0/templates",
+									"raw": "{{HOST}}/v0/templates/get-all-templates",
 									"host": [
 										"{{HOST}}"
 									],
 									"path": [
 										"v0",
-										"templates"
+										"templates",
+										"get-all-templates"
 									]
 								}
 							},
@@ -2156,7 +2142,7 @@
 						{
 							"name": "Update Template",
 							"request": {
-								"method": "PATCH",
+								"method": "POST",
 								"header": [],
 								"body": {
 									"mode": "raw",
@@ -2168,14 +2154,14 @@
 									}
 								},
 								"url": {
-									"raw": "{{HOST}}/v0/templates/{{TEMPLATE_ID}}",
+									"raw": "{{HOST}}/v0/templates/update-template",
 									"host": [
 										"{{HOST}}"
 									],
 									"path": [
 										"v0",
 										"templates",
-										"{{TEMPLATE_ID}}"
+										"update-template"
 									]
 								}
 							},
@@ -2188,7 +2174,7 @@
 								"header": [],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"sourceTemplateId\": \"{{TEMPLATE_ID}}\"\n}",
+									"raw": "{ \n    \"sourceTemplateId\": \"example_template_id\"\n} ",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -2196,13 +2182,14 @@
 									}
 								},
 								"url": {
-									"raw": "{{HOST}}/v0/templates",
+									"raw": "{{HOST}}/v0/templates/duplicate-template",
 									"host": [
 										"{{HOST}}"
 									],
 									"path": [
 										"v0",
-										"templates"
+										"templates",
+										"duplicate-template"
 									]
 								}
 							},
@@ -2211,21 +2198,26 @@
 						{
 							"name": "Delete Template",
 							"request": {
-								"method": "DELETE",
+								"method": "POST",
 								"header": [],
 								"body": {
-									"mode": "formdata",
-									"formdata": []
+									"mode": "raw",
+									"raw": "{\n    \"templateId\": \"8989080980\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
 								},
 								"url": {
-									"raw": "{{HOST}}/v0/templates/{{TEMPLATE_ID}}",
+									"raw": "{{HOST}}/v0/templates/delete-template",
 									"host": [
 										"{{HOST}}"
 									],
 									"path": [
 										"v0",
 										"templates",
-										"{{TEMPLATE_ID}}"
+										"delete-template"
 									]
 								}
 							},
@@ -2347,6 +2339,152 @@
 						}
 					},
 					"response": []
+				}
+			]
+		},
+		{
+			"name": "v1",
+			"item": [
+				{
+					"name": "Identity",
+					"item": [
+						{
+							"name": "Keys",
+							"item": [
+								{
+									"name": "Generate Key",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"alias\": \"An Example Alias\",\n    \"signingAlgorithm\": \"ES256\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{HOST}}/v0/keys/generate-new-key",
+											"host": [
+												"{{HOST}}"
+											],
+											"path": [
+												"v0",
+												"keys",
+												"generate-new-key"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Remove Key",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"keyId\": \"your-managed-key-id\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{HOST}}/v0/keys/remove-key",
+											"host": [
+												"{{HOST}}"
+											],
+											"path": [
+												"v0",
+												"keys",
+												"remove-key"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Rename Key Alias",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"keyId\": \"your-managed-key-id\",\n    \"newAlias\": \"new-key-alias\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{HOST}}/v0/keys/rename-key-alias",
+											"host": [
+												"{{HOST}}"
+											],
+											"path": [
+												"v0",
+												"keys",
+												"rename-key-alias"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Set Signing Key",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"keyId\": \"your-managed-key-id\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{HOST}}/v0/keys/set-signing-key",
+											"host": [
+												"{{HOST}}"
+											],
+											"path": [
+												"v0",
+												"keys",
+												"set-signing-key"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "List all Keys",
+									"request": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{HOST}}/v0/keys/list-all",
+											"host": [
+												"{{HOST}}"
+											],
+											"path": [
+												"v0",
+												"keys",
+												"list-all"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						}
+					]
 				}
 			]
 		}
@@ -2476,10 +2614,6 @@
 			"key": "REQUEST_URI",
 			"value": "INITIAL_VALUE",
 			"type": "string"
-		},
-		{
-			"key": "template_id",
-			"value": ""
 		}
 	]
 }
