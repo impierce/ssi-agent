@@ -51,15 +51,14 @@ impl From<Template> for TemplateDto {
             visibility: value.visibility,
             description: value.description,
             r#type: value.r#type,
-            schema: value.schema,
+            schema: *value.schema,
         }
     }
 }
 
 #[derive(Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
-pub struct PostTemplatesEndpointRequest {
-    pub source_template_id: Option<String>,
+pub struct PostCreateTemplateEndpointRequest {
     pub title: Option<String>,
     pub display: Option<Display>,
     pub credential_format: Option<CredentialFormat>,
@@ -74,10 +73,9 @@ pub struct PostTemplatesEndpointRequest {
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn post_templates(
+pub(crate) async fn create_template(
     State(state): State<Arc<LibraryState>>,
-    Json(PostTemplatesEndpointRequest {
-        source_template_id,
+    Json(PostCreateTemplateEndpointRequest {
         title,
         display,
         credential_format,
@@ -89,59 +87,9 @@ pub(crate) async fn post_templates(
         description,
         r#type,
         schema,
-    }): Json<PostTemplatesEndpointRequest>,
+    }): Json<PostCreateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    // Handle template duplication if `source_template_id` field is provided.
-    if let Some(old_template_id) = source_template_id {
-        let new_template_id = Uuid::new_v4().to_string();
-
-        // Fetch original template data.
-        let original_template = query_handler(&old_template_id, &state.query.template)
-            .await?
-            .ok_or_else(|| {
-                ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-                    .title("Source Template Not Found")
-                    .type_url(type_url("library#source-template-not-found"))
-                    .message(format!("No Source Template found with id: `{old_template_id}`"))
-                    .finish()
-            })?;
-
-        // TODO: Create a DuplicateTemplate command which takes care of duplication logic.
-        // This would require defining a LibraryService that acts as a Domain Service.
-        let create_command = TemplateCommand::CreateTemplate {
-            template_id: new_template_id.clone(),
-            source_template_id: Some(old_template_id),
-            // Duplicate the template's original fields, appending "Copy" to the title.
-            title: original_template.title.map(|t| format!("{} Copy", t)),
-            display: original_template.display,
-            credential_format: original_template.credential_format,
-            creator: original_template.creator,
-            holder_type: original_template.holder_type,
-            tags: original_template.tags,
-            status: Status::Draft,
-            visibility: original_template.visibility,
-            description: original_template.description,
-            r#type: original_template.r#type,
-            schema: original_template.schema,
-        };
-
-        command_handler(&new_template_id, &state.command.template, create_command).await?;
-
-        // Return the duplicated template.
-        let new_template = query_handler(&new_template_id, &state.query.template)
-            .await?
-            .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
-
-        return Ok((
-            StatusCode::CREATED,
-            [(header::LOCATION, &format!("{API_VERSION}/templates/{new_template_id}"))],
-            Json(new_template),
-        )
-            .into_response());
-    }
-
-    // If the `source_template_id` field is not provided, create a new template.
-    let template_id = uuid::Uuid::new_v4().to_string();
+    let template_id = Uuid::new_v4().to_string();
 
     let command = TemplateCommand::CreateTemplate {
         template_id: template_id.clone(),
@@ -176,9 +124,63 @@ pub(crate) async fn post_templates(
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PostDuplicateTemplateEndpointRequest {
+    pub source_template_id: String,
+}
+
+#[axum_macros::debug_handler]
+pub(crate) async fn duplicate_template(
+    State(state): State<Arc<LibraryState>>,
+    Json(PostDuplicateTemplateEndpointRequest { source_template_id }): Json<PostDuplicateTemplateEndpointRequest>,
+) -> Result<Response, ApiError> {
+    let new_template_id = Uuid::new_v4().to_string();
+
+    let original_template = query_handler(&source_template_id, &state.query.template)
+        .await?
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Source Template Not Found")
+                .type_url(type_url("library#source-template-not-found"))
+                .message(format!("No Source Template found with id: `{source_template_id}`"))
+                .finish()
+        })?;
+
+    let command = TemplateCommand::CreateTemplate {
+        template_id: new_template_id.clone(),
+        source_template_id: Some(source_template_id),
+        title: original_template.title.map(|t| format!("{} Copy", t)),
+        display: original_template.display,
+        credential_format: original_template.credential_format,
+        creator: original_template.creator,
+        holder_type: original_template.holder_type,
+        tags: original_template.tags,
+        status: Status::Draft,
+        visibility: original_template.visibility,
+        description: original_template.description,
+        r#type: original_template.r#type,
+        schema: original_template.schema,
+    };
+
+    command_handler(&new_template_id, &state.command.template, command).await?;
+
+    // Return the duplicated template.
+    let new_template = query_handler(&new_template_id, &state.query.template)
+        .await?
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    return Ok((
+        StatusCode::CREATED,
+        [(header::LOCATION, &format!("{API_VERSION}/templates/{new_template_id}"))],
+        Json(new_template),
+    )
+        .into_response());
+}
+
 #[derive(Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
-pub struct PatchTemplatesEndpointRequest {
+pub struct PostUpdateTemplatesEndpointRequest {
     pub title: Option<String>,
     pub display: Option<Display>,
     pub credential_format: Option<CredentialFormat>,
@@ -193,10 +195,10 @@ pub struct PatchTemplatesEndpointRequest {
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn patch_template(
+pub(crate) async fn update_template(
     State(state): State<Arc<LibraryState>>,
     Path(template_id): Path<String>,
-    Json(PatchTemplatesEndpointRequest {
+    Json(PostUpdateTemplatesEndpointRequest {
         title,
         display,
         credential_format,
@@ -208,7 +210,7 @@ pub(crate) async fn patch_template(
         description,
         r#type,
         schema,
-    }): Json<PatchTemplatesEndpointRequest>,
+    }): Json<PostUpdateTemplatesEndpointRequest>,
 ) -> Result<Response, ApiError> {
     if let Some(title) = title {
         let command = TemplateCommand::UpdateTitle {
@@ -324,6 +326,7 @@ pub(crate) async fn get_templates(
                     template.status != Status::Deleted
                     // TODO: Apply filtering logic based on request parameters
                 })
+                .map(TemplateDto::from)
                 .collect();
 
             filtered_templates
@@ -351,10 +354,16 @@ pub(crate) async fn get_template(
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PostDeleteTemplateEndpointRequest {
+    pub template_id: String,
+}
+
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_template(
-    State(state): State<LibraryState>,
-    Path(template_id): Path<String>,
+    State(state): State<Arc<LibraryState>>,
+    Json(PostDeleteTemplateEndpointRequest { template_id }): Json<PostDeleteTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let command = TemplateCommand::DeleteTemplate {
         template_id: template_id.clone(),
