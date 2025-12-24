@@ -7,24 +7,31 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_did::{CoreDID, DIDUrl, DID as _};
 use identity_document::document::CoreDocument;
-use identity_iota::iota::rebased::client::{IdentityClient, IdentityClientReadOnly};
-use identity_iota::iota::IotaDID;
+use identity_iota::iota::rebased::client::{
+    get_object_id_from_did, IdentityClient, IdentityClientReadOnly, PublishDidDocument,
+};
+use identity_iota::iota::rebased::migration::{ControllerToken, Identity, OnChainIdentity};
+use identity_iota::iota::{rebased, IotaDID};
 use identity_iota::storage::{Storage, StorageSigner};
 use identity_iota::{
     iota::IotaDocument,
     verification::{MethodScope, MethodType, VerificationMethod},
 };
+use identity_storage::{JwkStorage, KeyIdStorage};
 use iota_sdk::types::base_types::IotaAddress;
 use iota_sdk::{IotaClient, IotaClientBuilder};
 use jsonwebtoken::Algorithm;
 use product_common::core_client::CoreClient as _;
+use product_common::gas_station::GasStationOptions;
 use product_common::network_name::NetworkName;
+use product_common::transaction::TransactionBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use ssi_dids::DIDMethod;
 use ssi_dids::Source;
 use std::{collections::BTreeMap, sync::Arc};
 use tracing::{debug, info, warn};
+use url::Url;
 
 // TODO: look into a more appropriate value for the minimum gas budget. This current value of `50_000_000` as adopted
 // from examples from the IOTA identity library.
@@ -100,7 +107,7 @@ impl Aggregate for Document {
                 let mut iota_metadata = self.iota_metadata.clone().unwrap_or_default();
 
                 let document = match &did_method {
-                    SupportedDidMethod::Iota | SupportedDidMethod::IotaDev => {
+                    SupportedDidMethod::Iota | SupportedDidMethod::IotaDev | SupportedDidMethod::IotaTest => {
                         // Retrieve the network name associated with the DID method.
                         let network_name = did_method
                             .network_name()
@@ -165,46 +172,55 @@ impl Aggregate for Document {
                             IotaDocument::new(&network_name)
                         });
 
-                        info!("Testing whether a DID Document can be published...");
+                        let document = if config().iota_sponsoring_service_url.is_none() {
+                            info!("Testing whether a DID Document can be published...");
 
-                        // This code block is doing a dummy publish to ensure that the DID Document is created and can
-                        // be published/updated later. It uses a gas budget of 0 to avoid actually publishing the
-                        // document.
-                        let document = match identity_client.publish_did_document_update(document.clone(), 0).await {
-                            // This match arm can never be reached, because we use a gas budget of 0.
-                            Ok(document) => document,
-                            // This error occurs when the DID Document is not published yet. We will not return an
-                            // error because the `PublishDocument` command will handle the actual publishing if the
-                            // funds are sufficient.
-                            Err(identity_iota::iota::rebased::Error::DIDResolutionError(_err)) => {
-                                warn!("Document is not published yet.");
-
-                                document
-                            }
-                            // This error occurs when the `identity_client` has no control over the DID Document that
-                            // has been stored in the aggregate instance. This usually means that the current keys
-                            // stored in the KMS have been updated between boots. We throw an error here indicating
-                            // that the original KMS needs to be used or that the database needs to be wiped.
-                            // TODO: implement KMS migration.
-                            Err(identity_iota::iota::rebased::Error::Identity(err))
-                                if err.contains("address") && err.contains("has no control over Identity") =>
+                            // This code block is doing a dummy publish to ensure that the DID Document is created and can
+                            // be published/updated later. It uses a gas budget of 0 to avoid actually publishing the
+                            // document.
+                            let document = match identity_client.publish_did_document_update(document.clone(), 0).await
                             {
-                                warn!("No control over the identity, as no matching keys were found in the key storage: {err}");
+                                // This match arm can never be reached, because we use a gas budget of 0.
+                                Ok(document) => document,
+                                // This error occurs when the DID Document is not published yet. We will not return an
+                                // error because the `PublishDocument` command will handle the actual publishing if the
+                                // funds are sufficient.
+                                Err(identity_iota::iota::rebased::Error::DIDResolutionError(_err)) => {
+                                    warn!("Document is not published yet.");
 
-                                return Err(DocumentError::IotaControllerError(
-                                    identity_iota::iota::rebased::Error::Identity(err),
-                                ));
-                            }
-                            // This error is to be expected because we use a gas budget of 0.
-                            Err(identity_iota::iota::rebased::Error::TransactionUnexpectedResponse(err))
-                                if err.contains("Gas budget: 0 is lower than min") =>
-                            {
-                                info!("Document can be published or updated later if the funds are sufficient.");
+                                    document
+                                }
+                                // This error occurs when the `identity_client` has no control over the DID Document that
+                                // has been stored in the aggregate instance. This usually means that the current keys
+                                // stored in the KMS have been updated between boots. We throw an error here indicating
+                                // that the original KMS needs to be used or that the database needs to be wiped.
+                                // TODO: implement KMS migration.
+                                Err(identity_iota::iota::rebased::Error::Identity(err))
+                                    if err.contains("address") && err.contains("has no control over Identity") =>
+                                {
+                                    warn!("No control over the identity, as no matching keys were found in the key storage: {err}");
 
-                                document
-                            }
-                            // Any other error is unexpected and should be handled.
-                            Err(err) => return Err(DocumentError::IotaIdentityError(err)),
+                                    return Err(DocumentError::IotaControllerError(
+                                        identity_iota::iota::rebased::Error::Identity(err),
+                                    ));
+                                }
+                                // This error is to be expected because we use a gas budget of 0.
+                                Err(identity_iota::iota::rebased::Error::TransactionUnexpectedResponse(err))
+                                    if err.contains("Gas budget: 0 is lower than min") =>
+                                {
+                                    info!("Document can be published or updated later if the funds are sufficient.");
+
+                                    document
+                                }
+                                // Any other error is unexpected and should be handled.
+                                Err(err) => return Err(DocumentError::IotaIdentityError(err)),
+                            };
+
+                            document
+                        } else {
+                            info!("Sponsoring service configured, skipping dummy publish test.");
+
+                            document
                         };
 
                         info!("DID Document created: {document:#?}");
@@ -281,7 +297,8 @@ impl Aggregate for Document {
                 let status = Status::SignAndValidate;
 
                 let iota_metadata = (did_method == SupportedDidMethod::Iota
-                    || did_method == SupportedDidMethod::IotaDev)
+                    || did_method == SupportedDidMethod::IotaDev
+                    || did_method == SupportedDidMethod::IotaTest)
                     .then_some(iota_metadata);
 
                 Ok(vec![DocumentCreated {
@@ -385,7 +402,7 @@ impl Aggregate for Document {
                 Ok(vec![ServiceAdded { document_id, document }])
             }
             PublishDocument => {
-                let document: IotaDocument = self.document.clone().ok_or(MissingDocumentError)?.into();
+                let mut document: IotaDocument = self.document.clone().ok_or(MissingDocumentError)?.into();
 
                 let did_method = self.did_method.ok_or(MissingDidMethodError)?;
 
@@ -445,7 +462,10 @@ impl Aggregate for Document {
                     .and_then(|network_name| NetworkName::try_from(network_name).ok())
                     .ok_or(MissingNetworkNameError(did_method))?;
 
-                if !iota_metadata.is_funded {
+                let iota_sponsoring_service_url = config().iota_sponsoring_service_url.clone();
+                let iota_sponsoring_service_auth = config().iota_sponsoring_service_auth.clone();
+
+                if !iota_metadata.is_funded && iota_sponsoring_service_url.is_none() {
                     warn!(
                         "Skipping publishing DID Document for DID method `{did_method}` because it is not sufficiently funded",  
                     );
@@ -466,53 +486,66 @@ impl Aggregate for Document {
 
                 let mut iota_metadata = self.iota_metadata.clone().unwrap_or_default();
 
-                let document = if !iota_metadata.is_published {
-                    // Publish the DID Document for the first time.
-                    let document = identity_client
-                        .publish_did_document(document)
-                        .with_gas_budget(MIN_GAS_BUDGET)
-                        .build_and_execute(&identity_client)
-                        .await
-                        .map_err(|err| DocumentError::GenericError(err.to_string()))?
-                        .output;
+                if !iota_metadata.is_published {
+                    info!("Publishing DID Document for the first time...");
 
+                    document = publish_did_document(
+                        &identity_client,
+                        document.clone(),
+                        wallet_address,
+                        MIN_GAS_BUDGET,
+                        &iota_sponsoring_service_url,
+                        iota_sponsoring_service_auth.as_deref(),
+                    )
+                    .await?;
+
+                    iota_metadata.is_published = true;
                     iota_metadata.created_at = document.metadata.created.map(|created| created.to_string());
-
-                    document
                 } else {
+                    info!("Updating existing DID Document...");
+
                     // Update the existing DID Document.
                     match self.status {
                         // This status indicates that the DID Document update is ready to be published to the IOTA ledger.
                         Status::SignAndValidate => {
                             info!("Updating DID Document with status: SignAndValidate");
-                            // Publish the updated Alias Output.
-                            let updated_document = identity_client
-                                .publish_did_document_update(document, MIN_GAS_BUDGET)
-                                .await
-                                .map_err(|err| GenericError(err.to_string()))?;
+
+                            update_did_document(
+                                &identity_client,
+                                document.clone(),
+                                MIN_GAS_BUDGET,
+                                &iota_sponsoring_service_url,
+                                iota_sponsoring_service_auth.as_deref(),
+                            )
+                            .await?;
 
                             iota_metadata.is_deactivated = false;
-
-                            updated_document
                         }
                         Status::Disabled => {
                             // This status indicates that the DID Document should be deactivated.
-                            identity_client
-                                .deactivate_did_output(document.id(), MIN_GAS_BUDGET)
-                                .await
-                                .map_err(|err| GenericError(err.to_string()))?;
 
-                            let deactivated_document = identity_client
-                                .resolve_did(document.id())
-                                .await
-                                .map_err(|err| GenericError(err.to_string()))?;
+                            info!("Deactivating DID Document with status: Disabled");
+
+                            deactivate_did(
+                                &identity_client,
+                                document.clone(),
+                                MIN_GAS_BUDGET,
+                                &iota_sponsoring_service_url,
+                                iota_sponsoring_service_auth.as_deref(),
+                            )
+                            .await?;
 
                             iota_metadata.is_deactivated = true;
-
-                            deactivated_document
                         }
-                    }
+                    };
                 };
+
+                let document = identity_client
+                    .resolve_did(document.id())
+                    .await
+                    .map_err(|err| GenericError(err.to_string()))?;
+
+                info!("DID Document after publishing: {document:#?}");
 
                 let balance = iota_client
                     .coin_read_api()
@@ -525,15 +558,21 @@ impl Aggregate for Document {
                 iota_metadata.balance = balance as u64;
                 iota_metadata.updated_at = document.metadata.updated.map(|updated| updated.to_string());
 
+                info!("Updated IOTA Metadata: {iota_metadata:#?}");
+
                 iota_metadata.explorer_url = Some(format!(
                     "https://explorer.iota.org/object/{}?network={}",
                     document.id().tag_str(),
                     if did_method == SupportedDidMethod::IotaDev {
                         "devnet"
+                    } else if did_method == SupportedDidMethod::IotaTest {
+                        "testnet"
                     } else {
                         "mainnet"
                     }
                 ));
+
+                info!("Explorer URL: {:?}", iota_metadata.explorer_url);
 
                 Ok(vec![DocumentPublished {
                     document_id: self.document_id.clone(),
@@ -592,6 +631,157 @@ impl Aggregate for Document {
             }
         }
     }
+}
+
+/// Helper function to retrieve the On-Chain Identity (OCI) and Controller Token.
+/// This code is extracted from `IdentityCient::publish_did_document_update` and
+/// `IdentityCient::deactivate_did_output` so that it can be used to update and
+/// deactivate DID Documents through an IOTA Gas Station.
+async fn get_oci_and_controller_token<K, I>(
+    identity_client: &IdentityClient<StorageSigner<'_, K, I>>,
+    document: &IotaDocument,
+) -> Result<(OnChainIdentity, ControllerToken), rebased::Error>
+where
+    K: JwkStorage,
+    I: KeyIdStorage,
+{
+    let oci = if let Identity::FullFledged(value) = identity_client
+        .get_identity(get_object_id_from_did(document.id())?)
+        .await?
+    {
+        value
+    } else {
+        return Err(rebased::Error::Identity(
+            "only new identities can be updated".to_string(),
+        ));
+    };
+
+    let controller_token = oci.get_controller_token(identity_client).await?.ok_or_else(|| {
+        rebased::Error::Identity(format!(
+            "address {} has no control over Identity {}",
+            identity_client.sender_address(),
+            oci.id()
+        ))
+    })?;
+
+    Ok((oci, controller_token))
+}
+
+async fn publish_did_document<K, I>(
+    identity_client: &IdentityClient<StorageSigner<'_, K, I>>,
+    document: IotaDocument,
+    wallet_address: IotaAddress,
+    gas_budget: u64,
+    iota_sponsoring_service_url: &Option<Url>,
+    iota_sponsoring_service_auth: Option<&str>,
+) -> Result<IotaDocument, DocumentError>
+where
+    K: JwkStorage,
+    I: KeyIdStorage,
+{
+    let document = if let Some(iota_sponsoring_service_url) = iota_sponsoring_service_url {
+        info!("Publishing DID Document using IOTA Gas Station...");
+
+        TransactionBuilder::new(PublishDidDocument::new(document, wallet_address))
+            .with_gas_budget(MIN_GAS_BUDGET)
+            .execute_with_gas_station(
+                identity_client,
+                iota_sponsoring_service_url.as_str(),
+                iota_sponsoring_service_auth.map(|auth| GasStationOptions::default().with_auth_token(auth)),
+            )
+            .await
+            .map_err(|err| DocumentError::IotaPublishDocumentError(err.to_string()))?
+            .output
+    } else {
+        info!("Publishing DID Document...");
+
+        identity_client
+            .publish_did_document(document)
+            .with_gas_budget(gas_budget)
+            .build_and_execute(identity_client)
+            .await
+            .map_err(|err| DocumentError::IotaPublishDocumentError(err.to_string()))?
+            .output
+    };
+
+    Ok(document)
+}
+
+async fn update_did_document<K, I>(
+    identity_client: &IdentityClient<StorageSigner<'_, K, I>>,
+    document: IotaDocument,
+    gas_budget: u64,
+    iota_sponsoring_service_url: &Option<Url>,
+    iota_sponsoring_service_auth: Option<&str>,
+) -> Result<(), DocumentError>
+where
+    K: JwkStorage,
+    I: KeyIdStorage,
+{
+    if let Some(iota_sponsoring_service_url) = iota_sponsoring_service_url {
+        info!("Updating DID Document using IOTA Gas Station...");
+
+        let (mut oci, controller_token) = get_oci_and_controller_token(identity_client, &document).await?;
+
+        oci.update_did_document(document, &controller_token)
+            .finish(identity_client)
+            .await?
+            .with_gas_budget(gas_budget)
+            .execute_with_gas_station(
+                identity_client,
+                iota_sponsoring_service_url.as_str(),
+                iota_sponsoring_service_auth.map(|auth| GasStationOptions::default().with_auth_token(auth)),
+            )
+            .await
+            .map_err(|err| DocumentError::IotaUpdateDocumentError(err.to_string()))?;
+    } else {
+        info!("Updating DID Document...");
+
+        identity_client
+            .publish_did_document_update(document, MIN_GAS_BUDGET)
+            .await
+            .map_err(|err| DocumentError::IotaUpdateDocumentError(err.to_string()))?;
+    }
+    Ok(())
+}
+
+async fn deactivate_did<K, I>(
+    identity_client: &IdentityClient<StorageSigner<'_, K, I>>,
+    document: IotaDocument,
+    gas_budget: u64,
+    iota_sponsoring_service_url: &Option<Url>,
+    iota_sponsoring_service_auth: Option<&str>,
+) -> Result<(), DocumentError>
+where
+    K: JwkStorage,
+    I: KeyIdStorage,
+{
+    if let Some(iota_sponsoring_service_url) = iota_sponsoring_service_url {
+        info!("Deactivating DID using IOTA Gas Station...");
+
+        let (mut oci, controller_token) = get_oci_and_controller_token(identity_client, &document).await?;
+
+        oci.deactivate_did(&controller_token)
+            .finish(identity_client)
+            .await?
+            .with_gas_budget(gas_budget)
+            .execute_with_gas_station(
+                identity_client,
+                iota_sponsoring_service_url.as_str(),
+                iota_sponsoring_service_auth.map(|auth| GasStationOptions::default().with_auth_token(auth)),
+            )
+            .await
+            .map_err(|err| DocumentError::IotaDeactivateDidError(err.to_string()))?;
+    } else {
+        info!("Deactivating DID...");
+
+        identity_client
+            .deactivate_did_output(document.id(), MIN_GAS_BUDGET)
+            .await
+            .map_err(|err| DocumentError::IotaDeactivateDidError(err.to_string()))?;
+    }
+
+    Ok(())
 }
 
 pub async fn get_iota_client(api_endpoint: &str) -> Result<IotaClient, DocumentError> {

@@ -2343,148 +2343,25 @@
 			]
 		},
 		{
-			"name": "v1",
+			"name": "public",
 			"item": [
 				{
-					"name": "Identity",
-					"item": [
-						{
-							"name": "Keys",
-							"item": [
-								{
-									"name": "Generate Key",
-									"request": {
-										"method": "POST",
-										"header": [],
-										"body": {
-											"mode": "raw",
-											"raw": "{\n    \"alias\": \"An Example Alias\",\n    \"signingAlgorithm\": \"ES256\"\n}",
-											"options": {
-												"raw": {
-													"language": "json"
-												}
-											}
-										},
-										"url": {
-											"raw": "{{HOST}}/v0/keys/generate-new-key",
-											"host": [
-												"{{HOST}}"
-											],
-											"path": [
-												"v0",
-												"keys",
-												"generate-new-key"
-											]
-										}
-									},
-									"response": []
-								},
-								{
-									"name": "Remove Key",
-									"request": {
-										"method": "POST",
-										"header": [],
-										"body": {
-											"mode": "raw",
-											"raw": "{\n    \"keyId\": \"your-managed-key-id\"\n}",
-											"options": {
-												"raw": {
-													"language": "json"
-												}
-											}
-										},
-										"url": {
-											"raw": "{{HOST}}/v0/keys/remove-key",
-											"host": [
-												"{{HOST}}"
-											],
-											"path": [
-												"v0",
-												"keys",
-												"remove-key"
-											]
-										}
-									},
-									"response": []
-								},
-								{
-									"name": "Rename Key Alias",
-									"request": {
-										"method": "POST",
-										"header": [],
-										"body": {
-											"mode": "raw",
-											"raw": "{\n    \"keyId\": \"your-managed-key-id\",\n    \"newAlias\": \"new-key-alias\"\n}",
-											"options": {
-												"raw": {
-													"language": "json"
-												}
-											}
-										},
-										"url": {
-											"raw": "{{HOST}}/v0/keys/rename-key-alias",
-											"host": [
-												"{{HOST}}"
-											],
-											"path": [
-												"v0",
-												"keys",
-												"rename-key-alias"
-											]
-										}
-									},
-									"response": []
-								},
-								{
-									"name": "Set Signing Key",
-									"request": {
-										"method": "POST",
-										"header": [],
-										"body": {
-											"mode": "raw",
-											"raw": "{\n    \"keyId\": \"your-managed-key-id\"\n}",
-											"options": {
-												"raw": {
-													"language": "json"
-												}
-											}
-										},
-										"url": {
-											"raw": "{{HOST}}/v0/keys/set-signing-key",
-											"host": [
-												"{{HOST}}"
-											],
-											"path": [
-												"v0",
-												"keys",
-												"set-signing-key"
-											]
-										}
-									},
-									"response": []
-								},
-								{
-									"name": "List all Keys",
-									"request": {
-										"method": "GET",
-										"header": [],
-										"url": {
-											"raw": "{{HOST}}/v0/keys/list-all",
-											"host": [
-												"{{HOST}}"
-											],
-											"path": [
-												"v0",
-												"keys",
-												"list-all"
-											]
-										}
-									},
-									"response": []
-								}
+					"name": "Show sponsoring configuration",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/public/sponsoring-configuration",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"public",
+								"sponsoring-configuration"
 							]
 						}
-					]
+					},
+					"response": []
 				}
 			]
 		}
