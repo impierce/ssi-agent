@@ -131,6 +131,7 @@ pub struct PostDuplicateTemplateEndpointRequest {
 }
 
 #[axum_macros::debug_handler]
+#[allow(clippy::needless_return)]
 pub(crate) async fn duplicate_template(
     State(state): State<Arc<LibraryState>>,
     Json(PostDuplicateTemplateEndpointRequest { source_template_id }): Json<PostDuplicateTemplateEndpointRequest>,
