@@ -317,6 +317,7 @@ pub struct ApplicationConfiguration {
     pub iota_node_password: Option<String>,
     #[config(default)]
     pub skip_template_enforcement: bool,
+    #[config(default)]
     pub iota_sponsoring_service_url: Option<Url>,
     #[config(default)]
     #[serde(serialize_with = "redact")]

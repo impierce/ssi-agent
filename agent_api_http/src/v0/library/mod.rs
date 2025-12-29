@@ -16,20 +16,6 @@ use crate::{
     API_VERSION,
 };
 
-// pub fn router(library_state: Arc<LibraryState>) -> Router {
-//     Router::new()
-//         .nest(
-//             API_VERSION,
-//             Router::new()
-//                 .route("/templates", get(get_templates).post(post_templates))
-//                 .route(
-//                     "/templates/{template_id}",
-//                     get(get_template).patch(patch_template).delete(delete_template),
-//                 ),
-//         )
-//         .with_state(library_state)
-// }
-
 pub fn router(library_state: Arc<LibraryState>) -> Router {
     Router::new()
         .nest(
