@@ -41,15 +41,18 @@ pub(crate) async fn generate_key(
     State(context): State<IdentityContext>,
     Json(payload): Json<PostGenerateKey>,
 ) -> Result<(StatusCode, String), ApiError> {
-    let new_managed_key_id = uuid::Uuid::new_v4().to_string();
     let signing_algorithm = payload.signature_algorithm.unwrap_or(SigningAlgorithm::ES256);
 
-    context
+    let managed_key_id = context
         .key_generation_saga
         .generate_key(payload.alias, signing_algorithm)
-        .await;
+        .await
+        .map_err(|e| {
+            tracing::error!("Saga failed: {:?}", e);
+            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
 
-    Ok((StatusCode::CREATED, new_managed_key_id))
+    Ok((StatusCode::CREATED, managed_key_id))
 }
 #[derive(Deserialize)]
 pub struct PostRemoveKey {
@@ -138,7 +141,12 @@ pub(crate) async fn set_signing_key(
 pub(crate) async fn list_all(
     State(context): State<IdentityContext>,
 ) -> Result<(StatusCode, Json<Vec<ManagedKeyDto>>), ApiError> {
-    let view = query_handler(&(), &context.state.query.all_managed_keys).await?;
+    let view = query_handler("all_managed_keys", &context.state.query.all_managed_keys)
+        .await
+        .map_err(|e| {
+            tracing::error!("Query failed: {:?}", e);
+            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
 
     // AllManagedKeysView contains a HashMap of ManagedKeyViews
     let keys = view
