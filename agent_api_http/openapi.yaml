@@ -1485,6 +1485,22 @@ paths:
                   description: The ID of the key to set as the signing key.
                   example: "a81bc81b-abcd-4e5d-abff-90865d1e13b1"
 
+  /v0/keys/list-all:
+    get:
+      tags:
+        - Identity
+      summary: List all managed keys
+      description: Retrieves a list of all cryptographic keys managed by the key management system.
+      responses:
+        "200":
+          description: Keys retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
   /auth/token:
     post:
       summary: Standard OAuth 2.0 endpoint for fetching a token
