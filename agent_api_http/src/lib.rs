@@ -1,11 +1,13 @@
 pub mod public;
 pub mod v0;
+pub mod v1;
 
 pub mod error;
 pub mod handlers;
 pub mod metrics;
 pub mod utils;
 
+use crate::v1::identity::IdentityContext;
 use agent_authorization::state::AuthorizationState;
 use agent_holder::state::HolderState;
 use agent_identity::{
@@ -56,13 +58,24 @@ pub fn app(
         issuance_state,
         holder_state,
         verification_state,
-
-        key_generation_saga: _,
-        key_removal_saga: _,
+        key_generation_saga,
+        key_removal_saga,
     }: ApplicationState,
 ) -> Router {
+    let v1_identity_router = match (identity_state.clone(), key_generation_saga, key_removal_saga) {
+        (Some(state), Some(gen_saga), Some(rem_saga)) => {
+            let context = IdentityContext {
+                state,
+                key_generation_saga: gen_saga,
+                key_removal_saga: rem_saga,
+            };
+            v1::identity::router(context)
+        }
+        _ => Router::new(),
+    };
     let app = Router::new()
         .merge(identity_state.map(v0::identity::router).unwrap_or_default())
+        .merge(v1_identity_router)
         .merge(library_state.map(v0::library::router).unwrap_or_default())
         .merge(
             authorization_state
