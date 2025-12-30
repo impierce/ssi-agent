@@ -1,5 +1,5 @@
 use super::{command::ManagedKeyCommand, error::ManagedKeyError, event::ManagedKeyEvent};
-use crate::{service::SecretManagerServices, subject::Subject};
+use crate::service::SecretManagerServices;
 use agent_shared::config::config;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
@@ -84,13 +84,11 @@ impl Aggregate for ManagedKey {
                     SigningAlgorithm::ES256 => (KeyType::new("P256"), JwsAlgorithm::ES256),
                 };
 
-                let key_id = services
-                    .stronghold_storage
-                    .generate(key_type, alg)
-                    .await
-                    .unwrap()
-                    .key_id
-                    .to_string();
+                let res = services.stronghold_storage.generate(key_type, alg).await.unwrap();
+
+                println!("Generated key: {}", res.jwk.to_json_pretty().unwrap());
+
+                let key_id = res.key_id.to_string();
 
                 Ok(vec![KeyGenerated {
                     managed_key_id,

@@ -40,7 +40,6 @@ static STRONGHOLD_PATH: &str = "./stronghold.dat";
 // TODO: Once we have a proper state implementation for `agent_secret_manager` we can make use of randomly generated Key
 // IDs. For now we need to make use of these static variables.
 static ED25519_KEY_ID: &str = "ed25519-0";
-static ES256_KEY_ID: &str = "es256-0";
 
 // Static configuration instance
 pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
@@ -473,8 +472,6 @@ pub struct SecretManagerConfig {
     pub stronghold_password: String,
     #[serde(default = "default_issuer_eddsa_key_id")]
     pub issuer_eddsa_key_id: KeyId,
-    #[serde(default = "default_issuer_es256_key_id")]
-    pub issuer_es256_key_id: KeyId,
 }
 
 impl SecretManagerConfig {
@@ -498,7 +495,6 @@ impl SecretManagerConfig {
             stronghold_path: default_stronghold_path(),
             stronghold_password,
             issuer_eddsa_key_id: default_issuer_eddsa_key_id(),
-            issuer_es256_key_id: default_issuer_es256_key_id(),
         }
     }
 }
@@ -509,10 +505,6 @@ fn default_stronghold_path() -> String {
 
 pub fn default_issuer_eddsa_key_id() -> KeyId {
     KeyId::new(ED25519_KEY_ID)
-}
-
-pub fn default_issuer_es256_key_id() -> KeyId {
-    KeyId::new(ES256_KEY_ID)
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

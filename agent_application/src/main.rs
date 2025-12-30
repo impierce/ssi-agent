@@ -51,8 +51,9 @@ async fn main() -> io::Result<()> {
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
     let subject = Arc::new(Subject::new().await);
+    let stronghold_storage = subject.stronghold_storage.clone();
 
-    let secret_manager_services = Arc::new(SecretManagerServices::new().await);
+    let secret_manager_services = Arc::new(SecretManagerServices::new(stronghold_storage));
     let secret_manager_state = match config().event_store.type_ {
         EventStoreType::Postgres => {
             let builder = Postgres::new().await;
@@ -110,7 +111,10 @@ async fn main() -> io::Result<()> {
         .await,
     );
 
-    let authorization_services = Arc::new(AuthorizationServices::new(subject.clone()));
+    let authorization_services = Arc::new(AuthorizationServices::new(
+        subject.clone(),
+        this_is_the_main_service.clone(),
+    ));
     let issuance_services = Arc::new(IssuanceServices::new(subject.clone(), this_is_the_main_service.clone()));
     let holder_services = Arc::new(HolderServices::new(subject.clone()));
     let verification_services = Arc::new(VerificationServices::new(subject.clone()));

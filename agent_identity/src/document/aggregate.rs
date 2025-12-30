@@ -270,7 +270,8 @@ impl Aggregate for Document {
                         let algorithm = with_fixed_algorithm.ok_or(MissingFixedAlgorithmError(did_method))?;
                         let key_id = match algorithm {
                             Algorithm::EdDSA => config().secret_manager.issuer_eddsa_key_id.clone(),
-                            Algorithm::ES256 => config().secret_manager.issuer_es256_key_id.clone(),
+                            // FIXME
+                            // Algorithm::ES256 => config().secret_manager.issuer_es256_key_id.clone(),
                             algorithm => return Err(UnsupportedSigningAlgorithmError(algorithm)),
                         };
 

@@ -19,6 +19,7 @@ pub struct ManagedKeyDto {
     pub key_id: String,
     pub alias: String,
     pub signing_algorithm: Option<SigningAlgorithm>,
+    pub is_signing_key: bool,
 }
 
 impl From<ManagedKey> for ManagedKeyDto {
@@ -28,6 +29,7 @@ impl From<ManagedKey> for ManagedKeyDto {
             key_id: value.key_id,
             alias: value.alias,
             signing_algorithm: value.signing_algorithm,
+            is_signing_key: value.is_signing_key,
         }
     }
 }
@@ -149,14 +151,7 @@ pub(crate) async fn list_all(
         Some(all_keys_view) => all_keys_view
             .managed_keys
             .into_values()
-            .filter_map(|key_view| {
-                (!key_view.is_removed).then(|| ManagedKeyDto {
-                    managed_key_id: key_view.managed_key_id,
-                    key_id: key_view.key_id,
-                    alias: key_view.alias,
-                    signing_algorithm: key_view.signing_algorithm,
-                })
-            })
+            .filter_map(|key_view| (!key_view.is_removed).then(|| ManagedKeyDto::from(key_view)))
             .collect(),
         None => Vec::new(),
     };

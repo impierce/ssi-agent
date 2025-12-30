@@ -14,10 +14,11 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager_consumer::resolver::Resolver;
 use identity_did::{DIDUrl, DID as _};
 use identity_iota::{
+    core::ToJson,
     document::DIDUrlQuery,
     verification::jwk::{Jwk, JwkParams},
 };
-use identity_storage::JwkStorage as _;
+use identity_storage::{JwkStorage as _, KeyId};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
 use std::{str::FromStr as _, sync::Arc};
@@ -224,17 +225,34 @@ impl Sign for ThisIsTheMainService {
 
     async fn sign(&self, message: &str, _subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
         let stronghold_storage = &self.secret_manager_services.stronghold_storage;
-        let (key_id, public_key) = match algorithm {
-            Algorithm::ES256 => {
-                let es256_key_id = config().secret_manager.issuer_es256_key_id.clone();
-                let public_key = stronghold_storage.get_es256_public_key(&es256_key_id).await?;
-                (es256_key_id, public_key)
-            }
-            Algorithm::EdDSA => {
-                let ed25519_key_id = config().secret_manager.issuer_eddsa_key_id.clone();
-                let public_key = stronghold_storage.get_ed25519_public_key(&ed25519_key_id).await?;
-                (ed25519_key_id, public_key)
-            }
+
+        let signing_algorithm: SigningAlgorithm = match algorithm {
+            Algorithm::EdDSA => SigningAlgorithm::EdDSA,
+            Algorithm::ES256 => SigningAlgorithm::ES256,
+            _ => todo!(),
+        };
+
+        let all_managed_keys_view =
+            query_handler("all_managed_keys", &self.secret_manager_state.query.all_managed_keys)
+                .await
+                .unwrap()
+                .unwrap();
+
+        let managed_key_view = all_managed_keys_view
+            .managed_keys
+            .values()
+            .find(|managed_key_view| {
+                managed_key_view.signing_algorithm == Some(signing_algorithm.clone())
+                    && managed_key_view.is_signing_key
+                    && !managed_key_view.is_removed
+            })
+            .unwrap();
+
+        let key_id = KeyId::new(&managed_key_view.key_id);
+
+        let public_key = match algorithm {
+            Algorithm::ES256 => stronghold_storage.get_es256_public_key(&key_id).await?,
+            Algorithm::EdDSA => stronghold_storage.get_ed25519_public_key(&key_id).await?,
             _ => return Err(anyhow!("Unsupported algorithm")),
         };
 

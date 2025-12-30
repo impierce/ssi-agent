@@ -325,7 +325,7 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
             authorization_code,
             access_token,
         },
-        signer: services.signer.clone(),
+        signer: services.this_is_the_main_service.clone(),
     }
 }
 

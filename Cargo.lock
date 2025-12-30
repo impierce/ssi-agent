@@ -164,6 +164,7 @@ version = "0.1.0"
 dependencies = [
  "agent_authorization",
  "agent_holder",
+ "agent_identity",
  "agent_issuance",
  "agent_secret_manager",
  "agent_shared",

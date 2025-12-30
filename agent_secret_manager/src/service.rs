@@ -6,13 +6,13 @@ use std::sync::Arc;
 pub trait Service {
     fn new(subject: Arc<dyn SubjectExt>) -> Self;
 
-    #[cfg(feature = "test_utils")]
-    fn default() -> Arc<Self>
-    where
-        Self: Sized,
-    {
-        Arc::new(Self::new(Arc::new(crate::subject::Subject::default())))
-    }
+    // #[cfg(feature = "test_utils")]
+    // fn default() -> Arc<Self>
+    // where
+    //     Self: Sized,
+    // {
+    //     Arc::new(Self::new(Arc::new(crate::subject::Subject::default())))
+    // }
 }
 
 pub struct SecretManagerServices {
@@ -20,9 +20,7 @@ pub struct SecretManagerServices {
 }
 
 impl SecretManagerServices {
-    pub async fn new() -> Self {
-        let stronghold_storage = stronghold_storage().await;
-
+    pub fn new(stronghold_storage: StrongholdExtStorage) -> Self {
         Self { stronghold_storage }
     }
 }
