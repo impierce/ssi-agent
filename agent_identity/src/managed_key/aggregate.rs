@@ -82,7 +82,7 @@ impl Aggregate for ManagedKey {
             } => {
                 let (key_type, alg) = match signing_algorithm {
                     SigningAlgorithm::EdDSA => (KeyType::new("Ed25519"), JwsAlgorithm::EdDSA),
-                    SigningAlgorithm::ES256 => (KeyType::new("ES256"), JwsAlgorithm::ES256),
+                    SigningAlgorithm::ES256 => (KeyType::new("P256"), JwsAlgorithm::ES256),
                 };
 
                 let key_id = services
