@@ -247,7 +247,7 @@ pub mod tests {
     use crate::v0::issuance::router;
     use crate::API_VERSION;
     use agent_issuance::state::initialize;
-    use agent_secret_manager::service::Service;
+    use agent_secret_manager::services::Service;
     use agent_secret_manager::subject::Subject;
     use agent_store::in_memory::InMemory;
     use agent_store::issuance_state;

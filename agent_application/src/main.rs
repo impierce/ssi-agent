@@ -18,10 +18,7 @@ use agent_issuance::{
     application::policies::issuer_metadata_synchronization_policy::IssuerMetadataSynchronizationPolicy,
     services::IssuanceServices,
 };
-use agent_secret_manager::{
-    service::{SecretManagerServices, Service as _},
-    subject::Subject,
-};
+use agent_secret_manager::services::SecretManagerServices;
 use agent_shared::config::{config, EventStoreType};
 use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
@@ -50,10 +47,7 @@ async fn main() -> io::Result<()> {
     let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
-    let subject = Arc::new(Subject::new().await);
-    let stronghold_storage = subject.stronghold_storage.clone();
-
-    let secret_manager_services = Arc::new(SecretManagerServices::new(stronghold_storage));
+    let secret_manager_services = Arc::new(SecretManagerServices::new().await);
     let secret_manager_state = match config().event_store.type_ {
         EventStoreType::Postgres => {
             let builder = Postgres::new().await;
@@ -87,7 +81,7 @@ async fn main() -> io::Result<()> {
         ),
     };
 
-    let identity_services = Arc::new(IdentityServices::new(subject.clone()));
+    let identity_services = Arc::new(IdentityServices::new(secret_manager_services.clone()));
     let identity_state = match config().event_store.type_ {
         EventStoreType::Postgres => {
             let builder = Postgres::new().await;
@@ -111,13 +105,10 @@ async fn main() -> io::Result<()> {
         .await,
     );
 
-    let authorization_services = Arc::new(AuthorizationServices::new(
-        subject.clone(),
-        this_is_the_main_service.clone(),
-    ));
-    let issuance_services = Arc::new(IssuanceServices::new(subject.clone(), this_is_the_main_service.clone()));
-    let holder_services = Arc::new(HolderServices::new(subject.clone()));
-    let verification_services = Arc::new(VerificationServices::new(subject.clone()));
+    let authorization_services = Arc::new(AuthorizationServices::new(this_is_the_main_service.clone()));
+    let issuance_services = Arc::new(IssuanceServices::new(this_is_the_main_service.clone()));
+    let holder_services = Arc::new(HolderServices::new(this_is_the_main_service.clone()));
+    let verification_services = Arc::new(VerificationServices::new(this_is_the_main_service.clone()));
 
     // TODO: Refactor this to reduce code duplication.
     let (library_state, authorization_state, issuance_state, holder_state, verification_state) = match config()

@@ -40,7 +40,7 @@ pub mod tests {
     use crate::v0::issuance::offers::tests::offers;
     use crate::v0::{authorization, issuance};
     use agent_authorization::state::UNIME_CLIENT_ID;
-    use agent_secret_manager::service::Service;
+    use agent_secret_manager::services::Service;
     use agent_store::in_memory::InMemory;
     use agent_store::{authorization_state, issuance_state};
     use axum::{

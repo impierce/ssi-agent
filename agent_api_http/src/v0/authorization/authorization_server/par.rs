@@ -34,7 +34,7 @@ pub mod tests {
     use agent_authorization::{
         domain::oauth2_authorization_request::aggregate::test_utils::code_challenge, state::UNIME_REDIRECT_URI,
     };
-    use agent_secret_manager::service::Service;
+    use agent_secret_manager::services::Service;
     use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
     use axum::{
         body::Body,

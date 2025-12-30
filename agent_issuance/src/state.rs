@@ -1,4 +1,4 @@
-use agent_secret_manager::subject::SubjectExt;
+use agent_identity::services::SubjectExt;
 use agent_shared::application_state::CommandHandler;
 use agent_shared::config::{
     config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, CredentialConfiguration,

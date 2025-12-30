@@ -1,5 +1,5 @@
 use super::{command::ManagedKeyCommand, error::ManagedKeyError, event::ManagedKeyEvent};
-use crate::service::SecretManagerServices;
+use crate::services::SecretManagerServices;
 use agent_shared::config::config;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};

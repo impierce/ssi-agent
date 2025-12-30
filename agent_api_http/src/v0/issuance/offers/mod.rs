@@ -137,7 +137,7 @@ pub mod tests {
         v0::issuance::{credentials::tests::credentials, router},
     };
     use agent_issuance::state::initialize;
-    use agent_secret_manager::service::Service;
+    use agent_secret_manager::services::Service;
     use agent_shared::config::set_config;
     use agent_store::in_memory::InMemory;
     use agent_store::issuance_state;

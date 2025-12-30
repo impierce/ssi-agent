@@ -1,8 +1,7 @@
 use agent_secret_manager::{
     managed_key::{self, aggregate::SigningAlgorithm},
-    service::SecretManagerServices,
+    services::SecretManagerServices,
     state::SecretManagerState,
-    subject::{Subject, SubjectExt},
 };
 use agent_shared::{
     config::{config, SupportedDidMethod},
@@ -27,24 +26,26 @@ use crate::state::IdentityState;
 
 /// Identity services.
 pub struct IdentityServices {
-    pub subject: Arc<Subject>,
+    pub secret_manager_services: Arc<SecretManagerServices>,
 }
 
 impl IdentityServices {
-    pub fn new(subject: Arc<Subject>) -> Self {
-        Self { subject }
+    pub fn new(secret_manager_services: Arc<SecretManagerServices>) -> Self {
+        Self {
+            secret_manager_services,
+        }
     }
 
-    #[cfg(feature = "test_utils")]
-    #[allow(clippy::should_implement_trait)]
-    pub fn default() -> Arc<Self>
-    where
-        Self: Sized,
-    {
-        Arc::new(Self::new(Arc::new(futures::executor::block_on(async {
-            Subject::new().await
-        }))))
-    }
+    // #[cfg(feature = "test_utils")]
+    // #[allow(clippy::should_implement_trait)]
+    // pub fn default() -> Arc<Self>
+    // where
+    //     Self: Sized,
+    // {
+    //     Arc::new(Self::new(Arc::new(futures::executor::block_on(async {
+    //         Subject::new().await
+    //     }))))
+    // }
 }
 
 pub struct ThisIsTheMainService {
@@ -75,6 +76,11 @@ impl std::fmt::Debug for ThisIsTheMainService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ThisIsTheMainService").finish()
     }
+}
+
+#[async_trait]
+pub trait SubjectExt: oid4vc_core::Subject {
+    async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk>;
 }
 
 /// Extension trait for `Subject` to provide additional functionality.

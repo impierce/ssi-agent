@@ -7,6 +7,8 @@ use cqrs_es::Aggregate;
 use identity_core::convert::ToJson;
 use identity_credential::{credential::Jwt, presentation::JwtPresentationOptions};
 use jsonwebtoken::Header;
+use oid4vc_core::Sign as _;
+use oid4vc_core::Subject as _;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -41,8 +43,8 @@ impl Aggregate for Presentation {
                 presentation_id,
                 signed_credentials,
             } => {
-                let holder = &services.holder;
-                let subject_did = holder
+                let this_is_the_main_service = &services.this_is_the_main_service;
+                let subject_did = this_is_the_main_service
                     .identifier(
                         get_preferred_did_method().to_string().as_ref(),
                         get_preferred_signing_algorithm(),
@@ -94,7 +96,7 @@ impl Aggregate for Presentation {
                 ]
                 .join(".");
 
-                let proof_value = holder
+                let proof_value = this_is_the_main_service
                     .sign(
                         &message,
                         get_preferred_did_method().to_string().as_ref(),

@@ -10,9 +10,8 @@ use log::info;
 // Aggregates
 pub mod managed_key;
 
-pub mod service;
+pub mod services;
 pub mod state;
-pub mod subject;
 
 pub async fn stronghold_storage() -> StrongholdExtStorage {
     #[cfg(feature = "test_utils")]

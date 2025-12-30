@@ -35,7 +35,7 @@ mod tests {
     use super::*;
     use crate::{tests::CREDENTIAL_ISSUER_METADATA, v0::issuance::router};
     use agent_issuance::state::initialize;
-    use agent_secret_manager::service::Service;
+    use agent_secret_manager::services::Service;
     use agent_store::{in_memory::InMemory, issuance_state};
     use axum::{
         body::Body,

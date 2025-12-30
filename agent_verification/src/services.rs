@@ -1,4 +1,4 @@
-use agent_secret_manager::{service::Service, subject::SubjectExt};
+use agent_identity::services::ThisIsTheMainService;
 use agent_shared::config::{
     config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, get_preferred_did_method,
 };
@@ -9,14 +9,14 @@ use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 /// Verification services. This struct is used to generate authorization requests and validate authorization responses.
 pub struct VerificationServices {
-    pub verifier: Arc<dyn SubjectExt>,
+    pub this_is_the_main_service: Arc<ThisIsTheMainService>,
     pub relying_party: RelyingPartyManager,
     pub siopv2_client_metadata: ClientMetadataResource<siopv2::authorization_request::ClientMetadataParameters>,
     pub oid4vp_client_metadata: ClientMetadataResource<oid4vp::authorization_request::ClientMetadataParameters>,
 }
 
-impl Service for VerificationServices {
-    fn new(verifier: Arc<dyn SubjectExt>) -> Self {
+impl VerificationServices {
+    pub fn new(this_is_the_main_service: Arc<ThisIsTheMainService>) -> Self {
         let client_name = config().display.first().as_ref().map(|display| display.name.clone());
 
         let logo_uri = config()
@@ -59,9 +59,9 @@ impl Service for VerificationServices {
         let default_subject_syntax_type = get_preferred_did_method();
 
         Self {
-            verifier: verifier.clone(),
+            this_is_the_main_service: this_is_the_main_service.clone(),
             relying_party: RelyingPartyManager::new(
-                verifier,
+                this_is_the_main_service,
                 default_subject_syntax_type.to_string(),
                 signing_algorithms_supported,
             )

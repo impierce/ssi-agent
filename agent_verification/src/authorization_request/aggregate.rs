@@ -10,6 +10,7 @@ use agent_shared::config::{config, get_preferred_signing_algorithm};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use oid4vc_core::client_metadata::ClientMetadataResource;
+use oid4vc_core::Subject as _;
 use oid4vc_core::{authorization_request::ByReference, scope::Scope};
 use oid4vp::token::vp_token_builder::VpTokenBuilder;
 use oid4vp::{authorization_request::ClientId, oid4vp::DecodedVpToken};
@@ -53,8 +54,8 @@ impl Aggregate for AuthorizationRequest {
                 dcql_query,
             } => {
                 let default_subject_syntax_type = services.relying_party.default_subject_syntax_type().to_string();
-                let verifier = &services.verifier;
-                let verifier_did = verifier
+                let this_is_the_main_service = &services.this_is_the_main_service;
+                let verifier_did = this_is_the_main_service
                     .identifier(&default_subject_syntax_type, get_preferred_signing_algorithm())
                     .await
                     .unwrap();

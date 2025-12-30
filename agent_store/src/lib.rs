@@ -43,7 +43,7 @@ use agent_library::template::aggregate::Template;
 use agent_library::template::views::all_templates::AllTemplatesView;
 use agent_secret_manager::managed_key::aggregate::ManagedKey;
 use agent_secret_manager::managed_key::views::all_managed_keys::AllManagedKeysView;
-use agent_secret_manager::service::SecretManagerServices;
+use agent_secret_manager::services::SecretManagerServices;
 use agent_secret_manager::state::SecretManagerState;
 use agent_shared::application_state::Command;
 use agent_shared::custom_queries::ListAllQuery;

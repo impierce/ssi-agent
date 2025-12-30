@@ -42,7 +42,7 @@ pub mod tests {
     use std::sync::Arc;
 
     use agent_issuance::state::initialize;
-    use agent_secret_manager::{service::Service, subject::Subject};
+    use agent_secret_manager::{services::Service, subject::Subject};
     use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
     use agent_store::{in_memory::InMemory, issuance_state};
     use axum::body::{self, Body};
