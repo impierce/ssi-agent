@@ -8,6 +8,7 @@ use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 
+/// Data transfer object for Managed Keys.
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManagedKeyDto {
@@ -153,7 +154,7 @@ pub(crate) async fn list_all(
     Ok((StatusCode::OK, Json(keys)))
 }
 
-// Helper function to find the managed_key_id by key_id
+// Helper function to fetch the managed_key_id by its key_id.
 async fn get_managed_key_id(key_id: &str, context: &IdentityContext) -> Result<String, ApiError> {
     let view = query_handler("all_managed_keys", &context.state.query.all_managed_keys)
         .await
