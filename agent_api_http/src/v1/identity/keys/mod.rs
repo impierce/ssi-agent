@@ -74,14 +74,14 @@ pub(crate) async fn remove_key(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PostRenameAlias {
+pub struct PostRenameKeyAlias {
     pub key_id: String,
     pub new_alias: String,
 }
 
 pub(crate) async fn rename_key_alias(
     State(context): State<IdentityContext>,
-    Json(payload): Json<PostRenameAlias>,
+    Json(payload): Json<PostRenameKeyAlias>,
 ) -> Result<StatusCode, ApiError> {
     let managed_key_id = get_managed_key_id(&payload.key_id, &context).await?;
 
