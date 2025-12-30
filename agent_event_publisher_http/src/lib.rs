@@ -4,13 +4,14 @@ use agent_authorization::domain::{
 };
 use agent_holder::presentation::aggregate::Presentation;
 use agent_identity::{
-    connection::aggregate::Connection, document::aggregate::Document, managed_key::aggregate::ManagedKey,
-    profile::aggregate::Profile, service::aggregate::Service,
+    connection::aggregate::Connection, document::aggregate::Document, profile::aggregate::Profile,
+    service::aggregate::Service,
 };
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
 use agent_library::template::aggregate::Template;
+use agent_secret_manager::managed_key::aggregate::ManagedKey;
 use agent_shared::config::config;
 use agent_store::{
     AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,

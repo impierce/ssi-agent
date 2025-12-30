@@ -1,4 +1,5 @@
-use crate::subject::SubjectExt;
+use crate::{stronghold_storage, subject::SubjectExt};
+use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use std::sync::Arc;
 
 /// Convenience trait for Services like `IssuanceServices`, `HolderServices`, and `VerifierServices`.
@@ -11,5 +12,17 @@ pub trait Service {
         Self: Sized,
     {
         Arc::new(Self::new(Arc::new(crate::subject::Subject::default())))
+    }
+}
+
+pub struct SecretManagerServices {
+    pub stronghold_storage: StrongholdExtStorage,
+}
+
+impl SecretManagerServices {
+    pub async fn new() -> Self {
+        let stronghold_storage = stronghold_storage().await;
+
+        Self { stronghold_storage }
     }
 }

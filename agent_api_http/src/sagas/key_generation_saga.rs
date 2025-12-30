@@ -1,29 +1,31 @@
+use agent_secret_manager::{
+    managed_key::{aggregate::SigningAlgorithm, command::ManagedKeyCommand},
+    state::SecretManagerState,
+};
 use agent_shared::handlers::{command_handler, query_handler};
 use async_trait::async_trait;
 use cqrs_es::{EventEnvelope, Query};
 use identity_iota::verification::VerificationMethod;
 use identity_storage::KeyId;
 
-use crate::{
-    document::command::DocumentCommand,
-    managed_key::{
-        aggregate::{ManagedKey, SigningAlgorithm},
-        command::ManagedKeyCommand,
-    },
-    services::IdentityServices,
-    state::IdentityState,
-};
+use agent_identity::{document::command::DocumentCommand, services::IdentityServices, state::IdentityState};
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct KeyGenerationSaga {
+    secret_manager_state: Arc<SecretManagerState>,
     identity_state: Arc<IdentityState>,
     identity_services: Arc<IdentityServices>,
 }
 
 impl KeyGenerationSaga {
-    pub fn new(identity_state: Arc<IdentityState>, identity_services: Arc<IdentityServices>) -> Self {
+    pub fn new(
+        secret_manager_state: Arc<SecretManagerState>,
+        identity_state: Arc<IdentityState>,
+        identity_services: Arc<IdentityServices>,
+    ) -> Self {
         Self {
+            secret_manager_state,
             identity_state,
             identity_services,
         }
@@ -44,9 +46,11 @@ impl KeyGenerationSaga {
             signing_algorithm,
         };
 
-        command_handler(&managed_key_id, &self.identity_state.command.managed_key, command).await?;
+        command_handler(&managed_key_id, &self.secret_manager_state.command.managed_key, command).await?;
 
-        if let Some(managed_key_view) = query_handler(&managed_key_id, &self.identity_state.query.managed_key).await? {
+        if let Some(managed_key_view) =
+            query_handler(&managed_key_id, &self.secret_manager_state.query.managed_key).await?
+        {
             let key_id = managed_key_view.key_id.clone();
             let signing_algorithm = managed_key_view.signing_algorithm.unwrap();
 

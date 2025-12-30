@@ -86,6 +86,7 @@ dependencies = [
  "agent_verification",
  "anyhow",
  "askama",
+ "async-trait",
  "axum 0.8.3",
  "axum-auth 0.8.1",
  "axum-macros",
@@ -99,6 +100,8 @@ dependencies = [
  "identity_core",
  "identity_credential",
  "identity_did",
+ "identity_iota",
+ "identity_storage",
  "jsonwebtoken",
  "lazy_static",
  "metrics",
@@ -198,6 +201,7 @@ dependencies = [
  "agent_identity",
  "agent_issuance",
  "agent_library",
+ "agent_secret_manager",
  "agent_shared",
  "agent_store",
  "agent_verification",
@@ -292,6 +296,7 @@ dependencies = [
  "async-trait",
  "axum 0.8.3",
  "base64 0.22.1",
+ "consumer",
  "cqrs-es",
  "derivative",
  "did-jwk",
@@ -303,6 +308,7 @@ dependencies = [
  "identity_document",
  "identity_iota",
  "identity_storage",
+ "identity_stronghold_ext",
  "iota-sdk 1.6.1",
  "itertools 0.14.0",
  "jsonwebtoken",
@@ -310,6 +316,7 @@ dependencies = [
  "mime",
  "names",
  "oid4vc-core",
+ "p256 0.13.2",
  "product_common",
  "rand 0.9.1",
  "reqwest 0.12.20",
@@ -336,6 +343,7 @@ name = "agent_issuance"
 version = "0.1.0"
 dependencies = [
  "agent_holder",
+ "agent_identity",
  "agent_issuance",
  "agent_library",
  "agent_secret_manager",
@@ -411,8 +419,13 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "consumer",
+ "cqrs-es",
  "futures",
+ "identity_core",
+ "identity_credential",
+ "identity_did",
  "identity_iota",
+ "identity_storage",
  "identity_stronghold_ext",
  "iota-sdk 1.1.5",
  "iota-sdk 1.6.1",
@@ -425,9 +438,11 @@ dependencies = [
  "p256 0.13.2",
  "ring",
  "serde",
+ "serde_json",
  "strum 0.26.3",
  "thiserror 1.0.69",
  "tokio",
+ "tracing",
  "url",
 ]
 
@@ -474,6 +489,7 @@ dependencies = [
  "agent_identity",
  "agent_issuance",
  "agent_library",
+ "agent_secret_manager",
  "agent_shared",
  "agent_verification",
  "async-trait",
@@ -2434,7 +2450,6 @@ checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=d730318#d730318136c82b4ecb2c61839ab24f8cc52ff58c"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -3193,7 +3208,6 @@ dependencies = [
 [[package]]
 name = "did_iota"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=d730318#d730318136c82b4ecb2c61839ab24f8cc52ff58c"
 dependencies = [
  "anyhow",
  "identity_iota",
@@ -3208,7 +3222,6 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=d730318#d730318136c82b4ecb2c61839ab24f8cc52ff58c"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -3225,7 +3238,6 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=d730318#d730318136c82b4ecb2c61839ab24f8cc52ff58c"
 dependencies = [
  "did-method-key",
  "identity_iota",
@@ -3272,7 +3284,6 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=d730318#d730318136c82b4ecb2c61839ab24f8cc52ff58c"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -5282,7 +5293,6 @@ dependencies = [
 [[package]]
 name = "identity_stronghold_ext"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=d730318#d730318136c82b4ecb2c61839ab24f8cc52ff58c"
 dependencies = [
  "async-trait",
  "elliptic-curve 0.13.8",
@@ -11186,7 +11196,6 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=d730318#d730318136c82b4ecb2c61839ab24f8cc52ff58c"
 dependencies = [
  "identity_iota",
  "identity_storage",

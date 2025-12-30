@@ -1,11 +1,10 @@
-use crate::services::IdentityServices;
-
 use super::{command::ManagedKeyCommand, error::ManagedKeyError, event::ManagedKeyEvent};
-use agent_secret_manager::subject::Subject;
+use crate::{service::SecretManagerServices, subject::Subject};
 use agent_shared::config::config;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::Aggregate;
+use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use identity_core::{
     common::{Duration, OrderedSet, Timestamp},
     convert::{FromJson, ToJson},
@@ -61,7 +60,7 @@ impl Aggregate for ManagedKey {
     type Command = ManagedKeyCommand;
     type Event = ManagedKeyEvent;
     type Error = ManagedKeyError;
-    type Services = Arc<IdentityServices>;
+    type Services = Arc<SecretManagerServices>;
 
     fn aggregate_type() -> String {
         "managed_key".to_string()
@@ -86,7 +85,6 @@ impl Aggregate for ManagedKey {
                 };
 
                 let key_id = services
-                    .subject
                     .stronghold_storage
                     .generate(key_type, alg)
                     .await
@@ -104,7 +102,7 @@ impl Aggregate for ManagedKey {
             RemoveKey => {
                 let key_id = KeyId::new(&self.key_id);
 
-                services.subject.stronghold_storage.delete(&key_id).await.unwrap();
+                services.stronghold_storage.delete(&key_id).await.unwrap();
                 // FIXME: services.subject.stronghold_storage.delete_key_id().await.unwrap();
 
                 Ok(vec![KeyRemoved {
@@ -164,18 +162,10 @@ impl Aggregate for ManagedKey {
 pub mod managed_key_tests {
     use super::test_utils::*;
     use super::*;
-    use crate::document::aggregate::test_utils::both_verification_methods;
-    use agent_shared::config::set_config;
     use cqrs_es::test::TestFramework;
-    use rstest::rstest;
 
     type ManagedKeyTestFramework = TestFramework<ManagedKey>;
 }
 
 #[cfg(feature = "test_utils")]
-pub mod test_utils {
-    use super::*;
-    use identity_core::{common::Url, convert::FromJson};
-    use rstest::*;
-    use serde_json::json;
-}
+pub mod test_utils {}

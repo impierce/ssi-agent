@@ -22,8 +22,6 @@ use agent_holder::services::HolderServices;
 use agent_holder::state::HolderState;
 use agent_identity::connection::views::all_connections::AllConnectionsView;
 use agent_identity::document::views::all_documents::AllDocumentsView;
-use agent_identity::managed_key::aggregate::ManagedKey;
-use agent_identity::managed_key::views::all_managed_keys::AllManagedKeysView;
 use agent_identity::service::views::all_services::AllServicesView;
 use agent_identity::services::IdentityServices;
 use agent_identity::state::IdentityState;
@@ -43,6 +41,10 @@ use agent_issuance::{
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::Template;
 use agent_library::template::views::all_templates::AllTemplatesView;
+use agent_secret_manager::managed_key::aggregate::ManagedKey;
+use agent_secret_manager::managed_key::views::all_managed_keys::AllManagedKeysView;
+use agent_secret_manager::service::SecretManagerServices;
+use agent_secret_manager::state::SecretManagerState;
 use agent_shared::application_state::Command;
 use agent_shared::custom_queries::ListAllQuery;
 use agent_shared::generic_query::generic_query;
@@ -169,6 +171,32 @@ pub trait CqrsComponentBuilder {
         <A as Aggregate>::Command: Send + Sync;
 }
 
+pub async fn secret_manager_state<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
+    services: Arc<SecretManagerServices>,
+    event_publishers: Vec<Box<dyn EventPublisher>>,
+) -> SecretManagerState {
+    // Partition the event_publishers into the different aggregates.
+    let Partitions {
+        managed_key_event_publishers,
+        ..
+    } = partition_event_publishers(event_publishers);
+
+    let (managed_key_command_handler, managed_key, all_managed_keys) = builder
+        .commands_and_queries::<ManagedKey, ManagedKey, AllManagedKeysView>(services, managed_key_event_publishers)
+        .await;
+
+    SecretManagerState {
+        command: agent_secret_manager::state::CommandHandlers {
+            managed_key: managed_key_command_handler,
+        },
+        query: agent_secret_manager::state::ViewRepositories {
+            managed_key,
+            all_managed_keys,
+        },
+    }
+}
+
 pub async fn identity_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<IdentityServices>,
@@ -178,7 +206,6 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
     let Partitions {
         connection_event_publishers,
         document_event_publishers,
-        managed_key_event_publishers,
         service_event_publishers,
         ..
     } = partition_event_publishers(event_publishers);
@@ -198,9 +225,6 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
     let (service_command_handler, service, all_services) = builder
         .commands_and_queries::<Service, Service, AllServicesView>(services.clone(), service_event_publishers)
         .await;
-    let (managed_key_command_handler, managed_key, all_managed_keys) = builder
-        .commands_and_queries::<ManagedKey, ManagedKey, AllManagedKeysView>(services, managed_key_event_publishers)
-        .await;
 
     IdentityState {
         command: agent_identity::state::CommandHandlers {
@@ -208,7 +232,6 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
             document: document_command_handler,
             profile: profile_command_handler,
             service: service_command_handler,
-            managed_key: managed_key_command_handler,
         },
         query: agent_identity::state::ViewRepositories {
             connection,
@@ -217,8 +240,6 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
             all_documents,
             service,
             all_services,
-            managed_key,
-            all_managed_keys,
             profile,
         },
     }
@@ -350,7 +371,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
             offer,
             all_offers,
         },
-        subject: services.issuer.clone(),
+        subject: services.this_is_the_main_service.clone(),
     }
 }
 

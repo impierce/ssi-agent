@@ -4,9 +4,6 @@ use crate::connection::views::ConnectionView;
 use crate::document::aggregate::Status;
 use crate::document::command::DocumentCommand;
 use crate::document::views::all_documents::AllDocumentsView;
-use crate::managed_key::aggregate::ManagedKey;
-use crate::managed_key::views::all_managed_keys::AllManagedKeysView;
-use crate::managed_key::views::ManagedKeyView;
 use crate::profile::aggregate::{Profile, Source};
 use crate::profile::command::ProfileCommand;
 use crate::profile::views::ProfileView;
@@ -46,7 +43,6 @@ pub struct CommandHandlers {
     pub document: CommandHandler<Document>,
     pub profile: CommandHandler<Profile>,
     pub service: CommandHandler<Service>,
-    pub managed_key: CommandHandler<ManagedKey>,
 }
 
 /// This type is used to define the queries that are used to query the view repositories. We make use of `dyn` here, so
@@ -60,11 +56,9 @@ type Queries = ViewRepositories<
     dyn ViewRepository<ProfileView, Profile>,
     dyn ViewRepository<ServiceView, Service>,
     dyn ViewRepository<AllServicesView, Service>,
-    dyn ViewRepository<ManagedKeyView, ManagedKey>,
-    dyn ViewRepository<AllManagedKeysView, ManagedKey>,
 >;
 
-pub struct ViewRepositories<C1, C2, D1, D2, P, S1, S2, MK1, MK2>
+pub struct ViewRepositories<C1, C2, D1, D2, P, S1, S2>
 where
     C1: ViewRepository<ConnectionView, Connection> + ?Sized,
     C2: ViewRepository<AllConnectionsView, Connection> + ?Sized,
@@ -73,8 +67,6 @@ where
     P: ViewRepository<ProfileView, Profile> + ?Sized,
     S1: ViewRepository<ServiceView, Service> + ?Sized,
     S2: ViewRepository<AllServicesView, Service> + ?Sized,
-    MK1: ViewRepository<ManagedKeyView, ManagedKey> + ?Sized,
-    MK2: ViewRepository<AllManagedKeysView, ManagedKey> + ?Sized,
 {
     pub connection: Arc<C1>,
     pub all_connections: Arc<C2>,
@@ -83,8 +75,6 @@ where
     pub profile: Arc<P>,
     pub service: Arc<S1>,
     pub all_services: Arc<S2>,
-    pub managed_key: Arc<MK1>,
-    pub all_managed_keys: Arc<MK2>,
 }
 
 impl Clone for Queries {
@@ -97,8 +87,6 @@ impl Clone for Queries {
             profile: self.profile.clone(),
             service: self.service.clone(),
             all_services: self.all_services.clone(),
-            managed_key: self.managed_key.clone(),
-            all_managed_keys: self.all_managed_keys.clone(),
         }
     }
 }

@@ -1,7 +1,9 @@
 use crate::IdentityContext;
-use agent_identity::managed_key::aggregate::{ManagedKey, SigningAlgorithm};
-use agent_identity::managed_key::command::ManagedKeyCommand;
 
+use agent_secret_manager::managed_key::{
+    aggregate::{ManagedKey, SigningAlgorithm},
+    command::ManagedKeyCommand,
+};
 use agent_shared::handlers::{command_handler, query_handler};
 use axum::extract::{Json, State};
 use http_api_problem::ApiError;
@@ -90,12 +92,16 @@ pub(crate) async fn rename_key_alias(
         new_alias: payload.new_alias,
     };
 
-    command_handler(&managed_key_id, &context.state.command.managed_key, command)
-        .await
-        .map_err(|e| {
-            tracing::error!("Saga failed: {:?}", e);
-            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
+    command_handler(
+        &managed_key_id,
+        &context.secret_manager_state.command.managed_key,
+        command,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("Saga failed: {:?}", e);
+        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -114,12 +120,16 @@ pub(crate) async fn set_signing_key(
 
     let command = ManagedKeyCommand::SetSigningKey {};
 
-    command_handler(&managed_key_id, &context.state.command.managed_key, command)
-        .await
-        .map_err(|e| {
-            tracing::error!("Saga failed: {:?}", e);
-            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
-        })?;
+    command_handler(
+        &managed_key_id,
+        &context.secret_manager_state.command.managed_key,
+        command,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("Saga failed: {:?}", e);
+        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -128,7 +138,7 @@ pub(crate) async fn set_signing_key(
 pub(crate) async fn list_all(
     State(context): State<IdentityContext>,
 ) -> Result<(StatusCode, Json<Vec<ManagedKeyDto>>), ApiError> {
-    let view = query_handler("all_managed_keys", &context.state.query.all_managed_keys)
+    let view = query_handler("all_managed_keys", &context.secret_manager_state.query.all_managed_keys)
         .await
         .map_err(|e| {
             tracing::error!("Query failed: {:?}", e);
@@ -156,7 +166,7 @@ pub(crate) async fn list_all(
 
 // Helper function to fetch the managed_key_id by its key_id.
 async fn get_managed_key_id(key_id: &str, context: &IdentityContext) -> Result<String, ApiError> {
-    let view = query_handler("all_managed_keys", &context.state.query.all_managed_keys)
+    let view = query_handler("all_managed_keys", &context.secret_manager_state.query.all_managed_keys)
         .await
         .map_err(|e| {
             tracing::error!("Query failed: {:?}", e);

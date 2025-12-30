@@ -1,13 +1,18 @@
-use agent_secret_manager::{service::Service, subject::SubjectExt};
+use agent_identity::services::ThisIsTheMainService;
+use agent_secret_manager::subject::SubjectExt;
 use std::sync::Arc;
 
 /// Issuance services. This struct is used to sign credentials and validate credential requests.
 pub struct IssuanceServices {
-    pub issuer: Arc<dyn SubjectExt>,
+    issuer: Arc<dyn SubjectExt>,
+    pub this_is_the_main_service: Arc<ThisIsTheMainService>,
 }
 
-impl Service for IssuanceServices {
-    fn new(issuer: Arc<dyn SubjectExt>) -> Self {
-        Self { issuer }
+impl IssuanceServices {
+    pub fn new(issuer: Arc<dyn SubjectExt>, this_is_the_main_service: Arc<ThisIsTheMainService>) -> Self {
+        Self {
+            issuer,
+            this_is_the_main_service,
+        }
     }
 }

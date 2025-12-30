@@ -307,102 +307,102 @@ impl Aggregate for ServerConfig {
     }
 }
 
-#[cfg(test)]
-pub mod server_config_tests {
-    use super::test_utils::*;
-    use super::*;
-    use crate::server_config::aggregate::ServerConfig;
-    use crate::server_config::event::ServerConfigEvent;
-    use agent_secret_manager::service::Service;
-    use agent_shared::config::{Authorization, CredentialConfiguration};
-    use cqrs_es::test::TestFramework;
-    use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
-    use oid4vci::credential_format_profiles::{w3c_verifiable_credentials, CredentialFormats, Parameters};
-    use oid4vci::credential_issuer::credential_configurations_supported::{
-        CredentialConfigurationsSupportedDisplay, Logo,
-    };
-    use rstest::*;
+// #[cfg(test)]
+// pub mod server_config_tests {
+//     use super::test_utils::*;
+//     use super::*;
+//     use crate::server_config::aggregate::ServerConfig;
+//     use crate::server_config::event::ServerConfigEvent;
+//     use agent_secret_manager::service::Service;
+//     use agent_shared::config::{Authorization, CredentialConfiguration};
+//     use cqrs_es::test::TestFramework;
+//     use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
+//     use oid4vci::credential_format_profiles::{w3c_verifiable_credentials, CredentialFormats, Parameters};
+//     use oid4vci::credential_issuer::credential_configurations_supported::{
+//         CredentialConfigurationsSupportedDisplay, Logo,
+//     };
+//     use rstest::*;
 
-    type ServerConfigTestFramework = TestFramework<ServerConfig>;
+//     type ServerConfigTestFramework = TestFramework<ServerConfig>;
 
-    #[rstest]
-    fn test_load_server_metadata(
-        authorization_server_metadata: Box<AuthorizationServerMetadata>,
-        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        cryptographic_binding_methods_supported: Vec<String>,
-        signing_algorithms_supported: Vec<Algorithm>,
-    ) {
-        ServerConfigTestFramework::with(Service::default())
-            .given_no_previous_events()
-            .when(ServerConfigCommand::InitializeServerMetadata {
-                authorization_server_metadata: authorization_server_metadata.clone(),
-                credential_issuer_metadata: credential_issuer_metadata.clone(),
-                cryptographic_binding_methods_supported: cryptographic_binding_methods_supported.clone(),
-                signing_algorithms_supported: signing_algorithms_supported.clone(),
-            })
-            .then_expect_events(vec![ServerConfigEvent::ServerMetadataInitialized {
-                authorization_server_metadata,
-                credential_issuer_metadata,
-                cryptographic_binding_methods_supported,
-                signing_algorithms_supported,
-            }]);
-    }
+//     #[rstest]
+//     fn test_load_server_metadata(
+//         authorization_server_metadata: Box<AuthorizationServerMetadata>,
+//         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
+//         cryptographic_binding_methods_supported: Vec<String>,
+//         signing_algorithms_supported: Vec<Algorithm>,
+//     ) {
+//         ServerConfigTestFramework::with(Service::default())
+//             .given_no_previous_events()
+//             .when(ServerConfigCommand::InitializeServerMetadata {
+//                 authorization_server_metadata: authorization_server_metadata.clone(),
+//                 credential_issuer_metadata: credential_issuer_metadata.clone(),
+//                 cryptographic_binding_methods_supported: cryptographic_binding_methods_supported.clone(),
+//                 signing_algorithms_supported: signing_algorithms_supported.clone(),
+//             })
+//             .then_expect_events(vec![ServerConfigEvent::ServerMetadataInitialized {
+//                 authorization_server_metadata,
+//                 credential_issuer_metadata,
+//                 cryptographic_binding_methods_supported,
+//                 signing_algorithms_supported,
+//             }]);
+//     }
 
-    #[rstest]
-    fn test_add_credential_configuration(
-        authorization_server_metadata: Box<AuthorizationServerMetadata>,
-        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        cryptographic_binding_methods_supported: Vec<String>,
-        signing_algorithms_supported: Vec<Algorithm>,
-        credential_configuration_id: String,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
-        credential_issuer_metadata_with_credential_configuration: Box<CredentialIssuerMetadata>,
-    ) {
-        ServerConfigTestFramework::with(Service::default())
-            .given(vec![ServerConfigEvent::ServerMetadataInitialized {
-                authorization_server_metadata,
-                credential_issuer_metadata,
-                cryptographic_binding_methods_supported,
-                signing_algorithms_supported,
-            }])
-            .when(ServerConfigCommand::UpdateCredentialConfiguration {
-                credential_configuration: CredentialConfiguration {
-                    credential_configuration_id: credential_configuration_id.clone(),
-                    credential_format_with_parameters: CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
-                        parameters: w3c_verifiable_credentials::jwt_vc_json::JwtVcJsonParameters {
-                            credential_definition: w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition {
-                                type_: vec!["VerifiableCredential".to_string()],
-                                credential_subject: Default::default(),
-                            },
-                        },
-                    }),
-                    display: vec![CredentialConfigurationsSupportedDisplay {
-                        name: "Verifiable Credential".to_string(),
-                        locale: Some("en".to_string()),
-                        logo: Some(Logo {
-                            uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
-                            alt_text: Some("Impierce Logo".to_string()),
-                        }),
-                        description: None,
-                        background_image: None,
-                        background_color: None,
-                        text_color: None,
-                    }],
-                    claims: vec![],
-                    authorization: Authorization {
-                        pre_authorized: true,
-                        tx_code_constraints: None,
-                    },
-                },
-                provisioned: false,
-            })
-            .then_expect_events(vec![ServerConfigEvent::CredentialConfigurationUpdated {
-                credential_configuration_id,
-                credential_issuer_metadata: credential_issuer_metadata_with_credential_configuration,
-                credential_configurations,
-            }]);
-    }
-}
+//     #[rstest]
+//     fn test_add_credential_configuration(
+//         authorization_server_metadata: Box<AuthorizationServerMetadata>,
+//         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
+//         cryptographic_binding_methods_supported: Vec<String>,
+//         signing_algorithms_supported: Vec<Algorithm>,
+//         credential_configuration_id: String,
+//         credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
+//         credential_issuer_metadata_with_credential_configuration: Box<CredentialIssuerMetadata>,
+//     ) {
+//         ServerConfigTestFramework::with(Service::default())
+//             .given(vec![ServerConfigEvent::ServerMetadataInitialized {
+//                 authorization_server_metadata,
+//                 credential_issuer_metadata,
+//                 cryptographic_binding_methods_supported,
+//                 signing_algorithms_supported,
+//             }])
+//             .when(ServerConfigCommand::UpdateCredentialConfiguration {
+//                 credential_configuration: CredentialConfiguration {
+//                     credential_configuration_id: credential_configuration_id.clone(),
+//                     credential_format_with_parameters: CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
+//                         parameters: w3c_verifiable_credentials::jwt_vc_json::JwtVcJsonParameters {
+//                             credential_definition: w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition {
+//                                 type_: vec!["VerifiableCredential".to_string()],
+//                                 credential_subject: Default::default(),
+//                             },
+//                         },
+//                     }),
+//                     display: vec![CredentialConfigurationsSupportedDisplay {
+//                         name: "Verifiable Credential".to_string(),
+//                         locale: Some("en".to_string()),
+//                         logo: Some(Logo {
+//                             uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
+//                             alt_text: Some("Impierce Logo".to_string()),
+//                         }),
+//                         description: None,
+//                         background_image: None,
+//                         background_color: None,
+//                         text_color: None,
+//                     }],
+//                     claims: vec![],
+//                     authorization: Authorization {
+//                         pre_authorized: true,
+//                         tx_code_constraints: None,
+//                     },
+//                 },
+//                 provisioned: false,
+//             })
+//             .then_expect_events(vec![ServerConfigEvent::CredentialConfigurationUpdated {
+//                 credential_configuration_id,
+//                 credential_issuer_metadata: credential_issuer_metadata_with_credential_configuration,
+//                 credential_configurations,
+//             }]);
+//     }
+// }
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {

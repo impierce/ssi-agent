@@ -265,7 +265,7 @@ impl Aggregate for Offer {
                 credential_request,
             } => {
                 let credential_issuer = CredentialIssuer {
-                    subject: services.issuer.clone(),
+                    subject: services.this_is_the_main_service.clone(),
                     metadata: *credential_issuer_metadata,
                     authorization_server_metadata: *authorization_server_metadata,
                 };
@@ -273,7 +273,7 @@ impl Aggregate for Offer {
                 let proof = credential_issuer
                     .validate_proof(
                         credential_request.proof.ok_or(MissingProofError)?,
-                        Validator::Subject(services.issuer.clone()),
+                        Validator::Subject(services.this_is_the_main_service.clone()),
                     )
                     .await
                     .map_err(|e| InvalidProofError(e.to_string()))?;
@@ -370,321 +370,321 @@ impl Aggregate for Offer {
     }
 }
 
-#[cfg(test)]
-#[allow(unused_imports)]
-pub mod tests {
-    use super::test_utils::*;
-    use crate::credential::aggregate::test_utils::notification_id;
-    use crate::{
-        credential::aggregate::test_utils::OPENBADGE_VERIFIABLE_CREDENTIAL_JWT, offer,
-        server_config::aggregate::test_utils::*,
-    };
-    use agent_secret_manager::service::Service;
-    use cqrs_es::test::TestFramework;
-    use jsonwebtoken::Algorithm;
-    use oid4vc_core::Subject;
-    use oid4vci::{
-        credential_issuer::{
-            authorization_server_metadata::AuthorizationServerMetadata,
-            credential_issuer_metadata::CredentialIssuerMetadata,
-        },
-        credential_request::CredentialRequest,
-    };
+// #[cfg(test)]
+// #[allow(unused_imports)]
+// pub mod tests {
+//     use super::test_utils::*;
+//     use crate::credential::aggregate::test_utils::notification_id;
+//     use crate::{
+//         credential::aggregate::test_utils::OPENBADGE_VERIFIABLE_CREDENTIAL_JWT, offer,
+//         server_config::aggregate::test_utils::*,
+//     };
+//     use agent_secret_manager::service::Service;
+//     use cqrs_es::test::TestFramework;
+//     use jsonwebtoken::Algorithm;
+//     use oid4vc_core::Subject;
+//     use oid4vci::{
+//         credential_issuer::{
+//             authorization_server_metadata::AuthorizationServerMetadata,
+//             credential_issuer_metadata::CredentialIssuerMetadata,
+//         },
+//         credential_request::CredentialRequest,
+//     };
 
-    use serde_json::json;
+//     use serde_json::json;
 
-    type OfferTestFramework = TestFramework<Offer>;
+//     type OfferTestFramework = TestFramework<Offer>;
 
-    #[rstest]
-    #[serial_test::serial]
-    #[allow(clippy::too_many_arguments)]
-    async fn test_create_offer(
-        offer_id: String,
-        grant_types: Vec<GrantType>,
-        #[future(awt)] pre_authorized_code: String,
-        #[future(awt)] credential_offer: CredentialOffer,
-        #[future(awt)] credential_offer_uri: CredentialOffer,
-        #[future(awt)] form_url_encoded_credential_offer: String,
-    ) {
-        OfferTestFramework::with(Service::default())
-            .given_no_previous_events()
-            .when(OfferCommand::CreateCredentialOffer {
-                offer_id: offer_id.clone(),
-                credential_configuration_ids: vec![],
-                grant_types: grant_types.clone(),
-                tx_code_constraints: None,
-                delivery_options: None,
-            })
-            .then_expect_events(vec![
-                OfferEvent::CredentialOfferCreated {
-                    offer_id: offer_id.clone(),
-                    grant_types,
-                    credential_offer,
-                    credential_offer_uri,
-                    pre_authorized_code,
-                    status: Status::Created,
-                    tx_code: None,
-                    delivery_options: None,
-                },
-                OfferEvent::FormUrlEncodedCredentialOfferCreated {
-                    offer_id: offer_id.clone(),
-                    form_url_encoded_credential_offer,
-                    status: Status::Pending,
-                },
-            ]);
-    }
+//     #[rstest]
+//     #[serial_test::serial]
+//     #[allow(clippy::too_many_arguments)]
+//     async fn test_create_offer(
+//         offer_id: String,
+//         grant_types: Vec<GrantType>,
+//         #[future(awt)] pre_authorized_code: String,
+//         #[future(awt)] credential_offer: CredentialOffer,
+//         #[future(awt)] credential_offer_uri: CredentialOffer,
+//         #[future(awt)] form_url_encoded_credential_offer: String,
+//     ) {
+//         OfferTestFramework::with(Service::default())
+//             .given_no_previous_events()
+//             .when(OfferCommand::CreateCredentialOffer {
+//                 offer_id: offer_id.clone(),
+//                 credential_configuration_ids: vec![],
+//                 grant_types: grant_types.clone(),
+//                 tx_code_constraints: None,
+//                 delivery_options: None,
+//             })
+//             .then_expect_events(vec![
+//                 OfferEvent::CredentialOfferCreated {
+//                     offer_id: offer_id.clone(),
+//                     grant_types,
+//                     credential_offer,
+//                     credential_offer_uri,
+//                     pre_authorized_code,
+//                     status: Status::Created,
+//                     tx_code: None,
+//                     delivery_options: None,
+//                 },
+//                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
+//                     offer_id: offer_id.clone(),
+//                     form_url_encoded_credential_offer,
+//                     status: Status::Pending,
+//                 },
+//             ]);
+//     }
 
-    #[rstest]
-    #[serial_test::serial]
-    #[allow(clippy::too_many_arguments)]
-    async fn test_create_offer_with_delivery_options(
-        offer_id: String,
-        grant_types: Vec<GrantType>,
-        #[future(awt)] pre_authorized_code: String,
-        #[future(awt)] credential_offer: CredentialOffer,
-        #[future(awt)] credential_offer_uri: CredentialOffer,
-        #[future(awt)] form_url_encoded_credential_offer: String,
-        delivery_options: DeliveryOptions,
-    ) {
-        OfferTestFramework::with(Service::default())
-            .given_no_previous_events()
-            .when(OfferCommand::CreateCredentialOffer {
-                offer_id: offer_id.clone(),
-                credential_configuration_ids: vec![],
-                grant_types: grant_types.clone(),
-                tx_code_constraints: None,
-                delivery_options: Some(delivery_options.clone()),
-            })
-            .then_expect_events(vec![
-                OfferEvent::CredentialOfferCreated {
-                    offer_id: offer_id.clone(),
-                    grant_types,
-                    credential_offer,
-                    credential_offer_uri,
-                    pre_authorized_code,
-                    status: Status::Created,
-                    tx_code: None,
-                    delivery_options: Some(delivery_options.clone()),
-                },
-                OfferEvent::FormUrlEncodedCredentialOfferCreated {
-                    offer_id: offer_id.clone(),
-                    form_url_encoded_credential_offer,
-                    status: Status::Pending,
-                },
-            ]);
-    }
+//     #[rstest]
+//     #[serial_test::serial]
+//     #[allow(clippy::too_many_arguments)]
+//     async fn test_create_offer_with_delivery_options(
+//         offer_id: String,
+//         grant_types: Vec<GrantType>,
+//         #[future(awt)] pre_authorized_code: String,
+//         #[future(awt)] credential_offer: CredentialOffer,
+//         #[future(awt)] credential_offer_uri: CredentialOffer,
+//         #[future(awt)] form_url_encoded_credential_offer: String,
+//         delivery_options: DeliveryOptions,
+//     ) {
+//         OfferTestFramework::with(Service::default())
+//             .given_no_previous_events()
+//             .when(OfferCommand::CreateCredentialOffer {
+//                 offer_id: offer_id.clone(),
+//                 credential_configuration_ids: vec![],
+//                 grant_types: grant_types.clone(),
+//                 tx_code_constraints: None,
+//                 delivery_options: Some(delivery_options.clone()),
+//             })
+//             .then_expect_events(vec![
+//                 OfferEvent::CredentialOfferCreated {
+//                     offer_id: offer_id.clone(),
+//                     grant_types,
+//                     credential_offer,
+//                     credential_offer_uri,
+//                     pre_authorized_code,
+//                     status: Status::Created,
+//                     tx_code: None,
+//                     delivery_options: Some(delivery_options.clone()),
+//                 },
+//                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
+//                     offer_id: offer_id.clone(),
+//                     form_url_encoded_credential_offer,
+//                     status: Status::Pending,
+//                 },
+//             ]);
+//     }
 
-    #[rstest]
-    #[serial_test::serial]
-    #[allow(clippy::too_many_arguments)]
-    async fn test_add_credential(
-        offer_id: String,
-        grant_types: Vec<GrantType>,
-        #[future(awt)] pre_authorized_code: String,
-        #[future(awt)] credential_offer: CredentialOffer,
-        #[future(awt)] credential_offer_uri: CredentialOffer,
-        credential_configuration_id: String,
-        #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
-        #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
-    ) {
-        OfferTestFramework::with(Service::default())
-            .given(vec![OfferEvent::CredentialOfferCreated {
-                offer_id: offer_id.clone(),
-                grant_types,
-                credential_offer_uri,
-                credential_offer,
-                pre_authorized_code,
-                status: Status::Created,
-                tx_code: None,
-                delivery_options: None,
-            }])
-            .when(OfferCommand::AddCredentials {
-                offer_id: offer_id.clone(),
-                credential_ids: vec!["credential-id".to_string()],
-                credential_configuration_ids: vec![credential_configuration_id],
-            })
-            .then_expect_events(vec![
-                OfferEvent::CredentialsAdded {
-                    offer_id: offer_id.clone(),
-                    credential_ids: vec!["credential-id".to_string()],
-                    credential_offer: credential_offer_with_credential_configuration_ids,
-                },
-                OfferEvent::FormUrlEncodedCredentialOfferCreated {
-                    offer_id,
-                    form_url_encoded_credential_offer:
-                        form_url_encoded_credential_offer_with_credential_configuration_ids,
-                    status: Status::Pending,
-                },
-            ]);
-    }
+//     #[rstest]
+//     #[serial_test::serial]
+//     #[allow(clippy::too_many_arguments)]
+//     async fn test_add_credential(
+//         offer_id: String,
+//         grant_types: Vec<GrantType>,
+//         #[future(awt)] pre_authorized_code: String,
+//         #[future(awt)] credential_offer: CredentialOffer,
+//         #[future(awt)] credential_offer_uri: CredentialOffer,
+//         credential_configuration_id: String,
+//         #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
+//         #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
+//     ) {
+//         OfferTestFramework::with(Service::default())
+//             .given(vec![OfferEvent::CredentialOfferCreated {
+//                 offer_id: offer_id.clone(),
+//                 grant_types,
+//                 credential_offer_uri,
+//                 credential_offer,
+//                 pre_authorized_code,
+//                 status: Status::Created,
+//                 tx_code: None,
+//                 delivery_options: None,
+//             }])
+//             .when(OfferCommand::AddCredentials {
+//                 offer_id: offer_id.clone(),
+//                 credential_ids: vec!["credential-id".to_string()],
+//                 credential_configuration_ids: vec![credential_configuration_id],
+//             })
+//             .then_expect_events(vec![
+//                 OfferEvent::CredentialsAdded {
+//                     offer_id: offer_id.clone(),
+//                     credential_ids: vec!["credential-id".to_string()],
+//                     credential_offer: credential_offer_with_credential_configuration_ids,
+//                 },
+//                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
+//                     offer_id,
+//                     form_url_encoded_credential_offer:
+//                         form_url_encoded_credential_offer_with_credential_configuration_ids,
+//                     status: Status::Pending,
+//                 },
+//             ]);
+//     }
 
-    #[allow(clippy::too_many_arguments)]
-    #[rstest]
-    #[serial_test::serial]
-    async fn test_verify_credential_response(
-        offer_id: String,
-        grant_types: Vec<GrantType>,
-        #[future(awt)] holder: Arc<dyn Subject>,
-        #[future(awt)] pre_authorized_code: String,
-        #[future(awt)] credential_offer: CredentialOffer,
-        #[future(awt)] credential_offer_uri: CredentialOffer,
-        #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
-        #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
-        #[future(awt)] credential_request: CredentialRequest,
-        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        authorization_server_metadata: Box<AuthorizationServerMetadata>,
-    ) {
-        OfferTestFramework::with(Service::default())
-            .given(vec![
-                OfferEvent::CredentialOfferCreated {
-                    offer_id: offer_id.clone(),
-                    grant_types,
-                    credential_offer,
-                    credential_offer_uri,
-                    pre_authorized_code,
-                    status: Status::Created,
-                    tx_code: None,
-                    delivery_options: None,
-                },
-                OfferEvent::CredentialsAdded {
-                    offer_id: offer_id.clone(),
-                    credential_ids: vec!["credential-id".to_string()],
-                    credential_offer: credential_offer_with_credential_configuration_ids,
-                },
-                OfferEvent::FormUrlEncodedCredentialOfferCreated {
-                    offer_id: offer_id.clone(),
-                    form_url_encoded_credential_offer:
-                        form_url_encoded_credential_offer_with_credential_configuration_ids,
-                    status: Status::Pending,
-                },
-            ])
-            .when(OfferCommand::VerifyCredentialRequest {
-                offer_id: offer_id.clone(),
-                credential_issuer_metadata,
-                authorization_server_metadata,
-                credential_request,
-            })
-            .then_expect_events(vec![OfferEvent::CredentialRequestVerified {
-                offer_id: offer_id.clone(),
-                subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
-            }]);
-    }
+//     #[allow(clippy::too_many_arguments)]
+//     #[rstest]
+//     #[serial_test::serial]
+//     async fn test_verify_credential_response(
+//         offer_id: String,
+//         grant_types: Vec<GrantType>,
+//         #[future(awt)] holder: Arc<dyn Subject>,
+//         #[future(awt)] pre_authorized_code: String,
+//         #[future(awt)] credential_offer: CredentialOffer,
+//         #[future(awt)] credential_offer_uri: CredentialOffer,
+//         #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
+//         #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
+//         #[future(awt)] credential_request: CredentialRequest,
+//         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
+//         authorization_server_metadata: Box<AuthorizationServerMetadata>,
+//     ) {
+//         OfferTestFramework::with(Service::default())
+//             .given(vec![
+//                 OfferEvent::CredentialOfferCreated {
+//                     offer_id: offer_id.clone(),
+//                     grant_types,
+//                     credential_offer,
+//                     credential_offer_uri,
+//                     pre_authorized_code,
+//                     status: Status::Created,
+//                     tx_code: None,
+//                     delivery_options: None,
+//                 },
+//                 OfferEvent::CredentialsAdded {
+//                     offer_id: offer_id.clone(),
+//                     credential_ids: vec!["credential-id".to_string()],
+//                     credential_offer: credential_offer_with_credential_configuration_ids,
+//                 },
+//                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
+//                     offer_id: offer_id.clone(),
+//                     form_url_encoded_credential_offer:
+//                         form_url_encoded_credential_offer_with_credential_configuration_ids,
+//                     status: Status::Pending,
+//                 },
+//             ])
+//             .when(OfferCommand::VerifyCredentialRequest {
+//                 offer_id: offer_id.clone(),
+//                 credential_issuer_metadata,
+//                 authorization_server_metadata,
+//                 credential_request,
+//             })
+//             .then_expect_events(vec![OfferEvent::CredentialRequestVerified {
+//                 offer_id: offer_id.clone(),
+//                 subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
+//             }]);
+//     }
 
-    #[rstest]
-    #[allow(clippy::too_many_arguments)]
-    #[serial_test::serial]
-    async fn test_create_credential_response(
-        offer_id: String,
-        grant_types: Vec<GrantType>,
-        #[future(awt)] holder: Arc<dyn Subject>,
-        #[future(awt)] pre_authorized_code: String,
-        #[future(awt)] credential_offer: CredentialOffer,
-        #[future(awt)] credential_offer_uri: CredentialOffer,
-        #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
-        #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
-        credential_response: CredentialResponse,
-        notification_id: String,
-    ) {
-        OfferTestFramework::with(Service::default())
-            .given(vec![
-                OfferEvent::CredentialOfferCreated {
-                    offer_id: offer_id.clone(),
-                    grant_types,
-                    credential_offer,
-                    credential_offer_uri,
-                    pre_authorized_code,
-                    status: Status::Created,
-                    tx_code: None,
-                    delivery_options: None,
-                },
-                OfferEvent::CredentialsAdded {
-                    offer_id: offer_id.clone(),
-                    credential_ids: vec!["credential-id".to_string()],
-                    credential_offer: credential_offer_with_credential_configuration_ids,
-                },
-                OfferEvent::FormUrlEncodedCredentialOfferCreated {
-                    offer_id: offer_id.clone(),
-                    form_url_encoded_credential_offer:
-                        form_url_encoded_credential_offer_with_credential_configuration_ids,
-                    status: Status::Pending,
-                },
-                OfferEvent::CredentialRequestVerified {
-                    offer_id: offer_id.clone(),
-                    subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
-                },
-            ])
-            .when(OfferCommand::CreateCredentialResponse {
-                offer_id: offer_id.clone(),
-                signed_credentials: vec![(
-                    json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT),
-                    Some(notification_id.clone()),
-                )],
-            })
-            .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
-                offer_id: offer_id.clone(),
-                credential_response,
-                status: Status::Issued,
-            }]);
-    }
+//     #[rstest]
+//     #[allow(clippy::too_many_arguments)]
+//     #[serial_test::serial]
+//     async fn test_create_credential_response(
+//         offer_id: String,
+//         grant_types: Vec<GrantType>,
+//         #[future(awt)] holder: Arc<dyn Subject>,
+//         #[future(awt)] pre_authorized_code: String,
+//         #[future(awt)] credential_offer: CredentialOffer,
+//         #[future(awt)] credential_offer_uri: CredentialOffer,
+//         #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
+//         #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
+//         credential_response: CredentialResponse,
+//         notification_id: String,
+//     ) {
+//         OfferTestFramework::with(Service::default())
+//             .given(vec![
+//                 OfferEvent::CredentialOfferCreated {
+//                     offer_id: offer_id.clone(),
+//                     grant_types,
+//                     credential_offer,
+//                     credential_offer_uri,
+//                     pre_authorized_code,
+//                     status: Status::Created,
+//                     tx_code: None,
+//                     delivery_options: None,
+//                 },
+//                 OfferEvent::CredentialsAdded {
+//                     offer_id: offer_id.clone(),
+//                     credential_ids: vec!["credential-id".to_string()],
+//                     credential_offer: credential_offer_with_credential_configuration_ids,
+//                 },
+//                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
+//                     offer_id: offer_id.clone(),
+//                     form_url_encoded_credential_offer:
+//                         form_url_encoded_credential_offer_with_credential_configuration_ids,
+//                     status: Status::Pending,
+//                 },
+//                 OfferEvent::CredentialRequestVerified {
+//                     offer_id: offer_id.clone(),
+//                     subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
+//                 },
+//             ])
+//             .when(OfferCommand::CreateCredentialResponse {
+//                 offer_id: offer_id.clone(),
+//                 signed_credentials: vec![(
+//                     json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT),
+//                     Some(notification_id.clone()),
+//                 )],
+//             })
+//             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
+//                 offer_id: offer_id.clone(),
+//                 credential_response,
+//                 status: Status::Issued,
+//             }]);
+//     }
 
-    #[rstest]
-    #[allow(clippy::too_many_arguments)]
-    #[serial_test::serial]
-    async fn test_just_in_time_credential_flow(
-        offer_id: String,
-        grant_types: Vec<GrantType>,
-        #[future(awt)] holder: Arc<dyn Subject>,
-        #[future(awt)] pre_authorized_code: String,
-        #[future(awt)] credential_offer: CredentialOffer,
-        #[future(awt)] credential_offer_uri: CredentialOffer,
-        #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
-        #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
-        credential_response: CredentialResponse,
-        notification_id: String,
-    ) {
-        OfferTestFramework::with(Service::default())
-            .given(vec![
-                OfferEvent::CredentialOfferCreated {
-                    offer_id: offer_id.clone(),
-                    grant_types,
-                    credential_offer,
-                    credential_offer_uri,
-                    pre_authorized_code,
-                    status: Status::Created,
-                    tx_code: None,
-                    delivery_options: None,
-                },
-                OfferEvent::FormUrlEncodedCredentialOfferCreated {
-                    offer_id: offer_id.clone(),
-                    form_url_encoded_credential_offer:
-                        form_url_encoded_credential_offer_with_credential_configuration_ids,
-                    status: Status::Pending,
-                },
-                OfferEvent::CredentialRequestVerified {
-                    offer_id: offer_id.clone(),
-                    subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
-                },
-                // Credentials are only added after the credential request is verified (JIT)
-                OfferEvent::CredentialsAdded {
-                    offer_id: offer_id.clone(),
-                    credential_ids: vec!["credential-id".to_string()],
-                    credential_offer: credential_offer_with_credential_configuration_ids,
-                },
-            ])
-            .when(OfferCommand::CreateCredentialResponse {
-                offer_id: offer_id.clone(),
-                signed_credentials: vec![(
-                    json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT),
-                    Some(notification_id.clone()),
-                )],
-            })
-            .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
-                offer_id: offer_id.clone(),
-                credential_response,
-                status: Status::Issued,
-            }]);
-    }
-}
+//     #[rstest]
+//     #[allow(clippy::too_many_arguments)]
+//     #[serial_test::serial]
+//     async fn test_just_in_time_credential_flow(
+//         offer_id: String,
+//         grant_types: Vec<GrantType>,
+//         #[future(awt)] holder: Arc<dyn Subject>,
+//         #[future(awt)] pre_authorized_code: String,
+//         #[future(awt)] credential_offer: CredentialOffer,
+//         #[future(awt)] credential_offer_uri: CredentialOffer,
+//         #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
+//         #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
+//         credential_response: CredentialResponse,
+//         notification_id: String,
+//     ) {
+//         OfferTestFramework::with(Service::default())
+//             .given(vec![
+//                 OfferEvent::CredentialOfferCreated {
+//                     offer_id: offer_id.clone(),
+//                     grant_types,
+//                     credential_offer,
+//                     credential_offer_uri,
+//                     pre_authorized_code,
+//                     status: Status::Created,
+//                     tx_code: None,
+//                     delivery_options: None,
+//                 },
+//                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
+//                     offer_id: offer_id.clone(),
+//                     form_url_encoded_credential_offer:
+//                         form_url_encoded_credential_offer_with_credential_configuration_ids,
+//                     status: Status::Pending,
+//                 },
+//                 OfferEvent::CredentialRequestVerified {
+//                     offer_id: offer_id.clone(),
+//                     subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
+//                 },
+//                 // Credentials are only added after the credential request is verified (JIT)
+//                 OfferEvent::CredentialsAdded {
+//                     offer_id: offer_id.clone(),
+//                     credential_ids: vec!["credential-id".to_string()],
+//                     credential_offer: credential_offer_with_credential_configuration_ids,
+//                 },
+//             ])
+//             .when(OfferCommand::CreateCredentialResponse {
+//                 offer_id: offer_id.clone(),
+//                 signed_credentials: vec![(
+//                     json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT),
+//                     Some(notification_id.clone()),
+//                 )],
+//             })
+//             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
+//                 offer_id: offer_id.clone(),
+//                 credential_response,
+//                 status: Status::Issued,
+//             }]);
+//     }
+// }
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {

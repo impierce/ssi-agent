@@ -1,29 +1,28 @@
+use agent_secret_manager::{managed_key::command::ManagedKeyCommand, state::SecretManagerState};
 use agent_shared::handlers::{command_handler, query_handler};
 use async_trait::async_trait;
 use cqrs_es::{EventEnvelope, Query};
 use identity_iota::verification::VerificationMethod;
 use identity_storage::KeyId;
 
-use crate::{
-    document::command::DocumentCommand,
-    managed_key::{
-        aggregate::{ManagedKey, SigningAlgorithm},
-        command::ManagedKeyCommand,
-    },
-    services::IdentityServices,
-    state::IdentityState,
-};
+use agent_identity::{document::command::DocumentCommand, services::IdentityServices, state::IdentityState};
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct KeyRemovalSaga {
+    secret_manager_state: Arc<SecretManagerState>,
     identity_state: Arc<IdentityState>,
     identity_services: Arc<IdentityServices>,
 }
 
 impl KeyRemovalSaga {
-    pub fn new(identity_state: Arc<IdentityState>, identity_services: Arc<IdentityServices>) -> Self {
+    pub fn new(
+        secret_manager_state: Arc<SecretManagerState>,
+        identity_state: Arc<IdentityState>,
+        identity_services: Arc<IdentityServices>,
+    ) -> Self {
         Self {
+            secret_manager_state,
             identity_state,
             identity_services,
         }
@@ -34,11 +33,11 @@ impl KeyRemovalSaga {
 
         let command = ManagedKeyCommand::RemoveKey;
 
-        command_handler(&managed_key_id, &self.identity_state.command.managed_key, command)
+        command_handler(&managed_key_id, &self.secret_manager_state.command.managed_key, command)
             .await
             .unwrap();
 
-        if let Some(managed_key_view) = query_handler(&managed_key_id, &self.identity_state.query.managed_key)
+        if let Some(managed_key_view) = query_handler(&managed_key_id, &self.secret_manager_state.query.managed_key)
             .await
             .unwrap()
         {

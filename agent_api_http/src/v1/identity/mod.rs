@@ -1,10 +1,11 @@
 pub mod keys;
 
+use crate::sagas::key_generation_saga::KeyGenerationSaga;
+use crate::sagas::key_removal_saga::KeyRemovalSaga;
 use crate::v1::identity::keys::{generate_key, list_all, remove_key, rename_key_alias, set_signing_key};
 use crate::API_VERSION;
-use agent_identity::application::sagas::key_generation_saga::KeyGenerationSaga;
-use agent_identity::application::sagas::key_removal_saga::KeyRemovalSaga;
 use agent_identity::state::IdentityState;
+use agent_secret_manager::state::SecretManagerState;
 use axum::{
     routing::{get, post},
     Router,
@@ -14,7 +15,8 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct IdentityContext {
-    pub state: Arc<IdentityState>,
+    pub identity_state: Arc<IdentityState>,
+    pub secret_manager_state: Arc<SecretManagerState>,
     pub key_generation_saga: KeyGenerationSaga,
     pub key_removal_saga: KeyRemovalSaga,
 }

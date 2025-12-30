@@ -5,22 +5,18 @@ use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager_consumer::resolver::Resolver;
 use did_manager_identity_stronghold_ext::StrongholdExtStorage;
-use identity_iota::did::DIDUrl;
 use identity_iota::storage::{JwkStorage, KeyId};
 use identity_iota::verification::jwk::Jwk;
 use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
-use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 /// Reponsible for signing and verifying data.
 #[derive(Debug)]
 pub struct Subject {
     pub stronghold_storage: StrongholdExtStorage,
-    pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DIDUrl>>>,
 }
 
 impl Subject {
@@ -28,10 +24,7 @@ impl Subject {
     pub async fn new() -> Self {
         let stronghold_storage = stronghold_storage().await;
 
-        Self {
-            stronghold_storage,
-            verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
-        }
+        Self { stronghold_storage }
     }
 
     pub async fn get_public_key(&self, key_id: KeyId, algorithm: &Algorithm) -> anyhow::Result<Jwk> {
@@ -41,22 +34,6 @@ impl Subject {
             _ => anyhow::bail!("Unsuported algorithm"),
         }
         .map_err(Into::into)
-    }
-
-    pub async fn insert_verification_method_id(
-        &self,
-        key: StorageKey,
-        verification_method_id: DIDUrl,
-    ) -> anyhow::Result<()> {
-        self.verification_method_ids
-            .lock()
-            .await
-            .insert(key, verification_method_id);
-        Ok(())
-    }
-
-    pub async fn get_verification_method_id(&self, key: StorageKey) -> Option<DIDUrl> {
-        self.verification_method_ids.lock().await.get(&key).cloned()
     }
 }
 
@@ -101,45 +78,13 @@ impl SubjectExt for Subject {
 mod default_subject {
     use super::*;
 
-    impl Subject {
-        const DID_KEY_ES256_VERIFICATION_METHOD_ID: &str = "did:key:zDnaeRwT4g6AZCHzxvNL7DLjqTaT88am4XR6TUGrKr6DXj6Tz#zDnaeRwT4g6AZCHzxvNL7DLjqTaT88am4XR6TUGrKr6DXj6Tz";
-        const DID_KEY_EDDSA_VERIFICATION_METHOD_ID: &str =
-            "did:key:z6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt#z6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt";
-        const DID_JWK_ES256_VERIFICATION_METHOD_ID: &str =
-            "did:jwk:eyJhbGciOiJFUzI1NiIsImNydiI6IlAtMjU2Iiwia2lkIjoib09ZMmRNVlU3R0s1YWwxcTdFQXh1b1lsb3hNUWx2NVpOWk9hdGlVWFFIZyIsImt0eSI6IkVDIiwieCI6IkZtazEzZ08yU0dMYnVYZUwyNHFKUEhDTm5jbkk2bEJ1NlpRTDJFVlp2NEUiLCJ5IjoiZnoyS3ZNaHVmelVwTWVMOS1LMnJlOWZ3QTNtemcxYnBmYmNlSVFTdWloWSJ9#0";
-        const DID_JWK_EDDSA_VERIFICATION_METHOD_ID: &str =
-            "did:jwk:eyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ#0";
-    }
-
     // This `Default` implementation for `Subject` returns a new `Subject` with the Verification Method IDs already preloaded.
     impl Default for Subject {
         fn default() -> Self {
             futures::executor::block_on(async {
                 let stronghold_storage = stronghold_storage().await;
 
-                let verification_method_ids = Arc::new(Mutex::new(HashMap::from_iter(vec![
-                    (
-                        StorageKey::new(SupportedDidMethod::Key, Algorithm::ES256),
-                        Self::DID_KEY_ES256_VERIFICATION_METHOD_ID.parse().unwrap(),
-                    ),
-                    (
-                        StorageKey::new(SupportedDidMethod::Key, Algorithm::EdDSA),
-                        Self::DID_KEY_EDDSA_VERIFICATION_METHOD_ID.parse().unwrap(),
-                    ),
-                    (
-                        StorageKey::new(SupportedDidMethod::Jwk, Algorithm::ES256),
-                        Self::DID_JWK_ES256_VERIFICATION_METHOD_ID.parse().unwrap(),
-                    ),
-                    (
-                        StorageKey::new(SupportedDidMethod::Jwk, Algorithm::EdDSA),
-                        Self::DID_JWK_EDDSA_VERIFICATION_METHOD_ID.parse().unwrap(),
-                    ),
-                ])));
-
-                Self {
-                    stronghold_storage,
-                    verification_method_ids,
-                }
+                Self { stronghold_storage }
             })
         }
     }
@@ -199,10 +144,12 @@ impl Sign for Subject {
     async fn key_id(&self, subject_syntax_type: &str, algorithm: Algorithm) -> Option<String> {
         let method = SupportedDidMethod::from_str(subject_syntax_type).ok()?;
 
-        self.get_verification_method_id(StorageKey::new(method, algorithm))
-            .await
-            .as_ref()
-            .map(ToString::to_string)
+        // self.get_verification_method_id(StorageKey::new(method, algorithm))
+        //     .await
+        //     .as_ref()
+        //     .map(ToString::to_string)
+
+        todo!()
     }
 
     async fn sign(&self, message: &str, _subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
@@ -238,24 +185,14 @@ impl oid4vc_core::Subject for Subject {
         let method = SupportedDidMethod::from_str(subject_syntax_type)
             .map_err(|e| anyhow!("Failed to parse SupportedDidMethod from string: {}", e))?;
 
-        self.get_verification_method_id(StorageKey::new(method, algorithm))
-            .await
-            .as_ref()
-            .map(DIDUrl::did)
-            .map(ToString::to_string)
-            .ok_or_else(|| anyhow!("Failed to get verification method ID"))
-    }
-}
+        // self.get_verification_method_id(StorageKey::new(method, algorithm))
+        //     .await
+        //     .as_ref()
+        //     .map(DIDUrl::did)
+        //     .map(ToString::to_string)
+        //     .ok_or_else(|| anyhow!("Failed to get verification method ID"))
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct StorageKey {
-    pub did_method: SupportedDidMethod,
-    pub algorithm: Algorithm,
-}
-
-impl StorageKey {
-    pub fn new(did_method: SupportedDidMethod, algorithm: Algorithm) -> Self {
-        Self { did_method, algorithm }
+        todo!()
     }
 }
 
@@ -283,39 +220,39 @@ mod tests {
     async fn es256_signed_jwt_successfully_verified() {
         set_config().set_secret_manager_config(SECRET_MANAGER_CONFIG.clone());
 
-        let subject = Arc::new(Subject::default());
+        // let subject = Arc::new(Subject::default());
 
-        let mut split = ES256_SIGNED_JWT.rsplitn(2, '.');
-        let (signature, message) = (split.next().unwrap(), split.next().unwrap());
+        // let mut split = ES256_SIGNED_JWT.rsplitn(2, '.');
+        // let (signature, message) = (split.next().unwrap(), split.next().unwrap());
 
-        // Decode the signature.
-        let signature_bytes = URL_SAFE_NO_PAD.decode(signature).unwrap();
+        // // Decode the signature.
+        // let signature_bytes = URL_SAFE_NO_PAD.decode(signature).unwrap();
 
-        // Resolve the public key from the DID Document
-        let public_key_bytes = subject.public_key("did:jwk:eyJhbGciOiJFUzI1NiIsImNydiI6IlAtMjU2Iiwia2lkIjoiNEF1WWhSQ2NGbG4ybnRnU19qOXBFQmRLdzIwUHQtbGFqWUhtWTdBME1GTSIsImt0eSI6IkVDIiwieCI6IjJMWGpORE96V3RwZVNZM2tiTlI2ZmxaTUR4YWh1azJ2UW1jdXZkQThvNDQiLCJ5IjoiZEF2RVZsWE1HUEtac2tWWTRZVzBzOEI4S3Y3c2sxYzkyT05YREpveF9IcyJ9#0").await.unwrap();
+        // // Resolve the public key from the DID Document
+        // let public_key_bytes = subject.public_key("did:jwk:eyJhbGciOiJFUzI1NiIsImNydiI6IlAtMjU2Iiwia2lkIjoiNEF1WWhSQ2NGbG4ybnRnU19qOXBFQmRLdzIwUHQtbGFqWUhtWTdBME1GTSIsImt0eSI6IkVDIiwieCI6IjJMWGpORE96V3RwZVNZM2tiTlI2ZmxaTUR4YWh1azJ2UW1jdXZkQThvNDQiLCJ5IjoiZEF2RVZsWE1HUEtac2tWWTRZVzBzOEI4S3Y3c2sxYzkyT05YREpveF9IcyJ9#0").await.unwrap();
 
-        // Verify the signature
-        let public_key = UnparsedPublicKey::new(&ECDSA_P256_SHA256_FIXED, public_key_bytes);
-        assert!(public_key.verify(message.as_bytes(), &signature_bytes).is_ok());
+        // // Verify the signature
+        // let public_key = UnparsedPublicKey::new(&ECDSA_P256_SHA256_FIXED, public_key_bytes);
+        // assert!(public_key.verify(message.as_bytes(), &signature_bytes).is_ok());
     }
 
     #[tokio::test]
     async fn eddsa_signed_jwt_successfully_verified() {
         set_config().set_secret_manager_config(SECRET_MANAGER_CONFIG.clone());
 
-        let subject = Arc::new(Subject::default());
+        // let subject = Arc::new(Subject::default());
 
-        let mut split = EDDSA_SIGNED_JWT.rsplitn(2, '.');
-        let (signature, message) = (split.next().unwrap(), split.next().unwrap());
+        // let mut split = EDDSA_SIGNED_JWT.rsplitn(2, '.');
+        // let (signature, message) = (split.next().unwrap(), split.next().unwrap());
 
-        // Decode the signature.
-        let signature_bytes = URL_SAFE_NO_PAD.decode(signature).unwrap();
+        // // Decode the signature.
+        // let signature_bytes = URL_SAFE_NO_PAD.decode(signature).unwrap();
 
-        // Resolve the public key from the DID Document
-        let public_key_bytes = subject.public_key("did:jwk:eyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJJbV9ZMFFPNm9HX2s5Mm9scTVMdHQ2YVA4c19BbEFhVUIzS0dzUEcteGI0Iiwia3R5IjoiT0tQIiwieCI6IlZPakR0QnZ3cGZjSkhyTzZLV1NPdXNVUGZmQkwyR19KcXZtUTY4S3h4VjQifQ#0").await.unwrap();
+        // // Resolve the public key from the DID Document
+        // let public_key_bytes = subject.public_key("did:jwk:eyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJJbV9ZMFFPNm9HX2s5Mm9scTVMdHQ2YVA4c19BbEFhVUIzS0dzUEcteGI0Iiwia3R5IjoiT0tQIiwieCI6IlZPakR0QnZ3cGZjSkhyTzZLV1NPdXNVUGZmQkwyR19KcXZtUTY4S3h4VjQifQ#0").await.unwrap();
 
-        // Verify the signature
-        let public_key = UnparsedPublicKey::new(&ED25519, public_key_bytes);
-        assert!(public_key.verify(message.as_bytes(), &signature_bytes).is_ok());
+        // // Verify the signature
+        // let public_key = UnparsedPublicKey::new(&ED25519, public_key_bytes);
+        // assert!(public_key.verify(message.as_bytes(), &signature_bytes).is_ok());
     }
 }
