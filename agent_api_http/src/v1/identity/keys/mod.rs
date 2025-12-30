@@ -153,7 +153,7 @@ pub(crate) async fn list_all(
     Ok((StatusCode::OK, Json(keys)))
 }
 
-// Helper function to find managed_key_id by key_id
+// Helper function to find the managed_key_id by key_id
 async fn get_managed_key_id(key_id: &str, context: &IdentityContext) -> Result<String, ApiError> {
     let view = query_handler("all_managed_keys", &context.state.query.all_managed_keys)
         .await
