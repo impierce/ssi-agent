@@ -34,8 +34,9 @@ thiserror.workspace = true
 tracing.workspace = true
 url.workspace = true
 
-# `test_utils` dependencies
+did-key = { version = "0.2", optional = true }         # `test_utils` dependencies
 lazy_static = { workspace = true, optional = true }
+oid4vc-manager = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }
 rstest = { workspace = true, optional = true }
 
@@ -51,4 +52,10 @@ serial_test = "3.0"
 tracing-test.workspace = true
 
 [features]
-test_utils = ["dep:lazy_static", "dep:once_cell", "dep:rstest"]
+test_utils = [
+    "dep:did-key",
+    "dep:lazy_static",
+    "dep:oid4vc-manager",
+    "dep:once_cell",
+    "dep:rstest",
+]

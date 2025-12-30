@@ -842,110 +842,110 @@ pub fn get_properties(method_type: MethodType) -> BTreeMap<String, serde_json::V
     properties
 }
 
-// #[cfg(test)]
-// pub mod document_tests {
-//     use crate::state::DOMAIN_LINKAGE_SERVICE_ID;
+#[cfg(test)]
+pub mod document_tests {
+    use crate::state::DOMAIN_LINKAGE_SERVICE_ID;
 
-//     use super::test_utils::*;
-//     use super::*;
-//     use cqrs_es::test::TestFramework;
-//     use identity_document::service::Service;
-//     use rstest::rstest;
+    use super::test_utils::*;
+    use super::*;
+    use cqrs_es::test::TestFramework;
+    use identity_document::service::Service;
+    use rstest::rstest;
 
-//     type DocumentTestFramework = TestFramework<Document>;
+    type DocumentTestFramework = TestFramework<Document>;
 
-//     #[rstest]
-//     #[serial_test::serial]
-//     async fn test_create_document(document_id: String, did_method: SupportedDidMethod, document: CoreDocument) {
-//         DocumentTestFramework::with(IdentityServices::default())
-//             .given_no_previous_events()
-//             .when(DocumentCommand::CreateDocument {
-//                 document_id: document_id.clone(),
-//                 did_method,
-//                 with_fixed_algorithm: None,
-//             })
-//             .then_expect_events(vec![DocumentEvent::DocumentCreated {
-//                 document_id,
-//                 did_method,
-//                 document,
-//                 status: Status::SignAndValidate,
-//                 with_fixed_algorithm: None,
-//                 iota_metadata: None,
-//             }])
-//     }
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_document(document_id: String, did_method: SupportedDidMethod, document: CoreDocument) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given_no_previous_events()
+            .when(DocumentCommand::CreateDocument {
+                document_id: document_id.clone(),
+                did_method,
+                with_fixed_algorithm: None,
+            })
+            .then_expect_events(vec![DocumentEvent::DocumentCreated {
+                document_id,
+                did_method,
+                document,
+                status: Status::SignAndValidate,
+                with_fixed_algorithm: None,
+                iota_metadata: None,
+            }])
+    }
 
-//     #[rstest]
-//     #[serial_test::serial]
-//     async fn test_add_service(
-//         document_id: String,
-//         did_method: SupportedDidMethod,
-//         document: CoreDocument,
-//         domain_linkage_service: Service,
-//         document_with_multiple_verification_methods: CoreDocument,
-//         document_with_domain_linkage_service: CoreDocument,
-//     ) {
-//         DocumentTestFramework::with(IdentityServices::default())
-//             .given(vec![
-//                 DocumentEvent::DocumentCreated {
-//                     document_id: document_id.clone(),
-//                     did_method,
-//                     document,
-//                     status: Status::SignAndValidate,
-//                     with_fixed_algorithm: None,
-//                     iota_metadata: None,
-//                 },
-//                 DocumentEvent::PublicKeyUpdated {
-//                     document_id: document_id.clone(),
-//                     document: document_with_multiple_verification_methods,
-//                 },
-//             ])
-//             .when(DocumentCommand::AddService {
-//                 service: Box::new(domain_linkage_service),
-//                 service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-//             })
-//             .then_expect_events(vec![DocumentEvent::ServiceAdded {
-//                 document_id: document_id.clone(),
-//                 document: document_with_domain_linkage_service,
-//             }])
-//     }
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_add_service(
+        document_id: String,
+        did_method: SupportedDidMethod,
+        document: CoreDocument,
+        domain_linkage_service: Service,
+        document_with_multiple_verification_methods: CoreDocument,
+        document_with_domain_linkage_service: CoreDocument,
+    ) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![
+                DocumentEvent::DocumentCreated {
+                    document_id: document_id.clone(),
+                    did_method,
+                    document,
+                    status: Status::SignAndValidate,
+                    with_fixed_algorithm: None,
+                    iota_metadata: None,
+                },
+                DocumentEvent::PublicKeyUpdated {
+                    document_id: document_id.clone(),
+                    document: document_with_multiple_verification_methods,
+                },
+            ])
+            .when(DocumentCommand::AddService {
+                service: Box::new(domain_linkage_service),
+                service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
+            })
+            .then_expect_events(vec![DocumentEvent::ServiceAdded {
+                document_id: document_id.clone(),
+                document: document_with_domain_linkage_service,
+            }])
+    }
 
-//     #[rstest]
-//     #[serial_test::serial]
-//     async fn test_set_status(
-//         document_id: String,
-//         did_method: SupportedDidMethod,
-//         document: CoreDocument,
-//         document_with_multiple_verification_methods: CoreDocument,
-//         document_with_domain_linkage_service: CoreDocument,
-//     ) {
-//         DocumentTestFramework::with(IdentityServices::default())
-//             .given(vec![
-//                 DocumentEvent::DocumentCreated {
-//                     document_id: document_id.clone(),
-//                     did_method,
-//                     document,
-//                     status: Status::SignAndValidate,
-//                     with_fixed_algorithm: None,
-//                     iota_metadata: None,
-//                 },
-//                 DocumentEvent::PublicKeyUpdated {
-//                     document_id: document_id.clone(),
-//                     document: document_with_multiple_verification_methods.clone(),
-//                 },
-//                 DocumentEvent::ServiceAdded {
-//                     document_id: document_id.clone(),
-//                     document: document_with_domain_linkage_service,
-//                 },
-//             ])
-//             .when(DocumentCommand::UpdateDocumentStatus {
-//                 status: Status::Disabled,
-//             })
-//             .then_expect_events(vec![DocumentEvent::DocumentStatusUpdated {
-//                 document_id,
-//                 status: Status::Disabled,
-//             }])
-//     }
-// }
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_set_status(
+        document_id: String,
+        did_method: SupportedDidMethod,
+        document: CoreDocument,
+        document_with_multiple_verification_methods: CoreDocument,
+        document_with_domain_linkage_service: CoreDocument,
+    ) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![
+                DocumentEvent::DocumentCreated {
+                    document_id: document_id.clone(),
+                    did_method,
+                    document,
+                    status: Status::SignAndValidate,
+                    with_fixed_algorithm: None,
+                    iota_metadata: None,
+                },
+                DocumentEvent::PublicKeyUpdated {
+                    document_id: document_id.clone(),
+                    document: document_with_multiple_verification_methods.clone(),
+                },
+                DocumentEvent::ServiceAdded {
+                    document_id: document_id.clone(),
+                    document: document_with_domain_linkage_service,
+                },
+            ])
+            .when(DocumentCommand::UpdateDocumentStatus {
+                status: Status::Disabled,
+            })
+            .then_expect_events(vec![DocumentEvent::DocumentStatusUpdated {
+                document_id,
+                status: Status::Disabled,
+            }])
+    }
+}
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {

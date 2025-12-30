@@ -36,16 +36,16 @@ impl IdentityServices {
         }
     }
 
-    // #[cfg(feature = "test_utils")]
-    // #[allow(clippy::should_implement_trait)]
-    // pub fn default() -> Arc<Self>
-    // where
-    //     Self: Sized,
-    // {
-    //     Arc::new(Self::new(Arc::new(futures::executor::block_on(async {
-    //         Subject::new().await
-    //     }))))
-    // }
+    #[cfg(feature = "test_utils")]
+    #[allow(clippy::should_implement_trait)]
+    pub fn default() -> Arc<Self>
+    where
+        Self: Sized,
+    {
+        Arc::new(Self::new(Arc::new(futures::executor::block_on(async {
+            SecretManagerServices::new().await
+        }))))
+    }
 }
 
 pub struct ThisIsTheMainService {

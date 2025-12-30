@@ -42,7 +42,7 @@ pub mod tests {
     use std::sync::Arc;
 
     use agent_issuance::state::initialize;
-    use agent_secret_manager::{services::Service, subject::Subject};
+    use agent_secret_manager::subject::Subject;
     use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
     use agent_store::{in_memory::InMemory, issuance_state};
     use axum::body::{self, Body};
@@ -54,14 +54,17 @@ pub mod tests {
     };
     use oid4vc_core::authentication::verify::Verify;
 
-    use crate::v0::issuance::router;
+    use crate::{
+        utils::tests::{main_service, test_issuance_state},
+        v0::issuance::router,
+    };
     use tower::Service as _;
 
     /// This test calls the token status list endpoint which in turn calls the function above.
     /// The remainder of the test breaks down the Token Status List response in various steps and checks these steps one by one.
     #[tokio::test]
     pub async fn test_token_status_list() {
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
+        let issuance_state = test_issuance_state(main_service().await, vec![]).await;
         initialize(&issuance_state).await.unwrap();
 
         let relying_party_state = Subject::default();

@@ -88,42 +88,42 @@ impl Aggregate for Connection {
     }
 }
 
-// #[cfg(test)]
-// pub mod document_tests {
-//     use super::test_utils::*;
-//     use super::*;
-//     use cqrs_es::test::TestFramework;
-//     use rstest::rstest;
+#[cfg(test)]
+pub mod document_tests {
+    use super::test_utils::*;
+    use super::*;
+    use cqrs_es::test::TestFramework;
+    use rstest::rstest;
 
-//     type ConnectionTestFramework = TestFramework<Connection>;
+    type ConnectionTestFramework = TestFramework<Connection>;
 
-//     #[rstest]
-//     #[serial_test::serial]
-//     async fn test_add_connection(
-//         connection_id: String,
-//         alias: String,
-//         domain: Url,
-//         dids: Vec<DIDUrl>,
-//         credential_offer_endpoint: Url,
-//     ) {
-//         ConnectionTestFramework::with(IdentityServices::default())
-//             .given_no_previous_events()
-//             .when(ConnectionCommand::AddConnection {
-//                 connection_id: connection_id.clone(),
-//                 alias: Some(alias.clone()),
-//                 domain: Some(domain.clone()),
-//                 dids: dids.clone(),
-//                 credential_offer_endpoint: Some(credential_offer_endpoint.clone()),
-//             })
-//             .then_expect_events(vec![ConnectionEvent::ConnectionAdded {
-//                 connection_id: connection_id.clone(),
-//                 alias: Some(alias),
-//                 domain: Some(domain.clone()),
-//                 dids: dids.clone(),
-//                 credential_offer_endpoint: Some(credential_offer_endpoint.clone()),
-//             }])
-//     }
-// }
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_add_connection(
+        connection_id: String,
+        alias: String,
+        domain: Url,
+        dids: Vec<DIDUrl>,
+        credential_offer_endpoint: Url,
+    ) {
+        ConnectionTestFramework::with(IdentityServices::default())
+            .given_no_previous_events()
+            .when(ConnectionCommand::AddConnection {
+                connection_id: connection_id.clone(),
+                alias: Some(alias.clone()),
+                domain: Some(domain.clone()),
+                dids: dids.clone(),
+                credential_offer_endpoint: Some(credential_offer_endpoint.clone()),
+            })
+            .then_expect_events(vec![ConnectionEvent::ConnectionAdded {
+                connection_id: connection_id.clone(),
+                alias: Some(alias),
+                domain: Some(domain.clone()),
+                dids: dids.clone(),
+                credential_offer_endpoint: Some(credential_offer_endpoint.clone()),
+            }])
+    }
+}
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {

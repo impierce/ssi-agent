@@ -104,8 +104,10 @@ pub(crate) async fn authorization_requests(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::v0::verification::router;
-    use agent_secret_manager::services::Service;
+    use crate::{
+        utils::tests::{main_service, test_verification_state},
+        v0::verification::router,
+    };
     use agent_store::in_memory::InMemory;
     use agent_store::verification_state;
     use axum::{
@@ -196,7 +198,7 @@ pub mod tests {
     #[tracing_test::traced_test]
     #[tokio::test]
     async fn test_authorization_requests_endpoint() {
-        let verification_state = Arc::new(verification_state(&InMemory, Service::default(), Default::default()).await);
+        let verification_state = test_verification_state(main_service().await, vec![]).await;
         let mut app = router(verification_state);
 
         let result = authorization_requests(&mut app).await;

@@ -147,10 +147,10 @@ pub mod tests {
         v0::issuance::{credentials::CredentialsEndpointRequest, offers::tests::offers},
     };
 
+    use crate::utils::tests::{main_service, test_authorization_state, test_issuance_state};
     use agent_event_publisher_http::EventPublisherHttp;
     use agent_issuance::credential::aggregate::CredentialExpiry;
     use agent_issuance::offer::event::OfferEvent;
-    use agent_secret_manager::services::Service;
     use agent_shared::config::{set_config, Events};
     use agent_store::authorization_state;
     use agent_store::{in_memory::InMemory, issuance_state, EventPublisher};
@@ -159,6 +159,7 @@ pub mod tests {
         http::{self, Request},
         Router,
     };
+
     use rstest::rstest;
     use serde_json::{json, Value};
     use std::sync::Arc;
@@ -352,7 +353,9 @@ pub mod tests {
             (None, Default::default())
         };
 
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), issuance_event_publishers).await);
+        let main_service = main_service().await;
+
+        let issuance_state = test_issuance_state(main_service.clone(), issuance_event_publishers).await;
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let mut issuance_app = router(issuance_state.clone());
@@ -382,8 +385,7 @@ pub mod tests {
 
         let grants = offers(&mut issuance_app, &credential_configuration_id).await.unwrap();
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, Service::default(), Default::default()).await);
+        let authorization_state = test_authorization_state(main_service).await;
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

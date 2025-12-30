@@ -379,7 +379,6 @@ impl Aggregate for Offer {
 //         credential::aggregate::test_utils::OPENBADGE_VERIFIABLE_CREDENTIAL_JWT, offer,
 //         server_config::aggregate::test_utils::*,
 //     };
-//     use agent_secret_manager::service::Service;
 //     use cqrs_es::test::TestFramework;
 //     use jsonwebtoken::Algorithm;
 //     use oid4vc_core::Subject;
@@ -406,7 +405,7 @@ impl Aggregate for Offer {
 //         #[future(awt)] credential_offer_uri: CredentialOffer,
 //         #[future(awt)] form_url_encoded_credential_offer: String,
 //     ) {
-//         OfferTestFramework::with(Service::default())
+//         OfferTestFramework::with(IssuanceServices::default())
 //             .given_no_previous_events()
 //             .when(OfferCommand::CreateCredentialOffer {
 //                 offer_id: offer_id.clone(),
@@ -446,7 +445,7 @@ impl Aggregate for Offer {
 //         #[future(awt)] form_url_encoded_credential_offer: String,
 //         delivery_options: DeliveryOptions,
 //     ) {
-//         OfferTestFramework::with(Service::default())
+//         OfferTestFramework::with(IssuanceServices::default())
 //             .given_no_previous_events()
 //             .when(OfferCommand::CreateCredentialOffer {
 //                 offer_id: offer_id.clone(),
@@ -487,7 +486,7 @@ impl Aggregate for Offer {
 //         #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
 //         #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
 //     ) {
-//         OfferTestFramework::with(Service::default())
+//         OfferTestFramework::with(IssuanceServices::default())
 //             .given(vec![OfferEvent::CredentialOfferCreated {
 //                 offer_id: offer_id.clone(),
 //                 grant_types,
@@ -534,7 +533,7 @@ impl Aggregate for Offer {
 //         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
 //         authorization_server_metadata: Box<AuthorizationServerMetadata>,
 //     ) {
-//         OfferTestFramework::with(Service::default())
+//         OfferTestFramework::with(IssuanceServices::default())
 //             .given(vec![
 //                 OfferEvent::CredentialOfferCreated {
 //                     offer_id: offer_id.clone(),
@@ -585,7 +584,7 @@ impl Aggregate for Offer {
 //         credential_response: CredentialResponse,
 //         notification_id: String,
 //     ) {
-//         OfferTestFramework::with(Service::default())
+//         OfferTestFramework::with(IssuanceServices::default())
 //             .given(vec![
 //                 OfferEvent::CredentialOfferCreated {
 //                     offer_id: offer_id.clone(),
@@ -642,7 +641,7 @@ impl Aggregate for Offer {
 //         credential_response: CredentialResponse,
 //         notification_id: String,
 //     ) {
-//         OfferTestFramework::with(Service::default())
+//         OfferTestFramework::with(IssuanceServices::default())
 //             .given(vec![
 //                 OfferEvent::CredentialOfferCreated {
 //                     offer_id: offer_id.clone(),
@@ -696,6 +695,7 @@ pub mod test_utils {
     use agent_shared::generate_random_string;
     use jsonwebtoken::Algorithm;
     use oid4vc_core::Subject;
+    use oid4vc_manager::methods::key_method::KeySubject;
     use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
     use oid4vci::credential_request::CredentialIdentifierOrCredentialConfigurationId::CredentialConfigurationId;
     use oid4vci::proof::ProofType;
@@ -724,7 +724,12 @@ pub mod test_utils {
 
     #[fixture]
     pub async fn holder() -> Arc<dyn oid4vc_core::Subject> {
-        Arc::new(agent_secret_manager::subject::Subject::default())
+        Arc::new(KeySubject::from_keypair(
+            did_key::generate::<did_key::Ed25519KeyPair>(Some(
+                "this-is-a-very-UNSAFE-holder-secret-key".as_bytes().try_into().unwrap(),
+            )),
+            None,
+        ))
     }
 
     #[fixture]

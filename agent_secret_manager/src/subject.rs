@@ -1,0 +1,244 @@
+use crate::stronghold_storage;
+use agent_shared::config::{config, SupportedDidMethod};
+use anyhow::anyhow;
+use async_trait::async_trait;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use did_manager_consumer::resolver::Resolver;
+use did_manager_identity_stronghold_ext::StrongholdExtStorage;
+use identity_iota::storage::{JwkStorage, KeyId};
+use identity_iota::verification::jwk::Jwk;
+use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
+use jsonwebtoken::Algorithm;
+use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
+use std::str::FromStr;
+use std::sync::Arc;
+
+/// Reponsible for signing and verifying data.
+#[derive(Debug)]
+pub struct Subject {
+    pub stronghold_storage: StrongholdExtStorage,
+}
+
+impl Subject {
+    /// Create a new Subject.
+    pub async fn new() -> Self {
+        let stronghold_storage = stronghold_storage().await;
+
+        Self { stronghold_storage }
+    }
+
+    pub async fn get_public_key(&self, key_id: KeyId, algorithm: &Algorithm) -> anyhow::Result<Jwk> {
+        match algorithm {
+            Algorithm::EdDSA => self.stronghold_storage.get_ed25519_public_key(&key_id).await,
+            Algorithm::ES256 => self.stronghold_storage.get_es256_public_key(&key_id).await,
+            _ => anyhow::bail!("Unsuported algorithm"),
+        }
+        .map_err(Into::into)
+    }
+}
+
+#[async_trait]
+pub trait SubjectExt: oid4vc_core::Subject {
+    async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk>;
+}
+
+/// Extension trait for `Subject` to provide additional functionality.
+#[async_trait]
+impl SubjectExt for Subject {
+    /// Resolves the public key for a given DID URL.
+    async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk> {
+        let did_url =
+            identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
+
+        // TODO: Make sure the resolver only needs to be created once.
+        let resolver = Resolver::new().await;
+
+        let document = resolver
+            .resolve(did_url.did().as_str())
+            .await
+            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
+
+        let verification_method = document
+            .resolve_method(DIDUrlQuery::from(&did_url), None)
+            .ok_or(anyhow!(
+                "Failed to resolve verification method for DID URL: `{did_url}`"
+            ))?;
+
+        verification_method
+            .data()
+            .public_key_jwk()
+            .ok_or_else(|| anyhow!("Failed to resolve public key for DID URL: `{did_url}`"))
+            .cloned()
+    }
+}
+
+/// This module contains implementations for `Subject` for testing purposes.
+/// It is only available when the `test_utils` feature is enabled.
+#[cfg(feature = "test_utils")]
+mod default_subject {
+    use super::*;
+
+    // This `Default` implementation for `Subject` returns a new `Subject` with the Verification Method IDs already preloaded.
+    impl Default for Subject {
+        fn default() -> Self {
+            futures::executor::block_on(async {
+                let stronghold_storage = stronghold_storage().await;
+
+                Self { stronghold_storage }
+            })
+        }
+    }
+}
+
+#[async_trait]
+impl Verify for Subject {
+    async fn public_key(&self, did_url: &str) -> anyhow::Result<Vec<u8>> {
+        let did_url =
+            identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
+
+        // TODO: Make sure the resolver only needs to be created once.
+        let resolver = Resolver::new().await;
+
+        let document = resolver
+            .resolve(did_url.did().as_str())
+            .await
+            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
+
+        let verification_method = document
+            .resolve_method(DIDUrlQuery::from(&did_url), None)
+            .ok_or(anyhow!(
+                "Failed to resolve verification method for DID URL: `{did_url}`"
+            ))?;
+
+        // Try decode from `MethodData` directly, else use public JWK params.
+        verification_method.data().try_decode().or_else(|_| {
+            verification_method
+                .data()
+                .public_key_jwk()
+                .and_then(|public_key_jwk| match public_key_jwk.params() {
+                    JwkParams::Okp(okp_params) => URL_SAFE_NO_PAD.decode(&okp_params.x).ok(),
+                    JwkParams::Ec(ec_params) => {
+                        let x_bytes = URL_SAFE_NO_PAD.decode(&ec_params.x).ok()?;
+                        let y_bytes = URL_SAFE_NO_PAD.decode(&ec_params.y).ok()?;
+
+                        let encoded_point = p256::EncodedPoint::from_affine_coordinates(
+                            p256::FieldBytes::from_slice(&x_bytes),
+                            p256::FieldBytes::from_slice(&y_bytes),
+                            false, // false for uncompressed point
+                        );
+
+                        let verifying_key = p256::ecdsa::VerifyingKey::from_encoded_point(&encoded_point)
+                            .expect("Failed to create verifying key from encoded point");
+
+                        Some(verifying_key.to_encoded_point(false).as_bytes().to_vec())
+                    }
+                    _ => None,
+                })
+                .ok_or(anyhow!("Failed to decode public key for DID URL: `{did_url}`"))
+        })
+    }
+}
+
+#[async_trait]
+impl Sign for Subject {
+    async fn key_id(&self, subject_syntax_type: &str, algorithm: Algorithm) -> Option<String> {
+        let method = SupportedDidMethod::from_str(subject_syntax_type).ok()?;
+
+        // self.get_verification_method_id(StorageKey::new(method, algorithm))
+        //     .await
+        //     .as_ref()
+        //     .map(ToString::to_string)
+
+        todo!()
+    }
+
+    async fn sign(&self, message: &str, _subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
+        let stronghold_storage = &self.stronghold_storage;
+
+        todo!();
+
+        // stronghold_storage
+        //     .sign(&key_id, message.as_bytes(), &public_key)
+        //     .await
+        //     .map_err(Into::into)
+    }
+
+    fn external_signer(&self) -> Option<Arc<dyn ExternalSign>> {
+        None
+    }
+}
+
+#[async_trait]
+impl oid4vc_core::Subject for Subject {
+    async fn identifier(&self, subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<String> {
+        let method = SupportedDidMethod::from_str(subject_syntax_type)
+            .map_err(|e| anyhow!("Failed to parse SupportedDidMethod from string: {}", e))?;
+
+        // self.get_verification_method_id(StorageKey::new(method, algorithm))
+        //     .await
+        //     .as_ref()
+        //     .map(DIDUrl::did)
+        //     .map(ToString::to_string)
+        //     .ok_or_else(|| anyhow!("Failed to get verification method ID"))
+
+        todo!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_shared::config::{default_issuer_eddsa_key_id, set_config, SecretManagerConfig};
+    use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED, ED25519};
+
+    const ES256_SIGNED_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGVXpJMU5pSXNJbU55ZGlJNklsQXRNalUySWl3aWEybGtJam9pTkVGMVdXaFNRMk5HYkc0eWJuUm5VMTlxT1hCRlFtUkxkekl3VUhRdGJHRnFXVWh0V1RkQk1FMUdUU0lzSW10MGVTSTZJa1ZESWl3aWVDSTZJakpNV0dwT1JFOTZWM1J3WlZOWk0ydGlUbEkyWm14YVRVUjRZV2gxYXpKMlVXMWpkWFprUVRodk5EUWlMQ0o1SWpvaVpFRjJSVlpzV0UxSFVFdGFjMnRXV1RSWlZ6QnpPRUk0UzNZM2Myc3hZemt5VDA1WVJFcHZlRjlJY3lKOSMwIn0.eyJpc3MiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJzdWIiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJhdWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaVlrNDNiSEpaWVhOUlZrNDNMVUpZY0MxMFdFVldTR1l0YVhkTWRsVnRiWHByVUZsc2VHWlRWRkZvVlNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SW1odVkyNU5UM2sxU0dGWGJ6SmFTbmhCWW5sWU1GOW1NVTFHU1dsMlRrRmtUMjFXYjNSWGVWZG9ielFpTENKNUlqb2libE5wYkhwMllsTmFYMUp1VWpOU2RreHdkRWxITmpkVWJWVkVhR1ZQWVZGNlltczJhVFJmWDBkeVFTSjkiLCJleHAiOjE3MjMwMjkyMjUsImlhdCI6MTcyMzAyODYyNSwibm9uY2UiOiJ0aGlzIGlzIGEgbm9uY2UifQ.w202CZKOeGM9k35tysJylksBUGI3fvkOgsPPVrfXYZzurns7KF5plMiR_KHH4H_GpYg57Nf2JWa3YEcXGDTVdw";
+    const EDDSA_SIGNED_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGWkVSVFFTSXNJbU55ZGlJNklrVmtNalUxTVRraUxDSnJhV1FpT2lKSmJWOVpNRkZQTm05SFgyczVNbTlzY1RWTWRIUTJZVkE0YzE5QmJFRmhWVUl6UzBkelVFY3RlR0kwSWl3aWEzUjVJam9pVDB0UUlpd2llQ0k2SWxaUGFrUjBRblozY0daalNraHlUelpMVjFOUGRYTlZVR1ptUWt3eVIxOUtjWFp0VVRZNFMzaDRWalFpZlEjMCJ9.eyJpc3MiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSkpiVjlaTUZGUE5tOUhYMnM1TW05c2NUVk1kSFEyWVZBNGMxOUJiRUZoVlVJelMwZHpVRWN0ZUdJMElpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklsWlBha1IwUW5aM2NHWmpTa2h5VHpaTFYxTlBkWE5WVUdabVFrd3lSMTlLY1hadFVUWTRTM2g0VmpRaWZRIiwic3ViIjoiZGlkOmp3azpleUpoYkdjaU9pSkZaRVJUUVNJc0ltTnlkaUk2SWtWa01qVTFNVGtpTENKcmFXUWlPaUpKYlY5Wk1GRlBObTlIWDJzNU1tOXNjVFZNZEhRMllWQTRjMTlCYkVGaFZVSXpTMGR6VUVjdGVHSTBJaXdpYTNSNUlqb2lUMHRRSWl3aWVDSTZJbFpQYWtSMFFuWjNjR1pqU2toeVR6WkxWMU5QZFhOVlVHWm1Ra3d5UjE5S2NYWnRVVFk0UzNoNFZqUWlmUSIsImF1ZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGWkVSVFFTSXNJbU55ZGlJNklrVmtNalUxTVRraUxDSnJhV1FpT2lKdFFqSXhUV2t5Y1V0WVZtTTFOREpVWWt0U09UZ3lUelpUWjFKWVZrWlFaVzV3TTNGWWRIRlRla3R2SWl3aWEzUjVJam9pVDB0UUlpd2llQ0k2SWprM1JVRXpSSE5vUmpONlIwSllTVjlVYnpObVJrUnJNVTFxV1VaYVV6bFZiMUpVYmxCT1NIUlpVV01pZlEiLCJleHAiOjE3MjMwMzE3MTQsImlhdCI6MTcyMzAzMTExNCwibm9uY2UiOiJ0aGlzIGlzIGEgbm9uY2UifQ.oGRYpwH4QvWZs0bZkgAuxq6MqNYdoX44KxNfRl7GzXCnv_0D_c19rhYMwzn04R7udNCthFDr7GUhXLQgROlUDw";
+
+    lazy_static::lazy_static! {
+        static ref SECRET_MANAGER_CONFIG: SecretManagerConfig = SecretManagerConfig {
+            stronghold_password: "sup3rSecr3t".to_string(),
+            stronghold_path: "/tmp/stronghold".to_string(),
+            issuer_eddsa_key_id: default_issuer_eddsa_key_id(),
+        };
+    }
+
+    #[tokio::test]
+    async fn es256_signed_jwt_successfully_verified() {
+        set_config().set_secret_manager_config(SECRET_MANAGER_CONFIG.clone());
+
+        // let subject = Arc::new(Subject::default());
+
+        // let mut split = ES256_SIGNED_JWT.rsplitn(2, '.');
+        // let (signature, message) = (split.next().unwrap(), split.next().unwrap());
+
+        // // Decode the signature.
+        // let signature_bytes = URL_SAFE_NO_PAD.decode(signature).unwrap();
+
+        // // Resolve the public key from the DID Document
+        // let public_key_bytes = subject.public_key("did:jwk:eyJhbGciOiJFUzI1NiIsImNydiI6IlAtMjU2Iiwia2lkIjoiNEF1WWhSQ2NGbG4ybnRnU19qOXBFQmRLdzIwUHQtbGFqWUhtWTdBME1GTSIsImt0eSI6IkVDIiwieCI6IjJMWGpORE96V3RwZVNZM2tiTlI2ZmxaTUR4YWh1azJ2UW1jdXZkQThvNDQiLCJ5IjoiZEF2RVZsWE1HUEtac2tWWTRZVzBzOEI4S3Y3c2sxYzkyT05YREpveF9IcyJ9#0").await.unwrap();
+
+        // // Verify the signature
+        // let public_key = UnparsedPublicKey::new(&ECDSA_P256_SHA256_FIXED, public_key_bytes);
+        // assert!(public_key.verify(message.as_bytes(), &signature_bytes).is_ok());
+    }
+
+    #[tokio::test]
+    async fn eddsa_signed_jwt_successfully_verified() {
+        set_config().set_secret_manager_config(SECRET_MANAGER_CONFIG.clone());
+
+        // let subject = Arc::new(Subject::default());
+
+        // let mut split = EDDSA_SIGNED_JWT.rsplitn(2, '.');
+        // let (signature, message) = (split.next().unwrap(), split.next().unwrap());
+
+        // // Decode the signature.
+        // let signature_bytes = URL_SAFE_NO_PAD.decode(signature).unwrap();
+
+        // // Resolve the public key from the DID Document
+        // let public_key_bytes = subject.public_key("did:jwk:eyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJJbV9ZMFFPNm9HX2s5Mm9scTVMdHQ2YVA4c19BbEFhVUIzS0dzUEcteGI0Iiwia3R5IjoiT0tQIiwieCI6IlZPakR0QnZ3cGZjSkhyTzZLV1NPdXNVUGZmQkwyR19KcXZtUTY4S3h4VjQifQ#0").await.unwrap();
+
+        // // Verify the signature
+        // let public_key = UnparsedPublicKey::new(&ED25519, public_key_bytes);
+        // assert!(public_key.verify(message.as_bytes(), &signature_bytes).is_ok());
+    }
+}

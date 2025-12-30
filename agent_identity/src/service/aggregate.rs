@@ -258,89 +258,90 @@ impl Aggregate for Service {
     }
 }
 
-// #[cfg(test)]
-// pub mod service_tests {
-//     use super::test_utils::*;
-//     use super::*;
-//     use crate::document::aggregate::test_utils::both_verification_methods;
-//     use agent_shared::config::set_config;
-//     use cqrs_es::test::TestFramework;
-//     use identity_document::service::Service as DocumentService;
-//     use identity_iota::verification::VerificationMethod;
-//     use rstest::rstest;
+#[cfg(test)]
+pub mod service_tests {
+    use super::test_utils::*;
+    use super::*;
+    use crate::document::aggregate::test_utils::both_verification_methods;
+    use agent_shared::config::set_config;
+    use cqrs_es::test::TestFramework;
+    use identity_document::service::Service as DocumentService;
+    use identity_iota::verification::VerificationMethod;
+    use rstest::rstest;
 
-//     type ServiceTestFramework = TestFramework<Service>;
+    type ServiceTestFramework = TestFramework<Service>;
 
-//     #[rstest]
-//     #[serial_test::serial]
-//     async fn test_create_domain_linkage_service(
-//         domain_linkage_service_id: String,
-//         both_verification_methods: Vec<VerificationMethod>,
-//         domain_linkage_service: DocumentService,
-//         domain_linkage_resource: ServiceResource,
-//     ) {
-//         set_config().set_preferred_did_method(agent_shared::config::SupportedDidMethod::Web);
+    // FIXME
+    // #[rstest]
+    // #[serial_test::serial]
+    // async fn test_create_domain_linkage_service(
+    //     domain_linkage_service_id: String,
+    //     both_verification_methods: Vec<VerificationMethod>,
+    //     domain_linkage_service: DocumentService,
+    //     domain_linkage_resource: ServiceResource,
+    // ) {
+    //     set_config().set_preferred_did_method(agent_shared::config::SupportedDidMethod::Web);
 
-//         ServiceTestFramework::with(IdentityServices::default())
-//             .given_no_previous_events()
-//             .when(ServiceCommand::CreateDomainLinkageService {
-//                 service_id: domain_linkage_service_id.clone(),
-//                 verification_methods: both_verification_methods,
-//             })
-//             .then_expect_events(vec![ServiceEvent::DomainLinkageServiceCreated {
-//                 service_id: domain_linkage_service_id,
-//                 service: domain_linkage_service,
-//                 resource: domain_linkage_resource,
-//                 is_deleted: false,
-//             }])
-//     }
+    //     ServiceTestFramework::with(IdentityServices::default())
+    //         .given_no_previous_events()
+    //         .when(ServiceCommand::CreateDomainLinkageService {
+    //             service_id: domain_linkage_service_id.clone(),
+    //             verification_methods: both_verification_methods,
+    //         })
+    //         .then_expect_events(vec![ServiceEvent::DomainLinkageServiceCreated {
+    //             service_id: domain_linkage_service_id,
+    //             service: domain_linkage_service,
+    //             resource: domain_linkage_resource,
+    //             is_deleted: false,
+    //         }])
+    // }
 
-//     #[rstest]
-//     #[serial_test::serial]
-//     async fn test_delete_domain_linkage_service(
-//         domain_linkage_service_id: String,
-//         domain_linkage_service: DocumentService,
-//         domain_linkage_resource: ServiceResource,
-//     ) {
-//         set_config().set_preferred_did_method(agent_shared::config::SupportedDidMethod::Web);
+    // #[rstest]
+    // #[serial_test::serial]
+    // async fn test_delete_domain_linkage_service(
+    //     domain_linkage_service_id: String,
+    //     domain_linkage_service: DocumentService,
+    //     domain_linkage_resource: ServiceResource,
+    // ) {
+    //     set_config().set_preferred_did_method(agent_shared::config::SupportedDidMethod::Web);
 
-//         ServiceTestFramework::with(IdentityServices::default())
-//             .given(vec![ServiceEvent::DomainLinkageServiceCreated {
-//                 service_id: domain_linkage_service_id.clone(),
-//                 service: domain_linkage_service.clone(),
-//                 resource: domain_linkage_resource.clone(),
-//                 is_deleted: false,
-//             }])
-//             .when(ServiceCommand::DeleteDomainLinkageService {
-//                 service_id: domain_linkage_service_id.clone(),
-//             })
-//             .then_expect_events(vec![ServiceEvent::DomainLinkageServiceDeleted {
-//                 service_id: domain_linkage_service_id,
-//                 service: None,
-//                 resource: None,
-//                 is_deleted: true,
-//             }])
-//     }
+    //     ServiceTestFramework::with(IdentityServices::default())
+    //         .given(vec![ServiceEvent::DomainLinkageServiceCreated {
+    //             service_id: domain_linkage_service_id.clone(),
+    //             service: domain_linkage_service.clone(),
+    //             resource: domain_linkage_resource.clone(),
+    //             is_deleted: false,
+    //         }])
+    //         .when(ServiceCommand::DeleteDomainLinkageService {
+    //             service_id: domain_linkage_service_id.clone(),
+    //         })
+    //         .then_expect_events(vec![ServiceEvent::DomainLinkageServiceDeleted {
+    //             service_id: domain_linkage_service_id,
+    //             service: None,
+    //             resource: None,
+    //             is_deleted: true,
+    //         }])
+    // }
 
-//     #[rstest]
-//     #[serial_test::serial]
-//     async fn test_create_linked_verifiable_presentation_service(
-//         linked_verifiable_presentation_service_id: String,
-//         linked_verifiable_presentation_service: DocumentService,
-//     ) {
-//         ServiceTestFramework::with(IdentityServices::default())
-//             .given_no_previous_events()
-//             .when(ServiceCommand::CreateLinkedVerifiablePresentationService {
-//                 service_id: linked_verifiable_presentation_service_id.clone(),
-//                 presentation_ids: vec!["presentation-1".to_string()],
-//             })
-//             .then_expect_events(vec![ServiceEvent::LinkedVerifiablePresentationServiceCreated {
-//                 service_id: linked_verifiable_presentation_service_id,
-//                 presentation_ids: vec!["presentation-1".to_string()],
-//                 service: linked_verifiable_presentation_service,
-//             }])
-//     }
-// }
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_linked_verifiable_presentation_service(
+        linked_verifiable_presentation_service_id: String,
+        linked_verifiable_presentation_service: DocumentService,
+    ) {
+        ServiceTestFramework::with(IdentityServices::default())
+            .given_no_previous_events()
+            .when(ServiceCommand::CreateLinkedVerifiablePresentationService {
+                service_id: linked_verifiable_presentation_service_id.clone(),
+                presentation_ids: vec!["presentation-1".to_string()],
+            })
+            .then_expect_events(vec![ServiceEvent::LinkedVerifiablePresentationServiceCreated {
+                service_id: linked_verifiable_presentation_service_id,
+                presentation_ids: vec!["presentation-1".to_string()],
+                service: linked_verifiable_presentation_service,
+            }])
+    }
+}
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {

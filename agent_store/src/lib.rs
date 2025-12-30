@@ -34,7 +34,6 @@ use agent_issuance::credential::views::CredentialView;
 use agent_issuance::offer::views::all_offers::AllOffersView;
 use agent_issuance::offer::views::OfferView;
 use agent_issuance::server_config::views::ServerConfigView;
-use agent_issuance::SimpleLoggingQuery;
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
@@ -46,7 +45,7 @@ use agent_secret_manager::managed_key::views::all_managed_keys::AllManagedKeysVi
 use agent_secret_manager::services::SecretManagerServices;
 use agent_secret_manager::state::SecretManagerState;
 use agent_shared::application_state::Command;
-use agent_shared::custom_queries::ListAllQuery;
+use agent_shared::custom_queries::{ListAllQuery, SimpleLoggingQuery};
 use agent_shared::generic_query::generic_query;
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use agent_verification::authorization_request::views::all_authorization_requests::AllAuthorizationRequestsView;
@@ -164,7 +163,7 @@ pub type CqrsComponents<A, V, AV> = (
 pub trait CqrsComponentBuilder {
     fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
         &self,
-        identity_services: A::Services,
+        services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
     ) -> impl std::future::Future<Output = CqrsComponents<A, V, AV>> + Send
     where

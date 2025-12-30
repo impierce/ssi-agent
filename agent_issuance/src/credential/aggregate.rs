@@ -572,7 +572,6 @@ fn get_status_list_url(index: usize) -> Result<Url, CredentialError> {
 //     use crate::credential::aggregate::Credential;
 //     use crate::credential::event::CredentialEvent;
 //     use crate::offer::aggregate::test_utils::holder;
-//     use agent_secret_manager::service::Service;
 //     use oid4vc_core::Subject;
 
 //     type CredentialTestFramework = TestFramework<Credential>;

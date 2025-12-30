@@ -243,11 +243,11 @@ pub async fn patch_credential(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::tests::OFFER_ID;
+    use crate::utils::tests::test_issuance_state;
     use crate::v0::issuance::router;
     use crate::API_VERSION;
+    use crate::{tests::OFFER_ID, utils::tests::main_service};
     use agent_issuance::state::initialize;
-    use agent_secret_manager::services::Service;
     use agent_secret_manager::subject::Subject;
     use agent_store::in_memory::InMemory;
     use agent_store::issuance_state;
@@ -411,7 +411,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_patch_credential() {
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
+        let issuance_state = test_issuance_state(main_service().await, vec![]).await;
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
@@ -422,7 +422,8 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_credentials_endpoint() {
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
+        let issuance_state = test_issuance_state(main_service().await, vec![]).await;
+
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);

@@ -162,13 +162,78 @@ pub(crate) mod serde_explicit_null {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
+    use agent_authorization::services::AuthorizationServices;
+    use agent_authorization::state::AuthorizationState;
+    use agent_identity::services::{IdentityServices, ThisIsTheMainService};
+    use agent_issuance::services::IssuanceServices;
+    use agent_issuance::state::IssuanceState;
+    use agent_secret_manager::services::SecretManagerServices;
+    use agent_store::in_memory::InMemory;
+    use agent_store::{issuance_state, EventPublisher};
+    use agent_verification::services::VerificationServices;
+    use agent_verification::state::VerificationState;
     use axum::body::Body;
     use axum::http::{Method, Request};
     use oid4vc_core::utils::form_urlencoded::to_form_urlencoded_string;
     use serde::{Deserialize, Serialize};
     use serde_json::json;
+    use std::sync::Arc;
+
+    pub(crate) async fn main_service() -> Arc<ThisIsTheMainService> {
+        let secret_manager_services = Arc::new(SecretManagerServices::new().await);
+        let secret_manager_state =
+            Arc::new(agent_store::secret_manager_state(&InMemory, secret_manager_services.clone(), vec![]).await);
+
+        let identity_services = Arc::new(IdentityServices::new(secret_manager_services.clone()));
+        let identity_state = Arc::new(agent_store::identity_state(&InMemory, identity_services, vec![]).await);
+
+        let this_is_the_main_service = Arc::new(
+            ThisIsTheMainService::new(
+                secret_manager_state.clone(),
+                secret_manager_services.clone(),
+                identity_state.clone(),
+            )
+            .await,
+        );
+        this_is_the_main_service
+    }
+
+    pub(crate) async fn test_issuance_state(
+        main_service: Arc<ThisIsTheMainService>,
+        event_publishers: Vec<Box<dyn EventPublisher>>,
+    ) -> Arc<IssuanceState> {
+        Arc::new(
+            issuance_state(
+                &InMemory,
+                Arc::new(IssuanceServices::new(main_service)),
+                event_publishers,
+            )
+            .await,
+        )
+    }
+
+    pub(crate) async fn test_authorization_state(main_service: Arc<ThisIsTheMainService>) -> Arc<AuthorizationState> {
+        Arc::new(
+            agent_store::authorization_state(&InMemory, Arc::new(AuthorizationServices::new(main_service)), vec![])
+                .await,
+        )
+    }
+
+    pub(crate) async fn test_verification_state(
+        main_service: Arc<ThisIsTheMainService>,
+        event_publishers: Vec<Box<dyn EventPublisher>>,
+    ) -> Arc<VerificationState> {
+        Arc::new(
+            agent_store::verification_state(
+                &InMemory,
+                Arc::new(VerificationServices::new(main_service)),
+                event_publishers,
+            )
+            .await,
+        )
+    }
 
     #[derive(Debug, Serialize, Deserialize, PartialEq)]
     struct TestObject {
