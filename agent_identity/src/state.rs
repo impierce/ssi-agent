@@ -309,7 +309,7 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
     for ((did_method, ToggleOptions { enabled, .. }), with_fixed_algorithm) in
         did_methods_with_or_without_fixed_algorithm
     {
-        let document_id_and_command = match all_documents.values().find(|document| {
+        let document_id_and_commands = match all_documents.values().find(|document| {
             document.did_method == Some(did_method) && document.with_fixed_algorithm == with_fixed_algorithm
         }) {
             // If the Document already exists, but the DID method is not enabled, then update the Document's status to `Disabled`.
@@ -319,25 +319,32 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
                 ..
             }) if !enabled => Some((
                 document_id.clone(),
-                DocumentCommand::UpdateDocumentStatus {
+                vec![DocumentCommand::UpdateDocumentStatus {
                     status: Status::Disabled,
-                },
+                }],
             )),
-            // If the DID method is enabled, then create the Document regardless of whether it already exists or not.
-            document if enabled => {
-                let document_id = document
-                    // Extract the `document_id` from the Document if it exists.
-                    .map(|document| document.document_id.clone())
-                    // Otherwise, generate a new `document_id`.
-                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            // If the Document already exists, but the DID method is not enabled, then update the Document's status to `SignAndValidate`.
+            Some(Document {
+                document_id,
+                status: Status::Disabled,
+                ..
+            }) if enabled => Some((
+                document_id.clone(),
+                vec![DocumentCommand::UpdateDocumentStatus {
+                    status: Status::SignAndValidate,
+                }],
+            )),
+            // If the Document does not exist and the DID method is enabled, then create the Document.
+            None if enabled => {
+                let document_id = uuid::Uuid::new_v4().to_string();
 
                 Some((
                     document_id.clone(),
-                    DocumentCommand::CreateDocument {
+                    vec![DocumentCommand::CreateDocument {
                         document_id: document_id.clone(),
                         did_method,
                         with_fixed_algorithm,
-                    },
+                    }],
                 ))
             }
             // In all other cases, the DID method is disabled and therefore no action is required.
@@ -345,16 +352,10 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
         };
 
         // If a Document command was generated, then execute the command and update the Document's Public Keys.
-        if let Some((document_id, command)) = document_id_and_command {
-            command_handler(&document_id, &state.command.document, command).await?;
-
-            // if enabled {
-            //     let command = DocumentCommand::UpdatePublicKeys {
-            //         public_key_jwks: vec![],
-            //     };
-
-            //     command_handler(&document_id, &state.command.document, command).await?;
-            // }
+        if let Some((document_id, commands)) = document_id_and_commands {
+            for command in commands {
+                command_handler(&document_id, &state.command.document, command).await?;
+            }
         }
     }
 
