@@ -8,7 +8,12 @@ use cqrs_es::{EventEnvelope, Query};
 use identity_iota::verification::VerificationMethod;
 use identity_storage::KeyId;
 
-use agent_identity::{document::command::DocumentCommand, services::IdentityServices, state::IdentityState};
+use agent_identity::{
+    document::command::DocumentCommand,
+    service::command::ServiceCommand,
+    services::IdentityServices,
+    state::{IdentityState, DOMAIN_LINKAGE_SERVICE_ID},
+};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -29,6 +34,22 @@ impl KeyGenerationSaga {
             identity_state,
             identity_services,
         }
+    }
+
+    pub async fn generate_default_keys(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let current_keys_n = query_handler("all_managed_keys", &self.secret_manager_state.query.all_managed_keys)
+            .await?
+            .map(|all_managed_keys_view| all_managed_keys_view.managed_keys.len())
+            .unwrap_or_default();
+
+        if current_keys_n == 0 {
+            self.generate_key("EdDSA Key".to_string(), SigningAlgorithm::EdDSA)
+                .await?;
+            self.generate_key("ES256 Key".to_string(), SigningAlgorithm::ES256)
+                .await?;
+        }
+
+        Ok(())
     }
 
     pub async fn generate_key(
@@ -57,7 +78,7 @@ impl KeyGenerationSaga {
             if let Some(all_documents_view) =
                 query_handler("all_documents", &self.identity_state.query.all_documents).await?
             {
-                for (document_id, document_view) in all_documents_view.documents {
+                for (document_id, document_view) in &all_documents_view.documents {
                     if document_view
                         .did_method
                         .map(|did_method| did_method.supports_update())
@@ -69,6 +90,42 @@ impl KeyGenerationSaga {
                         };
 
                         command_handler(&document_id, &self.identity_state.command.document, command).await?;
+                    }
+                }
+
+                let command = ServiceCommand::CreateDomainLinkageService {
+                    service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
+                    verification_methods: vec![],
+                };
+
+                command_handler(
+                    &DOMAIN_LINKAGE_SERVICE_ID,
+                    &self.identity_state.command.service,
+                    command,
+                )
+                .await
+                .ok();
+
+                let domain_linkage_service =
+                    query_handler(DOMAIN_LINKAGE_SERVICE_ID, &self.identity_state.query.service).await?;
+
+                for (document_id, document_view) in all_documents_view.documents {
+                    if document_view
+                        .did_method
+                        .map(|did_method| did_method.supports_update())
+                        .unwrap_or(false)
+                    {
+                        if let Some(domain_linkage_service) = domain_linkage_service
+                            .as_ref()
+                            .and_then(|domain_linkage_service| domain_linkage_service.service.clone())
+                        {
+                            let command = DocumentCommand::AddService {
+                                service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
+                                service: Box::new(domain_linkage_service),
+                            };
+
+                            command_handler(&document_id, &self.identity_state.command.document, command).await?;
+                        }
 
                         if document_view
                             .did_method

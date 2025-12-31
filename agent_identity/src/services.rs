@@ -11,16 +11,21 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager_consumer::resolver::Resolver;
+use identity_credential::domain_linkage::{DomainLinkageConfiguration, DomainLinkageCredentialBuilder};
 use identity_did::{DIDUrl, DID as _};
 use identity_iota::{
-    core::ToJson,
+    core::{Duration, Timestamp, ToJson},
+    credential::Jwt,
     document::DIDUrlQuery,
     verification::jwk::{Jwk, JwkParams},
 };
 use identity_storage::{JwkStorage as _, KeyId};
-use jsonwebtoken::Algorithm;
+use jsonwebtoken::{Algorithm, Header};
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
-use std::{str::FromStr as _, sync::Arc};
+use std::{
+    str::FromStr as _,
+    sync::{Arc, OnceLock},
+};
 
 use crate::state::IdentityState;
 
@@ -48,6 +53,8 @@ impl IdentityServices {
     }
 }
 
+pub static GLOBAL_SERVICE: OnceLock<Arc<ThisIsTheMainService>> = OnceLock::new();
+
 pub struct ThisIsTheMainService {
     pub secret_manager_state: Arc<SecretManagerState>,
     pub secret_manager_services: Arc<SecretManagerServices>,
@@ -69,6 +76,103 @@ impl ThisIsTheMainService {
             identity_state,
             resolver,
         }
+    }
+
+    pub async fn create_domain_linkage_configuration(&self) -> anyhow::Result<DomainLinkageConfiguration> {
+        let stronghold_storage = &self.secret_manager_services.stronghold_storage;
+
+        let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization()).unwrap();
+        // .map_err(|err| InvalidUrlError(err.to_string()))?;
+
+        // #[cfg(feature = "test_utils")]
+        // let (issuance_date, expiration_date) = {
+        //     let issuance_date = test_utils::issuance_date();
+        //     let expiration_date = test_utils::expiration_date();
+        //     (issuance_date, expiration_date)
+        // };
+        // #[cfg(not(feature = "test_utils"))]
+        let (issuance_date, expiration_date) = {
+            let issuance_date = Timestamp::now_utc();
+            let expiration_date = issuance_date
+                // TODO: make this configurable
+                .checked_add(Duration::days(365))
+                .unwrap();
+            // .ok_or(InvalidTimestampError)?;
+
+            (issuance_date, expiration_date)
+        };
+
+        let all_documents_view = query_handler("all_documents", &self.identity_state.query.all_documents)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let did_method_and_verification_method_ids = all_documents_view
+            .documents
+            .into_values()
+            .filter_map(|document_view| {
+                Some((document_view.did_method.unwrap(), document_view.verification_method_ids))
+            })
+            .collect::<Vec<_>>();
+
+        let mut linked_dids = vec![];
+
+        for (_did_method, verification_method_ids) in did_method_and_verification_method_ids {
+            for (key_id, verification_method_id) in verification_method_ids {
+                let key_id = KeyId::new(&key_id);
+
+                // FIXME: terrible temporary logic to determine key type
+                let public_key = if let Ok(public_key) = stronghold_storage.get_es256_public_key(&key_id).await {
+                    public_key
+                } else {
+                    stronghold_storage.get_ed25519_public_key(&key_id).await?
+                };
+
+                let subject_did = verification_method_id.did();
+                let algorithm = Algorithm::from_str(public_key.alg().unwrap()).unwrap();
+
+                let domain_linkage_credential = DomainLinkageCredentialBuilder::new()
+                    .issuer(subject_did.clone())
+                    .origin(origin.clone())
+                    .issuance_date(issuance_date)
+                    .expiration_date(expiration_date)
+                    .build()
+                    .unwrap()
+                    // .map_err(|err| DomainLinkageCredentialBuilderError(err.to_string()))?
+                    .serialize_jwt(Default::default())
+                    .unwrap();
+                // .map_err(|err| SerializationError(err.to_string()))?;
+
+                // Compose JWT
+                let header = Header {
+                    alg: algorithm,
+                    typ: None,
+                    kid: Some(verification_method_id.to_string()),
+                    ..Default::default()
+                };
+
+                let linked_did = [
+                    URL_SAFE_NO_PAD.encode(
+                        header.to_json_vec().unwrap(), // .map_err(|err| SerializationError(err.to_string()))?,
+                    ),
+                    URL_SAFE_NO_PAD.encode(domain_linkage_credential.as_bytes()),
+                ]
+                .join(".");
+
+                stronghold_storage
+                    .sign(&key_id, linked_did.as_bytes(), &public_key)
+                    .await
+                    .unwrap();
+
+                linked_dids.push(Jwt::from(linked_did));
+            }
+        }
+
+        if linked_dids.is_empty() {
+            return Err(anyhow!("No linked DIDs found"));
+        }
+
+        Ok(DomainLinkageConfiguration::new(linked_dids))
     }
 }
 

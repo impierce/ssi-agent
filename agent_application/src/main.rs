@@ -13,7 +13,7 @@ use agent_authorization::services::AuthorizationServices;
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_event_publisher_nats::EventPublisherNats;
 use agent_holder::services::HolderServices;
-use agent_identity::services::{IdentityServices, ThisIsTheMainService};
+use agent_identity::services::{IdentityServices, ThisIsTheMainService, GLOBAL_SERVICE};
 use agent_issuance::{
     application::policies::issuer_metadata_synchronization_policy::IssuerMetadataSynchronizationPolicy,
     services::IssuanceServices,
@@ -104,6 +104,8 @@ async fn main() -> io::Result<()> {
         )
         .await,
     );
+
+    GLOBAL_SERVICE.set(this_is_the_main_service.clone()).unwrap();
 
     let authorization_services = Arc::new(AuthorizationServices::new(this_is_the_main_service.clone()));
     let issuance_services = Arc::new(IssuanceServices::new(this_is_the_main_service.clone()));
@@ -214,7 +216,7 @@ async fn main() -> io::Result<()> {
     agent_authorization::state::initialize(&authorization_state)
         .await
         .unwrap();
-    agent_identity::state::initialize(&identity_state).await.unwrap();
+    agent_identity::state::initialize(&identity_state).await.ok();
     agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
     let key_generation_saga = KeyGenerationSaga::new(
@@ -222,6 +224,9 @@ async fn main() -> io::Result<()> {
         identity_state.clone(),
         identity_services.clone(),
     );
+
+    key_generation_saga.generate_default_keys().await.ok();
+
     let key_removal_saga = KeyRemovalSaga::new(
         secret_manager_state.clone(),
         identity_state.clone(),

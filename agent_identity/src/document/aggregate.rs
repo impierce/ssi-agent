@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_did::{CoreDID, DIDUrl, DID as _};
 use identity_document::document::CoreDocument;
+use identity_iota::core::{Duration, Timestamp};
 use identity_iota::iota::rebased::client::{
     get_object_id_from_did, IdentityClient, IdentityClientReadOnly, PublishDidDocument,
 };

@@ -103,7 +103,6 @@ pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
 
     initialize_display(state).await?;
     initialize_documents(state).await?;
-    initialize_domain_linkage(state).await?;
     initialize_linked_verifiable_presentations(state).await?;
     publish_decentrally_hosted_documents(state).await?;
 
@@ -397,91 +396,6 @@ fn get_did_methods_with_or_without_fixed_algorithm() -> Vec<((SupportedDidMethod
                 .map(|did_method| (did_method, None)),
         )
         .collect()
-}
-
-/// Initializes or disables the Domain Linkage Service based on the current configuration and document state.
-///
-/// This asynchronous function performs the following steps:
-///
-/// 1. Query Documents: It retrieves all documents that are not disabled and whose DID methods support updates.
-/// 2. Conditional Service Creation:
-///    - If domain linkage is enabled in the configuration and there exists at least one update-supporting document,
-///      it creates the Domain Linkage Service.
-///    - It then queries for the created service. If found, it adds the service to all update-supporting documents.
-/// 3. Service Deletion:
-///    - If domain linkage is disabled or no update-supporting documents exist, the function sends a command
-///      to disable the Domain Linkage Service.
-pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<()> {
-    // Get all the Documents that are not disabled and support updates.
-    let update_supporting_documents = query_all_documents(state, |(_, document)| {
-        document.status != Status::Disabled
-            && document
-                .did_method
-                .as_ref()
-                .map(SupportedDidMethod::supports_update)
-                .unwrap_or_default()
-            && document
-                .iota_metadata
-                .as_ref()
-                .map(|iota_metadata| iota_metadata.is_funded)
-                .unwrap_or(true)
-    })
-    .await?;
-
-    // Check whether Domain Linkage is enabled and whether there are any enabled update-supporting Documents.
-    if config().domain_linkage_enabled && !update_supporting_documents.is_empty() {
-        info!(
-            "Creating domain linkage service with documents: {:?}",
-            update_supporting_documents
-        );
-
-        // Collect all Verification Methods from update-supporting documents.
-        let verification_methods = update_supporting_documents
-            .values()
-            .filter_map(|document| document.document.as_ref())
-            .flat_map(|core_document| core_document.methods(None).into_iter().cloned())
-            .collect();
-
-        // Create the Domain Linkage Service.
-        let command = ServiceCommand::CreateDomainLinkageService {
-            service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-            verification_methods,
-        };
-
-        command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command).await?;
-
-        info!("Created Linked Domain service");
-
-        match query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
-            Ok(Some(Service {
-                service: Some(service), ..
-            })) => {
-                info!("Found Linked Domains service: {service}");
-
-                // Add the Domain Linkage service to all the enabled update supporting Documents.
-                for document_id in update_supporting_documents.keys() {
-                    let command = DocumentCommand::AddService {
-                        service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-                        service: Box::new(service.clone()),
-                    };
-
-                    command_handler(document_id, &state.command.document, command).await?;
-                }
-            }
-            _ => anyhow::bail!("Failed to retrieve Linked Domains service"),
-        };
-    } else {
-        // If Domain Linkage is disabled and/or there are no enabled update supporting Documents, then disable the Domain Linkage Service.
-        let command = ServiceCommand::DeleteDomainLinkageService {
-            service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-        };
-
-        command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command).await?;
-
-        info!("Disabled Domain Linkage service");
-    }
-
-    Ok(())
 }
 
 /// Initializes the Linked Verifiable Presentations service for DID Web Document.
