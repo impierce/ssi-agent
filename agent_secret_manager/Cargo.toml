@@ -13,8 +13,8 @@ agent_shared = { path = "../agent_shared" }
 # - All components of the `identity_stronghold_ext` module are still active.
 #
 # Future work: Migrate the remaining functionality into UniCore.
-did_manager_consumer = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.6", package = "consumer" }
-did_manager_identity_stronghold_ext = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.6", package = "identity_stronghold_ext" }
+did_manager_consumer = { git = "https://github.com/impierce/did-manager", rev = "00baa2a", package = "consumer" }
+did_manager_identity_stronghold_ext = { git = "https://github.com/impierce/did-manager", rev = "00baa2a", package = "identity_stronghold_ext" }
 
 anyhow.workspace = true
 async-trait.workspace = true
@@ -29,6 +29,7 @@ jsonwebtoken = "9.3"
 log = "0.4"
 oid4vc-core.workspace = true
 p256 = { version = "0.13", features = ["jwk"] }
+rustls.workspace = true
 serde.workspace = true
 tokio.workspace = true
 url.workspace = true

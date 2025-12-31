@@ -32,8 +32,12 @@ impl Subject {
         Self {
             stronghold_storage,
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
-            resolver: Resolver::new().await,
+            resolver: Resolver::new(None, None).await,
         }
+    }
+
+    pub async fn configure_resolver(&mut self, node_url: Option<&str>, tls_config: Option<rustls::ClientConfig>) {
+        self.resolver = Resolver::new(node_url, tls_config).await;
     }
 
     pub async fn get_public_key(&self, key_id: KeyId, algorithm: &Algorithm) -> anyhow::Result<Jwk> {
@@ -139,7 +143,7 @@ mod default_subject {
                 Self {
                     stronghold_storage,
                     verification_method_ids,
-                    resolver: Resolver::new().await,
+                    resolver: Resolver::new(None, None).await,
                 }
             })
         }
