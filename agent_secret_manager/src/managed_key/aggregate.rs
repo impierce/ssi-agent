@@ -1,5 +1,5 @@
 use super::{command::ManagedKeyCommand, error::ManagedKeyError, event::ManagedKeyEvent};
-use crate::services::SecretManagerServices;
+use crate::services::{SecretManagerServices, SECRET_MANAGER_DOMAIN_SERVICE};
 use agent_shared::config::config;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
@@ -17,6 +17,7 @@ use identity_did::DIDUrl;
 use identity_iota::{storage::JwkStorage as _, verification::jws::JwsAlgorithm};
 use identity_storage::KeyIdStorage;
 use identity_storage::{KeyId, KeyType};
+use iota_sdk::types::event;
 use jsonwebtoken::{Algorithm, Header};
 use oid4vc_core::Sign as _;
 use serde::{Deserialize, Serialize};
@@ -84,18 +85,33 @@ impl Aggregate for ManagedKey {
                     SigningAlgorithm::ES256 => (KeyType::new("P256"), JwsAlgorithm::ES256),
                 };
 
+                let secret_manager_domain_service = SECRET_MANAGER_DOMAIN_SERVICE.get().unwrap();
+
+                let is_signing_key = !secret_manager_domain_service
+                    .current_signing_key(&signing_algorithm)
+                    .await
+                    .is_some();
+
                 let res = services.stronghold_storage.generate(key_type, alg).await.unwrap();
 
                 println!("Generated key: {}", res.jwk.to_json_pretty().unwrap());
 
                 let key_id = res.key_id.to_string();
 
-                Ok(vec![KeyGenerated {
-                    managed_key_id,
+                let mut events = vec![];
+
+                events.push(KeyGenerated {
+                    managed_key_id: managed_key_id.clone(),
                     key_id,
                     alias,
                     signing_algorithm,
-                }])
+                });
+
+                if is_signing_key {
+                    events.push(SigningKeySet { managed_key_id });
+                }
+
+                Ok(events)
             }
             RemoveKey => {
                 let key_id = KeyId::new(&self.key_id);
@@ -112,11 +128,19 @@ impl Aggregate for ManagedKey {
                 new_alias,
             }]),
             SetSigningKey => {
-                // TODO: Unset other signing keys?
+                let secret_manager_domain_service = SECRET_MANAGER_DOMAIN_SERVICE.get().unwrap();
+
+                secret_manager_domain_service
+                    .unset_signing_keys(self.signing_algorithm.as_ref().unwrap())
+                    .await;
+
                 Ok(vec![SigningKeySet {
                     managed_key_id: self.managed_key_id.clone(),
                 }])
             }
+            UnsetSigningKey => Ok(vec![SigningKeyUnset {
+                managed_key_id: self.managed_key_id.clone(),
+            }]),
         }
     }
 
@@ -151,6 +175,9 @@ impl Aggregate for ManagedKey {
             }
             SigningKeySet { managed_key_id: _ } => {
                 self.is_signing_key = true;
+            }
+            SigningKeyUnset { managed_key_id: _ } => {
+                self.is_signing_key = false;
             }
         }
     }

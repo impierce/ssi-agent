@@ -21,6 +21,9 @@ pub enum ManagedKeyEvent {
     SigningKeySet {
         managed_key_id: String,
     },
+    SigningKeyUnset {
+        managed_key_id: String,
+    },
 }
 
 impl DomainEvent for ManagedKeyEvent {

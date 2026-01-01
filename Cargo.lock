@@ -5308,7 +5308,6 @@ dependencies = [
  "k256",
  "log",
  "p256 0.13.2",
- "rand 0.8.5",
  "secret-storage",
  "serde_json",
  "stronghold_ext",

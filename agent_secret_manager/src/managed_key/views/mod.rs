@@ -34,6 +34,9 @@ impl View<ManagedKey> for ManagedKey {
             SigningKeySet { managed_key_id: _ } => {
                 self.is_signing_key = true;
             }
+            SigningKeyUnset { managed_key_id: _ } => {
+                self.is_signing_key = false;
+            }
         }
     }
 }

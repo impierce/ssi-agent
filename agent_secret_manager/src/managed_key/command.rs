@@ -12,4 +12,5 @@ pub enum ManagedKeyCommand {
         new_alias: String,
     },
     SetSigningKey,
+    UnsetSigningKey,
 }
