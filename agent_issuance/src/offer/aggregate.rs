@@ -265,7 +265,7 @@ impl Aggregate for Offer {
                 credential_request,
             } => {
                 let credential_issuer = CredentialIssuer {
-                    subject: services.this_is_the_main_service.clone(),
+                    subject: services.identity_application_service.clone(),
                     metadata: *credential_issuer_metadata,
                     authorization_server_metadata: *authorization_server_metadata,
                 };
@@ -273,7 +273,7 @@ impl Aggregate for Offer {
                 let proof = credential_issuer
                     .validate_proof(
                         credential_request.proof.ok_or(MissingProofError)?,
-                        Validator::Subject(services.this_is_the_main_service.clone()),
+                        Validator::Subject(services.identity_application_service.clone()),
                     )
                     .await
                     .map_err(|e| InvalidProofError(e.to_string()))?;

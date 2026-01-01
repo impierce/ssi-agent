@@ -1,5 +1,5 @@
 use super::{command::ServiceCommand, error::ServiceError, event::ServiceEvent};
-use crate::services::{IdentityServices, GLOBAL_SERVICE};
+use crate::services::{IdentityServices, IDENTITY_APPLICATION_SERVICE};
 use agent_shared::config::config;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
@@ -59,8 +59,8 @@ impl Aggregate for Service {
                 service_id,
                 verification_methods,
             } => {
-                let this_is_the_main_service = GLOBAL_SERVICE.get().unwrap().clone();
-                let domain_linkage_configuration = this_is_the_main_service
+                let identity_application_service = IDENTITY_APPLICATION_SERVICE.get().unwrap().clone();
+                let domain_linkage_configuration = identity_application_service
                     .create_domain_linkage_configuration()
                     .await
                     .map_err(|_| EmptyLinkedDidsError)?;

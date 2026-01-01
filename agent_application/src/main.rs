@@ -13,12 +13,14 @@ use agent_authorization::services::AuthorizationServices;
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_event_publisher_nats::EventPublisherNats;
 use agent_holder::services::HolderServices;
-use agent_identity::services::{IdentityServices, ThisIsTheMainService, GLOBAL_SERVICE};
+use agent_identity::services::{IdentityApplicationService, IdentityServices, IDENTITY_APPLICATION_SERVICE};
 use agent_issuance::{
     application::policies::issuer_metadata_synchronization_policy::IssuerMetadataSynchronizationPolicy,
     services::IssuanceServices,
 };
-use agent_secret_manager::services::SecretManagerServices;
+use agent_secret_manager::services::{
+    SecretManagerDomainService, SecretManagerServices, SECRET_MANAGER_DOMAIN_SERVICE,
+};
 use agent_shared::config::{config, EventStoreType};
 use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
@@ -96,8 +98,8 @@ async fn main() -> io::Result<()> {
         }
     };
 
-    let this_is_the_main_service = Arc::new(
-        ThisIsTheMainService::new(
+    let identity_application_service = Arc::new(
+        IdentityApplicationService::new(
             secret_manager_state.clone(),
             secret_manager_services.clone(),
             identity_state.clone(),
@@ -105,12 +107,17 @@ async fn main() -> io::Result<()> {
         .await,
     );
 
-    GLOBAL_SERVICE.set(this_is_the_main_service.clone()).unwrap();
+    IDENTITY_APPLICATION_SERVICE
+        .set(identity_application_service.clone())
+        .unwrap();
+    SECRET_MANAGER_DOMAIN_SERVICE
+        .set(Arc::new(SecretManagerDomainService::new(secret_manager_state.clone())))
+        .unwrap();
 
-    let authorization_services = Arc::new(AuthorizationServices::new(this_is_the_main_service.clone()));
-    let issuance_services = Arc::new(IssuanceServices::new(this_is_the_main_service.clone()));
-    let holder_services = Arc::new(HolderServices::new(this_is_the_main_service.clone()));
-    let verification_services = Arc::new(VerificationServices::new(this_is_the_main_service.clone()));
+    let authorization_services = Arc::new(AuthorizationServices::new(identity_application_service.clone()));
+    let issuance_services = Arc::new(IssuanceServices::new(identity_application_service.clone()));
+    let holder_services = Arc::new(HolderServices::new(identity_application_service.clone()));
+    let verification_services = Arc::new(VerificationServices::new(identity_application_service.clone()));
 
     // TODO: Refactor this to reduce code duplication.
     let (library_state, authorization_state, issuance_state, holder_state, verification_state) = match config()

@@ -53,16 +53,16 @@ impl IdentityServices {
     }
 }
 
-pub static GLOBAL_SERVICE: OnceLock<Arc<ThisIsTheMainService>> = OnceLock::new();
+pub static IDENTITY_APPLICATION_SERVICE: OnceLock<Arc<IdentityApplicationService>> = OnceLock::new();
 
-pub struct ThisIsTheMainService {
+pub struct IdentityApplicationService {
     pub secret_manager_state: Arc<SecretManagerState>,
     pub secret_manager_services: Arc<SecretManagerServices>,
     pub identity_state: Arc<IdentityState>,
     pub resolver: Resolver,
 }
 
-impl ThisIsTheMainService {
+impl IdentityApplicationService {
     pub async fn new(
         secret_manager_state: Arc<SecretManagerState>,
         secret_manager_services: Arc<SecretManagerServices>,
@@ -176,7 +176,7 @@ impl ThisIsTheMainService {
     }
 }
 
-impl std::fmt::Debug for ThisIsTheMainService {
+impl std::fmt::Debug for IdentityApplicationService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ThisIsTheMainService").finish()
     }
@@ -189,7 +189,7 @@ pub trait SubjectExt: oid4vc_core::Subject {
 
 /// Extension trait for `Subject` to provide additional functionality.
 #[async_trait]
-impl SubjectExt for ThisIsTheMainService {
+impl SubjectExt for IdentityApplicationService {
     /// Resolves the public key for a given DID URL.
     async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk> {
         let did_url =
@@ -235,7 +235,7 @@ impl SubjectExt for ThisIsTheMainService {
 // }
 
 #[async_trait]
-impl Verify for ThisIsTheMainService {
+impl Verify for IdentityApplicationService {
     async fn public_key(&self, did_url: &str) -> anyhow::Result<Vec<u8>> {
         let did_url =
             identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
@@ -284,7 +284,7 @@ impl Verify for ThisIsTheMainService {
 }
 
 #[async_trait]
-impl Sign for ThisIsTheMainService {
+impl Sign for IdentityApplicationService {
     async fn key_id(&self, subject_syntax_type: &str, algorithm: Algorithm) -> Option<String> {
         let method = SupportedDidMethod::from_str(subject_syntax_type).ok()?;
 
@@ -378,7 +378,7 @@ impl Sign for ThisIsTheMainService {
 }
 
 #[async_trait]
-impl oid4vc_core::Subject for ThisIsTheMainService {
+impl oid4vc_core::Subject for IdentityApplicationService {
     async fn identifier(&self, subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<String> {
         let did_url: DIDUrl = self
             .key_id(subject_syntax_type, algorithm)

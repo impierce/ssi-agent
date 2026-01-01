@@ -43,8 +43,8 @@ impl Aggregate for Presentation {
                 presentation_id,
                 signed_credentials,
             } => {
-                let this_is_the_main_service = &services.this_is_the_main_service;
-                let subject_did = this_is_the_main_service
+                let identity_application_service = &services.identity_application_service;
+                let subject_did = identity_application_service
                     .identifier(
                         get_preferred_did_method().to_string().as_ref(),
                         get_preferred_signing_algorithm(),
@@ -96,7 +96,7 @@ impl Aggregate for Presentation {
                 ]
                 .join(".");
 
-                let proof_value = this_is_the_main_service
+                let proof_value = identity_application_service
                     .sign(
                         &message,
                         get_preferred_did_method().to_string().as_ref(),

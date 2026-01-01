@@ -1,4 +1,4 @@
-use agent_identity::services::ThisIsTheMainService;
+use agent_identity::services::IdentityApplicationService;
 use agent_shared::config::{
     get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, get_preferred_did_method,
 };
@@ -8,12 +8,12 @@ use std::sync::Arc;
 
 /// Holder services. This struct is used to sign credentials and validate credential requests.
 pub struct HolderServices {
-    pub this_is_the_main_service: Arc<ThisIsTheMainService>,
+    pub identity_application_service: Arc<IdentityApplicationService>,
     pub wallet: Wallet,
 }
 
 impl HolderServices {
-    pub fn new(this_is_the_main_service: Arc<ThisIsTheMainService>) -> Self {
+    pub fn new(identity_application_service: Arc<IdentityApplicationService>) -> Self {
         let signing_algorithms_supported = get_all_enabled_signing_algorithms_supported();
 
         let mut enabled_did_methods = get_all_enabled_did_methods();
@@ -32,7 +32,7 @@ impl HolderServices {
             enabled_did_methods.into_iter().map(Into::into).collect();
 
         let wallet = Wallet::new(
-            this_is_the_main_service.clone(),
+            identity_application_service.clone(),
             supported_subject_syntax_types,
             signing_algorithms_supported,
         )
@@ -40,7 +40,7 @@ impl HolderServices {
         .expect("Failed to create wallet");
 
         Self {
-            this_is_the_main_service,
+            identity_application_service,
             wallet,
         }
     }

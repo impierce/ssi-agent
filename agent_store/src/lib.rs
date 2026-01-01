@@ -324,7 +324,7 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
             authorization_code,
             access_token,
         },
-        signer: services.this_is_the_main_service.clone(),
+        signer: services.identity_application_service.clone(),
     }
 }
 
@@ -370,7 +370,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
             offer,
             all_offers,
         },
-        subject: services.this_is_the_main_service.clone(),
+        subject: services.identity_application_service.clone(),
     }
 }
 

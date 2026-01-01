@@ -1,14 +1,14 @@
-use agent_identity::services::ThisIsTheMainService;
+use agent_identity::services::IdentityApplicationService;
 use std::sync::Arc;
 
 pub struct AuthorizationServices {
-    pub this_is_the_main_service: Arc<ThisIsTheMainService>,
+    pub identity_application_service: Arc<IdentityApplicationService>,
 }
 
 impl AuthorizationServices {
-    pub fn new(this_is_the_main_service: Arc<ThisIsTheMainService>) -> Self {
+    pub fn new(identity_application_service: Arc<IdentityApplicationService>) -> Self {
         Self {
-            this_is_the_main_service,
+            identity_application_service,
         }
     }
 }

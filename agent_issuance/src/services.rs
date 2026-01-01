@@ -1,15 +1,15 @@
-use agent_identity::services::ThisIsTheMainService;
+use agent_identity::services::IdentityApplicationService;
 use std::sync::Arc;
 
 /// Issuance services. This struct is used to sign credentials and validate credential requests.
 pub struct IssuanceServices {
-    pub this_is_the_main_service: Arc<ThisIsTheMainService>,
+    pub identity_application_service: Arc<IdentityApplicationService>,
 }
 
 impl IssuanceServices {
-    pub fn new(this_is_the_main_service: Arc<ThisIsTheMainService>) -> Self {
+    pub fn new(identity_application_service: Arc<IdentityApplicationService>) -> Self {
         Self {
-            this_is_the_main_service,
+            identity_application_service,
         }
     }
 }

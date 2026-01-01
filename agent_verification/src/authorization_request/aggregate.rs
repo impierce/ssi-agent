@@ -54,8 +54,8 @@ impl Aggregate for AuthorizationRequest {
                 dcql_query,
             } => {
                 let default_subject_syntax_type = services.relying_party.default_subject_syntax_type().to_string();
-                let this_is_the_main_service = &services.this_is_the_main_service;
-                let verifier_did = this_is_the_main_service
+                let identity_application_service = &services.identity_application_service;
+                let verifier_did = identity_application_service
                     .identifier(&default_subject_syntax_type, get_preferred_signing_algorithm())
                     .await
                     .unwrap();

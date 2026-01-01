@@ -357,7 +357,7 @@ impl Aggregate for Credential {
                 let default_did_method = get_preferred_did_method();
 
                 let issuer_did = services
-                    .this_is_the_main_service
+                    .identity_application_service
                     .identifier(&default_did_method.to_string(), get_preferred_signing_algorithm())
                     .await
                     .unwrap();
@@ -455,7 +455,7 @@ impl Aggregate for Credential {
                     );
 
                     json!(jwt::encode(
-                        services.this_is_the_main_service.clone(),
+                        services.identity_application_service.clone(),
                         Header::new(get_preferred_signing_algorithm()),
                         vc_jwt_object,
                         &default_did_method.to_string()
