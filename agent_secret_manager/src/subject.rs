@@ -321,4 +321,22 @@ mod tests {
         let public_key = UnparsedPublicKey::new(&ED25519, public_key_bytes);
         assert!(public_key.verify(message.as_bytes(), &signature_bytes).is_ok());
     }
+
+    #[tokio::test]
+    async fn test_configure_resolver() {
+        let mut subject = Subject::new().await;
+        // TODO: find a node_url for testing
+        subject.configure_resolver(None, None).await;
+
+        subject
+            .resolver
+            .resolve("did:key:z6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt")
+            .await
+            .unwrap();
+        subject
+            .resolver
+            .resolve("did:iota:testnet:0xe4edef97da1257e83cbeb49159cfdd2da6ac971ac447f233f8439cf29376ebfe")
+            .await
+            .unwrap();
+    }
 }
