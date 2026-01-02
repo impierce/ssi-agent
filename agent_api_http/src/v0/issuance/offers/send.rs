@@ -15,7 +15,6 @@ use url::Url;
 #[serde(rename_all = "camelCase")]
 pub struct EmailOfferEndpointRequest {
     pub offer_id: String,
-    #[serde(flatten)]
     pub recipient_email: String,
 }
 
@@ -42,7 +41,6 @@ pub(crate) async fn email_offer(
 #[serde(rename_all = "camelCase")]
 pub struct TargetUrlOfferEndpointRequest {
     pub offer_id: String,
-    #[serde(flatten)]
     pub target_url: Url,
 }
 
