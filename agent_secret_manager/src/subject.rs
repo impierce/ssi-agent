@@ -335,7 +335,7 @@ mod tests {
             .unwrap();
         subject
             .resolver
-            .resolve("did:iota:testnet:0xe4edef97da1257e83cbeb49159cfdd2da6ac971ac447f233f8439cf29376ebfe")
+            .resolve("did:iota:testnet:0x04b26f82ba06c22a3ed57069cc349239bccd972fbb24ac5a7e0db6a0b9c42292")
             .await
             .unwrap();
     }
