@@ -290,6 +290,13 @@ impl Aggregate for Credential {
                                 let mut raw = serde_json::to_value(credential)
                                     .map_err(|_| CredentialError::InvalidCredentialStatus)?;
 
+                                if let Some(obj) = raw.as_object_mut() {
+                                    if let Some(data_obj) = data.raw.as_object() {
+                                        for (k, v) in data_obj {
+                                            obj.entry(k.clone()).or_insert_with(|| v.clone());
+                                        }
+                                    }
+                                }
                                 let raw_credential_status = raw["credentialStatus"]
                                     .as_object_mut()
                                     .ok_or(CredentialError::InvalidCredentialStatus)?;
