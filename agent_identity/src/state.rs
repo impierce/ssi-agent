@@ -536,7 +536,8 @@ pub async fn publish_decentrally_hosted_documents(state: &IdentityState) -> anyh
 
     // Publish each decentrally hosted Documents.
     for document_id in decentrally_hosted_documents.keys() {
-        command_handler(document_id, &state.command.document, DocumentCommand::PublishDocument).await?;
+        // Publish the Document. Note that we ignore any errors here to allow for the system to continue initializing.
+        let _ = command_handler(document_id, &state.command.document, DocumentCommand::PublishDocument).await;
     }
 
     Ok(())
