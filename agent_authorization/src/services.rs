@@ -1,12 +1,14 @@
-use agent_secret_manager::{service::Service, subject::SubjectExt};
+use agent_identity::services::IdentityApplicationService;
 use std::sync::Arc;
 
 pub struct AuthorizationServices {
-    pub signer: Arc<dyn SubjectExt>,
+    pub identity_application_service: Arc<IdentityApplicationService>,
 }
 
-impl Service for AuthorizationServices {
-    fn new(signer: Arc<dyn SubjectExt>) -> Self {
-        Self { signer }
+impl AuthorizationServices {
+    pub fn new(identity_application_service: Arc<IdentityApplicationService>) -> Self {
+        Self {
+            identity_application_service,
+        }
     }
 }

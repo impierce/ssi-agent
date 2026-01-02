@@ -1,4 +1,5 @@
 use super::aggregate::Status;
+use agent_secret_manager::managed_key::aggregate::SigningAlgorithm;
 use agent_shared::config::SupportedDidMethod;
 use identity_document::service::Service as DocumentService;
 use identity_iota::verification::jwk::Jwk;
@@ -16,8 +17,12 @@ pub enum DocumentCommand {
     UpdateDocumentStatus {
         status: Status,
     },
-    UpdatePublicKeys {
-        public_key_jwks: Vec<Jwk>,
+    AddVerificationMethod {
+        key_id: String,
+        signing_algorithm: SigningAlgorithm,
+    },
+    RemoveVerificationMethod {
+        key_id: String,
     },
     AddService {
         service_id: String,

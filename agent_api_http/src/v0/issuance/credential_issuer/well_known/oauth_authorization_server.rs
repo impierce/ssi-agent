@@ -26,9 +26,11 @@ pub(crate) async fn oauth_authorization_server(State(state): State<Arc<IssuanceS
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::v0::issuance::router;
+    use crate::{
+        utils::tests::{main_service, test_issuance_state},
+        v0::issuance::router,
+    };
     use agent_issuance::state::initialize;
-    use agent_secret_manager::service::Service;
     use agent_store::{in_memory::InMemory, issuance_state};
     use axum::{
         body::Body,
@@ -74,7 +76,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
+        let issuance_state = test_issuance_state(main_service().await, vec![]).await;
+
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);

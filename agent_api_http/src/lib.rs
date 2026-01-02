@@ -1,16 +1,23 @@
 pub mod public;
 pub mod v0;
+pub mod v1;
 
 pub mod error;
 pub mod handlers;
 pub mod metrics;
+pub mod sagas;
 pub mod utils;
 
+use crate::{
+    sagas::{key_generation_saga::KeyGenerationSaga, key_removal_saga::KeyRemovalSaga},
+    v1::identity::IdentityContext,
+};
 use agent_authorization::state::AuthorizationState;
 use agent_holder::state::HolderState;
 use agent_identity::state::IdentityState;
 use agent_issuance::state::IssuanceState;
 use agent_library::state::LibraryState;
+use agent_secret_manager::state::SecretManagerState;
 use agent_shared::config::config;
 use agent_verification::state::VerificationState;
 use axum::{
@@ -34,26 +41,51 @@ pub const DOCUMENTATION_URL: &str = "https://beta.docs.impierce.com/unicore/";
 
 #[derive(Default)]
 pub struct ApplicationState {
+    pub secret_manager_state: Option<Arc<SecretManagerState>>,
     pub identity_state: Option<Arc<IdentityState>>,
     pub library_state: Option<Arc<LibraryState>>,
     pub authorization_state: Option<Arc<AuthorizationState>>,
     pub issuance_state: Option<Arc<IssuanceState>>,
     pub holder_state: Option<Arc<HolderState>>,
     pub verification_state: Option<Arc<VerificationState>>,
+
+    pub key_generation_saga: Option<KeyGenerationSaga>,
+    pub key_removal_saga: Option<KeyRemovalSaga>,
 }
 
 pub fn app(
     ApplicationState {
+        secret_manager_state,
         identity_state,
         library_state,
         authorization_state,
         issuance_state,
         holder_state,
         verification_state,
+        key_generation_saga,
+        key_removal_saga,
     }: ApplicationState,
 ) -> Router {
+    let v1_identity_router = match (
+        identity_state.clone(),
+        secret_manager_state.clone(),
+        key_generation_saga,
+        key_removal_saga,
+    ) {
+        (Some(identity_state), Some(secret_manager_state), Some(gen_saga), Some(rem_saga)) => {
+            let context = IdentityContext {
+                identity_state,
+                secret_manager_state,
+                key_generation_saga: gen_saga,
+                key_removal_saga: rem_saga,
+            };
+            v1::identity::router(context)
+        }
+        _ => Router::new(),
+    };
     let app = Router::new()
         .merge(identity_state.map(v0::identity::router).unwrap_or_default())
+        .merge(v1_identity_router)
         .merge(library_state.map(v0::library::router).unwrap_or_default())
         .merge(
             authorization_state

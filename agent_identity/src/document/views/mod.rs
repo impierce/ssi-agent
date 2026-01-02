@@ -36,6 +36,24 @@ impl View<Document> for Document {
                 self.document_id.clone_from(document_id);
                 self.document.replace(document.clone());
             }
+            VerificationMethodAdded {
+                document_id,
+                document,
+                verification_method_ids,
+            } => {
+                self.document_id.clone_from(document_id);
+                self.document.replace(document.clone());
+                self.verification_method_ids.clone_from(verification_method_ids);
+            }
+            VerificationMethodRemoved {
+                document_id,
+                document,
+                verification_method_ids,
+            } => {
+                self.document_id.clone_from(document_id);
+                self.document.replace(document.clone());
+                self.verification_method_ids.clone_from(verification_method_ids);
+            }
             DocumentPublished {
                 document_id,
                 document,

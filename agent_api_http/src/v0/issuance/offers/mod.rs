@@ -131,13 +131,13 @@ pub(crate) async fn offer(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::utils::tests::{main_service, test_issuance_state};
     use crate::API_VERSION;
     use crate::{
         tests::OFFER_ID,
         v0::issuance::{credentials::tests::credentials, router},
     };
     use agent_issuance::state::initialize;
-    use agent_secret_manager::service::Service;
     use agent_shared::config::set_config;
     use agent_store::in_memory::InMemory;
     use agent_store::issuance_state;
@@ -223,7 +223,7 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_offers_endpoint() {
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
+        let issuance_state = test_issuance_state(main_service().await, vec![]).await;
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
@@ -237,7 +237,7 @@ pub mod tests {
     #[tracing_test::traced_test]
     async fn test_offers_endpoint_by_reference() {
         set_config().credential_offer_by_value_enabled = false;
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
+        let issuance_state = test_issuance_state(main_service().await, vec![]).await;
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);

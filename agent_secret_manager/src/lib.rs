@@ -7,7 +7,11 @@ use identity_iota::{
 use iota_sdk_legacy::client::secret::stronghold::StrongholdSecretManager;
 use log::info;
 
-pub mod service;
+// Aggregates
+pub mod managed_key;
+
+pub mod services;
+pub mod state;
 pub mod subject;
 
 pub async fn stronghold_storage() -> StrongholdExtStorage {
@@ -34,10 +38,7 @@ pub async fn stronghold_storage() -> StrongholdExtStorage {
 
     let stronghold_storage = StrongholdExtStorage::new(stronghold_adapter);
 
-    info!("Stronghold storage initialized");
-
     let ed25519_key_id = config().secret_manager.issuer_eddsa_key_id.clone();
-    let es256_key_id = config().secret_manager.issuer_es256_key_id.clone();
 
     // Generate keys if they don't exist
     // TODO: currently `generate` will generate a 'static' key-ids for each keytype. In a future improvement we need to
@@ -53,13 +54,8 @@ pub async fn stronghold_storage() -> StrongholdExtStorage {
             .expect("Failed to generate Ed25519 key");
         assert_eq!(key_id, ed25519_key_id);
     }
-    if stronghold_storage.get_es256_public_key(&es256_key_id).await.is_err() {
-        info!("Generating new key: {es256_key_id}",);
-        let key_id = generate(&stronghold_storage, KeyType::new("ES256"), JwsAlgorithm::ES256)
-            .await
-            .expect("Failed to generate ES256 key");
-        assert_eq!(key_id, es256_key_id);
-    }
+
+    info!("Stronghold storage initialized");
 
     stronghold_storage
 }

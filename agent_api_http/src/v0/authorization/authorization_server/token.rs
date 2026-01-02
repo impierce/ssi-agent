@@ -25,6 +25,7 @@ pub(crate) async fn token(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::utils::tests::{main_service, test_authorization_state, test_issuance_state};
     use crate::v0::{
         authorization::{
             self,
@@ -40,7 +41,6 @@ pub mod tests {
     use agent_authorization::{
         domain::oauth2_authorization_request::aggregate::test_utils::code_verifier, state::UNIME_REDIRECT_URI,
     };
-    use agent_secret_manager::service::Service;
     use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
     use axum::{
         body::Body,
@@ -139,7 +139,9 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_token_endpoint(#[case] is_pre_authorized: bool) {
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
+        let main_service = main_service().await;
+
+        let issuance_state = test_issuance_state(main_service.clone(), vec![]).await;
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
@@ -154,8 +156,7 @@ pub mod tests {
         credentials(&mut app, &credential_configuration_id).await;
         let grants = offers(&mut app, &credential_configuration_id).await.unwrap();
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, Service::default(), Default::default()).await);
+        let authorization_state = test_authorization_state(main_service).await;
 
         agent_authorization::state::initialize(&authorization_state)
             .await

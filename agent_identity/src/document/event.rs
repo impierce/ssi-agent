@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use super::aggregate::{IotaMetadata, Status};
 use agent_shared::config::SupportedDidMethod;
 use cqrs_es::DomainEvent;
+use identity_did::DIDUrl;
 use identity_document::document::CoreDocument;
 use jsonwebtoken::Algorithm;
 use serde::{Deserialize, Serialize};
@@ -19,6 +22,16 @@ pub enum DocumentEvent {
     PublicKeyUpdated {
         document_id: String,
         document: CoreDocument,
+    },
+    VerificationMethodAdded {
+        document_id: String,
+        document: CoreDocument,
+        verification_method_ids: HashMap<String, DIDUrl>,
+    },
+    VerificationMethodRemoved {
+        document_id: String,
+        document: CoreDocument,
+        verification_method_ids: HashMap<String, DIDUrl>,
     },
     DocumentStatusUpdated {
         document_id: String,

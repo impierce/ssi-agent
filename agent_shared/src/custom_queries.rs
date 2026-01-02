@@ -5,6 +5,19 @@ use cqrs_es::{
 };
 use std::marker::PhantomData;
 use std::sync::Arc;
+use tracing::info;
+
+pub struct SimpleLoggingQuery {}
+
+#[async_trait]
+impl<A: Aggregate> Query<A> for SimpleLoggingQuery {
+    async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<A>]) {
+        for event in events {
+            let payload = serde_json::to_string_pretty(&event.payload).unwrap();
+            info!("{}-{} - {}", aggregate_id, event.sequence, payload);
+        }
+    }
+}
 
 /// A custom query trait. This trait is used to define custom queries for the Aggregates that do not make use of
 /// `GenericQuery`.

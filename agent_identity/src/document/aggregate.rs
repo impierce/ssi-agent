@@ -1,12 +1,13 @@
 use super::{command::DocumentCommand, error::DocumentError, event::DocumentEvent};
 use crate::services::IdentityServices;
-use agent_secret_manager::subject::StorageKey;
+use agent_secret_manager::managed_key::aggregate::SigningAlgorithm;
 use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported};
 use agent_shared::config::{config_mut, SupportedDidMethod};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_did::{CoreDID, DIDUrl, DID as _};
 use identity_document::document::CoreDocument;
+use identity_iota::core::{Duration, Timestamp};
 use identity_iota::iota::rebased::client::{
     get_object_id_from_did, IdentityClient, IdentityClientReadOnly, PublishDidDocument,
 };
@@ -17,6 +18,7 @@ use identity_iota::{
     iota::IotaDocument,
     verification::{MethodScope, MethodType, VerificationMethod},
 };
+use identity_storage::KeyId;
 use identity_storage::{JwkStorage, KeyIdStorage};
 use iota_sdk::types::base_types::IotaAddress;
 use iota_sdk::{IotaClient, IotaClientBuilder};
@@ -29,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use ssi_dids::DIDMethod;
 use ssi_dids::Source;
+use std::collections::HashMap;
 use std::{collections::BTreeMap, sync::Arc};
 use tracing::{debug, info, warn};
 use url::Url;
@@ -60,6 +63,7 @@ pub enum Status {
     Disabled,
 }
 
+// TODO: `Document` most likely should not be an Aggregate, but rather a Read Model that is built from events emitted by other Aggregates, such as `ManagedKey` and `Service`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Document {
     #[serde(rename = "id")]
@@ -71,6 +75,7 @@ pub struct Document {
     pub with_fixed_algorithm: Option<Algorithm>,
     // Applicable only for DID methods that are based on the IOTA ledger.
     pub iota_metadata: Option<IotaMetadata>,
+    pub verification_method_ids: HashMap<String, DIDUrl>,
     pub status: Status,
 }
 
@@ -101,8 +106,8 @@ impl Aggregate for Document {
                 did_method,
                 with_fixed_algorithm,
             } => {
-                let subject = &services.subject;
-                let stronghold_storage = &subject.stronghold_storage;
+                let secret_manager_services = &services.secret_manager_services;
+                let stronghold_storage = &secret_manager_services.stronghold_storage;
 
                 let mut iota_metadata = self.iota_metadata.clone().unwrap_or_default();
 
@@ -264,33 +269,31 @@ impl Aggregate for Document {
                     }
                     SupportedDidMethod::Jwk | SupportedDidMethod::Key => {
                         let algorithm = with_fixed_algorithm.ok_or(MissingFixedAlgorithmError(did_method))?;
-                        let key_id = match algorithm {
-                            Algorithm::EdDSA => config().secret_manager.issuer_eddsa_key_id.clone(),
-                            Algorithm::ES256 => config().secret_manager.issuer_es256_key_id.clone(),
-                            algorithm => return Err(UnsupportedSigningAlgorithmError(algorithm)),
-                        };
 
-                        // Retrieve the public key from Stronghold.
-                        let public_key_jwk = subject
-                            .get_public_key(key_id.clone(), &algorithm)
-                            .await
-                            .map_err(|err| MissingKeyError(err.to_string()))?;
+                        // FIXME
+                        // // Retrieve the public key from Stronghold.
+                        // let public_key_jwk = secret_manager_services
+                        //     .get_public_key(key_id.clone(), &algorithm)
+                        //     .await
+                        //     .map_err(|err| MissingKeyError(err.to_string()))?;
 
-                        // Generate a DID from the public key.
-                        let controller = serde_json::from_value::<ssi_jwk::JWK>(json!(public_key_jwk))
-                            .ok()
-                            .and_then(|jwk| match did_method {
-                                SupportedDidMethod::Jwk => did_jwk_extern::DIDJWK.generate(&Source::Key(&jwk)),
-                                SupportedDidMethod::Key => did_key_extern::DIDKey.generate(&Source::Key(&jwk)),
-                                _ => None,
-                            })
-                            .and_then(|did| did.parse().ok())
-                            .ok_or(GenerateDidError(key_id))?;
+                        todo!();
 
-                        CoreDocument::builder(Default::default())
-                            .id(controller)
-                            .build()
-                            .map_err(ProduceDocumentError)?
+                        // // Generate a DID from the public key.
+                        // let controller = serde_json::from_value::<ssi_jwk::JWK>(json!(public_key_jwk))
+                        //     .ok()
+                        //     .and_then(|jwk| match did_method {
+                        //         SupportedDidMethod::Jwk => did_jwk_extern::DIDJWK.generate(&Source::Key(&jwk)),
+                        //         SupportedDidMethod::Key => did_key_extern::DIDKey.generate(&Source::Key(&jwk)),
+                        //         _ => None,
+                        //     })
+                        //     .and_then(|did| did.parse().ok())
+                        //     .unwrap();
+
+                        // CoreDocument::builder(Default::default())
+                        //     .id(controller)
+                        //     .build()
+                        //     .map_err(ProduceDocumentError)?
                     }
                 };
 
@@ -310,74 +313,65 @@ impl Aggregate for Document {
                     iota_metadata,
                 }])
             }
-            UpdatePublicKeys {
-                // TODO: decide whether the public keys should be supplied through the command or not.
-                public_key_jwks: _,
+            UpdateDocumentStatus { status } => Ok(vec![DocumentStatusUpdated {
+                document_id: self.document_id.clone(),
+                status,
+            }]),
+            AddVerificationMethod {
+                key_id,
+                signing_algorithm,
             } => {
+                let secret_manager_services = &services.secret_manager_services;
+                let stronghold_storage = &secret_manager_services.stronghold_storage;
+
                 let mut document = self.document.clone().ok_or(MissingDocumentError)?;
                 let did = document.id().clone();
 
                 let did_method = self.did_method.ok_or(MissingDidMethodError)?;
 
-                let subject = &services.subject;
+                let key_id = KeyId::new(&key_id);
 
-                // Remove all existing verification methods from the document.
-                let methods = document.methods(None).into_iter().cloned().collect::<Vec<_>>();
-                for method in methods {
-                    document.remove_method(method.id());
-                }
+                let jwk = match signing_algorithm {
+                    SigningAlgorithm::EdDSA => stronghold_storage.get_ed25519_public_key(&key_id).await.unwrap(),
+                    SigningAlgorithm::ES256 => stronghold_storage.get_es256_public_key(&key_id).await.unwrap(),
+                };
 
-                // Insert the new verification methods based on the signing algorithms.
-                let mut events = vec![];
-                for signing_algorithm in self
-                    .with_fixed_algorithm
-                    .map(|signing_algorithm| vec![signing_algorithm])
-                    .unwrap_or_else(get_all_enabled_signing_algorithms_supported)
-                {
-                    let key_id = match signing_algorithm {
-                        Algorithm::EdDSA => config().secret_manager.issuer_eddsa_key_id.clone(),
-                        Algorithm::ES256 => config().secret_manager.issuer_es256_key_id.clone(),
-                        algorithm => return Err(UnsupportedSigningAlgorithmError(algorithm)),
-                    };
+                let verification_method = VerificationMethod::new_from_jwk(
+                    did.clone(),
+                    jwk,
+                    (did_method == SupportedDidMethod::Key)
+                        .then_some(did.method_id())
+                        .or(did_method.fragment()),
+                )
+                .map_err(|err| VerificationMethodBuilderError(err.to_string()))?;
 
-                    let public_key_jwk = subject
-                        .get_public_key(key_id, &signing_algorithm)
-                        .await
-                        .map_err(|err| MissingKeyError(err.to_string()))?;
+                let mut verification_method_ids = self.verification_method_ids.clone();
+                verification_method_ids.insert(key_id.to_string(), verification_method.id().clone());
 
-                    let verification_method = VerificationMethod::new_from_jwk(
-                        did.clone(),
-                        public_key_jwk,
-                        (did_method == SupportedDidMethod::Key)
-                            .then_some(did.method_id())
-                            .or(did_method.fragment()),
-                    )
-                    .map_err(|err| VerificationMethodBuilderError(err.to_string()))?;
+                document
+                    .insert_method(verification_method, MethodScope::VerificationMethod) // TODO: add relationships, also TODO: adjust KID insertion elsewhere
+                    .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
 
-                    subject
-                        .insert_verification_method_id(
-                            StorageKey::new(did_method, signing_algorithm),
-                            verification_method.id().clone(),
-                        )
-                        .await
-                        .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
-
-                    document
-                        .insert_method(verification_method, MethodScope::VerificationMethod) // TODO: add relationships, also TODO: adjust KID insertion elsewhere
-                        .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
-
-                    events.push(PublicKeyUpdated {
-                        document_id: self.document_id.clone(),
-                        document: document.clone(),
-                    })
-                }
-
-                Ok(events)
+                Ok(vec![VerificationMethodAdded {
+                    document_id: self.document_id.clone(),
+                    verification_method_ids,
+                    document,
+                }])
             }
-            UpdateDocumentStatus { status } => Ok(vec![DocumentStatusUpdated {
-                document_id: self.document_id.clone(),
-                status,
-            }]),
+            RemoveVerificationMethod { key_id } => {
+                let mut document = self.document.clone().ok_or(MissingDocumentError)?;
+
+                let mut verification_method_ids = self.verification_method_ids.clone();
+                let verification_method_id = verification_method_ids.remove(&key_id.to_string()).unwrap();
+
+                document.remove_method(&verification_method_id);
+
+                Ok(vec![VerificationMethodRemoved {
+                    document_id: self.document_id.clone(),
+                    document,
+                    verification_method_ids,
+                }])
+            }
             AddService {
                 service_id,
                 mut service,
@@ -414,7 +408,7 @@ impl Aggregate for Document {
                 // Create a new IOTA client to interact with the IOTA ledger.
                 let iota_client = get_iota_client(api_endpoint).await?;
 
-                let stronghold_storage = &services.subject.stronghold_storage;
+                let stronghold_storage = &services.secret_manager_services.stronghold_storage;
 
                 let key_id = config().secret_manager.issuer_eddsa_key_id.clone();
 
@@ -615,6 +609,24 @@ impl Aggregate for Document {
             ServiceAdded { document_id, document } => {
                 self.document_id = document_id;
                 self.document.replace(document);
+            }
+            VerificationMethodAdded {
+                document_id,
+                document,
+                verification_method_ids,
+            } => {
+                self.document_id = document_id;
+                self.document.replace(document);
+                self.verification_method_ids = verification_method_ids;
+            }
+            VerificationMethodRemoved {
+                document_id,
+                document,
+                verification_method_ids,
+            } => {
+                self.document_id = document_id;
+                self.document.replace(document);
+                self.verification_method_ids = verification_method_ids;
             }
             DocumentPublished {
                 document_id,
@@ -861,39 +873,6 @@ pub mod document_tests {
                 with_fixed_algorithm: None,
                 iota_metadata: None,
             }])
-    }
-
-    #[rstest]
-    #[serial_test::serial]
-    async fn test_set_public_key_jwks(
-        document_id: String,
-        did_method: SupportedDidMethod,
-        document: CoreDocument,
-        document_with_single_verification_method: CoreDocument,
-        document_with_multiple_verification_methods: CoreDocument,
-    ) {
-        DocumentTestFramework::with(IdentityServices::default())
-            .given(vec![DocumentEvent::DocumentCreated {
-                document_id: document_id.clone(),
-                did_method,
-                document: document.clone(),
-                status: Status::SignAndValidate,
-                with_fixed_algorithm: None,
-                iota_metadata: None,
-            }])
-            .when(DocumentCommand::UpdatePublicKeys {
-                public_key_jwks: vec![],
-            })
-            .then_expect_events(vec![
-                DocumentEvent::PublicKeyUpdated {
-                    document_id: document_id.clone(),
-                    document: document_with_single_verification_method,
-                },
-                DocumentEvent::PublicKeyUpdated {
-                    document_id,
-                    document: document_with_multiple_verification_methods,
-                },
-            ])
     }
 
     #[rstest]

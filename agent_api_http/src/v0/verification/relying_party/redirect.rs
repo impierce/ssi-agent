@@ -60,11 +60,14 @@ pub mod tests {
     use std::{str::FromStr, sync::Arc};
 
     use super::*;
-    use crate::v0::verification::{
-        authorization_requests::tests::authorization_requests, relying_party::request::tests::request, router,
+    use crate::{
+        utils::tests::{main_service, test_verification_state},
+        v0::verification::{
+            authorization_requests::tests::authorization_requests, relying_party::request::tests::request, router,
+        },
     };
     use agent_event_publisher_http::EventPublisherHttp;
-    use agent_secret_manager::{service::Service, subject::Subject};
+    use agent_secret_manager::subject::Subject;
     use agent_shared::config::{set_config, Events};
     use agent_store::{in_memory::InMemory, verification_state, EventPublisher};
     use axum::{
@@ -158,7 +161,7 @@ pub mod tests {
 
         let event_publishers = vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>];
 
-        let verification_state = Arc::new(verification_state(&InMemory, Service::default(), event_publishers).await);
+        let verification_state = test_verification_state(main_service().await, event_publishers).await;
 
         let mut app = router(verification_state);
 

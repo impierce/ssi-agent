@@ -6,18 +6,21 @@ mod probes;
 use agent_api_http::{
     app,
     metrics::{metrics, track_metrics},
+    sagas::{key_generation_saga::KeyGenerationSaga, key_removal_saga::KeyRemovalSaga},
     ApplicationState,
 };
 use agent_authorization::services::AuthorizationServices;
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_event_publisher_nats::EventPublisherNats;
 use agent_holder::services::HolderServices;
-use agent_identity::services::IdentityServices;
+use agent_identity::services::{IdentityApplicationService, IdentityServices, IDENTITY_APPLICATION_SERVICE};
 use agent_issuance::{
     application::policies::issuer_metadata_synchronization_policy::IssuerMetadataSynchronizationPolicy,
     services::IssuanceServices,
 };
-use agent_secret_manager::{service::Service as _, subject::Subject};
+use agent_secret_manager::services::{
+    SecretManagerDomainService, SecretManagerServices, SECRET_MANAGER_DOMAIN_SERVICE,
+};
 use agent_shared::config::{config, EventStoreType};
 use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
@@ -29,17 +32,11 @@ use tracing::info;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let subject = Arc::new(Subject::new().await);
-
-    let identity_services = Arc::new(IdentityServices::new(subject.clone()));
-    let authorization_services = Arc::new(AuthorizationServices::new(subject.clone()));
-    let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
-    let holder_services = Arc::new(HolderServices::new(subject.clone()));
-    let verification_services = Arc::new(VerificationServices::new(subject.clone()));
-
     // TODO: Currently all these `*_event_publishers` are exactly the same, which is weird. We need some sort of layer
     // between `agent_application` and `agent_store` that will provide a cleaner way of initializing the event
     // publishers and sending them over to `agent_store`.
+    let secret_manager_event_publishers: Vec<Box<dyn EventPublisher>> =
+        vec![Box::new(EventPublisherHttp::load().unwrap())];
     let identity_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
     let issuance_event_publishers: Vec<Box<dyn EventPublisher>> = vec![
         Box::new(EventPublisherHttp::load().unwrap()),
@@ -52,120 +49,170 @@ async fn main() -> io::Result<()> {
     let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
         vec![Box::new(EventPublisherHttp::load().unwrap())];
 
+    let secret_manager_services = Arc::new(SecretManagerServices::new().await);
+    let secret_manager_state = match config().event_store.type_ {
+        EventStoreType::Postgres => {
+            let builder = Postgres::new().await;
+            Arc::new(
+                agent_store::secret_manager_state(
+                    &builder,
+                    secret_manager_services.clone(),
+                    secret_manager_event_publishers,
+                )
+                .await,
+            )
+        }
+        EventStoreType::MongoDb => {
+            let builder = MongoDB::new().await;
+            Arc::new(
+                agent_store::secret_manager_state(
+                    &builder,
+                    secret_manager_services.clone(),
+                    secret_manager_event_publishers,
+                )
+                .await,
+            )
+        }
+        EventStoreType::InMemory => Arc::new(
+            agent_store::secret_manager_state(
+                &InMemory,
+                secret_manager_services.clone(),
+                secret_manager_event_publishers,
+            )
+            .await,
+        ),
+    };
+
+    let identity_services = Arc::new(IdentityServices::new(secret_manager_services.clone()));
+    let identity_state = match config().event_store.type_ {
+        EventStoreType::Postgres => {
+            let builder = Postgres::new().await;
+            Arc::new(agent_store::identity_state(&builder, identity_services.clone(), identity_event_publishers).await)
+        }
+        EventStoreType::MongoDb => {
+            let builder = MongoDB::new().await;
+            Arc::new(agent_store::identity_state(&builder, identity_services.clone(), identity_event_publishers).await)
+        }
+        EventStoreType::InMemory => {
+            Arc::new(agent_store::identity_state(&InMemory, identity_services.clone(), identity_event_publishers).await)
+        }
+    };
+
+    let identity_application_service = Arc::new(
+        IdentityApplicationService::new(
+            secret_manager_state.clone(),
+            secret_manager_services.clone(),
+            identity_state.clone(),
+        )
+        .await,
+    );
+
+    IDENTITY_APPLICATION_SERVICE
+        .set(identity_application_service.clone())
+        .unwrap();
+    SECRET_MANAGER_DOMAIN_SERVICE
+        .set(Arc::new(SecretManagerDomainService::new(secret_manager_state.clone())))
+        .unwrap();
+
+    let authorization_services = Arc::new(AuthorizationServices::new(identity_application_service.clone()));
+    let issuance_services = Arc::new(IssuanceServices::new(identity_application_service.clone()));
+    let holder_services = Arc::new(HolderServices::new(identity_application_service.clone()));
+    let verification_services = Arc::new(VerificationServices::new(identity_application_service.clone()));
+
     // TODO: Refactor this to reduce code duplication.
-    let (identity_state, library_state, authorization_state, issuance_state, holder_state, verification_state) =
-        match config().event_store.type_ {
-            EventStoreType::Postgres => {
-                let builder = Postgres::new().await;
+    let (library_state, authorization_state, issuance_state, holder_state, verification_state) = match config()
+        .event_store
+        .type_
+    {
+        EventStoreType::Postgres => {
+            let builder = Postgres::new().await;
 
-                let issuance_state =
-                    Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);
+            let issuance_state =
+                Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);
 
-                let issuer_metadata_synchronization_policy =
-                    IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
+            let issuer_metadata_synchronization_policy =
+                IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
 
-                (
-                    Arc::new(agent_store::identity_state(&builder, identity_services, identity_event_publishers).await),
-                    Arc::new(
-                        agent_store::library_state(
-                            &builder,
-                            library_event_publishers,
-                            vec![Box::new(issuer_metadata_synchronization_policy)],
-                        )
+            (
+                Arc::new(
+                    agent_store::library_state(
+                        &builder,
+                        library_event_publishers,
+                        vec![Box::new(issuer_metadata_synchronization_policy)],
+                    )
+                    .await,
+                ),
+                Arc::new(
+                    agent_store::authorization_state(&builder, authorization_services, authorization_event_publishers)
                         .await,
-                    ),
-                    Arc::new(
-                        agent_store::authorization_state(
-                            &builder,
-                            authorization_services,
-                            authorization_event_publishers,
-                        )
+                ),
+                issuance_state,
+                Arc::new(agent_store::holder_state(&builder, holder_services, holder_event_publishers).await),
+                Arc::new(
+                    agent_store::verification_state(&builder, verification_services, verification_event_publishers)
                         .await,
-                    ),
-                    issuance_state,
-                    Arc::new(agent_store::holder_state(&builder, holder_services, holder_event_publishers).await),
-                    Arc::new(
-                        agent_store::verification_state(&builder, verification_services, verification_event_publishers)
-                            .await,
-                    ),
-                )
-            }
-            EventStoreType::MongoDb => {
-                let builder = MongoDB::new().await;
+                ),
+            )
+        }
+        EventStoreType::MongoDb => {
+            let builder = MongoDB::new().await;
 
-                let issuance_state =
-                    Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);
+            let issuance_state =
+                Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);
 
-                let issuer_metadata_synchronization_policy =
-                    IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
+            let issuer_metadata_synchronization_policy =
+                IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
 
-                (
-                    Arc::new(agent_store::identity_state(&builder, identity_services, identity_event_publishers).await),
-                    Arc::new(
-                        agent_store::library_state(
-                            &builder,
-                            library_event_publishers,
-                            vec![Box::new(issuer_metadata_synchronization_policy)],
-                        )
+            (
+                Arc::new(
+                    agent_store::library_state(
+                        &builder,
+                        library_event_publishers,
+                        vec![Box::new(issuer_metadata_synchronization_policy)],
+                    )
+                    .await,
+                ),
+                Arc::new(
+                    agent_store::authorization_state(&builder, authorization_services, authorization_event_publishers)
                         .await,
-                    ),
-                    Arc::new(
-                        agent_store::authorization_state(
-                            &builder,
-                            authorization_services,
-                            authorization_event_publishers,
-                        )
+                ),
+                issuance_state,
+                Arc::new(agent_store::holder_state(&builder, holder_services, holder_event_publishers).await),
+                Arc::new(
+                    agent_store::verification_state(&builder, verification_services, verification_event_publishers)
                         .await,
-                    ),
-                    issuance_state,
-                    Arc::new(agent_store::holder_state(&builder, holder_services, holder_event_publishers).await),
-                    Arc::new(
-                        agent_store::verification_state(&builder, verification_services, verification_event_publishers)
-                            .await,
-                    ),
-                )
-            }
-            EventStoreType::InMemory => {
-                let issuance_state = Arc::new(
-                    agent_store::issuance_state(&InMemory, issuance_services, issuance_event_publishers).await,
-                );
+                ),
+            )
+        }
+        EventStoreType::InMemory => {
+            let issuance_state =
+                Arc::new(agent_store::issuance_state(&InMemory, issuance_services, issuance_event_publishers).await);
 
-                let issuer_metadata_synchronization_policy =
-                    IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
+            let issuer_metadata_synchronization_policy =
+                IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
 
-                (
-                    Arc::new(
-                        agent_store::identity_state(&InMemory, identity_services, identity_event_publishers).await,
-                    ),
-                    Arc::new(
-                        agent_store::library_state(
-                            &InMemory,
-                            library_event_publishers,
-                            vec![Box::new(issuer_metadata_synchronization_policy)],
-                        )
+            (
+                Arc::new(
+                    agent_store::library_state(
+                        &InMemory,
+                        library_event_publishers,
+                        vec![Box::new(issuer_metadata_synchronization_policy)],
+                    )
+                    .await,
+                ),
+                Arc::new(
+                    agent_store::authorization_state(&InMemory, authorization_services, authorization_event_publishers)
                         .await,
-                    ),
-                    Arc::new(
-                        agent_store::authorization_state(
-                            &InMemory,
-                            authorization_services,
-                            authorization_event_publishers,
-                        )
+                ),
+                issuance_state,
+                Arc::new(agent_store::holder_state(&InMemory, holder_services, holder_event_publishers).await),
+                Arc::new(
+                    agent_store::verification_state(&InMemory, verification_services, verification_event_publishers)
                         .await,
-                    ),
-                    issuance_state,
-                    Arc::new(agent_store::holder_state(&InMemory, holder_services, holder_event_publishers).await),
-                    Arc::new(
-                        agent_store::verification_state(
-                            &InMemory,
-                            verification_services,
-                            verification_event_publishers,
-                        )
-                        .await,
-                    ),
-                )
-            }
-        };
+                ),
+            )
+        }
+    };
 
     info!("{:?}", config());
 
@@ -176,16 +223,34 @@ async fn main() -> io::Result<()> {
     agent_authorization::state::initialize(&authorization_state)
         .await
         .unwrap();
-    agent_identity::state::initialize(&identity_state).await.unwrap();
+    agent_identity::state::initialize(&identity_state).await.ok();
     agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
+    let key_generation_saga = KeyGenerationSaga::new(
+        secret_manager_state.clone(),
+        identity_state.clone(),
+        identity_services.clone(),
+    );
+
+    key_generation_saga.generate_default_keys().await.ok();
+
+    let key_removal_saga = KeyRemovalSaga::new(
+        secret_manager_state.clone(),
+        identity_state.clone(),
+        identity_services.clone(),
+    );
+
     let app = app(ApplicationState {
+        secret_manager_state: Some(secret_manager_state),
         identity_state: Some(identity_state),
         library_state: Some(library_state),
         authorization_state: Some(authorization_state),
         issuance_state: Some(issuance_state),
         holder_state: Some(holder_state),
         verification_state: Some(verification_state),
+
+        key_generation_saga: Some(key_generation_saga),
+        key_removal_saga: Some(key_removal_saga),
     });
 
     let metadata_state = metadata::MetadataState {

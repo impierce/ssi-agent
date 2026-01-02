@@ -11,15 +11,3 @@ pub mod utils;
 pub mod application;
 pub mod services;
 pub mod state;
-
-pub struct SimpleLoggingQuery {}
-
-#[async_trait]
-impl<A: Aggregate> Query<A> for SimpleLoggingQuery {
-    async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<A>]) {
-        for event in events {
-            let payload = serde_json::to_string_pretty(&event.payload).unwrap();
-            info!("{}-{} - {}", aggregate_id, event.sequence, payload);
-        }
-    }
-}

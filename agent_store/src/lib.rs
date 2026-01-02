@@ -34,15 +34,18 @@ use agent_issuance::credential::views::CredentialView;
 use agent_issuance::offer::views::all_offers::AllOffersView;
 use agent_issuance::offer::views::OfferView;
 use agent_issuance::server_config::views::ServerConfigView;
-use agent_issuance::SimpleLoggingQuery;
 use agent_issuance::{
     credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
 };
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::Template;
 use agent_library::template::views::all_templates::AllTemplatesView;
+use agent_secret_manager::managed_key::aggregate::ManagedKey;
+use agent_secret_manager::managed_key::views::all_managed_keys::AllManagedKeysView;
+use agent_secret_manager::services::SecretManagerServices;
+use agent_secret_manager::state::SecretManagerState;
 use agent_shared::application_state::Command;
-use agent_shared::custom_queries::ListAllQuery;
+use agent_shared::custom_queries::{ListAllQuery, SimpleLoggingQuery};
 use agent_shared::generic_query::generic_query;
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use agent_verification::authorization_request::views::all_authorization_requests::AllAuthorizationRequestsView;
@@ -160,11 +163,37 @@ pub type CqrsComponents<A, V, AV> = (
 pub trait CqrsComponentBuilder {
     fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
         &self,
-        identity_services: A::Services,
+        services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
     ) -> impl std::future::Future<Output = CqrsComponents<A, V, AV>> + Send
     where
         <A as Aggregate>::Command: Send + Sync;
+}
+
+pub async fn secret_manager_state<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
+    services: Arc<SecretManagerServices>,
+    event_publishers: Vec<Box<dyn EventPublisher>>,
+) -> SecretManagerState {
+    // Partition the event_publishers into the different aggregates.
+    let Partitions {
+        managed_key_event_publishers,
+        ..
+    } = partition_event_publishers(event_publishers);
+
+    let (managed_key_command_handler, managed_key, all_managed_keys) = builder
+        .commands_and_queries::<ManagedKey, ManagedKey, AllManagedKeysView>(services, managed_key_event_publishers)
+        .await;
+
+    SecretManagerState {
+        command: agent_secret_manager::state::CommandHandlers {
+            managed_key: managed_key_command_handler,
+        },
+        query: agent_secret_manager::state::ViewRepositories {
+            managed_key,
+            all_managed_keys,
+        },
+    }
 }
 
 pub async fn identity_state<CCB: CqrsComponentBuilder>(
@@ -295,7 +324,7 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
             authorization_code,
             access_token,
         },
-        signer: services.signer.clone(),
+        signer: services.identity_application_service.clone(),
     }
 }
 
@@ -341,7 +370,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
             offer,
             all_offers,
         },
-        subject: services.issuer.clone(),
+        subject: services.identity_application_service.clone(),
     }
 }
 
@@ -429,6 +458,7 @@ pub type ConnectionEventPublisher = Box<dyn Query<Connection>>;
 pub type DocumentEventPublisher = Box<dyn Query<Document>>;
 pub type ProfileEventPublisher = Box<dyn Query<Profile>>;
 pub type ServiceEventPublisher = Box<dyn Query<Service>>;
+pub type ManagedKeyEventPublisher = Box<dyn Query<ManagedKey>>;
 pub type TemplateEventPublisher = Box<dyn Query<Template>>;
 pub type AuthorizationCodeEventPublisher = Box<dyn Query<AuthorizationCode>>;
 pub type ClientEventPublisher = Box<dyn Query<Client>>;
@@ -449,6 +479,7 @@ pub struct Partitions {
     pub document_event_publishers: Vec<DocumentEventPublisher>,
     pub profile_event_publishers: Vec<ProfileEventPublisher>,
     pub service_event_publishers: Vec<ServiceEventPublisher>,
+    pub managed_key_event_publishers: Vec<ManagedKeyEventPublisher>,
     pub template_event_publishers: Vec<TemplateEventPublisher>,
     pub authorization_code_event_publishers: Vec<AuthorizationCodeEventPublisher>,
     pub client_event_publishers: Vec<ClientEventPublisher>,
@@ -472,6 +503,7 @@ pub trait EventPublisher {
     fn document(&mut self) -> Option<DocumentEventPublisher>;
     fn profile(&mut self) -> Option<ProfileEventPublisher>;
     fn service(&mut self) -> Option<ServiceEventPublisher>;
+    fn managed_key(&mut self) -> Option<ManagedKeyEventPublisher>;
 
     fn template(&mut self) -> Option<TemplateEventPublisher>;
 
@@ -601,6 +633,10 @@ mod test {
             None
         }
 
+        fn managed_key(&mut self) -> Option<ManagedKeyEventPublisher> {
+            None
+        }
+
         fn template(&mut self) -> Option<TemplateEventPublisher> {
             None
         }
@@ -667,6 +703,10 @@ mod test {
             None
         }
 
+        fn managed_key(&mut self) -> Option<ManagedKeyEventPublisher> {
+            None
+        }
+
         fn template(&mut self) -> Option<TemplateEventPublisher> {
             None
         }
@@ -723,6 +763,7 @@ mod test {
             document_event_publishers,
             profile_event_publishers,
             service_event_publishers,
+            managed_key_event_publishers,
             template_event_publishers,
             authorization_code_event_publishers,
             client_event_publishers,
@@ -741,6 +782,7 @@ mod test {
         assert_eq!(document_event_publishers.len(), 0);
         assert_eq!(profile_event_publishers.len(), 0);
         assert_eq!(service_event_publishers.len(), 0);
+        assert_eq!(managed_key_event_publishers.len(), 0);
         assert_eq!(template_event_publishers.len(), 0);
         assert_eq!(authorization_code_event_publishers.len(), 0);
         assert_eq!(client_event_publishers.len(), 0);
