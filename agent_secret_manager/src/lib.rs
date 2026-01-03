@@ -52,7 +52,9 @@ pub async fn stronghold_storage() -> StrongholdExtStorage {
         let key_id = generate(&stronghold_storage, KeyType::new("Ed25519"), JwsAlgorithm::EdDSA)
             .await
             .expect("Failed to generate Ed25519 key");
-        assert_eq!(key_id, ed25519_key_id);
+
+        agent_shared::config::config_mut().secret_manager.issuer_eddsa_key_id = key_id.clone();
+        info!("Generated Ed25519 key with key ID: {key_id}");
     }
 
     info!("Stronghold storage initialized");
