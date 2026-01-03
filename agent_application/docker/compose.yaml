@@ -4,7 +4,6 @@ services:
   cqrs-postgres-db:
     container_name: cqrs-postgres-db
     image: postgres
-    restart: always
     ports:
       - 5432:5432
     environment:
@@ -16,7 +15,6 @@ services:
 
   pg-admin:
     image: dpage/pgadmin4
-    restart: always
     ports:
       - 5433:80
     environment:
