@@ -36,7 +36,7 @@ name: ssi-agent
 
 services:
   mongodb:
-    image: mongo:8
+    image: mongo:8.0.17
     restart: always
     ports:
       - 27017:27017
