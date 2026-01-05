@@ -19,7 +19,7 @@ pub struct EmailOfferEndpointRequest {
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn email_offer(
+pub(crate) async fn individual_offer(
     State(state): State<Arc<IssuanceState>>,
     Json(EmailOfferEndpointRequest {
         offer_id,

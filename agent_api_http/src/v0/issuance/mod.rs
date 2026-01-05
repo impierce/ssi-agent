@@ -20,7 +20,7 @@ use crate::v0::issuance::{
     credentials::{all_credentials, credentials, patch_credential},
     offers::{
         all_offers, offer, offers,
-        send::{email_offer, organization_offer},
+        send::{individual_offer, organization_offer},
     },
 };
 use crate::API_VERSION;
@@ -42,7 +42,7 @@ pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
                 .route("/credential-configurations", post(credential_configurations))
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
-                .route("/offers/send-offer-to-individual", post(email_offer))
+                .route("/offers/send-offer-to-individual", post(individual_offer))
                 .route("/offers/send-offer-to-organization", post(organization_offer)),
         )
         .route(
