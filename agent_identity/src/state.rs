@@ -504,7 +504,7 @@ pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -
         // Add the Linked Verifiable Presentations service to the DID Web Document.
         for document_id in did_web_document.keys() {
             let command = DocumentCommand::AddService {
-                service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
+                service_id: LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.to_string(),
                 service: Box::new(service.clone()),
             };
 
