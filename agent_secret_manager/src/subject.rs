@@ -325,8 +325,7 @@ mod tests {
     #[tokio::test]
     async fn test_configure_resolver() {
         let mut subject = Subject::new().await;
-        // TODO: find a node_url for testing
-        subject.configure_resolver(None, None).await;
+        subject.configure_resolver(Some("https://api.iota.mainnet.dlt.green/"), None).await;
 
         subject
             .resolver
