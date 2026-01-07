@@ -45,7 +45,9 @@ fn into_proof_types_supported(signing_algorithms_supported: &[Algorithm]) -> Has
     HashMap::from_iter([(
         ProofType::Jwt,
         KeyProofMetadata {
-            proof_signing_alg_values_supported: signing_algorithms_supported.to_vec(),
+            proof_signing_alg_values_supported: into_credential_signing_alg_values_supported(
+                signing_algorithms_supported,
+            ),
         },
     )])
 }

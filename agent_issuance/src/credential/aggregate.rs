@@ -681,7 +681,6 @@ pub mod credential_tests {
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::*;
-    use jsonwebtoken::Algorithm;
     use lazy_static::lazy_static;
     use oid4vci::{
         credential_format_profiles::{
@@ -723,7 +722,7 @@ pub mod test_utils {
                 proof_types_supported: HashMap::from_iter(vec![(
                     ProofType::Jwt,
                     KeyProofMetadata {
-                        proof_signing_alg_values_supported: vec![Algorithm::EdDSA],
+                        proof_signing_alg_values_supported: vec!["EdDSA".to_string()],
                     },
                 )]),
                 display: vec![CredentialConfigurationsSupportedDisplay {
@@ -754,7 +753,7 @@ pub mod test_utils {
                 proof_types_supported: HashMap::from_iter(vec![(
                     ProofType::Jwt,
                     KeyProofMetadata {
-                        proof_signing_alg_values_supported: vec![Algorithm::ES256, Algorithm::EdDSA],
+                        proof_signing_alg_values_supported: vec!["ES256".to_string(), "EdDSA".to_string()],
                     },
                 )]),
                 display: vec![CredentialConfigurationsSupportedDisplay {

@@ -47,7 +47,6 @@ pub(crate) async fn authorization_request(
 
 #[derive(Deserialize, Serialize)]
 pub struct AuthorizationRequestsEndpointRequest {
-    pub nonce: String,
     pub state: Option<String>,
     pub dcql_query: Option<DcqlQuery>,
 }
@@ -55,16 +54,13 @@ pub struct AuthorizationRequestsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_requests(
     State(verification_state): State<Arc<VerificationState>>,
-    Json(AuthorizationRequestsEndpointRequest {
-        nonce,
-        state,
-        dcql_query,
-    }): Json<AuthorizationRequestsEndpointRequest>,
+    Json(AuthorizationRequestsEndpointRequest { state, dcql_query }): Json<AuthorizationRequestsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let state = state.unwrap_or(generate_random_string());
+    let nonce = generate_random_string();
 
     let command = AuthorizationRequestCommand::CreateAuthorizationRequest {
-        nonce: nonce.to_string(),
+        nonce: nonce.clone(),
         state: state.clone(),
         dcql_query: dcql_query.clone(),
     };
@@ -140,7 +136,6 @@ pub mod tests {
 
     pub async fn authorization_requests(app: &mut Router) -> String {
         let request_body = AuthorizationRequestsEndpointRequest {
-            nonce: "nonce".to_string(),
             state: None,
             dcql_query: Some(DCQL_QUERY.clone()),
         };
