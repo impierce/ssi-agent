@@ -486,12 +486,14 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
 
 /// Initializes the Linked Verifiable Presentations service for DID Web Document.
 pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -> anyhow::Result<()> {
-    // TODO: We currently only support Linked Verifiable Presentations for DID Web. In the future we should also support
-    // it for other update supporting DID methods.
-
-    // Get the DID Web document.
-    let did_web_document = query_all_documents(state, |(_, document)| {
-        document.status != Status::Disabled && document.did_method == Some(SupportedDidMethod::Web)
+    // Get all decentrally hosted documents.
+    let documents = query_all_documents(state, |(_, document)| {
+        document.status != Status::Disabled
+            && document
+                .did_method
+                .as_ref()
+                .map(SupportedDidMethod::hosted_decentrally)
+                .unwrap_or(false)
     })
     .await?;
 
@@ -502,7 +504,7 @@ pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -
         info!("Found Linked Verifiable Presentations service: {service}");
 
         // Add the Linked Verifiable Presentations service to the DID Web Document.
-        for document_id in did_web_document.keys() {
+        for document_id in documents.keys() {
             let command = DocumentCommand::AddService {
                 service_id: LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.to_string(),
                 service: Box::new(service.clone()),

@@ -50,8 +50,13 @@ pub(crate) async fn linked_vp(
         .await?
         .and_then(|all_documents_view| {
             all_documents_view.documents.into_values().find_map(|document| {
-                (document.status != Status::Disabled && document.did_method == Some(SupportedDidMethod::Web))
-                    .then_some(document.document_id)
+                (document.status != Status::Disabled
+                    && document
+                        .did_method
+                        .as_ref()
+                        .map(SupportedDidMethod::hosted_decentrally)
+                        .unwrap_or(false))
+                .then_some(document.document_id)
             })
         })
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
