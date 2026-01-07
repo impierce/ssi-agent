@@ -44,6 +44,12 @@ pub enum DocumentError {
     IotaIdentityError(#[from] identity_iota::iota::rebased::Error),
     #[error("Iota Product Common error: {0}")]
     IotaProductCommonError(#[from] product_common::error::Error),
+    #[error("Failed to publish IOTA DID Document: {0}")]
+    IotaPublishDocumentError(String),
+    #[error("Failed to update IOTA DID Document: {0}")]
+    IotaUpdateDocumentError(String),
+    #[error("Falied to deactivate IOTA DID: {0}")]
+    IotaDeactivateDidError(String),
 
     // did:web specific Errors
     #[error("Opaque origin not supported")]

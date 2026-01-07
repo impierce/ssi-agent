@@ -2281,6 +2281,29 @@
 					"response": []
 				}
 			]
+		},
+		{
+			"name": "public",
+			"item": [
+				{
+					"name": "Show sponsoring configuration",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{HOST}}/public/sponsoring-configuration",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"public",
+								"sponsoring-configuration"
+							]
+						}
+					},
+					"response": []
+				}
+			]
 		}
 	],
 	"auth": {
