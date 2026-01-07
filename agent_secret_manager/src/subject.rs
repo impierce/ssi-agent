@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager_consumer::resolver::Resolver;
 use did_manager_identity_stronghold_ext::StrongholdExtStorage;
+use did_manager_iota::consumer::NodeUrls;
 use identity_iota::did::DIDUrl;
 use identity_iota::storage::{JwkStorage, KeyId};
 use identity_iota::verification::jwk::Jwk;
@@ -29,15 +30,36 @@ impl Subject {
     pub async fn new() -> Self {
         let stronghold_storage = stronghold_storage().await;
 
+        let node_urls = NodeUrls {
+            mainnet: config().iota_node_url.clone(),
+            devnet: config().iota_node_url.clone(),
+            testnet: config().iota_node_url.clone(),
+        };
+
+        let config_username = config().iota_node_username.clone();
+        let config_password = config().iota_node_password.clone();
+
+        let username_password = match (config_username, config_password) {
+            (Some(username), Some(password)) => Some((username, password)),
+            _ => None,
+        };
+        let username_password = username_password.as_ref().map(|(u, p)| (u.as_str(), p.as_str()));
+
         Self {
             stronghold_storage,
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
-            resolver: Resolver::new(None, None).await,
+            resolver: Resolver::new(Some(node_urls), None, username_password).await,
         }
     }
 
-    pub async fn configure_resolver(&mut self, node_url: Option<&str>, tls_config: Option<rustls::ClientConfig>) {
-        self.resolver = Resolver::new(node_url, tls_config).await;
+    /// If no node URLs are provided, the resolver will use the default IOTA node URLs.
+    pub async fn configure_resolver(
+        &mut self,
+        node_url: Option<NodeUrls>,
+        tls_config: Option<rustls::ClientConfig>,
+        set_user_password: Option<(&str, &str)>,
+    ) {
+        self.resolver = Resolver::new(node_url, tls_config, set_user_password).await;
     }
 
     pub async fn get_public_key(&self, key_id: KeyId, algorithm: &Algorithm) -> anyhow::Result<Jwk> {
@@ -143,7 +165,7 @@ mod default_subject {
                 Self {
                     stronghold_storage,
                     verification_method_ids,
-                    resolver: Resolver::new(None, None).await,
+                    resolver: Resolver::new(None, None, None).await,
                 }
             })
         }
@@ -323,9 +345,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_configure_resolver() {
+    async fn test_configure_resolver_node_urls() {
         let mut subject = Subject::new().await;
-        subject.configure_resolver(Some("https://api.iota.mainnet.dlt.green/"), None).await;
+        let node_urls = Some(NodeUrls {
+            mainnet: Some("https://rpc.mainnet.iota.monochain.p2p.org/".to_string()),
+            devnet: Some("https://indexer.devnet.iota.cafe".to_string()),
+            testnet: Some("https://rpc.ankr.com/iota_testnet".to_string()),
+        });
+        subject.configure_resolver(node_urls, None, None).await;
 
         subject
             .resolver

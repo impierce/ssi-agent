@@ -411,6 +411,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "consumer",
+ "did_iota",
  "futures",
  "identity_iota",
  "identity_stronghold_ext",
