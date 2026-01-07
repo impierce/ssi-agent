@@ -18,7 +18,6 @@ anyhow.workspace = true
 async-trait.workspace = true
 cqrs-es.workspace = true
 http-serde = "2.1"
-rustls.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_with.workspace = true
