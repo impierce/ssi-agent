@@ -200,11 +200,28 @@ impl Aggregate for AuthorizationRequest {
                             .await
                             .map_err(InvalidOID4VPAuthorizationResponse)?;
 
-                        // let received_nonce = decoded_vp_token.nonce().ok_or(
-                        //     InvalidOID4VPAuthorizationResponse(anyhow::anyhow!(
-                        //         "VpToken is missing nonce"
-                        //     )),
-                        // )?;
+                        let received_nonce =
+                            decoded_vp_token
+                                .nonce()
+                                .ok_or(InvalidOID4VPAuthorizationResponse(anyhow::anyhow!(
+                                    "VpToken is missing nonce"
+                                )))?;
+
+                        let expected_nonce = match &authorization_request {
+                            GenericAuthorizationRequest::OID4VP(request) => &request.body.extension.nonce,
+                            _ => {
+                                return Err(AuthorizationRequestError::InvalidOID4VPAuthorizationResponse(
+                                    anyhow::anyhow!("Mismatch between AuthorizationRequest and nonce contents"),
+                                ))
+                            }
+                        };
+
+                        // Verify that the nonce in the VpToken matches the expected nonce
+                        if &received_nonce != expected_nonce {
+                            return Err(AuthorizationRequestError::InvalidOID4VPAuthorizationResponse(
+                                anyhow::anyhow!("Nonce mismatch in VpToken"),
+                            ));
+                        }
 
                         let dcql_query = match &authorization_request {
                             GenericAuthorizationRequest::OID4VP(oid4vp_request) => {
