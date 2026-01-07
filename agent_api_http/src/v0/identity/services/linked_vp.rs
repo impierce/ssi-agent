@@ -54,7 +54,7 @@ pub(crate) async fn linked_vp(
                     && document
                         .did_method
                         .as_ref()
-                        .map(SupportedDidMethod::hosted_decentrally)
+                        .map(SupportedDidMethod::supports_update)
                         .unwrap_or(false))
                 .then_some(document.document_id)
             })

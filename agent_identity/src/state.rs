@@ -486,13 +486,13 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
 
 /// Initializes the Linked Verifiable Presentations service for DID Web Document.
 pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -> anyhow::Result<()> {
-    // Get all decentrally hosted documents.
+    // Get all documents that can be updated.
     let documents = query_all_documents(state, |(_, document)| {
         document.status != Status::Disabled
             && document
                 .did_method
                 .as_ref()
-                .map(SupportedDidMethod::hosted_decentrally)
+                .map(SupportedDidMethod::supports_update)
                 .unwrap_or(false)
     })
     .await?;
