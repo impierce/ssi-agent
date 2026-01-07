@@ -2,7 +2,7 @@ use crate::handlers::{command_handler, query_handler};
 use agent_identity::{
     document::{aggregate::Status, command::DocumentCommand},
     service::{aggregate::Service, command::ServiceCommand},
-    state::IdentityState,
+    state::{publish_decentrally_hosted_documents, IdentityState},
 };
 use agent_shared::config::SupportedDidMethod;
 use axum::{
@@ -73,6 +73,10 @@ pub(crate) async fn linked_vp(
 
         command_handler(&document_id, &state.command.document, command).await?;
     }
+
+    publish_decentrally_hosted_documents(&state)
+        .await
+        .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
     query_handler("all_documents", &state.query.all_documents)
         .await?
