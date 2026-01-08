@@ -57,9 +57,9 @@ impl Subject {
         &mut self,
         tls_config: Option<rustls::ClientConfig>,
         node_url: Option<NodeUrls>,
-        set_user_password: Option<(&str, &str)>,
+        basic_auth: Option<(&str, &str)>,
     ) {
-        self.resolver = Resolver::new_with_options(tls_config, node_url, set_user_password).await;
+        self.resolver = Resolver::new_with_options(tls_config, node_url, basic_auth).await;
     }
 
     pub async fn get_public_key(&self, key_id: KeyId, algorithm: &Algorithm) -> anyhow::Result<Jwk> {
