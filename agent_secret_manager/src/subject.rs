@@ -352,7 +352,7 @@ mod tests {
             devnet: Some("https://indexer.devnet.iota.cafe".to_string()),
             testnet: Some("https://rpc.ankr.com/iota_testnet".to_string()),
         });
-        subject.configure_resolver(node_urls, None, None).await;
+        subject.configure_resolver(None, node_urls, None).await;
 
         subject
             .resolver
