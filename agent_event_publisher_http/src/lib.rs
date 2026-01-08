@@ -8,7 +8,8 @@ use agent_identity::{
     service::aggregate::Service,
 };
 use agent_issuance::{
-    credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
+    credential::aggregate::Credential, nonce::aggregate::Nonce, offer::aggregate::Offer,
+    server_config::aggregate::ServerConfig,
 };
 use agent_library::template::aggregate::Template;
 use agent_shared::config::config;
@@ -49,6 +50,7 @@ pub struct EventPublisherHttp {
     pub server_config: Option<AggregateEventPublisherHttp<ServerConfig>>,
     pub credential: Option<AggregateEventPublisherHttp<Credential>>,
     pub offer: Option<AggregateEventPublisherHttp<Offer>>,
+    pub nonce: Option<AggregateEventPublisherHttp<Nonce>>,
 
     // Holder
     pub holder_credential: Option<AggregateEventPublisherHttp<agent_holder::credential::aggregate::Credential>>,
