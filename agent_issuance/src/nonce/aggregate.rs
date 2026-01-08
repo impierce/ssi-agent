@@ -5,6 +5,7 @@ use crate::services::IssuanceServices;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::{debug, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

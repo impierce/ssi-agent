@@ -36,7 +36,8 @@ use agent_issuance::offer::views::OfferView;
 use agent_issuance::server_config::views::ServerConfigView;
 use agent_issuance::SimpleLoggingQuery;
 use agent_issuance::{
-    credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
+    credential::aggregate::Credential, nonce::aggregate::Nonce, offer::aggregate::Offer,
+    server_config::aggregate::ServerConfig,
 };
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::Template;
@@ -437,6 +438,7 @@ pub type AccessTokenEventPublisher = Box<dyn Query<AccessToken>>;
 pub type ServerConfigEventPublisher = Box<dyn Query<ServerConfig>>;
 pub type CredentialEventPublisher = Box<dyn Query<Credential>>;
 pub type OfferEventPublisher = Box<dyn Query<Offer>>;
+pub type NonceEventPublisher = Box<dyn Query<Nonce>>;
 pub type HolderCredentialEventPublisher = Box<dyn Query<agent_holder::credential::aggregate::Credential>>;
 pub type PresentationEventPublisher = Box<dyn Query<agent_holder::presentation::aggregate::Presentation>>;
 pub type ReceivedOfferEventPublisher = Box<dyn Query<agent_holder::offer::aggregate::Offer>>;
@@ -457,6 +459,7 @@ pub struct Partitions {
     pub server_config_event_publishers: Vec<ServerConfigEventPublisher>,
     pub credential_event_publishers: Vec<CredentialEventPublisher>,
     pub offer_event_publishers: Vec<OfferEventPublisher>,
+    pub nonce_event_publishers: Vec<NonceEventPublisher>,
     pub holder_credential_event_publishers: Vec<HolderCredentialEventPublisher>,
     pub presentation_event_publishers: Vec<PresentationEventPublisher>,
     pub received_offer_event_publishers: Vec<ReceivedOfferEventPublisher>,
@@ -483,6 +486,7 @@ pub trait EventPublisher {
     fn server_config(&mut self) -> Option<ServerConfigEventPublisher>;
     fn credential(&mut self) -> Option<CredentialEventPublisher>;
     fn offer(&mut self) -> Option<OfferEventPublisher>;
+    fn nonce(&mut self) -> Option<NonceEventPublisher>;
 
     fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher>;
     fn presentation(&mut self) -> Option<PresentationEventPublisher>;
@@ -630,6 +634,10 @@ mod test {
             None
         }
 
+        fn nonce(&mut self) -> Option<NonceEventPublisher> {
+            None
+        }
+
         fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher> {
             None
         }
@@ -696,6 +704,10 @@ mod test {
             None
         }
 
+        fn nonce(&mut self) -> Option<NonceEventPublisher> {
+            None
+        }
+
         fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher> {
             None
         }
@@ -731,6 +743,7 @@ mod test {
             server_config_event_publishers,
             credential_event_publishers,
             offer_event_publishers,
+            nonce_event_publishers,
             holder_credential_event_publishers,
             presentation_event_publishers,
             received_offer_event_publishers,
@@ -749,6 +762,7 @@ mod test {
         assert_eq!(server_config_event_publishers.len(), 1);
         assert_eq!(credential_event_publishers.len(), 0);
         assert_eq!(offer_event_publishers.len(), 0);
+        assert_eq!(nonce_event_publishers.len(), 0);
         assert_eq!(holder_credential_event_publishers.len(), 0);
         assert_eq!(presentation_event_publishers.len(), 0);
         assert_eq!(received_offer_event_publishers.len(), 0);

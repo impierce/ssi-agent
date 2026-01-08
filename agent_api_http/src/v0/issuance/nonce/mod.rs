@@ -1,3 +1,6 @@
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NonceEndpointRequest {}
