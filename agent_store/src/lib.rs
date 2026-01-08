@@ -334,6 +334,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
             credential: credential_command_handler,
             offer: offer_command_handler,
             server_config: server_config_command_handler,
+            nonce: nonce_command_handler, // CHAYA
         },
         query: agent_issuance::state::ViewRepositories {
             server_config,

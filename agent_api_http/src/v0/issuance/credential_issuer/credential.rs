@@ -63,6 +63,9 @@ pub(crate) async fn credential(
         credential_request,
     };
 
+    // CHAYA GO TO THE COMMAND - THERE IS VERIFYPROOF
+    // Make the proof get returned? potentially?
+
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
     command_handler(&offer_id, &state.command.offer, command).await?;
 

@@ -1,4 +1,6 @@
 use agent_shared::config::config;
+use agent_shared::handlers::command_handler;
+use agent_shared::handlers::query_handler;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use oid4vc_core::Validator;
@@ -13,6 +15,9 @@ use std::sync::Arc;
 use tracing::{debug, info};
 use url::Url;
 
+use crate::nonce::command::NonceCommand;
+use crate::nonce::error::NonceError;
+use crate::nonce::event::NonceEvent;
 use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError::{self, *};
 use crate::offer::event::OfferEvent;
@@ -278,6 +283,34 @@ impl Aggregate for Offer {
                     .await
                     .map_err(|e| InvalidProofError(e.to_string()))?;
 
+                /////
+                if let Some(incoming_nonce) = proof.nonce {
+                    let nonce_status = query_handler(&incoming_nonce, &services.nonce.query)
+                        .await
+                        .map_err(|e| MissingNonceError)?;
+
+                    match nonce_status {
+                        Some(c_nonce) if c_nonce.is_redeemed => {
+                            return Err(NonceRedeemedError);
+                        }
+                        Some(_) => {
+                            //
+                            let redeem_nonce_command = NonceCommand::RedeemNonce {
+                                c_nonce: incoming_nonce.clone(),
+                            };
+
+                            command_handler(&incoming_nonce, &services.nonce.command, redeem_nonce_command)
+                                .await
+                                .map_err(InvalidNonceError)?;
+                        }
+                        None => {
+                            return Err(MissingNonceError);
+                            // When could something like this even happen?
+                        }
+                    }
+                }
+
+                ////// this whole block might have to just go to the mod bit
                 let subject_did = proof.rfc7519_claims.iss().as_ref().cloned();
 
                 Ok(vec![CredentialRequestVerified {

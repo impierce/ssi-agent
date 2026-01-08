@@ -15,6 +15,7 @@ use tracing::{debug, info};
 use crate::credential::aggregate::Credential;
 use crate::credential::views::all_credentials::AllCredentialsView;
 use crate::credential::views::CredentialView;
+use crate::nonce::aggregate::Nonce;
 use crate::offer::aggregate::Offer;
 use crate::offer::views::all_offers::AllOffersView;
 use crate::offer::views::OfferView;
@@ -35,6 +36,7 @@ pub struct CommandHandlers {
     pub server_config: CommandHandler<ServerConfig>,
     pub credential: CommandHandler<Credential>,
     pub offer: CommandHandler<Offer>,
+    pub nonce: CommandHandler<Nonce>,
 }
 
 /// This type is used to define the queries that are used to query the view repositories. We make use of `dyn` here, so
