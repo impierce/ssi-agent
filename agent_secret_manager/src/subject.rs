@@ -48,18 +48,18 @@ impl Subject {
         Self {
             stronghold_storage,
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
-            resolver: Resolver::new(Some(node_urls), None, username_password).await,
+            resolver: Resolver::new_with_options(None, Some(node_urls), username_password).await,
         }
     }
 
     /// If no node URLs are provided, the resolver will use the default IOTA node URLs.
     pub async fn configure_resolver(
         &mut self,
-        node_url: Option<NodeUrls>,
         tls_config: Option<rustls::ClientConfig>,
+        node_url: Option<NodeUrls>,
         set_user_password: Option<(&str, &str)>,
     ) {
-        self.resolver = Resolver::new(node_url, tls_config, set_user_password).await;
+        self.resolver = Resolver::new_with_options(tls_config, node_url, set_user_password).await;
     }
 
     pub async fn get_public_key(&self, key_id: KeyId, algorithm: &Algorithm) -> anyhow::Result<Jwk> {
@@ -165,7 +165,7 @@ mod default_subject {
                 Self {
                     stronghold_storage,
                     verification_method_ids,
-                    resolver: Resolver::new(None, None, None).await,
+                    resolver: Resolver::new().await,
                 }
             })
         }
