@@ -32,17 +32,14 @@ impl Subject {
 
         let node_urls = NodeUrls {
             mainnet: config().iota_node_url.clone(),
-            devnet: config().iota_node_url.clone(),
             testnet: config().iota_node_url.clone(),
+            devnet: config().iota_node_url.clone(),
         };
 
-        let config_username = config().iota_node_username.clone();
-        let config_password = config().iota_node_password.clone();
-
-        let username_password = match (config_username, config_password) {
-            (Some(username), Some(password)) => Some((username, password)),
-            _ => None,
-        };
+        let username_password = config()
+            .iota_node_username
+            .clone()
+            .zip(config().iota_node_password.clone());
         let username_password = username_password.as_ref().map(|(u, p)| (u.as_str(), p.as_str()));
 
         Self {
