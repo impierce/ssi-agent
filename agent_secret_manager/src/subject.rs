@@ -30,6 +30,7 @@ impl Subject {
     pub async fn new() -> Self {
         let stronghold_storage = stronghold_storage().await;
 
+        // TODO: all networks are set to the same node URL ==> introduce per-network configuration?
         let node_urls = NodeUrls {
             mainnet: config().iota_node_url.clone(),
             testnet: config().iota_node_url.clone(),
