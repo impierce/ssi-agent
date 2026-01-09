@@ -49,16 +49,6 @@ impl Subject {
         }
     }
 
-    /// If no node URLs are provided, the resolver will use the default IOTA node URLs.
-    pub async fn configure_resolver(
-        &mut self,
-        tls_config: Option<rustls::ClientConfig>,
-        node_url: Option<NodeUrls>,
-        basic_auth: Option<(&str, &str)>,
-    ) {
-        self.resolver = Resolver::new_with_options(tls_config, node_url, basic_auth).await;
-    }
-
     pub async fn get_public_key(&self, key_id: KeyId, algorithm: &Algorithm) -> anyhow::Result<Jwk> {
         match algorithm {
             Algorithm::EdDSA => self.stronghold_storage.get_ed25519_public_key(&key_id).await,
@@ -339,27 +329,5 @@ mod tests {
         // Verify the signature
         let public_key = UnparsedPublicKey::new(&ED25519, public_key_bytes);
         assert!(public_key.verify(message.as_bytes(), &signature_bytes).is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_configure_resolver_node_urls() {
-        let mut subject = Subject::new().await;
-        let node_urls = Some(NodeUrls {
-            mainnet: Some("https://rpc.mainnet.iota.monochain.p2p.org/".to_string()),
-            devnet: Some("https://indexer.devnet.iota.cafe".to_string()),
-            testnet: Some("https://rpc.ankr.com/iota_testnet".to_string()),
-        });
-        subject.configure_resolver(None, node_urls, None).await;
-
-        subject
-            .resolver
-            .resolve("did:key:z6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt")
-            .await
-            .unwrap();
-        subject
-            .resolver
-            .resolve("did:iota:testnet:0x04b26f82ba06c22a3ed57069cc349239bccd972fbb24ac5a7e0db6a0b9c42292")
-            .await
-            .unwrap();
     }
 }
