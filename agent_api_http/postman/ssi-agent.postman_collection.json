@@ -1,9 +1,10 @@
 {
 	"info": {
-		"_postman_id": "e9b3fbae-f20e-4957-9d3a-6a310f5fda62",
-		"name": "ssi-agent",
+		"_postman_id": "b79c8c8b-b8cb-4757-b174-cc70b6a54714",
+		"name": "ssi-agent Copy 2",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "38461474"
+		"_exporter_id": "41786572",
+		"_collection_link": "https://impierce-technologies-bv.postman.co/workspace/New-Team-Workspace~1aa38760-77fc-4608-a1f5-e8a6fdaa0ad9/collection/41786572-b79c8c8b-b8cb-4757-b174-cc70b6a54714?action=share&source=collection_link&creator=41786572"
 	},
 	"item": [
 		{
@@ -841,6 +842,33 @@
 									"key": "request_uri",
 									"value": "{{REQUEST_URI}}"
 								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "nonce",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"credential_configuration_id\": \"001\",\n    \"proof\": {\n        \"proof_type\": \"jwt\",\n        \"jwt\": \"eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1rdWlSS3ExZktyekFYZVNOaUd3cnBKUFB1Z1k4QXhKWUE1Y3BDdlpDWUJEN0IjejZNa3VpUktxMWZLcnpBWGVTTmlHd3JwSlBQdWdZOEF4SllBNWNwQ3ZaQ1lCRDdCIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWt1aVJLcTFmS3J6QVhlU05pR3dycEpQUHVnWThBeEpZQTVjcEN2WkNZQkQ3QiIsImF1ZCI6Imh0dHA6Ly8xOTIuMTY4LjEuMTI3OjMwMzMvIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoidW5zYWZlX2Nfbm9uY2UifQ.wR2e4VUnVjG6IK9cntcqvc_8KEJQUd3SEjsPZwDYDlYqijZ4ZaQLxyHtzNmLkIS3FpChLrZrcvIUJrZxrWcKAg\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{HOST}}/openid4vci/nonce",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"openid4vci",
+								"nonce"
 							]
 						}
 					},
