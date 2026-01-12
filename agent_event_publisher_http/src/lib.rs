@@ -8,9 +8,7 @@ use agent_identity::{
     service::aggregate::Service,
 };
 use agent_issuance::{
-    credential::aggregate::Credential,
-    nonce::{self, aggregate::Nonce},
-    offer::aggregate::Offer,
+    credential::aggregate::Credential, nonce::aggregate::Nonce, offer::aggregate::Offer,
     server_config::aggregate::ServerConfig,
 };
 use agent_library::template::aggregate::Template;

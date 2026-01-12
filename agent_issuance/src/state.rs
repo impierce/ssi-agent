@@ -16,6 +16,7 @@ use crate::credential::aggregate::Credential;
 use crate::credential::views::all_credentials::AllCredentialsView;
 use crate::credential::views::CredentialView;
 use crate::nonce::aggregate::Nonce;
+use crate::nonce::views::NonceView;
 use crate::offer::aggregate::Offer;
 use crate::offer::views::all_offers::AllOffersView;
 use crate::offer::views::OfferView;
@@ -48,21 +49,24 @@ type Queries = ViewRepositories<
     dyn ViewRepository<AllCredentialsView, Credential>,
     dyn ViewRepository<OfferView, Offer>,
     dyn ViewRepository<AllOffersView, Offer>,
+    dyn ViewRepository<NonceView, Nonce>,
 >;
 
-pub struct ViewRepositories<SC, C, C1, O, O1>
+pub struct ViewRepositories<SC, C, C1, O, O1, N>
 where
     SC: ViewRepository<ServerConfigView, ServerConfig> + ?Sized,
     C: ViewRepository<CredentialView, Credential> + ?Sized,
     C1: ViewRepository<AllCredentialsView, Credential> + ?Sized,
     O: ViewRepository<OfferView, Offer> + ?Sized,
     O1: ViewRepository<AllOffersView, Offer> + ?Sized,
+    N: ViewRepository<NonceView, Nonce> + ?Sized,
 {
     pub server_config: Arc<SC>,
     pub credential: Arc<C>,
     pub all_credentials: Arc<C1>,
     pub offer: Arc<O>,
     pub all_offers: Arc<O1>,
+    pub nonce: Arc<N>,
 }
 
 impl Clone for Queries {
@@ -73,6 +77,7 @@ impl Clone for Queries {
             all_credentials: self.all_credentials.clone(),
             offer: self.offer.clone(),
             all_offers: self.all_offers.clone(),
+            nonce: self.nonce.clone(),
         }
     }
 }

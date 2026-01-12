@@ -25,19 +25,23 @@ impl Aggregate for Nonce {
         "nonce".to_string()
     }
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(
+        &self,
+        command: Self::Command,
+        _services: &Self::Services,
+    ) -> Result<Vec<Self::Event>, Self::Error> {
         use NonceCommand::*;
-        use NonceError::*;
         use NonceEvent::*;
+        // use NonceError::*;
 
         info!("Handling command: {:?}", command);
 
         match command {
-            NonceCommand::GenerateNonce { c_nonce } => Ok(vec![NonceEvent::NonceGenerated {
+            GenerateNonce { c_nonce } => Ok(vec![NonceGenerated {
                 c_nonce: c_nonce,
                 is_redeemed: false,
             }]),
-            NonceCommand::RedeemNonce { c_nonce } => Ok(vec![NonceEvent::NonceRedeemed {
+            RedeemNonce { c_nonce } => Ok(vec![NonceRedeemed {
                 c_nonce: c_nonce,
                 is_redeemed: true,
             }]),

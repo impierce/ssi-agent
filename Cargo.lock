@@ -89,6 +89,7 @@ dependencies = [
  "axum 0.8.3",
  "axum-auth 0.8.1",
  "axum-macros",
+ "base64 0.22.1",
  "chrono",
  "cqrs-es",
  "futures",
@@ -8428,7 +8429,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=99fc7be#99fc7be1b86aec38c2d7fbe4ba64d17d9800c050"
+source = "git+https://github.com/impierce/openid4vc?rev=294aa29#294aa2949796b2ad7fdc7e0e5ec073b1b1ba0f4b"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8453,7 +8454,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=99fc7be#99fc7be1b86aec38c2d7fbe4ba64d17d9800c050"
+source = "git+https://github.com/impierce/openid4vc?rev=294aa29#294aa2949796b2ad7fdc7e0e5ec073b1b1ba0f4b"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8486,7 +8487,7 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=99fc7be#99fc7be1b86aec38c2d7fbe4ba64d17d9800c050"
+source = "git+https://github.com/impierce/openid4vc?rev=294aa29#294aa2949796b2ad7fdc7e0e5ec073b1b1ba0f4b"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8514,7 +8515,7 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=99fc7be#99fc7be1b86aec38c2d7fbe4ba64d17d9800c050"
+source = "git+https://github.com/impierce/openid4vc?rev=294aa29#294aa2949796b2ad7fdc7e0e5ec073b1b1ba0f4b"
 dependencies = [
  "anyhow",
  "chrono",
@@ -11301,7 +11302,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=99fc7be#99fc7be1b86aec38c2d7fbe4ba64d17d9800c050"
+source = "git+https://github.com/impierce/openid4vc?rev=294aa29#294aa2949796b2ad7fdc7e0e5ec073b1b1ba0f4b"
 dependencies = [
  "anyhow",
  "async-trait",

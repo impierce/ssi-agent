@@ -31,6 +31,7 @@ use agent_identity::{
 };
 use agent_issuance::credential::views::all_credentials::AllCredentialsView;
 use agent_issuance::credential::views::CredentialView;
+use agent_issuance::nonce::views::NonceView;
 use agent_issuance::offer::views::all_offers::AllOffersView;
 use agent_issuance::offer::views::OfferView;
 use agent_issuance::server_config::views::ServerConfigView;
@@ -310,6 +311,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
         credential_event_publishers,
         offer_event_publishers,
         server_config_event_publishers,
+        nonce_event_publishers,
         ..
     } = partition_event_publishers(event_publishers);
 
@@ -328,13 +330,16 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
             server_config_event_publishers,
         )
         .await;
+    let (nonce_command_handler, nonce, _) = builder
+        .commands_and_queries::<NonceView, Nonce, NonceView>(services.clone(), nonce_event_publishers)
+        .await;
 
     agent_issuance::state::IssuanceState {
         command: agent_issuance::state::CommandHandlers {
             credential: credential_command_handler,
             offer: offer_command_handler,
             server_config: server_config_command_handler,
-            nonce: nonce_command_handler, // CHAYA
+            nonce: nonce_command_handler,
         },
         query: agent_issuance::state::ViewRepositories {
             server_config,
@@ -342,6 +347,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
             all_credentials,
             offer,
             all_offers,
+            nonce,
         },
         subject: services.issuer.clone(),
     }

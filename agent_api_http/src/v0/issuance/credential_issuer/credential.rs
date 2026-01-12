@@ -8,6 +8,7 @@ use crate::{
 use agent_issuance::{
     application::access_token_validation_service::AccessTokenValidationService,
     credential::{command::CredentialCommand, views::CredentialView},
+    nonce::command::NonceCommand,
     offer::{command::OfferCommand, views::OfferView},
     server_config::views::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
@@ -19,14 +20,32 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use oid4vci::credential_request::CredentialRequest;
 use oid4vci::errors::CredentialErrorResponse;
+use oid4vci::Proof;
 use std::sync::Arc;
 use tokio::time::sleep;
 use tracing::error;
 
 const POLLING_INTERVAL_MS: u64 = 100;
 
+fn extract_nonce_from_proof(proof: &Proof) -> Option<String> {
+    match proof {
+        Proof::Jwt { jwt } => {
+            let parts: Vec<&str> = jwt.split('.').collect();
+            if parts.len() != 3 {
+                return None;
+            }
+
+            let payload = URL_SAFE_NO_PAD.decode(parts[1]).ok()?;
+            let claims: serde_json::Value = serde_json::from_slice(&payload).ok()?;
+
+            // Extract nonce from claims
+            claims.get("nonce").and_then(|n| n.as_str()).map(|s| s.to_string())
+        }
+    }
+}
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<IssuanceState>>,
@@ -39,6 +58,33 @@ pub(crate) async fn credential(
         // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
         .and_then(|claims| claims.issuer_state)
         .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidToken))?;
+
+    if let Some(proof) = &credential_request.proof {
+        if let Some(nonce) = extract_nonce_from_proof(proof) {
+            // Query nonce state
+            let nonce_status = query_handler(&nonce, &state.query.nonce)
+                .await
+                .map_err(|_| PublicError::from(CredentialErrorResponse::InvalidProof))?;
+
+            match nonce_status {
+                Some(n) if n.is_redeemed => {
+                    // Nonce has already been redeemed
+                    return Err(PublicError::from(CredentialErrorResponse::InvalidNonce));
+                }
+                Some(_) => {
+                    // Nonce is valid, redeem it
+                    let command = NonceCommand::RedeemNonce { c_nonce: nonce.clone() };
+                    command_handler(&nonce, &state.command.nonce, command)
+                        .await
+                        .map_err(|_| PublicError::from(CredentialErrorResponse::InvalidProof))?;
+                }
+                None => {
+                    // Nonce doesn't exist
+                    return Err(PublicError::from(CredentialErrorResponse::InvalidNonce));
+                }
+            }
+        }
+    }
 
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
     let (credential_issuer_metadata, authorization_server_metadata) =

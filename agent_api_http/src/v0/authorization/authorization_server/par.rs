@@ -45,7 +45,6 @@ pub mod tests {
     use oid4vci::{
         authorization_details::{AuthorizationDetailsObject, CredentialConfigurationOrFormat, OpenidCredential},
         authorization_request::CodeChallengeMethod,
-        credential_format_profiles::CredentialFormats,
         credential_offer::AuthorizationCode,
         wallet::PushedAuthorizationResponse,
     };
@@ -75,12 +74,11 @@ pub mod tests {
                             authorization_details: vec![AuthorizationDetailsObject {
                                 r#type: OpenidCredential::Type,
                                 locations: None,
-                                credential_configuration_or_format: CredentialConfigurationOrFormat::<
-                                    CredentialFormats,
-                                >::CredentialConfigurationId {
-                                    credential_configuration_id: "configuration_id".to_string(),
-                                    parameters: None,
-                                },
+                                credential_configuration_or_format:
+                                    CredentialConfigurationOrFormat::CredentialConfigurationId {
+                                        credential_configuration_id: "configuration_id".to_string(),
+                                        parameters: None,
+                                    },
                                 claims: None,
                             }],
                         }))
