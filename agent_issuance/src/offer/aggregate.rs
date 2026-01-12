@@ -278,34 +278,6 @@ impl Aggregate for Offer {
                     .await
                     .map_err(|e| InvalidProofError(e.to_string()))?;
 
-                // /////
-                // if let Some(incoming_nonce) = proof.nonce {
-                //     let nonce_status = query_handler(&incoming_nonce, &services.nonce_services.nonce.query)
-                //         .await
-                //         .map_err(|e| MissingNonceError)?;
-
-                //     match nonce_status {
-                //         Some(c_nonce) if c_nonce.is_redeemed => {
-                //             return Err(NonceRedeemedError);
-                //         }
-                //         Some(_) => {
-                //             //
-                //             let redeem_nonce_command = NonceCommand::RedeemNonce {
-                //                 c_nonce: incoming_nonce.clone(),
-                //             };
-
-                //             command_handler(&incoming_nonce, &services.nonce.command, redeem_nonce_command)
-                //                 .await
-                //                 .map_err(|_| InvalidNonceError)?;
-                //         }
-                //         None => {
-                //             return Err(MissingNonceError);
-                //             // When could something like this even happen?
-                //         }
-                //     }
-                // }
-
-                // ////// this whole block might have to just go to the mod bit
                 let subject_did = proof.rfc7519_claims.iss().as_ref().cloned();
 
                 Ok(vec![CredentialRequestVerified {

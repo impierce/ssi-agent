@@ -3,8 +3,7 @@ use crate::{
     DOCUMENTATION_URL,
 };
 use agent_issuance::{
-    credential::error::CredentialError, nonce::error::NonceError, offer::error::OfferError,
-    server_config::error::ServerConfigError,
+    credential::error::CredentialError, offer::error::OfferError, server_config::error::ServerConfigError,
 };
 use axum::{response::IntoResponse, response::Response, Json};
 use http_api_problem::ApiError;
@@ -104,9 +103,6 @@ impl IntoApiErrorExt for OfferError {
             MissingProofError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             InvalidProofError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             MissingProofIssuerError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-            InvalidNonceError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-            NonceRedeemedError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-            MissingNonceError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
@@ -194,12 +190,6 @@ impl IntoPublicError for OfferError {
             // TODO: check for missing error responses
             _ => PublicError::InternalServerError,
         }
-    }
-}
-
-impl IntoApiErrorExt for NonceError {
-    fn into_api_error(self) -> ApiError {
-        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
     }
 }
 

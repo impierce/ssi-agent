@@ -12,12 +12,6 @@ pub enum OfferError {
     MissingProofError,
     #[error("Invalid `Proof` in Credential Request: {0}")]
     InvalidProofError(String),
-    #[error("Nonce validation failed")]
-    InvalidNonceError,
-    #[error("Nonce has been redeemed")]
-    NonceRedeemedError,
-    #[error("Missing Nonce")]
-    MissingNonceError,
     #[error("Missing `iss` claim in `Proof`")]
     MissingProofIssuerError,
     #[error("Grant Type `authorization_code` is not supported")]

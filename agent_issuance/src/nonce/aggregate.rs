@@ -32,7 +32,7 @@ impl Aggregate for Nonce {
     ) -> Result<Vec<Self::Event>, Self::Error> {
         use NonceCommand::*;
         use NonceEvent::*;
-        // use NonceError::*;
+        // use NonceError::* Unused for now - aggregate operations don't fail
 
         info!("Handling command: {:?}", command);
 
