@@ -92,11 +92,11 @@ mod tests {
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
-        let mut authorization_app = authorization::router((authorization_state, issuance_state));
+        let mut authorization_app = authorization::router((authorization_state, issuance_state.clone()));
 
         let access_token: String = token(&mut authorization_app, true, grants).await;
 
-        let (access_token, notification_id) = credential(&mut issuance_app, access_token, None).await;
+        let (access_token, notification_id) = credential(&mut issuance_app, &issuance_state, access_token, None).await;
 
         let request = Request::builder()
             .uri("/openid4vci/notification")
@@ -131,11 +131,11 @@ mod tests {
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
-        let mut authorization_app = authorization::router((authorization_state, issuance_state));
+        let mut authorization_app = authorization::router((authorization_state, issuance_state.clone()));
 
         let access_token: String = token(&mut authorization_app, true, grants).await;
 
-        let (access_token, notification_id) = credential(&mut issuance_app, access_token, None).await;
+        let (access_token, notification_id) = credential(&mut issuance_app, &issuance_state, access_token, None).await;
 
         struct TestCase {
             name: &'static str,

@@ -237,6 +237,7 @@ mod tests {
         pub static ref CREDENTIAL_ISSUER_METADATA: CredentialIssuerMetadata = CredentialIssuerMetadata {
             credential_issuer: config().public_url.clone(),
             credential_endpoint: config().public_url.join("openid4vci/credential").unwrap(),
+            nonce_endpoint: Some(config().public_url.join("openid4vci/nonce").unwrap()),
             credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
             display: Some(vec![json!({
                 "name": "UniCore",

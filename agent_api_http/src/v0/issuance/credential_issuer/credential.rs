@@ -196,6 +196,7 @@ pub mod tests {
     use agent_event_publisher_http::EventPublisherHttp;
     use agent_issuance::credential::aggregate::CredentialExpiry;
     use agent_issuance::offer::event::OfferEvent;
+    use agent_issuance::state::IssuanceState;
     use agent_secret_manager::service::Service;
     use agent_shared::config::{set_config, Events};
     use agent_store::authorization_state;
@@ -310,9 +311,18 @@ pub mod tests {
 
     pub async fn credential(
         issuance_app: &mut Router,
+        issuance_state: &Arc<IssuanceState>,
         access_token: String,
         external_server: Option<MockServer>,
     ) -> (String, String) {
+        let test_nonce = "7e03ad3f76cb3338c3a5642fe7634476aa3ad93fa1d584011ba2150d9da47133";
+        let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
+            c_nonce: test_nonce.to_string(),
+        };
+        agent_shared::handlers::command_handler(test_nonce, &issuance_state.command.nonce, command)
+            .await
+            .unwrap();
+
         let response = issuance_app
             .oneshot(
                 Request::builder()
@@ -401,6 +411,16 @@ pub mod tests {
         let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), issuance_event_publishers).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
+        if !with_anonymous_access {
+            let test_nonce = "7e03ad3f76cb3338c3a5642fe7634476aa3ad93fa1d584011ba2150d9da47133";
+            let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
+                c_nonce: test_nonce.to_string(),
+            };
+            agent_shared::handlers::command_handler(test_nonce, &issuance_state.command.nonce, command)
+                .await
+                .unwrap();
+        }
+
         let mut issuance_app = router(issuance_state.clone());
 
         if let Some(external_server) = &external_server {
@@ -437,10 +457,11 @@ pub mod tests {
         let mut authorization_app = authorization::router((authorization_state, issuance_state));
 
         let access_token: String = token(&mut authorization_app, is_pre_authorized, grants).await;
-
         let jwt = if with_anonymous_access {
+            // This JWT has no nonce, so no need to pre-generate
             "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1rcHc2OGh1OVFnTUFDNmJDOE0xeFo0cDZ4VXNFeUs0bUtZdEtNYkpnTmRrSjIjejZNa3B3NjhodTlRZ01BQzZiQzhNMXhaNHA2eFVzRXlLNG1LWXRLTWJKZ05ka0oyIn0.eyJhdWQiOiJodHRwOi8vMTI3LjAuMC4xOjQwNzI1LyIsImlhdCI6MTc2MjI2NTgxMH0.GuGCIl-0VGkADdbWkcL56P5jXZjGKBzYbr-gPfQ5Yl7u4KltF1pjle52RuTVInxIQXeP9GuDL1Ag52B6Y0NSAg"
         } else {
+            // This JWT contains the nonce we just generated
             "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"
         };
 
