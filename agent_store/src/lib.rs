@@ -537,7 +537,6 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
             if let Some(access_token) = event_publisher.access_token() {
                 partitions.access_token_event_publishers.push(access_token);
             }
-
             if let Some(server_config) = event_publisher.server_config() {
                 partitions.server_config_event_publishers.push(server_config);
             }
@@ -547,7 +546,9 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
             if let Some(offer) = event_publisher.offer() {
                 partitions.offer_event_publishers.push(offer);
             }
-
+            if let Some(nonce) = event_publisher.nonce() {
+                partitions.nonce_event_publishers.push(nonce);
+            }
             if let Some(holder_credential) = event_publisher.holder_credential() {
                 partitions.holder_credential_event_publishers.push(holder_credential);
             }
