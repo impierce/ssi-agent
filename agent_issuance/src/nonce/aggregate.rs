@@ -38,11 +38,11 @@ impl Aggregate for Nonce {
 
         match command {
             GenerateNonce { c_nonce } => Ok(vec![NonceGenerated {
-                c_nonce: c_nonce,
+                c_nonce,
                 is_redeemed: false,
             }]),
             RedeemNonce { c_nonce } => Ok(vec![NonceRedeemed {
-                c_nonce: c_nonce,
+                c_nonce,
                 is_redeemed: true,
             }]),
         }
