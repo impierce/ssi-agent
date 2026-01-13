@@ -320,6 +320,8 @@ pub struct ApplicationConfiguration {
     #[config(default)]
     #[serde(serialize_with = "redact")]
     pub iota_sponsoring_service_auth: Option<String>,
+    #[config(default)]
+    pub skip_nonce_validation: bool,
 }
 
 impl ApplicationConfiguration {
@@ -1106,6 +1108,7 @@ mod tests {
                   "kb-jwt_alg_values": ["ES256"]
                 }
               },
+              "skip_nonce_validation": false,
             })
         );
 

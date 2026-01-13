@@ -26,7 +26,7 @@ use oid4vci::errors::CredentialErrorResponse;
 use oid4vci::Proof;
 use std::sync::Arc;
 use tokio::time::sleep;
-use tracing::error;
+use tracing::{error, info};
 
 const POLLING_INTERVAL_MS: u64 = 100;
 
@@ -59,31 +59,35 @@ pub(crate) async fn credential(
         .and_then(|claims| claims.issuer_state)
         .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidToken))?;
 
-    if let Some(proof) = &credential_request.proof {
-        if let Some(nonce) = extract_nonce_from_proof(proof) {
-            // Query nonce state
-            let nonce_status = query_handler(&nonce, &state.query.nonce)
-                .await
-                .map_err(|_| PublicError::from(CredentialErrorResponse::InvalidProof))?;
+    if !config().skip_nonce_validation {
+        if let Some(proof) = &credential_request.proof {
+            if let Some(nonce) = extract_nonce_from_proof(proof) {
+                // Query nonce state
+                let nonce_status = query_handler(&nonce, &state.query.nonce)
+                    .await
+                    .map_err(|_| PublicError::from(CredentialErrorResponse::InvalidProof))?;
 
-            match nonce_status {
-                Some(n) if n.is_redeemed => {
-                    // Nonce has already been redeemed
-                    return Err(PublicError::from(CredentialErrorResponse::InvalidNonce));
-                }
-                Some(_) => {
-                    // Nonce is valid, redeem it
-                    let command = NonceCommand::RedeemNonce { c_nonce: nonce.clone() };
-                    command_handler(&nonce, &state.command.nonce, command)
-                        .await
-                        .map_err(|_| PublicError::from(CredentialErrorResponse::InvalidProof))?;
-                }
-                None => {
-                    // Nonce doesn't exist
-                    return Err(PublicError::from(CredentialErrorResponse::InvalidNonce));
+                match nonce_status {
+                    Some(n) if n.is_redeemed => {
+                        // Nonce has already been redeemed
+                        return Err(PublicError::from(CredentialErrorResponse::InvalidNonce));
+                    }
+                    Some(_) => {
+                        // Nonce is valid, redeem it
+                        let command = NonceCommand::RedeemNonce { c_nonce: nonce.clone() };
+                        command_handler(&nonce, &state.command.nonce, command)
+                            .await
+                            .map_err(|_| PublicError::from(CredentialErrorResponse::InvalidProof))?;
+                    }
+                    None => {
+                        // Nonce doesn't exist
+                        return Err(PublicError::from(CredentialErrorResponse::InvalidNonce));
+                    }
                 }
             }
         }
+    } else {
+        info!("Skipping nonce validation for credential requests");
     }
 
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
