@@ -2147,7 +2147,7 @@
 								"header": [],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"template_id\": \"{{TEMPLATE_ID}}\",\n    \"status\": \"published\"\n}",
+									"raw": "{\n    \"templateId\": \"{{TEMPLATE_ID}}\",\n    \"status\": \"published\"\n}",
 									"options": {
 										"raw": {
 											"language": "json"
