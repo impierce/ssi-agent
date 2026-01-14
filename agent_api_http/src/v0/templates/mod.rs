@@ -181,6 +181,7 @@ pub(crate) async fn duplicate_template(
 #[derive(Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct UpdateTemplatesEndpointRequest {
+    #[serde(rename = "id")]
     pub template_id: String,
     pub title: Option<String>,
     pub display: Option<Display>,
@@ -358,6 +359,7 @@ pub(crate) async fn get_template(
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteTemplateEndpointRequest {
+    #[serde(rename = "id")]
     pub template_id: String,
 }
 

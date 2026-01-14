@@ -2147,7 +2147,7 @@
 								"header": [],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"templateId\": \"{{TEMPLATE_ID}}\",\n    \"status\": \"published\"\n}",
+									"raw": "{\n    \"id\": \"{{TEMPLATE_ID}}\",\n    \"status\": \"published\"\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -2203,7 +2203,7 @@
 								"header": [],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"templateId\": \"{{TEMPLATE_ID}}\"\n}",
+									"raw": "{\n    \"id\": \"{{TEMPLATE_ID}}\"\n}",
 									"options": {
 										"raw": {
 											"language": "json"
