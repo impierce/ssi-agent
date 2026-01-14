@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager_consumer::resolver::Resolver;
 use did_manager_identity_stronghold_ext::StrongholdExtStorage;
+use did_manager_iota::consumer::NodeUrls;
 use identity_iota::did::DIDUrl;
 use identity_iota::storage::{JwkStorage, KeyId};
 use identity_iota::verification::jwk::Jwk;
@@ -21,6 +22,7 @@ use tokio::sync::Mutex;
 pub struct Subject {
     pub stronghold_storage: StrongholdExtStorage,
     pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DIDUrl>>>,
+    pub resolver: Resolver,
 }
 
 impl Subject {
@@ -28,9 +30,23 @@ impl Subject {
     pub async fn new() -> Self {
         let stronghold_storage = stronghold_storage().await;
 
+        // TODO: all networks are set to the same node URL ==> introduce per-network configuration?
+        let node_urls = NodeUrls {
+            mainnet: config().iota_node_url.clone(),
+            testnet: config().iota_node_url.clone(),
+            devnet: config().iota_node_url.clone(),
+        };
+
+        let username_password = config()
+            .iota_node_username
+            .clone()
+            .zip(config().iota_node_password.clone());
+        let username_password = username_password.as_ref().map(|(u, p)| (u.as_str(), p.as_str()));
+
         Self {
             stronghold_storage,
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
+            resolver: Resolver::new_with_options(None, Some(node_urls), username_password).await,
         }
     }
 
@@ -73,10 +89,8 @@ impl SubjectExt for Subject {
         let did_url =
             identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
 
-        // TODO: Make sure the resolver only needs to be created once.
-        let resolver = Resolver::new().await;
-
-        let document = resolver
+        let document = self
+            .resolver
             .resolve(did_url.did().as_str())
             .await
             .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
@@ -139,6 +153,7 @@ mod default_subject {
                 Self {
                     stronghold_storage,
                     verification_method_ids,
+                    resolver: Resolver::new().await,
                 }
             })
         }
@@ -151,10 +166,8 @@ impl Verify for Subject {
         let did_url =
             identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
 
-        // TODO: Make sure the resolver only needs to be created once.
-        let resolver = Resolver::new().await;
-
-        let document = resolver
+        let document = self
+            .resolver
             .resolve(did_url.did().as_str())
             .await
             .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
