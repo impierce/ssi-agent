@@ -405,7 +405,7 @@
 					"response": []
 				},
 				{
-					"name": "Send Offer by Target Url",
+					"name": "Send Offer to Organization",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -419,27 +419,27 @@
 							}
 						},
 						"url": {
-							"raw": "{{HOST}}/v0/offers/send",
+							"raw": "{{HOST}}/v0/offers/send-offer-to-organization",
 							"host": [
 								"{{HOST}}"
 							],
 							"path": [
 								"v0",
 								"offers",
-								"send"
+								"send-offer-to-organization"
 							]
 						}
 					},
 					"response": []
 				},
 				{
-					"name": "Send Offer by Email",
+					"name": "Send Offer to Individual",
 					"request": {
 						"method": "POST",
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\": \"{{OFFER_ID}}\",\n    \"recipientEmail\": \"cheyenne@example.test\"\n}",
+							"raw": "{\n    \"offerId\": \"{{OFFER_ID}}\",\n    \"recipientEmail\": \"email@example.test\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -447,14 +447,14 @@
 							}
 						},
 						"url": {
-							"raw": "{{HOST}}/v0/offers/send",
+							"raw": "{{HOST}}/v0/offers/send-offer-to-individual",
 							"host": [
 								"{{HOST}}"
 							],
 							"path": [
 								"v0",
 								"offers",
-								"send"
+								"send-offer-to-individual"
 							]
 						}
 					},
@@ -2147,7 +2147,7 @@
 								"header": [],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"status\": \"published\"\n}",
+									"raw": "{\n    \"template_id\": \"{{TEMPLATE_ID}}\",\n    \"status\": \"published\"\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -2387,7 +2387,7 @@
 										"header": [],
 										"body": {
 											"mode": "raw",
-											"raw": "{\n    \"keyId\": \"your-managed-key-id\"\n}",
+											"raw": "{\n    \"keyId\": \"zHpgKk3yHlxBomi96kvSoQEHslRzcufx\"\n}",
 											"options": {
 												"raw": {
 													"language": "json"

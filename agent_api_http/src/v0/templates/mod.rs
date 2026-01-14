@@ -181,6 +181,7 @@ pub(crate) async fn duplicate_template(
 #[derive(Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct UpdateTemplatesEndpointRequest {
+    pub template_id: String,
     pub title: Option<String>,
     pub display: Option<Display>,
     pub credential_format: Option<CredentialFormat>,
@@ -197,8 +198,8 @@ pub struct UpdateTemplatesEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn update_template(
     State(state): State<Arc<LibraryState>>,
-    Path(template_id): Path<String>,
     Json(UpdateTemplatesEndpointRequest {
+        template_id,
         title,
         display,
         credential_format,
