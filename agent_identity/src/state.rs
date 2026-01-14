@@ -423,7 +423,7 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
             && document
                 .iota_metadata
                 .as_ref()
-                .map(|iota_metadata| iota_metadata.is_funded)
+                .map(|iota_metadata| iota_metadata.is_funded || config().iota_sponsoring_service_url.is_some())
                 .unwrap_or(true)
     })
     .await?;
