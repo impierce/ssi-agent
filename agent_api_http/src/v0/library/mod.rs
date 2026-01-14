@@ -21,10 +21,8 @@ pub fn router(library_state: Arc<LibraryState>) -> Router {
         .nest(
             API_VERSION,
             Router::new()
-                // GET requests
                 .route("/templates/{template_id}", get(get_template))
                 .route("/templates/get-all-templates", get(get_templates))
-                // POST requests
                 .route("/templates/create-template", post(create_template))
                 .route("/templates/delete-template", post(delete_template))
                 .route("/templates/update-template", post(update_template))

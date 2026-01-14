@@ -9,6 +9,7 @@ pub enum TemplateEvent {
     TemplateCreated {
         template_id: String,
         source_template_id: Option<String>,
+        // TODO: Make this a required field.
         title: Option<String>,
         display: Option<Display>,
         credential_format: Option<CredentialFormat>,

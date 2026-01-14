@@ -58,7 +58,7 @@ impl From<Template> for TemplateDto {
 
 #[derive(Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
-pub struct PostCreateTemplateEndpointRequest {
+pub struct CreateTemplateEndpointRequest {
     pub title: Option<String>,
     pub display: Option<Display>,
     pub credential_format: Option<CredentialFormat>,
@@ -75,7 +75,7 @@ pub struct PostCreateTemplateEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn create_template(
     State(state): State<Arc<LibraryState>>,
-    Json(PostCreateTemplateEndpointRequest {
+    Json(CreateTemplateEndpointRequest {
         title,
         display,
         credential_format,
@@ -87,7 +87,7 @@ pub(crate) async fn create_template(
         description,
         r#type,
         schema,
-    }): Json<PostCreateTemplateEndpointRequest>,
+    }): Json<CreateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let template_id = Uuid::new_v4().to_string();
 
@@ -126,7 +126,7 @@ pub(crate) async fn create_template(
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PostDuplicateTemplateEndpointRequest {
+pub struct DuplicateTemplateEndpointRequest {
     pub source_template_id: String,
 }
 
@@ -134,7 +134,7 @@ pub struct PostDuplicateTemplateEndpointRequest {
 #[allow(clippy::needless_return)]
 pub(crate) async fn duplicate_template(
     State(state): State<Arc<LibraryState>>,
-    Json(PostDuplicateTemplateEndpointRequest { source_template_id }): Json<PostDuplicateTemplateEndpointRequest>,
+    Json(DuplicateTemplateEndpointRequest { source_template_id }): Json<DuplicateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let new_template_id = Uuid::new_v4().to_string();
 
@@ -181,7 +181,7 @@ pub(crate) async fn duplicate_template(
 
 #[derive(Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
-pub struct PostUpdateTemplatesEndpointRequest {
+pub struct UpdateTemplatesEndpointRequest {
     pub title: Option<String>,
     pub display: Option<Display>,
     pub credential_format: Option<CredentialFormat>,
@@ -199,7 +199,7 @@ pub struct PostUpdateTemplatesEndpointRequest {
 pub(crate) async fn update_template(
     State(state): State<Arc<LibraryState>>,
     Path(template_id): Path<String>,
-    Json(PostUpdateTemplatesEndpointRequest {
+    Json(UpdateTemplatesEndpointRequest {
         title,
         display,
         credential_format,
@@ -211,7 +211,7 @@ pub(crate) async fn update_template(
         description,
         r#type,
         schema,
-    }): Json<PostUpdateTemplatesEndpointRequest>,
+    }): Json<UpdateTemplatesEndpointRequest>,
 ) -> Result<Response, ApiError> {
     if let Some(title) = title {
         let command = TemplateCommand::UpdateTitle {
@@ -357,14 +357,14 @@ pub(crate) async fn get_template(
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PostDeleteTemplateEndpointRequest {
+pub struct DeleteTemplateEndpointRequest {
     pub template_id: String,
 }
 
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_template(
     State(state): State<Arc<LibraryState>>,
-    Json(PostDeleteTemplateEndpointRequest { template_id }): Json<PostDeleteTemplateEndpointRequest>,
+    Json(DeleteTemplateEndpointRequest { template_id }): Json<DeleteTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let command = TemplateCommand::DeleteTemplate {
         template_id: template_id.clone(),
