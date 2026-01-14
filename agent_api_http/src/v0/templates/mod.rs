@@ -131,7 +131,7 @@ pub struct DuplicateTemplateEndpointRequest {
 }
 
 #[axum_macros::debug_handler]
-#[allow(clippy::needless_return)]
+// #[allow(clippy::needless_return)]
 pub(crate) async fn duplicate_template(
     State(state): State<Arc<LibraryState>>,
     Json(DuplicateTemplateEndpointRequest { source_template_id }): Json<DuplicateTemplateEndpointRequest>,
@@ -171,12 +171,12 @@ pub(crate) async fn duplicate_template(
         .await?
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
-    return Ok((
+    Ok((
         StatusCode::CREATED,
         [(header::LOCATION, &format!("{API_VERSION}/templates/{new_template_id}"))],
         Json(new_template),
     )
-        .into_response());
+        .into_response())
 }
 
 #[derive(Deserialize, Serialize, Default)]
