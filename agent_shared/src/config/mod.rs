@@ -316,8 +316,6 @@ pub struct ApplicationConfiguration {
     #[config(default)]
     pub iota_node_password: Option<String>,
     #[config(default)]
-    pub skip_template_enforcement: bool,
-    #[config(default)]
     pub iota_sponsoring_service_url: Option<Url>,
     #[config(default)]
     #[serde(serialize_with = "redact")]
@@ -1100,7 +1098,6 @@ mod tests {
                   "kb-jwt_alg_values": ["ES256"]
                 },
             },
-            "skip_template_enforcement": false,
             })
         );
 

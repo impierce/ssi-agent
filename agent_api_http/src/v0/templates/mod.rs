@@ -22,6 +22,7 @@ use uuid::Uuid;
 pub struct TemplateDto {
     #[serde(rename = "id")]
     pub template_id: String,
+    pub source_template_id: Option<String>,
     pub title: Option<String>,
     pub display: Option<Display>,
     pub credential_format: Option<CredentialFormat>,
@@ -40,6 +41,7 @@ impl From<Template> for TemplateDto {
     fn from(value: Template) -> Self {
         Self {
             template_id: value.template_id,
+            source_template_id: value.source_template_id,
             title: value.title,
             display: value.display,
             credential_format: value.credential_format,
