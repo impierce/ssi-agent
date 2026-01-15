@@ -180,7 +180,7 @@ pub(crate) async fn duplicate_template(
 
 #[derive(Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
-pub struct UpdateTemplatesEndpointRequest {
+pub struct UpdateTemplateEndpointRequest {
     #[serde(rename = "id")]
     pub template_id: String,
     pub title: Option<String>,
@@ -199,7 +199,7 @@ pub struct UpdateTemplatesEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn update_template(
     State(state): State<Arc<LibraryState>>,
-    Json(UpdateTemplatesEndpointRequest {
+    Json(UpdateTemplateEndpointRequest {
         template_id,
         title,
         display,
@@ -212,7 +212,7 @@ pub(crate) async fn update_template(
         description,
         r#type,
         schema,
-    }): Json<UpdateTemplatesEndpointRequest>,
+    }): Json<UpdateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     if let Some(title) = title {
         let command = TemplateCommand::UpdateTitle {
@@ -324,6 +324,7 @@ pub(crate) async fn get_templates(
             let filtered_templates: Vec<TemplateDto> = all_templates_view
                 .templates
                 .into_values()
+                // TODO: Deleted templates should not be included in the all_templates_view
                 .filter(|template| {
                     template.status != Status::Deleted
                     // TODO: Apply filtering logic based on request parameters
