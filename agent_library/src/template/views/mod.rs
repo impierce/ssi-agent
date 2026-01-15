@@ -130,9 +130,7 @@ impl View<Template> for Template {
                 self.schema.replace(schema.clone());
                 self.modified_at.replace(modified_at.clone());
             }
-            TemplateDeleted { template_id } => {
-                *self = Self::default();
-                self.template_id.clone_from(template_id);
+            TemplateDeleted { template_id: _ } => {
                 self.status = Status::Deleted;
             }
         }

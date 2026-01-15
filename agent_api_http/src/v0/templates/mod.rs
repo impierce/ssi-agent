@@ -355,7 +355,7 @@ pub(crate) async fn get_template(
                 Some(template_view)
             }
         })
-        .map(|template_view| (StatusCode::OK, Json(template_view)).into_response())
+        .map(|template_view| (StatusCode::OK, Json(TemplateDto::from(template_view))).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
