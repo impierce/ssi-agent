@@ -326,7 +326,6 @@ pub(crate) async fn get_templates(
             let filtered_templates: Vec<TemplateDto> = all_templates_view
                 .templates
                 .into_values()
-                // TODO: Deleted templates should not be included in the all_templates_view
                 .filter(|template| {
                     template.status != Status::Deleted
                     // TODO: Apply filtering logic based on request parameters

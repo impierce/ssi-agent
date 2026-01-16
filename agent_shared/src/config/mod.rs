@@ -1097,7 +1097,7 @@ mod tests {
                   "sd-jwt_alg_values": ["ES256"],
                   "kb-jwt_alg_values": ["ES256"]
                 }
-            },
+              },
             })
         );
 
