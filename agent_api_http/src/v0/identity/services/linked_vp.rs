@@ -71,7 +71,7 @@ pub(crate) async fn linked_vp(
             service: Box::new(linked_verifiable_presentation_service.clone()),
         };
 
-        command_handler(&document_id, &state.command.document, command).await?;
+        command_handler(document_id, &state.command.document, command).await?;
     }
 
     publish_decentrally_hosted_documents(&state)
