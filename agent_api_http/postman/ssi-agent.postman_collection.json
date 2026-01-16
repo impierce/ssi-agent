@@ -1,9 +1,10 @@
 {
 	"info": {
-		"_postman_id": "e9b3fbae-f20e-4957-9d3a-6a310f5fda62",
+		"_postman_id": "4da8f32a-5645-4785-911d-5c2c729e2092",
 		"name": "ssi-agent",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "38461474"
+		"_exporter_id": "41786572",
+		"_collection_link": "https://impierce-technologies-bv.postman.co/workspace/New-Team-Workspace~1aa38760-77fc-4608-a1f5-e8a6fdaa0ad9/collection/41786572-4da8f32a-5645-4785-911d-5c2c729e2092?action=share&source=collection_link&creator=41786572"
 	},
 	"item": [
 		{
@@ -404,7 +405,7 @@
 					"response": []
 				},
 				{
-					"name": "Send Offer by Target Url",
+					"name": "Send Offer to Organization",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -418,27 +419,27 @@
 							}
 						},
 						"url": {
-							"raw": "{{HOST}}/v0/offers/send",
+							"raw": "{{HOST}}/v0/offers/send-offer-to-organization",
 							"host": [
 								"{{HOST}}"
 							],
 							"path": [
 								"v0",
 								"offers",
-								"send"
+								"send-offer-to-organization"
 							]
 						}
 					},
 					"response": []
 				},
 				{
-					"name": "Send Offer by Email",
+					"name": "Send Offer to Individual",
 					"request": {
 						"method": "POST",
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"offerId\": \"{{OFFER_ID}}\",\n    \"recipientEmail\": \"cheyenne@example.test\"\n}",
+							"raw": "{\n    \"offerId\": \"{{OFFER_ID}}\",\n    \"recipientEmail\": \"email@example.test\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -446,14 +447,14 @@
 							}
 						},
 						"url": {
-							"raw": "{{HOST}}/v0/offers/send",
+							"raw": "{{HOST}}/v0/offers/send-offer-to-individual",
 							"host": [
 								"{{HOST}}"
 							],
 							"path": [
 								"v0",
 								"offers",
-								"send"
+								"send-offer-to-individual"
 							]
 						}
 					},
@@ -2014,7 +2015,7 @@
 								"header": [],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"title\": \"My Template\",\n    \"credentialFormat\": \"w3c_vc_data_model_v1-1\",\n    \"holderType\": \"organization\"\n}",
+									"raw": "{\n    \"title\": \"My Example Template\",\n    \"credentialFormat\": \"w3c_vc_data_model_v1-1\",\n    \"holderType\": \"organization\"\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -2022,13 +2023,14 @@
 									}
 								},
 								"url": {
-									"raw": "{{HOST}}/v0/templates",
+									"raw": "{{HOST}}/v0/templates/create-template",
 									"host": [
 										"{{HOST}}"
 									],
 									"path": [
 										"v0",
-										"templates"
+										"templates",
+										"create-template"
 									]
 								}
 							},
@@ -2057,7 +2059,8 @@
 											""
 										],
 										"type": "text/javascript",
-										"packages": {}
+										"packages": {},
+										"requests": {}
 									}
 								},
 								{
@@ -2067,7 +2070,8 @@
 											""
 										],
 										"type": "text/javascript",
-										"packages": {}
+										"packages": {},
+										"requests": {}
 									}
 								}
 							],
@@ -2075,13 +2079,14 @@
 								"method": "GET",
 								"header": [],
 								"url": {
-									"raw": "{{HOST}}/v0/templates",
+									"raw": "{{HOST}}/v0/templates/get-all-templates",
 									"host": [
 										"{{HOST}}"
 									],
 									"path": [
 										"v0",
-										"templates"
+										"templates",
+										"get-all-templates"
 									]
 								}
 							},
@@ -2138,11 +2143,11 @@
 						{
 							"name": "Update Template",
 							"request": {
-								"method": "PATCH",
+								"method": "POST",
 								"header": [],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"status\": \"published\"\n}",
+									"raw": "{\n    \"id\": \"{{TEMPLATE_ID}}\",\n    \"status\": \"published\"\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -2150,14 +2155,70 @@
 									}
 								},
 								"url": {
-									"raw": "{{HOST}}/v0/templates/{{TEMPLATE_ID}}",
+									"raw": "{{HOST}}/v0/templates/update-template",
 									"host": [
 										"{{HOST}}"
 									],
 									"path": [
 										"v0",
 										"templates",
-										"{{TEMPLATE_ID}}"
+										"update-template"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Duplicate Template",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{ \n    \"sourceTemplateId\": \"{{TEMPLATE_ID}}\"\n} ",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{HOST}}/v0/templates/duplicate-template",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"templates",
+										"duplicate-template"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Template",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"id\": \"{{TEMPLATE_ID}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{HOST}}/v0/templates/delete-template",
+									"host": [
+										"{{HOST}}"
+									],
+									"path": [
+										"v0",
+										"templates",
+										"delete-template"
 									]
 								}
 							},
@@ -2283,25 +2344,148 @@
 			]
 		},
 		{
-			"name": "public",
+			"name": "v1",
 			"item": [
 				{
-					"name": "Show sponsoring configuration",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{HOST}}/public/sponsoring-configuration",
-							"host": [
-								"{{HOST}}"
-							],
-							"path": [
-								"public",
-								"sponsoring-configuration"
+					"name": "Identity",
+					"item": [
+						{
+							"name": "Keys",
+							"item": [
+								{
+									"name": "Generate Key",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"alias\": \"An Example Alias\",\n    \"signingAlgorithm\": \"ES256\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{HOST}}/v0/keys/generate-new-key",
+											"host": [
+												"{{HOST}}"
+											],
+											"path": [
+												"v0",
+												"keys",
+												"generate-new-key"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Remove Key",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"keyId\": \"zHpgKk3yHlxBomi96kvSoQEHslRzcufx\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{HOST}}/v0/keys/remove-key",
+											"host": [
+												"{{HOST}}"
+											],
+											"path": [
+												"v0",
+												"keys",
+												"remove-key"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Rename Key Alias",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"keyId\": \"your-managed-key-id\",\n    \"newAlias\": \"new-key-alias\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{HOST}}/v0/keys/rename-key-alias",
+											"host": [
+												"{{HOST}}"
+											],
+											"path": [
+												"v0",
+												"keys",
+												"rename-key-alias"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Set Signing Key",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"keyId\": \"your-managed-key-id\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{HOST}}/v0/keys/set-signing-key",
+											"host": [
+												"{{HOST}}"
+											],
+											"path": [
+												"v0",
+												"keys",
+												"set-signing-key"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "List all Keys",
+									"request": {
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{HOST}}/v0/keys/list-all",
+											"host": [
+												"{{HOST}}"
+											],
+											"path": [
+												"v0",
+												"keys",
+												"list-all"
+											]
+										}
+									},
+									"response": []
+								}
 							]
 						}
-					},
-					"response": []
+					]
 				}
 			]
 		}

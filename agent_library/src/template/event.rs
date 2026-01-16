@@ -8,6 +8,7 @@ use strum::Display;
 pub enum TemplateEvent {
     TemplateCreated {
         template_id: String,
+        source_template_id: Option<String>,
         // TODO: Make this a required field.
         title: Option<String>,
         display: Option<Display>,
@@ -20,7 +21,7 @@ pub enum TemplateEvent {
         visibility: Visibility,
         description: Option<String>,
         r#type: Vec<String>,
-        schema: Option<serde_json::Value>,
+        schema: Box<Option<serde_json::Value>>,
     },
     TitleUpdated {
         template_id: String,
@@ -76,6 +77,9 @@ pub enum TemplateEvent {
         template_id: String,
         schema: serde_json::Value,
         modified_at: String,
+    },
+    TemplateDeleted {
+        template_id: String,
     },
 }
 
