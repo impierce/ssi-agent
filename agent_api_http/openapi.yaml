@@ -845,12 +845,10 @@ paths:
         "404":
           description: Offer not found
 
-  /v0/offers/send:
+  /v0/offers/send-offer-to-individual:
     post:
-      summary: Send an offer
-      description: |
-        Send an offer to a recipient.
-        You must provide EITHER `recipientEmail` (for individuals) OR `targetUrl` (for organizations).
+      summary: Send an offer to an individual
+      description: Send a credential offer to an individual recipient via email.
       tags:
         - Issuance
       requestBody:
@@ -858,40 +856,52 @@ paths:
         content:
           application/json:
             schema:
-              oneOf:
-                - type: object
-                  title: Send via email
-                  properties:
-                    offerId:
-                      type: string
-                      description: Unique identifier for the offer
-                      example: "c86289fa-b105-4ec3-9326-a02436788f11"
-                    recipientEmail:
-                      type: string
-                      format: email
-                      description: The email address of the individual recipient
-                      example: "email@example.test"
-                  required:
-                    - offerId
-                    - recipientEmail
-                - type: object
-                  title: Send to an organization
-                  properties:
-                    offerId:
-                      type: string
-                      description: Unique identifier for the offer
-                      example: "c86289fa-b105-4ec3-9326-a02436788f11"
-                    targetUrl:
-                      type: string
-                      format: uri
-                      description: The URL of the receiving organizational wallet.
-                      example: "https://example.com/api/receive"
-                  required:
-                    - offerId
-                    - targetUrl
+              type: object
+              properties:
+                offerId:
+                  type: string
+                  description: Unique identifier for the offer
+                  example: "c86289fa-b105-4ec3-9326-a02436788f11"
+                recipientEmail:
+                  type: string
+                  format: email
+                  description: The email address of the individual recipient
+                  example: "email@example.test"
+              required:
+                - offerId
+                - recipientEmail
       responses:
         "200":
-          description: Offer sent successfully
+          description: Offer sent successfully to individual
+
+  /v0/offers/send-offer-to-organization:
+    post:
+      summary: Send an offer to an organization
+      description: Send a credential offer to an organizational wallet via URL.
+      tags:
+        - Issuance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                offerId:
+                  type: string
+                  description: Unique identifier for the offer
+                  example: "c86289fa-b105-4ec3-9326-a02436788f11"
+                targetUrl:
+                  type: string
+                  format: uri
+                  description: The URL of the receiving organizational wallet
+                  example: "https://example.com/api/receive"
+              required:
+                - offerId
+                - targetUrl
+      responses:
+        "200":
+          description: Offer sent successfully to organization
 
   # Template endpoints
   /v0/templates/get-all-templates:
