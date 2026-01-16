@@ -6,6 +6,7 @@ use serde::Deserialize;
 pub enum TemplateCommand {
     CreateTemplate {
         template_id: String,
+        source_template_id: Option<String>,
         title: Option<String>,
         display: Option<Display>,
         credential_format: Option<CredentialFormat>,
@@ -16,7 +17,7 @@ pub enum TemplateCommand {
         visibility: Visibility,
         description: Option<String>,
         r#type: Vec<String>,
-        schema: Option<serde_json::Value>,
+        schema: Box<Option<serde_json::Value>>,
     },
     UpdateTitle {
         template_id: String,
@@ -61,5 +62,8 @@ pub enum TemplateCommand {
     UpdateSchema {
         template_id: String,
         schema: serde_json::Value,
+    },
+    DeleteTemplate {
+        template_id: String,
     },
 }
