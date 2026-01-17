@@ -279,7 +279,6 @@ pub mod tests {
     use agent_shared::config::SupportedDidMethod;
     use chrono::{Duration, Utc};
     use cqrs_es::test::TestFramework;
-    use did_key::{generate, Ed25519KeyPair};
     use identity_credential::{credential::Jwt, presentation::Presentation};
     use jsonwebtoken::Algorithm;
     use jsonwebtoken::Header;
@@ -544,11 +543,14 @@ pub mod tests {
 
     async fn create_simple_vp_token(provider_did_method: &str) -> VpToken {
         // create a simple functional vp_token
-        let issuer = KeySubject::from_keypair(generate::<Ed25519KeyPair>(Some("test-issuer-key".as_bytes())), None);
+        let issuer = KeySubject::from_keypair(
+            spruceid_ssi::dids::DIDKey::generate(&spruceid_ssi::JWK::generate_ed25519()),
+            None,
+        );
         let issuer_did = issuer.identifier(provider_did_method, Algorithm::EdDSA).await.unwrap();
 
         let subject = Arc::new(KeySubject::from_keypair(
-            generate::<Ed25519KeyPair>(Some("test-subject-key".as_bytes())),
+            spruceid_ssi::dids::DIDKey::generate(&spruceid_ssi::JWK::generate_ed25519()),
             None,
         ));
         let subject_did = subject.identifier(provider_did_method, Algorithm::EdDSA).await.unwrap();

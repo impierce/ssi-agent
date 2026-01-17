@@ -27,8 +27,6 @@ use product_common::network_name::NetworkName;
 use product_common::transaction::TransactionBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use ssi_dids::DIDMethod;
-use ssi_dids::Source;
 use std::{collections::BTreeMap, sync::Arc};
 use tracing::{debug, info, warn};
 use url::Url;
@@ -277,11 +275,14 @@ impl Aggregate for Document {
                             .map_err(|err| MissingKeyError(err.to_string()))?;
 
                         // Generate a DID from the public key.
-                        let controller = serde_json::from_value::<ssi_jwk::JWK>(json!(public_key_jwk))
+                        let controller = serde_json::from_value::<spruceid_ssi::jwk::JWK>(json!(public_key_jwk))
                             .ok()
                             .and_then(|jwk| match did_method {
-                                SupportedDidMethod::Jwk => did_jwk_extern::DIDJWK.generate(&Source::Key(&jwk)),
-                                SupportedDidMethod::Key => did_key_extern::DIDKey.generate(&Source::Key(&jwk)),
+                                SupportedDidMethod::Jwk => Some(spruceid_ssi::dids::DIDJWK::generate(&jwk)),
+                                SupportedDidMethod::Key => Some(
+                                    spruceid_ssi::dids::DIDKey::generate(&jwk)
+                                        .expect("Failed to generate did:key from JWK"),
+                                ),
                                 _ => None,
                             })
                             .and_then(|did| did.parse().ok())

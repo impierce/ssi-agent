@@ -13,8 +13,6 @@ async-trait.workspace = true
 base64.workspace = true
 cqrs-es.workspace = true
 derivative.workspace = true
-did-jwk-extern = { version = "0.1.1", package = "did-jwk" }
-did-key-extern = { version = "0.2.2", package = "did-method-key" }
 identity_credential.workspace = true
 identity_core.workspace = true
 identity_did.workspace = true
@@ -29,8 +27,7 @@ product_common.workspace = true
 rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-ssi-dids = "0.1.1"
-ssi-jwk = "0.1.2"
+spruceid_ssi.workspace = true
 strum.workspace = true
 strum_macros.workspace = true
 thiserror.workspace = true

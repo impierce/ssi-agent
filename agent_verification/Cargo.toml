@@ -36,13 +36,13 @@ agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_verification = { path = ".", features = ["test_utils"] }
 
 async-std.workspace = true
-did-key = "0.2"
 identity_core.workspace = true
 identity_credential.workspace = true
 lazy_static.workspace = true
 oid4vci.workspace = true
 rstest.workspace = true
 serial_test = "3.0"
+spruceid_ssi.workspace = true
 
 [features]
 test_utils = []
