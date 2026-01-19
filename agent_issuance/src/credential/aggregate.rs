@@ -595,7 +595,7 @@ pub mod credential_tests {
         credential_id: String,
         notification_id: String,
     ) {
-        CredentialTestFramework::with(Service::default())
+        CredentialTestFramework::with(IssuanceServices::default().await)
             .given_no_previous_events()
             .when(CredentialCommand::CreateUnsignedCredential {
                 credential_id: credential_id.clone(),
@@ -639,7 +639,7 @@ pub mod credential_tests {
         #[case] verifiable_credential_jwt: String,
         credential_id: String,
     ) {
-        CredentialTestFramework::with(Service::default())
+        CredentialTestFramework::with(IssuanceServices::default().await)
             .given(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id: credential_id.clone(),
                 data: Data {

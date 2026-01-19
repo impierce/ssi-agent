@@ -30,10 +30,11 @@ pub mod tests {
         authorization,
         issuance::{self, credentials::tests::credentials, offers::tests::offers},
     };
-    use agent_authorization::state::UNIME_CLIENT_ID;
     use agent_authorization::{
         domain::oauth2_authorization_request::aggregate::test_utils::code_challenge, state::UNIME_REDIRECT_URI,
     };
+    use agent_authorization::{services::AuthorizationServices, state::UNIME_CLIENT_ID};
+    use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
     use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
     use axum::{
@@ -104,7 +105,8 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_pushed_authorization_request_endpoint() {
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
@@ -116,7 +118,7 @@ pub mod tests {
         let issuer_state = issuer_state.unwrap();
 
         let authorization_state =
-            Arc::new(authorization_state(&InMemory, Service::default(), Default::default()).await);
+            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

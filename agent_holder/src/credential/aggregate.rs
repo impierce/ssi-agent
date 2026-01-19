@@ -119,7 +119,7 @@ pub mod credential_tests {
     #[rstest]
     #[serial_test::serial]
     async fn test_add_credential(holder_credential_id: String, received_offer_id: String) {
-        CredentialTestFramework::with(Service::default())
+        CredentialTestFramework::with(HolderServices::default().await)
             .given_no_previous_events()
             .when(CredentialCommand::AddCredential {
                 holder_credential_id: holder_credential_id.clone(),

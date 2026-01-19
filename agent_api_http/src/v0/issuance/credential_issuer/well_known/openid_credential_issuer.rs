@@ -34,7 +34,7 @@ pub(crate) async fn openid_credential_issuer(State(state): State<Arc<IssuanceSta
 mod tests {
     use super::*;
     use crate::{tests::CREDENTIAL_ISSUER_METADATA, v0::issuance::router};
-    use agent_issuance::state::initialize;
+    use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_secret_manager::service::Service;
     use agent_store::{in_memory::InMemory, issuance_state};
     use axum::{
@@ -71,7 +71,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_openid_credential_issuer_endpoint() {
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
