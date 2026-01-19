@@ -515,7 +515,7 @@ pub mod tests {
                 authorization_request,
                 authorization_response,
             })
-            .then_expect_error_message("Invalid OID4VP Authorization Response: Nonce mismatch in VpToken");
+            .then_expect_error_message("Invalid OID4VP Authorization Response: Nonce mismatch in VP for credential query ID CredentialQueryId(\"CredentialQuery\") at index 0");
     }
 
     async fn authorization_response(
