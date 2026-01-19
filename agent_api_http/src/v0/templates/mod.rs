@@ -216,6 +216,14 @@ pub(crate) async fn update_template(
         schema,
     }): Json<UpdateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
+    if template_id.is_empty() {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST));
+    }
+
+    query_handler(&template_id, &state.query.template)
+        .await?
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
+
     if let Some(title) = title {
         let command = TemplateCommand::UpdateTitle {
             template_id: template_id.clone(),
@@ -370,6 +378,14 @@ pub(crate) async fn delete_template(
     State(state): State<Arc<LibraryState>>,
     Json(DeleteTemplateEndpointRequest { template_id }): Json<DeleteTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
+    if template_id.is_empty() {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST));
+    }
+
+    query_handler(&template_id, &state.query.template)
+        .await?
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
+
     let command = TemplateCommand::DeleteTemplate {
         template_id: template_id.clone(),
     };
