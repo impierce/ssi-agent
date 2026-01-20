@@ -8,4 +8,4 @@ This error arises when the template Id field is left empty in the request body. 
 
 ## Template Not Found
 
-This error arises when the given template Id does not match an existing template in the library.
+This error arises when the given template Id does not match any existing template in the library.
