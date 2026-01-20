@@ -1,3 +1,5 @@
+# https://github.com/taiki-e/cargo-llvm-cov/blob/main/README.md#github-actions-and-codecov
+
 name: Coverage
 
 on: [pull_request, push]
@@ -8,13 +10,17 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
       - name: Install Rust
         run: rustup update stable
+
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
+
       - name: Generate code coverage
-        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info --jobs 2
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
