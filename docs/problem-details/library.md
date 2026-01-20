@@ -4,8 +4,8 @@ This error arises when the source template data for duplication can not be fetch
 
 ## Template Id Missing
 
-This error arises when the template id field is left empty in the request body. The template id is required to update or delete a template.
+This error arises when the template `id` field is left empty in the request body. The `id` is required to update or delete a template.
 
 ## Template Not Found
 
-This error arises when the given template id does not match any existing template in the library.
+This error arises when the given `id` does not match any existing template in the library.
