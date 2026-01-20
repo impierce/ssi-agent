@@ -247,7 +247,7 @@ pub mod tests {
     use crate::tests::OFFER_ID;
     use crate::v0::issuance::router;
     use crate::API_VERSION;
-    use agent_issuance::state::initialize;
+    use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_secret_manager::service::Service;
     use agent_secret_manager::subject::Subject;
     use agent_store::in_memory::InMemory;
@@ -355,7 +355,7 @@ pub mod tests {
     pub async fn patch_credential(app: &mut Router) {
         let credential_endpoint = credentials(app, "001").await;
 
-        let relying_party_state = Subject::default();
+        let relying_party_state = Subject::test_subject().await;
 
         let patch_response = app
             .call(
@@ -412,7 +412,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_patch_credential() {
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
@@ -423,7 +424,8 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_credentials_endpoint() {
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);

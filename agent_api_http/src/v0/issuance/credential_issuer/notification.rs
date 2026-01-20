@@ -68,6 +68,8 @@ mod tests {
     use crate::v0::issuance::credentials::tests::credentials;
     use crate::v0::issuance::offers::tests::offers;
     use crate::v0::{authorization, issuance};
+    use agent_authorization::services::AuthorizationServices;
+    use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
     use agent_store::{authorization_state, issuance_state};
@@ -80,7 +82,8 @@ mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_valid_notification_request() {
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let mut issuance_app = issuance::router(issuance_state.clone());
 
@@ -88,7 +91,7 @@ mod tests {
         let grants = offers(&mut issuance_app, "001").await.unwrap();
 
         let authorization_state =
-            Arc::new(authorization_state(&InMemory, Service::default(), Default::default()).await);
+            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
@@ -119,7 +122,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_notification_request() {
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let mut issuance_app = issuance::router(issuance_state.clone());
 
@@ -127,7 +131,7 @@ mod tests {
         let grants = offers(&mut issuance_app, "001").await.unwrap();
 
         let authorization_state =
-            Arc::new(authorization_state(&InMemory, Service::default(), Default::default()).await);
+            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

@@ -67,6 +67,7 @@ pub mod tests {
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{set_config, Events};
     use agent_store::{in_memory::InMemory, verification_state, EventPublisher};
+    use agent_verification::services::VerificationServices;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -109,8 +110,12 @@ pub mod tests {
             .build()
             .unwrap();
 
-        let provider_manager =
-            ProviderManager::new(Arc::new(Subject::default()), vec!["did:key"], vec![Algorithm::EdDSA]).unwrap();
+        let provider_manager = ProviderManager::new(
+            Arc::new(Subject::test_subject().await),
+            vec!["did:key"],
+            vec![Algorithm::EdDSA],
+        )
+        .unwrap();
         let authorization_response = provider_manager
             .generate_response(&authorization_request, Default::default())
             .await
@@ -158,7 +163,8 @@ pub mod tests {
 
         let event_publishers = vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>];
 
-        let verification_state = Arc::new(verification_state(&InMemory, Service::default(), event_publishers).await);
+        let verification_state =
+            Arc::new(verification_state(&InMemory, VerificationServices::default().await, event_publishers).await);
 
         let mut app = router(verification_state);
 
