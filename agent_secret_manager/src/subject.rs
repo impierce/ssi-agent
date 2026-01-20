@@ -126,36 +126,34 @@ mod default_subject {
     }
 
     // This `Default` implementation for `Subject` returns a new `Subject` with the Verification Method IDs already preloaded.
-    impl Default for Subject {
-        fn default() -> Self {
-            futures::executor::block_on(async {
-                let stronghold_storage = stronghold_storage().await;
+    impl Subject {
+        pub async fn test_subject() -> Self {
+            let stronghold_storage = stronghold_storage().await;
 
-                let verification_method_ids = Arc::new(Mutex::new(HashMap::from_iter(vec![
-                    (
-                        StorageKey::new(SupportedDidMethod::Key, Algorithm::ES256),
-                        Self::DID_KEY_ES256_VERIFICATION_METHOD_ID.parse().unwrap(),
-                    ),
-                    (
-                        StorageKey::new(SupportedDidMethod::Key, Algorithm::EdDSA),
-                        Self::DID_KEY_EDDSA_VERIFICATION_METHOD_ID.parse().unwrap(),
-                    ),
-                    (
-                        StorageKey::new(SupportedDidMethod::Jwk, Algorithm::ES256),
-                        Self::DID_JWK_ES256_VERIFICATION_METHOD_ID.parse().unwrap(),
-                    ),
-                    (
-                        StorageKey::new(SupportedDidMethod::Jwk, Algorithm::EdDSA),
-                        Self::DID_JWK_EDDSA_VERIFICATION_METHOD_ID.parse().unwrap(),
-                    ),
-                ])));
+            let verification_method_ids = Arc::new(Mutex::new(HashMap::from_iter(vec![
+                (
+                    StorageKey::new(SupportedDidMethod::Key, Algorithm::ES256),
+                    Self::DID_KEY_ES256_VERIFICATION_METHOD_ID.parse().unwrap(),
+                ),
+                (
+                    StorageKey::new(SupportedDidMethod::Key, Algorithm::EdDSA),
+                    Self::DID_KEY_EDDSA_VERIFICATION_METHOD_ID.parse().unwrap(),
+                ),
+                (
+                    StorageKey::new(SupportedDidMethod::Jwk, Algorithm::ES256),
+                    Self::DID_JWK_ES256_VERIFICATION_METHOD_ID.parse().unwrap(),
+                ),
+                (
+                    StorageKey::new(SupportedDidMethod::Jwk, Algorithm::EdDSA),
+                    Self::DID_JWK_EDDSA_VERIFICATION_METHOD_ID.parse().unwrap(),
+                ),
+            ])));
 
-                Self {
-                    stronghold_storage,
-                    verification_method_ids,
-                    resolver: Resolver::new().await,
-                }
-            })
+            Self {
+                stronghold_storage,
+                verification_method_ids,
+                resolver: Resolver::new().await,
+            }
         }
     }
 }
@@ -296,7 +294,7 @@ mod tests {
     async fn es256_signed_jwt_successfully_verified() {
         set_config().set_secret_manager_config(SECRET_MANAGER_CONFIG.clone());
 
-        let subject = Arc::new(Subject::default());
+        let subject = Arc::new(Subject::test_subject().await);
 
         let mut split = ES256_SIGNED_JWT.rsplitn(2, '.');
         let (signature, message) = (split.next().unwrap(), split.next().unwrap());
@@ -316,7 +314,7 @@ mod tests {
     async fn eddsa_signed_jwt_successfully_verified() {
         set_config().set_secret_manager_config(SECRET_MANAGER_CONFIG.clone());
 
-        let subject = Arc::new(Subject::default());
+        let subject = Arc::new(Subject::test_subject().await);
 
         let mut split = EDDSA_SIGNED_JWT.rsplitn(2, '.');
         let (signature, message) = (split.next().unwrap(), split.next().unwrap());

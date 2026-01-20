@@ -326,13 +326,13 @@ pub mod server_config_tests {
     type ServerConfigTestFramework = TestFramework<ServerConfig>;
 
     #[rstest]
-    fn test_load_server_metadata(
+    async fn test_load_server_metadata(
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         cryptographic_binding_methods_supported: Vec<String>,
         signing_algorithms_supported: Vec<Algorithm>,
     ) {
-        ServerConfigTestFramework::with(Service::default())
+        ServerConfigTestFramework::with(IssuanceServices::default().await)
             .given_no_previous_events()
             .when(ServerConfigCommand::InitializeServerMetadata {
                 authorization_server_metadata: authorization_server_metadata.clone(),
@@ -349,7 +349,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
-    fn test_add_credential_configuration(
+    async fn test_add_credential_configuration(
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         cryptographic_binding_methods_supported: Vec<String>,
@@ -358,7 +358,7 @@ pub mod server_config_tests {
         credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
         credential_issuer_metadata_with_credential_configuration: Box<CredentialIssuerMetadata>,
     ) {
-        ServerConfigTestFramework::with(Service::default())
+        ServerConfigTestFramework::with(IssuanceServices::default().await)
             .given(vec![ServerConfigEvent::ServerMetadataInitialized {
                 authorization_server_metadata,
                 credential_issuer_metadata,
