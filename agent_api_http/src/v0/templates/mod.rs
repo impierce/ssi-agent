@@ -16,8 +16,10 @@ use std::sync::Arc;
 use tracing::debug;
 use uuid::Uuid;
 
+pub mod openapi;
+
 /// Data transfer object for Templates.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TemplateDto {
     #[serde(rename = "id")]
@@ -58,7 +60,7 @@ impl From<Template> for TemplateDto {
     }
 }
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
 #[serde(default, rename_all = "camelCase")]
 pub struct CreateTemplateEndpointRequest {
     pub title: Option<String>,
@@ -74,6 +76,26 @@ pub struct CreateTemplateEndpointRequest {
     pub schema: Option<serde_json::Value>,
 }
 
+/// Create a new template
+///
+/// Creates a new template which can be used to issue credentials.
+#[utoipa::path(
+    post,
+    path = "/templates/create-template",
+    tags = ["library", "templates"],
+    request_body(
+        content = CreateTemplateEndpointRequest,
+        examples(
+            ("Standard template" = (
+                description = "A simple example that will issue credentials in the W3C Verifiable Credentials Data Model v1.1 format.",
+                value = json!({ "title": "Standard template", "credentialFormat": "w3c_vc_data_model_v1-1", "holderType": "individual" })
+            ))
+        )
+    ),
+    responses(
+        (status = 201, description = "New template created successfully", headers(("Location", description = "The path of the newly created template")), body = TemplateDto)
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn create_template(
     State(state): State<Arc<LibraryState>>,
@@ -126,12 +148,28 @@ pub(crate) async fn create_template(
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DuplicateTemplateEndpointRequest {
     pub source_template_id: String,
 }
 
+/// Duplicate existing template
+///
+/// Creates a duplicate of an existing template.
+#[utoipa::path(
+    post,
+    path = "/templates/duplicate-template",
+    tags = ["library", "templates"],
+    request_body(
+        content = DuplicateTemplateEndpointRequest,
+        example = json!({ "sourceTemplateId": "91fc790f-d876-4827-9a9d-0fb0f6766dca" })
+    ),
+    responses(
+        (status = 201, description = "Duplicate created successfully", headers(("Location", description = "The path of the newly created template")), body = TemplateDto),
+        (status = 422, description = "Source Template Not Found")
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn duplicate_template(
     State(state): State<Arc<LibraryState>>,
@@ -307,12 +345,23 @@ pub(crate) async fn update_template(
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GetTemplatesEndpointRequest {
     // TODO: Add parameters for filtering templates
 }
 
+/// List all templates
+///
+/// List all available templates.
+#[utoipa::path(
+    get,
+    path = "/templates/get-all-templates",
+    tags = ["library", "templates"],
+    responses(
+        (status = 200, description = "All templates retrieved successfully", body = [TemplateDto])
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn get_templates(
     State(state): State<Arc<LibraryState>>,
