@@ -216,6 +216,24 @@ pub(crate) async fn update_template(
         schema,
     }): Json<UpdateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
+    if template_id.is_empty() {
+        return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+            .title("Template ID Missing")
+            .type_url(type_url("library#template-id-missing"))
+            .message("The `id` field is required to update a template.")
+            .finish());
+    }
+
+    query_handler(&template_id, &state.query.template)
+        .await?
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Template Not Found")
+                .type_url(type_url("library#template-not-found"))
+                .message(format!("No Template found with id: `{template_id}`"))
+                .finish()
+        })?;
+
     if let Some(title) = title {
         let command = TemplateCommand::UpdateTitle {
             template_id: template_id.clone(),
@@ -370,6 +388,24 @@ pub(crate) async fn delete_template(
     State(state): State<Arc<LibraryState>>,
     Json(DeleteTemplateEndpointRequest { template_id }): Json<DeleteTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
+    if template_id.is_empty() {
+        return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+            .title("Template ID Missing")
+            .type_url(type_url("library#template-id-missing"))
+            .message("The `id` field is required to delete a template.")
+            .finish());
+    }
+
+    query_handler(&template_id, &state.query.template)
+        .await?
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Template Not Found")
+                .type_url(type_url("library#template-not-found"))
+                .message(format!("No Template found with id: `{template_id}`"))
+                .finish()
+        })?;
+
     let command = TemplateCommand::DeleteTemplate {
         template_id: template_id.clone(),
     };
