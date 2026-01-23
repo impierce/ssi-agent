@@ -21,7 +21,7 @@ members = [
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.76.0"
-license = "Apache-2.0"
+license-file = "LICENSE"
 publish = false
 
 [workspace.dependencies]
