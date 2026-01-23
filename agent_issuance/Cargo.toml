@@ -14,7 +14,7 @@ anyhow.workspace = true
 async-trait.workspace = true
 cqrs-es.workspace = true
 chrono.workspace = true
-types-ob-v3 = { git = "https://github.com/impierce/digital-credential-data-models", rev = "9f16c27" }
+types-ob-v3 = { git = "https://github.com/impierce/digital-credential-data-models", rev = "6ca306e" }
 derivative.workspace = true
 identity_core.workspace = true
 identity_credential.workspace = true
