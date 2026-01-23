@@ -21,6 +21,7 @@ members = [
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.76.0"
+publish = false
 
 [workspace.dependencies]
 siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "99fc7be" }
