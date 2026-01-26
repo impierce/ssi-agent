@@ -75,6 +75,30 @@ impl Subject {
     pub async fn get_verification_method_id(&self, key: StorageKey) -> Option<DIDUrl> {
         self.verification_method_ids.lock().await.get(&key).cloned()
     }
+
+    /// Resolves the public key for a given DID URL.
+    pub async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk> {
+        let did_url =
+            identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
+
+        let document = self
+            .resolver
+            .resolve(did_url.did().as_str())
+            .await
+            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
+
+        let verification_method = document
+            .resolve_method(DIDUrlQuery::from(&did_url), None)
+            .ok_or(anyhow!(
+                "Failed to resolve verification method for DID URL: `{did_url}`"
+            ))?;
+
+        verification_method
+            .data()
+            .public_key_jwk()
+            .ok_or_else(|| anyhow!("Failed to resolve public key for DID URL: `{did_url}`"))
+            .cloned()
+    }
 }
 
 #[async_trait]
@@ -99,39 +123,6 @@ impl JwsSigner for Subject {
         let message = [message, signature].join(".");
 
         Ok(message.as_bytes().to_vec())
-    }
-}
-
-#[async_trait]
-pub trait SubjectExt: oid4vc_core::Subject + JwsSigner {
-    async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk>;
-}
-
-/// Extension trait for `Subject` to provide additional functionality.
-#[async_trait]
-impl SubjectExt for Subject {
-    /// Resolves the public key for a given DID URL.
-    async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk> {
-        let did_url =
-            identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
-
-        let document = self
-            .resolver
-            .resolve(did_url.did().as_str())
-            .await
-            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
-
-        let verification_method = document
-            .resolve_method(DIDUrlQuery::from(&did_url), None)
-            .ok_or(anyhow!(
-                "Failed to resolve verification method for DID URL: `{did_url}`"
-            ))?;
-
-        verification_method
-            .data()
-            .public_key_jwk()
-            .ok_or_else(|| anyhow!("Failed to resolve public key for DID URL: `{did_url}`"))
-            .cloned()
     }
 }
 

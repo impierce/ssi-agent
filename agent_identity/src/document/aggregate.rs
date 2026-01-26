@@ -21,7 +21,6 @@ use identity_storage::{JwkStorage, KeyIdStorage};
 use iota_sdk::types::base_types::IotaAddress;
 use iota_sdk::{IotaClient, IotaClientBuilder};
 use jsonwebtoken::Algorithm;
-use product_common::core_client::CoreClient as _;
 use product_common::gas_station::GasStationOptions;
 use product_common::network_name::NetworkName;
 use product_common::transaction::TransactionBuilder;

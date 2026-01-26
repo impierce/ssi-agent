@@ -1,4 +1,4 @@
-use agent_secret_manager::subject::{Subject, SubjectExt};
+use agent_secret_manager::subject::Subject;
 use agent_shared::application_state::CommandHandler;
 use agent_shared::config::{
     config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, CredentialConfiguration,
@@ -213,9 +213,7 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                   {
                     "credential_configuration_id": "001",
                     "format": "jwt_vc_json",
-                    "credential_definition": {
-                      "type": ["VerifiableCredential"]
-                    },
+                    "type": ["VerifiableCredential"],
                     "display": [
                       {
                         "name": "Verifiable Credential",
@@ -251,9 +249,31 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                     ]
                   },
                   {
-                    "credential_configuration_id": "002",
+                    "credential_configuration_id": "SD-JWT",
                     "format": "dc+sd-jwt",
-                    "vct": "https://example.com/vct",
+                    "claims": [
+                        {
+                            "path": ["first_name"],
+                            "display": [{
+                                "name": "First Name",
+                                "locale": "en"
+                            }],
+                        },
+                        {
+                            "path": ["last_name"],
+                            "display": [{
+                                "name": "Last Name",
+                                "locale": "en"
+                            }],
+                        },
+                        {
+                            "path": ["dob"],
+                            "display": [{
+                                "name": "Date of Birth",
+                                "locale": "en"
+                            }],
+                        }
+                    ]
                   }
                 ]))
                 .expect("Failed to parse default development credential configurations")

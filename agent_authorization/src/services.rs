@@ -1,7 +1,4 @@
-use agent_secret_manager::{
-    service::Service,
-    subject::{Subject, SubjectExt},
-};
+use agent_secret_manager::{service::Service, subject::Subject};
 use std::sync::Arc;
 
 pub struct AuthorizationServices {

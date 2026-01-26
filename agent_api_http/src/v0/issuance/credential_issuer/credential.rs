@@ -19,8 +19,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
+use oid4vci::credential_request::CredentialRequest;
 use oid4vci::errors::CredentialErrorResponse;
-use oid4vci::{credential_request::CredentialRequest, Proof};
 use std::sync::Arc;
 use tokio::time::sleep;
 use tracing::error;

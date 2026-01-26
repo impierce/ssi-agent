@@ -131,6 +131,7 @@ pub enum PublicError {
     CredentialError(OID4VCError<CredentialErrorResponse>),
     NotificationError(OID4VCError<NotificationErrorResponse>),
     InternalServerError,
+    NotFoundError,
 }
 
 impl axum::response::IntoResponse for PublicError {
@@ -149,6 +150,7 @@ impl axum::response::IntoResponse for PublicError {
                 (status, axum::Json(oid4vc_error)).into_response()
             }
             PublicError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            PublicError::NotFoundError => StatusCode::NOT_FOUND.into_response(),
         }
     }
 }

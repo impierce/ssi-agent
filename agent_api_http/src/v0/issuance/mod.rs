@@ -2,6 +2,7 @@
 pub mod credential_configurations;
 pub mod credential_issuer;
 pub mod credentials;
+pub mod ietf_oauth_sd_jwt_vc;
 pub mod offers;
 
 pub mod error;
@@ -54,5 +55,10 @@ pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
         .route("/openid4vci/notification", post(notification))
         .route("/openid4vci/credential-offer/{offer_id}", get(credential_offer_uri))
         .route("/ietf-oauth-token-status-list/{path}", get(token_status_list))
+        // TODO: Move this route to `../library` once `agent_library` is properly implemented.
+        .route(
+            "/vct/{credential_configuration_id}/{version}",
+            get(ietf_oauth_sd_jwt_vc::type_metadata),
+        )
         .with_state(issuance_state)
 }

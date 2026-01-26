@@ -1,7 +1,4 @@
-use agent_secret_manager::{
-    service::Service,
-    subject::{Subject, SubjectExt},
-};
+use agent_secret_manager::{service::Service, subject::Subject};
 use std::sync::Arc;
 
 /// Issuance services. This struct is used to sign credentials and validate credential requests.

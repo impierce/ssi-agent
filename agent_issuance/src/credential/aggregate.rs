@@ -388,12 +388,12 @@ impl Aggregate for Credential {
                     .unwrap();
 
                 let signed_credential = if let CredentialFormats::DcSdJwt(Parameters::<DcSdJwt> {
-                    parameters: DcSdJwtParameters { vct },
+                    parameters: DcSdJwtParameters { .. },
                 }) = &self.credential_configuration.credential_format
                 {
                     let issuer = &services.issuer;
 
-                    let data = self.data.clone().unwrap().raw;
+                    let mut data = self.data.clone().unwrap().raw;
 
                     let alg = match get_preferred_signing_algorithm() {
                         jsonwebtoken::Algorithm::ES256 => "ES256",
@@ -420,8 +420,6 @@ impl Aggregate for Credential {
                         .await
                         .unwrap();
 
-                    println!("DATA: {}", serde_json::to_string_pretty(&data).unwrap());
-
                     let paths = data
                         .clone()
                         .as_object()
@@ -429,6 +427,15 @@ impl Aggregate for Credential {
                         .keys()
                         .cloned()
                         .collect::<Vec<String>>();
+
+                    data["iss"] = json!(issuer_did);
+
+                    data["status"] = json!({
+                        "status_list": {
+                            "idx": self.credential_status.index,
+                            "uri": get_status_list_url(self.credential_status.index)?,
+                        }
+                    });
 
                     let mut builder = SdJwtBuilder::new(data)
                         .unwrap()

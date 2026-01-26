@@ -1,7 +1,4 @@
-use agent_secret_manager::{
-    service::Service,
-    subject::{Subject, SubjectExt},
-};
+use agent_secret_manager::{service::Service, subject::Subject};
 use agent_shared::config::{
     config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, get_preferred_did_method,
 };

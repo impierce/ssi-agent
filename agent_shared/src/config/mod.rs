@@ -10,10 +10,7 @@ use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_issuer::credential_configurations_supported::ClaimDescription;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedDisplay;
-use oid4vci::{
-    credential_format_profiles::{CredentialFormats, WithParameters},
-    credential_offer::TxCodeConstraints,
-};
+use oid4vci::{credential_format_profiles::CredentialFormats, credential_offer::TxCodeConstraints};
 use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported};
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -519,15 +516,15 @@ pub fn default_issuer_es256_key_id() -> KeyId {
 pub struct CredentialConfiguration {
     pub credential_configuration_id: String,
     #[serde(flatten)]
-    pub credential_format_with_parameters: CredentialFormats<WithParameters>,
+    pub format: CredentialFormats,
+    #[serde(default, rename = "type")]
+    pub type_: Vec<String>,
     #[serde(default)]
     pub display: Vec<CredentialConfigurationsSupportedDisplay>,
     #[serde(default)]
     pub claims: Vec<ClaimDescription>,
     #[serde(default)]
     pub authorization: Authorization,
-    #[serde(default)]
-    pub selective_disclosable: bool,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
