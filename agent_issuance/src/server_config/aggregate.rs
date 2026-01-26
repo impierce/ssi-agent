@@ -48,7 +48,7 @@ fn into_proof_types_supported(signing_algorithms_supported: &[Algorithm]) -> Has
         ProofType::Jwt,
         KeyProofMetadata {
             proof_signing_alg_values_supported: signing_algorithms_supported
-                .into_iter()
+                .iter()
                 .filter_map(|algorithm| {
                     algorithm
                         .to_json_value()
