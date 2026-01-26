@@ -15,14 +15,16 @@ use identity_credential::credential::{
 use jsonwebtoken::Header;
 use oauth_tsl::status_list::StatusType;
 use oauth_tsl::tokens::status_list_token::StatusListTyp;
-use oid4vc_core::jwt;
+use oid4vc_core::{jwt, Sign as _, Subject as _};
+use oid4vci::credential_format_profiles::ietf_sd_jwt_vc::dc_sd_jwt::{DcSdJwt, DcSdJwtParameters};
 use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::{
     CredentialDefinition, JwtVcJson, JwtVcJsonParameters,
 };
 use oid4vci::credential_format_profiles::{CredentialFormats, Parameters};
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use oid4vci::notification_request::NotificationRequest;
-use oid4vci::VerifiableCredentialJwt;
+use oid4vci::{Proof, VerifiableCredentialJwt};
+use sd_jwt::{RequiredKeyBinding, SdJwtBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
@@ -115,212 +117,235 @@ impl Aggregate for Credential {
                 credential_configuration,
                 expires_at,
                 credential_status_index,
-            } => match &credential_configuration.credential_format {
-                CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
-                    parameters:
-                        JwtVcJsonParameters {
-                            credential_definition: CredentialDefinition { type_, .. },
-                            ..
-                        },
-                }) => {
-                    #[cfg(feature = "test_utils")]
-                    let notification_id = test_utils::notification_id();
-                    #[cfg(not(feature = "test_utils"))]
-                    let notification_id = agent_shared::generate_random_string();
+            } => {
+                #[cfg(feature = "test_utils")]
+                let notification_id = test_utils::notification_id();
+                #[cfg(not(feature = "test_utils"))]
+                let notification_id = agent_shared::generate_random_string();
 
-                    #[cfg(feature = "test_utils")]
-                    let issuance_date = "2010-01-01T00:00:00Z".to_string();
-                    #[cfg(not(feature = "test_utils"))]
-                    let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+                match &credential_configuration.credential_format {
+                    CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
+                        parameters:
+                            JwtVcJsonParameters {
+                                credential_definition: CredentialDefinition { type_, .. },
+                                ..
+                            },
+                    }) => {
+                        #[cfg(feature = "test_utils")]
+                        let issuance_date = "2010-01-01T00:00:00Z".to_string();
+                        #[cfg(not(feature = "test_utils"))]
+                        let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
-                    let name = config()
-                        .display
-                        .first()
-                        .expect("Configuration `display.name` missing")
-                        .name
-                        .clone();
+                        let name = config()
+                            .display
+                            .first()
+                            .expect("Configuration `display.name` missing")
+                            .name
+                            .clone();
 
-                    let issuer: Profile = ProfileBuilder::default()
-                        .id(config().public_url.clone())
-                        .type_("Profile")
-                        .name(name)
-                        .try_into()
-                        .expect("Could not build issuer profile");
+                        let issuer: Profile = ProfileBuilder::default()
+                            .id(config().public_url.clone())
+                            .type_("Profile")
+                            .name(name)
+                            .try_into()
+                            .expect("Could not build issuer profile");
 
-                    let issuance_date =
-                        identity_core::common::Timestamp::parse(&issuance_date).expect("Could not parse issuance_date");
+                        let issuance_date = identity_core::common::Timestamp::parse(&issuance_date)
+                            .expect("Could not parse issuance_date");
 
-                    let expiration_date = match expires_at {
-                        CredentialExpiry::Fixed(fixed) => {
-                            let fixed = identity_core::common::Timestamp::from_unix(fixed.timestamp())
-                                .map_err(|_| InvalidExpirationDateError)?;
+                        let expiration_date = match expires_at {
+                            CredentialExpiry::Fixed(fixed) => {
+                                let fixed = identity_core::common::Timestamp::from_unix(fixed.timestamp())
+                                    .map_err(|_| InvalidExpirationDateError)?;
 
-                            Some(fixed)
-                        }
-                        CredentialExpiry::Never => None,
-                    };
-
-                    let mut credential_types: Vec<String> = type_.clone();
-
-                    let id = data
-                        .raw
-                        .get("id")
-                        .map(|id| {
-                            id.as_str()
-                                .and_then(|id_str| Url::parse(id_str).ok())
-                                .ok_or(InvalidIdentifierError)
-                        })
-                        .transpose()?;
-
-                    let credential_subject = identity_credential::credential::Subject::from_json_value(
-                        data.raw["credentialSubject"].clone(),
-                    )
-                    .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
-
-                    let credential_status = CredentialStatus {
-                        index: credential_status_index,
-                        status: StatusType::VALID,
-                    };
-
-                    let status_list_url = get_status_list_url(self.credential_status.index)?;
-
-                    // Loop through all the items in the `type` array in reverse until we find a match.
-                    while let Some(credential_type) = credential_types.pop() {
-                        match credential_type.as_str() {
-                            "VerifiableCredential" => {
-                                let issuer = match serde_json::from_value::<Issuer>(json!({
-                                    "id": issuer.id,
-                                    "name": issuer.name,
-                                })) {
-                                    Ok(issuer) => issuer,
-                                    Err(_) => unreachable!("Couldn't parse issuer"),
-                                };
-
-                                let status_uri_idx = identity_core::common::Object::from_json_value(json!({
-                                    "uri": status_list_url.clone(),
-                                    "idx": credential_status_index
-                                }))
-                                .map_err(|_| CredentialError::InvalidCredentialStatus)?;
-
-                                let status = identity_credential::credential::Status {
-                                    id: status_list_url.into(),
-                                    type_: StatusListTyp::Jwt.to_string(),
-                                    properties: status_uri_idx,
-                                };
-
-                                let builder = W3CVerifiableCredentialBuilder::default()
-                                    .issuer(issuer)
-                                    .subject(credential_subject)
-                                    .issuance_date(issuance_date)
-                                    .status(status);
-
-                                let builder = if let Some(expiration_date) = expiration_date {
-                                    builder.expiration_date(expiration_date)
-                                } else {
-                                    builder
-                                };
-
-                                let builder = if let Some(id) = id {
-                                    builder.id(id.into())
-                                } else {
-                                    builder
-                                };
-
-                                let credential: W3CVerifiableCredential = builder
-                                    .build()
-                                    .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
-
-                                // Set the type to the original credential configuration type.
-                                let mut raw = json!(credential);
-                                raw["type"] = json!(type_);
-
-                                return Ok(vec![UnsignedCredentialCreated {
-                                    credential_id,
-                                    data: Data { raw },
-                                    credential_configuration,
-                                    notification_id: Some(notification_id),
-                                    credential_status,
-                                }]);
+                                Some(fixed)
                             }
-                            "AchievementCredential" | "OpenBadgeCredential" => {
-                                let name = credential_configuration
-                                    .display
-                                    .first()
-                                    .map(|display| display.name.clone())
-                                    .unwrap_or("OpenBadge Credential".to_string());
+                            CredentialExpiry::Never => None,
+                        };
 
-                                let credential_subject = serde_json_path_to_error::from_value::<AchievementSubject>(
-                                    json!(credential_subject),
-                                )
-                                .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
+                        let mut credential_types: Vec<String> = type_.clone();
 
-                                let builder_credential_status = types_ob_v3::prelude::CredentialStatus {
-                                    id: status_list_url.to_string(),
-                                    type_: StatusListTyp::Jwt.to_string(),
-                                };
+                        let id = data
+                            .raw
+                            .get("id")
+                            .map(|id| {
+                                id.as_str()
+                                    .and_then(|id_str| Url::parse(id_str).ok())
+                                    .ok_or(InvalidIdentifierError)
+                            })
+                            .transpose()?;
 
-                                let builder = AchievementCredentialBuilder::default()
-                                    .context(vec![
-                                        "https://www.w3.org/2018/credentials/v1",
-                                        "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json",
-                                    ])
-                                    .type_(AchievementCredentialType::from(vec![
-                                        "VerifiableCredential",
-                                        &credential_type,
-                                    ]))
-                                    .name(name)
-                                    .issuer(issuer)
-                                    .credential_subject(credential_subject)
-                                    .issuance_date(issuance_date.to_rfc3339())
-                                    .credential_status(builder_credential_status);
+                        let credential_subject = identity_credential::credential::Subject::from_json_value(
+                            data.raw["credentialSubject"].clone(),
+                        )
+                        .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
 
-                                let builder = if let Some(expiration_date) = expiration_date {
-                                    builder.expiration_date(expiration_date.to_rfc3339())
-                                } else {
-                                    builder
-                                };
+                        let credential_status = CredentialStatus {
+                            index: credential_status_index,
+                            status: StatusType::VALID,
+                        };
 
-                                let builder = builder.id(id.ok_or(InvalidIdentifierError)?);
+                        let status_list_url = get_status_list_url(self.credential_status.index)?;
 
-                                let credential: AchievementCredential =
-                                    builder.try_into().map_err(InvalidCredentialSubjectError)?;
+                        // Loop through all the items in the `type` array in reverse until we find a match.
+                        while let Some(credential_type) = credential_types.pop() {
+                            match credential_type.as_str() {
+                                "VerifiableCredential" => {
+                                    let issuer = match serde_json::from_value::<Issuer>(json!({
+                                        "id": issuer.id,
+                                        "name": issuer.name,
+                                    })) {
+                                        Ok(issuer) => issuer,
+                                        Err(_) => unreachable!("Couldn't parse issuer"),
+                                    };
 
-                                // `types_ob_v3::achievement_credential` builder does not support additional properties for the credentialStatus,
-                                // therefore we insert them manually.
-                                let mut raw = serde_json::to_value(credential)
+                                    let status_uri_idx = identity_core::common::Object::from_json_value(json!({
+                                        "uri": status_list_url.clone(),
+                                        "idx": credential_status_index
+                                    }))
                                     .map_err(|_| CredentialError::InvalidCredentialStatus)?;
 
-                                let raw_credential_status = raw["credentialStatus"]
-                                    .as_object_mut()
-                                    .ok_or(CredentialError::InvalidCredentialStatus)?;
+                                    let status = identity_credential::credential::Status {
+                                        id: status_list_url.into(),
+                                        type_: StatusListTyp::Jwt.to_string(),
+                                        properties: status_uri_idx,
+                                    };
 
-                                raw_credential_status.insert(
-                                    "uri".to_string(),
-                                    serde_json::Value::String(status_list_url.to_string()),
-                                );
-                                raw_credential_status.insert(
-                                    "idx".to_string(),
-                                    serde_json::Value::Number(credential_status_index.into()),
-                                );
+                                    let builder = W3CVerifiableCredentialBuilder::default()
+                                        .issuer(issuer)
+                                        .subject(credential_subject)
+                                        .issuance_date(issuance_date)
+                                        .status(status);
 
-                                return Ok(vec![UnsignedCredentialCreated {
-                                    credential_id,
-                                    notification_id: Some(notification_id),
-                                    data: Data { raw },
-                                    credential_configuration,
-                                    credential_status,
-                                }]);
+                                    let builder = if let Some(expiration_date) = expiration_date {
+                                        builder.expiration_date(expiration_date)
+                                    } else {
+                                        builder
+                                    };
+
+                                    let builder = if let Some(id) = id {
+                                        builder.id(id.into())
+                                    } else {
+                                        builder
+                                    };
+
+                                    let credential: W3CVerifiableCredential = builder
+                                        .build()
+                                        .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
+
+                                    // Set the type to the original credential configuration type.
+                                    let mut raw = json!(credential);
+                                    raw["type"] = json!(type_);
+
+                                    return Ok(vec![UnsignedCredentialCreated {
+                                        credential_id,
+                                        data: Data { raw },
+                                        credential_configuration,
+                                        notification_id: Some(notification_id),
+                                        credential_status,
+                                    }]);
+                                }
+                                "AchievementCredential" | "OpenBadgeCredential" => {
+                                    let name = credential_configuration
+                                        .display
+                                        .first()
+                                        .map(|display| display.name.clone())
+                                        .unwrap_or("OpenBadge Credential".to_string());
+
+                                    let credential_subject =
+                                        serde_json_path_to_error::from_value::<AchievementSubject>(json!(
+                                            credential_subject
+                                        ))
+                                        .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
+
+                                    let builder_credential_status = types_ob_v3::prelude::CredentialStatus {
+                                        id: status_list_url.to_string(),
+                                        type_: StatusListTyp::Jwt.to_string(),
+                                    };
+
+                                    let builder = AchievementCredentialBuilder::default()
+                                        .context(vec![
+                                            "https://www.w3.org/2018/credentials/v1",
+                                            "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json",
+                                        ])
+                                        .type_(AchievementCredentialType::from(vec![
+                                            "VerifiableCredential",
+                                            &credential_type,
+                                        ]))
+                                        .name(name)
+                                        .issuer(issuer)
+                                        .credential_subject(credential_subject)
+                                        .issuance_date(issuance_date.to_rfc3339())
+                                        .credential_status(builder_credential_status);
+
+                                    let builder = if let Some(expiration_date) = expiration_date {
+                                        builder.expiration_date(expiration_date.to_rfc3339())
+                                    } else {
+                                        builder
+                                    };
+
+                                    let builder = builder.id(id.ok_or(InvalidIdentifierError)?);
+
+                                    let credential: AchievementCredential =
+                                        builder.try_into().map_err(InvalidCredentialSubjectError)?;
+
+                                    // `types_ob_v3::achievement_credential` builder does not support additional properties for the credentialStatus,
+                                    // therefore we insert them manually.
+                                    let mut raw = serde_json::to_value(credential)
+                                        .map_err(|_| CredentialError::InvalidCredentialStatus)?;
+
+                                    let raw_credential_status = raw["credentialStatus"]
+                                        .as_object_mut()
+                                        .ok_or(CredentialError::InvalidCredentialStatus)?;
+
+                                    raw_credential_status.insert(
+                                        "uri".to_string(),
+                                        serde_json::Value::String(status_list_url.to_string()),
+                                    );
+                                    raw_credential_status.insert(
+                                        "idx".to_string(),
+                                        serde_json::Value::Number(credential_status_index.into()),
+                                    );
+
+                                    return Ok(vec![UnsignedCredentialCreated {
+                                        credential_id,
+                                        notification_id: Some(notification_id),
+                                        data: Data { raw },
+                                        credential_configuration,
+                                        credential_status,
+                                    }]);
+                                }
+                                _ => continue,
                             }
-                            _ => continue,
                         }
-                    }
 
-                    Err(UnsupportedCredentialType)
+                        Err(UnsupportedCredentialType)
+                    }
+                    CredentialFormats::DcSdJwt(Parameters::<DcSdJwt> {
+                        parameters: DcSdJwtParameters { vct },
+                    }) => {
+                        // FIXME: Properly construct SD-JWT unsigned credential
+                        let mut raw = data.raw;
+                        raw["vct"] = json!(vct);
+
+                        let credential_status = CredentialStatus {
+                            index: credential_status_index,
+                            status: StatusType::VALID,
+                        };
+
+                        return Ok(vec![UnsignedCredentialCreated {
+                            credential_id,
+                            notification_id: Some(notification_id),
+                            data: Data { raw },
+                            credential_configuration,
+                            credential_status,
+                        }]);
+                    }
+                    _ => Err(UnsupportedCredentialFormat(serde_json::json!(
+                        credential_configuration.credential_format
+                    ))),
                 }
-                _ => Err(UnsupportedCredentialFormat(serde_json::json!(
-                    credential_configuration.credential_format
-                ))),
-            },
+            }
 
             CreateSignedCredential {
                 credential_id,
@@ -341,6 +366,7 @@ impl Aggregate for Credential {
                 credential_id,
                 subject_id,
                 overwrite,
+                proof,
             } => {
                 if self.signed.is_some() && !overwrite {
                     return Ok(vec![]);
@@ -360,7 +386,68 @@ impl Aggregate for Credential {
                     .identifier(&default_did_method.to_string(), get_preferred_signing_algorithm())
                     .await
                     .unwrap();
-                let signed_credential = {
+
+                let signed_credential = if let CredentialFormats::DcSdJwt(Parameters::<DcSdJwt> {
+                    parameters: DcSdJwtParameters { vct },
+                }) = &self.credential_configuration.credential_format
+                {
+                    let issuer = &services.issuer;
+
+                    let data = self.data.clone().unwrap().raw;
+
+                    let alg = match get_preferred_signing_algorithm() {
+                        jsonwebtoken::Algorithm::ES256 => "ES256",
+                        jsonwebtoken::Algorithm::EdDSA => "EdDSA",
+                        _ => {
+                            todo!()
+                        }
+                    };
+
+                    let proof = if let Some(Proof::Jwt { jwt: proof }) = proof {
+                        proof
+                    } else {
+                        // FIXME
+                        todo!()
+                    };
+
+                    let holder_kid = jsonwebtoken::decode_header(&proof).unwrap().kid.unwrap();
+
+                    let kid = issuer
+                        .key_id(
+                            &get_preferred_did_method().to_string(),
+                            get_preferred_signing_algorithm(),
+                        )
+                        .await
+                        .unwrap();
+
+                    println!("DATA: {}", serde_json::to_string_pretty(&data).unwrap());
+
+                    let paths = data
+                        .clone()
+                        .as_object()
+                        .unwrap()
+                        .keys()
+                        .cloned()
+                        .collect::<Vec<String>>();
+
+                    let mut builder = SdJwtBuilder::new(data)
+                        .unwrap()
+                        // Narrow the type to VC SD-JWT as per the spec.
+                        .header("typ", "dc+sd-jwt")
+                        // Set the issuer's verification method as the `kid` so that the verifiers can identify the correct key.
+                        .header("kid", kid)
+                        .require_key_binding(RequiredKeyBinding::Kid(holder_kid));
+
+                    for path in paths {
+                        if path != "vct" {
+                            builder = builder.make_concealable(&format!("/{}", path)).unwrap();
+                        }
+                    }
+
+                    let sd_jwt_credential = builder.finish(&**issuer, alg).await.unwrap();
+
+                    serde_json::json!(sd_jwt_credential.to_string())
+                } else {
                     let mut credential = self.data.as_ref().ok_or(MissingCredentialDataError)?.clone();
 
                     if let Some(ref id) = id {
@@ -656,6 +743,7 @@ pub mod credential_tests {
                 credential_id: credential_id.clone(),
                 subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
                 overwrite: false,
+                proof: None,
             })
             .then_expect_events(vec![CredentialEvent::CredentialSigned {
                 credential_id,

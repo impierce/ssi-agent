@@ -1,4 +1,7 @@
-use agent_secret_manager::{service::Service, subject::SubjectExt};
+use agent_secret_manager::{
+    service::Service,
+    subject::{Subject, SubjectExt},
+};
 use agent_shared::config::{
     get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, get_preferred_did_method,
 };
@@ -8,12 +11,12 @@ use std::sync::Arc;
 
 /// Holder services. This struct is used to sign credentials and validate credential requests.
 pub struct HolderServices {
-    pub holder: Arc<dyn SubjectExt>,
+    pub holder: Arc<Subject>,
     pub wallet: Wallet,
 }
 
 impl Service for HolderServices {
-    fn new(holder: Arc<dyn SubjectExt>) -> Self {
+    fn new(holder: Arc<Subject>) -> Self {
         let signing_algorithms_supported = get_all_enabled_signing_algorithms_supported();
 
         let mut enabled_did_methods = get_all_enabled_did_methods();

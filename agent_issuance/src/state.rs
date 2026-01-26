@@ -1,4 +1,4 @@
-use agent_secret_manager::subject::SubjectExt;
+use agent_secret_manager::subject::{Subject, SubjectExt};
 use agent_shared::application_state::CommandHandler;
 use agent_shared::config::{
     config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, CredentialConfiguration,
@@ -26,7 +26,7 @@ use crate::server_config::views::ServerConfigView;
 pub struct IssuanceState {
     pub command: CommandHandlers,
     pub query: Queries,
-    pub subject: Arc<dyn SubjectExt>,
+    pub subject: Arc<Subject>,
 }
 
 /// The command handlers are used to execute commands on the aggregates.
@@ -249,6 +249,11 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                             }],
                         }
                     ]
+                  },
+                  {
+                    "credential_configuration_id": "002",
+                    "format": "dc+sd-jwt",
+                    "vct": "https://example.com/vct",
                   }
                 ]))
                 .expect("Failed to parse default development credential configurations")

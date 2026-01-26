@@ -13,9 +13,12 @@ agent_shared = { path = "../agent_shared" }
 # - All components of the `identity_stronghold_ext` module are still active.
 #
 # Future work: Migrate the remaining functionality into UniCore.
-did_manager_consumer = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.7", package = "consumer" }
-did_manager_identity_stronghold_ext = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.7", package = "identity_stronghold_ext" }
-did_manager_iota = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.7", package = "did_iota" }
+# did_manager_consumer = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.7", package = "consumer" }
+# did_manager_identity_stronghold_ext = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.7", package = "identity_stronghold_ext" }
+# did_manager_iota = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.7", package = "did_iota" }
+did_manager_consumer = { path = "../../did-manager/consumer", package = "consumer" }
+did_manager_identity_stronghold_ext = { path = "../../did-manager/identity_stronghold_ext", package = "identity_stronghold_ext" }
+did_manager_iota = { path = "../../did-manager/did_iota", package = "did_iota" }
 
 anyhow.workspace = true
 async-trait.workspace = true
@@ -35,7 +38,9 @@ rustls = { version = "0.23", default-features = false, features = [
     "std",
     "tls12",
 ] }
+sd-jwt.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
 url.workspace = true
 

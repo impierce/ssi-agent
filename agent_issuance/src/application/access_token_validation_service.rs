@@ -1,4 +1,5 @@
 use crate::state::IssuanceState;
+use agent_secret_manager::subject::SubjectExt as _;
 use agent_shared::config::config;
 use identity_core::convert::{FromJson as _, ToJson as _};
 use jsonwebtoken::{decode, jwk::Jwk as JsonWebTokenJwk, DecodingKey, Validation};

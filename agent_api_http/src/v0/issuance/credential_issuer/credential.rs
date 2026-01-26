@@ -19,8 +19,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
-use oid4vci::credential_request::CredentialRequest;
 use oid4vci::errors::CredentialErrorResponse;
+use oid4vci::{credential_request::CredentialRequest, Proof};
 use std::sync::Arc;
 use tokio::time::sleep;
 use tracing::error;
@@ -55,6 +55,8 @@ pub(crate) async fn credential(
             ),
             _ => return Err(internal_server_error()),
         };
+
+    let proof = credential_request.proof.clone();
 
     let command = OfferCommand::VerifyCredentialRequest {
         offer_id: offer_id.clone(),
@@ -102,6 +104,7 @@ pub(crate) async fn credential(
             credential_id: credential_id.clone(),
             subject_id: subject_id.clone(),
             overwrite: false,
+            proof: proof.clone(),
         };
 
         command_handler(&credential_id, &state.command.credential, command).await?;

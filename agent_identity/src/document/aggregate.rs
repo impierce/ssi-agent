@@ -147,7 +147,7 @@ impl Aggregate for Document {
                             .map_err(|err| GenericError(err.to_string()))?;
 
                         // Retrieve the wallet address from the identity client.
-                        let wallet_address = identity_client.sender_address();
+                        let wallet_address = identity_client.address();
 
                         let balance = iota_client
                             .coin_read_api()
@@ -455,7 +455,7 @@ impl Aggregate for Document {
                 }
 
                 // Retrieve the wallet address from the identity client.
-                let wallet_address = identity_client.sender_address();
+                let wallet_address = identity_client.address();
 
                 let network_name = did_method
                     .network_name()
@@ -659,7 +659,7 @@ where
     let controller_token = oci.get_controller_token(identity_client).await?.ok_or_else(|| {
         rebased::Error::Identity(format!(
             "address {} has no control over Identity {}",
-            identity_client.sender_address(),
+            identity_client.address(),
             oci.id()
         ))
     })?;

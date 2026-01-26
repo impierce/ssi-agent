@@ -526,6 +526,8 @@ pub struct CredentialConfiguration {
     pub claims: Vec<ClaimDescription>,
     #[serde(default)]
     pub authorization: Authorization,
+    #[serde(default)]
+    pub selective_disclosable: bool,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]

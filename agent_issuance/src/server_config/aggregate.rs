@@ -403,6 +403,7 @@ pub mod server_config_tests {
                         pre_authorized: true,
                         tx_code_constraints: None,
                     },
+                    selective_disclosable: false,
                 },
                 provisioned: false,
             })

@@ -1,5 +1,5 @@
 use crate::stronghold_storage;
-use agent_shared::config::{config, SupportedDidMethod};
+use agent_shared::config::{config, get_preferred_did_method, SupportedDidMethod};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
@@ -12,6 +12,7 @@ use identity_iota::verification::jwk::Jwk;
 use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
+use sd_jwt::{JsonObject, JwsSigner};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -77,7 +78,32 @@ impl Subject {
 }
 
 #[async_trait]
-pub trait SubjectExt: oid4vc_core::Subject {
+impl JwsSigner for Subject {
+    type Error = String;
+
+    // FIX THIS: jwt::encode?
+    async fn sign(&self, header: &JsonObject, payload: &JsonObject) -> Result<Vec<u8>, Self::Error> {
+        let encoded_header = URL_SAFE_NO_PAD.encode(serde_json::to_vec(header).unwrap());
+        let encoded_payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(payload).unwrap());
+
+        let message = format!("{}.{}", encoded_header, encoded_payload);
+
+        let preferred_did_method = get_preferred_did_method();
+
+        // FIXME!!!
+        let proof_value = Sign::sign(self, &message, &preferred_did_method.to_string(), Algorithm::EdDSA)
+            .await
+            .unwrap();
+
+        let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
+        let message = [message, signature].join(".");
+
+        Ok(message.as_bytes().to_vec())
+    }
+}
+
+#[async_trait]
+pub trait SubjectExt: oid4vc_core::Subject + JwsSigner {
     async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk>;
 }
 
