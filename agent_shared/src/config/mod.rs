@@ -517,6 +517,7 @@ pub struct CredentialConfiguration {
     pub credential_configuration_id: String,
     #[serde(flatten)]
     pub format: CredentialFormats,
+    // The `type` field is only used when `format` is `jwt_vc_json`.
     #[serde(default, rename = "type")]
     pub type_: Vec<String>,
     #[serde(default)]
@@ -957,6 +958,30 @@ pub fn get_preferred_signing_algorithm() -> jsonwebtoken::Algorithm {
         .first()
         .cloned()
         .expect("Please set a signing algorithm as `preferred` in the configuration")
+}
+
+/// Extension trait for `jsonwebtoken::Algorithm` to provide a method to get the string representation.
+pub trait AlgorithmExt {
+    fn as_str(&self) -> &str;
+}
+
+impl AlgorithmExt for jsonwebtoken::Algorithm {
+    fn as_str(&self) -> &str {
+        match self {
+            jsonwebtoken::Algorithm::HS256 => "HS256",
+            jsonwebtoken::Algorithm::HS384 => "HS384",
+            jsonwebtoken::Algorithm::HS512 => "HS512",
+            jsonwebtoken::Algorithm::RS256 => "RS256",
+            jsonwebtoken::Algorithm::RS384 => "RS384",
+            jsonwebtoken::Algorithm::RS512 => "RS512",
+            jsonwebtoken::Algorithm::ES256 => "ES256",
+            jsonwebtoken::Algorithm::ES384 => "ES384",
+            jsonwebtoken::Algorithm::PS256 => "PS256",
+            jsonwebtoken::Algorithm::PS384 => "PS384",
+            jsonwebtoken::Algorithm::PS512 => "PS512",
+            jsonwebtoken::Algorithm::EdDSA => "EdDSA",
+        }
+    }
 }
 
 /// Serializes the passed `String` into the value `"<REDACTED>"` to prevent leaking secrets.

@@ -1,5 +1,5 @@
 use crate::stronghold_storage;
-use agent_shared::config::{config, get_preferred_did_method, SupportedDidMethod};
+use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm, SupportedDidMethod};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
@@ -105,19 +105,28 @@ impl Subject {
 impl JwsSigner for Subject {
     type Error = String;
 
-    // FIX THIS: jwt::encode?
     async fn sign(&self, header: &JsonObject, payload: &JsonObject) -> Result<Vec<u8>, Self::Error> {
-        let encoded_header = URL_SAFE_NO_PAD.encode(serde_json::to_vec(header).unwrap());
-        let encoded_payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(payload).unwrap());
+        let algorithm = header
+            .get("alg")
+            .and_then(|alg| alg.as_str())
+            .and_then(|alg_str| Algorithm::from_str(alg_str).ok())
+            .unwrap_or_else(get_preferred_signing_algorithm);
+
+        let encoded_header = serde_json::to_vec(header)
+            .map_err(|e| format!("Failed to serialize header to JSON: {}", e))
+            .map(|header_bytes| URL_SAFE_NO_PAD.encode(&header_bytes))?;
+
+        let encoded_payload = serde_json::to_vec(payload)
+            .map_err(|e| format!("Failed to serialize payload to JSON: {}", e))
+            .map(|payload_bytes| URL_SAFE_NO_PAD.encode(&payload_bytes))?;
 
         let message = format!("{}.{}", encoded_header, encoded_payload);
 
         let preferred_did_method = get_preferred_did_method();
 
-        // FIXME!!!
-        let proof_value = Sign::sign(self, &message, &preferred_did_method.to_string(), Algorithm::EdDSA)
+        let proof_value = Sign::sign(self, &message, &preferred_did_method.to_string(), algorithm)
             .await
-            .unwrap();
+            .map_err(|e| format!("Signing error: {}", e))?;
 
         let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
         let message = [message, signature].join(".");

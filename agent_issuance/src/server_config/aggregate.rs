@@ -198,7 +198,12 @@ impl Aggregate for ServerConfig {
                             parameters: (vct).into(),
                         })
                     }
-                    _ => todo!(),
+                    _ => {
+                        return Err(UnsupportedCredentialFormatIdentifierError(format!(
+                            "{:?}",
+                            credential_configuration.format
+                        )))
+                    }
                 };
 
                 let proof_types_supported = into_proof_types_supported(&self.signing_algorithms_supported);

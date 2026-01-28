@@ -11,14 +11,13 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn type_metadata(
     State(state): State<Arc<IssuanceState>>,
-    // FIXME: This is human readable so not suitable for a URL path segment
     Path((credential_configuration_id, _version)): Path<(String, String)>,
 ) -> Result<Response, PublicError> {
     let credential_configuration_id = URL_SAFE_NO_PAD
         .decode(credential_configuration_id)
         .ok()
         .and_then(|bytes| String::from_utf8(bytes).ok())
-        .ok_or_else(|| PublicError::NotFoundError)?;
+        .ok_or(PublicError::NotFoundError)?;
 
     // Check if the credential configuration IDs are valid.
     let _credential_configuration = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
@@ -30,7 +29,7 @@ pub(crate) async fn type_metadata(
                 .map(|(_, credential_configuration, _authorization)| credential_configuration)
                 .cloned()
         })
-        .ok_or_else(|| PublicError::NotFoundError)?;
+        .ok_or(PublicError::NotFoundError)?;
 
     // TODO: Fill in more of these fields once `agent_library` supports it.
     let type_metadata = TypeMetadata {

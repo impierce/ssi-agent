@@ -4,14 +4,17 @@ use crate::credential::error::CredentialError::{self};
 use crate::credential::event::CredentialEvent;
 use crate::services::IssuanceServices;
 use agent_shared::config::{
-    config, get_preferred_did_method, get_preferred_signing_algorithm, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT,
+    config, get_preferred_did_method, get_preferred_signing_algorithm, AlgorithmExt, BITS_PER_STATUS,
+    STATUS_LIST_BYTES_AMOUNT,
 };
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
+use identity_core::common::Timestamp;
 use identity_core::convert::FromJson;
 use identity_credential::credential::{
     Credential as W3CVerifiableCredential, CredentialBuilder as W3CVerifiableCredentialBuilder, Issuer,
 };
+use identity_credential::sd_jwt_vc::SdJwtVcClaims;
 use jsonwebtoken::Header;
 use oauth_tsl::status_list::StatusType;
 use oauth_tsl::tokens::status_list_token::StatusListTyp;
@@ -387,76 +390,84 @@ impl Aggregate for Credential {
                     .await
                     .unwrap();
 
+                let mut credential = self.data.as_ref().ok_or(MissingCredentialDataError)?.clone();
+
+                #[cfg(feature = "test_utils")]
+                let iat = 1262304000; // 2010-01-01T00:00:00Z
+                #[cfg(not(feature = "test_utils"))]
+                let iat = credential.raw["issuanceDate"]
+                    .as_str()
+                    .unwrap()
+                    .parse::<chrono::DateTime<chrono::Utc>>()
+                    .unwrap()
+                    .timestamp();
+
+                let exp = credential.raw["expirationDate"].as_str().map(|expiration_date| {
+                    expiration_date
+                        .parse::<chrono::DateTime<chrono::Utc>>()
+                        .expect("Could not parse `expirationDate` to DateTime")
+                        .timestamp()
+                });
+
                 let signed_credential = if let CredentialFormats::DcSdJwt(Parameters::<DcSdJwt> {
                     parameters: DcSdJwtParameters { .. },
                 }) = &self.credential_configuration.credential_format
                 {
                     let issuer = &services.issuer;
 
-                    let mut data = self.data.clone().unwrap().raw;
+                    let algorithm = get_preferred_signing_algorithm();
 
-                    let alg = match get_preferred_signing_algorithm() {
-                        jsonwebtoken::Algorithm::ES256 => "ES256",
-                        jsonwebtoken::Algorithm::EdDSA => "EdDSA",
-                        _ => {
-                            todo!()
-                        }
-                    };
+                    let alg = algorithm.as_str();
 
-                    let proof = if let Some(Proof::Jwt { jwt: proof }) = proof {
-                        proof
-                    } else {
-                        // FIXME
-                        todo!()
-                    };
+                    let holder_kid = proof.and_then(|proof| {
+                        let Proof::Jwt { jwt: proof } = proof;
+                        jsonwebtoken::decode_header(&proof).ok().and_then(|header| header.kid)
+                    });
 
-                    let holder_kid = jsonwebtoken::decode_header(&proof).unwrap().kid.unwrap();
-
-                    let kid = issuer
-                        .key_id(
-                            &get_preferred_did_method().to_string(),
-                            get_preferred_signing_algorithm(),
-                        )
-                        .await
-                        .unwrap();
-
-                    let paths = data
-                        .clone()
-                        .as_object()
-                        .unwrap()
-                        .keys()
-                        .cloned()
-                        .collect::<Vec<String>>();
-
-                    data["iss"] = json!(issuer_did);
-
-                    data["status"] = json!({
+                    let mut sd_jwt_vc_claims: SdJwtVcClaims =
+                        serde_json::from_value(credential.raw).map_err(|e| BuildCredentialError(e.to_string()))?;
+                    sd_jwt_vc_claims.iss = issuer_did.parse().ok();
+                    sd_jwt_vc_claims.status = serde_json::from_value(serde_json::json!({
                         "status_list": {
                             "idx": self.credential_status.index,
                             "uri": get_status_list_url(self.credential_status.index)?,
                         }
-                    });
+                    }))
+                    .ok();
+                    sd_jwt_vc_claims.iat = Timestamp::from_unix(iat).ok();
+                    sd_jwt_vc_claims.nbf = Timestamp::from_unix(iat).ok();
+                    sd_jwt_vc_claims.exp = exp.and_then(|exp| Timestamp::from_unix(exp).ok());
 
-                    let mut builder = SdJwtBuilder::new(data)
+                    let kid = issuer
+                        .key_id(&get_preferred_did_method().to_string(), algorithm)
+                        .await
+                        .unwrap();
+
+                    let paths = sd_jwt_vc_claims.keys().cloned().collect::<Vec<String>>();
+
+                    let mut builder = SdJwtBuilder::new(sd_jwt_vc_claims)
                         .unwrap()
-                        // Narrow the type to VC SD-JWT as per the spec.
                         .header("typ", "dc+sd-jwt")
-                        // Set the issuer's verification method as the `kid` so that the verifiers can identify the correct key.
-                        .header("kid", kid)
-                        .require_key_binding(RequiredKeyBinding::Kid(holder_kid));
+                        .header("kid", kid);
 
-                    for path in paths {
-                        if path != "vct" {
-                            builder = builder.make_concealable(&format!("/{}", path)).unwrap();
-                        }
+                    if let Some(holder_kid) = holder_kid.clone() {
+                        builder = builder.require_key_binding(RequiredKeyBinding::Kid(holder_kid));
                     }
 
-                    let sd_jwt_credential = builder.finish(&**issuer, alg).await.unwrap();
+                    // By default, all custom claims are concealable.
+                    for path in paths {
+                        builder = builder.make_concealable(&format!("/{}", path)).map_err(|e| {
+                            BuildCredentialError(format!("Failed to make claim at path `/{}` concealable: {}", path, e))
+                        })?;
+                    }
+
+                    let sd_jwt_credential = builder
+                        .finish(&**issuer, alg)
+                        .await
+                        .map_err(|e| BuildCredentialError(format!("Failed to build SD-JWT credential: {}", e)))?;
 
                     serde_json::json!(sd_jwt_credential.to_string())
                 } else {
-                    let mut credential = self.data.as_ref().ok_or(MissingCredentialDataError)?.clone();
-
                     if let Some(ref id) = id {
                         credential.raw["id"] = json!(id);
                     };
@@ -486,23 +497,6 @@ impl Aggregate for Credential {
 
                     info!("Credential: {:?}", credential);
 
-                    #[cfg(feature = "test_utils")]
-                    let iat = 1262304000; // 2010-01-01T00:00:00Z
-                    #[cfg(not(feature = "test_utils"))]
-                    let iat = credential.raw["issuanceDate"]
-                        .as_str()
-                        .unwrap()
-                        .parse::<chrono::DateTime<chrono::Utc>>()
-                        .unwrap()
-                        .timestamp();
-
-                    let exp = credential.raw["expirationDate"].as_str().map(|expiration_date| {
-                        expiration_date
-                            .parse::<chrono::DateTime<chrono::Utc>>()
-                            .expect("Could not parse `expirationDate` to DateTime")
-                            .timestamp()
-                    });
-
                     // Add standard claims
                     let mut vc_jwt_builder = VerifiableCredentialJwt::builder().iss(issuer_did).iat(iat).nbf(iat); // TODO: setting the `nbf` to `iat` makes the JWT immediately usable
 
@@ -525,14 +519,14 @@ impl Aggregate for Credential {
                     let vc_jwt_built = vc_jwt_builder
                         .verifiable_credential(credential.raw)
                         .build()
-                        .map_err(|e| CredentialError::BuildVcJwtError(e.to_string()))?;
+                        .map_err(|e| CredentialError::BuildCredentialError(e.to_string()))?;
 
                     let mut vc_jwt_value = serde_json::to_value(&vc_jwt_built)
-                        .map_err(|e| CredentialError::BuildVcJwtError(e.to_string()))?;
+                        .map_err(|e| CredentialError::BuildCredentialError(e.to_string()))?;
 
                     let mut vc_jwt_object = vc_jwt_value
                         .as_object_mut()
-                        .ok_or(CredentialError::BuildVcJwtError(
+                        .ok_or(CredentialError::BuildCredentialError(
                             "Failed to convert VC JWT to mutable JSON object".to_string(),
                         ))?
                         .clone();

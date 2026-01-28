@@ -102,7 +102,7 @@ impl Aggregate for Presentation {
                     get_preferred_signing_algorithm(),
                 )
                 .await
-                .unwrap();
+                .map_err(|err| SigningError(err.to_string()))?;
                 let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
                 let message = [message, signature].join(".");
 

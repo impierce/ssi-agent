@@ -51,7 +51,7 @@ impl IntoApiErrorExt for CredentialError {
                 ))
                 .source(self)
                 .finish(),
-            BuildVcJwtError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            BuildCredentialError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Unexpected Error")
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
@@ -120,6 +120,11 @@ impl IntoApiErrorExt for ServerConfigError {
             RemoveProvisionedCredentialConfigurationError => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Remove Provisioned Credential Configuration Error")
                 .type_url(type_url("issuance#remove-provisioned-credential-configuration-error"))
+                .source(self)
+                .finish(),
+            UnsupportedCredentialFormatIdentifierError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Unsupported Credential Format Identifier Error")
+                .type_url(type_url("issuance#unsupported-credential-format-identifier-error"))
                 .source(self)
                 .finish(),
         }
@@ -201,6 +206,7 @@ impl IntoPublicError for ServerConfigError {
         match self {
             UpdateProvisionedCredentialConfigurationError => PublicError::InternalServerError,
             RemoveProvisionedCredentialConfigurationError => PublicError::InternalServerError,
+            UnsupportedCredentialFormatIdentifierError(_) => PublicError::InternalServerError,
         }
     }
 }
