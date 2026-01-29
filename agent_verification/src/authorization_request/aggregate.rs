@@ -490,7 +490,7 @@ pub mod tests {
     ) {
         set_config().set_preferred_did_method(verifier_did_method);
 
-        let verification_services = VerificationServices::default();
+        let verification_services = VerificationServices::default().await;
         let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
 
