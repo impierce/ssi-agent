@@ -868,12 +868,10 @@ paths:
         "404":
           description: Offer not found
 
-  /v0/offers/send:
+  /v0/offers/send-offer-to-individual:
     post:
-      summary: Send an offer
-      description: |
-        Send an offer to a recipient.
-        You must provide EITHER `recipientEmail` (for individuals) OR `targetUrl` (for organizations).
+      summary: Send an offer to an individual
+      description: Send a credential offer to an individual recipient via email.
       tags:
         - Issuance
       requestBody:
@@ -881,40 +879,298 @@ paths:
         content:
           application/json:
             schema:
-              oneOf:
-                - type: object
-                  title: Send via email
-                  properties:
-                    offerId:
-                      type: string
-                      description: Unique identifier for the offer
-                      example: "c86289fa-b105-4ec3-9326-a02436788f11"
-                    recipientEmail:
-                      type: string
-                      format: email
-                      description: The email address of the individual recipient
-                      example: "email@example.test"
-                  required:
-                    - offerId
-                    - recipientEmail
-                - type: object
-                  title: Send to an organization
-                  properties:
-                    offerId:
-                      type: string
-                      description: Unique identifier for the offer
-                      example: "c86289fa-b105-4ec3-9326-a02436788f11"
-                    targetUrl:
-                      type: string
-                      format: uri
-                      description: The URL of the receiving organizational wallet.
-                      example: "https://example.com/api/receive"
-                  required:
-                    - offerId
-                    - targetUrl
+              type: object
+              properties:
+                offerId:
+                  type: string
+                  description: Unique identifier for the offer
+                  example: "c86289fa-b105-4ec3-9326-a02436788f11"
+                recipientEmail:
+                  type: string
+                  format: email
+                  description: The email address of the individual recipient
+                  example: "email@example.test"
+              required:
+                - offerId
+                - recipientEmail
       responses:
         "200":
-          description: Offer sent successfully
+          description: Offer sent successfully to individual
+
+  /v0/offers/send-offer-to-organization:
+    post:
+      summary: Send an offer to an organization
+      description: Send a credential offer to an organizational wallet via URL.
+      tags:
+        - Issuance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                offerId:
+                  type: string
+                  description: Unique identifier for the offer
+                  example: "c86289fa-b105-4ec3-9326-a02436788f11"
+                targetUrl:
+                  type: string
+                  format: uri
+                  description: The URL of the receiving organizational wallet
+                  example: "https://example.com/api/receive"
+              required:
+                - offerId
+                - targetUrl
+      responses:
+        "200":
+          description: Offer sent successfully to organization
+
+  # Template endpoints
+  /v0/templates/get-all-templates:
+    get:
+      tags:
+        - Library
+      summary: Get all templates
+      description: Retrieves all credential templates
+      responses:
+        "200":
+          description: Templates retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Template"
+              examples:
+                example:
+                  summary: Example templates list
+                  value:
+                    - id: "550e8400-e29b-41d4-a716-446655440000"
+                      title: "Employee ID Credential"
+                      credentialFormat: "jwt_vc_json"
+                      status: "Published"
+                      visibility: "Public"
+                      type:
+                        - "VerifiableCredential"
+                        - "EmployeeIDCredential"
+                      tags:
+                        - "employment"
+                        - "identity"
+
+  /v0/templates/{template_id}:
+    get:
+      tags:
+        - Library
+      summary: Get a specific template
+      description: Retrieves a template by its ID
+      parameters:
+        - in: path
+          name: template_id
+          required: true
+          schema:
+            type: string
+          description: The template ID
+      responses:
+        "200":
+          description: Template retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+        "404":
+          description: Template not found
+
+  /v0/templates/create-template:
+    post:
+      tags:
+        - Library
+      summary: Create a new credential template
+      description: Creates a new template for issuing credentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  example: "Employee ID Credential"
+                display:
+                  type: object
+                credentialFormat:
+                  type: string
+                  example: "jwt_vc_json"
+                creator:
+                  type: string
+                holderType:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+                  example: ["employment", "identity"]
+                status:
+                  type: string
+                  enum: [Draft, Published, Archived]
+                  default: Draft
+                visibility:
+                  type: string
+                  enum: [Private, Public]
+                  default: Private
+                description:
+                  type: string
+                type:
+                  type: array
+                  items:
+                    type: string
+                  example:
+                    - "VerifiableCredential"
+                schema:
+                  type: object
+              required:
+                - status
+                - visibility
+                - type
+      responses:
+        "201":
+          description: Template created successfully
+          headers:
+            Location:
+              schema:
+                type: string
+                example: "/v0/templates/550e8400-e29b-41d4-a716-446655440000"
+              description: URL of the created template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+
+  /v0/templates/update-template:
+    post:
+      tags:
+        - Library
+      summary: Update an existing template
+      description: Updates one or more fields of an existing template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                templateId:
+                  type: string
+                  description: The ID of the template to update
+                title:
+                  type: string
+                display:
+                  type: object
+                credentialFormat:
+                  type: string
+                creator:
+                  type: string
+                holderType:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+                status:
+                  type: string
+                  enum: [Draft, Published, Archived]
+                visibility:
+                  type: string
+                  enum: [Private, Public]
+                description:
+                  type: string
+                type:
+                  type: array
+                  items:
+                    type: string
+                schema:
+                  type: object
+              required:
+                - templateId
+            example:
+              templateId: "550e8400-e29b-41d4-a716-446655440000"
+              title: "Updated Employee ID Credential"
+              status: "Published"
+      responses:
+        "204":
+          description: Template updated successfully
+        "404":
+          description: Template not found
+
+  /v0/templates/duplicate-template:
+    post:
+      tags:
+        - Library
+      summary: Duplicate an existing template
+      description: Creates a copy of an existing template with "Copy" appended to the title and status set to Draft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sourceTemplateId:
+                  type: string
+                  description: The ID of the template to duplicate
+              required:
+                - sourceTemplateId
+            example:
+              sourceTemplateId: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        "201":
+          description: Template duplicated successfully
+          headers:
+            Location:
+              schema:
+                type: string
+                example: "/v0/templates/660e8400-e29b-41d4-a716-446655440001"
+              description: URL of the duplicated template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+        "422":
+          description: Source template not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: "Source Template Not Found"
+                details: "No Source Template found with id: `550e8400-e29b-41d4-a716-446655440000`"
+
+  /v0/templates/delete-template:
+    post:
+      tags:
+        - Library
+      summary: Delete a template
+      description: Marks a template as deleted
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                templateId:
+                  type: string
+                  description: The ID of the template to delete
+              required:
+                - templateId
+            example:
+              templateId: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        "204":
+          description: Template deleted successfully
+        "404":
+          description: Template not found
 
   # Metadata endpoints
   /version:
@@ -1663,6 +1919,42 @@ components:
           items:
             type: object
 
+    Template:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        display:
+          type: object
+        credentialFormat:
+          type: string
+        creator:
+          type: string
+        holderType:
+          type: string
+        modifiedAt:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [Draft, Published, Archived, Deleted]
+        visibility:
+          type: string
+          enum: [Private, Public]
+        description:
+          type: string
+        type:
+          type: array
+          items:
+            type: string
+        schema:
+          type: object
+
     DcqlQuery:
       type: object
       properties:
@@ -1797,6 +2089,8 @@ tags:
     externalDocs:
       url: https://docs.impierce.com
       description: Issuance API Documentation
+  - name: Library
+    description: Library endpoints for managing credential templates and configurations.
   - name: Holder
     description: Credential holder endpoints
   - name: Verification

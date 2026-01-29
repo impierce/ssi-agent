@@ -311,7 +311,7 @@ pub mod tests {
     ) {
         set_config().set_preferred_did_method(verifier_did_method);
 
-        let verification_services = VerificationServices::default();
+        let verification_services = VerificationServices::default().await;
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
         let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
 
@@ -350,7 +350,7 @@ pub mod tests {
     ) {
         set_config().set_preferred_did_method(verifier_did_method);
 
-        let verification_services = VerificationServices::default();
+        let verification_services = VerificationServices::default().await;
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
         let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
 
@@ -391,7 +391,7 @@ pub mod tests {
     ) {
         set_config().set_preferred_did_method(verifier_did_method);
 
-        let verification_services = VerificationServices::default();
+        let verification_services = VerificationServices::default().await;
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
         let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
 
@@ -432,7 +432,7 @@ pub mod tests {
     ) {
         set_config().set_preferred_did_method(verifier_did_method);
 
-        let verification_services = VerificationServices::default();
+        let verification_services = VerificationServices::default().await;
         let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
 
@@ -473,7 +473,7 @@ pub mod tests {
         authorization_request: &GenericAuthorizationRequest,
     ) -> GenericAuthorizationResponse {
         let provider_manager = ProviderManager::new(
-            Arc::new(Subject::default()),
+            Arc::new(Subject::test_subject().await),
             vec![provider_did_method],
             vec![Algorithm::ES256],
         )
@@ -500,7 +500,11 @@ pub mod tests {
     }
 
     pub async fn verifier_did(did_method: &str) -> String {
-        VERIFIER.identifier(did_method, Algorithm::EdDSA).await.unwrap()
+        Subject::test_subject()
+            .await
+            .identifier(did_method, Algorithm::EdDSA)
+            .await
+            .unwrap()
     }
 
     pub async fn authorization_request(
@@ -644,7 +648,6 @@ pub mod tests {
     }
 
     lazy_static! {
-        pub static ref VERIFIER: Subject = Subject::default();
         pub static ref REDIRECT_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
         pub static ref RESPONSE_URI: url::Url = "https://my-domain.example.org/redirect".parse::<url::Url>().unwrap();
         pub static ref DCQL_QUERY: DcqlQuery = DcqlQuery {

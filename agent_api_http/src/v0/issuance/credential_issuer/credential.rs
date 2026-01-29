@@ -193,9 +193,11 @@ pub mod tests {
         v0::issuance::{credentials::CredentialsEndpointRequest, offers::tests::offers},
     };
 
+    use agent_authorization::services::AuthorizationServices;
     use agent_event_publisher_http::EventPublisherHttp;
     use agent_issuance::credential::aggregate::CredentialExpiry;
     use agent_issuance::offer::event::OfferEvent;
+    use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::IssuanceState;
     use agent_secret_manager::service::Service;
     use agent_shared::config::{set_config, Events};
@@ -408,7 +410,8 @@ pub mod tests {
             (None, Default::default())
         };
 
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), issuance_event_publishers).await);
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, issuance_event_publishers).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         if !with_anonymous_access {
@@ -449,7 +452,7 @@ pub mod tests {
         let grants = offers(&mut issuance_app, &credential_configuration_id).await.unwrap();
 
         let authorization_state =
-            Arc::new(authorization_state(&InMemory, Service::default(), Default::default()).await);
+            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

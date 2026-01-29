@@ -1,7 +1,7 @@
 pub mod all_templates;
 
 use super::event::TemplateEvent;
-use crate::template::aggregate::Template;
+use crate::template::aggregate::{Status, Template};
 use cqrs_es::{EventEnvelope, View};
 
 pub type TemplateView = Template;
@@ -13,6 +13,7 @@ impl View<Template> for Template {
         match &event.payload {
             TemplateCreated {
                 template_id,
+                source_template_id,
                 title,
                 display,
                 credential_format,
@@ -27,6 +28,7 @@ impl View<Template> for Template {
                 schema,
             } => {
                 self.template_id.clone_from(template_id);
+                self.source_template_id.clone_from(source_template_id);
                 self.title.clone_from(title);
                 self.display.clone_from(display);
                 self.credential_format.clone_from(credential_format);
@@ -127,6 +129,9 @@ impl View<Template> for Template {
             } => {
                 self.schema.replace(schema.clone());
                 self.modified_at.replace(modified_at.clone());
+            }
+            TemplateDeleted { template_id: _ } => {
+                self.status = Status::Deleted;
             }
         }
     }

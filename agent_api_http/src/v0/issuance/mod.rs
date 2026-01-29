@@ -20,7 +20,10 @@ use crate::v0::issuance::{
     },
     credentials::{all_credentials, credentials, patch_credential},
     nonce::nonce,
-    offers::{all_offers, offer, offers, send::send},
+    offers::{
+        all_offers, offer, offers,
+        send::{individual_offer, organization_offer},
+    },
 };
 use crate::API_VERSION;
 use agent_issuance::state::IssuanceState;
@@ -41,7 +44,8 @@ pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
                 .route("/credential-configurations", post(credential_configurations))
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
-                .route("/offers/send", post(send)),
+                .route("/offers/send-offer-to-individual", post(individual_offer))
+                .route("/offers/send-offer-to-organization", post(organization_offer)),
         )
         .route(
             "/.well-known/oauth-authorization-server",

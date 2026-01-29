@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager_consumer::resolver::Resolver;
 use did_manager_identity_stronghold_ext::StrongholdExtStorage;
+use did_manager_iota::consumer::NodeUrls;
 use identity_iota::did::DIDUrl;
 use identity_iota::storage::{JwkStorage, KeyId};
 use identity_iota::verification::jwk::Jwk;
@@ -21,6 +22,7 @@ use tokio::sync::Mutex;
 pub struct Subject {
     pub stronghold_storage: StrongholdExtStorage,
     pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DIDUrl>>>,
+    pub resolver: Resolver,
 }
 
 impl Subject {
@@ -28,9 +30,23 @@ impl Subject {
     pub async fn new() -> Self {
         let stronghold_storage = stronghold_storage().await;
 
+        // TODO: all networks are set to the same node URL ==> introduce per-network configuration?
+        let node_urls = NodeUrls {
+            mainnet: config().iota_node_url.clone(),
+            testnet: config().iota_node_url.clone(),
+            devnet: config().iota_node_url.clone(),
+        };
+
+        let username_password = config()
+            .iota_node_username
+            .clone()
+            .zip(config().iota_node_password.clone());
+        let username_password = username_password.as_ref().map(|(u, p)| (u.as_str(), p.as_str()));
+
         Self {
             stronghold_storage,
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
+            resolver: Resolver::new_with_options(None, Some(node_urls), username_password).await,
         }
     }
 
@@ -73,10 +89,8 @@ impl SubjectExt for Subject {
         let did_url =
             identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
 
-        // TODO: Make sure the resolver only needs to be created once.
-        let resolver = Resolver::new().await;
-
-        let document = resolver
+        let document = self
+            .resolver
             .resolve(did_url.did().as_str())
             .await
             .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
@@ -112,35 +126,34 @@ mod default_subject {
     }
 
     // This `Default` implementation for `Subject` returns a new `Subject` with the Verification Method IDs already preloaded.
-    impl Default for Subject {
-        fn default() -> Self {
-            futures::executor::block_on(async {
-                let stronghold_storage = stronghold_storage().await;
+    impl Subject {
+        pub async fn test_subject() -> Self {
+            let stronghold_storage = stronghold_storage().await;
 
-                let verification_method_ids = Arc::new(Mutex::new(HashMap::from_iter(vec![
-                    (
-                        StorageKey::new(SupportedDidMethod::Key, Algorithm::ES256),
-                        Self::DID_KEY_ES256_VERIFICATION_METHOD_ID.parse().unwrap(),
-                    ),
-                    (
-                        StorageKey::new(SupportedDidMethod::Key, Algorithm::EdDSA),
-                        Self::DID_KEY_EDDSA_VERIFICATION_METHOD_ID.parse().unwrap(),
-                    ),
-                    (
-                        StorageKey::new(SupportedDidMethod::Jwk, Algorithm::ES256),
-                        Self::DID_JWK_ES256_VERIFICATION_METHOD_ID.parse().unwrap(),
-                    ),
-                    (
-                        StorageKey::new(SupportedDidMethod::Jwk, Algorithm::EdDSA),
-                        Self::DID_JWK_EDDSA_VERIFICATION_METHOD_ID.parse().unwrap(),
-                    ),
-                ])));
+            let verification_method_ids = Arc::new(Mutex::new(HashMap::from_iter(vec![
+                (
+                    StorageKey::new(SupportedDidMethod::Key, Algorithm::ES256),
+                    Self::DID_KEY_ES256_VERIFICATION_METHOD_ID.parse().unwrap(),
+                ),
+                (
+                    StorageKey::new(SupportedDidMethod::Key, Algorithm::EdDSA),
+                    Self::DID_KEY_EDDSA_VERIFICATION_METHOD_ID.parse().unwrap(),
+                ),
+                (
+                    StorageKey::new(SupportedDidMethod::Jwk, Algorithm::ES256),
+                    Self::DID_JWK_ES256_VERIFICATION_METHOD_ID.parse().unwrap(),
+                ),
+                (
+                    StorageKey::new(SupportedDidMethod::Jwk, Algorithm::EdDSA),
+                    Self::DID_JWK_EDDSA_VERIFICATION_METHOD_ID.parse().unwrap(),
+                ),
+            ])));
 
-                Self {
-                    stronghold_storage,
-                    verification_method_ids,
-                }
-            })
+            Self {
+                stronghold_storage,
+                verification_method_ids,
+                resolver: Resolver::new().await,
+            }
         }
     }
 }
@@ -151,10 +164,8 @@ impl Verify for Subject {
         let did_url =
             identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
 
-        // TODO: Make sure the resolver only needs to be created once.
-        let resolver = Resolver::new().await;
-
-        let document = resolver
+        let document = self
+            .resolver
             .resolve(did_url.did().as_str())
             .await
             .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
@@ -283,7 +294,7 @@ mod tests {
     async fn es256_signed_jwt_successfully_verified() {
         set_config().set_secret_manager_config(SECRET_MANAGER_CONFIG.clone());
 
-        let subject = Arc::new(Subject::default());
+        let subject = Arc::new(Subject::test_subject().await);
 
         let mut split = ES256_SIGNED_JWT.rsplitn(2, '.');
         let (signature, message) = (split.next().unwrap(), split.next().unwrap());
@@ -303,7 +314,7 @@ mod tests {
     async fn eddsa_signed_jwt_successfully_verified() {
         set_config().set_secret_manager_config(SECRET_MANAGER_CONFIG.clone());
 
-        let subject = Arc::new(Subject::default());
+        let subject = Arc::new(Subject::test_subject().await);
 
         let mut split = EDDSA_SIGNED_JWT.rsplitn(2, '.');
         let (signature, message) = (split.next().unwrap(), split.next().unwrap());
