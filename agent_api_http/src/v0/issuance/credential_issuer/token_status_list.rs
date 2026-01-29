@@ -41,7 +41,7 @@ pub async fn token_status_list(
 pub mod tests {
     use std::sync::Arc;
 
-    use agent_issuance::state::initialize;
+    use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
     use agent_store::{in_memory::InMemory, issuance_state};
@@ -61,10 +61,10 @@ pub mod tests {
     /// The remainder of the test breaks down the Token Status List response in various steps and checks these steps one by one.
     #[tokio::test]
     pub async fn test_token_status_list() {
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
+        let issuance_state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, vec![]).await);
         initialize(&issuance_state).await.unwrap();
 
-        let relying_party_state = Subject::default();
+        let relying_party_state = Subject::test_subject().await;
 
         let mut app = router(issuance_state);
 

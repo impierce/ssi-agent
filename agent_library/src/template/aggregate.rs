@@ -47,6 +47,7 @@ pub enum Status {
     Draft,
     Published,
     Archived,
+    Deleted,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Eq, PartialEq)]
@@ -62,6 +63,7 @@ pub enum Visibility {
 pub struct Template {
     #[serde(rename = "id")]
     pub template_id: String,
+    pub source_template_id: Option<String>,
     pub title: Option<String>,
     pub display: Option<Display>,
     pub credential_format: Option<CredentialFormat>,
@@ -73,7 +75,7 @@ pub struct Template {
     pub visibility: Visibility,
     pub description: Option<String>,
     pub r#type: Vec<String>,
-    pub schema: Option<serde_json::Value>,
+    pub schema: Box<Option<serde_json::Value>>,
 }
 
 #[async_trait]
@@ -100,6 +102,7 @@ impl Aggregate for Template {
         match command {
             CreateTemplate {
                 template_id,
+                source_template_id,
                 title,
                 display,
                 credential_format,
@@ -119,6 +122,7 @@ impl Aggregate for Template {
 
                 Ok(vec![TemplateCreated {
                     template_id,
+                    source_template_id,
                     title,
                     display,
                     credential_format,
@@ -277,6 +281,7 @@ impl Aggregate for Template {
                     modified_at,
                 }])
             }
+            DeleteTemplate { template_id } => Ok(vec![TemplateDeleted { template_id }]),
         }
     }
 
@@ -288,6 +293,7 @@ impl Aggregate for Template {
         match event {
             TemplateCreated {
                 template_id,
+                source_template_id,
                 title,
                 display,
                 credential_format,
@@ -302,6 +308,7 @@ impl Aggregate for Template {
                 schema,
             } => {
                 self.template_id = template_id;
+                self.source_template_id = source_template_id;
                 self.title = title;
                 self.display = display;
                 self.credential_format = credential_format;
@@ -400,8 +407,13 @@ impl Aggregate for Template {
                 schema,
                 modified_at,
             } => {
-                self.schema = Some(schema);
+                *self.schema = Some(schema);
                 self.modified_at.replace(modified_at);
+            }
+            TemplateDeleted { template_id } => {
+                *self = Self::default();
+                self.template_id = template_id;
+                self.status = Status::Deleted;
             }
         }
     }
@@ -438,6 +450,7 @@ pub mod document_tests {
             .given_no_previous_events()
             .when(TemplateCommand::CreateTemplate {
                 template_id: template_id.clone(),
+                source_template_id: None,
                 title: title.clone(),
                 display: display.clone(),
                 credential_format: credential_format.clone(),
@@ -448,10 +461,11 @@ pub mod document_tests {
                 visibility: visibility.clone(),
                 description: description.clone(),
                 r#type: r#type.clone(),
-                schema: schema.clone(),
+                schema: Box::new(schema.clone()),
             })
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
                 template_id,
+                source_template_id: None,
                 title,
                 display,
                 credential_format,
@@ -463,7 +477,7 @@ pub mod document_tests {
                 visibility,
                 description,
                 r#type,
-                schema,
+                schema: Box::new(schema),
             }])
     }
 }

@@ -316,7 +316,9 @@ pub mod tests {
     use super::*;
     use agent_api_http::v0::{authorization, issuance};
     use agent_api_http::API_VERSION;
+    use agent_authorization::services::AuthorizationServices;
     use agent_issuance::server_config::aggregate::test_utils::credential_configurations_supported;
+    use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
     use agent_shared::config::config;
     use agent_shared::config::config_mut;
@@ -349,12 +351,13 @@ pub mod tests {
         config_mut().credential_endpoint = application_url.join("openid4vci/credential").unwrap();
         config_mut().credential_offer_uri = application_url.join("openid4vci/credential-offer/").unwrap();
 
-        let issuance_state = Arc::new(issuance_state(&InMemory, Service::default(), Default::default()).await);
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let mut credential_isser = issuance::router(issuance_state.clone());
 
         let authorization_state =
-            Arc::new(authorization_state(&InMemory, Service::default(), Default::default()).await);
+            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
@@ -438,7 +441,7 @@ pub mod tests {
         #[future(awt)] credential_offer_parameters: Box<CredentialOfferParameters>,
         credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
     ) {
-        OfferTestFramework::with(Service::default())
+        OfferTestFramework::with(HolderServices::default().await)
             .given_no_previous_events()
             .when_async(OfferCommand::ReceiveCredentialOffer {
                 received_offer_id: received_offer_id.clone(),
@@ -468,7 +471,7 @@ pub mod tests {
         #[future(awt)] credential_offer_parameters: Box<CredentialOfferParameters>,
         credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
     ) {
-        OfferTestFramework::with(Service::default())
+        OfferTestFramework::with(HolderServices::default().await)
             .given(vec![OfferEvent::CredentialOfferReceived {
                 received_offer_id: received_offer_id.clone(),
                 credential_offer: credential_offer_parameters,
@@ -512,7 +515,7 @@ pub mod tests {
         credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
         signed_credentials: Vec<OfferCredential>,
     ) {
-        OfferTestFramework::with(Service::default())
+        OfferTestFramework::with(HolderServices::default().await)
             .given(vec![
                 OfferEvent::CredentialOfferReceived {
                     received_offer_id: received_offer_id.clone(),
@@ -554,7 +557,7 @@ pub mod tests {
         #[future(awt)] credential_offer_parameters: Box<CredentialOfferParameters>,
         credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
     ) {
-        OfferTestFramework::with(Service::default())
+        OfferTestFramework::with(HolderServices::default().await)
             .given(vec![OfferEvent::CredentialOfferReceived {
                 received_offer_id: received_offer_id.clone(),
                 credential_offer: credential_offer_parameters,
