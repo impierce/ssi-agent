@@ -2402,6 +2402,7 @@ checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 [[package]]
 name = "consumer"
 version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager?rev=03a2aa4#03a2aa42ba1e3b3d3987028c25991c24c17d7132"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -3160,6 +3161,7 @@ dependencies = [
 [[package]]
 name = "did_iota"
 version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager?rev=03a2aa4#03a2aa42ba1e3b3d3987028c25991c24c17d7132"
 dependencies = [
  "anyhow",
  "identity_iota",
@@ -3174,6 +3176,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager?rev=03a2aa4#03a2aa42ba1e3b3d3987028c25991c24c17d7132"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -3190,6 +3193,7 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager?rev=03a2aa4#03a2aa42ba1e3b3d3987028c25991c24c17d7132"
 dependencies = [
  "did-method-key",
  "identity_iota",
@@ -3236,6 +3240,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager?rev=03a2aa4#03a2aa42ba1e3b3d3987028c25991c24c17d7132"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -4965,7 +4970,7 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 [[package]]
 name = "identity_core"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?branch=feat/sd-jwt-dm-v2#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
+source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
 dependencies = [
  "deranged",
  "js-sys",
@@ -4983,7 +4988,7 @@ dependencies = [
 [[package]]
 name = "identity_credential"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?branch=feat/sd-jwt-dm-v2#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
+source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5011,7 +5016,7 @@ dependencies = [
 [[package]]
 name = "identity_did"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?branch=feat/sd-jwt-dm-v2#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
+source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
 dependencies = [
  "did_url_parser 0.3.0",
  "form_urlencoded",
@@ -5025,7 +5030,7 @@ dependencies = [
 [[package]]
 name = "identity_document"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?branch=feat/sd-jwt-dm-v2#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
+source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
 dependencies = [
  "did_url_parser 0.2.0",
  "identity_core",
@@ -5040,7 +5045,7 @@ dependencies = [
 [[package]]
 name = "identity_eddsa_verifier"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?branch=feat/sd-jwt-dm-v2#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
+source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
 dependencies = [
  "identity_jose",
  "iota-crypto",
@@ -5049,7 +5054,7 @@ dependencies = [
 [[package]]
 name = "identity_iota"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?branch=feat/sd-jwt-dm-v2#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
+source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
 dependencies = [
  "identity_core",
  "identity_credential",
@@ -5065,7 +5070,7 @@ dependencies = [
 [[package]]
 name = "identity_iota_core"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?branch=feat/sd-jwt-dm-v2#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
+source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -5110,7 +5115,7 @@ dependencies = [
 [[package]]
 name = "identity_jose"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?branch=feat/sd-jwt-dm-v2#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
+source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
 dependencies = [
  "anyhow",
  "bls12_381_plus 0.8.18",
@@ -5130,7 +5135,7 @@ dependencies = [
 [[package]]
 name = "identity_resolver"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?branch=feat/sd-jwt-dm-v2#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
+source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
 dependencies = [
  "async-trait",
  "futures",
@@ -5147,7 +5152,7 @@ dependencies = [
 [[package]]
 name = "identity_storage"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?branch=feat/sd-jwt-dm-v2#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
+source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5175,7 +5180,7 @@ dependencies = [
 [[package]]
 name = "identity_stronghold"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?branch=feat/sd-jwt-dm-v2#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
+source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
 dependencies = [
  "async-trait",
  "identity_storage",
@@ -5191,6 +5196,7 @@ dependencies = [
 [[package]]
 name = "identity_stronghold_ext"
 version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager?rev=03a2aa4#03a2aa42ba1e3b3d3987028c25991c24c17d7132"
 dependencies = [
  "async-trait",
  "elliptic-curve 0.13.8",
@@ -5210,7 +5216,7 @@ dependencies = [
 [[package]]
 name = "identity_verification"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?branch=feat/sd-jwt-dm-v2#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
+source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
 dependencies = [
  "identity_core",
  "identity_did",
@@ -8380,6 +8386,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
+source = "git+https://github.com/impierce/openid4vc?rev=31783fd#31783fd5d5c2804c3f0f2051186c1d95b904d0cb"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8404,6 +8411,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
+source = "git+https://github.com/impierce/openid4vc?rev=31783fd#31783fd5d5c2804c3f0f2051186c1d95b904d0cb"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8436,6 +8444,7 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
+source = "git+https://github.com/impierce/openid4vc?rev=31783fd#31783fd5d5c2804c3f0f2051186c1d95b904d0cb"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8463,6 +8472,7 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
+source = "git+https://github.com/impierce/openid4vc?rev=31783fd#31783fd5d5c2804c3f0f2051186c1d95b904d0cb"
 dependencies = [
  "anyhow",
  "chrono",
@@ -11146,6 +11156,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager?rev=03a2aa4#03a2aa42ba1e3b3d3987028c25991c24c17d7132"
 dependencies = [
  "identity_iota",
  "identity_storage",
@@ -11251,6 +11262,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
+source = "git+https://github.com/impierce/openid4vc?rev=31783fd#31783fd5d5c2804c3f0f2051186c1d95b904d0cb"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -12602,9 +12614,9 @@ checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
 
 [[package]]
 name = "tonic"
-version = "0.14.2"
+version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb7613188ce9f7df5bfe185db26c5814347d110db17920415cf2fbcad85e7203"
+checksum = "a286e33f82f8a1ee2df63f4fa35c0becf4a85a0cb03091a15fd7bf0b402dc94a"
 dependencies = [
  "async-trait",
  "axum 0.8.3",
@@ -12632,9 +12644,9 @@ dependencies = [
 
 [[package]]
 name = "tonic-health"
-version = "0.14.2"
+version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a82868bf299e0a1d2e8dce0dc33a46c02d6f045b2c1f1d6cc8dc3d0bf1812ef"
+checksum = "8dbde2c702c4be12b9b2f6f7e6c824a84a7b7be177070cada8ee575a581af359"
 dependencies = [
  "prost",
  "tokio",
@@ -12645,9 +12657,9 @@ dependencies = [
 
 [[package]]
 name = "tonic-prost"
-version = "0.14.2"
+version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66bd50ad6ce1252d87ef024b3d64fe4c3cf54a86fb9ef4c631fdd0ded7aeaa67"
+checksum = "d6c55a2d6a14174563de34409c9f92ff981d006f56da9c6ecd40d9d4a31500b0"
 dependencies = [
  "bytes",
  "prost",

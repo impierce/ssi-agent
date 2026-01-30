@@ -14,7 +14,7 @@ use identity_core::convert::FromJson;
 use identity_credential::credential::{
     Credential as W3CVerifiableCredential, CredentialBuilder as W3CVerifiableCredentialBuilder, Issuer,
 };
-use identity_credential::sd_jwt_vc::SdJwtVcClaims;
+use identity_credential::sd_jwt_vc::{SdJwtVcBuilder, SdJwtVcClaims};
 use jsonwebtoken::Header;
 use oauth_tsl::status_list::StatusType;
 use oauth_tsl::tokens::status_list_token::StatusListTyp;
@@ -331,6 +331,30 @@ impl Aggregate for Credential {
                         let mut raw = data.raw;
                         raw["vct"] = json!(vct);
 
+                        // #[cfg(feature = "test_utils")]
+                        // let issuance_date = "2010-01-01T00:00:00Z".to_string();
+                        // #[cfg(not(feature = "test_utils"))]
+                        // let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+
+                        // let issuance_date = identity_core::common::Timestamp::parse(&issuance_date)
+                        //     .expect("Could not parse issuance_date");
+
+                        // let expiration_date = match expires_at {
+                        //     CredentialExpiry::Fixed(fixed) => {
+                        //         let fixed = identity_core::common::Timestamp::from_unix(fixed.timestamp())
+                        //             .map_err(|_| InvalidExpirationDateError)?;
+
+                        //         Some(fixed)
+                        //     }
+                        //     CredentialExpiry::Never => None,
+                        // };
+
+                        // raw["iat"] = json!(issuance_date.to_unix());
+                        // raw["nbf"] = json!(issuance_date.to_unix());
+                        // if let Some(expiration_date) = expiration_date {
+                        //     raw["exp"] = json!(expiration_date);
+                        // }
+
                         let credential_status = CredentialStatus {
                             index: credential_status_index,
                             status: StatusType::VALID,
@@ -392,23 +416,6 @@ impl Aggregate for Credential {
 
                 let mut credential = self.data.as_ref().ok_or(MissingCredentialDataError)?.clone();
 
-                #[cfg(feature = "test_utils")]
-                let iat = 1262304000; // 2010-01-01T00:00:00Z
-                #[cfg(not(feature = "test_utils"))]
-                let iat = credential.raw["issuanceDate"]
-                    .as_str()
-                    .unwrap()
-                    .parse::<chrono::DateTime<chrono::Utc>>()
-                    .unwrap()
-                    .timestamp();
-
-                let exp = credential.raw["expirationDate"].as_str().map(|expiration_date| {
-                    expiration_date
-                        .parse::<chrono::DateTime<chrono::Utc>>()
-                        .expect("Could not parse `expirationDate` to DateTime")
-                        .timestamp()
-                });
-
                 let signed_credential = if let CredentialFormats::DcSdJwt(Parameters::<DcSdJwt> {
                     parameters: DcSdJwtParameters { .. },
                 }) = &self.credential_configuration.credential_format
@@ -424,31 +431,59 @@ impl Aggregate for Credential {
                         jsonwebtoken::decode_header(&proof).ok().and_then(|header| header.kid)
                     });
 
-                    let mut sd_jwt_vc_claims: SdJwtVcClaims =
-                        serde_json::from_value(credential.raw).map_err(|e| BuildCredentialError(e.to_string()))?;
-                    sd_jwt_vc_claims.iss = issuer_did.parse().ok();
-                    sd_jwt_vc_claims.status = serde_json::from_value(serde_json::json!({
-                        "status_list": {
-                            "idx": self.credential_status.index,
-                            "uri": get_status_list_url(self.credential_status.index)?,
-                        }
-                    }))
-                    .ok();
-                    sd_jwt_vc_claims.iat = Timestamp::from_unix(iat).ok();
-                    sd_jwt_vc_claims.nbf = Timestamp::from_unix(iat).ok();
-                    sd_jwt_vc_claims.exp = exp.and_then(|exp| Timestamp::from_unix(exp).ok());
+                    println!("{}", serde_json::to_string_pretty(&credential.raw).unwrap());
+
+                    #[cfg(feature = "test_utils")]
+                    let issuance_date = "2010-01-01T00:00:00Z".to_string();
+                    #[cfg(not(feature = "test_utils"))]
+                    let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+
+                    let issuance_date =
+                        identity_core::common::Timestamp::parse(&issuance_date).expect("Could not parse issuance_date");
+
+                    // let expiration_date = match expires_at {
+                    //     CredentialExpiry::Fixed(fixed) => {
+                    //         let fixed = identity_core::common::Timestamp::from_unix(fixed.timestamp())
+                    //             .map_err(|_| InvalidExpirationDateError)?;
+
+                    //         Some(fixed)
+                    //     }
+                    //     CredentialExpiry::Never => None,
+                    // };
+
+                    // raw["iat"] = json!(issuance_date.to_unix());
+                    // raw["nbf"] = json!(issuance_date.to_unix());
+                    // if let Some(expiration_date) = expiration_date {
+                    //     raw["exp"] = json!(expiration_date);
+                    // }
 
                     let kid = issuer
                         .key_id(&get_preferred_did_method().to_string(), algorithm)
                         .await
                         .unwrap();
 
+                    let sd_jwt_vc_claims = SdJwtVcClaims::from_json_value(credential.raw.clone())
+                        .map_err(|e| BuildCredentialError(format!("Failed to extract SD-JWT VC claims: {}", e)))?;
+
                     let paths = sd_jwt_vc_claims.keys().cloned().collect::<Vec<String>>();
 
-                    let mut builder = SdJwtBuilder::new(sd_jwt_vc_claims)
+                    let mut builder = SdJwtVcBuilder::new(credential.raw.clone())
                         .unwrap()
                         .header("typ", "dc+sd-jwt")
                         .header("kid", kid);
+
+                    builder = builder.iss(issuer_did.parse().unwrap());
+                    builder = builder.status(
+                        serde_json::from_value(serde_json::json!({
+                            "status_list": {
+                                "idx": self.credential_status.index,
+                                "uri": get_status_list_url(self.credential_status.index)?,
+                            }
+                        }))
+                        .unwrap(),
+                    );
+                    builder = builder.iat(issuance_date);
+                    builder = builder.nbf(issuance_date);
 
                     if let Some(holder_kid) = holder_kid.clone() {
                         builder = builder.require_key_binding(RequiredKeyBinding::Kid(holder_kid));
@@ -471,6 +506,23 @@ impl Aggregate for Credential {
                     if let Some(ref id) = id {
                         credential.raw["id"] = json!(id);
                     };
+
+                    #[cfg(feature = "test_utils")]
+                    let iat = 1262304000; // 2010-01-01T00:00:00Z
+                    #[cfg(not(feature = "test_utils"))]
+                    let iat = credential.raw["issuanceDate"]
+                        .as_str()
+                        .unwrap()
+                        .parse::<chrono::DateTime<chrono::Utc>>()
+                        .unwrap()
+                        .timestamp();
+
+                    let exp = credential.raw["expirationDate"].as_str().map(|expiration_date| {
+                        expiration_date
+                            .parse::<chrono::DateTime<chrono::Utc>>()
+                            .expect("Could not parse `expirationDate` to DateTime")
+                            .timestamp()
+                    });
 
                     credential.raw["issuer"] = json!(issuer_did);
 
