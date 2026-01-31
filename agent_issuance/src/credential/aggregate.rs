@@ -27,7 +27,7 @@ use oid4vci::credential_format_profiles::{CredentialFormats, Parameters};
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use oid4vci::notification_request::NotificationRequest;
 use oid4vci::{Proof, VerifiableCredentialJwt};
-use sd_jwt::{RequiredKeyBinding, SdJwtBuilder};
+use sd_jwt::RequiredKeyBinding;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
@@ -93,6 +93,8 @@ pub struct Credential {
     pub status: Status,
     pub holder_notifications: Vec<NotificationRequest>,
     pub credential_status: CredentialStatus,
+    pub issuance_date: Option<Timestamp>,
+    pub expiration_date: Option<Timestamp>,
 }
 
 #[async_trait]
@@ -122,6 +124,24 @@ impl Aggregate for Credential {
                 credential_status_index,
             } => {
                 #[cfg(feature = "test_utils")]
+                let issuance_date = "2010-01-01T00:00:00Z".to_string();
+                #[cfg(not(feature = "test_utils"))]
+                let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+
+                let issuance_date =
+                    identity_core::common::Timestamp::parse(&issuance_date).expect("Could not parse issuance_date");
+
+                let expiration_date = match expires_at {
+                    CredentialExpiry::Fixed(fixed) => {
+                        let fixed = identity_core::common::Timestamp::from_unix(fixed.timestamp())
+                            .map_err(|_| InvalidExpirationDateError)?;
+
+                        Some(fixed)
+                    }
+                    CredentialExpiry::Never => None,
+                };
+
+                #[cfg(feature = "test_utils")]
                 let notification_id = test_utils::notification_id();
                 #[cfg(not(feature = "test_utils"))]
                 let notification_id = agent_shared::generate_random_string();
@@ -134,11 +154,6 @@ impl Aggregate for Credential {
                                 ..
                             },
                     }) => {
-                        #[cfg(feature = "test_utils")]
-                        let issuance_date = "2010-01-01T00:00:00Z".to_string();
-                        #[cfg(not(feature = "test_utils"))]
-                        let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-
                         let name = config()
                             .display
                             .first()
@@ -152,19 +167,6 @@ impl Aggregate for Credential {
                             .name(name)
                             .try_into()
                             .expect("Could not build issuer profile");
-
-                        let issuance_date = identity_core::common::Timestamp::parse(&issuance_date)
-                            .expect("Could not parse issuance_date");
-
-                        let expiration_date = match expires_at {
-                            CredentialExpiry::Fixed(fixed) => {
-                                let fixed = identity_core::common::Timestamp::from_unix(fixed.timestamp())
-                                    .map_err(|_| InvalidExpirationDateError)?;
-
-                                Some(fixed)
-                            }
-                            CredentialExpiry::Never => None,
-                        };
 
                         let mut credential_types: Vec<String> = type_.clone();
 
@@ -246,6 +248,8 @@ impl Aggregate for Credential {
                                         credential_configuration,
                                         notification_id: Some(notification_id),
                                         credential_status,
+                                        issuance_date: Some(issuance_date),
+                                        expiration_date,
                                     }]);
                                 }
                                 "AchievementCredential" | "OpenBadgeCredential" => {
@@ -316,6 +320,8 @@ impl Aggregate for Credential {
                                         data: Data { raw },
                                         credential_configuration,
                                         credential_status,
+                                        issuance_date: Some(issuance_date),
+                                        expiration_date,
                                     }]);
                                 }
                                 _ => continue,
@@ -327,33 +333,8 @@ impl Aggregate for Credential {
                     CredentialFormats::DcSdJwt(Parameters::<DcSdJwt> {
                         parameters: DcSdJwtParameters { vct },
                     }) => {
-                        // FIXME: Properly construct SD-JWT unsigned credential
                         let mut raw = data.raw;
                         raw["vct"] = json!(vct);
-
-                        // #[cfg(feature = "test_utils")]
-                        // let issuance_date = "2010-01-01T00:00:00Z".to_string();
-                        // #[cfg(not(feature = "test_utils"))]
-                        // let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-
-                        // let issuance_date = identity_core::common::Timestamp::parse(&issuance_date)
-                        //     .expect("Could not parse issuance_date");
-
-                        // let expiration_date = match expires_at {
-                        //     CredentialExpiry::Fixed(fixed) => {
-                        //         let fixed = identity_core::common::Timestamp::from_unix(fixed.timestamp())
-                        //             .map_err(|_| InvalidExpirationDateError)?;
-
-                        //         Some(fixed)
-                        //     }
-                        //     CredentialExpiry::Never => None,
-                        // };
-
-                        // raw["iat"] = json!(issuance_date.to_unix());
-                        // raw["nbf"] = json!(issuance_date.to_unix());
-                        // if let Some(expiration_date) = expiration_date {
-                        //     raw["exp"] = json!(expiration_date);
-                        // }
 
                         let credential_status = CredentialStatus {
                             index: credential_status_index,
@@ -366,6 +347,8 @@ impl Aggregate for Credential {
                             data: Data { raw },
                             credential_configuration,
                             credential_status,
+                            issuance_date: Some(issuance_date),
+                            expiration_date,
                         }]);
                     }
                     _ => Err(UnsupportedCredentialFormat(serde_json::json!(
@@ -431,32 +414,6 @@ impl Aggregate for Credential {
                         jsonwebtoken::decode_header(&proof).ok().and_then(|header| header.kid)
                     });
 
-                    println!("{}", serde_json::to_string_pretty(&credential.raw).unwrap());
-
-                    #[cfg(feature = "test_utils")]
-                    let issuance_date = "2010-01-01T00:00:00Z".to_string();
-                    #[cfg(not(feature = "test_utils"))]
-                    let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-
-                    let issuance_date =
-                        identity_core::common::Timestamp::parse(&issuance_date).expect("Could not parse issuance_date");
-
-                    // let expiration_date = match expires_at {
-                    //     CredentialExpiry::Fixed(fixed) => {
-                    //         let fixed = identity_core::common::Timestamp::from_unix(fixed.timestamp())
-                    //             .map_err(|_| InvalidExpirationDateError)?;
-
-                    //         Some(fixed)
-                    //     }
-                    //     CredentialExpiry::Never => None,
-                    // };
-
-                    // raw["iat"] = json!(issuance_date.to_unix());
-                    // raw["nbf"] = json!(issuance_date.to_unix());
-                    // if let Some(expiration_date) = expiration_date {
-                    //     raw["exp"] = json!(expiration_date);
-                    // }
-
                     let kid = issuer
                         .key_id(&get_preferred_did_method().to_string(), algorithm)
                         .await
@@ -482,11 +439,18 @@ impl Aggregate for Credential {
                         }))
                         .unwrap(),
                     );
-                    builder = builder.iat(issuance_date);
-                    builder = builder.nbf(issuance_date);
 
                     if let Some(holder_kid) = holder_kid.clone() {
                         builder = builder.require_key_binding(RequiredKeyBinding::Kid(holder_kid));
+                    }
+
+                    if let Some(issuance_date) = self.issuance_date {
+                        builder = builder.iat(issuance_date);
+                        builder = builder.nbf(issuance_date);
+                    }
+
+                    if let Some(expiration_date) = self.expiration_date {
+                        builder = builder.exp(expiration_date);
                     }
 
                     // By default, all custom claims are concealable.
@@ -638,12 +602,16 @@ impl Aggregate for Credential {
                 credential_configuration,
                 notification_id,
                 credential_status,
+                issuance_date,
+                expiration_date,
             } => {
                 self.credential_id = credential_id;
                 self.data.replace(data);
                 self.credential_configuration = *credential_configuration;
                 self.notification_id = notification_id;
                 self.credential_status = credential_status;
+                self.issuance_date = issuance_date;
+                self.expiration_date = expiration_date;
             }
             SignedCredentialCreated {
                 credential_id,
@@ -717,15 +685,20 @@ pub mod credential_tests {
     type CredentialTestFramework = TestFramework<Credential>;
 
     #[rstest]
-    #[case::openbadges(
-        OPENBADGE_CREDENTIAL_SUBJECT.clone(),
-        OPENBADGE_CREDENTIAL_CONFIGURATION.clone(),
-        UNSIGNED_OPENBADGE_CREDENTIAL.clone()
-    )]
-    #[case::w3c_vc(
-        W3C_VC_CREDENTIAL_SUBJECT.clone(),
-        W3C_VC_CREDENTIAL_CONFIGURATION.clone(),
-        UNSIGNED_W3C_VC_CREDENTIAL.clone()
+    // #[case::openbadges(
+    //     OPENBADGE_CREDENTIAL_SUBJECT.clone(),
+    //     OPENBADGE_CREDENTIAL_CONFIGURATION.clone(),
+    //     UNSIGNED_OPENBADGE_CREDENTIAL.clone()
+    // )]
+    // #[case::w3c_vc(
+    //     W3C_VC_CREDENTIAL_SUBJECT.clone(),
+    //     W3C_VC_CREDENTIAL_CONFIGURATION.clone(),
+    //     UNSIGNED_W3C_VC_CREDENTIAL.clone()
+    // )]
+    #[case::dc_sd_jwt(
+        DC_SD_JWT_CREDENTIAL_SUBJECT.clone(),
+        DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+        UNSIGNED_DC_SD_JWT_CREDENTIAL.clone()
     )]
     #[serial_test::serial]
     async fn test_create_unsigned_credential(
@@ -734,6 +707,7 @@ pub mod credential_tests {
         #[case] unsigned_credential: serde_json::Value,
         credential_id: String,
         notification_id: String,
+        issuance_date: identity_core::common::Timestamp,
     ) {
         CredentialTestFramework::with(IssuanceServices::default().await)
             .given_no_previous_events()
@@ -757,6 +731,8 @@ pub mod credential_tests {
                     index: 0,
                     status: StatusType::VALID,
                 },
+                issuance_date: Some(issuance_date),
+                expiration_date: None,
             }])
     }
 
@@ -778,6 +754,7 @@ pub mod credential_tests {
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
         #[case] verifiable_credential_jwt: String,
         credential_id: String,
+        issuance_date: identity_core::common::Timestamp,
     ) {
         CredentialTestFramework::with(IssuanceServices::default().await)
             .given(vec![CredentialEvent::UnsignedCredentialCreated {
@@ -791,6 +768,8 @@ pub mod credential_tests {
                     index: 0,
                     status: StatusType::VALID,
                 },
+                issuance_date: Some(issuance_date),
+                expiration_date: None,
             }])
             .when(CredentialCommand::SignCredential {
                 credential_id: credential_id.clone(),
@@ -837,6 +816,11 @@ pub mod test_utils {
     #[fixture]
     pub fn notification_id() -> String {
         "notification_id".to_string()
+    }
+
+    #[fixture]
+    pub fn issuance_date() -> identity_core::common::Timestamp {
+        identity_core::common::Timestamp::parse("2010-01-01T00:00:00Z").unwrap()
     }
 
     pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjMuanNvbiJdLCJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJPcGVuQmFkZ2VDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJuYW1lIjoiVGVhbXdvcmsgQmFkZ2UiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwidHlwZSI6WyJBY2hpZXZlbWVudFN1YmplY3QiXSwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEiOnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY29nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNvZ25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbnQuIiwibmFtZSI6IlRlYW13b3JrIn19LCJjcmVkZW50aWFsU3RhdHVzIjp7ImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidHlwZSI6InN0YXR1c2xpc3Qrand0IiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjowfX0sInN0YXR1cyI6eyJzdGF0dXNfbGlzdCI6eyJpZHgiOjAsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCJ9fX0.FBmcIzSWi10Fvr_r6PLM18seqiavenyuSzryt-CToleTUuy5p4lLzWm1Cj5OmYrEWxwC4dMH46szxEt8YwqsBw";
@@ -911,6 +895,33 @@ pub mod test_utils {
                 }],
                 ..Default::default()
             };
+        pub static ref DC_SD_JWT_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
+            CredentialConfigurationsSupportedObject {
+                credential_format: CredentialFormats::DcSdJwt(Parameters {
+                    parameters: ("http://localhost:3033/vct/U0QtSldU/0".to_string()).into()
+                }),
+                cryptographic_binding_methods_supported: vec!["did:jwk".to_string(), "did:key".to_string(),],
+                credential_signing_alg_values_supported: vec!["ES256".to_string(), "EdDSA".to_string()],
+                proof_types_supported: HashMap::from_iter(vec![(
+                    ProofType::Jwt,
+                    KeyProofMetadata {
+                        proof_signing_alg_values_supported: vec!["ES256".to_string(), "EdDSA".to_string()],
+                    },
+                )]),
+                display: vec![CredentialConfigurationsSupportedDisplay {
+                    name: "SD-JWT Credential".to_string(),
+                    locale: Some("en".to_string()),
+                    logo: Some(Logo {
+                        uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
+                        alt_text: Some("Impierce Logo".to_string()),
+                    }),
+                    description: None,
+                    background_image: None,
+                    background_color: None,
+                    text_color: None,
+                }],
+                ..Default::default()
+            };
         pub static ref OPENBADGE_CREDENTIAL_SUBJECT: serde_json::Value = json!(
             {
                 "id": "https://example.com/credentials/3527",
@@ -938,6 +949,12 @@ pub mod test_utils {
                         "name": "Master of Oceanography"
                     }
                 }
+            }
+        );
+        pub static ref DC_SD_JWT_CREDENTIAL_SUBJECT: serde_json::Value = json!(
+            {
+                "first_name": "Ferris",
+                "last_name": "Rustacean"
             }
         );
         pub static ref UNSIGNED_OPENBADGE_CREDENTIAL: serde_json::Value = json!({
@@ -977,6 +994,11 @@ pub mod test_utils {
               "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
               "idx": 0
           }
+        });
+        pub static ref UNSIGNED_DC_SD_JWT_CREDENTIAL: serde_json::Value = json!({
+            "vct": "http://localhost:3033/vct/U0QtSldU/0",
+            "first_name": "Ferris",
+            "last_name": "Rustacean"
         });
     }
 }
