@@ -1,3 +1,5 @@
+# https://github.com/EmbarkStudios/cargo-deny/blob/main/deny.template.toml
+
 # This template contains all of the possible sections and their default values
 
 # Note that all fields that take a lint level have these possible values:
