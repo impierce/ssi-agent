@@ -303,7 +303,7 @@ pub struct ApplicationConfiguration {
             kb_jwt_alg_values: Some(vec![Algorithm::ES256])
                 }),
         ldp_vc: None,
-        ldp_vp: None,
+        di_vp: None,
         mso_mdoc: None,
     }")]
     pub vp_formats_supported: VpFormatsSupported,
