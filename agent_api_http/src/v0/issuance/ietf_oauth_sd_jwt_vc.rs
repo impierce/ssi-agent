@@ -5,7 +5,12 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use identity_credential::sd_jwt_vc::metadata::TypeMetadata;
+use identity_credential::sd_jwt_vc::metadata::{
+    ClaimDisclosability, ClaimDisplay, ClaimMetadata, DisplayMetadata, TypeMetadata,
+};
+use oid4vci::credential_issuer::credential_configurations_supported::{
+    ClaimDescription, CredentialConfigurationsSupportedDisplay,
+};
 use std::sync::Arc;
 
 #[axum_macros::debug_handler]
@@ -20,7 +25,7 @@ pub(crate) async fn type_metadata(
         .ok_or(PublicError::NotFoundError)?;
 
     // Check if the credential configuration IDs are valid.
-    let _credential_configuration = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+    let credential_configuration = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
         .await?
         .and_then(|server_config_view| {
             server_config_view
@@ -31,17 +36,61 @@ pub(crate) async fn type_metadata(
         })
         .ok_or(PublicError::NotFoundError)?;
 
+    let display = credential_configuration_display_to_display_metadata(credential_configuration.display);
+    let claims = claim_description_to_claims(credential_configuration.claims);
+
     // TODO: Fill in more of these fields once `agent_library` supports it.
+    // TODO: instead of contructing `TypeMetadata` here, we should store it as a View/Read Model and simply query it here.
     let type_metadata = TypeMetadata {
         name: Some(credential_configuration_id),
         description: None,
         extends: None,
         extends_integrity: None,
         schema: None,
-        // TODO: Fill in display and claims once these issues are resolved: https://github.com/iotaledger/identity/pull/1770/changes#r2729345235
-        display: vec![],
-        claims: vec![],
+        display,
+        claims,
     };
 
     Ok((axum::http::StatusCode::OK, axum::Json(type_metadata)).into_response())
+}
+
+fn credential_configuration_display_to_display_metadata(
+    supported_display: Vec<CredentialConfigurationsSupportedDisplay>,
+) -> Vec<DisplayMetadata> {
+    supported_display
+        .into_iter()
+        .map(|display| DisplayMetadata {
+            locale: display.locale.unwrap_or_default(),
+            name: display.name,
+            description: display.description,
+            rendering: None,
+        })
+        .collect()
+}
+
+fn claim_description_to_claims(claim_descriptions: Vec<ClaimDescription>) -> Vec<ClaimMetadata> {
+    claim_descriptions
+        .into_iter()
+        .filter_map(|claim| {
+            let display = claim
+                .display
+                .into_iter()
+                .map(|display| ClaimDisplay {
+                    locale: display.locale.unwrap_or_default(),
+                    label: display.name,
+                    description: None,
+                })
+                .collect();
+
+            serde_json::from_value(serde_json::json!(claim.path))
+                .ok()
+                .map(|path| ClaimMetadata {
+                    path,
+                    display,
+                    mandatory: None,
+                    sd: Some(ClaimDisclosability::Always),
+                    svg_id: None,
+                })
+        })
+        .collect()
 }
