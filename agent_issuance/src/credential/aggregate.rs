@@ -529,7 +529,7 @@ impl Aggregate for Credential {
                         builder = builder.iss(issuer_did);
                         builder = builder.status(status_claim);
 
-                        if let Some(holder_kid) = holder_kid.clone() {
+                        if let Some(holder_kid) = holder_kid {
                             builder = builder.require_key_binding(RequiredKeyBinding::Kid(holder_kid));
                         }
 
