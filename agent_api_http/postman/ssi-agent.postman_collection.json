@@ -119,6 +119,60 @@
 					"response": []
 				},
 				{
+					"name": "Create an SD-JWT VC Credential",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const location = pm.response.headers.get(\"LOCATION\");",
+									"",
+									"if(location){",
+									"    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"SD-JWT\",\n    \"credential\": {\n        \"first_name\": \"Ferris\",\n        \"last_name\": \"Crabman\",\n        \"dob\": \"1982-01-01\"\n    },\n    \"expiresAt\": \"never\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/credentials",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"credentials"
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "ACME Corp Credential",
 					"event": [
 						{
@@ -842,6 +896,69 @@
 									"key": "request_uri",
 									"value": "{{REQUEST_URI}}"
 								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "ietf oauth sd-jwt vc",
+			"item": [
+				{
+					"name": "SD-JWT VC Type Metadata",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const location = pm.response.headers.get(\"LOCATION\");",
+									"",
+									"if(location){",
+									"    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"002\",\n    \"credential\": {\n        \"first_name\": \"Ferris\",\n        \"last_name\": \"Crabman\",\n        \"dob\": \"1982-01-01\"\n    },\n    \"expiresAt\": \"never\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/vct/U0QtSldU/0",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"vct",
+								"U0QtSldU",
+								"0"
 							]
 						}
 					},
