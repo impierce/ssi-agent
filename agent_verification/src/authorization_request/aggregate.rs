@@ -310,7 +310,6 @@ pub mod tests {
     use oid4vp::token::vp_token::{PresentationFormat, VpToken};
     use oid4vp::token::vp_token_builder::VpTokenBuilder;
     use rstest::rstest;
-    // use serial_test::serial;
     use std::str::FromStr;
     use std::sync::Arc;
 
