@@ -270,15 +270,15 @@ impl Aggregate for Offer {
                     authorization_server_metadata: *authorization_server_metadata,
                 };
 
-                let proof = credential_issuer
-                    .validate_proof(
-                        credential_request.proof.ok_or(MissingProofError)?,
+                let validated_proofs = credential_issuer
+                    .validate_proofs(
+                        credential_request.proofs.ok_or(MissingProofError)?,
                         Validator::Subject(services.issuer.clone()),
                     )
                     .await
                     .map_err(|e| InvalidProofError(e.to_string()))?;
 
-                let subject_did = proof.rfc7519_claims.iss().as_ref().cloned();
+                let subject_did = validated_proofs[0].rfc7519_claims.iss().as_ref().cloned();
 
                 Ok(vec![CredentialRequestVerified {
                     offer_id,
@@ -699,6 +699,7 @@ pub mod test_utils {
     use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
     use oid4vci::credential_request::CredentialIdentifierOrCredentialConfigurationId::CredentialConfigurationId;
     use oid4vci::proof::ProofType;
+    use oid4vci::proofs::Proofs;
     use oid4vci::Proof;
     use oid4vci::{
         credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata, credential_request::CredentialRequest,
@@ -802,24 +803,35 @@ pub mod test_utils {
         #[future(awt)] holder: Arc<dyn Subject>,
         static_issuer_url: Url,
     ) -> CredentialRequest {
+        let generated_proof = Proof::builder()
+            .proof_type(ProofType::Jwt)
+            .algorithm(Algorithm::EdDSA)
+            .signer(holder.clone())
+            .iss(
+                holder
+                    .identifier("did:key", Algorithm::EdDSA)
+                    .await
+                    .expect("Failed to get holder identifier"),
+            )
+            .aud(static_issuer_url.to_string())
+            .iat(1571324800)
+            .subject_syntax_type("did:key")
+            .build()
+            .await
+            .expect("Failed to build proof");
+
+        let jwt_string = match generated_proof {
+            Proof::Jwt { jwt } => {
+                assert!(!jwt.is_empty(), "Generated JWT should not be empty");
+                jwt
+            }
+        };
+
         CredentialRequest {
             credential_identifier_or_credential_configuration_id: CredentialConfigurationId(
                 credential_configuration_id,
             ),
-            proof: Some(
-                Proof::builder()
-                    .proof_type(ProofType::Jwt)
-                    .algorithm(Algorithm::EdDSA)
-                    .signer(holder.clone())
-                    .iss(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap())
-                    .aud(static_issuer_url.to_string())
-                    .iat(1571324800)
-                    .subject_syntax_type("did:key")
-                    .build()
-                    .await
-                    .unwrap(),
-            ),
-            proofs: None,
+            proofs: Some(Proofs { jwt: vec![jwt_string] }),
         }
     }
 
