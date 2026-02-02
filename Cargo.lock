@@ -10616,7 +10616,7 @@ dependencies = [
 [[package]]
 name = "secret-storage"
 version = "0.3.0"
-source = "git+https://github.com/iotaledger/secret-storage?tag=v0.3.0#7dc13ddae8a7f2c8a931d3155f3cb9e9a27902fb"
+source = "git+https://github.com/iotaledger/secret-storage.git?tag=v0.3.0#7dc13ddae8a7f2c8a931d3155f3cb9e9a27902fb"
 dependencies = [
  "anyhow",
  "async-trait",

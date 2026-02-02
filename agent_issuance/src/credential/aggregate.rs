@@ -12,7 +12,8 @@ use cqrs_es::Aggregate;
 use identity_core::common::Timestamp;
 use identity_core::convert::FromJson;
 use identity_credential::credential::{
-    Credential as W3CVerifiableCredential, CredentialBuilder as W3CVerifiableCredentialBuilder, Issuer,
+    Credential as W3CVerifiableCredential, CredentialBuilder as W3CVerifiableCredentialBuilder,
+    CredentialV2 as W3CVerifiableCredentialV2, Issuer,
 };
 use identity_credential::sd_jwt_vc::{self, SdJwtVcBuilder, SdJwtVcClaims, StatusListRef, StatusMechanism};
 use jsonwebtoken::Header;
@@ -20,6 +21,7 @@ use oauth_tsl::status_list::StatusType;
 use oauth_tsl::tokens::status_list_token::StatusListTyp;
 use oid4vc_core::{jwt, Sign as _, Subject as _};
 use oid4vci::credential_format_profiles::ietf_sd_jwt_vc::dc_sd_jwt::{DcSdJwt, DcSdJwtParameters};
+use oid4vci::credential_format_profiles::vc_jose_cose::vc_sd_jwt::{VcSdJwt, VcSdJwtParameters};
 use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::{
     CredentialDefinition, JwtVcJson, JwtVcJsonParameters,
 };
@@ -27,7 +29,7 @@ use oid4vci::credential_format_profiles::{CredentialFormats, Parameters};
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use oid4vci::notification_request::NotificationRequest;
 use oid4vci::{Proof, VerifiableCredentialJwt};
-use sd_jwt::RequiredKeyBinding;
+use sd_jwt::{RequiredKeyBinding, SdJwtBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
@@ -350,6 +352,103 @@ impl Aggregate for Credential {
                             credential_status,
                             created_at: Some(created_at),
                             expires_at,
+                        }]);
+                    }
+                    CredentialFormats::VcSdJwt(Parameters::<VcSdJwt> {
+                        parameters: VcSdJwtParameters {},
+                    }) => {
+                        let name = config()
+                            .display
+                            .first()
+                            .expect("Configuration `display.name` missing")
+                            .name
+                            .clone();
+
+                        let issuer: Profile = ProfileBuilder::default()
+                            .id(config().public_url.clone())
+                            .type_("Profile")
+                            .name(name)
+                            .try_into()
+                            .expect("Could not build issuer profile");
+
+                        let id = data
+                            .raw
+                            .get("id")
+                            .map(|id| {
+                                id.as_str()
+                                    .and_then(|id_str| Url::parse(id_str).ok())
+                                    .ok_or(InvalidIdentifierError)
+                            })
+                            .transpose()?;
+
+                        let issuer = match serde_json::from_value::<Issuer>(json!({
+                            "id": issuer.id,
+                            "name": issuer.name,
+                        })) {
+                            Ok(issuer) => issuer,
+                            Err(_) => unreachable!("Couldn't parse issuer"),
+                        };
+
+                        let credential_subject = identity_credential::credential::Subject::from_json_value(
+                            data.raw["credentialSubject"].clone(),
+                        )
+                        .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
+
+                        let credential_status = CredentialStatus {
+                            index: credential_status_index,
+                            status: StatusType::VALID,
+                        };
+
+                        let status_list_url = get_status_list_url(self.credential_status.index)?;
+
+                        let status_uri_idx = identity_core::common::Object::from_json_value(json!({
+                            "uri": status_list_url.clone(),
+                            "idx": credential_status_index
+                        }))
+                        .map_err(|_| CredentialError::InvalidCredentialStatus)?;
+
+                        let status = identity_credential::credential::Status {
+                            id: status_list_url.into(),
+                            type_: StatusListTyp::Jwt.to_string(),
+                            properties: status_uri_idx,
+                        };
+
+                        let builder = W3CVerifiableCredentialBuilder::default()
+                            .issuer(issuer)
+                            .subject(credential_subject)
+                            .issuance_date(issuance_date)
+                            .status(status);
+
+                        let builder = if let Some(expiration_date) = expiration_date {
+                            builder.expiration_date(expiration_date)
+                        } else {
+                            builder
+                        };
+
+                        let builder = if let Some(id) = id {
+                            builder.id(id.into())
+                        } else {
+                            builder
+                        };
+
+                        let credential: W3CVerifiableCredentialV2 = builder
+                            .build_v2()
+                            .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
+
+                        let mut raw = json!(credential);
+
+                        // FIXME
+                        let type_ = vec!["VerifiableCredential".to_string()];
+                        raw["type"] = json!(type_);
+
+                        return Ok(vec![UnsignedCredentialCreated {
+                            credential_id,
+                            notification_id: Some(notification_id),
+                            data: Data { raw },
+                            credential_configuration,
+                            credential_status,
+                            issuance_date: Some(issuance_date),
+                            expiration_date,
                         }]);
                     }
                     _ => Err(UnsupportedCredentialFormat(serde_json::json!(
