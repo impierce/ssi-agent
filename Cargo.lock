@@ -2402,7 +2402,7 @@ checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=f26da3e#f26da3eee0ccd8110f6115c192412ec48191577f"
+source = "git+https://github.com/impierce/did-manager?rev=a76a2a3#a76a2a36f7cfddef7702fa450dca5c34c82f8534"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -3161,7 +3161,7 @@ dependencies = [
 [[package]]
 name = "did_iota"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=f26da3e#f26da3eee0ccd8110f6115c192412ec48191577f"
+source = "git+https://github.com/impierce/did-manager?rev=a76a2a3#a76a2a36f7cfddef7702fa450dca5c34c82f8534"
 dependencies = [
  "anyhow",
  "identity_iota",
@@ -3176,7 +3176,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=f26da3e#f26da3eee0ccd8110f6115c192412ec48191577f"
+source = "git+https://github.com/impierce/did-manager?rev=a76a2a3#a76a2a36f7cfddef7702fa450dca5c34c82f8534"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -3193,7 +3193,7 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=f26da3e#f26da3eee0ccd8110f6115c192412ec48191577f"
+source = "git+https://github.com/impierce/did-manager?rev=a76a2a3#a76a2a36f7cfddef7702fa450dca5c34c82f8534"
 dependencies = [
  "did-method-key",
  "identity_iota",
@@ -3240,7 +3240,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=f26da3e#f26da3eee0ccd8110f6115c192412ec48191577f"
+source = "git+https://github.com/impierce/did-manager?rev=a76a2a3#a76a2a36f7cfddef7702fa450dca5c34c82f8534"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -4970,7 +4970,7 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 [[package]]
 name = "identity_core"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
+source = "git+https://github.com/iotaledger/identity?rev=e68d4f5#e68d4f592fdf30b50ce5d8e0a0807403911feeda"
 dependencies = [
  "deranged",
  "js-sys",
@@ -4988,7 +4988,7 @@ dependencies = [
 [[package]]
 name = "identity_credential"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
+source = "git+https://github.com/iotaledger/identity?rev=e68d4f5#e68d4f592fdf30b50ce5d8e0a0807403911feeda"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5016,7 +5016,7 @@ dependencies = [
 [[package]]
 name = "identity_did"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
+source = "git+https://github.com/iotaledger/identity?rev=e68d4f5#e68d4f592fdf30b50ce5d8e0a0807403911feeda"
 dependencies = [
  "did_url_parser 0.3.0",
  "form_urlencoded",
@@ -5030,7 +5030,7 @@ dependencies = [
 [[package]]
 name = "identity_document"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
+source = "git+https://github.com/iotaledger/identity?rev=e68d4f5#e68d4f592fdf30b50ce5d8e0a0807403911feeda"
 dependencies = [
  "did_url_parser 0.2.0",
  "identity_core",
@@ -5045,7 +5045,7 @@ dependencies = [
 [[package]]
 name = "identity_eddsa_verifier"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
+source = "git+https://github.com/iotaledger/identity?rev=e68d4f5#e68d4f592fdf30b50ce5d8e0a0807403911feeda"
 dependencies = [
  "identity_jose",
  "iota-crypto",
@@ -5054,7 +5054,7 @@ dependencies = [
 [[package]]
 name = "identity_iota"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
+source = "git+https://github.com/iotaledger/identity?rev=e68d4f5#e68d4f592fdf30b50ce5d8e0a0807403911feeda"
 dependencies = [
  "identity_core",
  "identity_credential",
@@ -5070,7 +5070,7 @@ dependencies = [
 [[package]]
 name = "identity_iota_core"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
+source = "git+https://github.com/iotaledger/identity?rev=e68d4f5#e68d4f592fdf30b50ce5d8e0a0807403911feeda"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -5115,7 +5115,7 @@ dependencies = [
 [[package]]
 name = "identity_jose"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
+source = "git+https://github.com/iotaledger/identity?rev=e68d4f5#e68d4f592fdf30b50ce5d8e0a0807403911feeda"
 dependencies = [
  "anyhow",
  "bls12_381_plus 0.8.18",
@@ -5135,7 +5135,7 @@ dependencies = [
 [[package]]
 name = "identity_resolver"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
+source = "git+https://github.com/iotaledger/identity?rev=e68d4f5#e68d4f592fdf30b50ce5d8e0a0807403911feeda"
 dependencies = [
  "async-trait",
  "futures",
@@ -5152,7 +5152,7 @@ dependencies = [
 [[package]]
 name = "identity_storage"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
+source = "git+https://github.com/iotaledger/identity?rev=e68d4f5#e68d4f592fdf30b50ce5d8e0a0807403911feeda"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5180,7 +5180,7 @@ dependencies = [
 [[package]]
 name = "identity_stronghold"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
+source = "git+https://github.com/iotaledger/identity?rev=e68d4f5#e68d4f592fdf30b50ce5d8e0a0807403911feeda"
 dependencies = [
  "async-trait",
  "identity_storage",
@@ -5196,7 +5196,7 @@ dependencies = [
 [[package]]
 name = "identity_stronghold_ext"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=f26da3e#f26da3eee0ccd8110f6115c192412ec48191577f"
+source = "git+https://github.com/impierce/did-manager?rev=a76a2a3#a76a2a36f7cfddef7702fa450dca5c34c82f8534"
 dependencies = [
  "async-trait",
  "elliptic-curve 0.13.8",
@@ -5216,7 +5216,7 @@ dependencies = [
 [[package]]
 name = "identity_verification"
 version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
+source = "git+https://github.com/iotaledger/identity?rev=e68d4f5#e68d4f592fdf30b50ce5d8e0a0807403911feeda"
 dependencies = [
  "identity_core",
  "identity_did",
@@ -8386,7 +8386,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=124323e#124323eea8af568efc84f1da9b67da1e9729ec96"
+source = "git+https://github.com/impierce/openid4vc?rev=316d7b3#316d7b327e37c136164d29331ec72ee3468dcaea"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8411,7 +8411,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=124323e#124323eea8af568efc84f1da9b67da1e9729ec96"
+source = "git+https://github.com/impierce/openid4vc?rev=316d7b3#316d7b327e37c136164d29331ec72ee3468dcaea"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8444,7 +8444,7 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=124323e#124323eea8af568efc84f1da9b67da1e9729ec96"
+source = "git+https://github.com/impierce/openid4vc?rev=316d7b3#316d7b327e37c136164d29331ec72ee3468dcaea"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8472,7 +8472,7 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=124323e#124323eea8af568efc84f1da9b67da1e9729ec96"
+source = "git+https://github.com/impierce/openid4vc?rev=316d7b3#316d7b327e37c136164d29331ec72ee3468dcaea"
 dependencies = [
  "anyhow",
  "chrono",
@@ -11156,7 +11156,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=f26da3e#f26da3eee0ccd8110f6115c192412ec48191577f"
+source = "git+https://github.com/impierce/did-manager?rev=a76a2a3#a76a2a36f7cfddef7702fa450dca5c34c82f8534"
 dependencies = [
  "identity_iota",
  "identity_storage",
@@ -11262,7 +11262,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=124323e#124323eea8af568efc84f1da9b67da1e9729ec96"
+source = "git+https://github.com/impierce/openid4vc?rev=316d7b3#316d7b327e37c136164d29331ec72ee3468dcaea"
 dependencies = [
  "anyhow",
  "async-trait",
