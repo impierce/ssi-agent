@@ -505,7 +505,7 @@ pub mod tests {
         let authorization_response = authorization_response(
             &provider_did_method.to_string(),
             &authorization_request,
-            "malicious-nonce", // Mismatched nonce
+            "mismatched-nonce",
         )
         .await;
 
@@ -598,7 +598,6 @@ pub mod tests {
     }
 
     async fn create_simple_vp_token(provider_did_method: &str, nonce: &str) -> VpToken {
-        // Create a simple functional vp_token
         let issuer = KeySubject::from_keypair(generate::<Ed25519KeyPair>(Some("test-issuer-key".as_bytes())), None);
         let issuer_did = issuer.identifier(provider_did_method, Algorithm::EdDSA).await.unwrap();
 
