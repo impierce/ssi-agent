@@ -192,6 +192,7 @@ impl Aggregate for ServerConfig {
                             parameters: (vct).into(),
                         })
                     }
+                    CredentialFormats::VcSdJwt(_) => CredentialFormats::VcSdJwt(Parameters { parameters: ().into() }),
                     _ => {
                         return Err(UnsupportedCredentialFormatIdentifierError(format!(
                             "{:?}",
