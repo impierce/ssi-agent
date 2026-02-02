@@ -63,6 +63,8 @@ impl IntoApiErrorExt for CredentialError {
 
             // `/openid4vci/credential` endpoint
             MissingCredentialDataError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            InvalidIssuerDidError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            KeyIdError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }

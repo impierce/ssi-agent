@@ -20,4 +20,8 @@ pub enum CredentialError {
     InvalidCredentialStatus,
     #[error("Failed to create the credential: {0}")]
     BuildCredentialError(String),
+    #[error("Invalid issuer DID")]
+    InvalidIssuerDidError,
+    #[error("Failed to get a key identifier for signing the credential")]
+    KeyIdError,
 }

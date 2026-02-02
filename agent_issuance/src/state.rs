@@ -215,14 +215,14 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                     "format": "jwt_vc_json",
                     "type": ["VerifiableCredential"],
                     "display": [
-                      {
-                        "name": "Verifiable Credential",
-                        "locale": "en",
-                        "logo": {
-                          "uri": "https://www.impierce.com/external/impierce-logo.png",
-                          "alt_text": "Impierce Logo"
+                        {
+                            "name": "Verifiable Credential",
+                            "locale": "en",
+                            "logo": {
+                            "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                "alt_text": "Impierce Logo"
+                            }
                         }
-                      }
                     ],
                     "claims": [
                         {
@@ -251,6 +251,16 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                   {
                     "credential_configuration_id": "SD-JWT",
                     "format": "dc+sd-jwt",
+                    "display": [
+                        {
+                            "name": "SD-JWT VC Credential",
+                            "locale": "en",
+                            "logo": {
+                            "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                "alt_text": "Impierce Logo"
+                            }
+                        }
+                    ],
                     "claims": [
                         {
                             "path": ["first_name"],
