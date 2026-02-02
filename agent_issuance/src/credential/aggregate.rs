@@ -685,16 +685,16 @@ pub mod credential_tests {
     type CredentialTestFramework = TestFramework<Credential>;
 
     #[rstest]
-    // #[case::openbadges(
-    //     OPENBADGE_CREDENTIAL_SUBJECT.clone(),
-    //     OPENBADGE_CREDENTIAL_CONFIGURATION.clone(),
-    //     UNSIGNED_OPENBADGE_CREDENTIAL.clone()
-    // )]
-    // #[case::w3c_vc(
-    //     W3C_VC_CREDENTIAL_SUBJECT.clone(),
-    //     W3C_VC_CREDENTIAL_CONFIGURATION.clone(),
-    //     UNSIGNED_W3C_VC_CREDENTIAL.clone()
-    // )]
+    #[case::openbadges(
+        OPENBADGE_CREDENTIAL_SUBJECT.clone(),
+        OPENBADGE_CREDENTIAL_CONFIGURATION.clone(),
+        UNSIGNED_OPENBADGE_CREDENTIAL.clone()
+    )]
+    #[case::w3c_vc(
+        W3C_VC_CREDENTIAL_SUBJECT.clone(),
+        W3C_VC_CREDENTIAL_CONFIGURATION.clone(),
+        UNSIGNED_W3C_VC_CREDENTIAL.clone()
+    )]
     #[case::dc_sd_jwt(
         DC_SD_JWT_CREDENTIAL_SUBJECT.clone(),
         DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),

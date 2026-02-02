@@ -23,11 +23,12 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "31783fd" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "31783fd" }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "31783fd" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "31783fd" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "31783fd" }
+#  TODO: For all `openid4vc` dependencies, switch to latest `dev` revision once https://github.com/impierce/openid4vc/pull/118 is merged.
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "124323e" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "124323e" }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "124323e" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "124323e" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "124323e" }
 
 anyhow = "1.0"
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
@@ -38,6 +39,7 @@ chrono = { version = "0.4", features = ["serde"] }
 cqrs-es = "0.4.12"
 derivative = "2.2"
 futures = "0.3"
+# TODO: For all `identity_*` dependencies, switch to latest `beta` tag once https://github.com/iotaledger/identity/pull/1770 is merged.
 identity_core = { git = "https://github.com/iotaledger/identity", rev = "88ea775" }
 identity_credential = { git = "https://github.com/iotaledger/identity", rev = "88ea775", default-features = false, features = [
     "credential",

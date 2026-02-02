@@ -8,14 +8,15 @@ rust-version.workspace = true
 agent_shared = { path = "../agent_shared" }
 
 # TODO: Fully remove `did_manager`.
+# TODO: Use latest `beta` branch once https://github.com/impierce/did-manager/pull/42 is merged.
 # - The `producer` module has already been eliminated.
 # - In the `consumer` module, only the `Resolver` struct is still in use.
 # - All components of the `identity_stronghold_ext` module are still active.
 #
 # Future work: Migrate the remaining functionality into UniCore.
-did_manager_consumer = { git = "https://github.com/impierce/did-manager", rev = "03a2aa4", package = "consumer" }
-did_manager_identity_stronghold_ext = { git = "https://github.com/impierce/did-manager", rev = "03a2aa4", package = "identity_stronghold_ext" }
-did_manager_iota = { git = "https://github.com/impierce/did-manager", rev = "03a2aa4", package = "did_iota" }
+did_manager_consumer = { git = "https://github.com/impierce/did-manager", rev = "f26da3e", package = "consumer" }
+did_manager_identity_stronghold_ext = { git = "https://github.com/impierce/did-manager", rev = "f26da3e", package = "identity_stronghold_ext" }
+did_manager_iota = { git = "https://github.com/impierce/did-manager", rev = "f26da3e", package = "did_iota" }
 
 anyhow.workspace = true
 async-trait.workspace = true
