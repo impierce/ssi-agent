@@ -211,7 +211,7 @@ impl Aggregate for Credential {
                                     .map_err(|_| CredentialError::InvalidCredentialStatus)?;
 
                                     let status = identity_credential::credential::Status {
-                                        id: status_list_url.into(),
+                                        id: status_list_url,
                                         type_: StatusListTyp::Jwt.to_string(),
                                         properties: status_uri_idx,
                                     };
