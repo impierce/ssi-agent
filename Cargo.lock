@@ -97,9 +97,9 @@ dependencies = [
  "http-api-problem",
  "http-body-util",
  "hyper 1.7.0",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_credential 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_did 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_core",
+ "identity_credential",
+ "identity_did",
  "jsonwebtoken",
  "lazy_static",
  "metrics",
@@ -252,8 +252,8 @@ dependencies = [
  "axum 0.8.3",
  "base64 0.22.1",
  "cqrs-es",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_credential 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_core",
+ "identity_credential",
  "jsonwebtoken",
  "lazy_static",
  "mime",
@@ -298,12 +298,12 @@ dependencies = [
  "did-jwk",
  "did-method-key",
  "futures",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_credential 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_did 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_document 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_iota 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_storage 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_core",
+ "identity_credential",
+ "identity_did",
+ "identity_document",
+ "identity_iota",
+ "identity_storage",
  "iota-sdk 1.13.1",
  "itertools 0.14.0",
  "jsonwebtoken",
@@ -348,8 +348,8 @@ dependencies = [
  "chrono",
  "cqrs-es",
  "derivative",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_credential 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_core",
+ "identity_credential",
  "jsonwebtoken",
  "lazy_static",
  "oauth_tsl",
@@ -416,7 +416,7 @@ dependencies = [
  "consumer",
  "did_iota",
  "futures",
- "identity_iota 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_iota",
  "identity_stronghold_ext",
  "iota-sdk 1.1.5",
  "iota-sdk 1.13.1",
@@ -449,7 +449,7 @@ dependencies = [
  "cqrs-es",
  "dotenvy",
  "http-serde",
- "identity_iota 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_iota",
  "jsonwebtoken",
  "oid4vc-core",
  "oid4vci",
@@ -504,8 +504,8 @@ dependencies = [
  "cqrs-es",
  "did-key",
  "futures",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_credential 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_core",
+ "identity_credential",
  "jsonwebtoken",
  "lazy_static",
  "oid4vc-core",
@@ -2408,7 +2408,7 @@ dependencies = [
  "did_jwk",
  "did_key",
  "did_web",
- "identity_iota 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
+ "identity_iota",
  "rustls 0.23.28",
  "shared",
  "signature 2.2.0",
@@ -3164,7 +3164,7 @@ version = "0.1.0"
 source = "git+https://github.com/impierce/did-manager?rev=f26da3e#f26da3eee0ccd8110f6115c192412ec48191577f"
 dependencies = [
  "anyhow",
- "identity_iota 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
+ "identity_iota",
  "identity_stronghold",
  "iota-sdk 1.13.1",
  "log",
@@ -3179,7 +3179,7 @@ version = "0.1.0"
 source = "git+https://github.com/impierce/did-manager?rev=f26da3e#f26da3eee0ccd8110f6115c192412ec48191577f"
 dependencies = [
  "did-jwk",
- "identity_iota 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
+ "identity_iota",
  "identity_stronghold",
  "iota-sdk 1.13.1",
  "log",
@@ -3196,7 +3196,7 @@ version = "0.1.0"
 source = "git+https://github.com/impierce/did-manager?rev=f26da3e#f26da3eee0ccd8110f6115c192412ec48191577f"
 dependencies = [
  "did-method-key",
- "identity_iota 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
+ "identity_iota",
  "identity_stronghold",
  "iota-sdk 1.13.1",
  "jsonwebkey",
@@ -3243,7 +3243,7 @@ version = "0.1.0"
 source = "git+https://github.com/impierce/did-manager?rev=f26da3e#f26da3eee0ccd8110f6115c192412ec48191577f"
 dependencies = [
  "did-web",
- "identity_iota 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
+ "identity_iota",
  "identity_stronghold",
  "iota-sdk 1.13.1",
  "log",
@@ -4986,24 +4986,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "identity_core"
-version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
-dependencies = [
- "deranged",
- "js-sys",
- "multibase 0.9.1",
- "nom 8.0.0",
- "product_common",
- "serde",
- "serde_json",
- "strum 0.25.0",
- "thiserror 1.0.69",
- "time",
- "url",
-]
-
-[[package]]
 name = "identity_credential"
 version = "1.8.0-beta.2"
 source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
@@ -5011,36 +4993,11 @@ dependencies = [
  "anyhow",
  "async-trait",
  "flate2",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_did 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_document 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_verification 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "indexmap 2.12.0",
- "itertools 0.11.0",
- "once_cell",
- "roaring 0.10.12",
- "serde",
- "serde-aux",
- "serde_json",
- "serde_repr",
- "strum 0.25.0",
- "thiserror 1.0.69",
- "url",
-]
-
-[[package]]
-name = "identity_credential"
-version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
-dependencies = [
- "anyhow",
- "async-trait",
- "flate2",
  "futures",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_did 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_document 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_verification 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_core",
+ "identity_did",
+ "identity_document",
+ "identity_verification",
  "indexmap 2.12.0",
  "itertools 0.11.0",
  "jsonschema",
@@ -5063,22 +5020,8 @@ source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb7
 dependencies = [
  "did_url_parser 0.3.0",
  "form_urlencoded",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_jose 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "serde",
- "strum 0.25.0",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "identity_did"
-version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
-dependencies = [
- "did_url_parser 0.3.0",
- "form_urlencoded",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_jose 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_core",
+ "identity_jose",
  "serde",
  "strum 0.25.0",
  "thiserror 1.0.69",
@@ -5090,24 +5033,9 @@ version = "1.8.0-beta.2"
 source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
 dependencies = [
  "did_url_parser 0.2.0",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_did 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_verification 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "indexmap 2.12.0",
- "serde",
- "strum 0.25.0",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "identity_document"
-version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
-dependencies = [
- "did_url_parser 0.2.0",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_did 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_verification 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_core",
+ "identity_did",
+ "identity_verification",
  "indexmap 2.12.0",
  "serde",
  "strum 0.25.0",
@@ -5119,16 +5047,7 @@ name = "identity_eddsa_verifier"
 version = "1.8.0-beta.2"
 source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
 dependencies = [
- "identity_jose 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "iota-crypto",
-]
-
-[[package]]
-name = "identity_eddsa_verifier"
-version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
-dependencies = [
- "identity_jose 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_jose",
  "iota-crypto",
 ]
 
@@ -5137,30 +5056,14 @@ name = "identity_iota"
 version = "1.8.0-beta.2"
 source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
 dependencies = [
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_credential 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_did 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_document 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_iota_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_resolver 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_storage 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_verification 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "iota_interaction",
-]
-
-[[package]]
-name = "identity_iota"
-version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
-dependencies = [
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_credential 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_did 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_document 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_iota_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_resolver 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_storage 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_verification 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_core",
+ "identity_credential",
+ "identity_did",
+ "identity_document",
+ "identity_iota_core",
+ "identity_resolver",
+ "identity_storage",
+ "identity_verification",
  "iota_interaction",
 ]
 
@@ -5177,58 +5080,13 @@ dependencies = [
  "fastcrypto",
  "futures",
  "hyper 1.7.0",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_credential 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_did 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_document 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_eddsa_verifier 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_jose 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_verification 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "iota-config",
- "iota-crypto",
- "iota-sdk 1.13.1",
- "iota_interaction",
- "iota_interaction_rust",
- "iota_interaction_ts",
- "itertools 0.13.0",
- "move-core-types",
- "num-derive 0.4.2",
- "num-traits",
- "once_cell",
- "phf",
- "prefix-hex",
- "product_common",
- "rand 0.8.5",
- "ref-cast",
- "secret-storage",
- "serde",
- "serde-aux",
- "serde_json",
- "strum 0.25.0",
- "thiserror 1.0.69",
- "tokio",
-]
-
-[[package]]
-name = "identity_iota_core"
-version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
-dependencies = [
- "anyhow",
- "async-stream",
- "async-trait",
- "bcs",
- "cfg-if",
- "fastcrypto",
- "futures",
- "hyper 1.7.0",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_credential 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_did 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_document 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_eddsa_verifier 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_jose 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_verification 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_core",
+ "identity_credential",
+ "identity_did",
+ "identity_document",
+ "identity_eddsa_verifier",
+ "identity_jose",
+ "identity_verification",
  "iota-config",
  "iota-crypto",
  "iota-sdk 1.13.1",
@@ -5262,27 +5120,7 @@ dependencies = [
  "anyhow",
  "bls12_381_plus 0.8.18",
  "fastcrypto",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "iota-crypto",
- "iota_interaction",
- "json-proof-token",
- "k256",
- "p256 0.13.2",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "zeroize",
-]
-
-[[package]]
-name = "identity_jose"
-version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
-dependencies = [
- "anyhow",
- "bls12_381_plus 0.8.18",
- "fastcrypto",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_core",
  "iota-crypto",
  "iota_interaction",
  "json-proof-token",
@@ -5301,28 +5139,11 @@ source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb7
 dependencies = [
  "async-trait",
  "futures",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_credential 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_did 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_document 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_iota_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "serde",
- "strum 0.25.0",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "identity_resolver"
-version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
-dependencies = [
- "async-trait",
- "futures",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_credential 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_did 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_document 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_iota_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_core",
+ "identity_credential",
+ "identity_did",
+ "identity_document",
+ "identity_iota_core",
  "serde",
  "strum 0.25.0",
  "thiserror 1.0.69",
@@ -5338,37 +5159,12 @@ dependencies = [
  "bcs",
  "fastcrypto",
  "futures",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_credential 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_did 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_document 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_iota_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_verification 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "iota-sdk-types",
- "iota_interaction",
- "seahash",
- "secret-storage",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "identity_storage"
-version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
-dependencies = [
- "anyhow",
- "async-trait",
- "bcs",
- "fastcrypto",
- "futures",
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_credential 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_did 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_document 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_iota_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_verification 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_core",
+ "identity_credential",
+ "identity_did",
+ "identity_document",
+ "identity_iota_core",
+ "identity_verification",
  "iota-crypto",
  "iota-sdk-types",
  "iota_interaction",
@@ -5387,8 +5183,8 @@ version = "1.8.0-beta.2"
 source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
 dependencies = [
  "async-trait",
- "identity_storage 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_verification 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
+ "identity_storage",
+ "identity_verification",
  "iota-crypto",
  "iota-sdk 1.1.5",
  "iota_stronghold",
@@ -5404,8 +5200,8 @@ source = "git+https://github.com/impierce/did-manager?rev=f26da3e#f26da3eee0ccd8
 dependencies = [
  "async-trait",
  "elliptic-curve 0.13.8",
- "identity_storage 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_verification 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
+ "identity_storage",
+ "identity_verification",
  "iota-sdk 1.1.5",
  "iota_stronghold",
  "k256",
@@ -5422,23 +5218,9 @@ name = "identity_verification"
 version = "1.8.0-beta.2"
 source = "git+https://github.com/iotaledger/identity?rev=11756ad#11756ad808abeb794f219017ec0c18e16e898cc9"
 dependencies = [
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_did 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_jose 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "serde",
- "serde_json",
- "strum 0.25.0",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "identity_verification"
-version = "1.8.0-beta.2"
-source = "git+https://github.com/iotaledger/identity?rev=88ea775#88ea775a39ab9e3fc441c90315d2a9d45e96fd21"
-dependencies = [
- "identity_core 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_did 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
- "identity_jose 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_core",
+ "identity_did",
+ "identity_jose",
  "serde",
  "serde_json",
  "strum 0.25.0",
@@ -8604,7 +8386,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=31783fd#31783fd5d5c2804c3f0f2051186c1d95b904d0cb"
+source = "git+https://github.com/impierce/openid4vc?rev=124323e#124323eea8af568efc84f1da9b67da1e9729ec96"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8629,7 +8411,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=31783fd#31783fd5d5c2804c3f0f2051186c1d95b904d0cb"
+source = "git+https://github.com/impierce/openid4vc?rev=124323e#124323eea8af568efc84f1da9b67da1e9729ec96"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8641,7 +8423,7 @@ dependencies = [
  "did_url",
  "futures",
  "getset",
- "identity_credential 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_credential",
  "jsonwebtoken",
  "lazy_static",
  "oid4vc-core",
@@ -8662,7 +8444,7 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=31783fd#31783fd5d5c2804c3f0f2051186c1d95b904d0cb"
+source = "git+https://github.com/impierce/openid4vc?rev=124323e#124323eea8af568efc84f1da9b67da1e9729ec96"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8690,13 +8472,13 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=31783fd#31783fd5d5c2804c3f0f2051186c1d95b904d0cb"
+source = "git+https://github.com/impierce/openid4vc?rev=124323e#124323eea8af568efc84f1da9b67da1e9729ec96"
 dependencies = [
  "anyhow",
  "chrono",
  "futures",
  "getset",
- "identity_credential 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=88ea775)",
+ "identity_credential",
  "is_empty",
  "jsonwebtoken",
  "lazy_static",
@@ -11376,8 +11158,8 @@ name = "shared"
 version = "0.1.0"
 source = "git+https://github.com/impierce/did-manager?rev=f26da3e#f26da3eee0ccd8110f6115c192412ec48191577f"
 dependencies = [
- "identity_iota 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
- "identity_storage 1.8.0-beta.2 (git+https://github.com/iotaledger/identity?rev=11756ad)",
+ "identity_iota",
+ "identity_storage",
  "identity_stronghold",
  "identity_stronghold_ext",
  "iota-sdk 1.1.5",
@@ -11480,7 +11262,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=31783fd#31783fd5d5c2804c3f0f2051186c1d95b904d0cb"
+source = "git+https://github.com/impierce/openid4vc?rev=124323e#124323eea8af568efc84f1da9b67da1e9729ec96"
 dependencies = [
  "anyhow",
  "async-trait",

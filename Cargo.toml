@@ -40,19 +40,19 @@ cqrs-es = "0.4.12"
 derivative = "2.2"
 futures = "0.3"
 # TODO: For all `identity_*` dependencies, switch to latest `beta` tag once https://github.com/iotaledger/identity/pull/1770 is merged.
-identity_core = { git = "https://github.com/iotaledger/identity", rev = "88ea775" }
-identity_credential = { git = "https://github.com/iotaledger/identity", rev = "88ea775", default-features = false, features = [
+identity_core = { git = "https://github.com/iotaledger/identity", rev = "11756ad" }
+identity_credential = { git = "https://github.com/iotaledger/identity", rev = "11756ad", default-features = false, features = [
     "credential",
     "domain-linkage",
     "presentation",
     "sd-jwt-vc",
     "validator",
 ] }
-identity_did = { git = "https://github.com/iotaledger/identity", rev = "88ea775" }
-identity_document = { git = "https://github.com/iotaledger/identity", rev = "88ea775" }
-identity_iota = { git = "https://github.com/iotaledger/identity", rev = "88ea775" }
-identity_storage = { git = "https://github.com/iotaledger/identity", rev = "88ea775" }
-identity_verification = { git = "https://github.com/iotaledger/identity", rev = "88ea775", default-features = false }
+identity_did = { git = "https://github.com/iotaledger/identity", rev = "11756ad" }
+identity_document = { git = "https://github.com/iotaledger/identity", rev = "11756ad" }
+identity_iota = { git = "https://github.com/iotaledger/identity", rev = "11756ad" }
+identity_storage = { git = "https://github.com/iotaledger/identity", rev = "11756ad" }
+identity_verification = { git = "https://github.com/iotaledger/identity", rev = "11756ad", default-features = false }
 iota-sdk = { git = "https://github.com/iotaledger/iota", package = "iota-sdk", tag = "v1.13.1" }
 # TODO: Check if this is still needed.
 iota-sdk-legacy = { version = "1.0", package = "iota-sdk", default-features = false, features = [
