@@ -3,7 +3,7 @@ use agent_shared::generate_random_string;
 use agent_shared::handlers::command_handler;
 use axum::{
     extract::State,
-    http::StatusCode,
+    http::{header::CACHE_CONTROL, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
 
@@ -28,5 +28,40 @@ pub(crate) async fn nonce(State(state): State<Arc<IssuanceState>>) -> Result<Res
         .await
         .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
-    Ok((StatusCode::OK, Json(json!({ "c_nonce": fresh_c_nonce }))).into_response())
+    let mut headers = HeaderMap::new();
+    headers.insert(CACHE_CONTROL, "no-store".parse().unwrap());
+
+    Ok((StatusCode::OK, headers, Json(json!({ "c_nonce": fresh_c_nonce }))).into_response())
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use agent_issuance::services::IssuanceServices;
+    use agent_secret_manager::service::Service;
+    use axum::{body::Body, http::Request};
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn test_nonce_endpoint() {
+        use crate::v0::issuance;
+        use agent_store::in_memory::InMemory;
+        use agent_store::issuance_state;
+
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+        let issuance_app = issuance::router(issuance_state.clone());
+
+        let request = Request::builder()
+            .uri("/openid4vci/nonce")
+            .method("POST")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = issuance_app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get("cache-control").unwrap(), "no-store");
+    }
 }
