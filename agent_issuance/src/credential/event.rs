@@ -19,8 +19,8 @@ pub enum CredentialEvent {
         notification_id: Option<String>,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
         credential_status: CredentialStatus,
-        issuance_date: Option<Timestamp>,
-        expiration_date: Option<Timestamp>,
+        created_at: Option<Timestamp>,
+        expires_at: Option<Timestamp>,
     },
     SignedCredentialCreated {
         credential_id: String,

@@ -93,8 +93,8 @@ pub struct Credential {
     pub status: Status,
     pub holder_notifications: Vec<NotificationRequest>,
     pub credential_status: CredentialStatus,
-    pub issuance_date: Option<Timestamp>,
-    pub expiration_date: Option<Timestamp>,
+    pub created_at: Option<Timestamp>,
+    pub expires_at: Option<Timestamp>,
 }
 
 #[async_trait]
@@ -129,14 +129,14 @@ impl Aggregate for Credential {
                 let notification_id = agent_shared::generate_random_string();
 
                 #[cfg(feature = "test_utils")]
-                let issuance_date = "2010-01-01T00:00:00Z".to_string();
+                let created_at = "2010-01-01T00:00:00Z".to_string();
                 #[cfg(not(feature = "test_utils"))]
-                let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+                let created_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
-                let issuance_date =
-                    identity_core::common::Timestamp::parse(&issuance_date).expect("Could not parse issuance_date");
+                let created_at =
+                    identity_core::common::Timestamp::parse(&created_at).expect("Could not parse created_at");
 
-                let expiration_date = match expires_at {
+                let expires_at = match expires_at {
                     CredentialExpiry::Fixed(fixed) => {
                         let fixed = identity_core::common::Timestamp::from_unix(fixed.timestamp())
                             .map_err(|_| InvalidExpirationDateError)?;
@@ -216,13 +216,16 @@ impl Aggregate for Credential {
                                         properties: status_uri_idx,
                                     };
 
-                                    let builder = W3CVerifiableCredentialBuilder::default()
+                                    let mut builder = W3CVerifiableCredentialBuilder::default()
                                         .issuer(issuer)
                                         .subject(credential_subject)
-                                        .issuance_date(issuance_date)
                                         .status(status);
 
-                                    let builder = if let Some(expiration_date) = expiration_date {
+                                    if cfg!(feature = "test_utils") {
+                                        builder = builder.issuance_date("2010-01-01T00:00:00Z".parse().unwrap());
+                                    }
+
+                                    let builder = if let Some(expiration_date) = expires_at {
                                         builder.expiration_date(expiration_date)
                                     } else {
                                         builder
@@ -248,8 +251,8 @@ impl Aggregate for Credential {
                                         credential_configuration,
                                         notification_id: Some(notification_id),
                                         credential_status,
-                                        issuance_date: Some(issuance_date),
-                                        expiration_date,
+                                        created_at: Some(created_at),
+                                        expires_at,
                                     }]);
                                 }
                                 "AchievementCredential" | "OpenBadgeCredential" => {
@@ -270,7 +273,7 @@ impl Aggregate for Credential {
                                         type_: StatusListTyp::Jwt.to_string(),
                                     };
 
-                                    let builder = AchievementCredentialBuilder::default()
+                                    let mut builder = AchievementCredentialBuilder::default()
                                         .context(vec![
                                             "https://www.w3.org/2018/credentials/v1",
                                             "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json",
@@ -282,10 +285,13 @@ impl Aggregate for Credential {
                                         .name(name)
                                         .issuer(issuer)
                                         .credential_subject(credential_subject)
-                                        .issuance_date(issuance_date.to_rfc3339())
                                         .credential_status(builder_credential_status);
 
-                                    let builder = if let Some(expiration_date) = expiration_date {
+                                    if cfg!(feature = "test_utils") {
+                                        builder = builder.issuance_date("2010-01-01T00:00:00Z");
+                                    }
+
+                                    let builder = if let Some(expiration_date) = expires_at {
                                         builder.expiration_date(expiration_date.to_rfc3339())
                                     } else {
                                         builder
@@ -320,8 +326,8 @@ impl Aggregate for Credential {
                                         data: Data { raw },
                                         credential_configuration,
                                         credential_status,
-                                        issuance_date: Some(issuance_date),
-                                        expiration_date,
+                                        created_at: Some(created_at),
+                                        expires_at,
                                     }]);
                                 }
                                 _ => continue,
@@ -342,8 +348,8 @@ impl Aggregate for Credential {
                             data: Data { raw },
                             credential_configuration,
                             credential_status,
-                            issuance_date: Some(issuance_date),
-                            expiration_date,
+                            created_at: Some(created_at),
+                            expires_at,
                         }]);
                     }
                     _ => Err(UnsupportedCredentialFormat(serde_json::json!(
@@ -376,6 +382,14 @@ impl Aggregate for Credential {
                 if self.signed.is_some() && !overwrite {
                     return Ok(vec![]);
                 }
+
+                #[cfg(feature = "test_utils")]
+                let issuance_date = "2010-01-01T00:00:00Z".to_string();
+                #[cfg(not(feature = "test_utils"))]
+                let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+
+                let issuance_date =
+                    identity_core::common::Timestamp::parse(&issuance_date).expect("Could not parse issuance_date");
 
                 let id: Option<Url> = self
                     .data
@@ -412,19 +426,9 @@ impl Aggregate for Credential {
                         #[cfg(feature = "test_utils")]
                         let iat = 1262304000; // 2010-01-01T00:00:00Z
                         #[cfg(not(feature = "test_utils"))]
-                        let iat = credential.raw["issuanceDate"]
-                            .as_str()
-                            .unwrap()
-                            .parse::<chrono::DateTime<chrono::Utc>>()
-                            .unwrap()
-                            .timestamp();
+                        let iat = issuance_date.to_unix();
 
-                        let exp = credential.raw["expirationDate"].as_str().map(|expiration_date| {
-                            expiration_date
-                                .parse::<chrono::DateTime<chrono::Utc>>()
-                                .expect("Could not parse `expirationDate` to DateTime")
-                                .timestamp()
-                        });
+                        let exp = self.expires_at.map(|exp| exp.to_unix());
 
                         credential.raw["issuer"] = json!(issuer_did);
 
@@ -533,12 +537,10 @@ impl Aggregate for Credential {
                             builder = builder.require_key_binding(RequiredKeyBinding::Kid(holder_kid));
                         }
 
-                        if let Some(issuance_date) = self.issuance_date {
-                            builder = builder.iat(issuance_date);
-                            builder = builder.nbf(issuance_date);
-                        }
+                        builder = builder.iat(issuance_date);
+                        builder = builder.nbf(issuance_date);
 
-                        if let Some(expiration_date) = self.expiration_date {
+                        if let Some(expiration_date) = self.expires_at {
                             builder = builder.exp(expiration_date);
                         }
 
@@ -601,16 +603,16 @@ impl Aggregate for Credential {
                 credential_configuration,
                 notification_id,
                 credential_status,
-                issuance_date,
-                expiration_date,
+                created_at,
+                expires_at,
             } => {
                 self.credential_id = credential_id;
                 self.data.replace(data);
                 self.credential_configuration = *credential_configuration;
                 self.notification_id = notification_id;
                 self.credential_status = credential_status;
-                self.issuance_date = issuance_date;
-                self.expiration_date = expiration_date;
+                self.created_at = created_at;
+                self.expires_at = expires_at;
             }
             SignedCredentialCreated {
                 credential_id,
@@ -706,7 +708,7 @@ pub mod credential_tests {
         #[case] unsigned_credential: serde_json::Value,
         credential_id: String,
         notification_id: String,
-        issuance_date: identity_core::common::Timestamp,
+        created_at: identity_core::common::Timestamp,
     ) {
         CredentialTestFramework::with(IssuanceServices::default().await)
             .given_no_previous_events()
@@ -730,8 +732,8 @@ pub mod credential_tests {
                     index: 0,
                     status: StatusType::VALID,
                 },
-                issuance_date: Some(issuance_date),
-                expiration_date: None,
+                created_at: Some(created_at),
+                expires_at: None,
             }])
     }
 
@@ -753,7 +755,7 @@ pub mod credential_tests {
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
         #[case] verifiable_credential_jwt: String,
         credential_id: String,
-        issuance_date: identity_core::common::Timestamp,
+        created_at: identity_core::common::Timestamp,
     ) {
         CredentialTestFramework::with(IssuanceServices::default().await)
             .given(vec![CredentialEvent::UnsignedCredentialCreated {
@@ -767,8 +769,8 @@ pub mod credential_tests {
                     index: 0,
                     status: StatusType::VALID,
                 },
-                issuance_date: Some(issuance_date),
-                expiration_date: None,
+                created_at: Some(created_at),
+                expires_at: None,
             }])
             .when(CredentialCommand::SignCredential {
                 credential_id: credential_id.clone(),
@@ -818,7 +820,7 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn issuance_date() -> identity_core::common::Timestamp {
+    pub fn created_at() -> identity_core::common::Timestamp {
         identity_core::common::Timestamp::parse("2010-01-01T00:00:00Z").unwrap()
     }
 
