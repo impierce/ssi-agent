@@ -1,4 +1,5 @@
 {
+  // Enable the "test_utils" feature for Rust Analyzer and runnable configurations
   "rust-analyzer.cargo.features": ["test_utils"],
   "rust-analyzer.runnables.extraArgs": ["--features", "test_utils"]
 }
