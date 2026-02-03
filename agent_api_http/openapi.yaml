@@ -461,6 +461,19 @@ paths:
                         uri: https://impierce.com/images/logo-blue.png
                       name: Identity Credential
                   format: dc+sd-jwt
+              vcdm2_sd_jwt_credential_configurations:
+                summary: VCDM2.0 SD-JWT
+                value:
+                  credential_configuration_id: VCDM2.0 SD-JWT
+                  type:
+                    - VerifiableCredential
+                  display:
+                    - locale: en
+                      logo:
+                        alt_text: UniCore Logo
+                        uri: https://impierce.com/images/logo-blue.png
+                      name: Identity Credential
+                  format: vc+sd-jwt
       responses:
         "200":
           description: A Credential Configuration has been successfully added to the Credential Issuer Metadata
@@ -609,6 +622,17 @@ paths:
                     first_name: Ferris
                     last_name: Crabman
                   credentialConfigurationId: SD-JWT VC
+                  offerId: "001"
+                  expiresAt: "3025-10-24 11:34:00Z"
+              vcdm2-sd-jwt:
+                summary: VCDM2.0 SD-JWT
+                value:
+                  credential:
+                    credentialSubject:
+                      dob: "1982-01-01"
+                      first_name: Ferris
+                      last_name: Crabman
+                  credentialConfigurationId: VCDM2.0 SD-JWT
                   offerId: "001"
                   expiresAt: "3025-10-24 11:34:00Z"
       responses:
