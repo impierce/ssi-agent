@@ -601,6 +601,16 @@ paths:
                   credentialConfigurationId: w3c_vc_credential
                   offerId: "001"
                   expiresAt: "3025-10-24 11:34:00Z"
+              sd-jwt-vc:
+                summary: SD-JWT VC
+                value:
+                  credential:
+                    dob: "1982-01-01"
+                    first_name: Ferris
+                    last_name: Crabman
+                  credentialConfigurationId: SD-JWT VC
+                  offerId: "001"
+                  expiresAt: "3025-10-24 11:34:00Z"
       responses:
         "201":
           description: Credential successfully created
