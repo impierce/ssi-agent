@@ -913,11 +913,6 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"const location = pm.response.headers.get(\"LOCATION\");",
-									"",
-									"if(location){",
-									"    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
-									"}",
 									""
 								],
 								"type": "text/javascript",
@@ -935,21 +930,9 @@
 							}
 						}
 					],
-					"protocolProfileBehavior": {
-						"disableBodyPruning": true
-					},
 					"request": {
 						"method": "GET",
 						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"002\",\n    \"credential\": {\n        \"first_name\": \"Ferris\",\n        \"last_name\": \"Crabman\",\n        \"dob\": \"1982-01-01\"\n    },\n    \"expiresAt\": \"never\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
 						"url": {
 							"raw": "{{HOST}}/vct/U0QtSldU/0",
 							"host": [
