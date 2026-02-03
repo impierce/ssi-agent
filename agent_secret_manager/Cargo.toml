@@ -43,6 +43,7 @@ tokio.workspace = true
 url.workspace = true
 
 [dev-dependencies]
+agent_secret_manager = { path = ".", features = ["test_utils"] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 
 futures.workspace = true

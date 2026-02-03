@@ -409,6 +409,7 @@ dependencies = [
 name = "agent_secret_manager"
 version = "0.1.0"
 dependencies = [
+ "agent_secret_manager",
  "agent_shared",
  "anyhow",
  "async-trait",

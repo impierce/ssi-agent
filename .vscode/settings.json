@@ -1,0 +1,4 @@
+{
+  "rust-analyzer.cargo.features": ["test_utils"],
+  "rust-analyzer.runnables.extraArgs": ["--features", "test_utils"]
+}
