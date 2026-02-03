@@ -3,7 +3,8 @@ use crate::{
     DOCUMENTATION_URL,
 };
 use agent_issuance::{
-    credential::error::CredentialError, offer::error::OfferError, server_config::error::ServerConfigError,
+    application::access_token_validation_service::AccessTokenValidationError, credential::error::CredentialError,
+    offer::error::OfferError, server_config::error::ServerConfigError,
 };
 use axum::{response::IntoResponse, response::Response, Json};
 use http_api_problem::ApiError;
@@ -131,6 +132,7 @@ pub enum PublicError {
     CredentialError(OID4VCError<CredentialErrorResponse>),
     NotificationError(OID4VCError<NotificationErrorResponse>),
     InternalServerError,
+    AccessTokenError(AccessTokenValidationError),
 }
 
 impl axum::response::IntoResponse for PublicError {
@@ -149,6 +151,7 @@ impl axum::response::IntoResponse for PublicError {
                 (status, axum::Json(oid4vc_error)).into_response()
             }
             PublicError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            PublicError::AccessTokenError(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
     }
 }
@@ -221,6 +224,12 @@ impl From<NotificationErrorResponse> for PublicError {
     }
 }
 
+impl From<AccessTokenValidationError> for PublicError {
+    fn from(err: AccessTokenValidationError) -> Self {
+        PublicError::AccessTokenError(err)
+    }
+}
+
 pub fn authorization_error(error: AuthorizationErrorResponse) -> Response {
     let error: OID4VCError<AuthorizationErrorResponse> = OID4VCError::new(error);
     let status = error.error.status_code();
@@ -253,6 +262,10 @@ pub fn notification_error(error: NotificationErrorResponse) -> Response {
 
 pub fn internal_server_error() -> PublicError {
     PublicError::InternalServerError
+}
+
+pub fn access_token_error(err: AccessTokenValidationError) -> PublicError {
+    PublicError::AccessTokenError(err)
 }
 
 #[cfg(test)]

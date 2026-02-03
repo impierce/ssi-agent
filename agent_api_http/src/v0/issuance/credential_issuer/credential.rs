@@ -6,7 +6,7 @@ use crate::{
     v0::issuance::error::PublicError,
 };
 use agent_issuance::{
-    application::access_token_validation_service::AccessTokenValidationService,
+    application::access_token_validation_service::{AccessTokenValidationError, AccessTokenValidationService},
     credential::{command::CredentialCommand, views::CredentialView},
     offer::{command::OfferCommand, views::OfferView},
     server_config::views::ServerConfigView,
@@ -20,7 +20,6 @@ use axum::{
 };
 use axum_auth::AuthBearer;
 use oid4vci::credential_request::CredentialRequest;
-use oid4vci::errors::CredentialErrorResponse;
 use std::sync::Arc;
 use tokio::time::sleep;
 use tracing::error;
@@ -38,7 +37,7 @@ pub(crate) async fn credential(
         .ok()
         // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
         .and_then(|claims| claims.issuer_state)
-        .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidToken))?;
+        .ok_or_else(|| PublicError::from(AccessTokenValidationError::InvalidToken))?;
 
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
     let (credential_issuer_metadata, authorization_server_metadata) =
