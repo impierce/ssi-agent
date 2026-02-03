@@ -261,10 +261,6 @@ paths:
             schema:
               type: object
               properties:
-                nonce:
-                  type: string
-                  description: A unique identifier for the Authorization Request
-                  example: "0d520cbe176ab9e1f7888c70888020d84a69672a4baabd3ce1c6aaad8f6420c0"
                 state:
                   type: string
                   description: A unique string representing the state of the Authorization Request
@@ -305,17 +301,12 @@ paths:
                                   items:
                                     type: string
                                   example: ["credentialSubject", "first_name"]
-              required:
-                - nonce
             examples:
               siopv2:
                 summary: SIOPv2 Authorization Request
-                value:
-                  nonce: this is a nonce
               oid4vp-with-dcql:
                 summary: OID4VP with DCQL Query
                 value:
-                  nonce: this is a nonce
                   dcql_query:
                     credentials:
                       - id: "CredentialQuery"
