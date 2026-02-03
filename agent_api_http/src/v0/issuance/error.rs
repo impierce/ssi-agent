@@ -20,14 +20,14 @@ impl IntoApiErrorExt for CredentialError {
 
         match self {
             // UniCore API Problem Details
-            UnsupportedCredentialFormat(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Unsupported Credential Format")
-                .type_url(type_url("issuance#unsupported-credential-format"))
+            UnknownCredentialConfiguration(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Unknown Credential Configuration")
+                .type_url(type_url("issuance#unknown-credential-configuration"))
                 .source(self)
                 .finish(),
-            UnsupportedCredentialType => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Unsupported Credential Type")
-                .type_url(type_url("issuance#unsupported-credential-type"))
+            UnknownCredentialIdentifier => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Unknown Credential Identifier")
+                .type_url(type_url("issuance#unknown-credential-identifier"))
                 .source(self)
                 .finish(),
             InvalidCredentialSubjectError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
@@ -164,13 +164,13 @@ impl IntoPublicError for CredentialError {
     fn into_public_error(self) -> PublicError {
         use CredentialError::*;
         match self {
-            UnsupportedCredentialFormat(_) => PublicError::CredentialError(OID4VCError::new(
+            UnknownCredentialConfiguration(_) => PublicError::CredentialError(OID4VCError::new(
                 CredentialErrorResponse::UnknownCredentialConfiguration,
             )),
 
-            UnsupportedCredentialType => PublicError::CredentialError(OID4VCError::new(
-                CredentialErrorResponse::UnknownCredentialConfiguration,
-            )),
+            UnknownCredentialIdentifier => {
+                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::UnknownCredentialIdentifier))
+            }
 
             _ => PublicError::InternalServerError,
         }
@@ -279,31 +279,16 @@ pub mod tests {
     async fn issuance_errors_successfully_convert_to_problem_details() {
         assert_eq!(
             into_json_value(
-                CredentialError::UnsupportedCredentialFormat(serde_json::json!("unsupported_format"))
+                CredentialError::UnknownCredentialConfiguration(serde_json::json!("unknown_credential_configuration"))
                     .into_api_error()
                     .into_axum_response()
             )
             .await,
             json!({
-                "type": format!("{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-format"),
-                "title": "Unsupported Credential Format",
+                "type": format!("{DOCUMENTATION_URL}problem-details/issuance#unknown-credential-configuration"),
+                "title": "Unknown Credential Configuration",
                 "status": 500,
-                "detail": "Credential format not supported: `\"unsupported_format\"`"
-            }),
-        );
-
-        assert_eq!(
-            into_json_value(
-                CredentialError::UnsupportedCredentialType
-                    .into_api_error()
-                    .into_axum_response()
-            )
-            .await,
-            json!({
-                "type": format!("{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-type"),
-                "title": "Unsupported Credential Type",
-                "status": 500,
-                "detail": "This Credential type is not supported"
+                "detail": "Credential format not supported: `\"unknown_credential_configuration\"`"
             }),
         );
 
