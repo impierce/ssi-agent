@@ -200,6 +200,19 @@ impl Aggregate for AuthorizationRequest {
                             .await
                             .map_err(InvalidOID4VPAuthorizationResponse)?;
 
+                        let expected_nonce = match &authorization_request {
+                            GenericAuthorizationRequest::OID4VP(request) => &request.body.extension.nonce,
+                            _ => {
+                                return Err(AuthorizationRequestError::InvalidOID4VPAuthorizationResponse(
+                                    anyhow::anyhow!("Mismatch between AuthorizationRequest and nonce contents"),
+                                ))
+                            }
+                        };
+
+                        decoded_vp_token
+                            .validate_nonce(expected_nonce)
+                            .map_err(|e| InvalidOID4VPAuthorizationResponse(anyhow::anyhow!("{}", e)))?;
+
                         let dcql_query = match &authorization_request {
                             GenericAuthorizationRequest::OID4VP(oid4vp_request) => {
                                 &oid4vp_request.body.extension.dcql_query
@@ -404,7 +417,7 @@ pub mod tests {
         .await;
 
         let authorization_response =
-            authorization_response(&provider_did_method.to_string(), &authorization_request).await;
+            authorization_response(&provider_did_method.to_string(), &authorization_request, "nonce").await;
 
         let id_token = match &authorization_response {
             GenericAuthorizationResponse::SIOPv2(siopv2_response) => siopv2_response.extension.id_token.clone(),
@@ -445,7 +458,7 @@ pub mod tests {
         .await;
 
         let authorization_response =
-            authorization_response(&provider_did_method.to_string(), &authorization_request).await;
+            authorization_response(&provider_did_method.to_string(), &authorization_request, "nonce").await;
 
         let decoded_vp_token = match &authorization_response {
             GenericAuthorizationResponse::OID4VP(oid4vp_response) => verification_services
@@ -468,9 +481,46 @@ pub mod tests {
             }]);
     }
 
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_verify_oid4vp_authorization_response_nonce_mismatch(
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
+        #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] provider_did_method: SupportedDidMethod,
+    ) {
+        set_config().set_preferred_did_method(verifier_did_method);
+
+        let verification_services = VerificationServices::default().await;
+        let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
+        let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
+
+        let authorization_request = authorization_request(
+            "vp_token",
+            &verifier_did_method.to_string(),
+            siopv2_client_metadata,
+            oid4vp_client_metadata,
+        )
+        .await;
+
+        let authorization_response = authorization_response(
+            &provider_did_method.to_string(),
+            &authorization_request,
+            "mismatched-nonce",
+        )
+        .await;
+
+        AuthorizationRequestTestFramework::with(verification_services)
+            .given_no_previous_events()
+            .when(AuthorizationRequestCommand::VerifyAuthorizationResponse {
+                authorization_request,
+                authorization_response,
+            })
+            .then_expect_error_message("Invalid OID4VP Authorization Response: Nonce mismatch in VP for credential query ID CredentialQueryId(\"CredentialQuery\") at index 0");
+    }
+
     async fn authorization_response(
         provider_did_method: &str,
         authorization_request: &GenericAuthorizationRequest,
+        nonce: &str,
     ) -> GenericAuthorizationResponse {
         let provider_manager = ProviderManager::new(
             Arc::new(Subject::test_subject().await),
@@ -487,7 +537,7 @@ pub mod tests {
                     .unwrap(),
             ),
             GenericAuthorizationRequest::OID4VP(oid4vp_authorization_request) => {
-                let vp_token = create_simple_vp_token(provider_did_method).await;
+                let vp_token = create_simple_vp_token(provider_did_method, nonce).await;
 
                 GenericAuthorizationResponse::OID4VP(
                     provider_manager
@@ -546,8 +596,7 @@ pub mod tests {
         }
     }
 
-    async fn create_simple_vp_token(provider_did_method: &str) -> VpToken {
-        // create a simple functional vp_token
+    async fn create_simple_vp_token(provider_did_method: &str, nonce: &str) -> VpToken {
         let issuer = KeySubject::from_keypair(generate::<Ed25519KeyPair>(Some("test-issuer-key".as_bytes())), None);
         let issuer_did = issuer.identifier(provider_did_method, Algorithm::EdDSA).await.unwrap();
 
@@ -601,7 +650,7 @@ pub mod tests {
             .iss(subject_did.clone())
             .sub(subject_did)
             .aud("test_audience".to_string()) // might need to adjust this
-            .nonce("nonce".to_string())
+            .nonce(nonce.to_string())
             .exp((Utc::now() + Duration::minutes(10)).timestamp())
             .iat(Utc::now().timestamp())
             .verifiable_presentation(verifiable_presentation_jwt)

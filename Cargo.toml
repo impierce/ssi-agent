@@ -24,11 +24,11 @@ rust-version = "1.76.0"
 
 [workspace.dependencies]
 #  TODO: For all `openid4vc` dependencies, switch to latest `dev` revision once https://github.com/impierce/openid4vc/pull/118 is merged.
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "316d7b3" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "316d7b3" }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "316d7b3" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "316d7b3" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "316d7b3" }
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "20e1fb8" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "20e1fb8" }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "20e1fb8" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "20e1fb8" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "20e1fb8" }
 
 anyhow = "1.0"
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
