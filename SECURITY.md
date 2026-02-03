@@ -1,16 +1,27 @@
-# Security Vulnerability Disclosure Policy
+# Security Policy
 
 Impierce takes the security of the software we provide very seriously.
 We are committed to addressing security vulnerabilities in a timely and responsible manner.
 
-If you believe you have discovered a security vulnerability in any of our products or services,
+## Supported Versions
+
+The following versions are being supported with security updates.
+
+| Version | Supported          |
+| ------- | ------------------ |
+| 1.x.x   | :white_check_mark: |
+| < 1.0   | :x:                |
+
+## Reporting a Vulnerability
+
+If you believe you have discovered a security vulnerability in any of our currently supported products or services,
 we encourage you to disclose it to us responsibly so that we can take action and resolve the issue.
+
+Please refer to the `security.txt` below for details on how to contact our security team.
 
 Thank you for contributing to a safer digital environment for everyone!
 
 ---
-
-**security.txt** (according to [RFC 9116](https://www.rfc-editor.org/rfc/rfc9116.html))
 
 ```
 Contact: mailto:security@impierce.com
@@ -27,3 +38,5 @@ Canonical: https://www.impierce.com/.well-known/security.txt
 
 Acknowledgments: https://www.impierce.com/hall-of-fame.html
 ```
+
+_\* according to [RFC 9116](https://www.rfc-editor.org/rfc/rfc9116.html)_
