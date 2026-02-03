@@ -173,6 +173,60 @@
 					"response": []
 				},
 				{
+					"name": "Create a VCDM 2.0 SD-JWT Credential",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const location = pm.response.headers.get(\"LOCATION\");",
+									"",
+									"if(location){",
+									"    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
+									"}",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"VCDM 2.0 SD-JWT\",\n    \"type\": [\n        \"VerifiableCredential\"\n    ],\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    },\n    \"expiresAt\": \"never\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{HOST}}/v0/credentials",
+							"host": [
+								"{{HOST}}"
+							],
+							"path": [
+								"v0",
+								"credentials"
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "ACME Corp Credential",
 					"event": [
 						{
