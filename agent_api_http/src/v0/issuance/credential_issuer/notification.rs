@@ -1,6 +1,8 @@
 use crate::handlers::{command_handler, query_handler};
 use crate::v0::issuance::error::{internal_server_error, PublicError};
-use agent_issuance::application::access_token_validation_service::AccessTokenValidationService;
+use agent_issuance::application::access_token_validation_service::{
+    AccessTokenValidationError, AccessTokenValidationService,
+};
 use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
 use axum::response::{IntoResponse, Response};
 use axum::{
@@ -30,7 +32,7 @@ pub async fn notification(
 
     let _claims = AccessTokenValidationService::validate(&state, &access_token)
         .await
-        .map_err(|_err| PublicError::from(NotificationErrorResponse::InvalidToken))?;
+        .map_err(|_err| PublicError::from(AccessTokenValidationError::InvalidToken))?;
 
     let credentials = match query_handler("all_credentials", &state.query.all_credentials).await? {
         Some(all_credentials) => all_credentials.credentials,
@@ -169,7 +171,7 @@ mod tests {
                     event_description: None,
                 })
                 .unwrap(),
-                expected_error: NotificationErrorResponse::InvalidToken,
+                expected_error: NotificationErrorResponse::InvalidNotificationRequest,
             },
             TestCase {
                 name: "Invalid Notification Event",

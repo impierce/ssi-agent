@@ -164,13 +164,13 @@ impl IntoPublicError for CredentialError {
     fn into_public_error(self) -> PublicError {
         use CredentialError::*;
         match self {
-            UnsupportedCredentialFormat(_) => {
-                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::UnsupportedCredentialFormat))
-            }
+            UnsupportedCredentialFormat(_) => PublicError::CredentialError(OID4VCError::new(
+                CredentialErrorResponse::UnknownCredentialConfiguration,
+            )),
 
-            UnsupportedCredentialType => {
-                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::UnsupportedCredentialType))
-            }
+            UnsupportedCredentialType => PublicError::CredentialError(OID4VCError::new(
+                CredentialErrorResponse::UnknownCredentialConfiguration,
+            )),
 
             _ => PublicError::InternalServerError,
         }
