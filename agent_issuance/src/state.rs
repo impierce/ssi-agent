@@ -216,6 +216,7 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                     "credential_definition": {
                       "type": ["VerifiableCredential"]
                     },
+                    "credential_metadata": {
                     "display": [
                       {
                         "name": "Verifiable Credential",
@@ -249,6 +250,7 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                             }],
                         }
                     ]
+                    }
                   }
                 ]))
                 .expect("Failed to parse default development credential configurations")

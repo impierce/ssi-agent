@@ -176,6 +176,7 @@ mod tests {
                             ],
                         }
                     },
+                    "credential_metadata": {
                     "display": [
                         {
                             "name": "Verifiable Credential",
@@ -186,7 +187,7 @@ mod tests {
                             }
                         }
                     ]
-                }
+                }}
                 ))
                 .unwrap()
             ),
@@ -215,6 +216,7 @@ mod tests {
                             ],
                         }
                     },
+                    "credential_metadata": {
                     "display": [
                         {
                             "name": "Verifiable Credential",
@@ -224,7 +226,8 @@ mod tests {
                                 "alt_text": "Impierce Logo",
                             }
                         }
-                    ],
+                    ]
+            },
                     "authorization": {
                         "pre_authorized": false
                     }

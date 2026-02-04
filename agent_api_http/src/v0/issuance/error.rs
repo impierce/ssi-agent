@@ -20,12 +20,12 @@ impl IntoApiErrorExt for CredentialError {
 
         match self {
             // UniCore API Problem Details
-            UnknownCredentialConfiguration(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            UnknownCredentialConfiguration(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Unknown Credential Configuration")
                 .type_url(type_url("issuance#unknown-credential-configuration"))
                 .source(self)
                 .finish(),
-            UnknownCredentialIdentifier => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            UnknownCredentialIdentifier => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Unknown Credential Identifier")
                 .type_url(type_url("issuance#unknown-credential-identifier"))
                 .source(self)
@@ -287,8 +287,8 @@ pub mod tests {
             json!({
                 "type": format!("{DOCUMENTATION_URL}problem-details/issuance#unknown-credential-configuration"),
                 "title": "Unknown Credential Configuration",
-                "status": 500,
-                "detail": "Credential format not supported: `\"unknown_credential_configuration\"`"
+                "status": 400,
+                "detail": "Credential format not known: `\"unknown_credential_configuration\"`"
             }),
         );
 
