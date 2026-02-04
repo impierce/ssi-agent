@@ -521,10 +521,6 @@ pub struct CredentialConfiguration {
     pub credential_format_with_parameters: CredentialFormats<WithParameters>,
     #[serde(flatten)]
     pub credential_metadata: CredentialMetadata,
-    // #[serde(default)]
-    // pub display: Vec<CredentialConfigurationsSupportedDisplay>,
-    // #[serde(default)]
-    // pub claims: Vec<ClaimDescription>,
     #[serde(default)]
     pub authorization: Authorization,
 }
