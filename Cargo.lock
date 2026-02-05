@@ -343,6 +343,7 @@ dependencies = [
  "anyhow",
  "async-std",
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "cqrs-es",
  "derivative",

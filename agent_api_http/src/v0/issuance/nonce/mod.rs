@@ -9,13 +9,8 @@ use axum::{
 
 use axum::Json;
 use http_api_problem::ApiError;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
-
-#[derive(Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NonceEndpointRequest {}
 
 #[axum_macros::debug_handler]
 pub(crate) async fn nonce(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {

@@ -7,8 +7,8 @@ use crate::{
 };
 use agent_issuance::{
     application::access_token_validation_service::AccessTokenValidationService,
+    application::nonce_validation_service::NonceValidationService,
     credential::{command::CredentialCommand, views::CredentialView},
-    nonce::command::NonceCommand,
     offer::{command::OfferCommand, views::OfferView},
     server_config::views::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
@@ -20,32 +20,14 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use oid4vci::credential_request::CredentialRequest;
 use oid4vci::errors::CredentialErrorResponse;
-use oid4vci::Proof;
 use std::sync::Arc;
 use tokio::time::sleep;
 use tracing::error;
 
 const POLLING_INTERVAL_MS: u64 = 100;
 
-fn extract_nonce_from_proof(proof: &Proof) -> Option<String> {
-    match proof {
-        Proof::Jwt { jwt } => {
-            let parts: Vec<&str> = jwt.split('.').collect();
-            if parts.len() != 3 {
-                return None;
-            }
-
-            let payload = URL_SAFE_NO_PAD.decode(parts[1]).ok()?;
-            let claims: serde_json::Value = serde_json::from_slice(&payload).ok()?;
-
-            // Extract nonce from claims
-            claims.get("nonce").and_then(|n| n.as_str()).map(|s| s.to_string())
-        }
-    }
-}
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<IssuanceState>>,
@@ -59,32 +41,9 @@ pub(crate) async fn credential(
         .and_then(|claims| claims.issuer_state)
         .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidToken))?;
 
-    if let Some(proof) = &credential_request.proof {
-        if let Some(nonce) = extract_nonce_from_proof(proof) {
-            // Query nonce state
-            let nonce_status = query_handler(&nonce, &state.query.nonce)
-                .await
-                .map_err(|_| PublicError::from(CredentialErrorResponse::InvalidProof))?;
-
-            match nonce_status {
-                Some(n) if n.is_redeemed => {
-                    // Nonce has already been redeemed
-                    return Err(PublicError::from(CredentialErrorResponse::InvalidNonce));
-                }
-                Some(_) => {
-                    // Nonce is valid, redeem it
-                    let command = NonceCommand::RedeemNonce { c_nonce: nonce.clone() };
-                    command_handler(&nonce, &state.command.nonce, command)
-                        .await
-                        .map_err(|_| PublicError::from(CredentialErrorResponse::InvalidProof))?;
-                }
-                None => {
-                    // Nonce doesn't exist
-                    return Err(PublicError::from(CredentialErrorResponse::InvalidNonce));
-                }
-            }
-        }
-    }
+    NonceValidationService::validate(&state, &credential_request)
+        .await
+        .map_err(|_| PublicError::from(CredentialErrorResponse::InvalidNonce))?;
 
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
     let (credential_issuer_metadata, authorization_server_metadata) =
@@ -221,6 +180,7 @@ pub mod tests {
     const CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsiaWQiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4ifSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ0eXBlIjoic3RhdHVzbGlzdCtqd3QiLCJpZHgiOjEyMywidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIn19LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsiaWR4IjoxMjMsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCJ9fX0.LpNq8l-qqqCA-htsB8KZLaVoNCfxqTrsPxVmEj0dsPAGFhOqO8lXI7DU0FhNwzWedxJ1ySS_Vq7ChBW-TgY7Bw";
     const ANONYMOUS_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsIm5iZiI6MTI2MjMwNDAwMCwiaWF0IjoxMjYyMzA0MDAwLCJ2YyI6eyJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSJdLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4ifSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ0eXBlIjoic3RhdHVzbGlzdCtqd3QiLCJpZHgiOjEyMywidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIn19LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsiaWR4IjoxMjMsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCJ9fX0.SxT7dwfIdkqTTYnSDzAEE5-csEUb9ucWWEcgIgDEEiK7VwsdW9k7ozLvi79Yfa71Q1buILLJdzLYf1mHE-V2Bg";
     const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
+    const TEST_NONCE: &str = "7e03ad3f76cb3338c3a5642fe7634476aa3ad93fa1d584011ba2150d9da47133";
 
     trait CredentialEventTrigger {
         async fn prepare_credential_event_trigger(
@@ -317,11 +277,10 @@ pub mod tests {
         access_token: String,
         external_server: Option<MockServer>,
     ) -> (String, String) {
-        let test_nonce = "7e03ad3f76cb3338c3a5642fe7634476aa3ad93fa1d584011ba2150d9da47133";
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
-            c_nonce: test_nonce.to_string(),
+            c_nonce: TEST_NONCE.to_string(),
         };
-        agent_shared::handlers::command_handler(test_nonce, &issuance_state.command.nonce, command)
+        agent_shared::handlers::command_handler(TEST_NONCE, &issuance_state.command.nonce, command)
             .await
             .unwrap();
 
@@ -415,11 +374,10 @@ pub mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         if !with_anonymous_access {
-            let test_nonce = "7e03ad3f76cb3338c3a5642fe7634476aa3ad93fa1d584011ba2150d9da47133";
             let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
-                c_nonce: test_nonce.to_string(),
+                c_nonce: TEST_NONCE.to_string(),
             };
-            agent_shared::handlers::command_handler(test_nonce, &issuance_state.command.nonce, command)
+            agent_shared::handlers::command_handler(TEST_NONCE, &issuance_state.command.nonce, command)
                 .await
                 .unwrap();
         }
