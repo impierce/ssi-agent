@@ -10,7 +10,7 @@ pub struct NonceValidationService;
 
 #[derive(Debug, Error)]
 pub enum NonceValidationError {
-    #[error("Invalid nonce: the nonce is malformed or could not be processed")]
+    #[error("The nonce is malformed or could not be processed")]
     InvalidNonce,
     #[error("Required nonce could not be found")]
     MissingNonce,
