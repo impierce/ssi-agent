@@ -18,6 +18,7 @@ use crate::offer::error::OfferError::{self, *};
 use crate::offer::event::OfferEvent;
 use crate::services::IssuanceServices;
 use crate::utils::generate_tx_code::generate_tx_code;
+use oid4vci::credential_offer::CredentialConfigurationIds;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum Status {
@@ -118,7 +119,8 @@ impl Aggregate for Offer {
 
                 let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
                     credential_issuer: credential_issuer.clone(),
-                    credential_configuration_ids,
+                    credential_configuration_ids: CredentialConfigurationIds::try_new(credential_configuration_ids)
+                        .expect("Credential_configuration_ids should not be empty when creating a credential offer"),
                     grants: Some(grants),
                 }));
 
@@ -185,7 +187,10 @@ impl Aggregate for Offer {
                         .collect();
 
                     credential_offer.credential_configuration_ids =
-                        credential_configuration_id_set.into_iter().collect();
+                        CredentialConfigurationIds::try_new(credential_configuration_id_set.into_iter().collect())
+                            .expect(
+                                "Credential_configuration_ids should not be empty when updating a credential offer",
+                            );
                 } else {
                     unreachable!();
                 }
@@ -735,7 +740,10 @@ pub mod test_utils {
     ) -> CredentialOffer {
         CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
             credential_issuer: static_issuer_url,
-            credential_configuration_ids: vec![],
+            credential_configuration_ids: CredentialConfigurationIds::try_new(vec![
+                "this_must_be_non_empty".to_string()
+            ])
+            .expect("Credential_configuration_ids should not be empty when creating a credential offer"),
             grants: Some(Grants {
                 authorization_code: None,
                 pre_authorized_code: Some(PreAuthorizedCode {
@@ -753,7 +761,8 @@ pub mod test_utils {
     ) -> CredentialOffer {
         if let CredentialOffer::CredentialOffer(credential_offer) = &mut credential_offer {
             credential_offer.credential_configuration_ids =
-                credential_configurations_supported.keys().cloned().collect();
+                CredentialConfigurationIds::try_new(credential_configurations_supported.keys().cloned().collect())
+                    .expect("Credential_configurations_supported should not be empty");
         } else {
             unreachable!();
         }

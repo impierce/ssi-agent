@@ -188,8 +188,8 @@ pub mod tests {
         match CredentialOffer::from_str(&body).unwrap() {
             CredentialOffer::CredentialOffer(credential_offer) => {
                 assert_eq!(
-                    credential_offer.credential_configuration_ids,
-                    vec![credential_configuration_id.to_string()]
+                    &*credential_offer.credential_configuration_ids,
+                    &vec![credential_configuration_id.to_string()]
                 );
 
                 let CredentialOfferParameters {
