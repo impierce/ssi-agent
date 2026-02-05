@@ -10,11 +10,11 @@ pub struct NonceValidationService;
 
 #[derive(Debug, Error)]
 pub enum NonceValidationError {
-    #[error("Invalid nonce: either it does not exist or has already been redeemed")]
+    #[error("Invalid nonce: the nonce is malformed or could not be processed")]
     InvalidNonce,
-    #[error("Missing nonce in the proof")]
+    #[error("Required nonce could not be found")]
     MissingNonce,
-    #[error("Redeemed nonce: the nonce has already been used")]
+    #[error("Nonce has already been redeemed")]
     RedeemedNonce,
 }
 
