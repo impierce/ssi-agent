@@ -182,7 +182,7 @@ impl Aggregate for ServerConfig {
                     CredentialFormats::DcSdJwt(_) => {
                         let vct = format!(
                             "{}vct/{}/{version}",
-                            config().application_url,
+                            config().public_url,
                             URL_SAFE_NO_PAD.encode(&credential_configuration.credential_configuration_id),
                             // TODO: support versioning of VCTs once we support versioning of Templates
                             version = 0
