@@ -415,7 +415,7 @@ pub mod tests {
             .given_no_previous_events()
             .when(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
-                credential_configuration_ids: vec![],
+                credential_configuration_ids: vec!["this_must_be_non_empty".to_string()],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
                 delivery_options: None,
@@ -455,7 +455,7 @@ pub mod tests {
             .given_no_previous_events()
             .when(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
-                credential_configuration_ids: vec![],
+                credential_configuration_ids: vec!["this_must_be_non_empty".to_string()],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
                 delivery_options: Some(delivery_options.clone()),
@@ -488,16 +488,15 @@ pub mod tests {
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] credential_offer: CredentialOffer,
         #[future(awt)] credential_offer_uri: CredentialOffer,
-        credential_configuration_id: String,
-        #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
-        #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
+        // #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
+        #[future(awt)] form_url_encoded_credential_offer: String,
     ) {
         OfferTestFramework::with(IssuanceServices::default().await)
             .given(vec![OfferEvent::CredentialOfferCreated {
                 offer_id: offer_id.clone(),
                 grant_types,
                 credential_offer_uri,
-                credential_offer,
+                credential_offer: credential_offer.clone(),
                 pre_authorized_code,
                 status: Status::Created,
                 tx_code: None,
@@ -506,18 +505,17 @@ pub mod tests {
             .when(OfferCommand::AddCredentials {
                 offer_id: offer_id.clone(),
                 credential_ids: vec!["credential-id".to_string()],
-                credential_configuration_ids: vec![credential_configuration_id],
+                credential_configuration_ids: vec!["this_must_be_non_empty".to_string()],
             })
             .then_expect_events(vec![
                 OfferEvent::CredentialsAdded {
                     offer_id: offer_id.clone(),
                     credential_ids: vec!["credential-id".to_string()],
-                    credential_offer: credential_offer_with_credential_configuration_ids,
+                    credential_offer: credential_offer.clone(),
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id,
-                    form_url_encoded_credential_offer:
-                        form_url_encoded_credential_offer_with_credential_configuration_ids,
+                    form_url_encoded_credential_offer,
                     status: Status::Pending,
                 },
             ]);
@@ -533,8 +531,7 @@ pub mod tests {
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] credential_offer: CredentialOffer,
         #[future(awt)] credential_offer_uri: CredentialOffer,
-        #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
-        #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
+        #[future(awt)] form_url_encoded_credential_offer: String,
         #[future(awt)] credential_request: CredentialRequest,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
@@ -544,7 +541,7 @@ pub mod tests {
                 OfferEvent::CredentialOfferCreated {
                     offer_id: offer_id.clone(),
                     grant_types,
-                    credential_offer,
+                    credential_offer: credential_offer.clone(),
                     credential_offer_uri,
                     pre_authorized_code,
                     status: Status::Created,
@@ -554,12 +551,11 @@ pub mod tests {
                 OfferEvent::CredentialsAdded {
                     offer_id: offer_id.clone(),
                     credential_ids: vec!["credential-id".to_string()],
-                    credential_offer: credential_offer_with_credential_configuration_ids,
+                    credential_offer: credential_offer.clone(),
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: offer_id.clone(),
-                    form_url_encoded_credential_offer:
-                        form_url_encoded_credential_offer_with_credential_configuration_ids,
+                    form_url_encoded_credential_offer,
                     status: Status::Pending,
                 },
             ])
@@ -585,8 +581,7 @@ pub mod tests {
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] credential_offer: CredentialOffer,
         #[future(awt)] credential_offer_uri: CredentialOffer,
-        #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
-        #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
+        #[future(awt)] form_url_encoded_credential_offer: String,
         credential_response: CredentialResponse,
         notification_id: String,
     ) {
@@ -595,7 +590,7 @@ pub mod tests {
                 OfferEvent::CredentialOfferCreated {
                     offer_id: offer_id.clone(),
                     grant_types,
-                    credential_offer,
+                    credential_offer: credential_offer.clone(),
                     credential_offer_uri,
                     pre_authorized_code,
                     status: Status::Created,
@@ -605,12 +600,11 @@ pub mod tests {
                 OfferEvent::CredentialsAdded {
                     offer_id: offer_id.clone(),
                     credential_ids: vec!["credential-id".to_string()],
-                    credential_offer: credential_offer_with_credential_configuration_ids,
+                    credential_offer: credential_offer.clone(),
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: offer_id.clone(),
-                    form_url_encoded_credential_offer:
-                        form_url_encoded_credential_offer_with_credential_configuration_ids,
+                    form_url_encoded_credential_offer,
                     status: Status::Pending,
                 },
                 OfferEvent::CredentialRequestVerified {
@@ -642,8 +636,7 @@ pub mod tests {
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] credential_offer: CredentialOffer,
         #[future(awt)] credential_offer_uri: CredentialOffer,
-        #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
-        #[future(awt)] form_url_encoded_credential_offer_with_credential_configuration_ids: String,
+        #[future(awt)] form_url_encoded_credential_offer: String,
         credential_response: CredentialResponse,
         notification_id: String,
     ) {
@@ -652,7 +645,7 @@ pub mod tests {
                 OfferEvent::CredentialOfferCreated {
                     offer_id: offer_id.clone(),
                     grant_types,
-                    credential_offer,
+                    credential_offer: credential_offer.clone(),
                     credential_offer_uri,
                     pre_authorized_code,
                     status: Status::Created,
@@ -661,8 +654,7 @@ pub mod tests {
                 },
                 OfferEvent::FormUrlEncodedCredentialOfferCreated {
                     offer_id: offer_id.clone(),
-                    form_url_encoded_credential_offer:
-                        form_url_encoded_credential_offer_with_credential_configuration_ids,
+                    form_url_encoded_credential_offer,
                     status: Status::Pending,
                 },
                 OfferEvent::CredentialRequestVerified {
@@ -673,7 +665,7 @@ pub mod tests {
                 OfferEvent::CredentialsAdded {
                     offer_id: offer_id.clone(),
                     credential_ids: vec!["credential-id".to_string()],
-                    credential_offer: credential_offer_with_credential_configuration_ids,
+                    credential_offer: credential_offer.clone(),
                 },
             ])
             .when(OfferCommand::CreateCredentialResponse {
@@ -701,7 +693,6 @@ pub mod test_utils {
     use agent_shared::generate_random_string;
     use jsonwebtoken::Algorithm;
     use oid4vc_core::Subject;
-    use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
     use oid4vci::credential_request::CredentialIdentifierOrCredentialConfigurationId::CredentialConfigurationId;
     use oid4vci::proof::ProofType;
     use oid4vci::proofs::Proofs;
@@ -711,7 +702,6 @@ pub mod test_utils {
     };
     use once_cell::sync::OnceCell;
     pub use rstest::*;
-    use std::collections::HashMap;
     use url::Url;
 
     static PRE_AUTHORIZED_CODE: OnceCell<String> = OnceCell::new();
@@ -755,22 +745,6 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub async fn credential_offer_with_credential_configuration_ids(
-        #[future(awt)] mut credential_offer: CredentialOffer,
-        credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
-    ) -> CredentialOffer {
-        if let CredentialOffer::CredentialOffer(credential_offer) = &mut credential_offer {
-            credential_offer.credential_configuration_ids =
-                CredentialConfigurationIds::try_new(credential_configurations_supported.keys().cloned().collect())
-                    .expect("Credential_configurations_supported should not be empty");
-        } else {
-            unreachable!();
-        }
-
-        credential_offer
-    }
-
-    #[fixture]
     pub async fn credential_offer_uri(
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         offer_id: String,
@@ -786,19 +760,12 @@ pub mod test_utils {
 
     #[fixture]
     pub async fn form_url_encoded_credential_offer(#[future(awt)] pre_authorized_code: String) -> String {
-        format!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fmy-domain.example.org%2F%22%2C%22credential_configuration_ids%22%3A%5B%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%7D%7D%7D")
+        format!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fmy-domain.example.org%2F%22%2C%22credential_configuration_ids%22%3A%5B%22this_must_be_non_empty%22%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%7D%7D%7D")
     }
 
     #[fixture]
     pub fn grant_types() -> Vec<GrantType> {
         vec![GrantType::PreAuthorizedCode]
-    }
-
-    #[fixture]
-    pub async fn form_url_encoded_credential_offer_with_credential_configuration_ids(
-        #[future(awt)] pre_authorized_code: String,
-    ) -> String {
-        format!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fmy-domain.example.org%2F%22%2C%22credential_configuration_ids%22%3A%5B%22001%22%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%7D%7D%7D")
     }
 
     #[fixture]
