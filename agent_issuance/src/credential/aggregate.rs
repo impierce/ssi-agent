@@ -13,9 +13,10 @@ use identity_core::common::Timestamp;
 use identity_core::convert::FromJson;
 use identity_credential::credential::{
     Credential as W3CVerifiableCredential, CredentialBuilder as W3CVerifiableCredentialBuilder,
-    CredentialV2 as W3CVerifiableCredentialV2, Issuer,
+    CredentialV2 as W3CVerifiableCredentialV2, Issuer, Schema,
 };
 use identity_credential::sd_jwt_vc::{self, SdJwtVcBuilder, SdJwtVcClaims, StatusListRef, StatusMechanism};
+use jsonschema::{Retrieve, Uri, Validator};
 use jsonwebtoken::Header;
 use oauth_tsl::status_list::StatusType;
 use oauth_tsl::tokens::status_list_token::StatusListTyp;
@@ -32,6 +33,7 @@ use oid4vci::{Proof, VerifiableCredentialJwt};
 use sd_jwt::{RequiredKeyBinding, SdJwtBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{debug, info};
 use types_ob_v3::prelude::{
@@ -396,7 +398,31 @@ impl Aggregate for Credential {
                         let mut builder = W3CVerifiableCredentialBuilder::default()
                             .issuer(issuer)
                             .subject(credential_subject)
-                            .status(status);
+                            .status(status)
+                            // FIXME
+                            .type_("EuropeanDigitalCredential")
+                            .context(
+                                // identity_core::common::Url::parse("https://www.w3.org/2018/credentials/v1").unwrap(),
+                            )
+                            .properties(vec![(
+                                "credentialProfiles",
+                                serde_json::json!({
+                                  "id":"http://data.europa.eu/snb/credential/bdc47cb449",
+                                  "type":"Concept",
+                                  "inScheme":{
+                                    "id":"http://data.europa.eu/snb/credential/25831c2",
+                                     "type": "ConceptScheme"
+                                  }
+                                }),
+                            )])
+                            .schema(Schema::new(
+                                identity_core::common::Url::parse(
+                                    // FIXME
+                                    "https://eudiw.org/credentials/schemas/EuropeanDigitalCredentialV3_3.json",
+                                )
+                                .unwrap(),
+                                vec!["JsonSchema".to_string()],
+                            ));
 
                         if cfg!(feature = "test_utils") {
                             builder = builder.issuance_date("2010-01-01T00:00:00Z".parse().unwrap());
@@ -408,9 +434,24 @@ impl Aggregate for Credential {
                             builder
                         };
 
-                        let credential: W3CVerifiableCredentialV2 = builder
+                        let mut credential: W3CVerifiableCredentialV2 = builder
                             .build_v2()
                             .map_err(|e| InvalidCredentialSubjectError(e.to_string()))?;
+
+                        // credential.credential_schema =
+
+                        // Create validator with proper configuration
+                        let validator = EUROPEAN_DIGITAL_CREDENTIAL_V3_3_VALIDATOR.clone();
+
+                        println!("Validating credential against schema...");
+
+                        // Iterate over errors
+                        for error in validator.iter_errors(&serde_json::json!(credential)) {
+                            println!("Error: {error}");
+                            println!("Location: {}", error.instance_path());
+                        }
+
+                        println!("Validation complete.");
 
                         let mut raw = json!(credential);
 
@@ -673,6 +714,8 @@ impl Aggregate for Credential {
                             .map(|subject| subject.properties.keys().cloned().collect::<Vec<String>>())
                             .unwrap_or_default();
 
+                        // TODO: If necessary, convert `w3c_verifiable_credential_v2` to a serde_json::Value.
+
                         let mut builder = SdJwtBuilder::new(w3c_verifiable_credential_v2)
                             .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?
                             .header("typ", "vc+sd-jwt")
@@ -805,6 +848,68 @@ fn get_status_list_url(index: usize) -> Result<identity_core::common::Url, Crede
         .push(&status_list_number.to_string());
 
     Ok(status_list_url.into())
+}
+
+use lazy_static::lazy_static;
+use serde_json::Value;
+const JSONSCHEMAS_DIR: &str = "agent_issuance/res/json_schema";
+
+/// Helper function to create the static ref Validators from JSON Schema files.
+fn compile_validator(json_schema_str: &str) -> Validator {
+    let json_schema: Value = serde_json::from_str(json_schema_str).unwrap();
+
+    // Define the relative path to our jsonschema folder needed for the LocalRetriever
+    let jsonschema_dir = std::env::current_dir().unwrap().join(JSONSCHEMAS_DIR);
+
+    // Select correct draft version for JSON Schema Validator and construct schema with LocalRetriever
+    let schema = match json_schema.get("$schema").and_then(|value| value.as_str()).unwrap() {
+        "https://json-schema.org/draft/2019-09/schema#" => jsonschema::draft201909::options()
+            .with_retriever(LocalRetriever {
+                base_path: jsonschema_dir.clone(),
+            })
+            .build(&json_schema)
+            .unwrap(),
+        // Default to draft 2020-12
+        _ => jsonschema::draft202012::options()
+            .with_retriever(LocalRetriever {
+                base_path: jsonschema_dir.clone(),
+            })
+            .build(&json_schema)
+            .unwrap(),
+    };
+
+    schema
+}
+
+/// This struct is solely used to implement the `Retrieve` trait from the `jsonschema` crate,
+/// allowing us to load local JSON Schema files referenced via $ref in our JSON Schemas
+struct LocalRetriever {
+    base_path: PathBuf,
+}
+
+/// Implementation of the `Retrieve` trait for loading local JSON Schema files
+impl Retrieve for LocalRetriever {
+    fn retrieve(&self, uri: &Uri<String>) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        // Convert the URI/filename to a path in the resources folder
+        let file_path = self.base_path.join(uri.path().to_string().trim_start_matches('/'));
+        let content = std::fs::read_to_string(file_path)?;
+        let json = serde_json::from_str(&content)?;
+        Ok(json)
+    }
+}
+
+lazy_static! {
+    // pub static ref VERIFIABLE_CREDENTIAL_V1_1_VALIDATOR: Validator =
+    //     compile_validator(include_str!("VerifiableCredentialV1_1.json"))
+    //         .expect("Failed to compile VerifiableCredentialV1_1 JSON Schema");
+    // pub static ref VERIFIABLE_CREDENTIAL_V2_VALIDATOR: Validator =
+    //     compile_validator(include_str!("VerifiableCredentialV2.json"))
+    //         .expect("Failed to compile VerifiableCredentialV2 JSON Schema");
+    pub static ref EUROPEAN_DIGITAL_CREDENTIAL_V3_3_VALIDATOR: Validator =
+        compile_validator(include_str!("../../res/json_schema/EuropeanDigitalCredentialV3_3.json"));
+    // pub static ref OPEN_BADGE_CREDENTIAL_V3_VALIDATOR: Validator =
+    //     compile_validator(include_str!("OpenBadgeCredentialV3.json"))
+    //         .expect("Failed to compile OpenBadgeCredentialV3 JSON Schema");
 }
 
 #[cfg(test)]
