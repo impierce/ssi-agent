@@ -43,7 +43,20 @@ pub enum TokenIssuanceError {
 }
 
 pub struct TokenIssuanceService {}
-
+// TODO: Handle authorization_details merging/downscoping logic.
+// Per OID4VCI spec Section 6.1 and 6.2  https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-successful-token-response
+// - If authorization_details is present in both the Authorization Request
+//   (stored in authorization_state) and the Token Request, the Token Request
+//   may represent a downscoped subset.
+// - The server should validate that the Token Request's authorization_details
+//   is a subset of what was authorized in the Authorization Request:
+// "[...] it is RECOMMENDED that the AS would accept a request from the Wallet containing a subset of credential_configuration_id parameters
+// received in the original Authorization Request and issue a token for the reduced set."
+// - The Token Response MUST include authorization_details if it was present
+//   in either the Authorization Request or Token Request.
+// - Each entry must be enriched with credential_identifiers (within the authorization_details).
+//
+// For now, we pass through the Token Request's authorization_details as-is.
 impl TokenIssuanceService {
     pub async fn issue_token(
         authorization_state: &AuthorizationState,
