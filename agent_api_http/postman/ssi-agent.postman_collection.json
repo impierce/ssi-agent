@@ -639,10 +639,6 @@
           "request": {
             "method": "POST",
             "header": [],
-            "body": {
-              "mode": "raw",
-              "raw": ""
-            },
             "url": {
               "raw": "{{HOST}}/openid4vci/nonce",
               "host": [
