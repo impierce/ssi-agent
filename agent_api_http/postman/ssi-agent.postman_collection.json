@@ -31,9 +31,7 @@
             {
               "listen": "prerequest",
               "script": {
-                "exec": [
-                  ""
-                ],
+                "exec": [""],
                 "type": "text/javascript",
                 "packages": {}
               }
@@ -53,13 +51,8 @@
             },
             "url": {
               "raw": "{{HOST}}/v0/credentials",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "credentials"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "credentials"]
             }
           },
           "response": []
@@ -85,9 +78,7 @@
             {
               "listen": "prerequest",
               "script": {
-                "exec": [
-                  ""
-                ],
+                "exec": [""],
                 "type": "text/javascript",
                 "packages": {}
               }
@@ -107,13 +98,8 @@
             },
             "url": {
               "raw": "{{HOST}}/v0/credentials",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "credentials"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "credentials"]
             }
           },
           "response": []
@@ -139,9 +125,7 @@
             {
               "listen": "prerequest",
               "script": {
-                "exec": [
-                  ""
-                ],
+                "exec": [""],
                 "type": "text/javascript",
                 "packages": {}
               }
@@ -161,13 +145,8 @@
             },
             "url": {
               "raw": "{{HOST}}/v0/credentials",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "credentials"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "credentials"]
             }
           },
           "response": []
@@ -178,9 +157,7 @@
             {
               "listen": "test",
               "script": {
-                "exec": [
-                  ""
-                ],
+                "exec": [""],
                 "type": "text/javascript",
                 "packages": {}
               }
@@ -188,9 +165,7 @@
             {
               "listen": "prerequest",
               "script": {
-                "exec": [
-                  ""
-                ],
+                "exec": [""],
                 "type": "text/javascript",
                 "packages": {}
               }
@@ -201,13 +176,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/v0/credentials",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "credentials"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "credentials"]
             }
           },
           "response": []
@@ -219,9 +189,7 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}{{CREDENTIAL_LOCATION}}",
-              "host": [
-                "{{HOST}}{{CREDENTIAL_LOCATION}}"
-              ]
+              "host": ["{{HOST}}{{CREDENTIAL_LOCATION}}"]
             }
           },
           "response": []
@@ -242,9 +210,7 @@
             },
             "url": {
               "raw": "{{HOST}}{{CREDENTIAL_LOCATION}}",
-              "host": [
-                "{{HOST}}{{CREDENTIAL_LOCATION}}"
-              ]
+              "host": ["{{HOST}}{{CREDENTIAL_LOCATION}}"]
             }
           },
           "response": []
@@ -255,9 +221,7 @@
             {
               "listen": "test",
               "script": {
-                "exec": [
-                  ""
-                ],
+                "exec": [""],
                 "type": "text/javascript",
                 "packages": {}
               }
@@ -265,9 +229,7 @@
             {
               "listen": "prerequest",
               "script": {
-                "exec": [
-                  ""
-                ],
+                "exec": [""],
                 "type": "text/javascript",
                 "packages": {}
               }
@@ -278,13 +240,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/ietf-oauth-token-status-list/0",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "ietf-oauth-token-status-list",
-                "0"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["ietf-oauth-token-status-list", "0"]
             }
           },
           "response": []
@@ -312,9 +269,7 @@
             {
               "listen": "prerequest",
               "script": {
-                "exec": [
-                  ""
-                ],
+                "exec": [""],
                 "type": "text/javascript",
                 "packages": {}
               }
@@ -334,13 +289,8 @@
             },
             "url": {
               "raw": "{{HOST}}/v0/offers",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "offers"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "offers"]
             }
           },
           "response": []
@@ -351,9 +301,7 @@
             {
               "listen": "test",
               "script": {
-                "exec": [
-                  ""
-                ],
+                "exec": [""],
                 "type": "text/javascript",
                 "packages": {}
               }
@@ -361,9 +309,7 @@
             {
               "listen": "prerequest",
               "script": {
-                "exec": [
-                  ""
-                ],
+                "exec": [""],
                 "type": "text/javascript",
                 "packages": {}
               }
@@ -374,13 +320,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/v0/offers",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "offers"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "offers"]
             }
           },
           "response": []
@@ -392,14 +333,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/v0/offers/{{OFFER_ID}}",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "offers",
-                "{{OFFER_ID}}"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "offers", "{{OFFER_ID}}"]
             }
           },
           "response": []
@@ -420,14 +355,8 @@
             },
             "url": {
               "raw": "{{HOST}}/v0/offers/send-offer-to-organization",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "offers",
-                "send-offer-to-organization"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "offers", "send-offer-to-organization"]
             }
           },
           "response": []
@@ -448,14 +377,8 @@
             },
             "url": {
               "raw": "{{HOST}}/v0/offers/send-offer-to-individual",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "offers",
-                "send-offer-to-individual"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "offers", "send-offer-to-individual"]
             }
           },
           "response": []
@@ -476,13 +399,8 @@
             },
             "url": {
               "raw": "{{HOST}}/v0/credential-configurations",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "credential-configurations"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "credential-configurations"]
             }
           },
           "response": []
@@ -515,9 +433,7 @@
             "header": [],
             "url": {
               "raw": "{{CREDENTIAL_OFFER_URI}}",
-              "host": [
-                "{{CREDENTIAL_OFFER_URI}}"
-              ]
+              "host": ["{{CREDENTIAL_OFFER_URI}}"]
             }
           },
           "response": []
@@ -553,13 +469,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/.well-known/oauth-authorization-server",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                ".well-known",
-                "oauth-authorization-server"
-              ]
+              "host": ["{{HOST}}"],
+              "path": [".well-known", "oauth-authorization-server"]
             }
           },
           "response": []
@@ -571,13 +482,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/.well-known/openid-credential-issuer",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                ".well-known",
-                "openid-credential-issuer"
-              ]
+              "host": ["{{HOST}}"],
+              "path": [".well-known", "openid-credential-issuer"]
             }
           },
           "response": []
@@ -623,13 +529,8 @@
             },
             "url": {
               "raw": "{{HOST}}/auth/token",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "auth",
-                "token"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["auth", "token"]
             }
           },
           "response": []
@@ -645,13 +546,8 @@
             },
             "url": {
               "raw": "{{HOST}}/openid4vci/nonce",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "openid4vci",
-                "nonce"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["openid4vci", "nonce"]
             }
           },
           "response": []
@@ -694,13 +590,8 @@
             },
             "url": {
               "raw": "{{HOST}}/openid4vci/credential",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "openid4vci",
-                "credential"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["openid4vci", "credential"]
             }
           },
           "response": []
@@ -743,13 +634,8 @@
             },
             "url": {
               "raw": "{{HOST}}/openid4vci/notification",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "openid4vci",
-                "notification"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["openid4vci", "notification"]
             }
           },
           "response": []
@@ -830,13 +716,8 @@
             },
             "url": {
               "raw": "{{HOST}}/auth/par",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "auth",
-                "par"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["auth", "par"]
             }
           },
           "response": []
@@ -848,13 +729,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/auth/authorize?client_id=unime&request_uri={{REQUEST_URI}}",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "auth",
-                "authorize"
-              ],
+              "host": ["{{HOST}}"],
+              "path": ["auth", "authorize"],
               "query": [
                 {
                   "key": "client_id",
@@ -922,13 +798,8 @@
             },
             "url": {
               "raw": "{{HOST}}/v0/authorization_requests",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "authorization_requests"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "authorization_requests"]
             }
           },
           "response": []
@@ -969,9 +840,7 @@
             {
               "listen": "prerequest",
               "script": {
-                "exec": [
-                  ""
-                ],
+                "exec": [""],
                 "type": "text/javascript",
                 "packages": {}
               }
@@ -991,13 +860,8 @@
             },
             "url": {
               "raw": "{{HOST}}/v0/authorization_requests",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "authorization_requests"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "authorization_requests"]
             }
           },
           "response": []
@@ -1009,9 +873,7 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}{{AUTHORIZATION_REQUEST_LOCATION}}",
-              "host": [
-                "{{HOST}}{{AUTHORIZATION_REQUEST_LOCATION}}"
-              ]
+              "host": ["{{HOST}}{{AUTHORIZATION_REQUEST_LOCATION}}"]
             }
           },
           "response": []
@@ -1028,9 +890,7 @@
             "header": [],
             "url": {
               "raw": "{{REQUEST_URI}}",
-              "host": [
-                "{{REQUEST_URI}}"
-              ]
+              "host": ["{{REQUEST_URI}}"]
             }
           },
           "response": []
@@ -1047,13 +907,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/.well-known/did.json",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                ".well-known",
-                "did.json"
-              ]
+              "host": ["{{HOST}}"],
+              "path": [".well-known", "did.json"]
             }
           },
           "response": []
@@ -1065,13 +920,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/.well-known/did-configuration.json",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                ".well-known",
-                "did-configuration.json"
-              ]
+              "host": ["{{HOST}}"],
+              "path": [".well-known", "did-configuration.json"]
             }
           },
           "response": []
@@ -1110,9 +960,7 @@
             {
               "listen": "prerequest",
               "script": {
-                "exec": [
-                  ""
-                ],
+                "exec": [""],
                 "type": "text/javascript",
                 "packages": {}
               }
@@ -1123,14 +971,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/v0/holder/offers",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "holder",
-                "offers"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "holder", "offers"]
             }
           },
           "response": []
@@ -1142,15 +984,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/v0/holder/offers/{{RECEIVED_OFFER_ID}}",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "holder",
-                "offers",
-                "{{RECEIVED_OFFER_ID}}"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "holder", "offers", "{{RECEIVED_OFFER_ID}}"]
             }
           },
           "response": []
@@ -1162,9 +997,7 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/v0/holder/offers/{{RECEIVED_OFFER_ID}}/accept",
-              "host": [
-                "{{HOST}}"
-              ],
+              "host": ["{{HOST}}"],
               "path": [
                 "v0",
                 "holder",
@@ -1183,9 +1016,7 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/v0/holder/offers/{{RECEIVED_OFFER_ID}}/reject",
-              "host": [
-                "{{HOST}}"
-              ],
+              "host": ["{{HOST}}"],
               "path": [
                 "v0",
                 "holder",
@@ -1236,14 +1067,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/v0/holder/credentials",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "holder",
-                "credentials"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "holder", "credentials"]
             }
           },
           "response": []
@@ -1254,9 +1079,7 @@
             {
               "listen": "test",
               "script": {
-                "exec": [
-                  ""
-                ],
+                "exec": [""],
                 "type": "text/javascript"
               }
             }
@@ -1275,14 +1098,8 @@
             },
             "url": {
               "raw": "{{HOST}}/v0/holder/credentials",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "holder",
-                "credentials"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "holder", "credentials"]
             }
           },
           "response": []
@@ -1294,9 +1111,7 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/v0/holder/credentials/{{HOLDER_CREDENTIAL_ID}}",
-              "host": [
-                "{{HOST}}"
-              ],
+              "host": ["{{HOST}}"],
               "path": [
                 "v0",
                 "holder",
@@ -1346,14 +1161,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/v0/holder/presentations",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "holder",
-                "presentations"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "holder", "presentations"]
             }
           },
           "response": []
@@ -1365,15 +1174,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/v0/holder/presentations/{{PRESENTATION_ID}}",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "holder",
-                "presentations",
-                "{{PRESENTATION_ID}}"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "holder", "presentations", "{{PRESENTATION_ID}}"]
             }
           },
           "response": []
@@ -1394,14 +1196,8 @@
             },
             "url": {
               "raw": "{{HOST}}/v0/holder/presentations",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "holder",
-                "presentations"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "holder", "presentations"]
             }
           },
           "response": []
@@ -1420,9 +1216,7 @@
                 {
                   "listen": "test",
                   "script": {
-                    "exec": [
-                      ""
-                    ],
+                    "exec": [""],
                     "type": "text/javascript",
                     "packages": {}
                   }
@@ -1430,9 +1224,7 @@
                 {
                   "listen": "prerequest",
                   "script": {
-                    "exec": [
-                      ""
-                    ],
+                    "exec": [""],
                     "type": "text/javascript",
                     "packages": {}
                   }
@@ -1452,13 +1244,8 @@
                 },
                 "url": {
                   "raw": "{{HOST}}/v0/connections",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "connections"
-                  ]
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "connections"]
                 }
               },
               "response": []
@@ -1492,9 +1279,7 @@
                 {
                   "listen": "prerequest",
                   "script": {
-                    "exec": [
-                      ""
-                    ],
+                    "exec": [""],
                     "type": "text/javascript",
                     "packages": {}
                   }
@@ -1505,13 +1290,8 @@
                 "header": [],
                 "url": {
                   "raw": "{{HOST}}/v0/connections",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "connections"
-                  ]
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "connections"]
                 }
               },
               "response": []
@@ -1545,9 +1325,7 @@
                 {
                   "listen": "prerequest",
                   "script": {
-                    "exec": [
-                      ""
-                    ],
+                    "exec": [""],
                     "type": "text/javascript",
                     "packages": {}
                   }
@@ -1558,13 +1336,8 @@
                 "header": [],
                 "url": {
                   "raw": "{{HOST}}/v0/connections?did=did:example:123",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "connections"
-                  ],
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "connections"],
                   "query": [
                     {
                       "key": "did",
@@ -1606,13 +1379,8 @@
                 "header": [],
                 "url": {
                   "raw": "{{HOST}}/v0/connections?alias=My+Connection",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "connections"
-                  ],
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "connections"],
                   "query": [
                     {
                       "key": "alias",
@@ -1652,9 +1420,7 @@
                 {
                   "listen": "prerequest",
                   "script": {
-                    "exec": [
-                      ""
-                    ],
+                    "exec": [""],
                     "type": "text/javascript",
                     "packages": {}
                   }
@@ -1665,13 +1431,8 @@
                 "header": [],
                 "url": {
                   "raw": "{{HOST}}/v0/connections?domain=http://example.org",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "connections"
-                  ],
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "connections"],
                   "query": [
                     {
                       "key": "domain",
@@ -1688,9 +1449,7 @@
                 {
                   "listen": "test",
                   "script": {
-                    "exec": [
-                      ""
-                    ],
+                    "exec": [""],
                     "type": "text/javascript",
                     "packages": {}
                   }
@@ -1698,9 +1457,7 @@
                 {
                   "listen": "prerequest",
                   "script": {
-                    "exec": [
-                      ""
-                    ],
+                    "exec": [""],
                     "type": "text/javascript",
                     "packages": {}
                   }
@@ -1724,14 +1481,8 @@
                 },
                 "url": {
                   "raw": "{{HOST}}/v0/connections/{{CONNECTION_ID}}",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "connections",
-                    "{{CONNECTION_ID}}"
-                  ]
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "connections", "{{CONNECTION_ID}}"]
                 }
               },
               "response": []
@@ -1757,14 +1508,8 @@
                 },
                 "url": {
                   "raw": "{{HOST}}/v0/services/linked-vp",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "services",
-                    "linked-vp"
-                  ]
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "services", "linked-vp"]
                 }
               },
               "response": []
@@ -1808,13 +1553,8 @@
                 "header": [],
                 "url": {
                   "raw": "{{HOST}}/v0/services",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "services"
-                  ]
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "services"]
                 }
               },
               "response": []
@@ -1826,14 +1566,8 @@
                 "header": [],
                 "url": {
                   "raw": "{{HOST}}/v0/services/{{SERVICE_ID}}",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "services",
-                    "{{SERVICE_ID}}"
-                  ]
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "services", "{{SERVICE_ID}}"]
                 }
               },
               "response": []
@@ -1845,9 +1579,7 @@
                 "header": [],
                 "url": {
                   "raw": "{{HOST}}/v0/services/linked-verifiable-presentation-service",
-                  "host": [
-                    "{{HOST}}"
-                  ],
+                  "host": ["{{HOST}}"],
                   "path": [
                     "v0",
                     "services",
@@ -1894,13 +1626,8 @@
                 "header": [],
                 "url": {
                   "raw": "{{HOST}}/v0/documents",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "documents"
-                  ]
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "documents"]
                 }
               },
               "response": []
@@ -1912,14 +1639,8 @@
                 "header": [],
                 "url": {
                   "raw": "{{HOST}}/v0/documents/{{DOCUMENT_ID}}",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "documents",
-                    "{{DOCUMENT_ID}}"
-                  ]
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "documents", "{{DOCUMENT_ID}}"]
                 }
               },
               "response": []
@@ -1931,13 +1652,8 @@
                 "header": [],
                 "url": {
                   "raw": "{{HOST}}/v0/documents?did_method=did:jwk",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "documents"
-                  ],
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "documents"],
                   "query": [
                     {
                       "key": "did_method",
@@ -1969,13 +1685,8 @@
                 },
                 "url": {
                   "raw": "{{HOST}}/v0/profile",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "profile"
-                  ]
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "profile"]
                 }
               },
               "response": []
@@ -1986,9 +1697,7 @@
                 {
                   "listen": "test",
                   "script": {
-                    "exec": [
-                      ""
-                    ],
+                    "exec": [""],
                     "type": "text/javascript",
                     "packages": {}
                   }
@@ -1996,9 +1705,7 @@
                 {
                   "listen": "prerequest",
                   "script": {
-                    "exec": [
-                      ""
-                    ],
+                    "exec": [""],
                     "type": "text/javascript",
                     "packages": {}
                   }
@@ -2009,13 +1716,8 @@
                 "header": [],
                 "url": {
                   "raw": "{{HOST}}/v0/profile",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "profile"
-                  ]
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "profile"]
                 }
               },
               "response": []
@@ -2046,14 +1748,8 @@
                 },
                 "url": {
                   "raw": "{{HOST}}/v0/templates/create-template",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "templates",
-                    "create-template"
-                  ]
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "templates", "create-template"]
                 }
               },
               "response": []
@@ -2088,9 +1784,7 @@
                 {
                   "listen": "prerequest",
                   "script": {
-                    "exec": [
-                      ""
-                    ],
+                    "exec": [""],
                     "type": "text/javascript",
                     "packages": {},
                     "requests": {}
@@ -2102,14 +1796,8 @@
                 "header": [],
                 "url": {
                   "raw": "{{HOST}}/v0/templates/get-all-templates",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "templates",
-                    "get-all-templates"
-                  ]
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "templates", "get-all-templates"]
                 }
               },
               "response": []
@@ -2120,9 +1808,7 @@
                 {
                   "listen": "test",
                   "script": {
-                    "exec": [
-                      ""
-                    ],
+                    "exec": [""],
                     "type": "text/javascript",
                     "packages": {}
                   }
@@ -2130,9 +1816,7 @@
                 {
                   "listen": "prerequest",
                   "script": {
-                    "exec": [
-                      ""
-                    ],
+                    "exec": [""],
                     "type": "text/javascript",
                     "packages": {}
                   }
@@ -2150,14 +1834,8 @@
                 },
                 "url": {
                   "raw": "{{HOST}}/v0/templates/{{TEMPLATE_ID}}",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "templates",
-                    "{{TEMPLATE_ID}}"
-                  ]
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "templates", "{{TEMPLATE_ID}}"]
                 }
               },
               "response": []
@@ -2178,14 +1856,8 @@
                 },
                 "url": {
                   "raw": "{{HOST}}/v0/templates/update-template",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "templates",
-                    "update-template"
-                  ]
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "templates", "update-template"]
                 }
               },
               "response": []
@@ -2206,14 +1878,8 @@
                 },
                 "url": {
                   "raw": "{{HOST}}/v0/templates/duplicate-template",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "templates",
-                    "duplicate-template"
-                  ]
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "templates", "duplicate-template"]
                 }
               },
               "response": []
@@ -2234,14 +1900,8 @@
                 },
                 "url": {
                   "raw": "{{HOST}}/v0/templates/delete-template",
-                  "host": [
-                    "{{HOST}}"
-                  ],
-                  "path": [
-                    "v0",
-                    "templates",
-                    "delete-template"
-                  ]
+                  "host": ["{{HOST}}"],
+                  "path": ["v0", "templates", "delete-template"]
                 }
               },
               "response": []
@@ -2260,12 +1920,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/healthz",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "healthz"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["healthz"]
             }
           },
           "response": []
@@ -2277,12 +1933,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/version",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "version"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["version"]
             }
           },
           "response": []
@@ -2294,12 +1946,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/info",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "info"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["info"]
             }
           },
           "response": []
@@ -2311,13 +1959,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/v0/configuration",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "configuration"
-              ]
+              "host": ["{{HOST}}"],
+              "path": ["v0", "configuration"]
             }
           },
           "response": []
@@ -2329,13 +1972,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST}}/v0/configuration?provisioned=true",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "configuration"
-              ],
+              "host": ["{{HOST}}"],
+              "path": ["v0", "configuration"],
               "query": [
                 {
                   "key": "provisioned",
@@ -2353,12 +1991,8 @@
             "header": [],
             "url": {
               "raw": "{{HOST_METRICS}}/metrics",
-              "host": [
-                "{{HOST_METRICS}}"
-              ],
-              "path": [
-                "metrics"
-              ]
+              "host": ["{{HOST_METRICS}}"],
+              "path": ["metrics"]
             }
           },
           "response": []
@@ -2390,14 +2024,8 @@
                     },
                     "url": {
                       "raw": "{{HOST}}/v0/keys/generate-new-key",
-                      "host": [
-                        "{{HOST}}"
-                      ],
-                      "path": [
-                        "v0",
-                        "keys",
-                        "generate-new-key"
-                      ]
+                      "host": ["{{HOST}}"],
+                      "path": ["v0", "keys", "generate-new-key"]
                     }
                   },
                   "response": []
@@ -2418,14 +2046,8 @@
                     },
                     "url": {
                       "raw": "{{HOST}}/v0/keys/remove-key",
-                      "host": [
-                        "{{HOST}}"
-                      ],
-                      "path": [
-                        "v0",
-                        "keys",
-                        "remove-key"
-                      ]
+                      "host": ["{{HOST}}"],
+                      "path": ["v0", "keys", "remove-key"]
                     }
                   },
                   "response": []
@@ -2446,14 +2068,8 @@
                     },
                     "url": {
                       "raw": "{{HOST}}/v0/keys/rename-key-alias",
-                      "host": [
-                        "{{HOST}}"
-                      ],
-                      "path": [
-                        "v0",
-                        "keys",
-                        "rename-key-alias"
-                      ]
+                      "host": ["{{HOST}}"],
+                      "path": ["v0", "keys", "rename-key-alias"]
                     }
                   },
                   "response": []
@@ -2474,14 +2090,8 @@
                     },
                     "url": {
                       "raw": "{{HOST}}/v0/keys/set-signing-key",
-                      "host": [
-                        "{{HOST}}"
-                      ],
-                      "path": [
-                        "v0",
-                        "keys",
-                        "set-signing-key"
-                      ]
+                      "host": ["{{HOST}}"],
+                      "path": ["v0", "keys", "set-signing-key"]
                     }
                   },
                   "response": []
@@ -2493,14 +2103,8 @@
                     "header": [],
                     "url": {
                       "raw": "{{HOST}}/v0/keys/list-all",
-                      "host": [
-                        "{{HOST}}"
-                      ],
-                      "path": [
-                        "v0",
-                        "keys",
-                        "list-all"
-                      ]
+                      "host": ["{{HOST}}"],
+                      "path": ["v0", "keys", "list-all"]
                     }
                   },
                   "response": []
@@ -2532,18 +2136,14 @@
       "listen": "prerequest",
       "script": {
         "type": "text/javascript",
-        "exec": [
-          ""
-        ]
+        "exec": [""]
       }
     },
     {
       "listen": "test",
       "script": {
         "type": "text/javascript",
-        "exec": [
-          ""
-        ]
+        "exec": [""]
       }
     }
   ],
