@@ -23,11 +23,11 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "42574ca" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "42574ca" }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "42574ca" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "42574ca" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "42574ca" }
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "59aefe0" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "59aefe0" }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "59aefe0" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "59aefe0" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "59aefe0" }
 
 anyhow = "1.0"
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
