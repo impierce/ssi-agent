@@ -76,6 +76,7 @@ pub mod tests {
                                 r#type: OpenidCredential::Type,
                                 locations: None,
                                 credential_configuration_id: "configuration_id".to_string(),
+                                credential_identifiers: None,
                                 claims: None,
                             }],
                         }))

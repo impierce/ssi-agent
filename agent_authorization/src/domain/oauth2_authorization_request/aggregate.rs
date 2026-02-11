@@ -286,6 +286,7 @@ pub mod test_utils {
             r#type: OpenidCredential::Type,
             locations: None,
             credential_configuration_id: "001".to_string(),
+            credential_identifiers: None,
             claims: None,
         }]
     }

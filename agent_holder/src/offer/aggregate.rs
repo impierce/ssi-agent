@@ -131,6 +131,7 @@ impl Aggregate for Offer {
                     }) => TokenRequest::PreAuthorizedCode {
                         pre_authorized_code: pre_authorized_code.pre_authorized_code,
                         tx_code: None,
+                        authorization_details: None,
                     },
                     _ => return Err(MissingPreAuthorizedCodeError),
                 };
@@ -495,6 +496,7 @@ pub mod tests {
                         expires_in: None,
                         scope: None,
                         refresh_token: None,
+                        authorization_details: None,
                     },
                 },
             ]);
@@ -535,6 +537,7 @@ pub mod tests {
                         expires_in: None,
                         scope: None,
                         refresh_token: None,
+                        authorization_details: None,
                     },
                 },
             ])
