@@ -518,11 +518,9 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
             if let Some(service) = event_publisher.service() {
                 partitions.service_event_publishers.push(service);
             }
-
             if let Some(template) = event_publisher.template() {
                 partitions.template_event_publishers.push(template);
             }
-
             if let Some(authorization_code) = event_publisher.authorization_code() {
                 partitions.authorization_code_event_publishers.push(authorization_code);
             }
@@ -558,7 +556,6 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
             if let Some(received_offer) = event_publisher.received_offer() {
                 partitions.received_offer_event_publishers.push(received_offer);
             }
-
             if let Some(authorization_request) = event_publisher.authorization_request() {
                 partitions
                     .authorization_request_event_publishers
