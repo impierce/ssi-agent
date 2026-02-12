@@ -32,7 +32,8 @@ impl Aggregate for Nonce {
     ) -> Result<Vec<Self::Event>, Self::Error> {
         use NonceCommand::*;
         use NonceEvent::*;
-        // use NonceError::* Unused for now - aggregate operations don't fail
+        // TODO: add proper errors within NonceError
+        // use NonceError::*
 
         info!("Handling command: {:?}", command);
 
@@ -65,5 +66,53 @@ impl Aggregate for Nonce {
                 self.is_redeemed = is_redeemed;
             }
         }
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use crate::services::IssuanceServices;
+    use agent_secret_manager::service::Service;
+    use cqrs_es::test::TestFramework;
+    use rstest::rstest;
+
+    type NonceTestFramework = TestFramework<Nonce>;
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_nonce_generation() {
+        let issuance_services = IssuanceServices::default().await;
+        let nonce_value = "123-nonce-123".to_string();
+
+        NonceTestFramework::with(issuance_services)
+            .given_no_previous_events()
+            .when(NonceCommand::GenerateNonce {
+                c_nonce: nonce_value.clone(),
+            })
+            .then_expect_events(vec![NonceEvent::NonceGenerated {
+                c_nonce: nonce_value,
+                is_redeemed: false,
+            }]);
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_nonce_redemption() {
+        let issuance_services = IssuanceServices::default().await;
+        let nonce_value = "123-nonce-123".to_string();
+
+        NonceTestFramework::with(issuance_services)
+            .given(vec![NonceEvent::NonceGenerated {
+                c_nonce: nonce_value.clone(),
+                is_redeemed: false,
+            }])
+            .when(NonceCommand::RedeemNonce {
+                c_nonce: nonce_value.clone(),
+            })
+            .then_expect_events(vec![NonceEvent::NonceRedeemed {
+                c_nonce: nonce_value,
+                is_redeemed: true,
+            }]);
     }
 }
