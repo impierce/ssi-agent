@@ -151,7 +151,7 @@ pub mod presentation_tests {
         signed_credentials: Vec<OfferCredential>,
         signed_presentation: Jwt,
     ) {
-        PresentationTestFramework::with(Service::default())
+        PresentationTestFramework::with(HolderServices::default().await)
             .given_no_previous_events()
             .when(PresentationCommand::CreatePresentation {
                 presentation_id: presentation_id.clone(),

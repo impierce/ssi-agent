@@ -423,7 +423,7 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
             && document
                 .iota_metadata
                 .as_ref()
-                .map(|iota_metadata| iota_metadata.is_funded)
+                .map(|iota_metadata| iota_metadata.is_funded || config().iota_sponsoring_service_url.is_some())
                 .unwrap_or(true)
     })
     .await?;
@@ -486,12 +486,14 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
 
 /// Initializes the Linked Verifiable Presentations service for DID Web Document.
 pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -> anyhow::Result<()> {
-    // TODO: We currently only support Linked Verifiable Presentations for DID Web. In the future we should also support
-    // it for other update supporting DID methods.
-
-    // Get the DID Web document.
-    let did_web_document = query_all_documents(state, |(_, document)| {
-        document.status != Status::Disabled && document.did_method == Some(SupportedDidMethod::Web)
+    // Get all documents that can be updated.
+    let documents = query_all_documents(state, |(_, document)| {
+        document.status != Status::Disabled
+            && document
+                .did_method
+                .as_ref()
+                .map(SupportedDidMethod::supports_update)
+                .unwrap_or(false)
     })
     .await?;
 
@@ -502,9 +504,9 @@ pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -
         info!("Found Linked Verifiable Presentations service: {service}");
 
         // Add the Linked Verifiable Presentations service to the DID Web Document.
-        for document_id in did_web_document.keys() {
+        for document_id in documents.keys() {
             let command = DocumentCommand::AddService {
-                service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
+                service_id: LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.to_string(),
                 service: Box::new(service.clone()),
             };
 

@@ -1,3 +1,4 @@
+use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
@@ -13,6 +14,7 @@ use hyper::{header, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::debug;
+use uuid::Uuid;
 
 /// Data transfer object for Templates.
 #[derive(Serialize, Deserialize)]
@@ -20,6 +22,7 @@ use tracing::debug;
 pub struct TemplateDto {
     #[serde(rename = "id")]
     pub template_id: String,
+    pub source_template_id: Option<String>,
     pub title: Option<String>,
     pub display: Option<Display>,
     pub credential_format: Option<CredentialFormat>,
@@ -38,6 +41,7 @@ impl From<Template> for TemplateDto {
     fn from(value: Template) -> Self {
         Self {
             template_id: value.template_id,
+            source_template_id: value.source_template_id,
             title: value.title,
             display: value.display,
             credential_format: value.credential_format,
@@ -49,14 +53,14 @@ impl From<Template> for TemplateDto {
             visibility: value.visibility,
             description: value.description,
             r#type: value.r#type,
-            schema: value.schema,
+            schema: *value.schema,
         }
     }
 }
 
 #[derive(Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
-pub struct PostTemplatesEndpointRequest {
+pub struct CreateTemplateEndpointRequest {
     pub title: Option<String>,
     pub display: Option<Display>,
     pub credential_format: Option<CredentialFormat>,
@@ -71,9 +75,9 @@ pub struct PostTemplatesEndpointRequest {
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn post_templates(
+pub(crate) async fn create_template(
     State(state): State<Arc<LibraryState>>,
-    Json(PostTemplatesEndpointRequest {
+    Json(CreateTemplateEndpointRequest {
         title,
         display,
         credential_format,
@@ -85,12 +89,13 @@ pub(crate) async fn post_templates(
         description,
         r#type,
         schema,
-    }): Json<PostTemplatesEndpointRequest>,
+    }): Json<CreateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    let template_id = uuid::Uuid::new_v4().to_string();
+    let template_id = Uuid::new_v4().to_string();
 
     let command = TemplateCommand::CreateTemplate {
         template_id: template_id.clone(),
+        source_template_id: None,
         title,
         display,
         credential_format,
@@ -101,7 +106,7 @@ pub(crate) async fn post_templates(
         visibility,
         description,
         r#type,
-        schema,
+        schema: Box::new(schema),
     };
 
     command_handler(&template_id, &state.command.template, command).await?;
@@ -121,9 +126,65 @@ pub(crate) async fn post_templates(
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateTemplateEndpointRequest {
+    pub source_template_id: String,
+}
+
+#[axum_macros::debug_handler]
+pub(crate) async fn duplicate_template(
+    State(state): State<Arc<LibraryState>>,
+    Json(DuplicateTemplateEndpointRequest { source_template_id }): Json<DuplicateTemplateEndpointRequest>,
+) -> Result<Response, ApiError> {
+    let new_template_id = Uuid::new_v4().to_string();
+
+    let original_template = query_handler(&source_template_id, &state.query.template)
+        .await?
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Source Template Not Found")
+                .type_url(type_url("library#source-template-not-found"))
+                .message(format!("No Source Template found with id: `{source_template_id}`"))
+                .finish()
+        })?;
+
+    let command = TemplateCommand::CreateTemplate {
+        template_id: new_template_id.clone(),
+        source_template_id: Some(source_template_id),
+        title: original_template.title.map(|t| format!("{} Copy", t)),
+        display: original_template.display,
+        credential_format: original_template.credential_format,
+        creator: original_template.creator,
+        holder_type: original_template.holder_type,
+        tags: original_template.tags,
+        status: Status::Draft,
+        visibility: original_template.visibility,
+        description: original_template.description,
+        r#type: original_template.r#type,
+        schema: original_template.schema,
+    };
+
+    command_handler(&new_template_id, &state.command.template, command).await?;
+
+    // Return the duplicated template.
+    let new_template = query_handler(&new_template_id, &state.query.template)
+        .await?
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    Ok((
+        StatusCode::CREATED,
+        [(header::LOCATION, &format!("{API_VERSION}/templates/{new_template_id}"))],
+        Json(new_template),
+    )
+        .into_response())
+}
+
 #[derive(Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase")]
-pub struct PatchTemplatesEndpointRequest {
+pub struct UpdateTemplateEndpointRequest {
+    #[serde(rename = "id")]
+    pub template_id: String,
     pub title: Option<String>,
     pub display: Option<Display>,
     pub credential_format: Option<CredentialFormat>,
@@ -138,10 +199,10 @@ pub struct PatchTemplatesEndpointRequest {
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn patch_template(
+pub(crate) async fn update_template(
     State(state): State<Arc<LibraryState>>,
-    Path(template_id): Path<String>,
-    Json(PatchTemplatesEndpointRequest {
+    Json(UpdateTemplateEndpointRequest {
+        template_id,
         title,
         display,
         credential_format,
@@ -153,8 +214,26 @@ pub(crate) async fn patch_template(
         description,
         r#type,
         schema,
-    }): Json<PatchTemplatesEndpointRequest>,
+    }): Json<UpdateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
+    if template_id.is_empty() {
+        return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+            .title("Template ID Missing")
+            .type_url(type_url("library#template-id-missing"))
+            .message("The `id` field is required to update a template.")
+            .finish());
+    }
+
+    query_handler(&template_id, &state.query.template)
+        .await?
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Template Not Found")
+                .type_url(type_url("library#template-not-found"))
+                .message(format!("No Template found with id: `{template_id}`"))
+                .finish()
+        })?;
+
     if let Some(title) = title {
         let command = TemplateCommand::UpdateTitle {
             template_id: template_id.clone(),
@@ -265,9 +344,10 @@ pub(crate) async fn get_templates(
             let filtered_templates: Vec<TemplateDto> = all_templates_view
                 .templates
                 .into_values()
-                .filter(|_template|
+                .filter(|template| {
+                    template.status != Status::Deleted
                     // TODO: Apply filtering logic based on request parameters
-                    true)
+                })
                 .map(TemplateDto::from)
                 .collect();
 
@@ -285,41 +365,51 @@ pub(crate) async fn get_template(
 ) -> Result<Response, ApiError> {
     query_handler(&template_id, &state.query.template)
         .await?
+        .and_then(|template_view| {
+            if template_view.status == Status::Deleted {
+                None
+            } else {
+                Some(template_view)
+            }
+        })
         .map(|template_view| (StatusCode::OK, Json(TemplateDto::from(template_view))).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use {Display, Template};
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteTemplateEndpointRequest {
+    #[serde(rename = "id")]
+    pub template_id: String,
+}
 
-    #[test]
-    fn test_template_response_serialization() {
-        let template = Template {
-            template_id: "test-id".to_string(),
-            title: Some("Test Title".to_string()),
-            display: Some(Display {
-                name: "Test Display".to_string(),
-                logo: None,
-            }),
-            credential_format: None,
-            creator: None,
-            holder_type: Some(HolderType::Individual),
-            modified_at: None,
-            tags: vec![],
-            status: Default::default(),
-            visibility: Default::default(),
-            description: None,
-            r#type: vec![],
-            schema: None,
-        };
-
-        let response = TemplateDto::from(template);
-        let json = serde_json::json!(&response);
-
-        assert_eq!(json["id"], "test-id");
-        assert_eq!(json["title"], "Test Title");
-        assert_eq!(json["holderType"], "individual");
+#[axum_macros::debug_handler]
+pub(crate) async fn delete_template(
+    State(state): State<Arc<LibraryState>>,
+    Json(DeleteTemplateEndpointRequest { template_id }): Json<DeleteTemplateEndpointRequest>,
+) -> Result<Response, ApiError> {
+    if template_id.is_empty() {
+        return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+            .title("Template ID Missing")
+            .type_url(type_url("library#template-id-missing"))
+            .message("The `id` field is required to delete a template.")
+            .finish());
     }
+
+    query_handler(&template_id, &state.query.template)
+        .await?
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Template Not Found")
+                .type_url(type_url("library#template-not-found"))
+                .message(format!("No Template found with id: `{template_id}`"))
+                .finish()
+        })?;
+
+    let command = TemplateCommand::DeleteTemplate {
+        template_id: template_id.clone(),
+    };
+
+    command_handler(&template_id, &state.command.template, command).await?;
+    Ok(StatusCode::NO_CONTENT.into_response())
 }

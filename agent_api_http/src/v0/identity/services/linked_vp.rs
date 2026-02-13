@@ -2,7 +2,7 @@ use crate::handlers::{command_handler, query_handler};
 use agent_identity::{
     document::{aggregate::Status, command::DocumentCommand},
     service::{aggregate::Service, command::ServiceCommand},
-    state::IdentityState,
+    state::{publish_decentrally_hosted_documents, IdentityState},
 };
 use agent_shared::config::SupportedDidMethod;
 use axum::{
@@ -45,27 +45,56 @@ pub(crate) async fn linked_vp(
         _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
     };
 
-    // Query the DID Web Document to obtain the `document_id`.
-    let document_id = query_handler("all_documents", &state.query.all_documents)
+    // Query all DID Documents that require an update.
+    let document_ids: Vec<String> = query_handler("all_documents", &state.query.all_documents)
         .await?
-        .and_then(|all_documents_view| {
-            all_documents_view.documents.into_values().find_map(|document| {
-                (document.status != Status::Disabled && document.did_method == Some(SupportedDidMethod::Web))
-                    .then_some(document.document_id)
-            })
+        .map(|all_documents_view| {
+            all_documents_view
+                .documents
+                .into_values()
+                .filter(|document| {
+                    document.status != Status::Disabled
+                        && document
+                            .did_method
+                            .as_ref()
+                            .map(SupportedDidMethod::supports_update)
+                            .unwrap_or(false)
+                })
+                .map(|document| document.document_id)
+                .collect()
         })
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
 
-    let command = DocumentCommand::AddService {
-        service_id,
-        service: Box::new(linked_verifiable_presentation_service),
-    };
+    for document_id in &document_ids {
+        let command = DocumentCommand::AddService {
+            service_id: service_id.clone(),
+            service: Box::new(linked_verifiable_presentation_service.clone()),
+        };
 
-    command_handler(&document_id, &state.command.document, command).await?;
+        command_handler(document_id, &state.command.document, command).await?;
+    }
 
-    query_handler(&document_id, &state.query.document)
+    publish_decentrally_hosted_documents(&state)
+        .await
+        .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    query_handler("all_documents", &state.query.all_documents)
         .await?
-        .map(|document_view| (StatusCode::OK, Json(document_view)).into_response())
+        .map(|all_documents_view| {
+            let documents: Vec<_> = all_documents_view
+                .documents
+                .into_values()
+                .filter(|document| {
+                    document.status != Status::Disabled
+                        && document
+                            .did_method
+                            .as_ref()
+                            .map(SupportedDidMethod::supports_update)
+                            .unwrap_or(false)
+                })
+                .collect();
+            (StatusCode::OK, Json(documents)).into_response()
+        })
         // TODO: this *should* be an impossible error, what should we return here?
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
