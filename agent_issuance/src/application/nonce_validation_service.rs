@@ -26,7 +26,7 @@ impl NonceValidationService {
         state: &IssuanceState,
         credential_request: &CredentialRequest,
     ) -> Result<(), NonceValidationError> {
-        if let Some(nonce) = extract_nonce_from_credential(credential_request) {
+        if let Some(nonce) = extract_nonce_from_credential_request(credential_request) {
             // Query nonce state
             let nonce_status = query_handler(&nonce, &state.query.nonce)
                 .await
