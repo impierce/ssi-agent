@@ -21,6 +21,7 @@ use axum::{
 };
 use axum_auth::AuthBearer;
 use oid4vci::credential_request::CredentialRequest;
+use oid4vci::errors::CredentialErrorResponse;
 use std::sync::Arc;
 use tokio::time::sleep;
 use tracing::error;
@@ -38,7 +39,7 @@ pub(crate) async fn credential(
         .ok()
         // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
         .and_then(|claims| claims.issuer_state)
-        .ok_or_else(|| PublicError::from(AccessTokenValidationError::InvalidToken))?;
+        .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidProof))?;
 
     NonceValidationService::validate(&state, &credential_request)
         .await
