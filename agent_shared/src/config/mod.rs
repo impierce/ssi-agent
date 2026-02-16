@@ -618,6 +618,8 @@ pub struct Events {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub offer: Vec<OfferEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nonce: Vec<NonceEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub holder_credential: Vec<HolderCredentialEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub presentation: Vec<PresentationEvent>,
@@ -721,6 +723,12 @@ pub enum OfferEvent {
     CredentialResponseCreated,
     TxCodeGenerated,
     CredentialOfferEmailSent,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum NonceEvent {
+    NonceGenerated,
+    NonceRedeemed,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
