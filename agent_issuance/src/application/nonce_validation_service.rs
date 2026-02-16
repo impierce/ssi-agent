@@ -32,19 +32,15 @@ impl NonceValidationService {
                 .map_err(|_| NonceValidationError::InvalidNonce)?;
 
             match nonce_status {
-                Some(n) if n.is_redeemed => {
-                    return Err(NonceValidationError::RedeemedNonce);
-                }
+                Some(n) if n.is_redeemed => Err(NonceValidationError::RedeemedNonce),
                 Some(_) => {
                     let command = NonceCommand::RedeemNonce { c_nonce: nonce.clone() };
                     command_handler(&nonce, &state.command.nonce, command)
                         .await
                         .map_err(|_| NonceValidationError::InvalidNonce)?;
-                    return Ok(());
+                    Ok(())
                 }
-                None => {
-                    return Err(NonceValidationError::MissingNonce);
-                }
+                None => Err(NonceValidationError::MissingNonce),
             }
         } else {
             Ok(())
