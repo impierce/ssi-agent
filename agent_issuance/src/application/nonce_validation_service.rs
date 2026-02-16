@@ -57,7 +57,7 @@ impl NonceValidationService {
 }
 
 // Helpers
-fn extract_nonce_from_credential(credential_request: &CredentialRequest) -> Option<String> {
+fn extract_nonce_from_credential_request(credential_request: &CredentialRequest) -> Option<String> {
     let proof = credential_request.proof.as_ref()?;
 
     match proof {
@@ -101,7 +101,7 @@ mod tests {
                 proofs: None,
             };
 
-            let nonce = extract_nonce_from_credential(&credential_request);
+            let nonce = extract_nonce_from_credential_request(&credential_request);
             assert_eq!(nonce, Some(NONCE_VALUE.to_string()));
         }
 
@@ -118,8 +118,8 @@ mod tests {
                 proofs: None,
             };
 
-            let nonce = extract_nonce_from_credential(&credential_request);
-            assert_
+            let nonce = extract_nonce_from_credential_request(&credential_request);
+            assert_eq!(nonce, None);
         }
     }
 }
