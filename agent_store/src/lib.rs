@@ -31,12 +31,14 @@ use agent_identity::{
 };
 use agent_issuance::credential::views::all_credentials::AllCredentialsView;
 use agent_issuance::credential::views::CredentialView;
+use agent_issuance::nonce::views::NonceView;
 use agent_issuance::offer::views::all_offers::AllOffersView;
 use agent_issuance::offer::views::OfferView;
 use agent_issuance::server_config::views::ServerConfigView;
 use agent_issuance::SimpleLoggingQuery;
 use agent_issuance::{
-    credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
+    credential::aggregate::Credential, nonce::aggregate::Nonce, offer::aggregate::Offer,
+    server_config::aggregate::ServerConfig,
 };
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::Template;
@@ -309,6 +311,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
         credential_event_publishers,
         offer_event_publishers,
         server_config_event_publishers,
+        nonce_event_publishers,
         ..
     } = partition_event_publishers(event_publishers);
 
@@ -327,12 +330,16 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
             server_config_event_publishers,
         )
         .await;
+    let (nonce_command_handler, nonce, _) = builder
+        .commands_and_queries::<NonceView, Nonce, NonceView>(services.clone(), nonce_event_publishers)
+        .await;
 
     agent_issuance::state::IssuanceState {
         command: agent_issuance::state::CommandHandlers {
             credential: credential_command_handler,
             offer: offer_command_handler,
             server_config: server_config_command_handler,
+            nonce: nonce_command_handler,
         },
         query: agent_issuance::state::ViewRepositories {
             server_config,
@@ -340,6 +347,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
             all_credentials,
             offer,
             all_offers,
+            nonce,
         },
         subject: services.issuer.clone(),
     }
@@ -437,6 +445,7 @@ pub type AccessTokenEventPublisher = Box<dyn Query<AccessToken>>;
 pub type ServerConfigEventPublisher = Box<dyn Query<ServerConfig>>;
 pub type CredentialEventPublisher = Box<dyn Query<Credential>>;
 pub type OfferEventPublisher = Box<dyn Query<Offer>>;
+pub type NonceEventPublisher = Box<dyn Query<Nonce>>;
 pub type HolderCredentialEventPublisher = Box<dyn Query<agent_holder::credential::aggregate::Credential>>;
 pub type PresentationEventPublisher = Box<dyn Query<agent_holder::presentation::aggregate::Presentation>>;
 pub type ReceivedOfferEventPublisher = Box<dyn Query<agent_holder::offer::aggregate::Offer>>;
@@ -457,6 +466,7 @@ pub struct Partitions {
     pub server_config_event_publishers: Vec<ServerConfigEventPublisher>,
     pub credential_event_publishers: Vec<CredentialEventPublisher>,
     pub offer_event_publishers: Vec<OfferEventPublisher>,
+    pub nonce_event_publishers: Vec<NonceEventPublisher>,
     pub holder_credential_event_publishers: Vec<HolderCredentialEventPublisher>,
     pub presentation_event_publishers: Vec<PresentationEventPublisher>,
     pub received_offer_event_publishers: Vec<ReceivedOfferEventPublisher>,
@@ -483,6 +493,7 @@ pub trait EventPublisher {
     fn server_config(&mut self) -> Option<ServerConfigEventPublisher>;
     fn credential(&mut self) -> Option<CredentialEventPublisher>;
     fn offer(&mut self) -> Option<OfferEventPublisher>;
+    fn nonce(&mut self) -> Option<NonceEventPublisher>;
 
     fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher>;
     fn presentation(&mut self) -> Option<PresentationEventPublisher>;
@@ -507,11 +518,9 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
             if let Some(service) = event_publisher.service() {
                 partitions.service_event_publishers.push(service);
             }
-
             if let Some(template) = event_publisher.template() {
                 partitions.template_event_publishers.push(template);
             }
-
             if let Some(authorization_code) = event_publisher.authorization_code() {
                 partitions.authorization_code_event_publishers.push(authorization_code);
             }
@@ -526,7 +535,6 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
             if let Some(access_token) = event_publisher.access_token() {
                 partitions.access_token_event_publishers.push(access_token);
             }
-
             if let Some(server_config) = event_publisher.server_config() {
                 partitions.server_config_event_publishers.push(server_config);
             }
@@ -536,7 +544,9 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
             if let Some(offer) = event_publisher.offer() {
                 partitions.offer_event_publishers.push(offer);
             }
-
+            if let Some(nonce) = event_publisher.nonce() {
+                partitions.nonce_event_publishers.push(nonce);
+            }
             if let Some(holder_credential) = event_publisher.holder_credential() {
                 partitions.holder_credential_event_publishers.push(holder_credential);
             }
@@ -546,7 +556,6 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
             if let Some(received_offer) = event_publisher.received_offer() {
                 partitions.received_offer_event_publishers.push(received_offer);
             }
-
             if let Some(authorization_request) = event_publisher.authorization_request() {
                 partitions
                     .authorization_request_event_publishers
@@ -630,6 +639,10 @@ mod test {
             None
         }
 
+        fn nonce(&mut self) -> Option<NonceEventPublisher> {
+            None
+        }
+
         fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher> {
             None
         }
@@ -696,6 +709,10 @@ mod test {
             None
         }
 
+        fn nonce(&mut self) -> Option<NonceEventPublisher> {
+            None
+        }
+
         fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher> {
             None
         }
@@ -731,6 +748,7 @@ mod test {
             server_config_event_publishers,
             credential_event_publishers,
             offer_event_publishers,
+            nonce_event_publishers,
             holder_credential_event_publishers,
             presentation_event_publishers,
             received_offer_event_publishers,
@@ -749,6 +767,7 @@ mod test {
         assert_eq!(server_config_event_publishers.len(), 1);
         assert_eq!(credential_event_publishers.len(), 0);
         assert_eq!(offer_event_publishers.len(), 0);
+        assert_eq!(nonce_event_publishers.len(), 0);
         assert_eq!(holder_credential_event_publishers.len(), 0);
         assert_eq!(presentation_event_publishers.len(), 0);
         assert_eq!(received_offer_event_publishers.len(), 0);
