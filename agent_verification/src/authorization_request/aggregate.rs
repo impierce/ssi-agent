@@ -183,7 +183,7 @@ impl Aggregate for AuthorizationRequest {
 
                 if self.validated {
                     return Err(AuthorizationRequestError::InvalidOID4VPAuthorizationResponse(
-                        anyhow::anyhow!("Replay detected. Nonce has already been validated."),
+                        anyhow::anyhow!("Nonce has already been validated."),
                     ));
                 }
 
