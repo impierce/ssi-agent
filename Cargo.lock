@@ -340,6 +340,7 @@ dependencies = [
  "agent_library",
  "agent_secret_manager",
  "agent_shared",
+ "agent_store",
  "anyhow",
  "async-std",
  "async-trait",

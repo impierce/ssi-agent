@@ -27,18 +27,15 @@ impl NonceValidationService {
         credential_request: &CredentialRequest,
     ) -> Result<(), NonceValidationError> {
         if let Some(nonce) = extract_nonce_from_credential_request(credential_request) {
-            // Query nonce state
             let nonce_status = query_handler(&nonce, &state.query.nonce)
                 .await
                 .map_err(|_| NonceValidationError::InvalidNonce)?;
 
             match nonce_status {
                 Some(n) if n.is_redeemed => {
-                    // Nonce has already been redeemed
                     return Err(NonceValidationError::RedeemedNonce);
                 }
                 Some(_) => {
-                    // Nonce is valid, redeem it
                     let command = NonceCommand::RedeemNonce { c_nonce: nonce.clone() };
                     command_handler(&nonce, &state.command.nonce, command)
                         .await
@@ -46,18 +43,17 @@ impl NonceValidationService {
                     return Ok(());
                 }
                 None => {
-                    // Nonce doesn't exist
                     return Err(NonceValidationError::MissingNonce);
                 }
             }
         } else {
-            Err(NonceValidationError::InvalidNonce)
+            Ok(())
         }
     }
 }
 
 // Helpers
-fn extract_nonce_from_credential_request(credential_request: &CredentialRequest) -> Option<String> {
+pub fn extract_nonce_from_credential_request(credential_request: &CredentialRequest) -> Option<String> {
     let proof = credential_request.proof.as_ref()?;
 
     match proof {
@@ -78,48 +74,125 @@ fn extract_nonce_from_credential_request(credential_request: &CredentialRequest)
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use agent_issuance::application::nonce_validation_service::{
+        extract_nonce_from_credential_request, NonceValidationError, NonceValidationService,
+    };
+    use agent_issuance::nonce::command::NonceCommand;
+    use agent_issuance::services::IssuanceServices;
+    use agent_issuance::state::initialize;
+    use agent_secret_manager::service::Service;
+    use agent_shared::handlers::command_handler;
+    use agent_store::in_memory::InMemory;
+    use oid4vci::Proof;
 
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-        use oid4vci::credential_request::CredentialIdentifierOrCredentialConfigurationId;
+    use agent_store::issuance_state;
+    use oid4vci::credential_request::CredentialIdentifierOrCredentialConfigurationId;
+    use oid4vci::credential_request::CredentialRequest;
 
-        #[test]
-        fn test_extract_nonce_from_proof() {
-            const PROOF_JWT: &str = "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ";
-            const NONCE_VALUE: &str = "7e03ad3f76cb3338c3a5642fe7634476aa3ad93fa1d584011ba2150d9da47133";
+    use oid4vci::credential_request::CredentialIdentifierOrCredentialConfigurationId::CredentialConfigurationId;
+    use rstest::{fixture, rstest};
+    use std::sync::Arc;
 
-            let credential_request = CredentialRequest {
-                credential_identifier_or_credential_configuration_id:
-                    CredentialIdentifierOrCredentialConfigurationId::CredentialConfigurationId(
-                        "test.credential".to_string(),
-                    ),
-                proof: Some(Proof::Jwt {
-                    jwt: PROOF_JWT.to_string(),
-                }),
-                proofs: None,
-            };
+    const PROOF_JWT: &str = "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ";
+    const NONCE_VALUE: &str = "7e03ad3f76cb3338c3a5642fe7634476aa3ad93fa1d584011ba2150d9da47133";
+    const NONCE_VALUE_2: &str = "8e03ad3f76cb3338c3a5642fe7634476aa3ad93fa1d584011ba2150d9da47133";
 
-            let nonce = extract_nonce_from_credential_request(&credential_request);
-            assert_eq!(nonce, Some(NONCE_VALUE.to_string()));
-        }
+    #[test]
+    fn test_extract_nonce_from_proof() {
+        let credential_request = CredentialRequest {
+            credential_identifier_or_credential_configuration_id:
+                CredentialIdentifierOrCredentialConfigurationId::CredentialConfigurationId(
+                    "test.credential".to_string(),
+                ),
+            proof: Some(Proof::Jwt {
+                jwt: PROOF_JWT.to_string(),
+            }),
+            proofs: None,
+        };
 
-        #[test]
-        fn test_extract_nonce_from_malformed_jwt() {
-            let credential_request = CredentialRequest {
-                credential_identifier_or_credential_configuration_id:
-                    CredentialIdentifierOrCredentialConfigurationId::CredentialConfigurationId(
-                        "test.credential".to_string(),
-                    ),
-                proof: Some(Proof::Jwt {
-                    jwt: "malformed.jwt".to_string(),
-                }),
-                proofs: None,
-            };
+        let nonce = extract_nonce_from_credential_request(&credential_request);
+        assert_eq!(nonce, Some(NONCE_VALUE.to_string()));
+    }
 
-            let nonce = extract_nonce_from_credential_request(&credential_request);
-            assert_eq!(nonce, None);
+    #[test]
+    fn test_extract_nonce_from_malformed_jwt() {
+        let credential_request = CredentialRequest {
+            credential_identifier_or_credential_configuration_id:
+                CredentialIdentifierOrCredentialConfigurationId::CredentialConfigurationId(
+                    "test.credential".to_string(),
+                ),
+            proof: Some(Proof::Jwt {
+                jwt: "malformed.jwt".to_string(),
+            }),
+            proofs: None,
+        };
+
+        let nonce = extract_nonce_from_credential_request(&credential_request);
+        assert_eq!(nonce, None);
+    }
+
+    #[rstest]
+    async fn test_valid_nonce_successful_validation(credential_request: CredentialRequest) {
+        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&state).await.unwrap();
+
+        let nonce = NONCE_VALUE.to_string();
+
+        let create_command = NonceCommand::GenerateNonce { c_nonce: nonce.clone() };
+        command_handler(NONCE_VALUE, &state.command.nonce, create_command)
+            .await
+            .unwrap();
+
+        let result = NonceValidationService::validate(&state, &credential_request).await;
+        assert!(result.is_ok());
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_validate_redeemed_nonce_fails(credential_request: CredentialRequest) {
+        let nonce = NONCE_VALUE.to_string();
+        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&state).await.unwrap();
+
+        let create_command = NonceCommand::GenerateNonce { c_nonce: nonce.clone() };
+        command_handler(NONCE_VALUE, &state.command.nonce, create_command)
+            .await
+            .unwrap();
+
+        let redeem_command = NonceCommand::RedeemNonce { c_nonce: nonce.clone() };
+        command_handler(NONCE_VALUE, &state.command.nonce, redeem_command)
+            .await
+            .unwrap();
+
+        let result = NonceValidationService::validate(&state, &credential_request).await;
+        assert!(matches!(result, Err(NonceValidationError::RedeemedNonce)));
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_validate_wrong_nonce(credential_request: CredentialRequest) {
+        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&state).await.unwrap();
+
+        let create_command = NonceCommand::GenerateNonce {
+            c_nonce: NONCE_VALUE_2.to_string(),
+        };
+        command_handler(NONCE_VALUE_2, &state.command.nonce, create_command)
+            .await
+            .unwrap();
+
+        let result = NonceValidationService::validate(&state, &credential_request).await;
+        assert!(matches!(result, Err(NonceValidationError::MissingNonce)));
+    }
+
+    #[fixture]
+    fn credential_request() -> CredentialRequest {
+        CredentialRequest {
+            credential_identifier_or_credential_configuration_id: CredentialConfigurationId("001".to_string()),
+            proof: Some(Proof::Jwt {
+                jwt: PROOF_JWT.to_string(),
+            }),
+            proofs: None,
         }
     }
 }
