@@ -1919,6 +1919,22 @@ components:
           type: string
         display:
           type: object
+          properties:
+            name:
+              type: string
+              example: "UniCore"
+            locale:
+              type: string
+              example: "en"
+            logo:
+              type: object
+              properties:
+                uri:
+                  type: string
+                  example: "https://www.impierce.com/external/impierce-icon.png"
+                alt_text:
+                  type: string
+                  example: "Impierce Icon"
         credentialFormat:
           type: string
         creator:
