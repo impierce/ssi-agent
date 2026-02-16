@@ -26,6 +26,7 @@ pub struct AuthorizationRequest {
     pub id_token: Option<String>,
     pub vp_token: Option<DecodedVpToken>,
     pub state: Option<String>,
+    pub validated: bool,
 }
 
 #[async_trait]
@@ -180,6 +181,12 @@ impl Aggregate for AuthorizationRequest {
             } => {
                 let relying_party = &services.relying_party;
 
+                if self.validated {
+                    return Err(AuthorizationRequestError::InvalidOID4VPAuthorizationResponse(
+                        anyhow::anyhow!("Replay detected. Nonce has already been validated."),
+                    ));
+                }
+
                 match authorization_response {
                     GenericAuthorizationResponse::SIOPv2(authorization_response) => {
                         let _ = relying_party
@@ -192,6 +199,7 @@ impl Aggregate for AuthorizationRequest {
                         Ok(vec![SIOPv2AuthorizationResponseVerified {
                             id_token,
                             state: authorization_response.state,
+                            validated: true,
                         }])
                     }
                     GenericAuthorizationResponse::OID4VP(oid4vp_authorization_response) => {
@@ -243,6 +251,7 @@ impl Aggregate for AuthorizationRequest {
                         Ok(vec![OID4VPAuthorizationResponseVerified {
                             vp_token: decoded_vp_token,
                             state: oid4vp_authorization_response.state,
+                            validated: true,
                         }])
                     }
                 }
@@ -271,13 +280,23 @@ impl Aggregate for AuthorizationRequest {
                 self.signed_authorization_request_object
                     .replace(signed_authorization_request_object);
             }
-            SIOPv2AuthorizationResponseVerified { id_token, state } => {
+            SIOPv2AuthorizationResponseVerified {
+                id_token,
+                state,
+                validated,
+            } => {
                 self.id_token.replace(id_token);
                 self.state = state;
+                self.validated = validated;
             }
-            OID4VPAuthorizationResponseVerified { vp_token, state } => {
+            OID4VPAuthorizationResponseVerified {
+                vp_token,
+                state,
+                validated,
+            } => {
                 self.vp_token.replace(vp_token);
                 self.state = state;
+                self.validated = validated;
             }
         }
     }
@@ -433,6 +452,7 @@ pub mod tests {
             .then_expect_events(vec![AuthorizationRequestEvent::SIOPv2AuthorizationResponseVerified {
                 id_token,
                 state: Some("state".to_string()),
+                validated: true,
             }]);
     }
 
@@ -478,6 +498,7 @@ pub mod tests {
             .then_expect_events(vec![AuthorizationRequestEvent::OID4VPAuthorizationResponseVerified {
                 vp_token: decoded_vp_token,
                 state: Some("state".to_string()),
+                validated: true,
             }]);
     }
 
