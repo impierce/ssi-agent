@@ -19,6 +19,7 @@ askama = "0.14"
 axum.workspace = true
 axum-auth = "0.8"
 axum-macros = "0.5"
+base64.workspace = true
 chrono.workspace = true
 cqrs-es.workspace = true
 http = "1.3"
