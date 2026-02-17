@@ -7,9 +7,7 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_did::{CoreDID, DIDUrl, DID as _};
 use identity_document::document::CoreDocument;
-use identity_iota::iota::rebased::client::{
-    get_object_id_from_did, IdentityClient, IdentityClientReadOnly, PublishDidDocument,
-};
+use identity_iota::iota::rebased::client::{get_object_id_from_did, IdentityClient, PublishDidDocument};
 use identity_iota::iota::rebased::migration::{ControllerToken, Identity, OnChainIdentity};
 use identity_iota::iota::{rebased, IotaDID};
 use identity_iota::storage::{Storage, StorageSigner};
@@ -134,14 +132,13 @@ impl Aggregate for Document {
                         // Create a new IOTA client to interact with the IOTA ledger.
                         let iota_client = get_iota_client(api_endpoint).await?;
 
-                        let read_only_client = IdentityClientReadOnly::new(iota_client.clone())
-                            .await
-                            .map_err(|err| GenericError(err.to_string()))?;
-
                         // Create an `IdentityClient` instance.
                         // This client is used to interact with the IOTA identity ledger.
                         // It is used to publish the DID Document and to resolve it later.
-                        let identity_client = IdentityClient::new(read_only_client, signer)
+                        let identity_client = IdentityClient::from_iota_client(iota_client.clone(), None)
+                            .await
+                            .map_err(|err| GenericError(err.to_string()))?
+                            .with_signer(signer)
                             .await
                             .map_err(|err| GenericError(err.to_string()))?;
 
@@ -428,14 +425,13 @@ impl Aggregate for Document {
                 // This signer is used to sign the transactions that are sent to the IOTA ledger.
                 let signer = StorageSigner::new(storage, key_id, public_key_jwk.clone());
 
-                let read_only_client = IdentityClientReadOnly::new(iota_client.clone())
-                    .await
-                    .map_err(|err| GenericError(err.to_string()))?;
-
                 // Create an `IdentityClient` instance.
                 // This client is used to interact with the IOTA identity ledger.
                 // It is used to publish the DID Document and to resolve it later.
-                let identity_client = IdentityClient::new(read_only_client, signer)
+                let identity_client = IdentityClient::from_iota_client(iota_client.clone(), None)
+                    .await
+                    .map_err(|err| GenericError(err.to_string()))?
+                    .with_signer(signer)
                     .await
                     .map_err(|err| GenericError(err.to_string()))?;
 
