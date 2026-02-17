@@ -16,7 +16,7 @@ impl View<Credential> for Credential {
                 notification_id,
                 credential_status,
                 created_at,
-                expires_at: expiration_date,
+                expires_at,
             } => {
                 self.credential_id.clone_from(credential_id);
                 self.data.replace(data.clone());
@@ -24,7 +24,7 @@ impl View<Credential> for Credential {
                 self.notification_id.clone_from(notification_id);
                 self.credential_status.clone_from(credential_status);
                 self.created_at.clone_from(created_at);
-                self.expires_at.clone_from(expiration_date);
+                self.expires_at.clone_from(expires_at);
             }
             CredentialEvent::SignedCredentialCreated {
                 credential_id,
