@@ -17,10 +17,12 @@ pub enum AuthorizationRequestEvent {
     SIOPv2AuthorizationResponseVerified {
         id_token: String,
         state: Option<String>,
+        validated: bool,
     },
     OID4VPAuthorizationResponseVerified {
         vp_token: DecodedVpToken,
         state: Option<String>,
+        validated: bool,
     },
 }
 

@@ -3,6 +3,7 @@ pub mod credential_configurations;
 pub mod credential_issuer;
 pub mod credentials;
 pub mod ietf_oauth_sd_jwt_vc;
+pub mod nonce;
 pub mod offers;
 
 pub mod error;
@@ -19,6 +20,7 @@ use crate::v0::issuance::{
         },
     },
     credentials::{all_credentials, credentials, patch_credential},
+    nonce::nonce,
     offers::{
         all_offers, offer, offers,
         send::{individual_offer, organization_offer},
@@ -52,6 +54,7 @@ pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
         )
         .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
         .route("/openid4vci/credential", post(credential))
+        .route("/openid4vci/nonce", post(nonce))
         .route("/openid4vci/notification", post(notification))
         .route("/openid4vci/credential-offer/{offer_id}", get(credential_offer_uri))
         .route("/ietf-oauth-token-status-list/{path}", get(token_status_list))
