@@ -1,10 +1,10 @@
 {
   "info": {
-    "_postman_id": "9f2402b7-2ec7-41e1-9738-9393ceef9caa",
+    "_postman_id": "bd568b99-121b-438e-afc1-2356f4ab1803",
     "name": "ssi-agent",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "41786572",
-    "_collection_link": "https://go.postman.co/collection/41786572-9f2402b7-2ec7-41e1-9738-9393ceef9caa?source=collection_link"
+    "_collection_link": "https://go.postman.co/collection/41786572-bd568b99-121b-438e-afc1-2356f4ab1803?source=collection_link"
   },
   "item": [
     {
@@ -629,6 +629,24 @@
               "path": [
                 "auth",
                 "token"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "nonce",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{HOST}}/openid4vci/nonce",
+              "host": [
+                "{{HOST}}"
+              ],
+              "path": [
+                "openid4vci",
+                "nonce"
               ]
             }
           },

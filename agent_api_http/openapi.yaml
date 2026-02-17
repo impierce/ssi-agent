@@ -173,6 +173,29 @@ paths:
               schema:
                 type: object
 
+  /openid4vci/nonce:
+    post:
+      summary: Request a fresh nonce for credential request proof
+      description: |
+        Standard OpenID4VCI nonce endpoint (Draft 15). Returns a fresh `c_nonce` that the wallet 
+        must include in the proof JWT when requesting a credential. Each nonce can only be used once.
+      tags:
+        - (public)
+      responses:
+        "200":
+          description: Fresh nonce generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  c_nonce:
+                    type: string
+                    description: A fresh nonce value to be used in the credential request proof
+                    example: "9c294e36e4231fbcf07758a71bb0b4903d7fdebf75e03a5beb7aeecf8a1b13af"
+              example:
+                c_nonce: "9c294e36e4231fbcf07758a71bb0b4903d7fdebf75e03a5beb7aeecf8a1b13af"
+
   /v0/authorization_requests:
     get:
       tags:
@@ -238,10 +261,6 @@ paths:
             schema:
               type: object
               properties:
-                nonce:
-                  type: string
-                  description: A unique identifier for the Authorization Request
-                  example: "0d520cbe176ab9e1f7888c70888020d84a69672a4baabd3ce1c6aaad8f6420c0"
                 state:
                   type: string
                   description: A unique string representing the state of the Authorization Request
@@ -282,17 +301,12 @@ paths:
                                   items:
                                     type: string
                                   example: ["credentialSubject", "first_name"]
-              required:
-                - nonce
             examples:
               siopv2:
                 summary: SIOPv2 Authorization Request
-                value:
-                  nonce: this is a nonce
               oid4vp-with-dcql:
                 summary: OID4VP with DCQL Query
                 value:
-                  nonce: this is a nonce
                   dcql_query:
                     credentials:
                       - id: "CredentialQuery"
