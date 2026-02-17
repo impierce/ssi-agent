@@ -1976,32 +1976,25 @@ components:
           example: "550e8400-e29b-41d4-a716-446655440000"
         sourceTemplateId:
           type: string
-          nullable: true
           description: ID of the template this was duplicated from, if any
         title:
           type: string
-          nullable: true
           description: Human-readable title for the template
           example: "Employee ID Credential"
         display:
-          nullable: true
           allOf:
             - $ref: "#/components/schemas/Display"
         credentialFormat:
-          nullable: true
           allOf:
             - $ref: "#/components/schemas/CredentialFormat"
         creator:
           type: string
-          nullable: true
           description: Identifier of the template creator
         holderType:
-          nullable: true
           allOf:
             - $ref: "#/components/schemas/HolderType"
         modifiedAt:
           type: string
-          nullable: true
           description: ISO 8601 timestamp of last modification
           example: "2024-06-21T12:34:54Z"
         tags:
@@ -2017,7 +2010,6 @@ components:
           $ref: "#/components/schemas/TemplateVisibility"
         description:
           type: string
-          nullable: true
           description: Longer description of the template
         type:
           type: array
@@ -2029,7 +2021,6 @@ components:
             - "EmployeeIDCredential"
         schema:
           type: object
-          nullable: true
           description: JSON Schema describing the credential subject structure
 
     DcqlQuery:
