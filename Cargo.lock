@@ -329,6 +329,7 @@ dependencies = [
  "tracing-test",
  "url",
  "urlencoding",
+ "utoipa",
  "uuid",
 ]
 

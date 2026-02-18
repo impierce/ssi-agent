@@ -8,6 +8,7 @@ use utoipa::OpenApi;
         url = "https://docs.impierce.com/unicore"
     ),
     nest(
+        (path = "/v0", api = crate::v0::identity::connections::openapi::ConnectionsApi),
         (path = "/v0", api = crate::v0::templates::openapi::TemplatesApi),
     )
 )]

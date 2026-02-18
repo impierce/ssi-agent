@@ -6,6 +6,48 @@ info:
     name: Apache 2.0
   version: 0.0.0-semantically-released
 paths:
+  /v0/connections:
+    get:
+      tags:
+      - connections
+      summary: List all connections
+      description: List all available connections.
+      operationId: get_connections
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GetConnectionsEndpointRequest'
+        required: true
+      responses:
+        '200':
+          description: All connections retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Connection'
+  /v0/connections/{connection_id}:
+    get:
+      tags:
+      - connections
+      summary: Get connection by ID
+      description: Retrieve a specific connection by its unique identifier.
+      operationId: get_connection
+      parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Connection retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Connection'
   /v0/templates/create-template:
     post:
       tags:
@@ -115,6 +157,34 @@ paths:
                 $ref: '#/components/schemas/TemplateDto'
 components:
   schemas:
+    Connection:
+      type: object
+      required:
+      - id
+      - domain
+      - dids
+      - first_interacted
+      - last_interacted
+      - credential_offer_endpoint
+      properties:
+        alias:
+          type:
+          - string
+          - 'null'
+        credential_offer_endpoint:
+          type: string
+        dids:
+          type: array
+          items:
+            type: string
+        domain:
+          type: string
+        first_interacted:
+          type: string
+        id:
+          type: string
+        last_interacted:
+          type: string
     CreateTemplateEndpointRequest:
       type: object
       properties:
@@ -190,6 +260,17 @@ components:
       - sourceTemplateId
       properties:
         sourceTemplateId:
+          type: string
+    GetConnectionsEndpointRequest:
+      type: object
+      properties:
+        alias:
+          type:
+          - string
+          - 'null'
+        did:
+          type: string
+        domain:
           type: string
     GetTemplatesEndpointRequest:
       type: object
@@ -279,6 +360,8 @@ components:
       - private
       - public
 tags:
+- name: connections
+  description: Manage trusted connections.
 - name: library
   description: Manage your own templates, browse and import external templates.
 - name: templates

@@ -10,17 +10,22 @@ use crate::services::IdentityServices;
 
 use super::{command::ConnectionCommand, error::ConnectionError, event::ConnectionEvent};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 pub struct Connection {
     #[serde(rename = "id")]
     pub connection_id: String,
     pub alias: Option<String>,
+    #[schema(value_type = String)]
     pub domain: Option<Url>,
+    #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
+    #[schema(value_type = String)]
     pub first_interacted: Option<Timestamp>,
+    #[schema(value_type = String)]
     pub last_interacted: Option<Timestamp>,
 
     // TODO: How do we want to make distinction between issuer, holder, and verifier capabilities of the `Connection`?
+    #[schema(value_type = String)]
     pub credential_offer_endpoint: Option<Url>,
     // pub issuer_options: Option<IssuerOptions>,
     // pub holder_options: Option<HolderOptions>,

@@ -38,6 +38,7 @@ tokio.workspace = true
 tracing.workspace = true
 url.workspace = true
 urlencoding = "2.1"
+utoipa.workspace = true
 uuid.workspace = true
 
 # `test_utils` dependencies
