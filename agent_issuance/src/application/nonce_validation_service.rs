@@ -28,12 +28,12 @@ impl NonceValidationService {
         let nonces = extract_nonce_from_credential_request(credential_request);
 
         if nonces.is_empty() {
-            Err(NonceValidationError::MissingNonce);
+            return Err(NonceValidationError::MissingNonce);
         }
 
         // All the c_nonces within the proofs of a singular CredentialRequest should be the same.
         if !nonces.iter().all(|n| n == &nonces[0]) {
-            Err(NonceValidationError::InvalidNonce);
+            return Err(NonceValidationError::InvalidNonce);
         }
 
         let nonce = &nonces[0];
