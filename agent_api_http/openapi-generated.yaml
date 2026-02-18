@@ -5,6 +5,9 @@ info:
   license:
     name: Apache 2.0
   version: 0.0.0-semantically-released
+servers:
+- url: http://localhost:3033
+  description: Local development
 paths:
   /v0/connections:
     get:

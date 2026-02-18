@@ -7,6 +7,9 @@ use utoipa::OpenApi;
         description = "Official UniCore documentation",
         url = "https://docs.impierce.com/unicore"
     ),
+    servers(
+        (url = "http://localhost:3033", description = "Local development")
+    ),
     nest(
         (path = "/v0", api = crate::v0::identity::connections::openapi::ConnectionsApi),
         (path = "/v0", api = crate::v0::templates::openapi::TemplatesApi),
