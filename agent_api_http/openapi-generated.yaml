@@ -92,6 +92,27 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/TemplateDto'
+  /v0/templates/{template_id}:
+    get:
+      tags:
+      - library
+      - templates
+      summary: Get template by ID
+      description: Retrieve a specific template by its ID.
+      operationId: get_template
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Template retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateDto'
 components:
   schemas:
     CreateTemplateEndpointRequest:

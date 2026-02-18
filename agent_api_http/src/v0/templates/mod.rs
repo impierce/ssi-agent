@@ -407,6 +407,17 @@ pub(crate) async fn get_templates(
     Ok((StatusCode::OK, Json(filtered_templates)).into_response())
 }
 
+/// Get template by ID
+///
+/// Retrieve a specific template by its ID.
+#[utoipa::path(
+    get,
+    path = "/templates/{template_id}",
+    tags = ["library", "templates"],
+    responses(
+        (status = 200, description = "Template retrieved successfully", body = TemplateDto)
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn get_template(
     State(state): State<Arc<LibraryState>>,
