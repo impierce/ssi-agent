@@ -25,43 +25,59 @@ impl NonceValidationService {
         state: &IssuanceState,
         credential_request: &CredentialRequest,
     ) -> Result<(), NonceValidationError> {
-        if let Some(nonce) = extract_nonce_from_credential_request(credential_request) {
-            let nonce_status = query_handler(&nonce, &state.query.nonce)
-                .await
-                .map_err(|_| NonceValidationError::InvalidNonce)?;
+        let nonces = extract_nonce_from_credential_request(credential_request);
 
-            match nonce_status {
-                Some(n) if n.is_redeemed => Err(NonceValidationError::RedeemedNonce),
-                Some(_) => {
-                    let command = NonceCommand::RedeemNonce { c_nonce: nonce.clone() };
-                    command_handler(&nonce, &state.command.nonce, command)
-                        .await
-                        .map_err(|_| NonceValidationError::InvalidNonce)?;
-                    Ok(())
-                }
-                None => Err(NonceValidationError::MissingNonce),
+        if nonces.is_empty() {
+            return Err(NonceValidationError::MissingNonce);
+        }
+
+        // All the c_nonces within the proofs of a singular CredentialRequest should be the same.
+        if !nonces.iter().all(|n| n == &nonces[0]) {
+            return Err(NonceValidationError::InvalidNonce);
+        }
+
+        let nonce = &nonces[0];
+
+        let nonce_status = query_handler(nonce, &state.query.nonce)
+            .await
+            .map_err(|_| NonceValidationError::InvalidNonce)?;
+
+        match nonce_status {
+            Some(n) if n.is_redeemed => return Err(NonceValidationError::RedeemedNonce),
+            Some(_) => {
+                let command = NonceCommand::RedeemNonce { c_nonce: nonce.clone() };
+                command_handler(nonce, &state.command.nonce, command)
+                    .await
+                    .map_err(|_| NonceValidationError::InvalidNonce)?;
+                Ok(())
             }
-        } else {
-            Ok(())
+            None => return Err(NonceValidationError::MissingNonce),
         }
     }
 }
 
 // Helpers
-pub fn extract_nonce_from_credential_request(credential_request: &CredentialRequest) -> Option<String> {
-    let proofs = credential_request.proofs.as_ref()?;
-    let jwt = proofs.jwt.first()?;
+pub fn extract_nonce_from_credential_request(credential_request: &CredentialRequest) -> Vec<String> {
+    let Some(proofs) = &credential_request.proofs else {
+        return vec![];
+    };
 
-    let parts: Vec<&str> = jwt.split('.').collect();
-    if parts.len() != 3 {
-        return None;
-    }
+    proofs
+        .jwt
+        .iter()
+        .filter_map(|jwt: &String| {
+            let parts: Vec<&str> = jwt.split('.').collect();
+            if parts.len() != 3 {
+                return None;
+            }
 
-    let payload = URL_SAFE_NO_PAD.decode(parts[1]).ok()?;
-    let claims: serde_json::Value = serde_json::from_slice(&payload).ok()?;
+            let payload = URL_SAFE_NO_PAD.decode(parts[1]).ok()?;
+            let claims: serde_json::Value = serde_json::from_slice(&payload).ok()?;
 
-    // Extract nonce from claims
-    claims.get("nonce").and_then(|n| n.as_str()).map(|s| s.to_string())
+            // Extract nonce from claims
+            claims.get("nonce").and_then(|n| n.as_str()).map(|s| s.to_string())
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -90,7 +106,7 @@ mod tests {
     const NONCE_VALUE_2: &str = "8e03ad3f76cb3338c3a5642fe7634476aa3ad93fa1d584011ba2150d9da47133";
 
     #[test]
-    fn test_extract_nonce_from_proof() {
+    fn test_extract_nonce_from_credential_request() {
         let credential_request = CredentialRequest {
             credential_identifier_or_credential_configuration_id:
                 CredentialIdentifierOrCredentialConfigurationId::CredentialConfigurationId(
@@ -101,8 +117,8 @@ mod tests {
             }),
         };
 
-        let nonce = extract_nonce_from_credential_request(&credential_request);
-        assert_eq!(nonce, Some(NONCE_VALUE.to_string()));
+        let nonces = extract_nonce_from_credential_request(&credential_request);
+        assert_eq!(nonces, vec![NONCE_VALUE.to_string()]);
     }
 
     #[test]
@@ -117,8 +133,8 @@ mod tests {
             }),
         };
 
-        let nonce = extract_nonce_from_credential_request(&credential_request);
-        assert_eq!(nonce, None);
+        let nonces = extract_nonce_from_credential_request(&credential_request);
+        assert!(nonces.is_empty());
     }
 
     #[rstest]

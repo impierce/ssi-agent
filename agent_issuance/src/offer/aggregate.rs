@@ -120,7 +120,7 @@ impl Aggregate for Offer {
                 let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
                     credential_issuer: credential_issuer.clone(),
                     credential_configuration_ids: CredentialConfigurationIds::try_new(credential_configuration_ids)
-                        .expect("Credential_configuration_ids should not be empty when creating a credential offer"),
+                        .map_err(|_| OfferError::MissingCredentialConfigurationIdsError)?,
                     grants: Some(grants),
                 }));
 
@@ -188,9 +188,7 @@ impl Aggregate for Offer {
 
                     credential_offer.credential_configuration_ids =
                         CredentialConfigurationIds::try_new(credential_configuration_id_set.into_iter().collect())
-                            .expect(
-                                "Credential_configuration_ids should not be empty when updating a credential offer",
-                            );
+                            .map_err(|_| MissingCredentialConfigurationIdsError)?;
                 } else {
                     unreachable!();
                 }
@@ -283,7 +281,9 @@ impl Aggregate for Offer {
                     .await
                     .map_err(|e| InvalidProofError(e.to_string()))?;
 
-                let subject_did = validated_proofs[0].rfc7519_claims.iss().as_ref().cloned();
+                let subject_did = validated_proofs
+                    .first()
+                    .and_then(|proof| proof.rfc7519_claims.iss().as_ref().cloned());
 
                 Ok(vec![CredentialRequestVerified {
                     offer_id,
@@ -415,7 +415,7 @@ pub mod tests {
             .given_no_previous_events()
             .when(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
-                credential_configuration_ids: vec!["this_must_be_non_empty".to_string()],
+                credential_configuration_ids: vec!["UniversityDegree".to_string()],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
                 delivery_options: None,
@@ -455,7 +455,7 @@ pub mod tests {
             .given_no_previous_events()
             .when(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
-                credential_configuration_ids: vec!["this_must_be_non_empty".to_string()],
+                credential_configuration_ids: vec!["UniversityDegree".to_string()],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
                 delivery_options: Some(delivery_options.clone()),
@@ -488,7 +488,6 @@ pub mod tests {
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] credential_offer: CredentialOffer,
         #[future(awt)] credential_offer_uri: CredentialOffer,
-        // #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
         #[future(awt)] form_url_encoded_credential_offer: String,
     ) {
         OfferTestFramework::with(IssuanceServices::default().await)
@@ -505,7 +504,7 @@ pub mod tests {
             .when(OfferCommand::AddCredentials {
                 offer_id: offer_id.clone(),
                 credential_ids: vec!["credential-id".to_string()],
-                credential_configuration_ids: vec!["this_must_be_non_empty".to_string()],
+                credential_configuration_ids: vec!["UniversityDegree".to_string()],
             })
             .then_expect_events(vec![
                 OfferEvent::CredentialsAdded {
@@ -730,10 +729,8 @@ pub mod test_utils {
     ) -> CredentialOffer {
         CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
             credential_issuer: static_issuer_url,
-            credential_configuration_ids: CredentialConfigurationIds::try_new(vec![
-                "this_must_be_non_empty".to_string()
-            ])
-            .expect("Credential_configuration_ids should not be empty when creating a credential offer"),
+            credential_configuration_ids: CredentialConfigurationIds::try_new(vec!["UniversityDegree".to_string()])
+                .expect("Credential_configuration_ids should not be empty when creating a credential offer"),
             grants: Some(Grants {
                 authorization_code: None,
                 pre_authorized_code: Some(PreAuthorizedCode {

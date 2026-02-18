@@ -104,6 +104,7 @@ impl IntoApiErrorExt for OfferError {
             MissingProofError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             InvalidProofError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             MissingProofIssuerError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            MissingCredentialConfigurationIdsError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
