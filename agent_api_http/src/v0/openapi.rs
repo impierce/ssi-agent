@@ -29,12 +29,12 @@ mod tests {
     fn generate_openapi_spec() {
         let openapi = patch_generated_openapi(ApiDoc::openapi());
         let yaml = openapi.to_yaml().unwrap();
-        std::fs::write("_openapi.yaml", yaml).unwrap();
+        std::fs::write("openapi-generated.yaml", yaml).unwrap();
     }
 
     #[test]
     fn openapi_spec_is_up_to_date() {
-        let current = std::fs::read_to_string("_openapi.yaml").unwrap();
+        let current = std::fs::read_to_string("openapi-generated.yaml").unwrap();
         let latest = patch_generated_openapi(ApiDoc::openapi()).to_yaml().unwrap();
         assert_eq!(current, latest, "The OpenAPI specification is out of date. Please run the `generate_openapi_spec` test and check in the results.");
     }

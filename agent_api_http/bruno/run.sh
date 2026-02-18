@@ -8,7 +8,7 @@ rm -r ./UniCore\ HTTP\ API
 
 # 3. Import OpenAPI specification
 bru import openapi \
-  --source ../_openapi.yaml \
+  --source ../openapi-generated.yaml \
   --output ./
 
 cd ./UniCore\ HTTP\ API
