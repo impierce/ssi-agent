@@ -28,12 +28,12 @@ impl NonceValidationService {
         let nonces = extract_nonce_from_credential_request(credential_request);
 
         if nonces.is_empty() {
-            return Err(NonceValidationError::MissingNonce);
+            Err(NonceValidationError::MissingNonce);
         }
 
         // All the c_nonces within the proofs of a singular CredentialRequest should be the same.
         if !nonces.iter().all(|n| n == &nonces[0]) {
-            return Err(NonceValidationError::InvalidNonce);
+            Err(NonceValidationError::InvalidNonce);
         }
 
         let nonce = &nonces[0];
@@ -43,7 +43,7 @@ impl NonceValidationService {
             .map_err(|_| NonceValidationError::InvalidNonce)?;
 
         match nonce_status {
-            Some(n) if n.is_redeemed => return Err(NonceValidationError::RedeemedNonce),
+            Some(n) if n.is_redeemed => Err(NonceValidationError::RedeemedNonce),
             Some(_) => {
                 let command = NonceCommand::RedeemNonce { c_nonce: nonce.clone() };
                 command_handler(nonce, &state.command.nonce, command)
@@ -51,7 +51,7 @@ impl NonceValidationService {
                     .map_err(|_| NonceValidationError::InvalidNonce)?;
                 Ok(())
             }
-            None => return Err(NonceValidationError::MissingNonce),
+            None => Err(NonceValidationError::MissingNonce),
         }
     }
 }
