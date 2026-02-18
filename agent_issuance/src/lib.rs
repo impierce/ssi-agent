@@ -4,6 +4,7 @@ use tracing::info;
 
 // Aggregates
 pub mod credential;
+pub mod nonce;
 pub mod offer;
 pub mod server_config;
 pub mod utils;
