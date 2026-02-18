@@ -36,6 +36,6 @@ mod tests {
     fn openapi_spec_is_up_to_date() {
         let current = std::fs::read_to_string("openapi-generated.yaml").unwrap();
         let latest = patch_generated_openapi(ApiDoc::openapi()).to_yaml().unwrap();
-        assert_eq!(current, latest, "The OpenAPI specification is out of date. Please run the `generate_openapi_spec` test and check in the results.");
+        assert_eq!(current, latest, "The OpenAPI specification is out of date. Please run the `generate_openapi_spec` test and commit the results.");
     }
 }
