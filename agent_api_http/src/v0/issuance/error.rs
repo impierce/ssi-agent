@@ -20,6 +20,16 @@ impl IntoApiErrorExt for CredentialError {
 
         match self {
             // UniCore API Problem Details
+            UnsupportedCredentialFormat(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Unsupported Credential Format")
+                .type_url(type_url("issuance#unsupported-credential-format"))
+                .source(self)
+                .finish(),
+            UnsupportedCredentialType => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Unsupported Credential Type")
+                .type_url(type_url("issuance#unsupported-credential-type"))
+                .source(self)
+                .finish(),
             UnknownCredentialConfiguration(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Unknown Credential Configuration")
                 .type_url(type_url("issuance#unknown-credential-configuration"))
