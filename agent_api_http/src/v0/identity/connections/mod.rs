@@ -73,10 +73,10 @@ pub struct GetConnectionsEndpointRequest {
     #[serde(default)]
     pub alias: Option<String>,
     #[serde(default)]
-    #[schema(value_type = String)]
+    #[schema(value_type = Option<String>)]
     pub domain: Option<Url>,
     #[serde(default)]
-    #[schema(value_type = String)]
+    #[schema(value_type = Option<String>)]
     pub did: Option<DIDUrl>,
 }
 

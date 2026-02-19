@@ -15,13 +15,13 @@ pub struct Connection {
     #[serde(rename = "id")]
     pub connection_id: String,
     pub alias: Option<String>,
-    #[schema(value_type = String)]
+    #[schema(value_type = Option<String>)]
     pub domain: Option<Url>,
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
-    #[schema(value_type = String)]
+    #[schema(value_type = Option<String>)]
     pub first_interacted: Option<Timestamp>,
-    #[schema(value_type = String)]
+    #[schema(value_type = Option<String>)]
     pub last_interacted: Option<Timestamp>,
 
     // TODO: How do we want to make distinction between issuer, holder, and verifier capabilities of the `Connection`?
