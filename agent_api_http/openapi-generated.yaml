@@ -122,12 +122,6 @@ paths:
       summary: List all templates
       description: List all available templates.
       operationId: get_all_templates
-      requestBody:
-        content:
-          application/json:
-            schema:
-              default: null
-        required: true
       responses:
         '200':
           description: All templates retrieved successfully

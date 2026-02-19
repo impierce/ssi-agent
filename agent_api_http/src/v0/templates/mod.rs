@@ -364,12 +364,6 @@ pub(crate) async fn update_template(
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
-#[derive(Deserialize, Serialize, utoipa::ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct GetTemplatesEndpointRequest {
-    // TODO: Add parameters for filtering templates
-}
-
 /// List all templates
 ///
 /// List all available templates.
@@ -378,18 +372,12 @@ pub struct GetTemplatesEndpointRequest {
     path = "/templates/get-all-templates",
     operation_id = "get_all_templates",
     tags = ["Library", "Templates"],
-    request_body = (),
     responses(
         (status = 200, description = "All templates retrieved successfully", body = [TemplateDto])
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn get_templates(
-    State(state): State<Arc<LibraryState>>,
-    Form(GetTemplatesEndpointRequest {}): Form<GetTemplatesEndpointRequest>,
-) -> Result<Response, ApiError> {
-    debug!("Request Params - ");
-
+pub(crate) async fn get_templates(State(state): State<Arc<LibraryState>>) -> Result<Response, ApiError> {
     let filtered_templates = query_handler("all_templates", &state.query.all_templates)
         .await?
         .map(|all_templates_view| {
