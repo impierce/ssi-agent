@@ -7,13 +7,12 @@ use agent_library::template::command::TemplateCommand;
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Form, Json,
+    Json,
 };
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::debug;
 use uuid::Uuid;
 
 pub mod openapi;
