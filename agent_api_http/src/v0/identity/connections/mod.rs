@@ -86,7 +86,8 @@ pub struct GetConnectionsEndpointRequest {
 #[utoipa::path(
     get,
     path = "/connections",
-    tags = ["connections"],
+    operation_id = "get_all_connections",
+    tags = ["Connections"],
     responses(
         (status = 200, description = "All connections retrieved successfully", body = [Connection])
     )
@@ -128,7 +129,8 @@ pub(crate) async fn get_connections(
 #[utoipa::path(
     get,
     path = "/connections/{connection_id}",
-    tags = ["connections"],
+    operation_id = "get_connection_by_id",
+    tags = ["Connections"],
     responses(
         (status = 200, description = "Connection retrieved successfully", body = Connection)
     )

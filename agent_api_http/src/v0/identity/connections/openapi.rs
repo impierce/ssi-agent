@@ -5,7 +5,7 @@ use utoipa::OpenApi;
 #[openapi(
     paths(get_connections, get_connection),
     tags(
-        (name = "connections", description = "Manage trusted connections."),
+        (name = "Connections", description = "Manage trusted connections."),
     )
 )]
 pub(crate) struct ConnectionsApi;

@@ -12,10 +12,10 @@ paths:
   /v0/connections:
     get:
       tags:
-      - connections
+      - Connections
       summary: List all connections
       description: List all available connections.
-      operationId: get_connections
+      operationId: get_all_connections
       requestBody:
         content:
           application/x-www-form-urlencoded:
@@ -34,10 +34,10 @@ paths:
   /v0/connections/{connection_id}:
     get:
       tags:
-      - connections
+      - Connections
       summary: Get connection by ID
       description: Retrieve a specific connection by its unique identifier.
-      operationId: get_connection
+      operationId: get_connection_by_id
       parameters:
       - name: connection_id
         in: path
@@ -54,8 +54,8 @@ paths:
   /v0/templates/create-template:
     post:
       tags:
-      - library
-      - templates
+      - Library
+      - Templates
       summary: Create a new template
       description: Creates a new template which can be used to issue credentials.
       operationId: create_template
@@ -87,8 +87,8 @@ paths:
   /v0/templates/duplicate-template:
     post:
       tags:
-      - library
-      - templates
+      - Library
+      - Templates
       summary: Duplicate existing template
       description: Creates a duplicate of an existing template.
       operationId: duplicate_template
@@ -117,11 +117,11 @@ paths:
   /v0/templates/get-all-templates:
     get:
       tags:
-      - library
-      - templates
+      - Library
+      - Templates
       summary: List all templates
       description: List all available templates.
-      operationId: get_templates
+      operationId: get_all_templates
       requestBody:
         content:
           application/x-www-form-urlencoded:
@@ -140,11 +140,11 @@ paths:
   /v0/templates/{template_id}:
     get:
       tags:
-      - library
-      - templates
+      - Library
+      - Templates
       summary: Get template by ID
       description: Retrieve a specific template by its ID.
-      operationId: get_template
+      operationId: get_template_by_id
       parameters:
       - name: template_id
         in: path
@@ -363,11 +363,11 @@ components:
       - private
       - public
 tags:
-- name: connections
+- name: Connections
   description: Manage trusted connections.
-- name: library
+- name: Library
   description: Manage your own templates, browse and import external templates.
-- name: templates
+- name: Templates
   description: Create and manage templates which provide the structure for credentials to be issued.
 externalDocs:
   url: https://docs.impierce.com/unicore

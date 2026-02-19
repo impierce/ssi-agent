@@ -7,8 +7,8 @@ use utoipa::OpenApi;
 #[openapi(
     paths(create_template, duplicate_template, get_templates, get_template),
     tags(
-        (name = "library", description = "Manage your own templates, browse and import external templates."),
-        (name = "templates", description = "Create and manage templates which provide the structure for credentials to be issued.")
+        (name = "Library", description = "Manage your own templates, browse and import external templates."),
+        (name = "Templates", description = "Create and manage templates which provide the structure for credentials to be issued.")
     )
 )]
 pub(crate) struct TemplatesApi;

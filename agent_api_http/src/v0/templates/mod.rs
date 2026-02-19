@@ -83,7 +83,7 @@ pub struct CreateTemplateEndpointRequest {
 #[utoipa::path(
     post,
     path = "/templates/create-template",
-    tags = ["library", "templates"],
+    tags = ["Library", "Templates"],
     request_body(
         content = CreateTemplateEndpointRequest,
         examples(
@@ -161,7 +161,7 @@ pub struct DuplicateTemplateEndpointRequest {
 #[utoipa::path(
     post,
     path = "/templates/duplicate-template",
-    tags = ["library", "templates"],
+    tags = ["Library", "Templates"],
     request_body(
         content = DuplicateTemplateEndpointRequest,
         example = json!({ "sourceTemplateId": "91fc790f-d876-4827-9a9d-0fb0f6766dca" })
@@ -376,7 +376,8 @@ pub struct GetTemplatesEndpointRequest {
 #[utoipa::path(
     get,
     path = "/templates/get-all-templates",
-    tags = ["library", "templates"],
+    operation_id = "get_all_templates",
+    tags = ["Library", "Templates"],
     responses(
         (status = 200, description = "All templates retrieved successfully", body = [TemplateDto])
     )
@@ -414,7 +415,8 @@ pub(crate) async fn get_templates(
 #[utoipa::path(
     get,
     path = "/templates/{template_id}",
-    tags = ["library", "templates"],
+    operation_id = "get_template_by_id",
+    tags = ["Library", "Templates"],
     responses(
         (status = 200, description = "Template retrieved successfully", body = TemplateDto)
     )
