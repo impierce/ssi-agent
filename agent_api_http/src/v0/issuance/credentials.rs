@@ -1,8 +1,7 @@
-use crate::error::{type_url, IntoApiErrorExt};
+use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_issuance::credential::aggregate::CredentialStatus;
-use agent_issuance::credential::error::CredentialError;
 use agent_issuance::{
     credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data},
     offer::command::OfferCommand,
@@ -68,8 +67,13 @@ pub(crate) async fn credentials(
                 .cloned()
         })
         .ok_or_else(|| {
-            CredentialError::UnknownCredentialConfiguration(serde_json::json!(credential_configuration_id))
-                .into_api_error()
+            ApiError::builder(StatusCode::NOT_FOUND)
+                .title("No Credential Configuration Found")
+                .type_url(type_url("issuance#no-credential-configuration-found"))
+                .message(format!(
+                    "No Credential Configuration found with id: `{credential_configuration_id}`"
+                ))
+                .finish()
         })?;
 
     let command = if is_signed {
