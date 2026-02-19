@@ -124,9 +124,9 @@ paths:
       operationId: get_all_templates
       requestBody:
         content:
-          application/x-www-form-urlencoded:
+          application/json:
             schema:
-              $ref: '#/components/schemas/GetTemplatesEndpointRequest'
+              default: null
         required: true
       responses:
         '200':
@@ -275,8 +275,6 @@ components:
           type: string
         domain:
           type: string
-    GetTemplatesEndpointRequest:
-      type: object
     HolderType:
       type: string
       enum:

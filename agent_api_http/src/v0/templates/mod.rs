@@ -378,6 +378,7 @@ pub struct GetTemplatesEndpointRequest {
     path = "/templates/get-all-templates",
     operation_id = "get_all_templates",
     tags = ["Library", "Templates"],
+    request_body = (),
     responses(
         (status = 200, description = "All templates retrieved successfully", body = [TemplateDto])
     )
