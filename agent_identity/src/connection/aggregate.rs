@@ -19,13 +19,15 @@ pub struct Connection {
     pub domain: Option<Url>,
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
+    // TODO: use appropriate value_type for timestamps (also enable crate feature `chrono` or `time`)
     #[schema(value_type = Option<String>)]
     pub first_interacted: Option<Timestamp>,
+    // TODO: use appropriate value_type for timestamps (also enable crate feature `chrono` or `time`)
     #[schema(value_type = Option<String>)]
     pub last_interacted: Option<Timestamp>,
 
     // TODO: How do we want to make distinction between issuer, holder, and verifier capabilities of the `Connection`?
-    #[schema(value_type = String)]
+    #[schema(value_type = Option<String>)]
     pub credential_offer_endpoint: Option<Url>,
     // pub issuer_options: Option<IssuerOptions>,
     // pub holder_options: Option<HolderOptions>,

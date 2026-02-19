@@ -159,14 +159,15 @@ components:
       required:
       - id
       - dids
-      - credential_offer_endpoint
       properties:
         alias:
           type:
           - string
           - 'null'
         credential_offer_endpoint:
-          type: string
+          type:
+          - string
+          - 'null'
         dids:
           type: array
           items:
