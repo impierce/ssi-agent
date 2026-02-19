@@ -21,6 +21,7 @@ pub mod openapi;
 /// Data transfer object for Templates.
 #[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(title = "Template")]
 pub struct TemplateDto {
     #[serde(rename = "id")]
     pub template_id: String,

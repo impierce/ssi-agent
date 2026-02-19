@@ -302,6 +302,7 @@ components:
       - deleted
     TemplateDto:
       type: object
+      title: Template
       description: Data transfer object for Templates.
       required:
       - id
