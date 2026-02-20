@@ -1,0 +1,399 @@
+{
+  "credential": {
+    "id": "urn:credential:3ef0ac26-9a1f-41c6-871b-2b82e670907b",
+    "type": [
+      "VerifiableCredential",
+      "EuropeanDigitalCredential"
+    ],
+    "credentialProfiles": {
+      "id": "http://data.europa.eu/snb/credential/e34929035b",
+      "type": "Concept",
+      "inScheme": {
+        "id": "http://data.europa.eu/snb/credential/25831c2",
+        "type": "ConceptScheme"
+      },
+      "prefLabel": {
+        "en": "Generic"
+      }
+    },
+    "displayParameter": {
+      "id": "urn:epass:displayParameter:1",
+      "type": "DisplayParameter",
+      "individualDisplay": {
+        "id": "urn:epass:individualDisplay:1",
+        "type": "IndividualDisplay",
+        "displayDetail": {
+          "id": "urn:epass:displayDetail:1",
+          "type": "DisplayDetail",
+          "image": {
+            "id": "urn:epass:mediaObject:1",
+            "type": "MediaObject",
+            "content": "",
+            "contentEncoding": {
+              "id": "http://data.europa.eu/snb/encoding/6146cde7dd",
+              "type": "Concept",
+              "inScheme": {
+                "id": "http://data.europa.eu/snb/encoding/25831c2",
+                "type": "ConceptScheme"
+              },
+              "prefLabel": {
+                "en": "base64"
+              }
+            },
+            "contentType": {
+              "id": "http://publications.europa.eu/resource/authority/file-type/JPEG",
+              "type": "Concept",
+              "inScheme": {
+                "id": "http://publications.europa.eu/resource/authority/file-type",
+                "type": "ConceptScheme"
+              },
+              "notation": "file-type",
+              "prefLabel": {
+                "en": "JPEG"
+              }
+            }
+          },
+          "page": 1
+        },
+        "language": {
+          "id": "http://publications.europa.eu/resource/authority/language/ENG",
+          "type": "Concept",
+          "inScheme": {
+            "id": "http://publications.europa.eu/resource/authority/language",
+            "type": "ConceptScheme"
+          },
+          "notation": "language",
+          "prefLabel": {
+            "en": "English"
+          }
+        }
+      },
+      "primaryLanguage": {
+        "id": "http://publications.europa.eu/resource/authority/language/ENG",
+        "type": "Concept",
+        "inScheme": {
+          "id": "http://publications.europa.eu/resource/authority/language",
+          "type": "ConceptScheme"
+        },
+        "notation": "language",
+        "prefLabel": {
+          "en": "English"
+        }
+      },
+      "description": {
+        "en": "has attended the EDC Updates webinar"
+      },
+      "language": {
+        "id": "http://publications.europa.eu/resource/authority/language/ENG",
+        "type": "Concept",
+        "inScheme": {
+          "id": "http://publications.europa.eu/resource/authority/language",
+          "type": "ConceptScheme"
+        },
+        "notation": "language",
+        "prefLabel": {
+          "en": "English"
+        }
+      },
+      "title": {
+        "en": "Certificate of Participation"
+      }
+    },
+    "credentialSchema": {
+      "id": "http://data.europa.eu/snb/model/ap/edc-generic-full",
+      "type": "ShaclValidator2017"
+    },
+    "credentialSubject": {
+      "id": "urn:epass:person:1",
+      "type": "Person",
+      "contactPoint": {
+        "id": "urn:epass:contactPoint:2",
+        "type": "ContactPoint",
+        "emailAddress": {
+          "id": "mailto:ana.andromeda@email.com",
+          "type": "Mailbox"
+        }
+      },
+      "dateOfBirth": "1999-10-01T22:00:00Z",
+      "hasClaim": {
+        "id": "urn:epass:learningAchievement:1",
+        "type": "LearningAchievement",
+        "awardedBy": {
+          "id": "urn:epass:awardingProcess:1",
+          "type": "AwardingProcess",
+          "awardingBody": {
+            "id": "urn:epass:org:1",
+            "type": "Organisation",
+            "groupMemberOf": {
+              "id": "urn:epass:group:1",
+              "type": "Group",
+              "contactPoint": {
+                "id": "urn:epass:contactPoint:1",
+                "type": "ContactPoint",
+                "emailAddress": {
+                  "id": "mailto:info@resa.edu",
+                  "type": "Mailbox"
+                }
+              },
+              "prefLabel": {
+                "en": "Research Alliance"
+              }
+            },
+            "location": {
+              "id": "urn:epass:location:2",
+              "type": "Location",
+              "address": {
+                "id": "urn:epass:address:2",
+                "type": "Address",
+                "countryCode": {
+                  "id": "http://publications.europa.eu/resource/authority/country/IRL",
+                  "type": "Concept",
+                  "inScheme": {
+                    "id": "http://publications.europa.eu/resource/authority/country",
+                    "type": "ConceptScheme"
+                  },
+                  "notation": "country",
+                  "prefLabel": {
+                    "en": "Ireland"
+                  }
+                },
+                "fullAddress": {
+                  "id": "urn:epass:note:1",
+                  "type": "Note",
+                  "noteLiteral": {
+                    "en": "Instant Street 16, D08 Dublin"
+                  }
+                }
+              },
+              "spatialCode": {
+                "id": "http://publications.europa.eu/resource/authority/atu/IRL_CTH_DUB",
+                "type": "Concept",
+                "inScheme": {
+                  "id": "http://publications.europa.eu/resource/authority/atu",
+                  "type": "ConceptScheme"
+                },
+                "notation": "atu",
+                "prefLabel": {
+                  "en": "Dublin city"
+                }
+              }
+            },
+            "logo": {
+              "id": "urn:epass:mediaObject:3",
+              "type": "MediaObject",
+              "content": "",
+              "contentEncoding": {
+                "id": "http://data.europa.eu/snb/encoding/6146cde7dd",
+                "type": "Concept",
+                "inScheme": {
+                  "id": "http://data.europa.eu/snb/encoding/25831c2",
+                  "type": "ConceptScheme"
+                },
+                "prefLabel": {
+                  "en": "base64"
+                }
+              },
+              "contentType": {
+                "id": "http://publications.europa.eu/resource/authority/file-type/PNG",
+                "type": "Concept",
+                "inScheme": {
+                  "id": "http://publications.europa.eu/resource/authority/file-type",
+                  "type": "ConceptScheme"
+                },
+                "notation": "file-type",
+                "prefLabel": {
+                  "en": "PNG"
+                }
+              }
+            },
+            "vatIdentifier": {
+              "id": "urn:epass:legalIdentifier:3",
+              "type": "LegalIdentifier",
+              "spatial": {
+                "id": "http://publications.europa.eu/resource/authority/country/IRL",
+                "type": "Concept",
+                "inScheme": {
+                  "id": "http://publications.europa.eu/resource/authority/country",
+                  "type": "ConceptScheme"
+                },
+                "notation": "country",
+                "prefLabel": {
+                  "en": "Ireland"
+                }
+              },
+              "notation": "654321"
+            },
+            "altLabel": {
+              "en": "UniZ"
+            },
+            "identifier": {
+              "id": "urn:epass:identifier:2",
+              "type": "Identifier",
+              "schemeName": "Research Alliance",
+              "notation": "Res1818"
+            },
+            "legalName": {
+              "en": "University of Zed"
+            },
+            "registration": {
+              "id": "urn:epass:legalIdentifier:4",
+              "type": "LegalIdentifier",
+              "spatial": {
+                "id": "http://publications.europa.eu/resource/authority/country/IRL",
+                "type": "Concept",
+                "inScheme": {
+                  "id": "http://publications.europa.eu/resource/authority/country",
+                  "type": "ConceptScheme"
+                },
+                "notation": "country",
+                "prefLabel": {
+                  "en": "Ireland"
+                }
+              },
+              "notation": "0000"
+            },
+            "homepage": {
+              "id": "urn:epass:webResource:2",
+              "type": "WebResource",
+              "contentURL": "https://uniz.edu"
+            }
+          }
+        }
+      },
+      "nationalID": {
+        "id": "urn:epass:legalIdentifier:5",
+        "type": "LegalIdentifier",
+        "spatial": {
+          "id": "http://publications.europa.eu/resource/authority/country/ITA",
+          "type": "Concept",
+          "inScheme": {
+            "id": "http://publications.europa.eu/resource/authority/country",
+            "type": "ConceptScheme"
+          },
+          "notation": "country",
+          "prefLabel": {
+            "en": "Italy"
+          }
+        },
+        "notation": "LA-234218"
+      },
+      "familyName": {
+        "en": "Andromeda"
+      },
+      "fullName": {
+        "en": "Ana Andromeda"
+      },
+      "givenName": {
+        "en": "Ana"
+      }
+    },
+    "issuer": {
+      "id": "urn:epass:org:2",
+      "type": "Organisation",
+      "location": {
+        "id": "urn:epass:location:1",
+        "type": "Location",
+        "address": {
+          "id": "urn:epass:address:1",
+          "type": "Address",
+          "countryCode": {
+            "id": "http://publications.europa.eu/resource/authority/country/BEL",
+            "type": "Concept",
+            "inScheme": {
+              "id": "http://publications.europa.eu/resource/authority/country",
+              "type": "ConceptScheme"
+            },
+            "notation": "country",
+            "prefLabel": {
+              "en": "Belgium"
+            }
+          }
+        }
+      },
+      "logo": {
+        "id": "urn:epass:mediaObject:2",
+        "type": "MediaObject",
+        "content": "",
+        "contentEncoding": {
+          "id": "http://data.europa.eu/snb/encoding/6146cde7dd",
+          "type": "Concept",
+          "inScheme": {
+            "id": "http://data.europa.eu/snb/encoding/25831c2",
+            "type": "ConceptScheme"
+          },
+          "prefLabel": {
+            "en": "base64"
+          }
+        },
+        "contentType": {
+          "id": "http://publications.europa.eu/resource/authority/file-type/PNG",
+          "type": "Concept",
+          "inScheme": {
+            "id": "http://publications.europa.eu/resource/authority/file-type",
+            "type": "ConceptScheme"
+          },
+          "notation": "file-type",
+          "prefLabel": {
+            "en": "PNG"
+          }
+        }
+      },
+      "vatIdentifier": {
+        "id": "urn:epass:legalIdentifier:3",
+        "type": "LegalIdentifier",
+        "spatial": {
+          "id": "http://publications.europa.eu/resource/authority/country/IRL",
+          "type": "Concept",
+          "inScheme": {
+            "id": "http://publications.europa.eu/resource/authority/country",
+            "type": "ConceptScheme"
+          },
+          "notation": "country",
+          "prefLabel": {
+            "en": "Ireland"
+          }
+        },
+        "notation": "654321"
+      },
+      "altLabel": {
+        "en": "UniZ"
+      },
+      "identifier": {
+        "id": "urn:epass:identifier:2",
+        "type": "Identifier",
+        "schemeName": "Research Alliance",
+        "notation": "Res1818"
+      },
+      "legalName": {
+        "en": "ORGANIZACION TEST"
+      },
+      "registration": {
+        "id": "urn:epass:legalIdentifier:4",
+        "type": "LegalIdentifier",
+        "spatial": {
+          "id": "http://publications.europa.eu/resource/authority/country/IRL",
+          "type": "Concept",
+          "inScheme": {
+            "id": "http://publications.europa.eu/resource/authority/country",
+            "type": "ConceptScheme"
+          },
+          "notation": "country",
+          "prefLabel": {
+            "en": "Ireland"
+          }
+        },
+        "notation": "0000"
+      },
+      "homepage": {
+        "id": "urn:epass:webResource:2",
+        "type": "WebResource",
+        "contentURL": "https://uniz.edu"
+      }
+    },
+    "validFrom": "2022-12-31T23:00:00Z",
+    "@context": [
+      "https://www.w3.org/2018/credentials/v1",
+      "http://data.europa.eu/snb/model/context/edc-ap"
+    ]
+  }
+}

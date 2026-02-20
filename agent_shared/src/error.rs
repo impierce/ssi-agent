@@ -11,4 +11,6 @@ pub enum SharedError {
     InvalidConfiguration(String),
     #[error("Configuration is not suitable for production: {0}")]
     ConfigurationNotSuitableForProduction(String),
+    #[error("Error: `{0}`")]
+    Error(String),
 }

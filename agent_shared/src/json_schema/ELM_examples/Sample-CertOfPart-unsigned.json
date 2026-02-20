@@ -1,0 +1,476 @@
+{
+  "id": "urn:credential:43662fb0-c31c-4afb-b501-e85aea91c0a8",
+  "type": [
+    "VerifiableCredential",
+    "EuropeanDigitalCredential"
+  ],
+  "credentialProfiles": {
+    "id": "http://data.europa.eu/snb/credential/e34929035b",
+    "type": "Concept",
+    "inScheme": {
+      "id": "http://data.europa.eu/snb/credential/25831c2",
+      "type": "ConceptScheme"
+    },
+    "prefLabel": {
+      "en": "Generic"
+    }
+  },
+  "displayParameter": {
+    "id": "urn:epass:displayParameter:1",
+    "type": "DisplayParameter",
+    "individualDisplay": {
+      "id": "urn:epass:individualDisplay:1",
+      "type": "IndividualDisplay",
+      "displayDetail": {
+        "id": "urn:epass:displayDetail:1",
+        "type": "DisplayDetail",
+        "image": {
+          "id": "urn:epass:mediaObject:1",
+          "type": "MediaObject",
+          "content": "[IMAGE_DATA_TRUNCATED]",
+          "contentEncoding": {
+            "id": "http://data.europa.eu/snb/encoding/6146cde7dd",
+            "type": "Concept",
+            "inScheme": {
+              "id": "http://data.europa.eu/snb/encoding/25831c2",
+              "type": "ConceptScheme"
+            },
+            "prefLabel": {
+              "en": "base64"
+            }
+          },
+          "contentType": {
+            "id": "http://publications.europa.eu/resource/authority/file-type/JPEG",
+            "type": "Concept",
+            "inScheme": {
+              "id": "http://publications.europa.eu/resource/authority/file-type",
+              "type": "ConceptScheme"
+            },
+            "notation": "file-type",
+            "prefLabel": {
+              "en": "JPEG"
+            }
+          }
+        },
+        "page": 1
+      },
+      "language": {
+        "id": "http://publications.europa.eu/resource/authority/language/ENG",
+        "type": "Concept",
+        "inScheme": {
+          "id": "http://publications.europa.eu/resource/authority/language",
+          "type": "ConceptScheme"
+        },
+        "notation": "language",
+        "prefLabel": {
+          "en": "English"
+        }
+      }
+    },
+    "primaryLanguage": {
+      "id": "http://publications.europa.eu/resource/authority/language/ENG",
+      "type": "Concept",
+      "inScheme": {
+        "id": "http://publications.europa.eu/resource/authority/language",
+        "type": "ConceptScheme"
+      },
+      "notation": "language",
+      "prefLabel": {
+        "en": "English"
+      }
+    },
+    "description": {
+      "en": "has attended the EDC Updates webinar"
+    },
+    "language": {
+      "id": "http://publications.europa.eu/resource/authority/language/ENG",
+      "type": "Concept",
+      "inScheme": {
+        "id": "http://publications.europa.eu/resource/authority/language",
+        "type": "ConceptScheme"
+      },
+      "notation": "language",
+      "prefLabel": {
+        "en": "English"
+      }
+    },
+    "title": {
+      "en": "Certificate of Participation"
+    }
+  },
+  "credentialSchema": {
+    "id": "http://data.europa.eu/snb/model/ap/edc-generic-full",
+    "type": "ShaclValidator2017"
+  },
+  "credentialSubject": {
+    "id": "urn:epass:person:1",
+    "type": "Person",
+    "citizenshipCountry": {
+      "id": "http://publications.europa.eu/resource/authority/country/ITA",
+      "type": "Concept",
+      "inScheme": {
+        "id": "http://publications.europa.eu/resource/authority/country",
+        "type": "ConceptScheme"
+      },
+      "notation": "country",
+      "prefLabel": {
+        "en": "Italy"
+      }
+    },
+    "contactPoint": {
+      "id": "urn:epass:contactPoint:1",
+      "type": "ContactPoint",
+      "address": {
+        "id": "urn:epass:address:2",
+        "type": "Address",
+        "countryCode": {
+          "id": "http://publications.europa.eu/resource/authority/country/ESP",
+          "type": "Concept",
+          "inScheme": {
+            "id": "http://publications.europa.eu/resource/authority/country",
+            "type": "ConceptScheme"
+          },
+          "notation": "country",
+          "prefLabel": {
+            "en": "Spain"
+          }
+        },
+        "fullAddress": {
+          "id": "urn:epass:note:1",
+          "type": "Note",
+          "noteLiteral": {
+            "en": "Calle Iglesia 16, 17242 Girona"
+          }
+        }
+      },
+      "emailAddress": {
+        "id": "mailto:ana.andromeda.4edc@gmail.com",
+        "type": "Mailbox"
+      }
+    },
+    "dateOfBirth": "1999-10-01T22:00:00Z",
+    "gender": {
+      "id": "http://publications.europa.eu/resource/authority/human-sex/FEMALE",
+      "type": "Concept",
+      "inScheme": {
+        "id": "http://publications.europa.eu/resource/authority/human-sex",
+        "type": "ConceptScheme"
+      },
+      "notation": "human-sex",
+      "prefLabel": {
+        "en": "female"
+      }
+    },
+    "hasClaim": {
+      "id": "urn:epass:activity:1",
+      "type": "LearningActivity",
+      "awardedBy": {
+        "id": "urn:epass:awardingProcess:1",
+        "type": "AwardingProcess",
+        "awardingBody": {
+          "id": "urn:epass:org:1",
+          "type": "Organisation",
+          "location": {
+            "id": "urn:epass:location:1",
+            "type": "Location",
+            "address": {
+              "id": "urn:epass:address:1",
+              "type": "Address",
+              "countryCode": {
+                "id": "http://publications.europa.eu/resource/authority/country/BEL",
+                "type": "Concept",
+                "inScheme": {
+                  "id": "http://publications.europa.eu/resource/authority/country",
+                  "type": "ConceptScheme"
+                },
+                "notation": "country",
+                "prefLabel": {
+                  "en": "Belgium"
+                }
+              }
+            }
+          },
+          "logo": {
+            "id": "urn:epass:mediaObject:2",
+            "type": "MediaObject",
+            "content": "[IMAGE_DATA_TRUNCATED]",
+            "contentEncoding": {
+              "id": "http://data.europa.eu/snb/encoding/6146cde7dd",
+              "type": "Concept",
+              "inScheme": {
+                "id": "http://data.europa.eu/snb/encoding/25831c2",
+                "type": "ConceptScheme"
+              },
+              "prefLabel": {
+                "en": "base64"
+              }
+            },
+            "contentType": {
+              "id": "http://publications.europa.eu/resource/authority/file-type/PNG",
+              "type": "Concept",
+              "inScheme": {
+                "id": "http://publications.europa.eu/resource/authority/file-type",
+                "type": "ConceptScheme"
+              },
+              "notation": "file-type",
+              "prefLabel": {
+                "en": "PNG"
+              }
+            }
+          },
+          "altLabel": {
+            "en": "EDC Support Team"
+          },
+          "legalName": {
+            "en": "European Digital Credentials for Learning Support Team"
+          },
+          "registration": {
+            "id": "urn:epass:legalIdentifier:1",
+            "type": "LegalIdentifier",
+            "spatial": {
+              "id": "http://publications.europa.eu/resource/authority/country/BEL",
+              "type": "Concept",
+              "inScheme": {
+                "id": "http://publications.europa.eu/resource/authority/country",
+                "type": "ConceptScheme"
+              },
+              "notation": "country",
+              "prefLabel": {
+                "en": "Belgium"
+              }
+            },
+            "notation": "0000"
+          },
+          "homepage": {
+            "id": "urn:epass:webResource:1",
+            "type": "WebResource",
+            "contentURL": "https://europa.eu/europass/en/europass-tools/digital-credentials"
+          }
+        }
+      },
+      "specifiedBy": {
+        "id": "urn:epass:learningActivitySpec:1",
+        "type": "LearningActivitySpecification",
+        "mode": {
+          "id": "http://data.europa.eu/snb/learning-assessment/920fbb3cbe",
+          "type": "Concept",
+          "inScheme": {
+            "id": "http://data.europa.eu/snb/learning-assessment/25831c2",
+            "type": "ConceptScheme"
+          },
+          "prefLabel": {
+            "en": "Online"
+          }
+        },
+        "supplementaryDocument": [
+          {
+            "id": "urn:epass:webResource:2",
+            "type": "WebResource",
+            "contentURL": "https://op.europa.eu/en/web/eu-vocabularies/europass",
+            "title": {
+              "en": "Common European Skills Data Space"
+            }
+          },
+          {
+            "id": "urn:epass:webResource:3",
+            "type": "WebResource",
+            "contentURL": "https://europa.eu/europass/en/news/updates-european-digital-credential-infrastructure",
+            "title": {
+              "en": "Updates to the European Digital Credential Infrastructure"
+            }
+          },
+          {
+            "id": "urn:epass:webResource:4",
+            "type": "WebResource",
+            "contentURL": "https://github.com/european-commission-empl/European-Learning-Model",
+            "title": {
+              "en": "ELM on Github"
+            }
+          }
+        ],
+        "volumeOfLearning": "P2M",
+        "language": {
+          "id": "http://publications.europa.eu/resource/authority/language/ENG",
+          "type": "Concept",
+          "inScheme": {
+            "id": "http://publications.europa.eu/resource/authority/language",
+            "type": "ConceptScheme"
+          },
+          "notation": "language",
+          "prefLabel": {
+            "en": "English"
+          }
+        },
+        "title": {
+          "en": "EDC Updates Webinar"
+        },
+        "dcType": {
+          "id": "http://data.europa.eu/snb/learning-activity/efff75e10a",
+          "type": "Concept",
+          "inScheme": {
+            "id": "http://data.europa.eu/snb/learning-activity/25831c2",
+            "type": "ConceptScheme"
+          },
+          "prefLabel": {
+            "en": "workshop, seminar or conference"
+          }
+        },
+        "homepage": {
+          "id": "urn:epass:webResource:1",
+          "type": "WebResource",
+          "contentURL": "https://europa.eu/europass/en/europass-tools/digital-credentials"
+        }
+      },
+      "workload": "PT2H",
+      "description": {
+        "en": "The newest version of the European Digital Credential for Learning (EDC) infrastructure was released in June 2023. The purpose of this online webinar was to inform implementers and other interested parties about the changes, and demonstrate how the newly introduced features improve overall usability and EDC's interoperability with other existing initiatives."
+      },
+      "temporal": {
+        "id": "urn:epass:period:1",
+        "type": "PeriodOfTime",
+        "endDate": "2023-06-28T14:00:00Z",
+        "startDate": "2023-06-28T12:00:00Z"
+      },
+      "title": {
+        "en": "EDC Updates Webinar"
+      }
+    },
+    "nationalID": {
+      "id": "urn:epass:legalIdentifier:2",
+      "type": "LegalIdentifier",
+      "spatial": {
+        "id": "http://publications.europa.eu/resource/authority/country/ITA",
+        "type": "Concept",
+        "inScheme": {
+          "id": "http://publications.europa.eu/resource/authority/country",
+          "type": "ConceptScheme"
+        },
+        "notation": "country",
+        "prefLabel": {
+          "en": "Italy"
+        }
+      },
+      "notation": "LA-234218"
+    },
+    "placeOfBirth": {
+      "id": "urn:epass:location:2",
+      "type": "Location",
+      "address": {
+        "id": "urn:epass:address:3",
+        "type": "Address",
+        "countryCode": {
+          "id": "http://publications.europa.eu/resource/authority/country/ITA",
+          "type": "Concept",
+          "inScheme": {
+            "id": "http://publications.europa.eu/resource/authority/country",
+            "type": "ConceptScheme"
+          },
+          "notation": "country",
+          "prefLabel": {
+            "en": "Italy"
+          }
+        }
+      }
+    },
+    "identifier": {
+      "id": "urn:epass:identifier:2",
+      "type": "Identifier",
+      "schemeName": "Student ID",
+      "notation": "97168A"
+    },
+    "familyName": {
+      "en": "Andromeda"
+    },
+    "fullName": {
+      "en": "Ana Andromeda"
+    },
+    "givenName": {
+      "en": "Ana"
+    }
+  },
+  "issuer": {
+    "id": "urn:epass:org:1",
+    "type": "Organisation",
+    "location": {
+      "id": "urn:epass:location:1",
+      "type": "Location",
+      "address": {
+        "id": "urn:epass:address:1",
+        "type": "Address",
+        "countryCode": {
+          "id": "http://publications.europa.eu/resource/authority/country/BEL",
+          "type": "Concept",
+          "inScheme": {
+            "id": "http://publications.europa.eu/resource/authority/country",
+            "type": "ConceptScheme"
+          },
+          "notation": "country",
+          "prefLabel": {
+            "en": "Belgium"
+          }
+        }
+      }
+    },
+    "logo": {
+      "id": "urn:epass:mediaObject:2",
+      "type": "MediaObject",
+      "content": "[IMAGE_DATA_TRUNCATED]",
+      "contentEncoding": {
+        "id": "http://data.europa.eu/snb/encoding/6146cde7dd",
+        "type": "Concept",
+        "inScheme": {
+          "id": "http://data.europa.eu/snb/encoding/25831c2",
+          "type": "ConceptScheme"
+        },
+        "prefLabel": {
+          "en": "base64"
+        }
+      },
+      "contentType": {
+        "id": "http://publications.europa.eu/resource/authority/file-type/PNG",
+        "type": "Concept",
+        "inScheme": {
+          "id": "http://publications.europa.eu/resource/authority/file-type",
+          "type": "ConceptScheme"
+        },
+        "notation": "file-type",
+        "prefLabel": {
+          "en": "PNG"
+        }
+      }
+    },
+    "altLabel": {
+      "en": "EDC Support Team"
+    },
+    "legalName": {
+      "en": "European Digital Credentials for Learning Support Team"
+    },
+    "registration": {
+      "id": "urn:epass:legalIdentifier:1",
+      "type": "LegalIdentifier",
+      "spatial": {
+        "id": "http://publications.europa.eu/resource/authority/country/BEL",
+        "type": "Concept",
+        "inScheme": {
+          "id": "http://publications.europa.eu/resource/authority/country",
+          "type": "ConceptScheme"
+        },
+        "notation": "country",
+        "prefLabel": {
+          "en": "Belgium"
+        }
+      },
+      "notation": "0000"
+    },
+    "homepage": {
+      "id": "urn:epass:webResource:1",
+      "type": "WebResource",
+      "contentURL": "https://europa.eu/europass/en/europass-tools/digital-credentials"
+    }
+  },
+  "validFrom": "2023-06-28T14:30:00Z",
+  "@context": [
+    "https://www.w3.org/2018/credentials/v1",
+    "http://data.europa.eu/snb/model/context/edc-ap"
+  ]
+}
