@@ -311,6 +311,7 @@ impl Aggregate for Credential {
                                             .ok_or(BuildCredentialError(
                                                 "Failed to enter the @context into the credential".to_string(),
                                             ))?;
+                                        // Due to ELM schema requiring a `validFrom` while still building on VC DM 1.1, we also still need `issuanceDate`.
                                         credential_data
                                             .insert_if_none(
                                                 &["issuanceDate"],
@@ -319,20 +320,42 @@ impl Aggregate for Credential {
                                             .ok_or(BuildCredentialError(
                                                 "Failed to enter the issuanceDate date into the credential".to_string(),
                                             ))?;
-                                        if let Some(expiration_date) = expires_at {
-                                            credential_data
-                                                .insert_at_path(&["expirationDate"], json!(expiration_date))
-                                                .ok_or(BuildCredentialError(
-                                                    "Failed to enter the expirationDate date into the credential"
-                                                        .to_string(),
-                                                ))?;
-                                        }
+                                        credential_data
+                                            .insert_if_none(
+                                                &["validFrom"],
+                                                json!(created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+                                            )
+                                            .ok_or(BuildCredentialError(
+                                                "Failed to enter the validFrom date into the credential".to_string(),
+                                            ))?;
                                     }
+                                    // The following link explains the difference between `issued`, `issuanceDate` and `validFrom`:
+                                    // https://europa.eu/europass/elm-browser/homepage/3-2-0/edc-generic-no-cv_en.html
+                                    credential_data
+                                        .insert_if_none(
+                                            &["issued"],
+                                            json!(created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+                                        )
+                                        .ok_or(BuildCredentialError(
+                                            "Failed to enter the issued date into the credential".to_string(),
+                                        ))?;
+                                    if let Some(expiration_date) = expires_at {
+                                        credential_data
+                                            .insert_at_path(&["expirationDate"], json!(expiration_date))
+                                            .ok_or(BuildCredentialError(
+                                                "Failed to enter the expirationDate date into the credential"
+                                                    .to_string(),
+                                            ))?;
+                                    }
+                                    // TODO: Due to the complexity of the different allowed issuer types (Agent, Person, Organisation),
+                                    // We will keep it simple for now and only pass a placeholder eIDAS Legal Identifier.
+                                    // As long as organisations don't their eIDAS Legal Identifier there can be made no official `issuer` and therefore ELM anyway.
+                                    credential_data.insert_if_none(&["issuer"], json!("urn:epass:org:1"));
 
                                     // No fields in credentialProfiles are actually required by the ELM schema
                                     // TODO: enter empty credentialProfile
                                     credential_data
-                                        .insert_at_path(
+                                        .insert_if_none(
                                             &["credentialProfiles"],
                                             json!({
                                                 "id":"http://data.europa.eu/snb/credential/bdc47cb449",
@@ -349,7 +372,7 @@ impl Aggregate for Credential {
 
                                     // TODO: this is currently hard coded, it can remain so until the use of this property (and all of ELM) becomes more clear and it has purpose to the user
                                     credential_data
-                                        .insert_at_path(
+                                        .insert_if_none(
                                             &["displayParameter"],
                                             json!({
                                                 "id": "urn:epass:displayParameter:1",
@@ -357,24 +380,71 @@ impl Aggregate for Credential {
                                                 "title": {
                                                     "en": credential_name
                                                 },
-                                                "inScheme":{
-                                                    "id":"http://data.europa.eu/snb/credential/25831c2",
-                                                    "type": "ConceptScheme"
-                                                }
+                                                "individualDisplay": {
+                                                    "id": "urn:epass:individualDisplay:1",
+                                                    "type": "IndividualDisplay",
+                                                    "language": {
+                                                        "id": "http://publications.europa.eu/resource/authority/language/ENG",
+                                                        "type": "Concept",
+                                                        "inScheme": {
+                                                            "id": "http://publications.europa.eu/resource/authority/language",
+                                                            "type": "ConceptScheme"
+                                                        },
+                                                        "notation": "language",
+                                                        "prefLabel": {
+                                                            "en": "English"
+                                                        }
+                                                    },
+                                                    "displayDetail": {
+                                                        "id": "urn:epass:displayDetail:1",
+                                                        "type": "DisplayDetail",
+                                                        "page": 1,
+                                                        "image": {
+                                                            "id": "urn:epass:mediaObject:1",
+                                                            "type": "MediaObject",
+                                                            // TODO: this field needs an actual baked in image, binary data, with live data the encoding and type need to be changed accordingly
+                                                            "content": "[PLACEHOLDER]",
+                                                            "contentEncoding": {
+                                                                "id": "http://data.europa.eu/snb/encoding/6146cde7dd",
+                                                                "type": "Concept",
+                                                                "inScheme": {
+                                                                    "id": "http://data.europa.eu/snb/encoding/25831c2",
+                                                                    "type": "ConceptScheme"
+                                                                },
+                                                                "prefLabel": {
+                                                                    "en": "base64"
+                                                                }
+                                                            },
+                                                            "contentType": {
+                                                                "id": "http://publications.europa.eu/resource/authority/file-type/JPEG",
+                                                                "type": "Concept",
+                                                                "inScheme": {
+                                                                    "id": "http://publications.europa.eu/resource/authority/file-type",
+                                                                    "type": "ConceptScheme"
+                                                                },
+                                                                "notation": "file-type",
+                                                                "prefLabel": {
+                                                                    "en": "JPEG"
+                                                                }
+                                                            }
+                                                        },
+                                                    },
+                                                },
                                             }),
                                         )
                                         .ok_or(BuildCredentialError(
                                             "Failed to enter the displayParameter into the credential".to_string(),
                                         ))?;
 
-                                    //     .schema(Schema::new(
-                                    //         identity_core::common::Url::parse(
-                                    //             // FIXME
-                                    //             "https://eudiw.org/credentials/schemas/EuropeanDigitalCredentialV3_3.json",
-                                    //         )
-                                    //         .unwrap(),
-                                    //         vec!["JsonSchema".to_string()],
-                                    //     ));
+                                    credential_data.insert_if_none(&["credentialSchema"], json!({
+                                        "id": "https://eudiw.org/credentials/schemas/EuropeanDigitalCredentialV3_3.json",
+                                        "type": "JsonSchema"
+                                    })).ok_or(BuildCredentialError(
+                                        "Failed to enter the credentialSchema into the credential".to_string(),
+                                    ))?;
+
+                                    // No credentialSubject is being manually added, meaning that this and the rest of the optional fields are expected to be present in the payload correctly.
+                                    // The above fields can be considered sensible defaults and can otherwise still be set within the payload.
 
                                     // Validate credential before building
                                     // CredentialType::EuropeanDigitalCredential.validate(&credential_data).map_err(|e| BuildCredentialError(e.to_string()))?;
