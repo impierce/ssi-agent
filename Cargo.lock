@@ -363,7 +363,6 @@ dependencies = [
  "sd-jwt-payload",
  "serde",
  "serde_json",
- "serde_json_path_to_error",
  "serde_with 3.13.0",
  "serial_test",
  "strum 0.26.3",
@@ -399,7 +398,6 @@ dependencies = [
 name = "agent_macros"
 version = "0.1.0"
 dependencies = [
- "darling 0.20.11",
  "proc-macro2",
  "quote",
  "syn 2.0.104",
@@ -422,7 +420,6 @@ dependencies = [
  "iota-sdk 1.1.5",
  "iota-sdk 1.13.1",
  "iota_stronghold",
- "itertools 0.14.0",
  "jsonwebtoken",
  "lazy_static",
  "log",
@@ -11048,17 +11045,6 @@ dependencies = [
  "memchr",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "serde_json_path_to_error"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "131f9e72e503904612f46028049e1c873b7b4d725baccedf8a00e3e67904cb1a"
-dependencies = [
- "serde",
- "serde_json",
- "serde_path_to_error",
 ]
 
 [[package]]

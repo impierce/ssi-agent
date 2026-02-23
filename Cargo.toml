@@ -42,11 +42,9 @@ futures = "0.3"
 # TODO: For all `identity_*` dependencies, switch to latest `beta` tag once https://github.com/iotaledger/identity/pull/1770 is merged.
 identity_core = { git = "https://github.com/iotaledger/identity", rev = "e68d4f5" }
 identity_credential = { git = "https://github.com/iotaledger/identity", rev = "e68d4f5", default-features = false, features = [
-    "credential",
     "domain-linkage",
     "presentation",
     "sd-jwt-vc",
-    "validator",
 ] }
 identity_did = { git = "https://github.com/iotaledger/identity", rev = "e68d4f5" }
 identity_document = { git = "https://github.com/iotaledger/identity", rev = "e68d4f5" }
