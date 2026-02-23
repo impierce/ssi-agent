@@ -557,7 +557,7 @@ pub mod tests {
         #[future(awt)] credential_offer: CredentialOffer,
         #[future(awt)] credential_offer_uri: CredentialOffer,
         #[future(awt)] form_url_encoded_credential_offer: String,
-        #[future(awt)] credential_request: CredentialRequest,
+        #[future(awt)] university_degree_credential_request: CredentialRequest,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
     ) {
@@ -588,7 +588,7 @@ pub mod tests {
                 offer_id: offer_id.clone(),
                 credential_issuer_metadata,
                 authorization_server_metadata,
-                credential_request,
+                credential_request: university_degree_credential_request,
             })
             .then_expect_events(vec![OfferEvent::CredentialRequestVerified {
                 offer_id: offer_id.clone(),
@@ -797,11 +797,7 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub async fn credential_request(
-        credential_configuration_id: String,
-        #[future(awt)] holder: Arc<dyn Subject>,
-        static_issuer_url: Url,
-    ) -> CredentialRequest {
+    pub async fn proof(#[future(awt)] holder: Arc<dyn Subject>, static_issuer_url: Url) -> String {
         let generated_proof = Proof::builder()
             .proof_type(ProofType::Jwt)
             .algorithm(Algorithm::EdDSA)
@@ -826,11 +822,29 @@ pub mod test_utils {
             }
         };
 
+        jwt_string
+    }
+
+    #[fixture]
+    pub async fn credential_request(
+        credential_configuration_id: String,
+        #[future(awt)] proof: String,
+    ) -> CredentialRequest {
         CredentialRequest {
             credential_identifier_or_credential_configuration_id: CredentialConfigurationId(
                 credential_configuration_id,
             ),
-            proofs: Some(Proofs { jwt: vec![jwt_string] }),
+            proofs: Some(Proofs { jwt: vec![proof] }),
+        }
+    }
+
+    #[fixture]
+    pub async fn university_degree_credential_request(#[future(awt)] proof: String) -> CredentialRequest {
+        CredentialRequest {
+            credential_identifier_or_credential_configuration_id: CredentialConfigurationId(
+                "UniversityDegree".to_string(),
+            ),
+            proofs: Some(Proofs { jwt: vec![proof] }),
         }
     }
 
