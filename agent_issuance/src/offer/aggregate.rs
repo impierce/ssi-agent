@@ -287,8 +287,7 @@ impl Aggregate for Offer {
                 if let CredentialOffer::CredentialOffer(credential_offer) = credential_offer {
                     if !credential_offer
                         .credential_configuration_ids
-                        .iter()
-                        .any(|credential_configuration_id| *credential_configuration_id == request_configuration_id)
+                        .contains(&request_configuration_id)
                     {
                         return Err(UnknownCredentialConfiguration(request_configuration_id));
                     }
