@@ -431,7 +431,7 @@ pub mod tests {
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_configuration_id": "001",
+                            "credential_configuration_id": credential_configuration_id,
                             "proofs": {
                                 "jwt":[jwt]
                             }
