@@ -30,7 +30,7 @@ pub async fn notification(
 
     let _claims = AccessTokenValidationService::validate(&state, &access_token)
         .await
-        .map_err(|_err| PublicError::from(NotificationErrorResponse::InvalidToken))?;
+        .map_err(|_err| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
 
     let credentials = match query_handler("all_credentials", &state.query.all_credentials).await? {
         Some(all_credentials) => all_credentials.credentials,
@@ -95,11 +95,11 @@ mod tests {
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
-        let mut authorization_app = authorization::router((authorization_state, issuance_state));
+        let mut authorization_app = authorization::router((authorization_state, issuance_state.clone()));
 
         let access_token: String = token(&mut authorization_app, true, grants).await;
 
-        let (access_token, notification_id) = credential(&mut issuance_app, access_token, None).await;
+        let (access_token, notification_id) = credential(&mut issuance_app, &issuance_state, access_token, None).await;
 
         let request = Request::builder()
             .uri("/openid4vci/notification")
@@ -135,11 +135,11 @@ mod tests {
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
-        let mut authorization_app = authorization::router((authorization_state, issuance_state));
+        let mut authorization_app = authorization::router((authorization_state, issuance_state.clone()));
 
         let access_token: String = token(&mut authorization_app, true, grants).await;
 
-        let (access_token, notification_id) = credential(&mut issuance_app, access_token, None).await;
+        let (access_token, notification_id) = credential(&mut issuance_app, &issuance_state, access_token, None).await;
 
         struct TestCase {
             name: &'static str,
@@ -169,7 +169,7 @@ mod tests {
                     event_description: None,
                 })
                 .unwrap(),
-                expected_error: NotificationErrorResponse::InvalidToken,
+                expected_error: NotificationErrorResponse::InvalidNotificationRequest,
             },
             TestCase {
                 name: "Invalid Notification Event",

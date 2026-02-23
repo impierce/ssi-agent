@@ -4,8 +4,9 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::Aggregate;
 use identity_core::convert::ToJson;
 use jsonwebtoken::Algorithm;
-use oid4vci::credential_format_profiles::w3c_verifiable_credentials::{jwt_vc_json, CredentialSubject};
+use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json;
 use oid4vci::credential_format_profiles::{CredentialFormats, Parameters};
+use oid4vci::credential_issuer::credential_configurations_supported::AlgIdentifier;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
@@ -34,14 +35,14 @@ fn into_credential_configurations_supported(
         .collect()
 }
 
-fn into_credential_signing_alg_values_supported(signing_algorithms_supported: &[Algorithm]) -> Vec<String> {
+fn into_credential_signing_alg_values_supported(signing_algorithms_supported: &[Algorithm]) -> Vec<AlgIdentifier> {
     signing_algorithms_supported
         .iter()
         .filter_map(|algorithm| {
             algorithm
                 .to_json_value()
                 .ok()
-                .and_then(|value| value.as_str().map(ToString::to_string))
+                .and_then(|value| value.as_str().map(|s| AlgIdentifier::String(s.to_string())))
         })
         .collect()
 }
@@ -171,15 +172,14 @@ impl Aggregate for ServerConfig {
                 credential_configuration,
                 provisioned,
             } => {
-                let credential_format = match credential_configuration.format {
-                    CredentialFormats::JwtVcJson(_) => CredentialFormats::JwtVcJson(Parameters {
+                let credential_format = match credential_configuration.format.as_str() {
+                    "jwt_vc_json" => CredentialFormats::JwtVcJson(Parameters {
                         parameters: (jwt_vc_json::CredentialDefinition {
                             type_: credential_configuration.type_,
-                            credential_subject: CredentialSubject::default(),
                         })
                         .into(),
                     }),
-                    CredentialFormats::DcSdJwt(_) => {
+                    "dc+sd-jwt" => {
                         let vct = format!(
                             "{}vct/{}/{version}",
                             config().public_url,
@@ -209,8 +209,7 @@ impl Aggregate for ServerConfig {
                         &self.signing_algorithms_supported,
                     ),
                     proof_types_supported,
-                    display: credential_configuration.display,
-                    claims: credential_configuration.claims,
+                    credential_metadata: Some(credential_configuration.credential_metadata),
                     ..Default::default()
                 };
 
@@ -352,6 +351,7 @@ pub mod server_config_tests {
     use agent_secret_manager::service::Service;
     use agent_shared::config::{Authorization, CredentialConfiguration};
     use cqrs_es::test::TestFramework;
+    use oid4vci::credential_issuer::credential_configurations_supported::CredentialMetadata;
     use oid4vci::credential_issuer::credential_configurations_supported::{
         CredentialConfigurationsSupportedDisplay, Logo,
     };
@@ -402,21 +402,23 @@ pub mod server_config_tests {
             .when(ServerConfigCommand::UpdateCredentialConfiguration {
                 credential_configuration: CredentialConfiguration {
                     credential_configuration_id: credential_configuration_id.clone(),
-                    format: CredentialFormats::JwtVcJson(()),
+                    format: "jwt_vc_json".to_string(),
                     type_: vec!["VerifiableCredential".to_string()],
-                    display: vec![CredentialConfigurationsSupportedDisplay {
-                        name: "Verifiable Credential".to_string(),
-                        locale: Some("en".to_string()),
-                        logo: Some(Logo {
-                            uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
-                            alt_text: Some("Impierce Logo".to_string()),
-                        }),
-                        description: None,
-                        background_image: None,
-                        background_color: None,
-                        text_color: None,
-                    }],
-                    claims: vec![],
+                    credential_metadata: CredentialMetadata {
+                        display: Some(vec![CredentialConfigurationsSupportedDisplay {
+                            name: "Verifiable Credential".to_string(),
+                            locale: Some("en".to_string()),
+                            logo: Some(Logo {
+                                uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
+                                alt_text: Some("Impierce Logo".to_string()),
+                            }),
+                            description: None,
+                            background_image: None,
+                            background_color: None,
+                            text_color: None,
+                        }]),
+                        claims: None,
+                    },
                     authorization: Authorization {
                         pre_authorized: true,
                         tx_code_constraints: None,
