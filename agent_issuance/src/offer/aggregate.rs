@@ -19,6 +19,7 @@ use crate::offer::event::OfferEvent;
 use crate::services::IssuanceServices;
 use crate::utils::generate_tx_code::generate_tx_code;
 use oid4vci::credential_offer::CredentialConfigurationIds;
+use oid4vci::credential_request::CredentialIdentifierOrCredentialConfigurationId;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum Status {
@@ -120,7 +121,7 @@ impl Aggregate for Offer {
                 let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
                     credential_issuer: credential_issuer.clone(),
                     credential_configuration_ids: CredentialConfigurationIds::try_new(credential_configuration_ids)
-                        .expect("Credential_configuration_ids should not be empty when creating a credential offer"),
+                        .map_err(|_| OfferError::MissingCredentialConfigurationIdsError)?,
                     grants: Some(grants),
                 }));
 
@@ -188,9 +189,7 @@ impl Aggregate for Offer {
 
                     credential_offer.credential_configuration_ids =
                         CredentialConfigurationIds::try_new(credential_configuration_id_set.into_iter().collect())
-                            .expect(
-                                "Credential_configuration_ids should not be empty when updating a credential offer",
-                            );
+                            .map_err(|_| MissingCredentialConfigurationIdsError)?;
                 } else {
                     unreachable!();
                 }
@@ -269,6 +268,31 @@ impl Aggregate for Offer {
                 authorization_server_metadata,
                 credential_request,
             } => {
+                let credential_offer = self
+                    .credential_offer
+                    .clone()
+                    .ok_or_else(|| MissingCredentialOfferError)?;
+
+                let request_configuration_id =
+                    if let CredentialIdentifierOrCredentialConfigurationId::CredentialConfigurationId(
+                        request_configuration_id,
+                    ) = credential_request.credential_identifier_or_credential_configuration_id
+                    {
+                        request_configuration_id
+                    } else {
+                        return Err(UnsupportedCredentialIdentifierError);
+                    };
+
+                // Validate that the requested Credential Offer ID is contained in the Credential Offer.
+                if let CredentialOffer::CredentialOffer(credential_offer) = credential_offer {
+                    if !credential_offer
+                        .credential_configuration_ids
+                        .contains(&request_configuration_id)
+                    {
+                        return Err(UnknownCredentialConfiguration(request_configuration_id));
+                    }
+                }
+
                 let credential_issuer = CredentialIssuer {
                     subject: services.issuer.clone(),
                     metadata: *credential_issuer_metadata,
@@ -283,7 +307,9 @@ impl Aggregate for Offer {
                     .await
                     .map_err(|e| InvalidProofError(e.to_string()))?;
 
-                let subject_did = validated_proofs[0].rfc7519_claims.iss().as_ref().cloned();
+                let subject_did = validated_proofs
+                    .first()
+                    .and_then(|proof| proof.rfc7519_claims.iss().as_ref().cloned());
 
                 Ok(vec![CredentialRequestVerified {
                     offer_id,
@@ -415,7 +441,7 @@ pub mod tests {
             .given_no_previous_events()
             .when(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
-                credential_configuration_ids: vec!["this_must_be_non_empty".to_string()],
+                credential_configuration_ids: vec!["UniversityDegree".to_string()],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
                 delivery_options: None,
@@ -455,7 +481,7 @@ pub mod tests {
             .given_no_previous_events()
             .when(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
-                credential_configuration_ids: vec!["this_must_be_non_empty".to_string()],
+                credential_configuration_ids: vec!["UniversityDegree".to_string()],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
                 delivery_options: Some(delivery_options.clone()),
@@ -488,7 +514,6 @@ pub mod tests {
         #[future(awt)] pre_authorized_code: String,
         #[future(awt)] credential_offer: CredentialOffer,
         #[future(awt)] credential_offer_uri: CredentialOffer,
-        // #[future(awt)] credential_offer_with_credential_configuration_ids: CredentialOffer,
         #[future(awt)] form_url_encoded_credential_offer: String,
     ) {
         OfferTestFramework::with(IssuanceServices::default().await)
@@ -505,7 +530,7 @@ pub mod tests {
             .when(OfferCommand::AddCredentials {
                 offer_id: offer_id.clone(),
                 credential_ids: vec!["credential-id".to_string()],
-                credential_configuration_ids: vec!["this_must_be_non_empty".to_string()],
+                credential_configuration_ids: vec!["UniversityDegree".to_string()],
             })
             .then_expect_events(vec![
                 OfferEvent::CredentialsAdded {
@@ -532,7 +557,7 @@ pub mod tests {
         #[future(awt)] credential_offer: CredentialOffer,
         #[future(awt)] credential_offer_uri: CredentialOffer,
         #[future(awt)] form_url_encoded_credential_offer: String,
-        #[future(awt)] credential_request: CredentialRequest,
+        #[future(awt)] university_degree_credential_request: CredentialRequest,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
     ) {
@@ -563,7 +588,7 @@ pub mod tests {
                 offer_id: offer_id.clone(),
                 credential_issuer_metadata,
                 authorization_server_metadata,
-                credential_request,
+                credential_request: university_degree_credential_request,
             })
             .then_expect_events(vec![OfferEvent::CredentialRequestVerified {
                 offer_id: offer_id.clone(),
@@ -730,10 +755,8 @@ pub mod test_utils {
     ) -> CredentialOffer {
         CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
             credential_issuer: static_issuer_url,
-            credential_configuration_ids: CredentialConfigurationIds::try_new(vec![
-                "this_must_be_non_empty".to_string()
-            ])
-            .expect("Credential_configuration_ids should not be empty when creating a credential offer"),
+            credential_configuration_ids: CredentialConfigurationIds::try_new(vec!["UniversityDegree".to_string()])
+                .expect("Credential_configuration_ids should not be empty when creating a credential offer"),
             grants: Some(Grants {
                 authorization_code: None,
                 pre_authorized_code: Some(PreAuthorizedCode {
@@ -760,7 +783,7 @@ pub mod test_utils {
 
     #[fixture]
     pub async fn form_url_encoded_credential_offer(#[future(awt)] pre_authorized_code: String) -> String {
-        format!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fmy-domain.example.org%2F%22%2C%22credential_configuration_ids%22%3A%5B%22this_must_be_non_empty%22%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%7D%7D%7D")
+        format!("openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fmy-domain.example.org%2F%22%2C%22credential_configuration_ids%22%3A%5B%22UniversityDegree%22%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%7D%7D%7D")
     }
 
     #[fixture]
@@ -774,11 +797,7 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub async fn credential_request(
-        credential_configuration_id: String,
-        #[future(awt)] holder: Arc<dyn Subject>,
-        static_issuer_url: Url,
-    ) -> CredentialRequest {
+    pub async fn proof(#[future(awt)] holder: Arc<dyn Subject>, static_issuer_url: Url) -> String {
         let generated_proof = Proof::builder()
             .proof_type(ProofType::Jwt)
             .algorithm(Algorithm::EdDSA)
@@ -803,11 +822,29 @@ pub mod test_utils {
             }
         };
 
+        jwt_string
+    }
+
+    #[fixture]
+    pub async fn credential_request(
+        credential_configuration_id: String,
+        #[future(awt)] proof: String,
+    ) -> CredentialRequest {
         CredentialRequest {
             credential_identifier_or_credential_configuration_id: CredentialConfigurationId(
                 credential_configuration_id,
             ),
-            proofs: Some(Proofs { jwt: vec![jwt_string] }),
+            proofs: Some(Proofs { jwt: vec![proof] }),
+        }
+    }
+
+    #[fixture]
+    pub async fn university_degree_credential_request(#[future(awt)] proof: String) -> CredentialRequest {
+        CredentialRequest {
+            credential_identifier_or_credential_configuration_id: CredentialConfigurationId(
+                "UniversityDegree".to_string(),
+            ),
+            proofs: Some(Proofs { jwt: vec![proof] }),
         }
     }
 

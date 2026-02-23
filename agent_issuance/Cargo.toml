@@ -11,6 +11,7 @@ agent_secret_manager = { path = "../agent_secret_manager" }
 
 anyhow.workspace = true
 async-trait.workspace = true
+base64.workspace = true
 cqrs-es.workspace = true
 chrono.workspace = true
 types-ob-v3 = { git = "https://github.com/impierce/digital-credential-data-models", rev = "9f16c27" }
@@ -45,6 +46,7 @@ agent_secret_manager = { path = "../agent_secret_manager", features = [
     "test_utils",
 ] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
+agent_store = { path = "../agent_store" }
 async-std.workspace = true
 serial_test = "3.0"
 tracing-test.workspace = true

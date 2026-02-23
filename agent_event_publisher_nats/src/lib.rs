@@ -3,7 +3,7 @@ use agent_shared::config::config;
 use agent_store::{
     AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
     ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
-    HolderCredentialEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
+    HolderCredentialEventPublisher, NonceEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
     PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
     ServiceEventPublisher, TemplateEventPublisher,
 };
@@ -98,6 +98,11 @@ impl EventPublisher for EventPublisherNats {
             .take()
             .map(|publisher| Box::new(publisher) as OfferEventPublisher)
     }
+
+    fn nonce(&mut self) -> Option<NonceEventPublisher> {
+        None
+    }
+
     fn document(&mut self) -> Option<DocumentEventPublisher> {
         None
     }
