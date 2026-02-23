@@ -19,6 +19,7 @@ use crate::offer::event::OfferEvent;
 use crate::services::IssuanceServices;
 use crate::utils::generate_tx_code::generate_tx_code;
 use oid4vci::credential_offer::CredentialConfigurationIds;
+use oid4vci::credential_request::CredentialIdentifierOrCredentialConfigurationId;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum Status {
@@ -267,6 +268,32 @@ impl Aggregate for Offer {
                 authorization_server_metadata,
                 credential_request,
             } => {
+                let credential_offer = self
+                    .credential_offer
+                    .clone()
+                    .ok_or_else(|| MissingCredentialOfferError)?;
+
+                let request_configuration_id =
+                    if let CredentialIdentifierOrCredentialConfigurationId::CredentialConfigurationId(
+                        request_configuration_id,
+                    ) = credential_request.credential_identifier_or_credential_configuration_id
+                    {
+                        request_configuration_id
+                    } else {
+                        return Err(UnsupportedCredentialIdentifierError);
+                    };
+
+                // Validate that the requested Credential Offer ID is contained in the Credential Offer.
+                if let CredentialOffer::CredentialOffer(credential_offer) = credential_offer {
+                    if !credential_offer
+                        .credential_configuration_ids
+                        .iter()
+                        .any(|credential_configuration_id| *credential_configuration_id == request_configuration_id)
+                    {
+                        return Err(UnknownCredentialConfiguration(request_configuration_id));
+                    }
+                }
+
                 let credential_issuer = CredentialIssuer {
                     subject: services.issuer.clone(),
                     metadata: *credential_issuer_metadata,

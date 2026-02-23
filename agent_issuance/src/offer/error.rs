@@ -28,4 +28,8 @@ pub enum OfferError {
     InvalidPreAuthorizedCodeError,
     #[error("Credential configuration IDs should not be empty when creating a credential offer.")]
     MissingCredentialConfigurationIdsError,
+    #[error("Credential configuration not known:{0}")]
+    UnknownCredentialConfiguration(String),
+    #[error("Credential identifier not supported")]
+    UnsupportedCredentialIdentifierError,
 }

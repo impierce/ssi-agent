@@ -2,8 +2,6 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum CredentialError {
-    #[error("Credential format not known: `{0}`")]
-    UnknownCredentialConfiguration(serde_json::Value),
     // TODO: Remove this error when fixing: https://github.com/impierce/ssi-agent/issues/136
     #[error("Credential format not supported: `{0}`")]
     UnsupportedCredentialFormat(serde_json::Value),
@@ -22,6 +20,4 @@ pub enum CredentialError {
     InvalidCredentialStatus,
     #[error("Failed to create the VC JWT: {0}")]
     BuildVcJwtError(String),
-    #[error("Unknown Credential Identifier")]
-    UnknownCredentialIdentifier,
 }

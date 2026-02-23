@@ -30,16 +30,6 @@ impl IntoApiErrorExt for CredentialError {
                 .type_url(type_url("issuance#unsupported-credential-type"))
                 .source(self)
                 .finish(),
-            UnknownCredentialConfiguration(_) => ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Unknown Credential Configuration")
-                .type_url(type_url("issuance#unknown-credential-configuration"))
-                .source(self)
-                .finish(),
-            UnknownCredentialIdentifier => ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Unknown Credential Identifier")
-                .type_url(type_url("issuance#unknown-credential-identifier"))
-                .source(self)
-                .finish(),
             InvalidCredentialSubjectError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Credential Subject")
                 .type_url(type_url("issuance#invalid-credential-subject"))
@@ -115,6 +105,8 @@ impl IntoApiErrorExt for OfferError {
             InvalidProofError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             MissingProofIssuerError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             MissingCredentialConfigurationIdsError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            UnknownCredentialConfiguration(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            UnsupportedCredentialIdentifierError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
@@ -175,15 +167,14 @@ impl IntoPublicError for CredentialError {
     fn into_public_error(self) -> PublicError {
         use CredentialError::*;
         match self {
-            UnknownCredentialConfiguration(_) => PublicError::CredentialError(OID4VCError::new(
-                CredentialErrorResponse::UnknownCredentialConfiguration,
-            )),
-
-            UnknownCredentialIdentifier => {
-                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::UnknownCredentialIdentifier))
-            }
-
-            _ => PublicError::InternalServerError,
+            UnsupportedCredentialFormat(_) => PublicError::InternalServerError,
+            UnsupportedCredentialType => PublicError::InternalServerError,
+            InvalidCredentialSubjectError(_) => PublicError::InternalServerError,
+            InvalidIdentifierError => PublicError::InternalServerError,
+            MissingCredentialDataError => PublicError::InternalServerError,
+            InvalidExpirationDateError => PublicError::InternalServerError,
+            InvalidCredentialStatus => PublicError::InternalServerError,
+            BuildVcJwtError(_) => PublicError::InternalServerError,
         }
     }
 }
@@ -288,21 +279,6 @@ pub mod tests {
 
     #[tokio::test]
     async fn issuance_errors_successfully_convert_to_problem_details() {
-        assert_eq!(
-            into_json_value(
-                CredentialError::UnknownCredentialConfiguration(serde_json::json!("unknown_credential_configuration"))
-                    .into_api_error()
-                    .into_axum_response()
-            )
-            .await,
-            json!({
-                "type": format!("{DOCUMENTATION_URL}problem-details/issuance#unknown-credential-configuration"),
-                "title": "Unknown Credential Configuration",
-                "status": 400,
-                "detail": "Credential format not known: `\"unknown_credential_configuration\"`"
-            }),
-        );
-
         assert_eq!(
             into_json_value(
                 CredentialError::InvalidIdentifierError
