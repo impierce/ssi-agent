@@ -316,9 +316,7 @@ impl Aggregate for Credential {
                             _ => continue,
                         }
                     }
-                    Err(UnknownCredentialConfiguration(serde_json::json!(
-                        credential_configuration.credential_format
-                    )))
+                    Err(UnsupportedCredentialType)
                 }
                 _ => Err(UnknownCredentialConfiguration(serde_json::json!(
                     credential_configuration.credential_format

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
-use agent_identity::{connection::command::ConnectionCommand, state::IdentityState};
+use agent_identity::{connection::aggregate::Connection, connection::command::ConnectionCommand, state::IdentityState};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
@@ -14,6 +14,8 @@ use identity_core::common::Url;
 use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
+
+pub mod openapi;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,17 +67,31 @@ pub(crate) async fn post_connections(
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GetConnectionsEndpointRequest {
     #[serde(default)]
     pub alias: Option<String>,
     #[serde(default)]
+    #[schema(value_type = Option<String>)]
     pub domain: Option<Url>,
     #[serde(default)]
+    #[schema(value_type = Option<String>)]
     pub did: Option<DIDUrl>,
 }
 
+/// List all connections
+///
+/// List all available connections.
+#[utoipa::path(
+    get,
+    path = "/connections",
+    operation_id = "get_all_connections",
+    tags = ["Connections"],
+    responses(
+        (status = 200, description = "All connections retrieved successfully", body = [Connection])
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connections(
     State(state): State<Arc<IdentityState>>,
@@ -107,6 +123,18 @@ pub(crate) async fn get_connections(
     Ok((StatusCode::OK, Json(filtered_connections)).into_response())
 }
 
+/// Get connection by ID
+///
+/// Retrieve a specific connection by its unique identifier.
+#[utoipa::path(
+    get,
+    path = "/connections/{connection_id}",
+    operation_id = "get_connection_by_id",
+    tags = ["Connections"],
+    responses(
+        (status = 200, description = "Connection retrieved successfully", body = Connection)
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connection(
     State(state): State<Arc<IdentityState>>,

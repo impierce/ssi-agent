@@ -177,17 +177,17 @@ mod tests {
                         }
                     },
                     "credential_metadata": {
-                    "display": [
-                        {
-                            "name": "Verifiable Credential",
-                            "locale": "en",
-                            "logo": {
-                                "uri": "https://www.impierce.com/external/impierce-logo.png",
-                                "alt_text": "Impierce Logo",
+                        "display": [
+                            {
+                                "name": "Verifiable Credential",
+                                "locale": "en",
+                                "logo": {
+                                    "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                    "alt_text": "Impierce Logo",
+                                }
                             }
-                        }
-                    ]
-                }}
+                        ]
+                    }}
                 ))
                 .unwrap()
             ),
@@ -217,17 +217,17 @@ mod tests {
                         }
                     },
                     "credential_metadata": {
-                    "display": [
-                        {
-                            "name": "Verifiable Credential",
-                            "locale": "en",
-                            "logo": {
-                                "uri": "https://www.impierce.com/external/impierce-logo.png",
-                                "alt_text": "Impierce Logo",
+                        "display": [
+                            {
+                                "name": "Verifiable Credential",
+                                "locale": "en",
+                                "logo": {
+                                    "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                    "alt_text": "Impierce Logo",
+                                }
                             }
-                        }
-                    ]
-            },
+                        ]
+                    },
                     "authorization": {
                         "pre_authorized": false
                     }
@@ -240,6 +240,7 @@ mod tests {
         pub static ref CREDENTIAL_ISSUER_METADATA: CredentialIssuerMetadata = CredentialIssuerMetadata {
             credential_issuer: config().public_url.clone(),
             credential_endpoint: config().public_url.join("openid4vci/credential").unwrap(),
+            nonce_endpoint: Some(config().public_url.join("openid4vci/nonce").unwrap()),
             credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),
             display: Some(vec![json!({
                 "name": "UniCore",
