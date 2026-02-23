@@ -15,9 +15,7 @@ dotenvy = { version = "0.15" }
 http-serde = "2.1"
 # TODO: replace all identity_* with identity_iota?
 identity_iota.workspace = true
-jsonschema = "0.40"
 jsonwebtoken.workspace = true
-lazy_static.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true

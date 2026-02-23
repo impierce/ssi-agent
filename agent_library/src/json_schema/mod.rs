@@ -5,10 +5,8 @@ use lazy_static::lazy_static;
 use serde_json::Value;
 use std::fs::{self};
 use std::path::PathBuf;
+use thiserror::Error;
 use tracing::{debug, info, warn};
-
-use crate::error::SharedError;
-// use crate::credential::error::CredentialError as SharedError;
 
 const JSONSCHEMAS_DIR: &str = "src/jsonschemas";
 
@@ -28,9 +26,10 @@ lazy_static! {
 }
 
 /// Helper function to create the static ref Validators from JSON Schema files.
-fn compile_validator(json_schema_str: &str) -> Result<Validator, SharedError> {
-    let json_schema: Value = serde_json::from_str(json_schema_str)
-        .map_err(|_| SharedError::Error("Failed to convert JSON Schema &str to serde_json::Value".to_string()))?;
+fn compile_validator(json_schema_str: &str) -> Result<Validator, JsonSchemaError> {
+    let json_schema: Value = serde_json::from_str(json_schema_str).map_err(|_| {
+        JsonSchemaError::InvalidJsonData("Failed to convert JSON Schema &str to serde_json::Value".to_string())
+    })?;
 
     // Define the relative path to our jsonschema folder needed for the LocalRetriever
     let jsonschema_dir = std::env::current_dir().unwrap().join(JSONSCHEMAS_DIR);
@@ -39,7 +38,9 @@ fn compile_validator(json_schema_str: &str) -> Result<Validator, SharedError> {
     let schema = match json_schema
         .get("$schema")
         .and_then(|value| value.to_clean_string())
-        .ok_or(SharedError::Error("Invalid or missing \"$schema\" field".to_string()))?
+        .ok_or(JsonSchemaError::InvalidJsonData(
+            "Invalid or missing \"$schema\" field".to_string(),
+        ))?
         .as_str()
     {
         "https://json-schema.org/draft/2019-09/schema#" => jsonschema::draft201909::options()
@@ -49,7 +50,7 @@ fn compile_validator(json_schema_str: &str) -> Result<Validator, SharedError> {
             .should_validate_formats(true)
             .build(&json_schema)
             .map_err(|_| {
-                SharedError::Error(format!(
+                JsonSchemaError::InvalidJsonData(format!(
                     "Failed to compile JSON Schema from serde_json::Value: {json_schema}"
                 ))
             })?,
@@ -61,7 +62,7 @@ fn compile_validator(json_schema_str: &str) -> Result<Validator, SharedError> {
             .should_validate_formats(true)
             .build(&json_schema)
             .map_err(|_| {
-                SharedError::Error(format!(
+                JsonSchemaError::InvalidJsonData(format!(
                     "Failed to compile JSON Schema from serde_json::Value: {json_schema}"
                 ))
             })?,
@@ -73,22 +74,23 @@ fn compile_validator(json_schema_str: &str) -> Result<Validator, SharedError> {
 /// Validate supported credential types against their corresponding JSON Schema.
 /// This function is only capable of validating VC's and subsequent Credential Formats/Types.
 /// All VC's must have a `type` field, which is either a string or an array of strings.
-pub fn validate_credential_types(data: &Value) -> Result<(), SharedError> {
+pub fn validate_credential_types(data: &Value) -> Result<(), JsonSchemaError> {
     // Data should be passed as a serde_json::Value::Object as per the VerifiableCredentialRecord::try_new() method.
     // However this block double checks and emits the correct error message when this is not the case.
     // Serde_json::Value typing is error prone and sometimes Objects are wrapped as Strings resulting in Value::String.
     // Therefore, we try to "unwrap" the String type here once before also failing on that type.
     let data = match data {
         Value::String(str) => {
-            let parsed_data = serde_json::from_str::<Value>(str).map_err(|e| SharedError::Error(e.to_string()))?;
+            let parsed_data =
+                serde_json::from_str::<Value>(str).map_err(|e| JsonSchemaError::InvalidJsonData(e.to_string()))?;
             if !parsed_data.is_object() {
-                return Err(SharedError::Error("Expected JSON object".to_string()));
+                return Err(JsonSchemaError::InvalidJsonData("Expected JSON object".to_string()));
             }
             parsed_data
         }
         Value::Object(_) => data.clone(),
         _ => {
-            return Err(SharedError::Error("Expected JSON object".to_string()));
+            return Err(JsonSchemaError::InvalidJsonData("Expected JSON object".to_string()));
         }
     };
 
@@ -97,7 +99,7 @@ pub fn validate_credential_types(data: &Value) -> Result<(), SharedError> {
     match type_field {
         Some(_type) if !_type.is_null() => {
             match serde_json::from_value::<StringOrArray>(_type.clone())
-                .map_err(|e| SharedError::Error(e.to_string()))?
+                .map_err(|e| JsonSchemaError::GetCredentialTypeError(e.to_string()))?
             {
                 StringOrArray::String(credential_type) => Ok(credential_type.validate(&data)?),
                 StringOrArray::Array(credential_type_array) => credential_type_array
@@ -142,13 +144,13 @@ pub enum CredentialTypeVersion {
 }
 
 impl CredentialTypeVersion {
-    pub fn get_validator(&self) -> Result<&'static Validator, SharedError> {
+    pub fn get_validator(&self) -> Result<&'static Validator, JsonSchemaError> {
         match self {
             CredentialTypeVersion::VerifiableCredentialV1_1 => Ok(&VERIFIABLE_CREDENTIAL_V1_1_VALIDATOR),
             CredentialTypeVersion::VerifiableCredentialV2 => Ok(&VERIFIABLE_CREDENTIAL_V2_VALIDATOR),
             CredentialTypeVersion::EuropeanDigitalCredentialV3_3 => Ok(&EUROPEAN_DIGITAL_CREDENTIAL_V3_3_VALIDATOR),
             CredentialTypeVersion::OpenBadgeCredentialV3 => Ok(&OPEN_BADGE_CREDENTIAL_V3_VALIDATOR),
-            CredentialTypeVersion::Unknown => Err(SharedError::Error(
+            CredentialTypeVersion::Unknown => Err(JsonSchemaError::GetCredentialTypeError(
                 "Unknown Credential Type version, no corresponding validator found".to_string(),
             )),
         }
@@ -156,15 +158,15 @@ impl CredentialTypeVersion {
 }
 
 impl CredentialType {
-    fn get_version(&self, data: &Value) -> Result<CredentialTypeVersion, SharedError> {
+    fn get_version(&self, data: &Value) -> Result<CredentialTypeVersion, JsonSchemaError> {
         let context_array = serde_json::from_value::<Vec<String>>(data["@context"].clone())
-            .map_err(|e| SharedError::Error(e.to_string()))?;
+            .map_err(|e| JsonSchemaError::InvalidJsonData(e.to_string()))?;
 
         match self {
             CredentialType::OpenBadgeCredential => {
                 match context_array
                     .get(1)
-                    .ok_or(SharedError::Error(
+                    .ok_or(JsonSchemaError::GetCredentialTypeError(
                         "Invalid Credential Format: Second context element missing from OpenBadge Credential"
                             .to_string(),
                     ))?
@@ -176,7 +178,7 @@ impl CredentialType {
                     {
                         Ok(CredentialTypeVersion::OpenBadgeCredentialV3)
                     }
-                    _ => Err(SharedError::Error(
+                    _ => Err(JsonSchemaError::GetCredentialTypeError(
                         "Invalid Credential Format: Unexpected second context element in OpenBadge Credential"
                             .to_string(),
                     )),
@@ -185,7 +187,7 @@ impl CredentialType {
             CredentialType::VerifiableCredential => {
                 match context_array
                     .first()
-                    .ok_or(SharedError::Error(
+                    .ok_or(JsonSchemaError::GetCredentialTypeError(
                         "Invalid Credential Format: Required first context element missing from Verifiable Credential"
                             .to_string(),
                     ))?
@@ -193,7 +195,7 @@ impl CredentialType {
                 {
                     "https://www.w3.org/2018/credentials/v1" => Ok(CredentialTypeVersion::VerifiableCredentialV1_1),
                     "https://www.w3.org/ns/credentials/v2" => Ok(CredentialTypeVersion::VerifiableCredentialV2),
-                    _ => Err(SharedError::Error(
+                    _ => Err(JsonSchemaError::GetCredentialTypeError(
                         "Invalid Credential Format: Unexpected first context element in Verifiable Credential"
                             .to_string(),
                     )),
@@ -212,7 +214,7 @@ impl CredentialType {
         }
     }
 
-    pub fn validate(&self, data: &Value) -> Result<(), SharedError> {
+    pub fn validate(&self, data: &Value) -> Result<(), JsonSchemaError> {
         let version = self.get_version(data)?;
 
         match version {
@@ -224,9 +226,10 @@ impl CredentialType {
                 let errors: Vec<ValidationError> = version.get_validator()?.iter_errors(data).collect();
                 if !errors.is_empty() {
                     println!("validation errors: {errors:#?}");
-                    Err(SharedError::Error(format!(
-                        "The data is invalid according to the given JSON Schema: {errors:?}"
-                    )))
+                    Err(JsonSchemaError::CredentialValidationError(
+                        version.to_string(),
+                        format!("{errors:#?}"),
+                    ))
                 } else {
                     info!("Credential type: {self:?} successfully validated against corresponding JSON Schema");
                     Ok(())
@@ -267,6 +270,16 @@ impl ValueToString for serde_json::Value {
     fn to_clean_string(&self) -> Option<String> {
         self.as_str().map(ToString::to_string)
     }
+}
+
+#[derive(Error, Debug)]
+pub enum JsonSchemaError {
+    #[error("Get Credential Type Error: `{0}`")]
+    GetCredentialTypeError(String),
+    #[error("Failed to parse JSON data: `{0}`")]
+    InvalidJsonData(String),
+    #[error("Credential data validation, according to its type `{0}`, results in the following errors: `{1}`")]
+    CredentialValidationError(String, String),
 }
 
 #[cfg(test)]

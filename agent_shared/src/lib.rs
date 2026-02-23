@@ -4,7 +4,6 @@ pub mod custom_queries;
 pub mod error;
 pub mod generic_query;
 pub mod handlers;
-pub mod json_schema;
 pub mod profile;
 pub mod url_utils;
 
