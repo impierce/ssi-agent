@@ -36,3 +36,6 @@ jobs:
         # TODO: We set `RUST_MIN_STACK` to 16 MiB to prevent stack overflow in `test_verify_credential_response`.
         # Investigate if this is still needed after our testing refactor.
         run: RUST_MIN_STACK=16777216 cargo test --workspace
+
+      - name: Generated files are unchanged
+        run: git diff --exit-code
