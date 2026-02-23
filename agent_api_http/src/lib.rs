@@ -176,17 +176,18 @@ mod tests {
                             ],
                         }
                     },
-                    "display": [
-                        {
-                            "name": "Verifiable Credential",
-                            "locale": "en",
-                            "logo": {
-                                "uri": "https://www.impierce.com/external/impierce-logo.png",
-                                "alt_text": "Impierce Logo",
+                    "credential_metadata": {
+                        "display": [
+                            {
+                                "name": "Verifiable Credential",
+                                "locale": "en",
+                                "logo": {
+                                    "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                    "alt_text": "Impierce Logo",
+                                }
                             }
-                        }
-                    ]
-                }
+                        ]
+                    }}
                 ))
                 .unwrap()
             ),
@@ -215,16 +216,18 @@ mod tests {
                             ],
                         }
                     },
-                    "display": [
-                        {
-                            "name": "Verifiable Credential",
-                            "locale": "en",
-                            "logo": {
-                                "uri": "https://www.impierce.com/external/impierce-logo.png",
-                                "alt_text": "Impierce Logo",
+                    "credential_metadata": {
+                        "display": [
+                            {
+                                "name": "Verifiable Credential",
+                                "locale": "en",
+                                "logo": {
+                                    "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                    "alt_text": "Impierce Logo",
+                                }
                             }
-                        }
-                    ],
+                        ]
+                    },
                     "authorization": {
                         "pre_authorized": false
                     }

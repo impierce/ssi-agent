@@ -30,7 +30,7 @@ pub async fn notification(
 
     let _claims = AccessTokenValidationService::validate(&state, &access_token)
         .await
-        .map_err(|_err| PublicError::from(NotificationErrorResponse::InvalidToken))?;
+        .map_err(|_err| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
 
     let credentials = match query_handler("all_credentials", &state.query.all_credentials).await? {
         Some(all_credentials) => all_credentials.credentials,
@@ -169,7 +169,7 @@ mod tests {
                     event_description: None,
                 })
                 .unwrap(),
-                expected_error: NotificationErrorResponse::InvalidToken,
+                expected_error: NotificationErrorResponse::InvalidNotificationRequest,
             },
             TestCase {
                 name: "Invalid Notification Event",

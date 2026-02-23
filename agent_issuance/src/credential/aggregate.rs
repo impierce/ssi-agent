@@ -244,9 +244,11 @@ impl Aggregate for Credential {
                             }
                             "AchievementCredential" | "OpenBadgeCredential" => {
                                 let name = credential_configuration
-                                    .display
-                                    .first()
-                                    .map(|display| display.name.clone())
+                                    .credential_metadata
+                                    .as_ref()
+                                    .and_then(|meta| meta.display.as_ref())
+                                    .and_then(|display| display.first())
+                                    .map(|d| d.name.clone())
                                     .unwrap_or("OpenBadge Credential".to_string());
 
                                 let credential_subject = serde_json_path_to_error::from_value::<AchievementSubject>(
@@ -314,7 +316,6 @@ impl Aggregate for Credential {
                             _ => continue,
                         }
                     }
-
                     Err(UnsupportedCredentialType)
                 }
                 _ => Err(UnsupportedCredentialFormat(serde_json::json!(
@@ -682,11 +683,14 @@ pub mod credential_tests {
 pub mod test_utils {
     use super::*;
     use lazy_static::lazy_static;
+    use oid4vci::credential_issuer::credential_configurations_supported::CredentialMetadata;
     use oid4vci::{
         credential_format_profiles::{
             w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition, CredentialFormats, Parameters,
         },
-        credential_issuer::credential_configurations_supported::{CredentialConfigurationsSupportedDisplay, Logo},
+        credential_issuer::credential_configurations_supported::{
+            AlgIdentifier, CredentialConfigurationsSupportedDisplay, Logo,
+        },
         proof::{KeyProofMetadata, ProofType},
     };
     use rstest::fixture;
@@ -718,25 +722,28 @@ pub mod test_utils {
                     .into(),
                 }),
                 cryptographic_binding_methods_supported: vec!["did:key".to_string(), "did:jwk".to_string(),],
-                credential_signing_alg_values_supported: vec!["EdDSA".to_string()],
+                credential_signing_alg_values_supported: vec![AlgIdentifier::String("EdDSA".to_string())],
                 proof_types_supported: HashMap::from_iter(vec![(
                     ProofType::Jwt,
                     KeyProofMetadata {
-                        proof_signing_alg_values_supported: vec!["EdDSA".to_string()],
+                        proof_signing_alg_values_supported: vec![AlgIdentifier::String("EdDSA".to_string())],
                     },
                 )]),
-                display: vec![CredentialConfigurationsSupportedDisplay {
-                    name: "Teamwork Badge".to_string(),
-                    locale: None,
-                    logo: Some(Logo {
-                        uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
-                        alt_text: Some("Impierce Logo".to_string()),
-                    }),
-                    description: None,
-                    background_image: None,
-                    background_color: None,
-                    text_color: None,
-                }],
+                credential_metadata: Some(CredentialMetadata {
+                    display: Some(vec![CredentialConfigurationsSupportedDisplay {
+                        name: "Teamwork Badge".to_string(),
+                        locale: None,
+                        logo: Some(Logo {
+                            uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
+                            alt_text: Some("Impierce Logo".to_string()),
+                        }),
+                        description: None,
+                        background_image: None,
+                        background_color: None,
+                        text_color: None,
+                    }]),
+                    claims: None,
+                }),
                 ..Default::default()
             };
         pub static ref W3C_VC_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
@@ -749,25 +756,34 @@ pub mod test_utils {
                     .into()
                 }),
                 cryptographic_binding_methods_supported: vec!["did:jwk".to_string(), "did:key".to_string(),],
-                credential_signing_alg_values_supported: vec!["ES256".to_string(), "EdDSA".to_string()],
+                credential_signing_alg_values_supported: vec![
+                    AlgIdentifier::String("ES256".to_string()),
+                    AlgIdentifier::String("EdDSA".to_string())
+                ],
                 proof_types_supported: HashMap::from_iter(vec![(
                     ProofType::Jwt,
                     KeyProofMetadata {
-                        proof_signing_alg_values_supported: vec!["ES256".to_string(), "EdDSA".to_string()],
+                        proof_signing_alg_values_supported: vec![
+                            AlgIdentifier::String("ES256".to_string()),
+                            AlgIdentifier::String("EdDSA".to_string())
+                        ],
                     },
                 )]),
-                display: vec![CredentialConfigurationsSupportedDisplay {
-                    name: "Verifiable Credential".to_string(),
-                    locale: Some("en".to_string()),
-                    logo: Some(Logo {
-                        uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
-                        alt_text: Some("Impierce Logo".to_string()),
-                    }),
-                    description: None,
-                    background_image: None,
-                    background_color: None,
-                    text_color: None,
-                }],
+                credential_metadata: Some(CredentialMetadata {
+                    display: Some(vec![CredentialConfigurationsSupportedDisplay {
+                        name: "Verifiable Credential".to_string(),
+                        locale: Some("en".to_string()),
+                        logo: Some(Logo {
+                            uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
+                            alt_text: Some("Impierce Logo".to_string()),
+                        }),
+                        description: None,
+                        background_image: None,
+                        background_color: None,
+                        text_color: None,
+                    }]),
+                    claims: None,
+                }),
                 ..Default::default()
             };
         pub static ref OPENBADGE_CREDENTIAL_SUBJECT: serde_json::Value = json!(

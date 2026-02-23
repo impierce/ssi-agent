@@ -8,8 +8,7 @@ use identity_iota::{
 };
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
-use oid4vci::credential_issuer::credential_configurations_supported::ClaimDescription;
-use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedDisplay;
+use oid4vci::credential_issuer::credential_configurations_supported::CredentialMetadata;
 use oid4vci::{
     credential_format_profiles::{CredentialFormats, WithParameters},
     credential_offer::TxCodeConstraints,
@@ -303,7 +302,7 @@ pub struct ApplicationConfiguration {
             kb_jwt_alg_values: Some(vec![Algorithm::ES256])
                 }),
         ldp_vc: None,
-        ldp_vp: None,
+        di_vp: None,
         mso_mdoc: None,
     }")]
     pub vp_formats_supported: VpFormatsSupported,
@@ -520,10 +519,8 @@ pub struct CredentialConfiguration {
     pub credential_configuration_id: String,
     #[serde(flatten)]
     pub credential_format_with_parameters: CredentialFormats<WithParameters>,
-    #[serde(default)]
-    pub display: Vec<CredentialConfigurationsSupportedDisplay>,
-    #[serde(default)]
-    pub claims: Vec<ClaimDescription>,
+    #[serde(flatten)]
+    pub credential_metadata: CredentialMetadata,
     #[serde(default)]
     pub authorization: Authorization,
 }

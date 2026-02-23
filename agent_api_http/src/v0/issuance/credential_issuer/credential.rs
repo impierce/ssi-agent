@@ -39,7 +39,7 @@ pub(crate) async fn credential(
         .ok()
         // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
         .and_then(|claims| claims.issuer_state)
-        .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidToken))?;
+        .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidProof))?;
 
     NonceValidationService::validate(&state, &credential_request)
         .await
@@ -294,9 +294,7 @@ pub mod tests {
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "credential_configuration_id": "001",
-                            "proof": {
-                                "proof_type": "jwt",
-                                "jwt": "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lk\
+                            "proofs": { "jwt": ["eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lk\
                                         IjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4\
                                         a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lG\
                                         OGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFa\
@@ -304,7 +302,7 @@ pub mod tests {
                                         ZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAs\
                                         Im5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkz\
                                         ZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBY\
-                                        tgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"
+                                        tgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"]
                             }
                         }))
                         .unwrap(),
@@ -373,14 +371,12 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, issuance_event_publishers).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        if !with_anonymous_access {
-            let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
-                c_nonce: TEST_NONCE.to_string(),
-            };
-            agent_shared::handlers::command_handler(TEST_NONCE, &issuance_state.command.nonce, command)
-                .await
-                .unwrap();
-        }
+        let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
+            c_nonce: TEST_NONCE.to_string(),
+        };
+        agent_shared::handlers::command_handler(TEST_NONCE, &issuance_state.command.nonce, command)
+            .await
+            .unwrap();
 
         let mut issuance_app = router(issuance_state.clone());
 
@@ -420,7 +416,7 @@ pub mod tests {
         let access_token: String = token(&mut authorization_app, is_pre_authorized, grants).await;
         let jwt = if with_anonymous_access {
             // This JWT has no nonce, so no need to pre-generate
-            "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1rcHc2OGh1OVFnTUFDNmJDOE0xeFo0cDZ4VXNFeUs0bUtZdEtNYkpnTmRrSjIjejZNa3B3NjhodTlRZ01BQzZiQzhNMXhaNHA2eFVzRXlLNG1LWXRLTWJKZ05ka0oyIn0.eyJhdWQiOiJodHRwOi8vMTI3LjAuMC4xOjQwNzI1LyIsImlhdCI6MTc2MjI2NTgxMH0.GuGCIl-0VGkADdbWkcL56P5jXZjGKBzYbr-gPfQ5Yl7u4KltF1pjle52RuTVInxIQXeP9GuDL1Ag52B6Y0NSAg"
+            "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVTMjU2Iiwia2lkIjoiZGlkOmp3azpleUpoYkdjaU9pSkZVekkxTmlJc0ltTnlkaUk2SWxBdE1qVTJJaXdpYTJsa0lqb2lhMUoyYms1M1N6QlhSbTlWZEVGR1JEZDFSbGN6Y3pSbWVFbDBVVmRKZGpaTU9FRldYMEV0VTFOV2J5SXNJbXQwZVNJNklrVkRJaXdpZUNJNklrSXRWblp4V2xsMVUyVmlXbXBoWVRNMlExcGhaMnRKVFZWeU9ERlZRMjR0U0ROZlJXbHBYMnByUlRBaUxDSjVJam9pZW01SFgwVXhiWFZQT1dsWGNFbHdPWE16VUZWbWRXUnlZelpNV2pBdGEwNDJVREJrUm5neldFeDRXU0o5IzAifQ.eyJhdWQiOiJodHRwOi8vbG9jYWxob3N0OjMwMzMvIiwiaWF0IjoxNzcxNDE1OTg2LCJub25jZSI6IjdlMDNhZDNmNzZjYjMzMzhjM2E1NjQyZmU3NjM0NDc2YWEzYWQ5M2ZhMWQ1ODQwMTFiYTIxNTBkOWRhNDcxMzMifQ.1vmzQVFvo90TSp8Yh9CbqJHyrzjE3U5xQN4G8BGPk6-vlrWHejVPjk-oWW8uXRmdiRsmJjRCUeSN3fLKdlTK_g"
         } else {
             // This JWT contains the nonce we just generated
             "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"
@@ -435,10 +431,9 @@ pub mod tests {
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_configuration_id": "001",
-                            "proof": {
-                                "proof_type": "jwt",
-                                "jwt": jwt
+                            "credential_configuration_id": credential_configuration_id,
+                            "proofs": {
+                                "jwt":[jwt]
                             }
                         }))
                         .unwrap(),
