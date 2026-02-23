@@ -2,11 +2,12 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum CredentialError {
-    // TODO: Remove this error when fixing: https://github.com/impierce/ssi-agent/issues/136
     #[error("Credential format not known: `{0}`")]
     UnknownCredentialConfiguration(serde_json::Value),
+    // TODO: Remove this error when fixing: https://github.com/impierce/ssi-agent/issues/136
     #[error("Credential format not supported: `{0}`")]
     UnsupportedCredentialFormat(serde_json::Value),
+    // TODO: Remove this error when fixing: https://github.com/impierce/ssi-agent/issues/136
     #[error("This Credential type is not supported")]
     UnsupportedCredentialType,
     #[error("The `credentialSubject` value is invalid: {0}")]
