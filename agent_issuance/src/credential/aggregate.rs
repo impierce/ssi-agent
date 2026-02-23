@@ -1,6 +1,6 @@
 use super::entity::Data;
 use crate::credential::command::CredentialCommand;
-use crate::credential::error::CredentialError::{self};
+use crate::credential::error::CredentialError::{self, *};
 use crate::credential::event::CredentialEvent;
 use crate::services::IssuanceServices;
 use agent_shared::config::{
@@ -132,7 +132,6 @@ impl Aggregate for Credential {
                     .map_err(|e| BuildCredentialError(format!("Failed to parse created_at: {}", e)))?;
                 #[cfg(not(feature = "test_utils"))]
                 let created_at: DateTime<Utc> = chrono::Utc::now();
-                // .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
                 let expires_at = match expires_at {
                     CredentialExpiry::Fixed(fixed) => Some(fixed),
@@ -145,62 +144,6 @@ impl Aggregate for Credential {
                 };
 
                 let mut credential_data = data.raw.clone();
-
-                // Add validFrom and validUntil as per VC DM 2.0
-                //
-                // This means we default to setting the `validFrom` to the creation date of the credential, which is a sensible default if no validFrom date has been entered.
-                // However it is allowed to not enter any validity period and make an OBv3 credential valid eternally in to the past and/or future.
-                // TODO: create a way to make a credential without a validFrom value.
-                credential_data
-                    .insert_if_none(
-                        &["validFrom"],
-                        json!(created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
-                    )
-                    .ok_or(BuildCredentialError(
-                        "Failed to enter the validFrom date into the credential".to_string(),
-                    ))?;
-
-                if let Some(expiration_date) = expires_at {
-                    credential_data
-                        .insert_at_path(&["expirationDate"], json!(expiration_date))
-                        .ok_or(BuildCredentialError(
-                            "Failed to enter the expirationDate into the credential".to_string(),
-                        ))?;
-                }
-
-                // Add issuer
-                let id = config().public_url.clone();
-                let issuer_name = config().display.first().ok_or(InvalidCredentialDataError)?.name.clone();
-
-                credential_data
-                    .insert_at_path(
-                        &["issuer"],
-                        json!({
-                            "id": id,
-                            "name": issuer_name
-                        }),
-                    )
-                    .ok_or(BuildCredentialError(
-                        "Failed to enter the issuer into the credential".to_string(),
-                    ))?;
-
-                let credential_name = credential_configuration
-                    .display
-                    .first()
-                    .map(|display| display.name.clone());
-
-                // Add credential status
-                let status_list_url = get_status_list_url(self.credential_status.index)?;
-
-                credential_data.insert_if_none(
-                    &["credentialStatus"],
-                    json!({
-                        "type": StatusListTyp::Jwt.to_string(),
-                        "id": status_list_url.to_string(),
-                        "uri": status_list_url.to_string(),
-                        "idx": credential_status_index,
-                    }),
-                );
 
                 match &credential_configuration.credential_format {
                     CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
@@ -219,262 +162,29 @@ impl Aggregate for Credential {
                                 "Failed to enter the type into the credential".to_string(),
                             ))?;
 
-                        let mut credential_types = type_.clone();
-                        // Loop through all the items in the `type` array in reverse until we find a match.
-                        // This looping assumes the most specific type to match on is the latest one in the array.
-                        // This is an implicit consequence of the typing rules in digital credential formats.
-                        // For example, for OBv3 as well as ELM the first type is `VerifiableCredential` and the second type is its own type (e.g. `OpenBadgeCredential`/`EuropeanDigitalCredential`).
-                        while let Some(credential_type) = credential_types.pop() {
-                            match credential_type.as_str() {
-                                // This supports VC DM 2.0 only.
-                                "VerifiableCredential" => {
-                                    credential_data
-                                        .insert_if_none(&["@context"], json!(["https://www.w3.org/ns/credentials/v2"]))
-                                        .ok_or(BuildCredentialError(
-                                            "Failed to enter the @context into the credential".to_string(),
-                                        ))?;
-
-                                    credential_data
-                                        .insert_if_none(&["name"], json!(credential_name))
-                                        .ok_or(BuildCredentialError(
-                                            "Failed to enter the name into the credential".to_string(),
-                                        ))?;
-
-                                    // Validate credential before building
-                                    CredentialType::VerifiableCredential
-                                        .validate(&credential_data)
-                                        .map_err(|e| BuildCredentialError(e.to_string()))?;
-
-                                    return Ok(vec![UnsignedCredentialCreated {
-                                        credential_id,
-                                        data: Data { raw: credential_data },
-                                        credential_configuration,
-                                        notification_id: Some(notification_id),
-                                        credential_status,
-                                        created_at: Some(created_at),
-                                        expires_at,
-                                    }]);
-                                }
-                                "AchievementCredential" | "OpenBadgeCredential" => {
-                                    credential_data
-                                        .insert_if_none(
-                                            &["@context"],
-                                            json!([
-                                                "https://www.w3.org/ns/credentials/v2",
-                                                "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json"
-                                            ]),
-                                        )
-                                        .ok_or(BuildCredentialError(
-                                            "Failed to enter the @context into the credential".to_string(),
-                                        ))?;
-
-                                    credential_data
-                                        .insert_at_path(&["issuer", "type"], json!("Profile"))
-                                        .ok_or(BuildCredentialError(
-                                            "Failed to enter the issuer.type into the credential".to_string(),
-                                        ))?;
-                                    if let Some(credential_name) = credential_name {
-                                        credential_data.insert_if_none(&["name"], json!(credential_name));
-                                    } else {
-                                        credential_data
-                                            .insert_if_none(&["name"], json!("OpenBadge Credential"))
-                                            .ok_or(BuildCredentialError(
-                                                "Failed to enter the name into the credential".to_string(),
-                                            ))?;
-                                    }
-
-                                    // Validate credential before building
-                                    CredentialType::OpenBadgeCredential
-                                        .validate(&credential_data)
-                                        .map_err(|e| BuildCredentialError(e.to_string()))?;
-
-                                    return Ok(vec![UnsignedCredentialCreated {
-                                        credential_id,
-                                        notification_id: Some(notification_id),
-                                        data: Data { raw: credential_data },
-                                        credential_configuration,
-                                        credential_status,
-                                        created_at: Some(created_at),
-                                        expires_at,
-                                    }]);
-                                }
-                                "EuropeanDigitalCredential" => {
-                                    // Currently the ELM schema still references VC DM 1.1.
-                                    // It seems like they will be moving to VC DM 2.0. but for now we need to be compatible with both.
-                                    // TODO: remove once the ELM schema has been updated to VC DM 2.0.
-                                    {
-                                        credential_data
-                                            .insert_if_none(
-                                                &["@context"],
-                                                json!(["https://www.w3.org/2018/credentials/v1"]),
-                                            )
-                                            .ok_or(BuildCredentialError(
-                                                "Failed to enter the @context into the credential".to_string(),
-                                            ))?;
-                                        // Due to ELM schema requiring a `validFrom` while still building on VC DM 1.1, we also still need `issuanceDate`.
-                                        credential_data
-                                            .insert_if_none(
-                                                &["issuanceDate"],
-                                                json!(created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
-                                            )
-                                            .ok_or(BuildCredentialError(
-                                                "Failed to enter the issuanceDate date into the credential".to_string(),
-                                            ))?;
-                                        credential_data
-                                            .insert_if_none(
-                                                &["validFrom"],
-                                                json!(created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
-                                            )
-                                            .ok_or(BuildCredentialError(
-                                                "Failed to enter the validFrom date into the credential".to_string(),
-                                            ))?;
-                                    }
-                                    // The following link explains the difference between `issued`, `issuanceDate` and `validFrom`:
-                                    // https://europa.eu/europass/elm-browser/homepage/3-2-0/edc-generic-no-cv_en.html
-                                    credential_data
-                                        .insert_if_none(
-                                            &["issued"],
-                                            json!(created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
-                                        )
-                                        .ok_or(BuildCredentialError(
-                                            "Failed to enter the issued date into the credential".to_string(),
-                                        ))?;
-                                    if let Some(expiration_date) = expires_at {
-                                        credential_data
-                                            .insert_at_path(&["expirationDate"], json!(expiration_date))
-                                            .ok_or(BuildCredentialError(
-                                                "Failed to enter the expirationDate date into the credential"
-                                                    .to_string(),
-                                            ))?;
-                                    }
-                                    // TODO: Due to the complexity of the different allowed issuer types (Agent, Person, Organisation),
-                                    // We will keep it simple for now and only pass a placeholder eIDAS Legal Identifier.
-                                    // As long as organisations don't their eIDAS Legal Identifier there can be made no official `issuer` and therefore ELM anyway.
-                                    credential_data.insert_if_none(&["issuer"], json!("urn:epass:org:1"));
-
-                                    // No fields in credentialProfiles are actually required by the ELM schema
-                                    // TODO: enter empty credentialProfile
-                                    credential_data
-                                        .insert_if_none(
-                                            &["credentialProfiles"],
-                                            json!({
-                                                "id":"http://data.europa.eu/snb/credential/bdc47cb449",
-                                                "type":"Concept",
-                                                "inScheme":{
-                                                    "id":"http://data.europa.eu/snb/credential/25831c2",
-                                                    "type": "ConceptScheme"
-                                                }
-                                            }),
-                                        )
-                                        .ok_or(BuildCredentialError(
-                                            "Failed to enter the credentialProfiles into the credential".to_string(),
-                                        ))?;
-
-                                    // TODO: this is currently hard coded, it can remain so until the use of this property (and all of ELM) becomes more clear and it has purpose to the user
-                                    credential_data
-                                        .insert_if_none(
-                                            &["displayParameter"],
-                                            json!({
-                                                "id": "urn:epass:displayParameter:1",
-                                                "type": "DisplayParameter",
-                                                "title": {
-                                                    "en": credential_name
-                                                },
-                                                "individualDisplay": {
-                                                    "id": "urn:epass:individualDisplay:1",
-                                                    "type": "IndividualDisplay",
-                                                    "language": {
-                                                        "id": "http://publications.europa.eu/resource/authority/language/ENG",
-                                                        "type": "Concept",
-                                                        "inScheme": {
-                                                            "id": "http://publications.europa.eu/resource/authority/language",
-                                                            "type": "ConceptScheme"
-                                                        },
-                                                        "notation": "language",
-                                                        "prefLabel": {
-                                                            "en": "English"
-                                                        }
-                                                    },
-                                                    "displayDetail": {
-                                                        "id": "urn:epass:displayDetail:1",
-                                                        "type": "DisplayDetail",
-                                                        "page": 1,
-                                                        "image": {
-                                                            "id": "urn:epass:mediaObject:1",
-                                                            "type": "MediaObject",
-                                                            // TODO: this field needs an actual baked in image, binary data, with live data the encoding and type need to be changed accordingly
-                                                            "content": "[PLACEHOLDER]",
-                                                            "contentEncoding": {
-                                                                "id": "http://data.europa.eu/snb/encoding/6146cde7dd",
-                                                                "type": "Concept",
-                                                                "inScheme": {
-                                                                    "id": "http://data.europa.eu/snb/encoding/25831c2",
-                                                                    "type": "ConceptScheme"
-                                                                },
-                                                                "prefLabel": {
-                                                                    "en": "base64"
-                                                                }
-                                                            },
-                                                            "contentType": {
-                                                                "id": "http://publications.europa.eu/resource/authority/file-type/JPEG",
-                                                                "type": "Concept",
-                                                                "inScheme": {
-                                                                    "id": "http://publications.europa.eu/resource/authority/file-type",
-                                                                    "type": "ConceptScheme"
-                                                                },
-                                                                "notation": "file-type",
-                                                                "prefLabel": {
-                                                                    "en": "JPEG"
-                                                                }
-                                                            }
-                                                        },
-                                                    },
-                                                },
-                                            }),
-                                        )
-                                        .ok_or(BuildCredentialError(
-                                            "Failed to enter the displayParameter into the credential".to_string(),
-                                        ))?;
-
-                                    credential_data.insert_if_none(&["credentialSchema"], json!({
-                                        "id": "https://eudiw.org/credentials/schemas/EuropeanDigitalCredentialV3_3.json",
-                                        "type": "JsonSchema"
-                                    })).ok_or(BuildCredentialError(
-                                        "Failed to enter the credentialSchema into the credential".to_string(),
-                                    ))?;
-
-                                    // No credentialSubject is being manually added, meaning that this and the rest of the optional fields are expected to be present in the payload correctly.
-                                    // The above fields can be considered sensible defaults and can otherwise still be set within the payload.
-
-                                    // Validate credential before building
-                                    // CredentialType::EuropeanDigitalCredential.validate(&credential_data).map_err(|e| BuildCredentialError(e.to_string()))?;
-
-                                    let result = CredentialType::EuropeanDigitalCredential.validate(&credential_data);
-                                    if let Err(errors) = result {
-                                        println!("Validation errors: {errors:?}");
-                                    } else {
-                                        println!(
-                                            "Credential is valid according to the EuropeanDigitalCredential schema."
-                                        );
-                                    }
-
-                                    println!("Validation complete.");
-
-                                    return Ok(vec![UnsignedCredentialCreated {
-                                        credential_id,
-                                        notification_id: Some(notification_id),
-                                        data: Data { raw: credential_data },
-                                        credential_configuration,
-                                        credential_status,
-                                        created_at: Some(created_at),
-                                        expires_at,
-                                    }]);
-                                }
-                                _ => continue,
+                        match build_credential_data(
+                            type_,
+                            &mut credential_data,
+                            &credential_configuration,
+                            created_at,
+                            expires_at,
+                            credential_status_index,
+                        ) {
+                            Ok(credential_data) => {
+                                return Ok(vec![UnsignedCredentialCreated {
+                                    credential_id,
+                                    notification_id: Some(notification_id),
+                                    data: Data { raw: credential_data },
+                                    credential_configuration,
+                                    credential_status,
+                                    created_at: Some(created_at),
+                                    expires_at,
+                                }]);
+                            }
+                            Err(e) => {
+                                return Err(BuildCredentialError(e.to_string()));
                             }
                         }
-
-                        Err(UnsupportedCredentialType)
                     }
                     CredentialFormats::DcSdJwt(Parameters::<DcSdJwt> {
                         parameters: DcSdJwtParameters { vct },
@@ -499,15 +209,31 @@ impl Aggregate for Credential {
                                 ..
                             },
                     }) => {
-                        return Ok(vec![UnsignedCredentialCreated {
-                            credential_id,
-                            notification_id: Some(notification_id),
-                            data: Data { raw: credential_data },
-                            credential_configuration,
-                            credential_status,
-                            created_at: Some(created_at),
+                        // TODO: should we add the "type" field at the root to not break the Json Schema validation?
+
+                        match build_credential_data(
+                            type_,
+                            &mut credential_data,
+                            &credential_configuration,
+                            created_at,
                             expires_at,
-                        }]);
+                            self.credential_status.index,
+                        ) {
+                            Ok(credential_data) => {
+                                return Ok(vec![UnsignedCredentialCreated {
+                                    credential_id,
+                                    notification_id: Some(notification_id),
+                                    data: Data { raw: credential_data },
+                                    credential_configuration,
+                                    credential_status,
+                                    created_at: Some(created_at),
+                                    expires_at,
+                                }]);
+                            }
+                            Err(e) => {
+                                return Err(BuildCredentialError(e.to_string()));
+                            }
+                        }
                     }
                     _ => Err(UnsupportedCredentialFormat(serde_json::json!(
                         credential_configuration.credential_format
@@ -536,6 +262,7 @@ impl Aggregate for Credential {
                 overwrite,
                 proof,
             } => {
+                // TODO: SignCredential seems to do the do an entire credential building process of its own? Shouldn't the order of events simply be CreateUnsignedCredential and then SignCredential?
                 if self.signed.is_some() && !overwrite {
                     return Ok(vec![]);
                 }
@@ -952,6 +679,342 @@ fn get_status_list_url(index: usize) -> Result<identity_core::common::Url, Crede
     Ok(status_list_url.into())
 }
 
+/// This builds the credential according to the last given type in the provided type array.
+/// The first block builds fields common for all our current supported credential types.
+/// The match case builds the fields specific to the credential type and validates the credential against its Json Schema before returning it.
+/// Every Error is returned as a BuildCredentialError and handled upstream.
+// TODO: build a Context struct to capture all the arguments and clean up fn signature?
+fn build_credential_data(
+    credential_types: &[String],
+    credential_data: &mut serde_json::Value,
+    credential_configuration: &CredentialConfigurationsSupportedObject,
+    created_at: chrono::DateTime<chrono::Utc>,
+    expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    credential_status_index: usize,
+) -> Result<serde_json::Value, CredentialError> {
+    let credential_name = credential_configuration
+        .display
+        .first()
+        .map(|display| display.name.clone());
+
+    // Add validFrom and validUntil as per VC DM 2.0
+    //
+    // This means we default to setting the `validFrom` to the creation date of the credential, which is a sensible default if no validFrom date has been entered.
+    // However it is allowed to not enter any validity period and make an OBv3 credential valid eternally in to the past and/or future.
+    // TODO: create a way through which this sensible default can be turned off.
+    credential_data
+        .insert_if_none(
+            &["validFrom"],
+            json!(created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+        )
+        .ok_or(BuildCredentialError(
+            "Failed to enter the validFrom date into the credential".to_string(),
+        ))?;
+
+    if let Some(expiration_date) = expires_at {
+        credential_data
+            .insert_at_path(&["expirationDate"], json!(expiration_date))
+            .ok_or(BuildCredentialError(
+                "Failed to enter the expirationDate into the credential".to_string(),
+            ))?;
+    }
+
+    // Add issuer
+    let id = config().public_url.clone();
+    let issuer_name = config().display.first().ok_or(InvalidCredentialDataError)?.name.clone();
+
+    credential_data
+        .insert_at_path(
+            &["issuer"],
+            json!({
+                "id": id,
+                "name": issuer_name
+            }),
+        )
+        .ok_or(BuildCredentialError(
+            "Failed to enter the issuer into the credential".to_string(),
+        ))?;
+
+    // Add credential status
+    let status_list_url = get_status_list_url(credential_status_index)?;
+
+    credential_data.insert_if_none(
+        &["credentialStatus"],
+        json!({
+            "type": StatusListTyp::Jwt.to_string(),
+            "id": status_list_url.to_string(),
+            "uri": status_list_url.to_string(),
+            "idx": credential_status_index,
+        }),
+    );
+
+    // Loop through all the items in the `type` array in reverse until we find a match.
+    // This looping assumes the most specific type to match on is the latest one in the array.
+    // This is an implicit consequence of the typing rules in digital credential formats.
+    // For example, for OBv3 as well as ELM the first type is `VerifiableCredential` and the second type is its own type (e.g. `OpenBadgeCredential`/`EuropeanDigitalCredential`).
+    for credential_type in credential_types.iter().rev() {
+        match credential_type.as_str() {
+            // This supports VC DM 2.0 only.
+            "VerifiableCredential" => {
+                credential_data
+                    .insert_if_none(&["name"], json!(credential_name))
+                    .ok_or(BuildCredentialError(
+                        "Failed to enter the name into the credential".to_string(),
+                    ))?;
+
+                // JwtVcJson is still based on VC DM 1.1, while VcSdJwt (vc+sd-jwt) is based on VC DM 2.0.
+                match credential_configuration.credential_format {
+                    CredentialFormats::JwtVcJson(_) => {
+                        credential_data
+                            .insert_if_none(&["@context"], json!(["https://www.w3.org/2018/credentials/v1"]))
+                            .ok_or(BuildCredentialError(
+                                "Failed to enter the @context into the credential".to_string(),
+                            ))?;
+
+                        credential_data
+                            .insert_if_none(
+                                &["issuanceDate"],
+                                json!(created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+                            )
+                            .ok_or(BuildCredentialError(
+                                "Failed to enter the issuanceDate into the credential".to_string(),
+                            ))?;
+                    }
+                    CredentialFormats::VcSdJwt(_) => {
+                        credential_data
+                            .insert_if_none(&["@context"], json!(["https://www.w3.org/ns/credentials/v2"]))
+                            .ok_or(BuildCredentialError(
+                                "Failed to enter the @context into the credential".to_string(),
+                            ))?;
+                    }
+                    _ => {
+                        return Err(UnsupportedCredentialFormat(serde_json::json!(
+                            credential_configuration.credential_format
+                        )));
+                    }
+                }
+
+                if matches!(
+                    credential_configuration.credential_format,
+                    CredentialFormats::JwtVcJson(_)
+                ) {
+                    // Validate credential before returning
+                    CredentialType::VerifiableCredential
+                        .validate(credential_data)
+                        .map_err(|e| BuildCredentialError(e.to_string()))?;
+                }
+                // TODO: how to validate VcSdJwt format?
+
+                return Ok(credential_data.clone());
+            }
+            "AchievementCredential" | "OpenBadgeCredential" => {
+                credential_data
+                    .insert_if_none(
+                        &["@context"],
+                        json!([
+                            "https://www.w3.org/ns/credentials/v2",
+                            "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json"
+                        ]),
+                    )
+                    .ok_or(BuildCredentialError(
+                        "Failed to enter the @context into the credential".to_string(),
+                    ))?;
+
+                credential_data
+                    .insert_at_path(&["issuer", "type"], json!("Profile"))
+                    .ok_or(BuildCredentialError(
+                        "Failed to enter the issuer.type into the credential".to_string(),
+                    ))?;
+                if let Some(credential_name) = credential_name {
+                    credential_data.insert_if_none(&["name"], json!(credential_name));
+                } else {
+                    credential_data
+                        .insert_if_none(&["name"], json!("OpenBadge Credential"))
+                        .ok_or(BuildCredentialError(
+                            "Failed to enter the name into the credential".to_string(),
+                        ))?;
+                }
+
+                // Validate credential before building
+                CredentialType::OpenBadgeCredential
+                    .validate(credential_data)
+                    .map_err(|e| BuildCredentialError(e.to_string()))?;
+
+                return Ok(credential_data.clone());
+            }
+            "EuropeanDigitalCredential" => {
+                // Currently the ELM schema still references VC DM 1.1.
+                // It seems like they will be moving to VC DM 2.0. but for now we need to be compatible with both.
+                // TODO: remove once the ELM schema has been updated to VC DM 2.0.
+                {
+                    credential_data
+                        .insert_if_none(&["@context"], json!(["https://www.w3.org/2018/credentials/v1"]))
+                        .ok_or(BuildCredentialError(
+                            "Failed to enter the @context into the credential".to_string(),
+                        ))?;
+                    // Due to ELM schema requiring a `validFrom` while still building on VC DM 1.1, we also still need `issuanceDate`.
+                    credential_data
+                        .insert_if_none(
+                            &["issuanceDate"],
+                            json!(created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+                        )
+                        .ok_or(BuildCredentialError(
+                            "Failed to enter the issuanceDate date into the credential".to_string(),
+                        ))?;
+                    credential_data
+                        .insert_if_none(
+                            &["validFrom"],
+                            json!(created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+                        )
+                        .ok_or(BuildCredentialError(
+                            "Failed to enter the validFrom date into the credential".to_string(),
+                        ))?;
+                }
+                // The following link explains the difference between `issued`, `issuanceDate` and `validFrom`:
+                // https://europa.eu/europass/elm-browser/homepage/3-2-0/edc-generic-no-cv_en.html
+                credential_data
+                    .insert_if_none(
+                        &["issued"],
+                        json!(created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+                    )
+                    .ok_or(BuildCredentialError(
+                        "Failed to enter the issued date into the credential".to_string(),
+                    ))?;
+                if let Some(expiration_date) = expires_at {
+                    credential_data
+                        .insert_at_path(&["expirationDate"], json!(expiration_date))
+                        .ok_or(BuildCredentialError(
+                            "Failed to enter the expirationDate date into the credential".to_string(),
+                        ))?;
+                }
+                // TODO: Due to the complexity of the different allowed issuer types (Agent, Person, Organisation),
+                // We will keep it simple for now and only pass a placeholder eIDAS Legal Identifier.
+                // As long as organisations don't have their eIDAS Legal Identifier there can be made no official `issuer` nor ELM anyway.
+                credential_data.insert_if_none(&["issuer"], json!("urn:epass:org:1"));
+
+                // No fields in credentialProfiles are actually required by the ELM schema
+                // TODO: For now entering this dummy default as it is the same in every example under this link:
+                // https://github.com/european-commission-empl/European-Learning-Model/tree/master/Credentials/JSON-LD%20Examples%20(ELM%20v3)
+                credential_data
+                    .insert_if_none(
+                        &["credentialProfiles"],
+                        json!({
+                            "id":"http://data.europa.eu/snb/credential/bdc47cb449",
+                            "type":"Concept",
+                            "inScheme":{
+                                "id":"http://data.europa.eu/snb/credential/25831c2",
+                                "type": "ConceptScheme"
+                            }
+                        }),
+                    )
+                    .ok_or(BuildCredentialError(
+                        "Failed to enter the credentialProfiles into the credential".to_string(),
+                    ))?;
+
+                // TODO: this is currently hard coded, it can remain so until the use of this property (and all of ELM) becomes more clear and it has purpose to the user
+                credential_data
+                    .insert_if_none(
+                        &["displayParameter"],
+                        json!({
+                            "id": "urn:epass:displayParameter:1",
+                            "type": "DisplayParameter",
+                            "title": {
+                                "en": credential_name
+                            },
+                            "individualDisplay": {
+                                "id": "urn:epass:individualDisplay:1",
+                                "type": "IndividualDisplay",
+                                "language": {
+                                    "id": "http://publications.europa.eu/resource/authority/language/ENG",
+                                    "type": "Concept",
+                                    "inScheme": {
+                                        "id": "http://publications.europa.eu/resource/authority/language",
+                                        "type": "ConceptScheme"
+                                    },
+                                    "notation": "language",
+                                    "prefLabel": {
+                                        "en": "English"
+                                    }
+                                },
+                                "displayDetail": {
+                                    "id": "urn:epass:displayDetail:1",
+                                    "type": "DisplayDetail",
+                                    "page": 1,
+                                    "image": {
+                                        "id": "urn:epass:mediaObject:1",
+                                        "type": "MediaObject",
+                                        // TODO: this field needs an actual baked in image, binary data, with live data the encoding and type need to be changed accordingly
+                                        "content": "[PLACEHOLDER]",
+                                        "contentEncoding": {
+                                            "id": "http://data.europa.eu/snb/encoding/6146cde7dd",
+                                            "type": "Concept",
+                                            "inScheme": {
+                                                "id": "http://data.europa.eu/snb/encoding/25831c2",
+                                                "type": "ConceptScheme"
+                                            },
+                                            "prefLabel": {
+                                                "en": "base64"
+                                            }
+                                        },
+                                        "contentType": {
+                                            "id": "http://publications.europa.eu/resource/authority/file-type/JPEG",
+                                            "type": "Concept",
+                                            "inScheme": {
+                                                "id": "http://publications.europa.eu/resource/authority/file-type",
+                                                "type": "ConceptScheme"
+                                            },
+                                            "notation": "file-type",
+                                            "prefLabel": {
+                                                "en": "JPEG"
+                                            }
+                                        }
+                                    },
+                                },
+                            },
+                        }),
+                    )
+                    .ok_or(BuildCredentialError(
+                        "Failed to enter the displayParameter into the credential".to_string(),
+                    ))?;
+
+                credential_data
+                    .insert_if_none(
+                        &["credentialSchema"],
+                        json!({
+                            "id": "https://eudiw.org/credentials/schemas/EuropeanDigitalCredentialV3_3.json",
+                            "type": "JsonSchema"
+                        }),
+                    )
+                    .ok_or(BuildCredentialError(
+                        "Failed to enter the credentialSchema into the credential".to_string(),
+                    ))?;
+
+                // No credentialSubject is being manually added, meaning that this and the rest of the optional fields are expected to be present in the payload correctly.
+                // The above fields can be considered sensible defaults and can otherwise still be set within the payload.
+
+                // Validate credential before building
+                // CredentialType::EuropeanDigitalCredential.validate(credential_data).map_err(|e| BuildCredentialError(e.to_string()))?;
+
+                let result = CredentialType::EuropeanDigitalCredential.validate(credential_data);
+                if let Err(errors) = result {
+                    println!("Validation errors: {errors:?}");
+                } else {
+                    println!("Credential is valid according to the EuropeanDigitalCredential schema.");
+                }
+
+                println!("Validation complete.");
+
+                return Ok(credential_data.clone());
+            }
+            _ => continue,
+        }
+    }
+
+    Err(BuildCredentialError(
+        "None of the provided credential types are supported".to_string(),
+    ))
+}
+
 #[cfg(test)]
 pub mod credential_tests {
     use super::test_utils::*;
@@ -1116,9 +1179,9 @@ pub mod test_utils {
         "2010-01-01T00:00:00Z".parse().unwrap()
     }
 
-    pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9wdXJsLmltc2dsb2JhbC5vcmcvc3BlYy9vYi92M3AwL2NvbnRleHQtMy4wLjMuanNvbiJdLCJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJPcGVuQmFkZ2VDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJuYW1lIjoiVGVhbXdvcmsgQmFkZ2UiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwidHlwZSI6WyJBY2hpZXZlbWVudFN1YmplY3QiXSwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEiOnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY29nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNvZ25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbnQuIiwibmFtZSI6IlRlYW13b3JrIn19LCJjcmVkZW50aWFsU3RhdHVzIjp7ImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidHlwZSI6InN0YXR1c2xpc3Qrand0IiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjowfX0sInN0YXR1cyI6eyJzdGF0dXNfbGlzdCI6eyJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjB9fX0.PDwoMAawtjYr-cn5tfcPpnatf8cLuJMtaGXwsmEGimE-ki_fS8B1itBMGeQZyPhqhJIpD7ZepxYEn7rMXc0fDg";
+    pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy9ucy9jcmVkZW50aWFscy92MiIsImh0dHBzOi8vcHVybC5pbXNnbG9iYWwub3JnL3NwZWMvb2IvdjNwMC9jb250ZXh0LTMuMC4zLmpzb24iXSwiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2NyZWRlbnRpYWxzLzM1MjciLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiT3BlbkJhZGdlQ3JlZGVudGlhbCJdLCJpc3N1ZXIiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInZhbGlkRnJvbSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwibmFtZSI6IlRlYW13b3JrIEJhZGdlIiwiY3JlZGVudGlhbFN1YmplY3QiOnsiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInR5cGUiOlsiQWNoaWV2ZW1lbnRTdWJqZWN0Il0sImFjaGlldmVtZW50Ijp7ImlkIjoiaHR0cHM6Ly9leGFtcGxlLmNvbS9hY2hpZXZlbWVudHMvMjFzdC1jZW50dXJ5LXNraWxscy90ZWFtd29yayIsInR5cGUiOiJBY2hpZXZlbWVudCIsImNyaXRlcmlhIjp7Im5hcnJhdGl2ZSI6IlRlYW0gbWVtYmVycyBhcmUgbm9taW5hdGVkIGZvciB0aGlzIGJhZGdlIGJ5IHRoZWlyIHBlZXJzIGFuZCByZWNvZ25pemVkIHVwb24gcmV2aWV3IGJ5IEV4YW1wbGUgQ29ycCBtYW5hZ2VtZW50LiJ9LCJkZXNjcmlwdGlvbiI6IlRoaXMgYmFkZ2UgcmVjb2duaXplcyB0aGUgZGV2ZWxvcG1lbnQgb2YgdGhlIGNhcGFjaXR5IHRvIGNvbGxhYm9yYXRlIHdpdGhpbiBhIGdyb3VwIGVudmlyb25tZW50LiIsIm5hbWUiOiJUZWFtd29yayJ9fSwiY3JlZGVudGlhbFN0YXR1cyI6eyJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInR5cGUiOiJzdGF0dXNsaXN0K2p3dCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MH19LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjowfX19.F-Iuig6Em7T_SxqO6h4cTHcdIHy0yKwlCn1m2653sPK3TlT7NAFvrWL-35wrjKxSKo4j1M6Y0M6E3yEUyEHyDw";
 
-    pub const W3C_VC_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJkZWdyZWUiOnsidHlwZSI6Ik1hc3RlckRlZ3JlZSIsIm5hbWUiOiJNYXN0ZXIgb2YgT2NlYW5vZ3JhcGh5In19LCJpc3N1ZXIiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwiY3JlZGVudGlhbFN0YXR1cyI6eyJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInR5cGUiOiJzdGF0dXNsaXN0K2p3dCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MH19LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjowfX19.O95yvZmczmZs7-crtkthFgF2YNRHsfaiBfWPe-aL9flxoq-upcpfR2NsvvK5t_EojWgeXICL4XY358HCr_ADCA";
+    pub const W3C_VC_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJkZWdyZWUiOnsidHlwZSI6Ik1hc3RlckRlZ3JlZSIsIm5hbWUiOiJNYXN0ZXIgb2YgT2NlYW5vZ3JhcGh5In19LCJpc3N1ZXIiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwiY3JlZGVudGlhbFN0YXR1cyI6eyJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInR5cGUiOiJzdGF0dXNsaXN0K2p3dCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MH0sInZhbGlkRnJvbSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwibmFtZSI6IlZlcmlmaWFibGUgQ3JlZGVudGlhbCJ9LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjowfX19.GVmn2k8JjBqNS2MdEaO-GFN0Q6npmJgT3xGWEfCIxsKumJg6g8ZOxFms-_B7eh9qyf1smdZ22F9EjIt-4D4lDQ";
 
     #[fixture]
     pub fn credential_id() -> String {
@@ -1294,7 +1357,7 @@ pub mod test_utils {
         );
         pub static ref UNSIGNED_OPENBADGE_CREDENTIAL: serde_json::Value = json!({
           "@context": [
-            "https://www.w3.org/2018/credentials/v1",
+            "https://www.w3.org/ns/credentials/v2",
             "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json"
           ],
           "id": "https://example.com/credentials/3527",
@@ -1304,7 +1367,7 @@ pub mod test_utils {
             "type": "Profile",
             "name": "UniCore"
           },
-          "issuanceDate": "2010-01-01T00:00:00Z",
+          "validFrom": "2010-01-01T00:00:00Z",
           "name": "Teamwork Badge",
           "credentialSubject": OPENBADGE_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
           "credentialStatus": {
@@ -1328,16 +1391,19 @@ pub mod test_utils {
               "type": "statuslist+jwt",
               "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
               "idx": 0
-          }
+          },
+          "validFrom": "2010-01-01T00:00:00Z",
+          "name": "Verifiable Credential"
         });
         pub static ref UNSIGNED_DC_SD_JWT_CREDENTIAL: serde_json::Value = json!({
             "vct": "http://localhost:3033/vct/U0QtSldU/0",
             "first_name": "Ferris",
             "last_name": "Rustacean"
         });
+        // TODO: should the `vct` claim (and others) already be added here? I would say all building/compiling of data should be separate from signing.
         pub static ref UNSIGNED_VC_SD_JWT_CREDENTIAL: serde_json::Value = json!({
           "@context": [ "https://www.w3.org/ns/credentials/v2" ],
-          "type": [ "VerifiableCredential" ],
+        //   "type": [ "VerifiableCredential" ], should this be in or out?
           "credentialSubject": VC_SD_JWT_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
           "issuer": {
             "id": "https://my-domain.example.org/",
@@ -1349,7 +1415,8 @@ pub mod test_utils {
               "type": "statuslist+jwt",
               "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
               "idx": 0
-          }
+          },
+          "name": "VCDM2.0 SD-JWT Credential"
         });
     }
 }
