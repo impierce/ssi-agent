@@ -12,7 +12,7 @@ pub enum CredentialError {
     InvalidCredentialSubjectError(String),
     #[error("The `id` value could not be parsed to a valid URI")]
     InvalidIdentifierError,
-    #[error("Could not find sufficient or valid data to be signed")]
+    #[error("Could not find valid data or missing data to be signed")]
     InvalidCredentialDataError,
     #[error("Invalid expiration data: The expiration date must not exceed `9999-12-31T23:59:59Z`. Please provide a valid date within the supported range.")]
     InvalidExpirationDateError,

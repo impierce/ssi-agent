@@ -721,7 +721,12 @@ fn build_credential_data(
 
     // Add issuer
     let id = config().public_url.clone();
-    let issuer_name = config().display.first().ok_or(InvalidCredentialDataError)?.name.clone();
+    let issuer_name = config()
+        .display
+        .first()
+        .ok_or(BuildCredentialError("Could not find the issuer name".to_string()))?
+        .name
+        .clone();
 
     credential_data
         .insert_at_path(
