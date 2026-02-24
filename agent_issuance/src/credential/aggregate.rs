@@ -513,9 +513,10 @@ impl Aggregate for Credential {
                         let alg = algorithm.as_str();
 
                         let holder_kid = proofs.and_then(|proofs| {
-                            let proof = proofs.jwt.first()?;
-
-                            jsonwebtoken::decode_header(&proof).ok().and_then(|header| header.kid)
+                            // TODO: Support batch credential issuance. See https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-batch-credential-issuance
+                            jsonwebtoken::decode_header(proofs.jwt.first()?)
+                                .ok()
+                                .and_then(|header| header.kid)
                         });
 
                         let kid = issuer
