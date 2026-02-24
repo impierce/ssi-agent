@@ -265,7 +265,7 @@ fn compile_validator(json_schema_key: &str) -> Result<Validator, JsonSchemaError
 }
 
 /// This struct is solely used to implement the `Retrieve` trait from the `jsonschema` crate,
-/// allowing us to load external JSON Schema files referenced via $ref in any JSON Schema.
+/// allowing us to reference other JSON Schema's in this folder via $ref in any JSON Schema.
 struct MemoryRetriever {}
 
 /// Implementation of the `Retrieve` trait for loading local JSON Schema files

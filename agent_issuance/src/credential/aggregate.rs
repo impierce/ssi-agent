@@ -126,6 +126,7 @@ impl Aggregate for Credential {
                 #[cfg(not(feature = "test_utils"))]
                 let notification_id = agent_shared::generate_random_string();
 
+                // created_at is only used for the `CreatedUnsignedCredential` event and is not equal to the issuanceDate/validFrom field, which is only added during signing (SignCredential). (validFrom only if no field has been provided in the initial credential data payload).
                 #[cfg(feature = "test_utils")]
                 let created_at: DateTime<Utc> = "2010-01-01T00:00:00Z"
                     .parse()
@@ -160,11 +161,10 @@ impl Aggregate for Credential {
                                 "Failed to enter the type into the credential".to_string(),
                             ))?;
 
-                        match build_credential_data(
+                        match build_unsigned_credential_data(
                             type_,
                             &mut credential_data,
                             &credential_configuration,
-                            created_at,
                             expires_at,
                             credential_status_index,
                         ) {
@@ -214,11 +214,10 @@ impl Aggregate for Credential {
                                 "Failed to enter the type into the credential".to_string(),
                             ))?;
 
-                        match build_credential_data(
+                        match build_unsigned_credential_data(
                             type_,
                             &mut credential_data,
                             &credential_configuration,
-                            created_at,
                             expires_at,
                             self.credential_status.index,
                         ) {
@@ -269,19 +268,20 @@ impl Aggregate for Credential {
                     return Ok(vec![]);
                 }
 
-                // TODO: SignCredential seems to do the do a credential building process of its own? Shouldn't the order of events simply be CreateUnsignedCredential and then SignCredential?
-                // TODO: Issuance date, status and subject id should be here
+                // Create/collect claims needed for the signed (SD-)JWT
                 #[cfg(feature = "test_utils")]
-                let issuance_date = "2010-01-01T00:00:00Z".to_string();
+                let iat = "2010-01-01T00:00:00Z".to_string();
                 #[cfg(not(feature = "test_utils"))]
-                let issuance_date = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+                let iat = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
-                let issuance_date =
-                    identity_core::common::Timestamp::parse(&issuance_date).expect("Could not parse issuance_date");
+                let created_at = iat.clone();
+                let iat = identity_core::common::Timestamp::parse(&iat).expect("Could not parse issuance_date");
+                // let iat = iat.to_unix();
 
+                // iss is set to the issuer DID
                 let default_did_method = get_preferred_did_method();
 
-                let issuer_did: identity_core::common::Url = services
+                let iss: identity_core::common::Url = services
                     .issuer
                     .identifier(&default_did_method.to_string(), get_preferred_signing_algorithm())
                     .await
@@ -289,8 +289,7 @@ impl Aggregate for Credential {
                     .and_then(|did| did.parse().ok())
                     .ok_or(InvalidIssuerDidError)?;
 
-                let mut credential = self.data.as_ref().ok_or(InvalidCredentialDataError)?.clone();
-
+                // Set status claim, seems to miss typ field? TODO
                 let status_list_url = get_status_list_url(self.credential_status.index)?;
 
                 let status_claim = sd_jwt_vc::Status(StatusMechanism::StatusList(StatusListRef {
@@ -298,53 +297,39 @@ impl Aggregate for Credential {
                     uri: status_list_url,
                 }));
 
-                #[cfg(feature = "test_utils")]
-                let iat = 1262304000; // 2010-01-01T00:00:00Z
-                #[cfg(not(feature = "test_utils"))]
-                let iat = issuance_date.to_unix();
-
-                let id: Option<Url> = self
+                // The sensible default for the jti is equal to the credential root `id` field
+                let jti: Option<Url> = self
                     .data
                     .as_ref()
                     .and_then(|data| data.raw.get("id"))
                     .and_then(|id| id.as_str())
                     .and_then(|id| Url::parse(id).ok());
 
+                // TODO: add this value back to self in the end
+                let credential_data = self.data.as_ref().ok_or(InvalidCredentialDataError)?.raw.clone();
+                let credential_data = build_signed_credential_data(
+                    credential_data,
+                    &self.credential_configuration,
+                    created_at,
+                    iss.to_string(),
+                    subject_id.clone(),
+                )?;
+
+                // TODO:subject id should be here
+
                 let signed_credential = match &self.credential_configuration.credential_format {
                     CredentialFormats::JwtVcJson(_) => {
                         let exp = self.expires_at.map(|exp| exp.timestamp());
 
-                        credential.raw["issuer"] = json!(issuer_did);
-
-                        let credential_subject = credential.raw["credentialSubject"].as_object().unwrap().clone();
-
-                        // Create a new Map and insert the id field first
-                        let mut new_credential_subject = serde_json::Map::new();
-
-                        if let Some(subject_id) = &subject_id {
-                            new_credential_subject.insert("id".to_string(), json!(subject_id));
-                        }
-
-                        // Insert the rest of the fields
-                        for (key, value) in credential_subject {
-                            if key != "id" {
-                                new_credential_subject.insert(key, value);
-                            }
-                        }
-
-                        info!("Credential subject: {:?}", new_credential_subject);
-
-                        // Replace the original credentialSubject with the new map
-                        credential.raw["credentialSubject"] = serde_json::Value::Object(new_credential_subject);
-
-                        info!("Credential: {:?}", credential);
+                        info!("Credential: {:?}", credential_data);
 
                         // Add standard claims
                         let mut vc_jwt_builder = VerifiableCredentialJwt::builder()
-                            .iss(issuer_did.to_string())
-                            .iat(iat)
-                            .nbf(iat); // TODO: setting the `nbf` to `iat` makes the JWT immediately usable
+                            .iss(iss.to_string())
+                            .iat(iat.to_unix())
+                            .nbf(iat.to_unix()); // TODO: setting the `nbf` to `iat` makes the JWT immediately usable
 
+                        // TODO: shouldnt this be in all formats?
                         if let Some(subject_id) = subject_id {
                             vc_jwt_builder = vc_jwt_builder.sub(subject_id);
                         }
@@ -355,14 +340,14 @@ impl Aggregate for Credential {
                             vc_jwt_builder
                         };
 
-                        let vc_jwt_builder = if let Some(id) = id {
+                        let vc_jwt_builder = if let Some(id) = jti {
                             vc_jwt_builder.jti(id.to_string())
                         } else {
                             vc_jwt_builder
                         };
 
                         let vc_jwt_built = vc_jwt_builder
-                            .verifiable_credential(credential.raw)
+                            .verifiable_credential(credential_data)
                             .build()
                             .map_err(|e| CredentialError::BuildCredentialError(e.to_string()))?;
 
@@ -404,25 +389,25 @@ impl Aggregate for Credential {
                             .await
                             .ok_or(KeyIdError)?;
 
-                        let sd_jwt_vc_claims = SdJwtVcClaims::from_json_value(credential.raw.clone())
+                        let sd_jwt_vc_claims = SdJwtVcClaims::from_json_value(credential_data.clone())
                             .map_err(|e| BuildCredentialError(format!("Failed to extract SD-JWT VC claims: {}", e)))?;
 
                         let paths = sd_jwt_vc_claims.keys().cloned().collect::<Vec<String>>();
 
-                        let mut builder = SdJwtVcBuilder::new(credential.raw.clone())
+                        let mut builder = SdJwtVcBuilder::new(credential_data)
                             .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?
                             .header("typ", "dc+sd-jwt")
                             .header("kid", kid);
 
-                        builder = builder.iss(issuer_did);
+                        builder = builder.iss(iss);
                         builder = builder.status(status_claim);
 
                         if let Some(holder_kid) = holder_kid {
                             builder = builder.require_key_binding(RequiredKeyBinding::Kid(holder_kid));
                         }
 
-                        builder = builder.iat(issuance_date);
-                        builder = builder.nbf(issuance_date);
+                        builder = builder.iat(iat);
+                        builder = builder.nbf(iat);
 
                         if let Some(expiration_date) = self.expires_at {
                             // tmp
@@ -468,14 +453,14 @@ impl Aggregate for Credential {
                             .ok_or(KeyIdError)?;
 
                         let mut w3c_verifiable_credential_v2: W3CVerifiableCredentialV2 =
-                            W3CVerifiableCredentialV2::from_json_value(credential.raw).map_err(|e| {
+                            W3CVerifiableCredentialV2::from_json_value(credential_data).map_err(|e| {
                                 BuildCredentialError(format!(
                                     "Failed to extract W3C Verifiable Credential V2 claims: {}",
                                     e
                                 ))
                             })?;
 
-                        w3c_verifiable_credential_v2.valid_from = issuance_date;
+                        w3c_verifiable_credential_v2.valid_from = iat;
 
                         if let Some(expiration_date) = self.expires_at {
                             w3c_verifiable_credential_v2.valid_until = Some(
@@ -613,86 +598,95 @@ impl Aggregate for Credential {
 
 // Helpers
 
-// Helper methods to simplify working with serde_json::Value.
-pub trait ExtraMethods {
-    /// Inserts a value at the specified path, creating intermediate objects as needed.
-    /// The path includes the final key name where the value will be inserted.
-    /// For example, to set `$.issuer.id = "123"`, use:
-    /// `credential.add_value_or_insert(&["issuer", "id"], json!("123"))`
-    ///
-    /// Returns `Some(&mut self)` on success, `None` on failure.
-    fn insert_at_path(&mut self, path: &[&str], value: serde_json::Value) -> Option<&mut Self>;
-    fn insert_if_none(&mut self, path: &[&str], value: serde_json::Value) -> Option<&mut Self>;
-}
+fn build_signed_credential_data(
+    mut credential_data: serde_json::Value,
+    credential_configuration: &CredentialConfigurationsSupportedObject,
+    created_at: String,
+    iss: String,
+    subject_id: Option<String>,
+) -> Result<serde_json::Value, CredentialError> {
+    let credential_types = credential_data
+        .get("type")
+        .and_then(|t| t.as_array())
+        .ok_or(InvalidCredentialDataError)?
+        .iter()
+        .filter_map(|t| t.as_str())
+        .map(|s| s.to_string())
+        .collect::<Vec<String>>();
 
-impl ExtraMethods for serde_json::Value {
-    fn insert_at_path(&mut self, path: &[&str], value: serde_json::Value) -> Option<&mut Self> {
-        let (last_key, parent_path) = path.split_last()?;
+    // Add validFrom as per VC DM 2.0
+    // This means we default to setting the `validFrom` to the creation date of the credential as a sensible default.
+    // However it is allowed to not enter any validity period and make an OBv3 credential valid eternally in to the past and/or future.
+    // TODO: create a way through which this sensible default can be turned off.
+    credential_data
+        .insert_if_none(&["validFrom"], json!(created_at))
+        .ok_or(BuildCredentialError(
+            "Failed to enter the validFrom date into the credential".to_string(),
+        ))?;
 
-        let mut current_value: &mut Value = self;
+    // TODO: seems double
+    credential_data["issuer"]["id"] = json!(iss);
 
-        // Navigate/create path to parent of final key
-        for key in parent_path {
-            current_value = current_value
-                // TODO: add array handling here too?
-                .as_object_mut()?
-                .entry((*key).to_string())
-                .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    if let Some(subject_id) = &subject_id {
+        credential_data.insert_at_path(&["credentialSubject", "id"], json!(subject_id));
+    }
+    // Loop through all the items in the `type` array in reverse until we find a match.
+    // This looping assumes the most specific type to match on is the latest one in the array.
+    // This is an implicit consequence of the typing rules in digital credential formats.
+    // For example, for OBv3 as well as ELM the first type is `VerifiableCredential` and the second type is its own type (e.g. `OpenBadgeCredential`/`EuropeanDigitalCredential`).
+    for credential_type in credential_types.iter().rev() {
+        match credential_type.as_str() {
+            "VerifiableCredential" => {
+                // JwtVcJson is still based on VC DM 1.1, while VcSdJwt (vc+sd-jwt) is based on VC DM 2.0.
+                if matches!(
+                    credential_configuration.credential_format,
+                    CredentialFormats::JwtVcJson(_)
+                ) {
+                    credential_data
+                        .insert_if_none(&["issuanceDate"], json!(created_at))
+                        .ok_or(BuildCredentialError(
+                            "Failed to enter the issuanceDate into the credential".to_string(),
+                        ))?;
+                }
+            }
+            "AchievementCredential" | "OpenBadgeCredential" => {}
+            "EuropeanDigitalCredential" => {
+                // Due to ELM schema requiring a `validFrom` while still building on VC DM 1.1, we also still need `issuanceDate`.
+                credential_data
+                    .insert_if_none(&["issuanceDate"], json!(created_at))
+                    .ok_or(BuildCredentialError(
+                        "Failed to enter the issuanceDate date into the credential".to_string(),
+                    ))?;
+                credential_data
+                    .insert_if_none(&["validFrom"], json!(created_at))
+                    .ok_or(BuildCredentialError(
+                        "Failed to enter the validFrom date into the credential".to_string(),
+                    ))?;
+
+                // The following link explains the difference between `issued`, `issuanceDate` and `validFrom`:
+                // https://europa.eu/europass/elm-browser/homepage/3-2-0/edc-generic-no-cv_en.html
+                credential_data
+                    .insert_if_none(&["issued"], json!(created_at))
+                    .ok_or(BuildCredentialError(
+                        "Failed to enter the issued date into the credential".to_string(),
+                    ))?;
+            }
+            _ => continue,
         }
-
-        // Insert the value at the final key
-        current_value.as_object_mut()?.insert(last_key.to_string(), value);
-
-        Some(self)
     }
 
-    fn insert_if_none(&mut self, path: &[&str], value: serde_json::Value) -> Option<&mut Self> {
-        let (last_key, parent_path) = path.split_last()?;
-
-        let mut current_value: &mut Value = self;
-
-        // Navigate/create path to parent of final key
-        for key in parent_path {
-            current_value = current_value
-                // TODO: add array handling here too?
-                .as_object_mut()?
-                .entry((*key).to_string())
-                .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
-        }
-
-        // Insert the value at the final key if it doesn't exist
-        current_value
-            .as_object_mut()?
-            .entry(last_key.to_string())
-            .or_insert(value);
-
-        Some(self)
-    }
-}
-
-fn get_status_list_url(index: usize) -> Result<identity_core::common::Url, CredentialError> {
-    let statuses_per_byte: usize = 8 / BITS_PER_STATUS as usize;
-    let status_list_number = index / ((STATUS_LIST_BYTES_AMOUNT * statuses_per_byte) as f64 * 0.7) as usize;
-
-    let mut status_list_url = config().ietf_oauth_token_status_list_uri.clone();
-    status_list_url
-        .path_segments_mut()
-        .map_err(|_| CredentialError::InvalidCredentialStatus)?
-        .push(&status_list_number.to_string());
-
-    Ok(status_list_url.into())
+    Ok(credential_data.clone())
 }
 
 /// This builds the credential according to the last given type in the provided type array.
 /// The first block builds fields common for all our current supported credential types.
 /// The match case builds the fields specific to the credential type and validates the credential against its Json Schema before returning it.
 /// Every Error is returned as a BuildCredentialError and handled upstream.
-// TODO: build a Context struct to capture all the arguments and clean up fn signature?
-fn build_credential_data(
+/// NOTE: Keep in mind that all data used during signing (SignCredential) is only added then also fields which need to be the same as certain claims on the JWT level, this includes: `issuer.id`, `credentialSubject.id`, `issuanceDate`/`validFrom`, `expirationDate`/`validUntil`.
+fn build_unsigned_credential_data(
     credential_types: &[String],
     credential_data: &mut serde_json::Value,
     credential_configuration: &CredentialConfigurationsSupportedObject,
-    created_at: chrono::DateTime<chrono::Utc>,
     expires_at: Option<chrono::DateTime<chrono::Utc>>,
     credential_status_index: usize,
 ) -> Result<serde_json::Value, CredentialError> {
@@ -701,30 +695,7 @@ fn build_credential_data(
         .first()
         .map(|display| display.name.clone());
 
-    // Add validFrom and validUntil as per VC DM 2.0
-    //
-    // This means we default to setting the `validFrom` to the creation date of the credential, which is a sensible default if no validFrom date has been entered.
-    // However it is allowed to not enter any validity period and make an OBv3 credential valid eternally in to the past and/or future.
-    // TODO: create a way through which this sensible default can be turned off.
-    credential_data
-        .insert_if_none(
-            &["validFrom"],
-            json!(created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
-        )
-        .ok_or(BuildCredentialError(
-            "Failed to enter the validFrom date into the credential".to_string(),
-        ))?;
-
-    if let Some(expiration_date) = expires_at {
-        credential_data
-            .insert_at_path(&["expirationDate"], json!(expiration_date))
-            .ok_or(BuildCredentialError(
-                "Failed to enter the expirationDate into the credential".to_string(),
-            ))?;
-    }
-
-    // Add issuer, enforcing id and name to reflect the UniCore configuration
-    let id = config().public_url.clone();
+    // Add issuer name reflecting the UniCore configuration
     let issuer_name = config()
         .display
         .first()
@@ -733,19 +704,14 @@ fn build_credential_data(
         .clone();
 
     credential_data
-        .insert_at_path(&["issuer", "id"], json!(id))
-        .ok_or(BuildCredentialError(
-            "Failed to enter the issuer.id into the credential".to_string(),
-        ))?;
-    credential_data
         .insert_at_path(&["issuer", "name"], json!(issuer_name))
         .ok_or(BuildCredentialError(
             "Failed to enter the issuer.name into the credential".to_string(),
         ))?;
 
-    // If no root id is provided, set the issuer id as sensible default.
+    // If no root id is provided, set the issuer public url as sensible default.
     credential_data
-        .insert_if_none(&["id"], json!(id))
+        .insert_if_none(&["id"], json!(config().public_url))
         .ok_or(BuildCredentialError(
             "Failed to enter the id into the credential".to_string(),
         ))?;
@@ -763,13 +729,20 @@ fn build_credential_data(
         }),
     );
 
+    if let Some(expiration_date) = expires_at {
+        credential_data
+            .insert_at_path(&["expirationDate"], json!(expiration_date))
+            .ok_or(BuildCredentialError(
+                "Failed to enter the expirationDate into the credential".to_string(),
+            ))?;
+    }
+
     // Loop through all the items in the `type` array in reverse until we find a match.
     // This looping assumes the most specific type to match on is the latest one in the array.
     // This is an implicit consequence of the typing rules in digital credential formats.
     // For example, for OBv3 as well as ELM the first type is `VerifiableCredential` and the second type is its own type (e.g. `OpenBadgeCredential`/`EuropeanDigitalCredential`).
     for credential_type in credential_types.iter().rev() {
         match credential_type.as_str() {
-            // This supports VC DM 2.0 only.
             "VerifiableCredential" => {
                 credential_data
                     .insert_if_none(&["name"], json!(credential_name))
@@ -785,15 +758,6 @@ fn build_credential_data(
                             .ok_or(BuildCredentialError(
                                 "Failed to enter the @context into the credential".to_string(),
                             ))?;
-
-                        credential_data
-                            .insert_if_none(
-                                &["issuanceDate"],
-                                json!(created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
-                            )
-                            .ok_or(BuildCredentialError(
-                                "Failed to enter the issuanceDate into the credential".to_string(),
-                            ))?;
                     }
                     CredentialFormats::VcSdJwt(_) => {
                         credential_data
@@ -802,6 +766,7 @@ fn build_credential_data(
                                 "Failed to enter the @context into the credential".to_string(),
                             ))?;
                     }
+                    // TODO: this is actually a hard enforcement that a VC (DM 1.1 & 2) cannot be issued as dc+sd-jwt. Do we want that?
                     _ => {
                         return Err(UnsupportedCredentialFormat(serde_json::json!(
                             credential_configuration.credential_format
@@ -809,16 +774,10 @@ fn build_credential_data(
                     }
                 }
 
-                if matches!(
-                    credential_configuration.credential_format,
-                    CredentialFormats::JwtVcJson(_)
-                ) {
-                    // Validate credential before returning
-                    CredentialType::VerifiableCredential
-                        .validate(credential_data)
-                        .map_err(|e| BuildCredentialError(e.to_string()))?;
-                }
-                // TODO: how to validate VcSdJwt format?
+                // Validate credential before returning
+                CredentialType::VerifiableCredential
+                    .validate(credential_data)
+                    .map_err(|e| BuildCredentialError(e.to_string()))?;
 
                 return Ok(credential_data.clone());
             }
@@ -861,40 +820,12 @@ fn build_credential_data(
                 // Currently the ELM schema still references VC DM 1.1.
                 // It seems like they will be moving to VC DM 2.0. but for now we need to be compatible with both.
                 // TODO: remove once the ELM schema has been updated to VC DM 2.0.
-                {
-                    credential_data
-                        .insert_if_none(&["@context"], json!(["https://www.w3.org/2018/credentials/v1"]))
-                        .ok_or(BuildCredentialError(
-                            "Failed to enter the @context into the credential".to_string(),
-                        ))?;
-                    // Due to ELM schema requiring a `validFrom` while still building on VC DM 1.1, we also still need `issuanceDate`.
-                    credential_data
-                        .insert_if_none(
-                            &["issuanceDate"],
-                            json!(created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
-                        )
-                        .ok_or(BuildCredentialError(
-                            "Failed to enter the issuanceDate date into the credential".to_string(),
-                        ))?;
-                    credential_data
-                        .insert_if_none(
-                            &["validFrom"],
-                            json!(created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
-                        )
-                        .ok_or(BuildCredentialError(
-                            "Failed to enter the validFrom date into the credential".to_string(),
-                        ))?;
-                }
-                // The following link explains the difference between `issued`, `issuanceDate` and `validFrom`:
-                // https://europa.eu/europass/elm-browser/homepage/3-2-0/edc-generic-no-cv_en.html
                 credential_data
-                    .insert_if_none(
-                        &["issued"],
-                        json!(created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
-                    )
+                    .insert_if_none(&["@context"], json!(["https://www.w3.org/2018/credentials/v1"]))
                     .ok_or(BuildCredentialError(
-                        "Failed to enter the issued date into the credential".to_string(),
+                        "Failed to enter the @context into the credential".to_string(),
                     ))?;
+
                 if let Some(expiration_date) = expires_at {
                     credential_data
                         .insert_at_path(&["expirationDate"], json!(expiration_date))
@@ -1057,6 +988,75 @@ fn build_credential_data(
     ))
 }
 
+fn get_status_list_url(index: usize) -> Result<identity_core::common::Url, CredentialError> {
+    let statuses_per_byte: usize = 8 / BITS_PER_STATUS as usize;
+    let status_list_number = index / ((STATUS_LIST_BYTES_AMOUNT * statuses_per_byte) as f64 * 0.7) as usize;
+
+    let mut status_list_url = config().ietf_oauth_token_status_list_uri.clone();
+    status_list_url
+        .path_segments_mut()
+        .map_err(|_| CredentialError::InvalidCredentialStatus)?
+        .push(&status_list_number.to_string());
+
+    Ok(status_list_url.into())
+}
+
+// Helper methods to simplify working with serde_json::Value.
+pub trait ExtraMethods {
+    /// Inserts a value at the specified path, creating intermediate objects as needed.
+    /// The path includes the final key name where the value will be inserted.
+    /// For example, to set `$.issuer.id = "123"`, use:
+    /// `credential.add_value_or_insert(&["issuer", "id"], json!("123"))`
+    ///
+    /// Returns `Some(&mut self)` on success, `None` on failure.
+    fn insert_at_path(&mut self, path: &[&str], value: serde_json::Value) -> Option<&mut Self>;
+    fn insert_if_none(&mut self, path: &[&str], value: serde_json::Value) -> Option<&mut Self>;
+}
+
+impl ExtraMethods for serde_json::Value {
+    fn insert_at_path(&mut self, path: &[&str], value: serde_json::Value) -> Option<&mut Self> {
+        let (last_key, parent_path) = path.split_last()?;
+
+        let mut current_value: &mut Value = self;
+
+        // Navigate/create path to parent of final key
+        for key in parent_path {
+            current_value = current_value
+                // TODO: add array handling here too?
+                .as_object_mut()?
+                .entry((*key).to_string())
+                .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+        }
+
+        // Insert the value at the final key
+        current_value.as_object_mut()?.insert(last_key.to_string(), value);
+
+        Some(self)
+    }
+
+    fn insert_if_none(&mut self, path: &[&str], value: serde_json::Value) -> Option<&mut Self> {
+        let (last_key, parent_path) = path.split_last()?;
+
+        let mut current_value: &mut Value = self;
+
+        // Navigate/create path to parent of final key
+        for key in parent_path {
+            current_value = current_value
+                // TODO: add array handling here too?
+                .as_object_mut()?
+                .entry((*key).to_string())
+                .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+        }
+
+        // Insert the value at the final key if it doesn't exist
+        current_value
+            .as_object_mut()?
+            .entry(last_key.to_string())
+            .or_insert(value);
+
+        Some(self)
+    }
+}
 #[cfg(test)]
 pub mod credential_tests {
     use super::test_utils::*;
