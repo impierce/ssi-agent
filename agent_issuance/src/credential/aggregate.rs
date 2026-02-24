@@ -153,9 +153,7 @@ impl Aggregate for Credential {
                                 ..
                             },
                     }) => {
-                        // TODO: we need to validate our own issuing against the referenced cred_config.
-                        // Set the type to the original credential configuration type.
-                        // TODO: And shouldn't users be able to type more specifically then only the cred config?
+                        // Set the type to the original credential configuration type. // TODO: More enforcement that the credential adheres to the credential_configuration which has been offered to the receiving party.
                         credential_data
                             .insert_at_path(&["type"], json!(type_))
                             .ok_or(BuildCredentialError(
@@ -209,7 +207,12 @@ impl Aggregate for Credential {
                                 ..
                             },
                     }) => {
-                        // TODO: should we add the "type" field at the root to not break the Json Schema validation?
+                        // Set the type to the original credential configuration type. // TODO: More enforcement that the credential adheres to the credential_configuration which has been offered to the receiving party.
+                        credential_data
+                            .insert_at_path(&["type"], json!(type_))
+                            .ok_or(BuildCredentialError(
+                                "Failed to enter the type into the credential".to_string(),
+                            ))?;
 
                         match build_credential_data(
                             type_,
@@ -262,11 +265,12 @@ impl Aggregate for Credential {
                 overwrite,
                 proof,
             } => {
-                // TODO: SignCredential seems to do the do an entire credential building process of its own? Shouldn't the order of events simply be CreateUnsignedCredential and then SignCredential?
                 if self.signed.is_some() && !overwrite {
                     return Ok(vec![]);
                 }
 
+                // TODO: SignCredential seems to do the do a credential building process of its own? Shouldn't the order of events simply be CreateUnsignedCredential and then SignCredential?
+                // TODO: Issuance date, status and subject id should be here
                 #[cfg(feature = "test_utils")]
                 let issuance_date = "2010-01-01T00:00:00Z".to_string();
                 #[cfg(not(feature = "test_utils"))]
@@ -274,13 +278,6 @@ impl Aggregate for Credential {
 
                 let issuance_date =
                     identity_core::common::Timestamp::parse(&issuance_date).expect("Could not parse issuance_date");
-
-                let id: Option<Url> = self
-                    .data
-                    .as_ref()
-                    .and_then(|data| data.raw.get("id"))
-                    .and_then(|id| id.as_str())
-                    .and_then(|id| Url::parse(id).ok());
 
                 let default_did_method = get_preferred_did_method();
 
@@ -306,12 +303,15 @@ impl Aggregate for Credential {
                 #[cfg(not(feature = "test_utils"))]
                 let iat = issuance_date.to_unix();
 
+                let id: Option<Url> = self
+                    .data
+                    .as_ref()
+                    .and_then(|data| data.raw.get("id"))
+                    .and_then(|id| id.as_str())
+                    .and_then(|id| Url::parse(id).ok());
+
                 let signed_credential = match &self.credential_configuration.credential_format {
                     CredentialFormats::JwtVcJson(_) => {
-                        if let Some(ref id) = id {
-                            credential.raw["id"] = json!(id);
-                        };
-
                         let exp = self.expires_at.map(|exp| exp.timestamp());
 
                         credential.raw["issuer"] = json!(issuer_did);
@@ -651,9 +651,13 @@ impl ExtraMethods for serde_json::Value {
 
         let mut current_value: &mut Value = self;
 
-        // Navigate to parent of final key
+        // Navigate/create path to parent of final key
         for key in parent_path {
-            current_value = current_value.as_object_mut()?.get_mut(*key)?;
+            current_value = current_value
+                // TODO: add array handling here too?
+                .as_object_mut()?
+                .entry((*key).to_string())
+                .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
         }
 
         // Insert the value at the final key if it doesn't exist
@@ -719,7 +723,7 @@ fn build_credential_data(
             ))?;
     }
 
-    // Add issuer
+    // Add issuer, enforcing id and name to reflect the UniCore configuration
     let id = config().public_url.clone();
     let issuer_name = config()
         .display
@@ -729,15 +733,21 @@ fn build_credential_data(
         .clone();
 
     credential_data
-        .insert_at_path(
-            &["issuer"],
-            json!({
-                "id": id,
-                "name": issuer_name
-            }),
-        )
+        .insert_at_path(&["issuer", "id"], json!(id))
         .ok_or(BuildCredentialError(
-            "Failed to enter the issuer into the credential".to_string(),
+            "Failed to enter the issuer.id into the credential".to_string(),
+        ))?;
+    credential_data
+        .insert_at_path(&["issuer", "name"], json!(issuer_name))
+        .ok_or(BuildCredentialError(
+            "Failed to enter the issuer.name into the credential".to_string(),
+        ))?;
+
+    // If no root id is provided, set the issuer id as sensible default.
+    credential_data
+        .insert_if_none(&["id"], json!(id))
+        .ok_or(BuildCredentialError(
+            "Failed to enter the id into the credential".to_string(),
         ))?;
 
     // Add credential status
@@ -898,7 +908,7 @@ fn build_credential_data(
                 credential_data.insert_if_none(&["issuer"], json!("urn:epass:org:1"));
 
                 // No fields in credentialProfiles are actually required by the ELM schema
-                // TODO: For now entering this dummy default as it is the same in every example under this link:
+                // For now entering this dummy default as it is the same in every example under this link:
                 // https://github.com/european-commission-empl/European-Learning-Model/tree/master/Credentials/JSON-LD%20Examples%20(ELM%20v3)
                 credential_data
                     .insert_if_none(
@@ -916,7 +926,8 @@ fn build_credential_data(
                         "Failed to enter the credentialProfiles into the credential".to_string(),
                     ))?;
 
-                // TODO: this is currently hard coded, it can remain so until the use of this property (and all of ELM) becomes more clear and it has purpose to the user
+                // TODO: this is currently hard coded, it can remain so until the use of this property (and all of ELM) becomes more clear and it has purpose to the user.
+                // Also the `language` and `primaryLanguage` properties have no required fields but following the examples in the link above we use the current as sensible defaults.
                 credential_data
                     .insert_if_none(
                         &["displayParameter"],
@@ -925,6 +936,30 @@ fn build_credential_data(
                             "type": "DisplayParameter",
                             "title": {
                                 "en": credential_name
+                            },
+                            "primaryLanguage": {
+                                "id": "http://publications.europa.eu/resource/authority/language/ENG",
+                                "type": "Concept",
+                                "inScheme": {
+                                "id": "http://publications.europa.eu/resource/authority/language",
+                                "type": "ConceptScheme"
+                                },
+                                "notation": "language",
+                                "prefLabel": {
+                                "en": "English"
+                                }
+                            },
+                            "language": {
+                                "id": "http://publications.europa.eu/resource/authority/language/ENG",
+                                "type": "Concept",
+                                "inScheme": {
+                                "id": "http://publications.europa.eu/resource/authority/language",
+                                "type": "ConceptScheme"
+                                },
+                                "notation": "language",
+                                "prefLabel": {
+                                "en": "English"
+                                }
                             },
                             "individualDisplay": {
                                 "id": "urn:epass:individualDisplay:1",
@@ -994,20 +1029,22 @@ fn build_credential_data(
                         "Failed to enter the credentialSchema into the credential".to_string(),
                     ))?;
 
+                // The ELM Data Model only allows two different types: "CredentialStatus", "TrustedCredentialStatus2021".
+                // Therefore, we have no choice but to type it as the generic "CredentialStatus".
+                credential_data
+                    .insert_at_path(&["credentialStatus", "type"], json!("CredentialStatus"))
+                    .ok_or(BuildCredentialError(
+                        "Failed to enter the credentialStatus.type into the credential".to_string(),
+                    ))?;
+
                 // No credentialSubject is being manually added, meaning that this and the rest of the optional fields are expected to be present in the payload correctly.
+                // TODO: Only the credentialSubject.id will be added manually during the SignCredential operation?
                 // The above fields can be considered sensible defaults and can otherwise still be set within the payload.
 
                 // Validate credential before building
-                // CredentialType::EuropeanDigitalCredential.validate(credential_data).map_err(|e| BuildCredentialError(e.to_string()))?;
-
-                let result = CredentialType::EuropeanDigitalCredential.validate(credential_data);
-                if let Err(errors) = result {
-                    println!("Validation errors: {errors:?}");
-                } else {
-                    println!("Credential is valid according to the EuropeanDigitalCredential schema.");
-                }
-
-                println!("Validation complete.");
+                CredentialType::EuropeanDigitalCredential
+                    .validate(credential_data)
+                    .map_err(|e| BuildCredentialError(e.to_string()))?;
 
                 return Ok(credential_data.clone());
             }
