@@ -1,9 +1,9 @@
 {
   "info": {
-    "_postman_id": "bd568b99-121b-438e-afc1-2356f4ab1803",
+    "_postman_id": "d83ef4f5-b1c2-47b0-8bd8-765a5aaf29e2",
     "name": "ssi-agent",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "_exporter_id": "41786572",
+    "_exporter_id": "38461474",
     "_collection_link": "https://go.postman.co/collection/41786572-bd568b99-121b-438e-afc1-2356f4ab1803?source=collection_link"
   },
   "item": [
@@ -99,6 +99,60 @@
             "body": {
               "mode": "raw",
               "raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"001\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    },\n    \"expiresAt\": \"never\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{HOST}}/v0/credentials",
+              "host": [
+                "{{HOST}}"
+              ],
+              "path": [
+                "v0",
+                "credentials"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create an SD-JWT VC Credential",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const location = pm.response.headers.get(\"LOCATION\");",
+                  "",
+                  "if(location){",
+                  "    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
+                  "}",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"SD-JWT\",\n    \"credential\": {\n        \"first_name\": \"Ferris\",\n        \"last_name\": \"Crabman\",\n        \"dob\": \"1982-01-01\"\n    },\n    \"expiresAt\": \"never\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -860,6 +914,52 @@
                   "key": "request_uri",
                   "value": "{{REQUEST_URI}}"
                 }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "ietf oauth sd-jwt vc",
+      "item": [
+        {
+          "name": "SD-JWT VC Type Metadata",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{HOST}}/vct/U0QtSldU/0",
+              "host": [
+                "{{HOST}}"
+              ],
+              "path": [
+                "vct",
+                "U0QtSldU",
+                "0"
               ]
             }
           },

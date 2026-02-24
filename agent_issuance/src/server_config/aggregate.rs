@@ -1,8 +1,11 @@
-use agent_shared::config::Authorization;
+use agent_shared::config::{config, Authorization};
 use async_trait::async_trait;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::Aggregate;
 use identity_core::convert::ToJson;
 use jsonwebtoken::Algorithm;
+use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json;
+use oid4vci::credential_format_profiles::{CredentialFormats, Parameters};
 use oid4vci::credential_issuer::credential_configurations_supported::AlgIdentifier;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use oid4vci::credential_issuer::{
@@ -169,10 +172,38 @@ impl Aggregate for ServerConfig {
                 credential_configuration,
                 provisioned,
             } => {
+                let credential_format = match credential_configuration.format.as_str() {
+                    "jwt_vc_json" => CredentialFormats::JwtVcJson(Parameters {
+                        parameters: (jwt_vc_json::CredentialDefinition {
+                            type_: credential_configuration.type_,
+                        })
+                        .into(),
+                    }),
+                    "dc+sd-jwt" => {
+                        let vct = format!(
+                            "{}vct/{}/{version}",
+                            config().public_url,
+                            URL_SAFE_NO_PAD.encode(&credential_configuration.credential_configuration_id),
+                            // TODO: support versioning of VCTs once we support versioning of Templates
+                            version = 0
+                        );
+
+                        CredentialFormats::DcSdJwt(Parameters {
+                            parameters: (vct).into(),
+                        })
+                    }
+                    _ => {
+                        return Err(UnsupportedCredentialFormatIdentifierError(format!(
+                            "{:?}",
+                            credential_configuration.format
+                        )))
+                    }
+                };
+
                 let proof_types_supported = into_proof_types_supported(&self.signing_algorithms_supported);
 
                 let credential_configuration_object = CredentialConfigurationsSupportedObject {
-                    credential_format: credential_configuration.credential_format_with_parameters,
+                    credential_format,
                     cryptographic_binding_methods_supported: self.cryptographic_binding_methods_supported.clone(),
                     credential_signing_alg_values_supported: into_credential_signing_alg_values_supported(
                         &self.signing_algorithms_supported,
@@ -320,8 +351,6 @@ pub mod server_config_tests {
     use agent_secret_manager::service::Service;
     use agent_shared::config::{Authorization, CredentialConfiguration};
     use cqrs_es::test::TestFramework;
-    use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
-    use oid4vci::credential_format_profiles::{w3c_verifiable_credentials, CredentialFormats, Parameters};
     use oid4vci::credential_issuer::credential_configurations_supported::CredentialMetadata;
     use oid4vci::credential_issuer::credential_configurations_supported::{
         CredentialConfigurationsSupportedDisplay, Logo,
@@ -373,13 +402,8 @@ pub mod server_config_tests {
             .when(ServerConfigCommand::UpdateCredentialConfiguration {
                 credential_configuration: CredentialConfiguration {
                     credential_configuration_id: credential_configuration_id.clone(),
-                    credential_format_with_parameters: CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
-                        parameters: w3c_verifiable_credentials::jwt_vc_json::JwtVcJsonParameters {
-                            credential_definition: w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition {
-                                type_: vec!["VerifiableCredential".to_string()],
-                            },
-                        },
-                    }),
+                    format: "jwt_vc_json".to_string(),
+                    type_: vec!["VerifiableCredential".to_string()],
                     credential_metadata: CredentialMetadata {
                         display: Some(vec![CredentialConfigurationsSupportedDisplay {
                             name: "Verifiable Credential".to_string(),

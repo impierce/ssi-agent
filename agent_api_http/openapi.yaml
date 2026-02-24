@@ -399,16 +399,13 @@ paths:
                 format:
                   type: string
                   example: jwt_vc_json
-                credential_definition:
-                  type: object
-                  properties:
-                    type:
-                      type: array
-                      items:
-                        type: string
-                        example: VerifiableCredential
-                      example:
-                        - VerifiableCredential
+                type:
+                  type: array
+                  items:
+                    type: string
+                    example: VerifiableCredential
+                  example:
+                    - VerifiableCredential
                 display:
                   type: array
                   items:
@@ -444,10 +441,9 @@ paths:
                 summary: Open Badges 3.0
                 value:
                   credential_configuration_id: openbadge_credential
-                  credential_definition:
-                    type:
-                      - VerifiableCredential
-                      - OpenBadgeCredential
+                  type:
+                    - VerifiableCredential
+                    - OpenBadgeCredential
                   display:
                     - locale: en
                       logo:
@@ -459,9 +455,8 @@ paths:
                 summary: W3C VC Data Model
                 value:
                   credential_configuration_id: w3c_vc_credential
-                  credential_definition:
-                    type:
-                      - VerifiableCredential
+                  type:
+                    - VerifiableCredential
                   display:
                     - locale: en
                       logo:
@@ -469,6 +464,17 @@ paths:
                         uri: https://impierce.com/images/logo-blue.png
                       name: Identity Credential
                   format: jwt_vc_json
+              sd_jwt_vc_credential_configurations:
+                summary: SD-JWT VC
+                value:
+                  credential_configuration_id: SD-JWT VC
+                  display:
+                    - locale: en
+                      logo:
+                        alt_text: UniCore Logo
+                        uri: https://impierce.com/images/logo-blue.png
+                      name: Identity Credential
+                  format: dc+sd-jwt
       responses:
         "200":
           description: A Credential Configuration has been successfully added to the Credential Issuer Metadata
@@ -607,6 +613,16 @@ paths:
                       first_name: Ferris
                       last_name: Crabman
                   credentialConfigurationId: w3c_vc_credential
+                  offerId: "001"
+                  expiresAt: "3025-10-24 11:34:00Z"
+              sd-jwt-vc:
+                summary: SD-JWT VC
+                value:
+                  credential:
+                    dob: "1982-01-01"
+                    first_name: Ferris
+                    last_name: Crabman
+                  credentialConfigurationId: SD-JWT VC
                   offerId: "001"
                   expiresAt: "3025-10-24 11:34:00Z"
       responses:

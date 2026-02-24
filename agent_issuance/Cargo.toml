@@ -24,6 +24,7 @@ oid4vci.workspace = true
 oid4vc-core.workspace = true
 rand.workspace = true
 reqwest.workspace = true
+sd-jwt.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_json_path_to_error.workspace = true
