@@ -15,6 +15,8 @@ use tracing::{debug, info};
 use crate::credential::aggregate::Credential;
 use crate::credential::views::all_credentials::AllCredentialsView;
 use crate::credential::views::CredentialView;
+use crate::nonce::aggregate::Nonce;
+use crate::nonce::views::NonceView;
 use crate::offer::aggregate::Offer;
 use crate::offer::views::all_offers::AllOffersView;
 use crate::offer::views::OfferView;
@@ -35,6 +37,7 @@ pub struct CommandHandlers {
     pub server_config: CommandHandler<ServerConfig>,
     pub credential: CommandHandler<Credential>,
     pub offer: CommandHandler<Offer>,
+    pub nonce: CommandHandler<Nonce>,
 }
 
 /// This type is used to define the queries that are used to query the view repositories. We make use of `dyn` here, so
@@ -46,21 +49,24 @@ type Queries = ViewRepositories<
     dyn ViewRepository<AllCredentialsView, Credential>,
     dyn ViewRepository<OfferView, Offer>,
     dyn ViewRepository<AllOffersView, Offer>,
+    dyn ViewRepository<NonceView, Nonce>,
 >;
 
-pub struct ViewRepositories<SC, C, C1, O, O1>
+pub struct ViewRepositories<SC, C, C1, O, O1, N>
 where
     SC: ViewRepository<ServerConfigView, ServerConfig> + ?Sized,
     C: ViewRepository<CredentialView, Credential> + ?Sized,
     C1: ViewRepository<AllCredentialsView, Credential> + ?Sized,
     O: ViewRepository<OfferView, Offer> + ?Sized,
     O1: ViewRepository<AllOffersView, Offer> + ?Sized,
+    N: ViewRepository<NonceView, Nonce> + ?Sized,
 {
     pub server_config: Arc<SC>,
     pub credential: Arc<C>,
     pub all_credentials: Arc<C1>,
     pub offer: Arc<O>,
     pub all_offers: Arc<O1>,
+    pub nonce: Arc<N>,
 }
 
 impl Clone for Queries {
@@ -71,6 +77,7 @@ impl Clone for Queries {
             all_credentials: self.all_credentials.clone(),
             offer: self.offer.clone(),
             all_offers: self.all_offers.clone(),
+            nonce: self.nonce.clone(),
         }
     }
 }
@@ -141,6 +148,7 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
                 credential_issuer_metadata: Box::new(CredentialIssuerMetadata {
                     credential_issuer: public_url.clone(),
                     credential_endpoint: public_url.append_path_segment("openid4vci/credential"),
+                    nonce_endpoint: Some(public_url.append_path_segment("openid4vci/nonce")),
                     display,
                     ..Default::default()
                 }),
@@ -214,39 +222,41 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                     "credential_configuration_id": "001",
                     "format": "jwt_vc_json",
                     "type": ["VerifiableCredential"],
-                    "display": [
-                        {
-                            "name": "Verifiable Credential",
-                            "locale": "en",
-                            "logo": {
-                            "uri": "https://www.impierce.com/external/impierce-logo.png",
-                                "alt_text": "Impierce Logo"
+                    "credential_metadata": {
+                        "display": [
+                            {
+                                "name": "Verifiable Credential",
+                                "locale": "en",
+                                "logo": {
+                                "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                    "alt_text": "Impierce Logo"
+                                }
                             }
-                        }
-                    ],
-                    "claims": [
-                        {
-                            "path": ["credentialSubject", "first_name"],
-                            "display": [{
-                                "name": "First Name",
-                                "locale": "en"
-                            }],
-                        },
-                        {
-                            "path": ["credentialSubject", "last_name"],
-                            "display": [{
-                                "name": "Last Name",
-                                "locale": "en"
-                            }],
-                        },
-                        {
-                            "path": ["credentialSubject", "dob"],
-                            "display": [{
-                                "name": "Date of Birth",
-                                "locale": "en"
-                            }],
-                        }
-                    ]
+                        ],
+                        "claims": [
+                            {
+                                "path": ["credentialSubject", "first_name"],
+                                "display": [{
+                                    "name": "First Name",
+                                    "locale": "en"
+                                }],
+                            },
+                            {
+                                "path": ["credentialSubject", "last_name"],
+                                "display": [{
+                                    "name": "Last Name",
+                                    "locale": "en"
+                                }],
+                            },
+                            {
+                                "path": ["credentialSubject", "dob"],
+                                "display": [{
+                                    "name": "Date of Birth",
+                                    "locale": "en"
+                                }],
+                            }
+                        ]
+                    }
                   },
                   {
                     "credential_configuration_id": "SD-JWT",

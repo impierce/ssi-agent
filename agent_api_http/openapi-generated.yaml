@@ -1,0 +1,374 @@
+openapi: 3.1.0
+info:
+  title: UniCore HTTP API
+  description: ''
+  license:
+    name: Apache 2.0
+  version: 0.0.0-semantically-released
+servers:
+- url: http://localhost:3033
+  description: Local development
+paths:
+  /v0/connections:
+    get:
+      tags:
+      - Connections
+      summary: List all connections
+      description: List all available connections.
+      operationId: get_all_connections
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GetConnectionsEndpointRequest'
+        required: true
+      responses:
+        '200':
+          description: All connections retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Connection'
+  /v0/connections/{connection_id}:
+    get:
+      tags:
+      - Connections
+      summary: Get connection by ID
+      description: Retrieve a specific connection by its unique identifier.
+      operationId: get_connection_by_id
+      parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Connection retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Connection'
+  /v0/templates/create-template:
+    post:
+      tags:
+      - Library
+      - Templates
+      summary: Create a new template
+      description: Creates a new template which can be used to issue credentials.
+      operationId: create_template
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplateEndpointRequest'
+            examples:
+              Standard template:
+                description: A simple example that will issue credentials in the W3C Verifiable Credentials Data Model v1.1 format.
+                value:
+                  title: Standard template
+                  credentialFormat: w3c_vc_data_model_v1-1
+                  holderType: individual
+        required: true
+      responses:
+        '201':
+          description: New template created successfully
+          headers:
+            Location:
+              schema:
+                type: string
+              description: The path of the newly created template
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+  /v0/templates/duplicate-template:
+    post:
+      tags:
+      - Library
+      - Templates
+      summary: Duplicate existing template
+      description: Creates a duplicate of an existing template.
+      operationId: duplicate_template
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DuplicateTemplateEndpointRequest'
+            example:
+              sourceTemplateId: 91fc790f-d876-4827-9a9d-0fb0f6766dca
+        required: true
+      responses:
+        '201':
+          description: Duplicate created successfully
+          headers:
+            Location:
+              schema:
+                type: string
+              description: The path of the newly created template
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '422':
+          description: Source Template Not Found
+  /v0/templates/get-all-templates:
+    get:
+      tags:
+      - Library
+      - Templates
+      summary: List all templates
+      description: List all available templates.
+      operationId: get_all_templates
+      responses:
+        '200':
+          description: All templates retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Template'
+  /v0/templates/{template_id}:
+    get:
+      tags:
+      - Library
+      - Templates
+      summary: Get template by ID
+      description: Retrieve a specific template by its ID.
+      operationId: get_template_by_id
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Template retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+components:
+  schemas:
+    Connection:
+      type: object
+      required:
+      - id
+      - dids
+      properties:
+        alias:
+          type:
+          - string
+          - 'null'
+        credential_offer_endpoint:
+          type:
+          - string
+          - 'null'
+        dids:
+          type: array
+          items:
+            type: string
+        domain:
+          type:
+          - string
+          - 'null'
+        first_interacted:
+          type:
+          - string
+          - 'null'
+        id:
+          type: string
+        last_interacted:
+          type:
+          - string
+          - 'null'
+    CreateTemplateEndpointRequest:
+      type: object
+      properties:
+        creator:
+          type:
+          - string
+          - 'null'
+          default: null
+        credentialFormat:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/CredentialFormat'
+          default: null
+        description:
+          type:
+          - string
+          - 'null'
+          default: null
+        display:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Display'
+          default: null
+        holderType:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/HolderType'
+          default: null
+        schema: {}
+        status:
+          oneOf:
+          - $ref: '#/components/schemas/Status'
+          default: draft
+        tags:
+          type: array
+          items:
+            type: string
+          default: []
+        title:
+          type:
+          - string
+          - 'null'
+          default: null
+        type:
+          type: array
+          items:
+            type: string
+          default: []
+        visibility:
+          oneOf:
+          - $ref: '#/components/schemas/Visibility'
+          default: private
+    CredentialFormat:
+      type: string
+      enum:
+      - w3c_vc_data_model_v1-1
+      - w3c_vc_data_model_v2-0
+      - open_badges_3-0
+    Display:
+      type: object
+      required:
+      - name
+      properties:
+        logo:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Logo'
+        name:
+          type: string
+    DuplicateTemplateEndpointRequest:
+      type: object
+      required:
+      - sourceTemplateId
+      properties:
+        sourceTemplateId:
+          type: string
+    GetConnectionsEndpointRequest:
+      type: object
+      properties:
+        alias:
+          type:
+          - string
+          - 'null'
+        did:
+          type:
+          - string
+          - 'null'
+        domain:
+          type:
+          - string
+          - 'null'
+    HolderType:
+      type: string
+      enum:
+      - individual
+      - organization
+    Logo:
+      type: object
+      required:
+      - uri
+      properties:
+        alt_text:
+          type:
+          - string
+          - 'null'
+        uri:
+          type: string
+    Status:
+      type: string
+      enum:
+      - draft
+      - published
+      - archived
+      - deleted
+    Template:
+      type: object
+      description: Data transfer object for Templates.
+      required:
+      - id
+      - tags
+      - status
+      - visibility
+      - type
+      properties:
+        creator:
+          type:
+          - string
+          - 'null'
+        credentialFormat:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/CredentialFormat'
+        description:
+          type:
+          - string
+          - 'null'
+        display:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Display'
+        holderType:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/HolderType'
+        id:
+          type: string
+        modifiedAt:
+          type:
+          - string
+          - 'null'
+        schema: {}
+        sourceTemplateId:
+          type:
+          - string
+          - 'null'
+        status:
+          $ref: '#/components/schemas/Status'
+        tags:
+          type: array
+          items:
+            type: string
+        title:
+          type:
+          - string
+          - 'null'
+        type:
+          type: array
+          items:
+            type: string
+        visibility:
+          $ref: '#/components/schemas/Visibility'
+    Visibility:
+      type: string
+      enum:
+      - private
+      - public
+tags:
+- name: Connections
+  description: Manage trusted connections.
+- name: Library
+  description: Manage your own templates, browse and import external templates.
+- name: Templates
+  description: Create and manage templates which provide the structure for credentials to be issued.
+externalDocs:
+  url: https://docs.impierce.com/unicore
+  description: Official UniCore documentation

@@ -7,6 +7,7 @@ use crate::{
 };
 use agent_issuance::{
     application::access_token_validation_service::AccessTokenValidationService,
+    application::nonce_validation_service::NonceValidationService,
     credential::{command::CredentialCommand, views::CredentialView},
     offer::{command::OfferCommand, views::OfferView},
     server_config::views::ServerConfigView,
@@ -38,7 +39,11 @@ pub(crate) async fn credential(
         .ok()
         // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
         .and_then(|claims| claims.issuer_state)
-        .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidToken))?;
+        .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidProof))?;
+
+    NonceValidationService::validate(&state, &credential_request)
+        .await
+        .map_err(|_| PublicError::from(CredentialErrorResponse::InvalidNonce))?;
 
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
     let (credential_issuer_metadata, authorization_server_metadata) =
@@ -56,7 +61,7 @@ pub(crate) async fn credential(
             _ => return Err(internal_server_error()),
         };
 
-    let proof = credential_request.proof.clone();
+    let proofs = credential_request.proofs.clone();
 
     let command = OfferCommand::VerifyCredentialRequest {
         offer_id: offer_id.clone(),
@@ -104,7 +109,7 @@ pub(crate) async fn credential(
             credential_id: credential_id.clone(),
             subject_id: subject_id.clone(),
             overwrite: false,
-            proof: proof.clone(),
+            proofs: proofs.clone(),
         };
 
         command_handler(&credential_id, &state.command.credential, command).await?;
@@ -155,6 +160,7 @@ pub mod tests {
     use agent_issuance::credential::aggregate::CredentialExpiry;
     use agent_issuance::offer::event::OfferEvent;
     use agent_issuance::services::IssuanceServices;
+    use agent_issuance::state::IssuanceState;
     use agent_secret_manager::service::Service;
     use agent_shared::config::{set_config, Events};
     use agent_store::authorization_state;
@@ -177,6 +183,7 @@ pub mod tests {
     const CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsiaWQiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4ifSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ0eXBlIjoic3RhdHVzbGlzdCtqd3QiLCJpZHgiOjEyMywidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIn19LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fX0.hpDfiFRTZPH0XyvmZ9LDq0sPJbvnkJvGsEhZwb-OGoYetkN9zNT6vRKqj2FEoVutF-RfSKjGTNyFPdPI6OvMAg";
     const ANONYMOUS_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsIm5iZiI6MTI2MjMwNDAwMCwiaWF0IjoxMjYyMzA0MDAwLCJ2YyI6eyJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSJdLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4ifSwiaXNzdWVyIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QiLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ0eXBlIjoic3RhdHVzbGlzdCtqd3QiLCJpZHgiOjEyMywidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIn19LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fX0.pn0weAAGWvUzSBiz6vVWfVFFgGYVJH5vBZOqPaRR2yDenuN6oyY5R1K3h4WlRAVKVS0iE8hYYGbAia9svr8eCw";
     const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
+    const TEST_NONCE: &str = "7e03ad3f76cb3338c3a5642fe7634476aa3ad93fa1d584011ba2150d9da47133";
 
     trait CredentialEventTrigger {
         async fn prepare_credential_event_trigger(
@@ -269,9 +276,17 @@ pub mod tests {
 
     pub async fn credential(
         issuance_app: &mut Router,
+        issuance_state: &Arc<IssuanceState>,
         access_token: String,
         external_server: Option<MockServer>,
     ) -> (String, String) {
+        let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
+            c_nonce: TEST_NONCE.to_string(),
+        };
+        agent_shared::handlers::command_handler(TEST_NONCE, &issuance_state.command.nonce, command)
+            .await
+            .unwrap();
+
         let response = issuance_app
             .oneshot(
                 Request::builder()
@@ -282,9 +297,7 @@ pub mod tests {
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "credential_configuration_id": "001",
-                            "proof": {
-                                "proof_type": "jwt",
-                                "jwt": "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lk\
+                            "proofs": { "jwt": ["eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lk\
                                         IjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4\
                                         a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lG\
                                         OGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFa\
@@ -292,7 +305,7 @@ pub mod tests {
                                         ZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAs\
                                         Im5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkz\
                                         ZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBY\
-                                        tgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"
+                                        tgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"]
                             }
                         }))
                         .unwrap(),
@@ -361,6 +374,13 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, issuance_event_publishers).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
+        let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
+            c_nonce: TEST_NONCE.to_string(),
+        };
+        agent_shared::handlers::command_handler(TEST_NONCE, &issuance_state.command.nonce, command)
+            .await
+            .unwrap();
+
         let mut issuance_app = router(issuance_state.clone());
 
         if let Some(external_server) = &external_server {
@@ -397,10 +417,11 @@ pub mod tests {
         let mut authorization_app = authorization::router((authorization_state, issuance_state));
 
         let access_token: String = token(&mut authorization_app, is_pre_authorized, grants).await;
-
         let jwt = if with_anonymous_access {
-            "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1rcHc2OGh1OVFnTUFDNmJDOE0xeFo0cDZ4VXNFeUs0bUtZdEtNYkpnTmRrSjIjejZNa3B3NjhodTlRZ01BQzZiQzhNMXhaNHA2eFVzRXlLNG1LWXRLTWJKZ05ka0oyIn0.eyJhdWQiOiJodHRwOi8vMTI3LjAuMC4xOjQwNzI1LyIsImlhdCI6MTc2MjI2NTgxMH0.GuGCIl-0VGkADdbWkcL56P5jXZjGKBzYbr-gPfQ5Yl7u4KltF1pjle52RuTVInxIQXeP9GuDL1Ag52B6Y0NSAg"
+            // This JWT has no nonce, so no need to pre-generate
+            "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVTMjU2Iiwia2lkIjoiZGlkOmp3azpleUpoYkdjaU9pSkZVekkxTmlJc0ltTnlkaUk2SWxBdE1qVTJJaXdpYTJsa0lqb2lhMUoyYms1M1N6QlhSbTlWZEVGR1JEZDFSbGN6Y3pSbWVFbDBVVmRKZGpaTU9FRldYMEV0VTFOV2J5SXNJbXQwZVNJNklrVkRJaXdpZUNJNklrSXRWblp4V2xsMVUyVmlXbXBoWVRNMlExcGhaMnRKVFZWeU9ERlZRMjR0U0ROZlJXbHBYMnByUlRBaUxDSjVJam9pZW01SFgwVXhiWFZQT1dsWGNFbHdPWE16VUZWbWRXUnlZelpNV2pBdGEwNDJVREJrUm5neldFeDRXU0o5IzAifQ.eyJhdWQiOiJodHRwOi8vbG9jYWxob3N0OjMwMzMvIiwiaWF0IjoxNzcxNDE1OTg2LCJub25jZSI6IjdlMDNhZDNmNzZjYjMzMzhjM2E1NjQyZmU3NjM0NDc2YWEzYWQ5M2ZhMWQ1ODQwMTFiYTIxNTBkOWRhNDcxMzMifQ.1vmzQVFvo90TSp8Yh9CbqJHyrzjE3U5xQN4G8BGPk6-vlrWHejVPjk-oWW8uXRmdiRsmJjRCUeSN3fLKdlTK_g"
         } else {
+            // This JWT contains the nonce we just generated
             "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"
         };
 
@@ -413,10 +434,9 @@ pub mod tests {
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_configuration_id": "001",
-                            "proof": {
-                                "proof_type": "jwt",
-                                "jwt": jwt
+                            "credential_configuration_id": credential_configuration_id,
+                            "proofs": {
+                                "jwt":[jwt]
                             }
                         }))
                         .unwrap(),

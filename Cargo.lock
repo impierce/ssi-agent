@@ -127,6 +127,7 @@ dependencies = [
  "tracing-test",
  "url",
  "urlencoding",
+ "utoipa",
  "uuid",
  "wiremock",
 ]
@@ -329,6 +330,7 @@ dependencies = [
  "tracing-test",
  "url",
  "urlencoding",
+ "utoipa",
  "uuid",
 ]
 
@@ -341,6 +343,7 @@ dependencies = [
  "agent_library",
  "agent_secret_manager",
  "agent_shared",
+ "agent_store",
  "anyhow",
  "async-std",
  "async-trait",
@@ -393,6 +396,7 @@ dependencies = [
  "strum_macros 0.26.4",
  "thiserror 1.0.69",
  "tracing",
+ "utoipa",
 ]
 
 [[package]]
@@ -2319,7 +2323,7 @@ checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=049fa77#049fa77c7e1e17aebfd424af1523110e37c8200a"
+source = "git+https://github.com/impierce/did-manager?rev=a2863a3#a2863a328ece653d9a8f61528bb1cbf96d263858"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -3078,7 +3082,7 @@ dependencies = [
 [[package]]
 name = "did_iota"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=049fa77#049fa77c7e1e17aebfd424af1523110e37c8200a"
+source = "git+https://github.com/impierce/did-manager?rev=a2863a3#a2863a328ece653d9a8f61528bb1cbf96d263858"
 dependencies = [
  "anyhow",
  "identity_iota",
@@ -3093,7 +3097,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=049fa77#049fa77c7e1e17aebfd424af1523110e37c8200a"
+source = "git+https://github.com/impierce/did-manager?rev=a2863a3#a2863a328ece653d9a8f61528bb1cbf96d263858"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -3110,7 +3114,7 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=049fa77#049fa77c7e1e17aebfd424af1523110e37c8200a"
+source = "git+https://github.com/impierce/did-manager?rev=a2863a3#a2863a328ece653d9a8f61528bb1cbf96d263858"
 dependencies = [
  "did-method-key",
  "identity_iota",
@@ -3157,7 +3161,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=049fa77#049fa77c7e1e17aebfd424af1523110e37c8200a"
+source = "git+https://github.com/impierce/did-manager?rev=a2863a3#a2863a328ece653d9a8f61528bb1cbf96d263858"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -5116,7 +5120,7 @@ dependencies = [
 [[package]]
 name = "identity_stronghold_ext"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=049fa77#049fa77c7e1e17aebfd424af1523110e37c8200a"
+source = "git+https://github.com/impierce/did-manager?rev=a2863a3#a2863a328ece653d9a8f61528bb1cbf96d263858"
 dependencies = [
  "async-trait",
  "elliptic-curve 0.13.8",
@@ -8277,7 +8281,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=b9dc650#b9dc650951a93f8f97eda6026995c55369aa9ec9"
+source = "git+https://github.com/impierce/openid4vc?rev=dc2c388#dc2c38846dcee5da35ef8592f647179de12a8e56"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8302,7 +8306,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=b9dc650#b9dc650951a93f8f97eda6026995c55369aa9ec9"
+source = "git+https://github.com/impierce/openid4vc?rev=dc2c388#dc2c38846dcee5da35ef8592f647179de12a8e56"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8335,7 +8339,7 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=b9dc650#b9dc650951a93f8f97eda6026995c55369aa9ec9"
+source = "git+https://github.com/impierce/openid4vc?rev=dc2c388#dc2c38846dcee5da35ef8592f647179de12a8e56"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8363,7 +8367,7 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=b9dc650#b9dc650951a93f8f97eda6026995c55369aa9ec9"
+source = "git+https://github.com/impierce/openid4vc?rev=dc2c388#dc2c38846dcee5da35ef8592f647179de12a8e56"
 dependencies = [
  "anyhow",
  "chrono",
@@ -10616,7 +10620,7 @@ dependencies = [
 [[package]]
 name = "secret-storage"
 version = "0.3.0"
-source = "git+https://github.com/iotaledger/secret-storage.git?tag=v0.3.0#7dc13ddae8a7f2c8a931d3155f3cb9e9a27902fb"
+source = "git+https://github.com/iotaledger/secret-storage?tag=v0.3.0#7dc13ddae8a7f2c8a931d3155f3cb9e9a27902fb"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -10831,6 +10835,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a93142f0367a4cc53ae0fead1bcda39e85beccfad3dcd717656cacab94b12985"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "serde_norway"
+version = "0.9.42"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e408f29489b5fd500fab51ff1484fc859bb655f32c671f307dcd733b72e8168c"
+dependencies = [
+ "indexmap 2.12.0",
+ "itoa",
+ "ryu",
+ "serde",
+ "unsafe-libyaml-norway",
 ]
 
 [[package]]
@@ -11060,7 +11077,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=049fa77#049fa77c7e1e17aebfd424af1523110e37c8200a"
+source = "git+https://github.com/impierce/did-manager?rev=a2863a3#a2863a328ece653d9a8f61528bb1cbf96d263858"
 dependencies = [
  "identity_iota",
  "identity_storage",
@@ -11166,7 +11183,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=b9dc650#b9dc650951a93f8f97eda6026995c55369aa9ec9"
+source = "git+https://github.com/impierce/openid4vc?rev=dc2c388#dc2c38846dcee5da35ef8592f647179de12a8e56"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -13013,6 +13030,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "unsafe-libyaml-norway"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b39abd59bf32521c7f2301b52d05a6a2c975b6003521cbd0c6dc1582f0a22104"
+
+[[package]]
 name = "unsigned-varint"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13077,6 +13100,31 @@ name = "utf8parse"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
+
+[[package]]
+name = "utoipa"
+version = "5.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fcc29c80c21c31608227e0912b2d7fddba57ad76b606890627ba8ee7964e993"
+dependencies = [
+ "indexmap 2.12.0",
+ "serde",
+ "serde_json",
+ "serde_norway",
+ "utoipa-gen",
+]
+
+[[package]]
+name = "utoipa-gen"
+version = "5.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d79d08d92ab8af4c5e8a6da20c47ae3f61a0f1dabc1997cdf2d082b757ca08b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "regex",
+ "syn 2.0.104",
+]
 
 [[package]]
 name = "uuid"

@@ -2,7 +2,6 @@ use askama::Template;
 use axum::response::{Html, IntoResponse, Response};
 use http::StatusCode;
 use oid4vci::authorization_details::AuthorizationDetailsObject;
-use oid4vci::authorization_details::CredentialConfigurationOrFormat;
 
 // TODO: Add support for `scope` claim.
 /// Represents the view model for the consent page.

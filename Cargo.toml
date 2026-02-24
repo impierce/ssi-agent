@@ -23,12 +23,11 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
-#  TODO: For all `openid4vc` dependencies, switch to latest `dev` revision once https://github.com/impierce/openid4vc/pull/118 is merged.
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "b9dc650" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "b9dc650" }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "b9dc650" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "b9dc650" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "b9dc650" }
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "dc2c388" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "dc2c388" }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "dc2c388" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "dc2c388" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "dc2c388" }
 
 anyhow = "1.0"
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
@@ -93,5 +92,6 @@ tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tracing-test = { version = "0.2" }
 url = "2.5"
+utoipa = { version = "5", features = ["axum_extras", "yaml"] }
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"

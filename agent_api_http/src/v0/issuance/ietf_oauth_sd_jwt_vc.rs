@@ -36,8 +36,21 @@ pub(crate) async fn type_metadata(
         })
         .ok_or(PublicError::NotFoundError)?;
 
-    let display = credential_configuration_display_to_display_metadata(credential_configuration.display);
-    let claims = claim_description_to_claims(credential_configuration.claims);
+    let (display, claims) = credential_configuration
+        .credential_metadata
+        .map(|credential_metadata| {
+            let display = credential_metadata
+                .display
+                .map(credential_configuration_display_to_display_metadata)
+                .unwrap_or_default();
+            let claims = credential_metadata
+                .claims
+                .map(claim_description_to_claims)
+                .unwrap_or_default();
+
+            (display, claims)
+        })
+        .unwrap_or_default();
 
     // TODO: Fill in more of these fields once `agent_library` supports it.
     // TODO: instead of contructing `TypeMetadata` here, we should store it as a View/Read Model and simply query it here.

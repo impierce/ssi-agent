@@ -99,6 +99,7 @@ pub mod tests {
             TokenRequest::PreAuthorizedCode {
                 pre_authorized_code: code,
                 tx_code: None,
+                authorization_details: None,
             }
         } else {
             let code_verifier = String::from_utf8(code_verifier().to_vec()).unwrap();
@@ -108,6 +109,7 @@ pub mod tests {
                 code,
                 code_verifier: Some(code_verifier),
                 redirect_uri: UNIME_REDIRECT_URI.parse().ok(),
+                authorization_details: None,
             }
         };
 
