@@ -717,7 +717,6 @@ pub mod test_utils {
                 credential_format: CredentialFormats::JwtVcJson(Parameters {
                     parameters: (CredentialDefinition {
                         type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
-                        credential_subject: Default::default(),
                     })
                     .into(),
                 }),
@@ -751,7 +750,6 @@ pub mod test_utils {
                 credential_format: CredentialFormats::JwtVcJson(Parameters {
                     parameters: (CredentialDefinition {
                         type_: vec!["VerifiableCredential".to_string()],
-                        credential_subject: Default::default(),
                     })
                     .into()
                 }),

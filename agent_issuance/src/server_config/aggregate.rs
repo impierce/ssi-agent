@@ -377,7 +377,6 @@ pub mod server_config_tests {
                         parameters: w3c_verifiable_credentials::jwt_vc_json::JwtVcJsonParameters {
                             credential_definition: w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition {
                                 type_: vec!["VerifiableCredential".to_string()],
-                                credential_subject: Default::default(),
                             },
                         },
                     }),

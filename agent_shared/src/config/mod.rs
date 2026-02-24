@@ -13,6 +13,7 @@ use oid4vci::{
     credential_format_profiles::{CredentialFormats, WithParameters},
     credential_offer::TxCodeConstraints,
 };
+use oid4vp::authorization_request::AlgValues;
 use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported};
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -292,14 +293,14 @@ pub struct ApplicationConfiguration {
     pub event_publishers: EventPublishers,
     #[config(default = "VpFormatsSupported {
         jwt_vc_json: Some(JwtVcJsonParameters {
-            alg_values: Some(vec![Algorithm::ES256, Algorithm::EdDSA])
+            alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
         }),
         jwt_vp_json: Some(JwtVpJsonParameters {
-            alg_values: Some(vec![Algorithm::ES256, Algorithm::EdDSA])
+            alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
         }),
         dc_sd_jwt: Some(DcSdJwtParameters {
-            sd_jwt_alg_values: Some(vec![Algorithm::ES256]),
-            kb_jwt_alg_values: Some(vec![Algorithm::ES256])
+            sd_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap()),
+            kb_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap())
                 }),
         ldp_vc: None,
         di_vp: None,

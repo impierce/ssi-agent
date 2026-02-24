@@ -725,12 +725,12 @@ pub mod tests {
                 id: CredentialQueryId::try_new("CredentialQuery".to_string()).unwrap(),
                 format: Format::JwtVcJson,
                 multiple: None,
-                meta: Some(MetaTypes::W3CFormatMeta {
+                meta: MetaTypes::W3CFormatMeta {
                     type_values: vec![
                         vec!["VerifiableCredential".to_string()],
                         vec!["PersonalInformation".to_string()]
                     ]
-                }),
+                },
                 trusted_authorities: None,
                 require_cryptographic_holder_binding: None,
                 claims: Some(vec![
