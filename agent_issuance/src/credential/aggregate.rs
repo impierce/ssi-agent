@@ -321,11 +321,11 @@ impl Aggregate for Credential {
                 // TODO: this should also be used in JwtVcJson right?
                 // If proof is provided then set the holder_kid needs to be extracted to set the `cnf` claim. TODO: shouldnt this be set in JwtVcJson as well?
                 let holder_kid = proofs.and_then(|proofs| {
-                            // TODO: Support batch credential issuance. See https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-batch-credential-issuance
-                            jsonwebtoken::decode_header(proofs.jwt.first()?)
-                                .ok()
-                                .and_then(|header| header.kid)
-                        });
+                    // TODO: Support batch credential issuance. See https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-batch-credential-issuance
+                    jsonwebtoken::decode_header(proofs.jwt.first()?)
+                        .ok()
+                        .and_then(|header| header.kid)
+                });
 
                 // Set the jwt claims through the specific builder and build the JWT which will be signed at the bottom of each match arm
                 let signed_credential = match &self.credential_configuration.credential_format {
@@ -696,7 +696,7 @@ fn build_unsigned_credential_data(
         .and_then(|meta| meta.display.as_ref())
         .and_then(|display| display.first())
         .map(|d| d.name.clone());
-        // .unwrap_or("OpenBadge Credential".to_string());
+    // .unwrap_or("OpenBadge Credential".to_string());
 
     // Add issuer name reflecting the UniCore configuration
     let issuer_name = config()
@@ -1363,36 +1363,6 @@ pub mod test_utils {
                     }]),
                     claims: None
                 }),
-                ..Default::default()
-            };
-        pub static ref VC_SD_JWT_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
-            CredentialConfigurationsSupportedObject {
-                credential_format: CredentialFormats::VcSdJwt(Parameters {
-                    parameters: (vc_sd_jwt::CredentialDefinition {
-                        type_: vec!["VerifiableCredential".to_string()],
-                    })
-                    .into()
-                }),
-                cryptographic_binding_methods_supported: vec!["did:jwk".to_string(), "did:key".to_string(),],
-                credential_signing_alg_values_supported: vec!["ES256".to_string(), "EdDSA".to_string()],
-                proof_types_supported: HashMap::from_iter(vec![(
-                    ProofType::Jwt,
-                    KeyProofMetadata {
-                        proof_signing_alg_values_supported: vec!["ES256".to_string(), "EdDSA".to_string()],
-                    },
-                )]),
-                display: vec![CredentialConfigurationsSupportedDisplay {
-                    name: "VCDM2.0 SD-JWT Credential".to_string(),
-                    locale: Some("en".to_string()),
-                    logo: Some(Logo {
-                        uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
-                        alt_text: Some("Impierce Logo".to_string()),
-                    }),
-                    description: None,
-                    background_image: None,
-                    background_color: None,
-                    text_color: None,
-                }],
                 ..Default::default()
             };
         pub static ref OPENBADGE_CREDENTIAL_SUBJECT: serde_json::Value = json!(
