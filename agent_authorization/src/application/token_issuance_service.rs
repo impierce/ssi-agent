@@ -43,7 +43,20 @@ pub enum TokenIssuanceError {
 }
 
 pub struct TokenIssuanceService {}
-
+// TODO: Handle authorization_details merging/downscoping logic.
+// Per OID4VCI spec Section 6.1 and 6.2  https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-successful-token-response
+// - If authorization_details is present in both the Authorization Request
+//   (stored in authorization_state) and the Token Request, the Token Request
+//   may represent a downscoped subset.
+// - The server should validate that the Token Request's authorization_details
+//   is a subset of what was authorized in the Authorization Request:
+// "[...] it is RECOMMENDED that the AS would accept a request from the Wallet containing a subset of credential_configuration_id parameters
+// received in the original Authorization Request and issue a token for the reduced set."
+// - The Token Response MUST include authorization_details if it was present
+//   in either the Authorization Request or Token Request.
+// - Each entry must be enriched with credential_identifiers (within the authorization_details).
+//
+// For now, we pass through the Token Request's authorization_details as-is.
 impl TokenIssuanceService {
     pub async fn issue_token(
         authorization_state: &AuthorizationState,
@@ -52,10 +65,11 @@ impl TokenIssuanceService {
     ) -> Result<TokenResponse, TokenIssuanceError> {
         use TokenIssuanceError::*;
 
-        let (client_id, issuer_state) = match token_request {
+        let (client_id, issuer_state, authorization_details) = match token_request {
             TokenRequest::PreAuthorizedCode {
                 pre_authorized_code,
                 tx_code,
+                authorization_details,
             } => {
                 // TODO: make sure that the Pre-Authorized Code is short-lived and single-use.
                 // See https://github.com/impierce/ssi-agent/issues/240
@@ -94,13 +108,14 @@ impl TokenIssuanceService {
                 // is opaque to the Client, and it is validated by the Credential Issuer which for now is the same as
                 // the Authorization Server.
                 warn!("Using placeholder client_id: {}", PLACEHOLDER_CLIENT_ID);
-                (PLACEHOLDER_CLIENT_ID.to_string(), issuer_state)
+                (PLACEHOLDER_CLIENT_ID.to_string(), issuer_state, authorization_details)
             }
             TokenRequest::AuthorizationCode {
                 client_id,
                 code,
                 code_verifier,
                 redirect_uri,
+                authorization_details,
             } => {
                 let client = query_handler(&client_id, &authorization_state.query.client)
                     .await
@@ -126,7 +141,7 @@ impl TokenIssuanceService {
                     .ok_or(TokenIssuanceError::MissingAuthorizationCodeError)?
                     .issuer_state;
 
-                (client_id, issuer_state)
+                (client_id, issuer_state, authorization_details)
             }
         };
 
@@ -198,6 +213,9 @@ impl TokenIssuanceService {
             expires_in: Some(access_token_expires_in),
             scope: None,
             refresh_token: None,
+            // TODO: Ensure that the `credential_identifier` parameter in `authorization_details` is populated correctly before returning.
+            // See section 6.2 of the OID4VCI spec: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-successful-token-response
+            authorization_details,
         })
     }
 }

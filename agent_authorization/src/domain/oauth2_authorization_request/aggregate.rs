@@ -247,11 +247,7 @@ pub mod test_utils {
 
     use super::*;
     use crate::domain::client::aggregate::test_utils::client_id;
-    use oid4vci::{
-        authorization_details::{CredentialConfigurationOrFormat, OpenidCredential},
-        authorization_request::AuthorizationRequest,
-        pkce,
-    };
+    use oid4vci::{authorization_details::OpenidCredential, authorization_request::AuthorizationRequest, pkce};
     use rstest::*;
 
     #[fixture]
@@ -289,10 +285,8 @@ pub mod test_utils {
         vec![AuthorizationDetailsObject {
             r#type: OpenidCredential::Type,
             locations: None,
-            credential_configuration_or_format: CredentialConfigurationOrFormat::CredentialConfigurationId {
-                credential_configuration_id: "001".to_string(),
-                parameters: None,
-            },
+            credential_configuration_id: "001".to_string(),
+            credential_identifiers: None,
             claims: None,
         }]
     }

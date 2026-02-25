@@ -8,9 +8,9 @@ use identity_iota::{
 };
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
-use oid4vci::credential_issuer::credential_configurations_supported::ClaimDescription;
-use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedDisplay;
-use oid4vci::{credential_format_profiles::CredentialFormats, credential_offer::TxCodeConstraints};
+use oid4vci::credential_issuer::credential_configurations_supported::CredentialMetadata;
+use oid4vci::credential_offer::TxCodeConstraints;
+use oid4vp::authorization_request::AlgValues;
 use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported};
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -290,17 +290,17 @@ pub struct ApplicationConfiguration {
     pub event_publishers: EventPublishers,
     #[config(default = "VpFormatsSupported {
         jwt_vc_json: Some(JwtVcJsonParameters {
-            alg_values: Some(vec![Algorithm::ES256, Algorithm::EdDSA])
+            alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
         }),
         jwt_vp_json: Some(JwtVpJsonParameters {
-            alg_values: Some(vec![Algorithm::ES256, Algorithm::EdDSA])
+            alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
         }),
         dc_sd_jwt: Some(DcSdJwtParameters {
-            sd_jwt_alg_values: Some(vec![Algorithm::ES256]),
-            kb_jwt_alg_values: Some(vec![Algorithm::ES256])
+            sd_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap()),
+            kb_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap())
                 }),
         ldp_vc: None,
-        ldp_vp: None,
+        di_vp: None,
         mso_mdoc: None,
     }")]
     pub vp_formats_supported: VpFormatsSupported,
@@ -515,15 +515,12 @@ pub fn default_issuer_es256_key_id() -> KeyId {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct CredentialConfiguration {
     pub credential_configuration_id: String,
-    #[serde(flatten)]
-    pub format: CredentialFormats,
+    pub format: String,
     // The `type` field is only used when `format` is `jwt_vc_json`.
     #[serde(default, rename = "type")]
     pub type_: Vec<String>,
-    #[serde(default)]
-    pub display: Vec<CredentialConfigurationsSupportedDisplay>,
-    #[serde(default)]
-    pub claims: Vec<ClaimDescription>,
+    #[serde(flatten)]
+    pub credential_metadata: CredentialMetadata,
     #[serde(default)]
     pub authorization: Authorization,
 }
