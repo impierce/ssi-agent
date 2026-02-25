@@ -306,7 +306,6 @@ impl Aggregate for Credential {
                     .and_then(|id| id.as_str())
                     .and_then(|id| Url::parse(id).ok());
 
-                // TODO: add this value back to self in the end
                 let credential_data = self.data.as_ref().ok_or(InvalidCredentialDataError)?.raw.clone();
                 let credential_data = build_signed_credential_data(
                     credential_data,
@@ -321,7 +320,7 @@ impl Aggregate for Credential {
                     credential_data
                 );
 
-                // TODO: this should also be used in JwtVcJson right?
+                // TODO: can this holder binding also be used in JwtVcJson?
                 // If proof is provided then set the holder_kid needs to be extracted to set the `cnf` claim.
                 let holder_kid = proofs.and_then(|proofs| {
                     // TODO: Support batch credential issuance. See https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-batch-credential-issuance
@@ -333,14 +332,13 @@ impl Aggregate for Credential {
                 // Set the jwt claims through the specific builder and build the JWT which will be signed at the bottom of each match arm
                 let signed_credential = match &self.credential_configuration.credential_format {
                     CredentialFormats::JwtVcJson(_) => {
+                        // TODO: Would it be more straightforward to add the JWT claims similarly to all our jwt formats?
+
                         let mut vc_jwt_builder = VerifiableCredentialJwt::builder()
                             .iss(iss.to_string())
                             .iat(iat.to_unix())
-                            .nbf(iat.to_unix()); // TODO: setting the `nbf` to `iat` makes the JWT immediately usable
+                            .nbf(iat.to_unix()); // setting the `nbf` to `iat` makes the JWT immediately usable
 
-                        // TODO: not sure about the specs but since we now completely enfore alignment between jwt claims and credential data, wouldn't it be more straightforward to add all claims to all our jwt formats?
-
-                        // TODO: shouldnt this be in all formats?
                         if let Some(subject_id) = subject_id {
                             vc_jwt_builder = vc_jwt_builder.sub(subject_id);
                         }
@@ -417,7 +415,6 @@ impl Aggregate for Credential {
                         }
 
                         // By default set all custom claims to concealable.
-                        // TODO: I dont think this only gets the custom claims?
                         let sd_jwt_vc_claims = SdJwtVcClaims::from_json_value(credential_data.clone())
                             .map_err(|e| BuildCredentialError(format!("Failed to extract SD-JWT VC claims: {}", e)))?;
 
@@ -448,8 +445,6 @@ impl Aggregate for Credential {
                             .await
                             .ok_or(KeyIdError)?;
 
-                        // TODO: shouldn't claims be set here as well?
-
                         let mut builder = SdJwtBuilder::new(&credential_data)
                             .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?
                             .header("typ", "vc+sd-jwt")
@@ -462,13 +457,12 @@ impl Aggregate for Credential {
                             builder = builder.require_key_binding(RequiredKeyBinding::Kid(holder_kid));
                         }
 
-                        // TODO: see todo comment above, adding this line now to check if this fixes VerifiableCredentialRecord::try_new() error in identity-wallet
                         builder = builder
                             .insert_claim("iss", iss)
                             .map_err(|_| BuildCredentialError("Failed to insert 'iss' claim".to_string()))?;
 
                         // By default set all custom claims to concealable.
-                        // TODO: only CredentialSubject again, but perhaps only getting the Cred Subject claims is a good idea after all, I remember something about credentialStatus and RefreshService should never be concealable.
+                        // TODO: This only makes the credentialSubject properties concealable. Further research needed to see which properties should be conceleable, also depending on what Credential Data Model.
                         let paths = credential_data
                             .get("credentialSubject")
                             .and_then(|c| c.as_object())
@@ -669,6 +663,11 @@ fn build_signed_credential_data(
                         "Failed to enter the issued date into the credential".to_string(),
                     ))?;
 
+                // TODO: Due to the complexity of the different allowed issuer types (Agent, Person, Organisation),
+                // We will keep it simple for now and only pass a placeholder eIDAS Legal Identifier.
+                // As long as organisations don't have their eIDAS Legal Identifier there can be made no official `issuer` nor ELM anyway.
+                credential_data.insert_if_none(&["issuer"], json!(iss));
+
                 // Validate credential before building
                 CredentialType::EuropeanDigitalCredential
                     .validate(&credential_data)
@@ -753,28 +752,22 @@ fn build_unsigned_w3c_credential_data(
                         "Failed to enter the name into the credential".to_string(),
                     ))?;
 
-                // JwtVcJson is still based on VC DM 1.1, while VcSdJwt (vc+sd-jwt) is based on VC DM 2.0.
-                match credential_configuration.credential_format {
-                    CredentialFormats::JwtVcJson(_) => {
-                        credential_data
-                            .insert_if_none(&["@context"], json!(["https://www.w3.org/2018/credentials/v1"]))
-                            .ok_or(BuildCredentialError(
-                                "Failed to enter the @context into the credential".to_string(),
-                            ))?;
-                    }
-                    CredentialFormats::VcSdJwt(_) => {
-                        credential_data
-                            .insert_if_none(&["@context"], json!(["https://www.w3.org/ns/credentials/v2"]))
-                            .ok_or(BuildCredentialError(
-                                "Failed to enter the @context into the credential".to_string(),
-                            ))?;
-                    }
-                    // TODO: this is actually a hard enforcement that a VC (DM 1.1 & 2) cannot be issued as dc+sd-jwt. Do we want that?
-                    _ => {
-                        return Err(UnsupportedCredentialFormat(serde_json::json!(
-                            credential_configuration.credential_format
-                        )));
-                    }
+                // Our default is VC DM 2.0, but JwtVcJson is still based on VC DM 1.1, while VcSdJwt (vc+sd-jwt).
+                if matches!(
+                    credential_configuration.credential_format,
+                    CredentialFormats::JwtVcJson(_)
+                ) {
+                    credential_data
+                        .insert_if_none(&["@context"], json!(["https://www.w3.org/2018/credentials/v1"]))
+                        .ok_or(BuildCredentialError(
+                            "Failed to enter the @context into the credential".to_string(),
+                        ))?;
+                } else {
+                    credential_data
+                        .insert_if_none(&["@context"], json!(["https://www.w3.org/ns/credentials/v2"]))
+                        .ok_or(BuildCredentialError(
+                            "Failed to enter the @context into the credential".to_string(),
+                        ))?;
                 }
 
                 return Ok(credential_data.clone());
@@ -833,10 +826,6 @@ fn build_unsigned_w3c_credential_data(
                             "Failed to enter the expirationDate date into the credential".to_string(),
                         ))?;
                 }
-                // TODO: Due to the complexity of the different allowed issuer types (Agent, Person, Organisation),
-                // We will keep it simple for now and only pass a placeholder eIDAS Legal Identifier.
-                // As long as organisations don't have their eIDAS Legal Identifier there can be made no official `issuer` nor ELM anyway.
-                credential_data.insert_if_none(&["issuer"], json!("urn:epass:org:1"));
 
                 // No fields in credentialProfiles are actually required by the ELM schema
                 // For now entering this dummy default as it is the same in every example under this link:
@@ -1464,10 +1453,9 @@ pub mod test_utils {
             "first_name": "Ferris",
             "last_name": "Rustacean"
         });
-        // TODO: should the `vct` claim (and others) already be added here? I would say all building/compiling of data should be separate from signing.
         pub static ref UNSIGNED_VC_SD_JWT_CREDENTIAL: serde_json::Value = json!({
           "@context": [ "https://www.w3.org/ns/credentials/v2" ],
-        //   "type": [ "VerifiableCredential" ], should this be in or out?
+          "type": [ "VerifiableCredential" ],
           "credentialSubject": VC_SD_JWT_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
           "issuer": {
             "id": "https://my-domain.example.org/",
