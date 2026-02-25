@@ -290,7 +290,7 @@ impl Aggregate for Credential {
                     .and_then(|did| did.parse().ok())
                     .ok_or(InvalidIssuerDidError)?;
 
-                // Set status claim, seems to miss typ field? TODO
+                // Status claim as per the IETF OAuth Token Status List specification.
                 let status_list_url = get_status_list_url(self.credential_status.index)?;
 
                 let status_claim = sd_jwt_vc::Status(StatusMechanism::StatusList(StatusListRef {
@@ -322,7 +322,7 @@ impl Aggregate for Credential {
                 );
 
                 // TODO: this should also be used in JwtVcJson right?
-                // If proof is provided then set the holder_kid needs to be extracted to set the `cnf` claim. TODO: shouldnt this be set in JwtVcJson as well?
+                // If proof is provided then set the holder_kid needs to be extracted to set the `cnf` claim.
                 let holder_kid = proofs.and_then(|proofs| {
                     // TODO: Support batch credential issuance. See https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-batch-credential-issuance
                     jsonwebtoken::decode_header(proofs.jwt.first()?)
