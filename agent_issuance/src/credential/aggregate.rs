@@ -507,6 +507,7 @@ impl Aggregate for Credential {
                         let exp = self.expires_at.map(|exp| exp.to_unix());
 
                         credential.raw["issuer"] = json!(issuer_did);
+                        credential.raw["issuanceDate"] = json!(issuance_date);
 
                         let credential_subject = credential.raw["credentialSubject"].as_object().unwrap().clone();
 
