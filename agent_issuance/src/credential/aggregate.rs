@@ -164,6 +164,7 @@ impl Aggregate for Credential {
                             type_,
                             &mut credential_data,
                             &credential_configuration,
+                            &credential_id,
                             expires_at,
                             credential_status_index,
                         ) {
@@ -217,6 +218,7 @@ impl Aggregate for Credential {
                             type_,
                             &mut credential_data,
                             &credential_configuration,
+                            &credential_id,
                             expires_at,
                             self.credential_status.index,
                         ) {
@@ -692,6 +694,7 @@ fn build_unsigned_credential_data(
     credential_types: &[String],
     credential_data: &mut serde_json::Value,
     credential_configuration: &CredentialConfigurationsSupportedObject,
+    credential_id: &str,
     expires_at: Option<chrono::DateTime<chrono::Utc>>,
     credential_status_index: usize,
 ) -> Result<serde_json::Value, CredentialError> {
@@ -714,13 +717,6 @@ fn build_unsigned_credential_data(
         .insert_at_path(&["issuer", "name"], json!(issuer_name))
         .ok_or(BuildCredentialError(
             "Failed to enter the issuer.name into the credential".to_string(),
-        ))?;
-
-    // If no root id is provided, set the issuer public url as sensible default.
-    credential_data
-        .insert_if_none(&["id"], json!(config().public_url))
-        .ok_or(BuildCredentialError(
-            "Failed to enter the id into the credential".to_string(),
         ))?;
 
     // Add credential status
@@ -794,6 +790,13 @@ fn build_unsigned_credential_data(
                     )
                     .ok_or(BuildCredentialError(
                         "Failed to enter the @context into the credential".to_string(),
+                    ))?;
+
+                // If no root id is provided, set the aggregate credential_id as sensible default.
+                credential_data
+                    .insert_if_none(&["id"], json!(credential_id))
+                    .ok_or(BuildCredentialError(
+                        "Failed to enter the id into the credential".to_string(),
                     ))?;
 
                 credential_data
