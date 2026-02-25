@@ -124,7 +124,8 @@ impl Aggregate for Credential {
                 #[cfg(not(feature = "test_utils"))]
                 let notification_id = agent_shared::generate_random_string();
 
-                // created_at is only used for the `CreatedUnsignedCredential` event and is not equal to the issuanceDate/validFrom field, which is only added during signing (SignCredential). (validFrom only if no field has been provided in the initial credential data payload).
+                // created_at is only used for the `CreatedUnsignedCredential` event and is not equal to the issuanceDate(VC1.1), issued (ELM) nor validFrom (VC2 & OBv3) fields.
+                // These are only added during signing (SignCredential). (issuanceDate and issued will be overwritten even if provided in the payload, validFrom will not).
                 #[cfg(feature = "test_utils")]
                 let created_at: DateTime<Utc> = "2010-01-01T00:00:00Z"
                     .parse()
@@ -678,11 +679,15 @@ fn build_signed_credential_data(
     Ok(credential_data.clone())
 }
 
-/// This builds the credential according to the last given type in the provided type array.
+/// This builds the credential according to the last given type in the provided type array which matches with our supported credential types.
 /// The first block builds fields common for all our current supported credential types.
 /// The match case builds the fields specific to the credential type and validates the credential against its Json Schema before returning it.
 /// Every Error is returned as a BuildCredentialError and handled upstream.
-/// NOTE: Keep in mind that all data used during signing (SignCredential) is only added then also fields which need to be the same as certain claims on the JWT level, this includes: `issuer.id`, `credentialSubject.id`, `issuanceDate`/`validFrom`, `expirationDate`/`validUntil`.
+/// NOTE: Keep in mind that all data used during signing (SignCredential) for the JWT claims also overwites its Credential Data Model counterparts, this includes:
+/// - `issuer.id`
+/// - `credentialSubject.id`
+/// - `issuanceDate`/`validFrom`/`issued`
+/// - `expirationDate`/`validUntil`
 fn build_unsigned_credential_data(
     credential_types: &[String],
     credential_data: &mut serde_json::Value,
@@ -696,7 +701,6 @@ fn build_unsigned_credential_data(
         .and_then(|meta| meta.display.as_ref())
         .and_then(|display| display.first())
         .map(|d| d.name.clone());
-    // .unwrap_or("OpenBadge Credential".to_string());
 
     // Add issuer name reflecting the UniCore configuration
     let issuer_name = config()
