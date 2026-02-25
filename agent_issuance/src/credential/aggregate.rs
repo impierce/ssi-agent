@@ -160,7 +160,7 @@ impl Aggregate for Credential {
                                 "Failed to enter the type into the credential".to_string(),
                             ))?;
 
-                        match build_unsigned_credential_data(
+                        match build_unsigned_w3c_credential_data(
                             type_,
                             &mut credential_data,
                             &credential_configuration,
@@ -214,7 +214,7 @@ impl Aggregate for Credential {
                                 "Failed to enter the type into the credential".to_string(),
                             ))?;
 
-                        match build_unsigned_credential_data(
+                        match build_unsigned_w3c_credential_data(
                             type_,
                             &mut credential_data,
                             &credential_configuration,
@@ -690,7 +690,7 @@ fn build_signed_credential_data(
 /// - `credentialSubject.id`
 /// - `issuanceDate`/`validFrom`/`issued`
 /// - `expirationDate`/`validUntil`
-fn build_unsigned_credential_data(
+fn build_unsigned_w3c_credential_data(
     credential_types: &[String],
     credential_data: &mut serde_json::Value,
     credential_configuration: &CredentialConfigurationsSupportedObject,
