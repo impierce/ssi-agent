@@ -294,6 +294,44 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                             }],
                         }
                     ]
+                  },
+                  {
+                    "credential_configuration_id": "VCDM 2.0 SD-JWT",
+                    "format": "vc+sd-jwt",
+                    "type": ["VerifiableCredential"],
+                    "display": [
+                        {
+                            "name": "VCDM 2.0 SD-JWT Credential",
+                            "locale": "en",
+                            "logo": {
+                            "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                "alt_text": "Impierce Logo"
+                            }
+                        }
+                    ],
+                    "claims": [
+                        {
+                            "path": ["credentialSubject", "first_name"],
+                            "display": [{
+                                "name": "First Name",
+                                "locale": "en"
+                            }],
+                        },
+                        {
+                            "path": ["credentialSubject", "last_name"],
+                            "display": [{
+                                "name": "Last Name",
+                                "locale": "en"
+                            }],
+                        },
+                        {
+                            "path": ["credentialSubject", "dob"],
+                            "display": [{
+                                "name": "Date of Birth",
+                                "locale": "en"
+                            }],
+                        }
+                    ]
                   }
                 ]))
                 .expect("Failed to parse default development credential configurations")

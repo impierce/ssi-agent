@@ -4,6 +4,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::Aggregate;
 use identity_core::convert::ToJson;
 use jsonwebtoken::Algorithm;
+use oid4vci::credential_format_profiles::vc_jose_cose::vc_sd_jwt;
 use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json;
 use oid4vci::credential_format_profiles::{CredentialFormats, Parameters};
 use oid4vci::credential_issuer::credential_configurations_supported::AlgIdentifier;
@@ -192,6 +193,12 @@ impl Aggregate for ServerConfig {
                             parameters: (vct).into(),
                         })
                     }
+                    "vc+sd-jwt" => CredentialFormats::VcSdJwt(Parameters {
+                        parameters: (vc_sd_jwt::CredentialDefinition {
+                            type_: credential_configuration.type_,
+                        })
+                        .into(),
+                    }),
                     _ => {
                         return Err(UnsupportedCredentialFormatIdentifierError(format!(
                             "{:?}",

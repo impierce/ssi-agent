@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "d83ef4f5-b1c2-47b0-8bd8-765a5aaf29e2",
+    "_postman_id": "246c2e0c-a79a-4cb1-af6a-06476e3616db",
     "name": "ssi-agent",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "38461474",
@@ -153,6 +153,60 @@
             "body": {
               "mode": "raw",
               "raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"SD-JWT\",\n    \"credential\": {\n        \"first_name\": \"Ferris\",\n        \"last_name\": \"Crabman\",\n        \"dob\": \"1982-01-01\"\n    },\n    \"expiresAt\": \"never\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{HOST}}/v0/credentials",
+              "host": [
+                "{{HOST}}"
+              ],
+              "path": [
+                "v0",
+                "credentials"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create a VCDM 2.0 SD-JWT Credential",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const location = pm.response.headers.get(\"LOCATION\");",
+                  "",
+                  "if(location){",
+                  "    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
+                  "}",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"VCDM 2.0 SD-JWT\",\n    \"type\": [\n        \"VerifiableCredential\"\n    ],\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    },\n    \"expiresAt\": \"never\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
