@@ -11,6 +11,7 @@ use agent_shared::config::{
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use cqrs_es::Aggregate;
+use identity_core::common::Timestamp;
 use identity_core::convert::FromJson;
 use identity_credential::sd_jwt_vc::{self, SdJwtVcBuilder, SdJwtVcClaims, StatusListRef, StatusMechanism};
 use jsonwebtoken::Header;
@@ -32,9 +33,6 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tracing::{debug, info};
 use url::Url;
-
-// tmp
-use identity_credential::credential::CredentialV2 as W3CVerifiableCredentialV2;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum Status {
@@ -269,6 +267,7 @@ impl Aggregate for Credential {
                 }
 
                 // Create/collect claims needed for the signed (SD-)JWT
+                // These claims will be used to populate the last part of the credential data as well, as specs dictate there should be no conflict between the jwt claims and credential data.
                 #[cfg(feature = "test_utils")]
                 let iat = "2010-01-01T00:00:00Z".to_string();
                 #[cfg(not(feature = "test_utils"))]
@@ -276,7 +275,6 @@ impl Aggregate for Credential {
 
                 let created_at = iat.clone();
                 let iat = identity_core::common::Timestamp::parse(&iat).expect("Could not parse issuance_date");
-                // let iat = iat.to_unix();
 
                 // iss is set to the issuer DID
                 let default_did_method = get_preferred_did_method();
@@ -315,27 +313,35 @@ impl Aggregate for Credential {
                     subject_id.clone(),
                 )?;
 
-                // TODO:subject id should be here
+                info!(
+                    "Credential data to be signed (excluding JWT claims): {:?}",
+                    credential_data
+                );
 
+                // TODO: this should also be used in JwtVcJson right?
+                // If proof is provided then set the holder_kid needs to be extracted to set the `cnf` claim. TODO: shouldnt this be set in JwtVcJson as well?
+                let holder_kid = proof.and_then(|proof| {
+                    let Proof::Jwt { jwt: proof } = proof;
+                    jsonwebtoken::decode_header(&proof).ok().and_then(|header| header.kid)
+                });
+
+                // Set the jwt claims through the specific builder and build the JWT which will be signed at the bottom of each match arm
                 let signed_credential = match &self.credential_configuration.credential_format {
                     CredentialFormats::JwtVcJson(_) => {
-                        let exp = self.expires_at.map(|exp| exp.timestamp());
-
-                        info!("Credential: {:?}", credential_data);
-
-                        // Add standard claims
                         let mut vc_jwt_builder = VerifiableCredentialJwt::builder()
                             .iss(iss.to_string())
                             .iat(iat.to_unix())
                             .nbf(iat.to_unix()); // TODO: setting the `nbf` to `iat` makes the JWT immediately usable
+
+                        // TODO: not sure about the specs but since we now completely enfore alignment between jwt claims and credential data, wouldn't it be more straightforward to add all claims to all our jwt formats?
 
                         // TODO: shouldnt this be in all formats?
                         if let Some(subject_id) = subject_id {
                             vc_jwt_builder = vc_jwt_builder.sub(subject_id);
                         }
 
-                        let vc_jwt_builder = if let Some(exp) = exp {
-                            vc_jwt_builder.exp(exp)
+                        let vc_jwt_builder = if let Some(exp) = self.expires_at {
+                            vc_jwt_builder.exp(exp.timestamp())
                         } else {
                             vc_jwt_builder
                         };
@@ -354,6 +360,7 @@ impl Aggregate for Credential {
                         let mut vc_jwt_value = serde_json::to_value(&vc_jwt_built)
                             .map_err(|e| CredentialError::BuildCredentialError(e.to_string()))?;
 
+                        // Convert the value to a mutable object to insert the status claim which we cannot use from the VerifiableCredentialJwt builder.
                         let mut vc_jwt_object = vc_jwt_value
                             .as_object_mut()
                             .ok_or(CredentialError::BuildCredentialError(
@@ -363,6 +370,7 @@ impl Aggregate for Credential {
 
                         vc_jwt_object.insert("status".to_string(), json!(status_claim));
 
+                        // jwt::encode sets the header by itself.
                         json!(jwt::encode(
                             services.issuer.clone(),
                             Header::new(get_preferred_signing_algorithm()),
@@ -373,51 +381,43 @@ impl Aggregate for Credential {
                         .ok())
                     }
                     CredentialFormats::DcSdJwt(_) => {
+                        // Get the kid for the header of the DcSdJwt
                         let issuer = &services.issuer;
-
                         let algorithm = get_preferred_signing_algorithm();
-
-                        let alg = algorithm.as_str();
-
-                        let holder_kid = proof.and_then(|proof| {
-                            let Proof::Jwt { jwt: proof } = proof;
-                            jsonwebtoken::decode_header(&proof).ok().and_then(|header| header.kid)
-                        });
-
                         let kid = issuer
                             .key_id(&get_preferred_did_method().to_string(), algorithm)
                             .await
                             .ok_or(KeyIdError)?;
 
+                        let mut builder = SdJwtVcBuilder::new(&credential_data)
+                            .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?
+                            .header("typ", "dc+sd-jwt")
+                            .header("kid", kid);
+
+                        // Set the JWT claims
+                        builder = builder.iss(iss);
+                        builder = builder.iat(iat);
+                        builder = builder.nbf(iat);
+                        builder = builder.status(status_claim);
+
+                        if let Some(expiration_date) = self.expires_at {
+                            builder = builder.exp(
+                                Timestamp::parse(&expiration_date.to_rfc3339()).expect("Could not parse issuance_date"),
+                            );
+                        }
+
+                        // This sets the `cnf` claim
+                        if let Some(holder_kid) = holder_kid {
+                            builder = builder.require_key_binding(RequiredKeyBinding::Kid(holder_kid));
+                        }
+
+                        // By default set all custom claims to concealable.
+                        // TODO: I dont think this only gets the custom claims?
                         let sd_jwt_vc_claims = SdJwtVcClaims::from_json_value(credential_data.clone())
                             .map_err(|e| BuildCredentialError(format!("Failed to extract SD-JWT VC claims: {}", e)))?;
 
                         let paths = sd_jwt_vc_claims.keys().cloned().collect::<Vec<String>>();
 
-                        let mut builder = SdJwtVcBuilder::new(credential_data)
-                            .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?
-                            .header("typ", "dc+sd-jwt")
-                            .header("kid", kid);
-
-                        builder = builder.iss(iss);
-                        builder = builder.status(status_claim);
-
-                        if let Some(holder_kid) = holder_kid {
-                            builder = builder.require_key_binding(RequiredKeyBinding::Kid(holder_kid));
-                        }
-
-                        builder = builder.iat(iat);
-                        builder = builder.nbf(iat);
-
-                        if let Some(expiration_date) = self.expires_at {
-                            // tmp
-                            builder = builder.exp(
-                                identity_core::common::Timestamp::parse(&expiration_date.to_rfc3339())
-                                    .expect("Could not parse issuance_date"),
-                            );
-                        }
-
-                        // By default, all custom claims are concealable.
                         for path in paths {
                             builder = builder.make_concealable(&format!("/{}", path)).map_err(|e| {
                                 BuildCredentialError(format!(
@@ -428,67 +428,51 @@ impl Aggregate for Credential {
                         }
 
                         let sd_jwt_credential = builder
-                            .finish(&**issuer, alg)
+                            .finish(&**issuer, algorithm.as_str())
                             .await
                             .map_err(|e| BuildCredentialError(format!("Failed to build SD-JWT credential: {}", e)))?;
 
                         serde_json::json!(sd_jwt_credential.to_string())
                     }
                     CredentialFormats::VcSdJwt(_) => {
+                        // Get the kid for the header of the VcSdJwt
                         let issuer = &services.issuer;
-
                         let algorithm = get_preferred_signing_algorithm();
-
-                        let alg = algorithm.as_str();
-
-                        let holder_kid = proof.and_then(|proof| {
-                            let Proof::Jwt { jwt: proof } = proof;
-
-                            jsonwebtoken::decode_header(&proof).ok().and_then(|header| header.kid)
-                        });
-
                         let kid = issuer
                             .key_id(&get_preferred_did_method().to_string(), algorithm)
                             .await
                             .ok_or(KeyIdError)?;
 
-                        let mut w3c_verifiable_credential_v2: W3CVerifiableCredentialV2 =
-                            W3CVerifiableCredentialV2::from_json_value(credential_data).map_err(|e| {
-                                BuildCredentialError(format!(
-                                    "Failed to extract W3C Verifiable Credential V2 claims: {}",
-                                    e
-                                ))
-                            })?;
+                        // TODO: shouldn't claims be set here as well?
 
-                        w3c_verifiable_credential_v2.valid_from = iat;
-
-                        if let Some(expiration_date) = self.expires_at {
-                            w3c_verifiable_credential_v2.valid_until = Some(
-                                identity_core::common::Timestamp::parse(&expiration_date.to_rfc3339())
-                                    .expect("Could not parse issuance_date"),
-                            );
-                        }
-
-                        let paths = w3c_verifiable_credential_v2
-                            .credential_subject
-                            .first()
-                            .map(|subject| subject.properties.keys().cloned().collect::<Vec<String>>())
-                            .unwrap_or_default();
-
-                        // TODO: If necessary, convert `w3c_verifiable_credential_v2` to a serde_json::Value.
-
-                        let mut builder = SdJwtBuilder::new(w3c_verifiable_credential_v2)
+                        let mut builder = SdJwtBuilder::new(&credential_data)
                             .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?
                             .header("typ", "vc+sd-jwt")
                             .header("kid", kid)
                             .insert_claim("status", status_claim)
                             .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?;
 
+                        // This sets the `cnf` claim
                         if let Some(holder_kid) = holder_kid.clone() {
                             builder = builder.require_key_binding(RequiredKeyBinding::Kid(holder_kid));
                         }
 
-                        // By default, all custom claims are concealable.
+                        // TODO: see todo comment above, adding this line now to check if this fixes VerifiableCredentialRecord::try_new() error in identity-wallet
+                        builder = builder
+                            .insert_claim("iss", iss)
+                            .map_err(|_| BuildCredentialError("Failed to insert 'iss' claim".to_string()))?;
+
+                        // By default set all custom claims to concealable.
+                        // TODO: only CredentialSubject again, but perhaps only getting the Cred Subject claims is a good idea after all, I remember something about credentialStatus and RefreshService should never be concealable.
+                        let paths = credential_data
+                            .get("credentialSubject")
+                            .and_then(|c| c.as_object())
+                            .ok_or(BuildCredentialError(
+                                "Failed to convert credential data to JSON object".to_string(),
+                            ))?
+                            .keys()
+                            .cloned()
+                            .collect::<Vec<String>>();
                         for path in paths {
                             builder = builder
                                 .make_concealable(&format!("/credentialSubject/{}", path))
@@ -501,7 +485,7 @@ impl Aggregate for Credential {
                         }
 
                         let vc_sd_jwt_credential = builder
-                            .finish(&**issuer, alg)
+                            .finish(&**issuer, algorithm.as_str())
                             .await
                             .map_err(|e| BuildCredentialError(format!("Failed to build SD-JWT credential: {}", e)))?;
 
@@ -624,8 +608,7 @@ fn build_signed_credential_data(
             "Failed to enter the validFrom date into the credential".to_string(),
         ))?;
 
-    // TODO: seems double
-    credential_data["issuer"]["id"] = json!(iss);
+    credential_data.insert_at_path(&["issuer", "id"], json!(iss));
 
     if let Some(subject_id) = &subject_id {
         credential_data.insert_at_path(&["credentialSubject", "id"], json!(subject_id));
@@ -648,8 +631,18 @@ fn build_signed_credential_data(
                             "Failed to enter the issuanceDate into the credential".to_string(),
                         ))?;
                 }
+
+                // Validate credential data before signing
+                CredentialType::VerifiableCredential
+                    .validate(&credential_data)
+                    .map_err(|e| BuildCredentialError(e.to_string()))?;
             }
-            "AchievementCredential" | "OpenBadgeCredential" => {}
+            "AchievementCredential" | "OpenBadgeCredential" => {
+                // Validate credential before building
+                CredentialType::OpenBadgeCredential
+                    .validate(&credential_data)
+                    .map_err(|e| BuildCredentialError(e.to_string()))?;
+            }
             "EuropeanDigitalCredential" => {
                 // Due to ELM schema requiring a `validFrom` while still building on VC DM 1.1, we also still need `issuanceDate`.
                 credential_data
@@ -670,6 +663,11 @@ fn build_signed_credential_data(
                     .ok_or(BuildCredentialError(
                         "Failed to enter the issued date into the credential".to_string(),
                     ))?;
+
+                // Validate credential before building
+                CredentialType::EuropeanDigitalCredential
+                    .validate(&credential_data)
+                    .map_err(|e| BuildCredentialError(e.to_string()))?;
             }
             _ => continue,
         }
@@ -774,11 +772,6 @@ fn build_unsigned_credential_data(
                     }
                 }
 
-                // Validate credential before returning
-                CredentialType::VerifiableCredential
-                    .validate(credential_data)
-                    .map_err(|e| BuildCredentialError(e.to_string()))?;
-
                 return Ok(credential_data.clone());
             }
             "AchievementCredential" | "OpenBadgeCredential" => {
@@ -808,11 +801,6 @@ fn build_unsigned_credential_data(
                             "Failed to enter the name into the credential".to_string(),
                         ))?;
                 }
-
-                // Validate credential before building
-                CredentialType::OpenBadgeCredential
-                    .validate(credential_data)
-                    .map_err(|e| BuildCredentialError(e.to_string()))?;
 
                 return Ok(credential_data.clone());
             }
@@ -967,15 +955,6 @@ fn build_unsigned_credential_data(
                     .ok_or(BuildCredentialError(
                         "Failed to enter the credentialStatus.type into the credential".to_string(),
                     ))?;
-
-                // No credentialSubject is being manually added, meaning that this and the rest of the optional fields are expected to be present in the payload correctly.
-                // TODO: Only the credentialSubject.id will be added manually during the SignCredential operation?
-                // The above fields can be considered sensible defaults and can otherwise still be set within the payload.
-
-                // Validate credential before building
-                CredentialType::EuropeanDigitalCredential
-                    .validate(credential_data)
-                    .map_err(|e| BuildCredentialError(e.to_string()))?;
 
                 return Ok(credential_data.clone());
             }
