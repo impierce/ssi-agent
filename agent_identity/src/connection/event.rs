@@ -1,3 +1,4 @@
+use crate::connection::aggregate::DisplayProperties;
 use cqrs_es::DomainEvent;
 use identity_core::common::Url;
 use identity_did::DIDUrl;
@@ -8,7 +9,17 @@ use strum::Display;
 pub enum ConnectionEvent {
     ConnectionAdded {
         connection_id: String,
-        alias: Option<String>,
+        display: Option<DisplayProperties>,
+        domain: Option<Url>,
+        dids: Vec<DIDUrl>,
+        credential_offer_endpoint: Option<Url>,
+    },
+    ConnectionRemoved {
+        connection_id: String,
+    },
+    ConnectionUpdated {
+        connection_id: String,
+        display: Option<DisplayProperties>,
         domain: Option<Url>,
         dids: Vec<DIDUrl>,
         credential_offer_endpoint: Option<Url>,

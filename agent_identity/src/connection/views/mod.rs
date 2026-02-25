@@ -13,17 +13,31 @@ impl View<Connection> for Connection {
         match &event.payload {
             ConnectionAdded {
                 connection_id,
-                alias,
+                display,
                 domain,
                 dids,
                 credential_offer_endpoint,
             } => {
                 self.connection_id.clone_from(connection_id);
-                self.alias.clone_from(alias);
+                self.display.clone_from(display);
                 self.domain.clone_from(domain);
                 self.dids.clone_from(dids);
                 self.credential_offer_endpoint.clone_from(credential_offer_endpoint);
             }
+            ConnectionUpdated {
+                connection_id,
+                display,
+                domain,
+                dids,
+                credential_offer_endpoint,
+            } => {
+                self.connection_id.clone_from(connection_id);
+                self.display.clone_from(display);
+                self.domain.clone_from(domain);
+                self.dids.clone_from(dids);
+                self.credential_offer_endpoint.clone_from(credential_offer_endpoint);
+            }
+            ConnectionRemoved { connection_id: _ } => {}
         }
     }
 }

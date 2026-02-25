@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_core::common::{Timestamp, Url};
 use identity_did::DIDUrl;
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
 
@@ -14,11 +14,13 @@ use super::{command::ConnectionCommand, error::ConnectionError, event::Connectio
 pub struct Connection {
     #[serde(rename = "id")]
     pub connection_id: String,
-    pub alias: Option<String>,
+    // moved alias into the display
     #[schema(value_type = Option<String>)]
     pub domain: Option<Url>,
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
+    #[schema(value_type = Option<DisplayProperties>)]
+    pub display: Option<DisplayProperties>,
     // TODO: use appropriate value_type for timestamps (also enable crate feature `chrono` or `time`)
     #[schema(value_type = Option<String>)]
     pub first_interacted: Option<Timestamp>,
@@ -32,6 +34,24 @@ pub struct Connection {
     // pub issuer_options: Option<IssuerOptions>,
     // pub holder_options: Option<HolderOptions>,
     // pub verifier_options: Option<VerifierOptions>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
+pub struct DisplayProperties {
+    #[schema(value_type = Option<String>)]
+    pub alias: Option<String>,
+    #[schema(value_type = Option<String>)]
+    pub locale: Option<String>,
+    #[schema(value_type = Option<LogoProperties>)]
+    pub logo: Option<LogoProperties>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
+pub struct LogoProperties {
+    #[schema(value_type = Option<String>)]
+    pub url: Option<Url>,
+    #[schema(value_type = Option<String>)]
+    pub alt_text: Option<String>,
 }
 
 #[async_trait]
@@ -58,17 +78,28 @@ impl Aggregate for Connection {
         match command {
             AddConnection {
                 connection_id,
-                alias,
+                display,
                 domain,
                 dids,
                 credential_offer_endpoint,
             } => Ok(vec![ConnectionAdded {
                 connection_id,
-                alias,
+                display,
                 domain,
                 dids,
                 credential_offer_endpoint,
             }]),
+            SyncConnection { connection_id } => {
+                // todo: fetch and compare the current state of the connection with the actual state of the connection (e.g. by making a request to the domain or credential_offer_endpoint) and emit a ConnectionUpdated event if there are any differences
+                Ok(vec![ConnectionUpdated {
+                    connection_id,
+                    display: self.display.clone(),
+                    domain: self.domain.clone(),
+                    dids: self.dids.clone(),
+                    credential_offer_endpoint: self.credential_offer_endpoint.clone(),
+                }])
+            }
+            RemoveConnection { connection_id } => Ok(vec![ConnectionRemoved { connection_id }]),
         }
     }
 
@@ -80,17 +111,31 @@ impl Aggregate for Connection {
         match event {
             ConnectionAdded {
                 connection_id,
-                alias,
+                display,
                 domain,
                 dids,
                 credential_offer_endpoint,
             } => {
                 self.connection_id = connection_id;
-                self.alias = alias;
+                self.display = display;
                 self.domain = domain;
                 self.dids = dids;
                 self.credential_offer_endpoint = credential_offer_endpoint;
             }
+            ConnectionUpdated {
+                connection_id,
+                display,
+                domain,
+                dids,
+                credential_offer_endpoint,
+            } => {
+                self.connection_id = connection_id;
+                self.display = display;
+                self.domain = domain;
+                self.dids = dids;
+                self.credential_offer_endpoint = credential_offer_endpoint;
+            }
+            ConnectionRemoved { connection_id: _ } => {}
         }
     }
 }
@@ -108,7 +153,7 @@ pub mod document_tests {
     #[serial_test::serial]
     async fn test_add_connection(
         connection_id: String,
-        alias: String,
+        display: DisplayProperties,
         domain: Url,
         dids: Vec<DIDUrl>,
         credential_offer_endpoint: Url,
@@ -117,14 +162,14 @@ pub mod document_tests {
             .given_no_previous_events()
             .when(ConnectionCommand::AddConnection {
                 connection_id: connection_id.clone(),
-                alias: Some(alias.clone()),
+                display: Some(display.clone()),
                 domain: Some(domain.clone()),
                 dids: dids.clone(),
                 credential_offer_endpoint: Some(credential_offer_endpoint.clone()),
             })
             .then_expect_events(vec![ConnectionEvent::ConnectionAdded {
                 connection_id: connection_id.clone(),
-                alias: Some(alias),
+                display: Some(display.clone()),
                 domain: Some(domain.clone()),
                 dids: dids.clone(),
                 credential_offer_endpoint: Some(credential_offer_endpoint.clone()),
