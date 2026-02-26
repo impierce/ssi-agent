@@ -222,41 +222,39 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                     "credential_configuration_id": "001",
                     "format": "jwt_vc_json",
                     "type": ["VerifiableCredential"],
-                    "credential_metadata": {
-                        "display": [
-                            {
-                                "name": "Verifiable Credential",
-                                "locale": "en",
-                                "logo": {
-                                "uri": "https://www.impierce.com/external/impierce-logo.png",
-                                    "alt_text": "Impierce Logo"
-                                }
+                    "display": [
+                        {
+                            "name": "Verifiable Credential",
+                            "locale": "en",
+                            "logo": {
+                            "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                "alt_text": "Impierce Logo"
                             }
-                        ],
-                        "claims": [
-                            {
-                                "path": ["credentialSubject", "first_name"],
-                                "display": [{
-                                    "name": "First Name",
-                                    "locale": "en"
-                                }],
-                            },
-                            {
-                                "path": ["credentialSubject", "last_name"],
-                                "display": [{
-                                    "name": "Last Name",
-                                    "locale": "en"
-                                }],
-                            },
-                            {
-                                "path": ["credentialSubject", "dob"],
-                                "display": [{
-                                    "name": "Date of Birth",
-                                    "locale": "en"
-                                }],
-                            }
-                        ]
-                    }
+                        }
+                    ],
+                    "claims": [
+                        {
+                            "path": ["credentialSubject", "first_name"],
+                            "display": [{
+                                "name": "First Name",
+                                "locale": "en"
+                            }],
+                        },
+                        {
+                            "path": ["credentialSubject", "last_name"],
+                            "display": [{
+                                "name": "Last Name",
+                                "locale": "en"
+                            }],
+                        },
+                        {
+                            "path": ["credentialSubject", "dob"],
+                            "display": [{
+                                "name": "Date of Birth",
+                                "locale": "en"
+                            }],
+                        }
+                    ]
                   },
                   {
                     "credential_configuration_id": "SD-JWT",
