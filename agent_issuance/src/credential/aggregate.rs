@@ -307,7 +307,7 @@ impl Aggregate for Credential {
                     .and_then(|id| Url::parse(id).ok());
 
                 let credential_data = self.data.as_ref().ok_or(InvalidCredentialDataError)?.raw.clone();
-                let credential_data = build_signed_credential_data(
+                let credential_data = build_signed_w3c_credential_data(
                     credential_data,
                     &self.credential_configuration,
                     created_at,
@@ -581,7 +581,7 @@ impl Aggregate for Credential {
 
 // Helpers
 
-fn build_signed_credential_data(
+fn build_signed_w3c_credential_data(
     mut credential_data: serde_json::Value,
     credential_configuration: &CredentialConfigurationsSupportedObject,
     created_at: String,
@@ -752,7 +752,7 @@ fn build_unsigned_w3c_credential_data(
                         "Failed to enter the name into the credential".to_string(),
                     ))?;
 
-                // Our default is VC DM 2.0, but JwtVcJson is still based on VC DM 1.1, while VcSdJwt (vc+sd-jwt).
+                // Our default is VC DM 2.0, but JwtVcJson is still based on VC DM 1.1.
                 if matches!(
                     credential_configuration.credential_format,
                     CredentialFormats::JwtVcJson(_)
