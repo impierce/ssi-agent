@@ -307,18 +307,6 @@ impl Aggregate for Credential {
                     .and_then(|id| Url::parse(id).ok());
 
                 let credential_data = self.data.as_ref().ok_or(InvalidCredentialDataError)?.raw.clone();
-                let credential_data = build_signed_w3c_credential_data(
-                    credential_data,
-                    &self.credential_configuration,
-                    created_at,
-                    iss.to_string(),
-                    subject_id.clone(),
-                )?;
-
-                info!(
-                    "Credential data to be signed (excluding JWT claims): {:?}",
-                    credential_data
-                );
 
                 // TODO: can this holder binding also be used in JwtVcJson?
                 // If proof is provided then set the holder_kid needs to be extracted to set the `cnf` claim.
@@ -332,6 +320,14 @@ impl Aggregate for Credential {
                 // Set the jwt claims through the specific builder and build the JWT which will be signed at the bottom of each match arm
                 let signed_credential = match &self.credential_configuration.credential_format {
                     CredentialFormats::JwtVcJson(_) => {
+                        let credential_data = build_signed_w3c_credential_data(
+                            credential_data,
+                            &self.credential_configuration,
+                            created_at,
+                            iss.to_string(),
+                            subject_id.clone(),
+                        )?;
+
                         // TODO: Would it be more straightforward to add the JWT claims similarly to all our jwt formats?
 
                         let mut vc_jwt_builder = VerifiableCredentialJwt::builder()
@@ -437,6 +433,14 @@ impl Aggregate for Credential {
                         serde_json::json!(sd_jwt_credential.to_string())
                     }
                     CredentialFormats::VcSdJwt(_) => {
+                        let credential_data = build_signed_w3c_credential_data(
+                            credential_data,
+                            &self.credential_configuration,
+                            created_at,
+                            iss.to_string(),
+                            subject_id.clone(),
+                        )?;
+
                         // Get the kid for the header of the VcSdJwt
                         let issuer = &services.issuer;
                         let algorithm = get_preferred_signing_algorithm();
@@ -472,6 +476,7 @@ impl Aggregate for Credential {
                             .keys()
                             .cloned()
                             .collect::<Vec<String>>();
+
                         for path in paths {
                             builder = builder
                                 .make_concealable(&format!("/credentialSubject/{}", path))
