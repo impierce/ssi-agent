@@ -1,6 +1,6 @@
 // This folder is contains the lazy static ref Validators compiled from the JSON Schemas as to ensure easy compilation into the executable binary without the hassle of carrying over the JSON Schema files.
 // Furthermore, it contains the items and functions needed for JSON Schema validation of credentials.
-use jsonschema::{Retrieve, Uri, ValidationError, Validator};
+use jsonschema::{Retrieve, Uri, Validator};
 use lazy_static::lazy_static;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -209,13 +209,13 @@ impl CredentialType {
                 Ok(())
             }
             _ => {
-                let errors: Vec<ValidationError> = version.get_validator()?.iter_errors(data).collect();
+                let errors: Vec<_> = version
+                    .get_validator()?
+                    .iter_errors(data)
+                    .map(|e| format!("{e:?}"))
+                    .collect();
                 if !errors.is_empty() {
-                    println!("validation errors: {errors:#?}");
-                    Err(JsonSchemaError::CredentialValidationError(
-                        version.to_string(),
-                        format!("{errors:#?}"),
-                    ))
+                    Err(JsonSchemaError::CredentialValidationError(version.to_string(), errors))
                 } else {
                     info!("Credential type: {self:?} successfully validated against corresponding JSON Schema");
                     Ok(())
@@ -232,6 +232,8 @@ fn compile_validator(json_schema_key: &str) -> Result<Validator, JsonSchemaError
     })?;
 
     // Select correct draft version for JSON Schema Validator and construct schema with LocalRetriever
+    // There is a method enabling schema autodetection `jsonschema::validate_for()` but this method cannot be combined with `options()`.
+    // Therefore, we have to implement a schema matcher manually, this match case misses quite a few draft versions but these seem not to be in use anymore.
     let schema = match json_schema
         .get("$schema")
         .and_then(|value| value.to_clean_string())
@@ -303,8 +305,8 @@ pub enum JsonSchemaError {
     GetCredentialTypeError(String),
     #[error("Failed to parse JSON data: `{0}`")]
     InvalidJsonData(String),
-    #[error("Credential data validation, according to its type `{0}`, results in the following errors: `{1}`")]
-    CredentialValidationError(String, String),
+    #[error("Credential data validation, according to its type `{0}`, results in the following errors: `{1:#?}`")]
+    CredentialValidationError(String, Vec<String>),
 }
 
 #[cfg(test)]

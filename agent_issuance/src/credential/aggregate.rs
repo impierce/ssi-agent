@@ -3,7 +3,7 @@ use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError::{self, *};
 use crate::credential::event::CredentialEvent;
 use crate::services::IssuanceServices;
-use agent_library::json_schema::CredentialType;
+use agent_library::json_schema::{CredentialType, JsonSchemaError};
 use agent_shared::config::{
     config, get_preferred_did_method, get_preferred_signing_algorithm, AlgorithmExt, BITS_PER_STATUS,
     STATUS_LIST_BYTES_AMOUNT,
@@ -322,7 +322,6 @@ impl Aggregate for Credential {
                     CredentialFormats::JwtVcJson(_) => {
                         let credential_data = build_signed_w3c_credential_data(
                             credential_data,
-                            &self.credential_configuration,
                             created_at,
                             iss.to_string(),
                             subject_id.clone(),
@@ -435,7 +434,6 @@ impl Aggregate for Credential {
                     CredentialFormats::VcSdJwt(_) => {
                         let credential_data = build_signed_w3c_credential_data(
                             credential_data,
-                            &self.credential_configuration,
                             created_at,
                             iss.to_string(),
                             subject_id.clone(),
@@ -586,9 +584,12 @@ impl Aggregate for Credential {
 
 // Helpers
 
+/// This function sets the following values
+/// - issuer.id
+/// - credentialSubject.id
+/// - validFrom/issuanceDate/issued
 fn build_signed_w3c_credential_data(
     mut credential_data: serde_json::Value,
-    credential_configuration: &CredentialConfigurationsSupportedObject,
     created_at: String,
     iss: String,
     subject_id: Option<String>,
@@ -602,7 +603,12 @@ fn build_signed_w3c_credential_data(
         .map(|s| s.to_string())
         .collect::<Vec<String>>();
 
-    // Add validFrom as per VC DM 2.0
+    // Add both issuanceDate and validFrom for forward/backward (maximum) compatibility.
+    credential_data
+        .insert_if_none(&["issuanceDate"], json!(created_at))
+        .ok_or(BuildCredentialError(
+            "Failed to enter the issuanceDate date into the credential".to_string(),
+        ))?;
     // This means we default to setting the `validFrom` to the creation date of the credential as a sensible default.
     // However it is allowed to not enter any validity period and make an OBv3 credential valid eternally in to the past and/or future.
     // TODO: create a way through which this sensible default can be turned off.
@@ -624,18 +630,6 @@ fn build_signed_w3c_credential_data(
     for credential_type in credential_types.iter().rev() {
         match credential_type.as_str() {
             "VerifiableCredential" => {
-                // JwtVcJson is still based on VC DM 1.1, while VcSdJwt (vc+sd-jwt) is based on VC DM 2.0.
-                if matches!(
-                    credential_configuration.credential_format,
-                    CredentialFormats::JwtVcJson(_)
-                ) {
-                    credential_data
-                        .insert_if_none(&["issuanceDate"], json!(created_at))
-                        .ok_or(BuildCredentialError(
-                            "Failed to enter the issuanceDate into the credential".to_string(),
-                        ))?;
-                }
-
                 // Validate credential data before signing
                 CredentialType::VerifiableCredential
                     .validate(&credential_data)
@@ -648,18 +642,6 @@ fn build_signed_w3c_credential_data(
                     .map_err(|e| BuildCredentialError(e.to_string()))?;
             }
             "EuropeanDigitalCredential" => {
-                // Due to ELM schema requiring a `validFrom` while still building on VC DM 1.1, we also still need `issuanceDate`.
-                credential_data
-                    .insert_if_none(&["issuanceDate"], json!(created_at))
-                    .ok_or(BuildCredentialError(
-                        "Failed to enter the issuanceDate date into the credential".to_string(),
-                    ))?;
-                credential_data
-                    .insert_if_none(&["validFrom"], json!(created_at))
-                    .ok_or(BuildCredentialError(
-                        "Failed to enter the validFrom date into the credential".to_string(),
-                    ))?;
-
                 // The following link explains the difference between `issued`, `issuanceDate` and `validFrom`:
                 // https://europa.eu/europass/elm-browser/homepage/3-2-0/edc-generic-no-cv_en.html
                 credential_data
@@ -668,10 +650,8 @@ fn build_signed_w3c_credential_data(
                         "Failed to enter the issued date into the credential".to_string(),
                     ))?;
 
-                // TODO: Due to the complexity of the different allowed issuer types (Agent, Person, Organisation),
-                // We will keep it simple for now and only pass a placeholder eIDAS Legal Identifier.
+                // TODO: Due to the complexity of the different allowed issuer types (Agent, Person, Organisation) we keep it simple for now and pass the issuer as entered at the top of this fn.
                 // As long as organisations don't have their eIDAS Legal Identifier there can be made no official `issuer` nor ELM anyway.
-                credential_data.insert_if_none(&["issuer"], json!(iss));
 
                 // Validate credential before building
                 CredentialType::EuropeanDigitalCredential
@@ -689,11 +669,19 @@ fn build_signed_w3c_credential_data(
 /// The first block builds fields common for all our current supported credential types.
 /// The match case builds the fields specific to the credential type and validates the credential against its Json Schema before returning it.
 /// Every Error is returned as a BuildCredentialError and handled upstream.
-/// NOTE: Keep in mind that all data used during signing (SignCredential) for the JWT claims also overwites its Credential Data Model counterparts, this includes:
-/// - `issuer.id`
-/// - `credentialSubject.id`
-/// - `issuanceDate`/`validFrom`/`issued`
-/// - `expirationDate`/`validUntil`
+/// NOTE: Keep in mind that all data used during signing (SignCredential) for the JWT claims is also only then set for its Credential Data Model counterparts, this includes:
+/// - `issuer.id` (iss)
+/// - `credentialSubject.id` (sub)
+/// - `issuanceDate`/`validFrom`/`issued` (iat)
+///
+/// This function sets the following fields if applicable for the specific Credential Data Model:
+/// - `@context`, if not already set
+/// - `name`, if not already set
+/// - `id`, if not already set, and for OBv3/ELM set to urn based on the aggregate credential_id
+/// - `issuer.name`, reflecting the UniCore configuration
+/// - `credentialStatus`, if not already set, according to the IETF OAuth Token Status List specification in combination with the DIIP profile.
+/// - `expirationDate`, if expires_at is provided
+/// - All ELM required fields:
 fn build_unsigned_w3c_credential_data(
     credential_types: &[String],
     credential_data: &mut serde_json::Value,
@@ -736,7 +724,13 @@ fn build_unsigned_w3c_credential_data(
         }),
     );
 
+    // Set both the expirationDate and validUntil for forward/backward (maximum) compatibility.
     if let Some(expiration_date) = expires_at {
+        credential_data
+            .insert_at_path(&["validUntil"], json!(expiration_date))
+            .ok_or(BuildCredentialError(
+                "Failed to enter the validUntil date into the credential".to_string(),
+            ))?;
         credential_data
             .insert_at_path(&["expirationDate"], json!(expiration_date))
             .ok_or(BuildCredentialError(
@@ -751,12 +745,6 @@ fn build_unsigned_w3c_credential_data(
     for credential_type in credential_types.iter().rev() {
         match credential_type.as_str() {
             "VerifiableCredential" => {
-                credential_data
-                    .insert_if_none(&["name"], json!(credential_name))
-                    .ok_or(BuildCredentialError(
-                        "Failed to enter the name into the credential".to_string(),
-                    ))?;
-
                 // Our default is VC DM 2.0, but JwtVcJson is still based on VC DM 1.1.
                 if matches!(
                     credential_configuration.credential_format,
@@ -775,7 +763,18 @@ fn build_unsigned_w3c_credential_data(
                         ))?;
                 }
 
-                return Ok(credential_data.clone());
+                // Validate credential data before returning
+                let validation_result = CredentialType::VerifiableCredential.validate(credential_data);
+
+                match validation_result {
+                    Ok(_) => return Ok(credential_data.clone()),
+                    Err(mut errors) => {
+                        if filter_schema_errors(&mut errors) {
+                            return Ok(credential_data.clone());
+                        }
+                        return Err(BuildCredentialError(errors.to_string()));
+                    }
+                }
             }
             "AchievementCredential" | "OpenBadgeCredential" => {
                 credential_data
@@ -814,7 +813,18 @@ fn build_unsigned_w3c_credential_data(
                         ))?;
                 }
 
-                return Ok(credential_data.clone());
+                // Validate credential data before returning
+                let validation_result = CredentialType::OpenBadgeCredential.validate(credential_data);
+
+                match validation_result {
+                    Ok(_) => return Ok(credential_data.clone()),
+                    Err(mut errors) => {
+                        if filter_schema_errors(&mut errors) {
+                            return Ok(credential_data.clone());
+                        }
+                        return Err(BuildCredentialError(errors.to_string()));
+                    }
+                }
             }
             "EuropeanDigitalCredential" => {
                 // Currently the ELM schema still references VC DM 1.1.
@@ -831,14 +841,6 @@ fn build_unsigned_w3c_credential_data(
                     .ok_or(BuildCredentialError(
                         "Failed to enter the @context into the credential".to_string(),
                     ))?;
-
-                if let Some(expiration_date) = expires_at {
-                    credential_data
-                        .insert_at_path(&["expirationDate"], json!(expiration_date))
-                        .ok_or(BuildCredentialError(
-                            "Failed to enter the expirationDate date into the credential".to_string(),
-                        ))?;
-                }
 
                 // If no root id is provided, convert the aggregate credential_id to an urn as sensible default.
                 let root_id = uuid::Uuid::parse_str(credential_id)
@@ -979,7 +981,18 @@ fn build_unsigned_w3c_credential_data(
                         "Failed to enter the credentialStatus.type into the credential".to_string(),
                     ))?;
 
-                return Ok(credential_data.clone());
+                // Validate credential data before returning
+                let validation_result = CredentialType::EuropeanDigitalCredential.validate(credential_data);
+
+                match validation_result {
+                    Ok(_) => return Ok(credential_data.clone()),
+                    Err(mut errors) => {
+                        if filter_schema_errors(&mut errors) {
+                            return Ok(credential_data.clone());
+                        }
+                        return Err(BuildCredentialError(errors.to_string()));
+                    }
+                }
             }
             _ => continue,
         }
@@ -988,6 +1001,24 @@ fn build_unsigned_w3c_credential_data(
     Err(BuildCredentialError(
         "None of the provided credential types are supported".to_string(),
     ))
+}
+
+/// Helper to filter schema errors for fields which are set during signing (SignCredential),
+/// and therefore not present during the validation in the CreateUnsignedCredential step.
+fn filter_schema_errors(errors: &mut JsonSchemaError) -> bool {
+    if let JsonSchemaError::CredentialValidationError(_, ref mut errs) = errors {
+        errs.retain(|error| {
+            !(error.contains("issuer/id")
+                || error.contains("credentialSubject/id")
+                || error.contains("issuanceDate")
+                || error.contains("validFrom")
+                || error.contains("issued")
+                || (error.contains("issuer") && error.contains("id")))
+        });
+        errs.is_empty()
+    } else {
+        false
+    }
 }
 
 fn get_status_list_url(index: usize) -> Result<identity_core::common::Url, CredentialError> {
