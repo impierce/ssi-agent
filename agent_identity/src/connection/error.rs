@@ -8,4 +8,12 @@ pub enum ConnectionError {
     ConnectionNotFound(String),
     #[error("Failed to synchronize connection with ID '{0}'")]
     ConnectionSyncFailed(String),
+    #[error("Missing credential offer endpoint for connection")]
+    MissingCredentialOfferEndpoint,
+    #[error("Failed to fetch credential issuer metadata for '{0}'")]
+    CredentialIssuerMetadataFetchFailed(String),
+    #[error("Failed to resolve DID Web for '{0}'")]
+    DIDWebResolutionFailed(String),
+    #[error("Domain Missing for connection '{0}'")]
+    MissingDomain(String),
 }

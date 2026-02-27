@@ -311,6 +311,7 @@ dependencies = [
  "mime",
  "names",
  "oid4vc-core",
+ "oid4vci",
  "product_common",
  "rand 0.9.1",
  "reqwest 0.12.20",

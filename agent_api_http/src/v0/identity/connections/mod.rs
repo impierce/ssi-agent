@@ -2,7 +2,11 @@ use std::sync::Arc;
 
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
-use agent_identity::{connection::aggregate::Connection, connection::command::ConnectionCommand, state::IdentityState};
+use agent_identity::{
+    connection::aggregate::{Connection, DisplayProperties},
+    connection::command::ConnectionCommand,
+    state::IdentityState,
+};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
@@ -13,19 +17,19 @@ use hyper::{header, StatusCode};
 use identity_core::common::Url;
 use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+// use tracing::debug;
 
 pub mod openapi;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PostConnectionsEndpointRequest {
-    #[serde(default)]
-    pub alias: Option<String>,
+    // #[serde(default)]
+    // pub display: Option<DisplayProperties>,
     #[serde(default)]
     pub domain: Option<Url>,
-    #[serde(default)]
-    pub dids: Vec<DIDUrl>,
+    // #[serde(default)]
+    // pub dids: Vec<DIDUrl>,
     #[serde(default)]
     pub credential_offer_endpoint: Option<Url>,
 }
@@ -34,9 +38,9 @@ pub struct PostConnectionsEndpointRequest {
 pub(crate) async fn post_connections(
     State(state): State<Arc<IdentityState>>,
     Json(PostConnectionsEndpointRequest {
-        alias,
+        // display,
         domain,
-        dids,
+        //dids,
         credential_offer_endpoint,
     }): Json<PostConnectionsEndpointRequest>,
 ) -> Result<Response, ApiError> {
@@ -44,9 +48,9 @@ pub(crate) async fn post_connections(
 
     let command = ConnectionCommand::AddConnection {
         connection_id: connection_id.clone(),
-        alias,
+        //display,
         domain,
-        dids,
+        //dids,
         credential_offer_endpoint,
     };
 
@@ -71,7 +75,7 @@ pub(crate) async fn post_connections(
 #[serde(rename_all = "camelCase")]
 pub struct GetConnectionsEndpointRequest {
     #[serde(default)]
-    pub alias: Option<String>,
+    pub display: Option<DisplayProperties>,
     #[serde(default)]
     #[schema(value_type = Option<String>)]
     pub domain: Option<Url>,
@@ -95,9 +99,9 @@ pub struct GetConnectionsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connections(
     State(state): State<Arc<IdentityState>>,
-    Form(GetConnectionsEndpointRequest { alias, domain, did }): Form<GetConnectionsEndpointRequest>,
+    Form(GetConnectionsEndpointRequest { display, domain, did }): Form<GetConnectionsEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    debug!("Request Params - alias: {alias:?}, domain: {domain:?}, did: {did:?}");
+    // debug!("Request Params - display: {display:?}, domain: {domain:?}, did: {did:?}");
 
     let filtered_connections = query_handler("all_connections", &state.query.all_connections)
         .await?
@@ -106,9 +110,9 @@ pub(crate) async fn get_connections(
                 .connections
                 .into_values()
                 .filter(|connection| {
-                    alias
+                    display
                         .as_ref()
-                        .map_or(true, |alias| connection.alias.as_ref() == Some(alias))
+                        .map_or(true, |display| connection.display.as_ref() == Some(display))
                         && domain
                             .as_ref()
                             .map_or(true, |domain| connection.domain.as_ref() == Some(domain))

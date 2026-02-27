@@ -1,6 +1,6 @@
-use crate::connection::aggregate::DisplayProperties;
+// use crate::connection::aggregate::DisplayProperties;
 use identity_core::common::Url;
-use identity_did::DIDUrl;
+// use identity_did::DIDUrl;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -8,9 +8,9 @@ use serde::Deserialize;
 pub enum ConnectionCommand {
     AddConnection {
         connection_id: String,
-        display: Option<DisplayProperties>,
+        // display: Option<DisplayProperties>,
         domain: Option<Url>,
-        dids: Vec<DIDUrl>,
+        // dids: Vec<DIDUrl>,
         credential_offer_endpoint: Option<Url>,
     },
     SyncConnection {
