@@ -790,9 +790,11 @@ fn build_unsigned_w3c_credential_data(
                         "Failed to enter the @context into the credential".to_string(),
                     ))?;
 
-                // If no root id is provided, set the aggregate credential_id as sensible default.
+                // If no root id is provided, convert the aggregate credential_id to an urn as sensible default.
+                let root_id = uuid::Uuid::parse_str(credential_id)
+                    .map_err(|e| BuildCredentialError(format!("Failed to parse credential_id as UUID: {}", e)))?;
                 credential_data
-                    .insert_if_none(&["id"], json!(credential_id))
+                    .insert_if_none(&["id"], json!(root_id.urn()))
                     .ok_or(BuildCredentialError(
                         "Failed to enter the id into the credential".to_string(),
                     ))?;
@@ -819,7 +821,13 @@ fn build_unsigned_w3c_credential_data(
                 // It seems like they will be moving to VC DM 2.0. but for now we need to be compatible with both.
                 // TODO: remove once the ELM schema has been updated to VC DM 2.0.
                 credential_data
-                    .insert_if_none(&["@context"], json!(["https://www.w3.org/2018/credentials/v1"]))
+                    .insert_if_none(
+                        &["@context"],
+                        json!([
+                            "https://www.w3.org/2018/credentials/v1",
+                            "https://www.w3.org/ns/credentials/v2"
+                        ]),
+                    )
                     .ok_or(BuildCredentialError(
                         "Failed to enter the @context into the credential".to_string(),
                     ))?;
@@ -831,6 +839,15 @@ fn build_unsigned_w3c_credential_data(
                             "Failed to enter the expirationDate date into the credential".to_string(),
                         ))?;
                 }
+
+                // If no root id is provided, convert the aggregate credential_id to an urn as sensible default.
+                let root_id = uuid::Uuid::parse_str(credential_id)
+                    .map_err(|e| BuildCredentialError(format!("Failed to parse credential_id as UUID: {}", e)))?;
+                credential_data
+                    .insert_if_none(&["id"], json!(root_id.urn()))
+                    .ok_or(BuildCredentialError(
+                        "Failed to enter the id into the credential".to_string(),
+                    ))?;
 
                 // No fields in credentialProfiles are actually required by the ELM schema
                 // For now entering this dummy default as it is the same in every example under this link:
