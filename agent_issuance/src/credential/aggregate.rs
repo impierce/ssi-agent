@@ -697,6 +697,11 @@ fn build_unsigned_w3c_credential_data(
         .and_then(|display| display.first())
         .map(|d| d.name.clone());
 
+    // This defaults the name to the credential configuration name if no name is provided.
+    if let Some(credential_name) = &credential_name {
+        credential_data.insert_if_none(&["name"], json!(credential_name));
+    }
+
     // Add issuer name reflecting the UniCore configuration
     let issuer_name = config()
         .display
@@ -803,15 +808,13 @@ fn build_unsigned_w3c_credential_data(
                     .ok_or(BuildCredentialError(
                         "Failed to enter the issuer.type into the credential".to_string(),
                     ))?;
-                if let Some(credential_name) = credential_name {
-                    credential_data.insert_if_none(&["name"], json!(credential_name));
-                } else {
-                    credential_data
-                        .insert_if_none(&["name"], json!("OpenBadge Credential"))
-                        .ok_or(BuildCredentialError(
-                            "Failed to enter the name into the credential".to_string(),
-                        ))?;
-                }
+
+                // Set the name to "OpenBadge Credential" if no name is provided, as it is required by the OBv3 schema.
+                credential_data
+                    .insert_if_none(&["name"], json!("OpenBadge Credential"))
+                    .ok_or(BuildCredentialError(
+                        "Failed to enter the name into the credential".to_string(),
+                    ))?;
 
                 // Validate credential data before returning
                 let validation_result = CredentialType::OpenBadgeCredential.validate(credential_data);
