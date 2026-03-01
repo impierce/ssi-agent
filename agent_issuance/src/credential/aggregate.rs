@@ -836,8 +836,8 @@ fn build_unsigned_w3c_credential_data(
                 }
             }
             "EuropeanDigitalCredential" => {
-                // Currently the ELM schema still references VC DM 1.1.
-                // It seems like they will be moving to VC DM 2.0. but for now we need to be compatible with both.
+                // Currently the ELM schema still references VC DM 1.1, although it seems likely they will be moving to VC DM 2.0.
+                // For now we need to add both contexts (which is a conflict) to be able to issue the ELM as a valid SD-JWT.
                 // TODO: remove once the ELM schema has been updated to VC DM 2.0.
                 credential_data
                     .insert_if_none(
@@ -1120,25 +1120,41 @@ pub mod credential_tests {
     type CredentialTestFramework = TestFramework<Credential>;
 
     #[rstest]
-    #[case::openbadges(
+    #[case::jwt_vc_json_vc1_1(
+        BASIC_CREDENTIAL_SUBJECT.clone(),
+        JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone(),
+        UNSIGNED_VC1_1_CREDENTIAL.clone()
+    )]
+    #[case::jwt_vc_json_obv3(
         OPENBADGE_CREDENTIAL_SUBJECT.clone(),
-        OPENBADGE_CREDENTIAL_CONFIGURATION.clone(),
+        JWT_VC_JSON_OBv3_CREDENTIAL_CONFIGURATION.clone(),
         UNSIGNED_OPENBADGE_CREDENTIAL.clone()
     )]
-    #[case::w3c_vc(
-        W3C_VC_CREDENTIAL_SUBJECT.clone(),
-        W3C_VC_CREDENTIAL_CONFIGURATION.clone(),
-        UNSIGNED_W3C_VC_CREDENTIAL.clone()
+    #[case::jwt_vc_json_elm(
+        BASIC_CREDENTIAL_SUBJECT.clone(),
+        JWT_VC_JSON_ELM_CREDENTIAL_CONFIGURATION.clone(),
+        UNSIGNED_ELM_CREDENTIAL.clone()
     )]
     #[case::dc_sd_jwt(
-        DC_SD_JWT_CREDENTIAL_SUBJECT.clone(),
+        // DC SD-JWT is a flat structure, so no nested properties. Therefore we flatten the credentialSubject here by retrieving its nested keys only.
+        BASIC_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
         DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
         UNSIGNED_DC_SD_JWT_CREDENTIAL.clone()
     )]
-    #[case::vc_sd_jwt(
-        VC_SD_JWT_CREDENTIAL_SUBJECT.clone(),
-        VC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
-        UNSIGNED_VC_SD_JWT_CREDENTIAL.clone()
+    #[case::vc2_sd_jwt(
+        BASIC_CREDENTIAL_SUBJECT.clone(),
+        VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+        UNSIGNED_VC2_SD_JWT_CREDENTIAL.clone()
+    )]
+    #[case::obv3_sd_jwt(
+        OPENBADGE_CREDENTIAL_SUBJECT.clone(),
+        OBv3_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+        UNSIGNED_OPENBADGE_CREDENTIAL.clone()
+    )]
+    #[case::elm_sd_jwt(
+        BASIC_CREDENTIAL_SUBJECT.clone(),
+        ELM_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+        UNSIGNED_ELM_CREDENTIAL.clone()
     )]
     #[serial_test::serial]
     async fn test_create_unsigned_credential(
@@ -1176,16 +1192,43 @@ pub mod credential_tests {
             }])
     }
 
+    // TODO: enable sd-jwt testing, since the salts change everytime we need to come up with an alternative to `assert_eq!`
+    //
+    // #[case::dc_sd_jwt(
+    //     UNSIGNED_DC_SD_JWT_CREDENTIAL.clone(),
+    //     DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+    //     DC_SD_JWT.to_string()
+    // )]
+    // #[case::vc2_sd_jwt(
+    //     UNSIGNED_VC2_SD_JWT_CREDENTIAL.clone(),
+    //     VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+    //     VC2_SD_JWT.to_string()
+    // )]
+    // #[case::obv3_sd_jwt(
+    //     UNSIGNED_OPENBADGE_CREDENTIAL.clone(),
+    //     OBv3_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+    //     OBV3_SD_JWT.to_string()
+    // )]
+    // #[case::elm_sd_jwt(
+    //     UNSIGNED_ELM_CREDENTIAL.clone(),
+    //     ELM_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+    //     ELM_SD_JWT.to_string()
+    // )]
     #[rstest]
-    #[case::openbadges(
-        UNSIGNED_OPENBADGE_CREDENTIAL.clone(),
-        OPENBADGE_CREDENTIAL_CONFIGURATION.clone(),
-        OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string(),
+    #[case::jwt_vc_json_vc1_1(
+        UNSIGNED_VC1_1_CREDENTIAL.clone(),
+        JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone(),
+        JWT_VC_JSON_VC1_1_JWT.to_string(),
     )]
-    #[case::w3c_vc(
-        UNSIGNED_W3C_VC_CREDENTIAL.clone(),
-        W3C_VC_CREDENTIAL_CONFIGURATION.clone(),
-        W3C_VC_VERIFIABLE_CREDENTIAL_JWT.to_string(),
+    #[case::jwt_vc_json_obv3(
+        UNSIGNED_OPENBADGE_CREDENTIAL.clone(),
+        JWT_VC_JSON_OBv3_CREDENTIAL_CONFIGURATION.clone(),
+        JWT_VC_JSON_OBV3_JWT.to_string(),
+    )]
+    #[case::jwt_vc_json_elm(
+        UNSIGNED_ELM_CREDENTIAL.clone(),
+        JWT_VC_JSON_ELM_CREDENTIAL_CONFIGURATION.clone(),
+        JWT_VC_JSON_ELM_JWT.to_string()
     )]
     #[serial_test::serial]
     async fn test_sign_credential(
@@ -1266,17 +1309,25 @@ pub mod test_utils {
         "2010-01-01T00:00:00Z".parse().unwrap()
     }
 
-    pub const OPENBADGE_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy9ucy9jcmVkZW50aWFscy92MiIsImh0dHBzOi8vcHVybC5pbXNnbG9iYWwub3JnL3NwZWMvb2IvdjNwMC9jb250ZXh0LTMuMC4zLmpzb24iXSwiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2NyZWRlbnRpYWxzLzM1MjciLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiT3BlbkJhZGdlQ3JlZGVudGlhbCJdLCJpc3N1ZXIiOnsidHlwZSI6IlByb2ZpbGUiLCJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwibmFtZSI6IlRlYW13b3JrIEJhZGdlIiwiY3JlZGVudGlhbFN1YmplY3QiOnsidHlwZSI6WyJBY2hpZXZlbWVudFN1YmplY3QiXSwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEiOnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY29nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNvZ25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbnQuIiwibmFtZSI6IlRlYW13b3JrIn0sImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwiY3JlZGVudGlhbFN0YXR1cyI6eyJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInR5cGUiOiJzdGF0dXNsaXN0K2p3dCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MH0sImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwidmFsaWRGcm9tIjoiMjAxMC0wMS0wMVQwMDowMDowMFoifSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7InVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MH19fQ.AV5cRNhirqVS2HhyyJ5DXtMwgJk3mAM65P4Dd6ZD_3O0gQ1xsFFLjEwREwpAdF58PKFvsY71GJBDp1PNR8zjCw";
-
-    pub const W3C_VC_VERIFIABLE_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsiZmlyc3RfbmFtZSI6IkZlcnJpcyIsImxhc3RfbmFtZSI6IlJ1c3RhY2VhbiIsImRlZ3JlZSI6eyJ0eXBlIjoiTWFzdGVyRGVncmVlIiwibmFtZSI6Ik1hc3RlciBvZiBPY2Vhbm9ncmFwaHkifSwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJpc3N1ZXIiOnsibmFtZSI6IlVuaUNvcmUiLCJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0In0sImNyZWRlbnRpYWxTdGF0dXMiOnsiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ0eXBlIjoic3RhdHVzbGlzdCtqd3QiLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjB9LCJuYW1lIjoiVmVyaWZpYWJsZSBDcmVkZW50aWFsIiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiJ9LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjowfX19.gchU3zkTapDlGQNIbqJ8XkheG2c7DbIt4Mbp6zGKO8Fa83E425Xey0y-2VrKWtz-nDPKBXmuX21c3Dvn_IfwBA";
-
+    // Test ID must still be parsable to a valid urn UUID.
     #[fixture]
     pub fn credential_id() -> String {
         "123e4567-e89b-12d3-a456-426614174000".to_string()
     }
 
+    pub const JWT_VC_JSON_VC1_1_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsiZmlyc3RfbmFtZSI6IkZlcnJpcyIsImxhc3RfbmFtZSI6IlJ1c3RhY2VhbiIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwiaXNzdWVyIjp7Im5hbWUiOiJVbmlDb3JlIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJjcmVkZW50aWFsU3RhdHVzIjp7ImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidHlwZSI6InN0YXR1c2xpc3Qrand0IiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjowfSwibmFtZSI6IlZlcmlmaWFibGUgQ3JlZGVudGlhbCIsImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwidmFsaWRGcm9tIjoiMjAxMC0wMS0wMVQwMDowMDowMFoifSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7InVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MH19fQ.oU6B6WvRG3xBLo-pXLKe-ITyFgSzDsaRxjUsXmoRcuF_UDM9ist8ed2uJqmE7D-spkyB6fVx1HWojf3GifXNCA";
+    pub const JWT_VC_JSON_OBV3_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy9ucy9jcmVkZW50aWFscy92MiIsImh0dHBzOi8vcHVybC5pbXNnbG9iYWwub3JnL3NwZWMvb2IvdjNwMC9jb250ZXh0LTMuMC4zLmpzb24iXSwiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2NyZWRlbnRpYWxzLzM1MjciLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiT3BlbkJhZGdlQ3JlZGVudGlhbCJdLCJpc3N1ZXIiOnsidHlwZSI6IlByb2ZpbGUiLCJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwibmFtZSI6IlRlYW13b3JrIEJhZGdlIiwiY3JlZGVudGlhbFN1YmplY3QiOnsidHlwZSI6WyJBY2hpZXZlbWVudFN1YmplY3QiXSwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEiOnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY29nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNvZ25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbnQuIiwibmFtZSI6IlRlYW13b3JrIn0sImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwiY3JlZGVudGlhbFN0YXR1cyI6eyJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInR5cGUiOiJzdGF0dXNsaXN0K2p3dCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MH0sImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwidmFsaWRGcm9tIjoiMjAxMC0wMS0wMVQwMDowMDowMFoifSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7InVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MH19fQ.AV5cRNhirqVS2HhyyJ5DXtMwgJk3mAM65P4Dd6ZD_3O0gQ1xsFFLjEwREwpAdF58PKFvsY71GJBDp1PNR8zjCw";
+    pub const JWT_VC_JSON_ELM_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly93d3cudzMub3JnL25zL2NyZWRlbnRpYWxzL3YyIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJFdXJvcGVhbkRpZ2l0YWxDcmVkZW50aWFsIl0sImlkIjoidXJuOnV1aWQ6MTIzZTQ1NjctZTg5Yi0xMmQzLWE0NTYtNDI2NjE0MTc0MDAwIiwiY3JlZGVudGlhbFN1YmplY3QiOnsiZmlyc3RfbmFtZSI6IkZlcnJpcyIsImxhc3RfbmFtZSI6IlJ1c3RhY2VhbiIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwiaXNzdWVyIjp7Im5hbWUiOiJVbmlDb3JlIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJjcmVkZW50aWFsU3RhdHVzIjp7InR5cGUiOiJDcmVkZW50aWFsU3RhdHVzIiwiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjB9LCJuYW1lIjoiRXVyb3BlYW4gRGlnaXRhbCBDcmVkZW50aWFsIiwiY3JlZGVudGlhbFByb2ZpbGVzIjp7ImlkIjoiaHR0cDovL2RhdGEuZXVyb3BhLmV1L3NuYi9jcmVkZW50aWFsL2JkYzQ3Y2I0NDkiLCJ0eXBlIjoiQ29uY2VwdCIsImluU2NoZW1lIjp7ImlkIjoiaHR0cDovL2RhdGEuZXVyb3BhLmV1L3NuYi9jcmVkZW50aWFsLzI1ODMxYzIiLCJ0eXBlIjoiQ29uY2VwdFNjaGVtZSJ9fSwiZGlzcGxheVBhcmFtZXRlciI6eyJpZCI6InVybjplcGFzczpkaXNwbGF5UGFyYW1ldGVyOjEiLCJ0eXBlIjoiRGlzcGxheVBhcmFtZXRlciIsInRpdGxlIjp7ImVuIjoiRXVyb3BlYW4gRGlnaXRhbCBDcmVkZW50aWFsIn0sInByaW1hcnlMYW5ndWFnZSI6eyJpZCI6Imh0dHA6Ly9wdWJsaWNhdGlvbnMuZXVyb3BhLmV1L3Jlc291cmNlL2F1dGhvcml0eS9sYW5ndWFnZS9FTkciLCJ0eXBlIjoiQ29uY2VwdCIsImluU2NoZW1lIjp7ImlkIjoiaHR0cDovL3B1YmxpY2F0aW9ucy5ldXJvcGEuZXUvcmVzb3VyY2UvYXV0aG9yaXR5L2xhbmd1YWdlIiwidHlwZSI6IkNvbmNlcHRTY2hlbWUifSwibm90YXRpb24iOiJsYW5ndWFnZSIsInByZWZMYWJlbCI6eyJlbiI6IkVuZ2xpc2gifX0sImxhbmd1YWdlIjp7ImlkIjoiaHR0cDovL3B1YmxpY2F0aW9ucy5ldXJvcGEuZXUvcmVzb3VyY2UvYXV0aG9yaXR5L2xhbmd1YWdlL0VORyIsInR5cGUiOiJDb25jZXB0IiwiaW5TY2hlbWUiOnsiaWQiOiJodHRwOi8vcHVibGljYXRpb25zLmV1cm9wYS5ldS9yZXNvdXJjZS9hdXRob3JpdHkvbGFuZ3VhZ2UiLCJ0eXBlIjoiQ29uY2VwdFNjaGVtZSJ9LCJub3RhdGlvbiI6Imxhbmd1YWdlIiwicHJlZkxhYmVsIjp7ImVuIjoiRW5nbGlzaCJ9fSwiaW5kaXZpZHVhbERpc3BsYXkiOnsiaWQiOiJ1cm46ZXBhc3M6aW5kaXZpZHVhbERpc3BsYXk6MSIsInR5cGUiOiJJbmRpdmlkdWFsRGlzcGxheSIsImxhbmd1YWdlIjp7ImlkIjoiaHR0cDovL3B1YmxpY2F0aW9ucy5ldXJvcGEuZXUvcmVzb3VyY2UvYXV0aG9yaXR5L2xhbmd1YWdlL0VORyIsInR5cGUiOiJDb25jZXB0IiwiaW5TY2hlbWUiOnsiaWQiOiJodHRwOi8vcHVibGljYXRpb25zLmV1cm9wYS5ldS9yZXNvdXJjZS9hdXRob3JpdHkvbGFuZ3VhZ2UiLCJ0eXBlIjoiQ29uY2VwdFNjaGVtZSJ9LCJub3RhdGlvbiI6Imxhbmd1YWdlIiwicHJlZkxhYmVsIjp7ImVuIjoiRW5nbGlzaCJ9fSwiZGlzcGxheURldGFpbCI6eyJpZCI6InVybjplcGFzczpkaXNwbGF5RGV0YWlsOjEiLCJ0eXBlIjoiRGlzcGxheURldGFpbCIsInBhZ2UiOjEsImltYWdlIjp7ImlkIjoidXJuOmVwYXNzOm1lZGlhT2JqZWN0OjEiLCJ0eXBlIjoiTWVkaWFPYmplY3QiLCJjb250ZW50IjoiW1BMQUNFSE9MREVSXSIsImNvbnRlbnRFbmNvZGluZyI6eyJpZCI6Imh0dHA6Ly9kYXRhLmV1cm9wYS5ldS9zbmIvZW5jb2RpbmcvNjE0NmNkZTdkZCIsInR5cGUiOiJDb25jZXB0IiwiaW5TY2hlbWUiOnsiaWQiOiJodHRwOi8vZGF0YS5ldXJvcGEuZXUvc25iL2VuY29kaW5nLzI1ODMxYzIiLCJ0eXBlIjoiQ29uY2VwdFNjaGVtZSJ9LCJwcmVmTGFiZWwiOnsiZW4iOiJiYXNlNjQifX0sImNvbnRlbnRUeXBlIjp7ImlkIjoiaHR0cDovL3B1YmxpY2F0aW9ucy5ldXJvcGEuZXUvcmVzb3VyY2UvYXV0aG9yaXR5L2ZpbGUtdHlwZS9KUEVHIiwidHlwZSI6IkNvbmNlcHQiLCJpblNjaGVtZSI6eyJpZCI6Imh0dHA6Ly9wdWJsaWNhdGlvbnMuZXVyb3BhLmV1L3Jlc291cmNlL2F1dGhvcml0eS9maWxlLXR5cGUiLCJ0eXBlIjoiQ29uY2VwdFNjaGVtZSJ9LCJub3RhdGlvbiI6ImZpbGUtdHlwZSIsInByZWZMYWJlbCI6eyJlbiI6IkpQRUcifX19fX19LCJjcmVkZW50aWFsU2NoZW1hIjp7ImlkIjoiaHR0cHM6Ly9ldWRpdy5vcmcvY3JlZGVudGlhbHMvc2NoZW1hcy9FdXJvcGVhbkRpZ2l0YWxDcmVkZW50aWFsVjNfMy5qc29uIiwidHlwZSI6Ikpzb25TY2hlbWEifSwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImlzc3VlZCI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIn0sInN0YXR1cyI6eyJzdGF0dXNfbGlzdCI6eyJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjB9fX0.rGm0vnynGn0ufEOS9QI9fpU93epA6iR0-ozd3GlauqppuwKddY8bARVLjnuoi_kWKIEDRdAVo1yajsF150oEBg";
+
+    // TODO: enable sd-jwt testing, since the salts change everytime we need to come up with an alternative to `assert_eq!`
+    //
+    // pub const DC_SD_JWT: &str = "placeholder";
+    // pub const VC2_SD_JWT: &str = "placeholder";
+    // pub const OBV3_SD_JWT: &str = "placeholder";
+    // pub const ELM_SD_JWT: &str = "placeholder";
+
     lazy_static! {
-        pub static ref OPENBADGE_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
+        pub static ref JWT_VC_JSON_OBv3_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
             CredentialConfigurationsSupportedObject {
                 credential_format: CredentialFormats::JwtVcJson(Parameters {
                     parameters: (CredentialDefinition {
@@ -1309,7 +1360,46 @@ pub mod test_utils {
                 }),
                 ..Default::default()
             };
-        pub static ref W3C_VC_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
+        pub static ref JWT_VC_JSON_ELM_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
+            CredentialConfigurationsSupportedObject {
+                credential_format: CredentialFormats::JwtVcJson(Parameters {
+                    parameters: (CredentialDefinition {
+                        type_: vec!["VerifiableCredential".to_string(), "EuropeanDigitalCredential".to_string()],
+                    })
+                    .into()
+                }),
+                cryptographic_binding_methods_supported: vec!["did:jwk".to_string(), "did:key".to_string(),],
+                credential_signing_alg_values_supported: vec![
+                    AlgIdentifier::String("ES256".to_string()),
+                    AlgIdentifier::String("EdDSA".to_string())
+                ],
+                proof_types_supported: HashMap::from_iter(vec![(
+                    ProofType::Jwt,
+                    KeyProofMetadata {
+                        proof_signing_alg_values_supported: vec![
+                            AlgIdentifier::String("ES256".to_string()),
+                            AlgIdentifier::String("EdDSA".to_string())
+                        ],
+                    },
+                )]),
+                credential_metadata: Some(CredentialMetadata {
+                    display: Some(vec![CredentialConfigurationsSupportedDisplay {
+                        name: "European Digital Credential".to_string(),
+                        locale: Some("en".to_string()),
+                        logo: Some(Logo {
+                            uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
+                            alt_text: Some("Impierce Logo".to_string()),
+                        }),
+                        description: None,
+                        background_image: None,
+                        background_color: None,
+                        text_color: None,
+                    }]),
+                    claims: None,
+                }),
+                ..Default::default()
+            };
+        pub static ref JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
             CredentialConfigurationsSupportedObject {
                 credential_format: CredentialFormats::JwtVcJson(Parameters {
                     parameters: (CredentialDefinition {
@@ -1384,7 +1474,7 @@ pub mod test_utils {
                 }),
                 ..Default::default()
             };
-        pub static ref VC_SD_JWT_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
+        pub static ref VC2_SD_JWT_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
             CredentialConfigurationsSupportedObject {
                 credential_format: CredentialFormats::VcSdJwt(Parameters {
                     parameters: (vc_sd_jwt::CredentialDefinition {
@@ -1423,6 +1513,94 @@ pub mod test_utils {
                 }),
                 ..Default::default()
             };
+        pub static ref ELM_SD_JWT_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
+            CredentialConfigurationsSupportedObject {
+                credential_format: CredentialFormats::VcSdJwt(Parameters {
+                    parameters: (vc_sd_jwt::CredentialDefinition {
+                        type_: vec!["VerifiableCredential".to_string(), "EuropeanDigitalCredential".to_string()],
+                    })
+                    .into()
+                }),
+                cryptographic_binding_methods_supported: vec!["did:jwk".to_string(), "did:key".to_string(),],
+                credential_signing_alg_values_supported: vec![
+                    AlgIdentifier::String("ES256".to_string()),
+                    AlgIdentifier::String("EdDSA".to_string())
+                ],
+                proof_types_supported: HashMap::from_iter(vec![(
+                    ProofType::Jwt,
+                    KeyProofMetadata {
+                        proof_signing_alg_values_supported: vec![
+                            AlgIdentifier::String("ES256".to_string()),
+                            AlgIdentifier::String("EdDSA".to_string())
+                        ],
+                    },
+                )]),
+                credential_metadata: Some(CredentialMetadata {
+                    display: Some(vec![CredentialConfigurationsSupportedDisplay {
+                        name: "European Digital Credential".to_string(),
+                        locale: Some("en".to_string()),
+                        logo: Some(Logo {
+                            uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
+                            alt_text: Some("Impierce Logo".to_string()),
+                        }),
+                        description: None,
+                        background_image: None,
+                        background_color: None,
+                        text_color: None,
+                    }]),
+                    claims: None
+                }),
+                ..Default::default()
+            };
+        pub static ref OBv3_SD_JWT_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
+            CredentialConfigurationsSupportedObject {
+                credential_format: CredentialFormats::VcSdJwt(Parameters {
+                    parameters: (vc_sd_jwt::CredentialDefinition {
+                        type_: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
+                    })
+                    .into()
+                }),
+                cryptographic_binding_methods_supported: vec!["did:jwk".to_string(), "did:key".to_string(),],
+                credential_signing_alg_values_supported: vec![
+                    AlgIdentifier::String("ES256".to_string()),
+                    AlgIdentifier::String("EdDSA".to_string())
+                ],
+                proof_types_supported: HashMap::from_iter(vec![(
+                    ProofType::Jwt,
+                    KeyProofMetadata {
+                        proof_signing_alg_values_supported: vec![
+                            AlgIdentifier::String("ES256".to_string()),
+                            AlgIdentifier::String("EdDSA".to_string())
+                        ],
+                    },
+                )]),
+                credential_metadata: Some(CredentialMetadata {
+                    display: Some(vec![CredentialConfigurationsSupportedDisplay {
+                        name: "Teamwork Badge".to_string(),
+                        locale: Some("en".to_string()),
+                        logo: Some(Logo {
+                            uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
+                            alt_text: Some("Impierce Logo".to_string()),
+                        }),
+                        description: None,
+                        background_image: None,
+                        background_color: None,
+                        text_color: None,
+                    }]),
+                    claims: None
+                }),
+                ..Default::default()
+            };
+
+        // This is used for the DC SD-JWT, VC 1.1 and 2.0 test cases.
+        pub static ref BASIC_CREDENTIAL_SUBJECT: serde_json::Value = json!(
+            {
+                "credentialSubject": {
+                    "first_name": "Ferris",
+                    "last_name": "Rustacean"
+                }
+            }
+        );
         pub static ref OPENBADGE_CREDENTIAL_SUBJECT: serde_json::Value = json!(
             {
                 "id": "https://example.com/credentials/3527",
@@ -1438,36 +1616,6 @@ pub mod test_utils {
                               "name": "Teamwork"
                           }
                   }
-            }
-        );
-        pub static ref W3C_VC_CREDENTIAL_SUBJECT: serde_json::Value = json!(
-            {
-                "credentialSubject": {
-                    "first_name": "Ferris",
-                    "last_name": "Rustacean",
-                    "degree": {
-                        "type": "MasterDegree",
-                        "name": "Master of Oceanography"
-                    }
-                }
-            }
-        );
-        pub static ref DC_SD_JWT_CREDENTIAL_SUBJECT: serde_json::Value = json!(
-            {
-                "first_name": "Ferris",
-                "last_name": "Rustacean"
-            }
-        );
-        pub static ref VC_SD_JWT_CREDENTIAL_SUBJECT: serde_json::Value = json!(
-            {
-                "credentialSubject": {
-                    "first_name": "Ferris",
-                    "last_name": "Rustacean",
-                    "degree": {
-                        "type": "MasterDegree",
-                        "name": "Master of Oceanography"
-                    }
-                }
             }
         );
         pub static ref UNSIGNED_OPENBADGE_CREDENTIAL: serde_json::Value = json!({
@@ -1490,10 +1638,10 @@ pub mod test_utils {
               "idx": 0
           }
         });
-        pub static ref UNSIGNED_W3C_VC_CREDENTIAL: serde_json::Value = json!({
+        pub static ref UNSIGNED_VC1_1_CREDENTIAL: serde_json::Value = json!({
           "@context": [ "https://www.w3.org/2018/credentials/v1" ],
           "type": [ "VerifiableCredential" ],
-          "credentialSubject": W3C_VC_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
+          "credentialSubject": BASIC_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
           "issuer": {
             "name": "UniCore"
           },
@@ -1510,10 +1658,10 @@ pub mod test_utils {
             "first_name": "Ferris",
             "last_name": "Rustacean"
         });
-        pub static ref UNSIGNED_VC_SD_JWT_CREDENTIAL: serde_json::Value = json!({
+        pub static ref UNSIGNED_VC2_SD_JWT_CREDENTIAL: serde_json::Value = json!({
           "@context": [ "https://www.w3.org/ns/credentials/v2" ],
           "type": [ "VerifiableCredential" ],
-          "credentialSubject": VC_SD_JWT_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
+          "credentialSubject": BASIC_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
           "issuer": {
             "name": "UniCore"
           },
@@ -1524,6 +1672,123 @@ pub mod test_utils {
               "idx": 0
           },
           "name": "VCDM2.0 SD-JWT Credential"
+        });
+        pub static ref UNSIGNED_ELM_CREDENTIAL: serde_json::Value = json!({
+            "@context": [
+                "https://www.w3.org/2018/credentials/v1",
+                "https://www.w3.org/ns/credentials/v2"
+            ],
+            "type": [
+                "VerifiableCredential",
+                "EuropeanDigitalCredential"
+            ],
+            "id": "urn:uuid:123e4567-e89b-12d3-a456-426614174000",
+            "credentialSubject": {
+                "first_name": "Ferris",
+                "last_name": "Rustacean"
+            },
+            "issuer": {
+                "name": "UniCore"
+            },
+            "credentialStatus": {
+                "type": "CredentialStatus",
+                "id": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
+                "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
+                "idx": 0
+            },
+            "name": "European Digital Credential",
+            "credentialProfiles": {
+                "id": "http://data.europa.eu/snb/credential/bdc47cb449",
+                "type": "Concept",
+                "inScheme": {
+                    "id": "http://data.europa.eu/snb/credential/25831c2",
+                    "type": "ConceptScheme"
+                }
+            },
+            "displayParameter": {
+                "id": "urn:epass:displayParameter:1",
+                "type": "DisplayParameter",
+                "title": {
+                    "en": "European Digital Credential"
+                },
+                "primaryLanguage": {
+                    "id": "http://publications.europa.eu/resource/authority/language/ENG",
+                    "type": "Concept",
+                    "inScheme": {
+                        "id": "http://publications.europa.eu/resource/authority/language",
+                        "type": "ConceptScheme"
+                    },
+                    "notation": "language",
+                    "prefLabel": {
+                        "en": "English"
+                    }
+                },
+                "language": {
+                    "id": "http://publications.europa.eu/resource/authority/language/ENG",
+                    "type": "Concept",
+                    "inScheme": {
+                        "id": "http://publications.europa.eu/resource/authority/language",
+                        "type": "ConceptScheme"
+                    },
+                    "notation": "language",
+                    "prefLabel": {
+                        "en": "English"
+                    }
+                },
+                "individualDisplay": {
+                    "id": "urn:epass:individualDisplay:1",
+                    "type": "IndividualDisplay",
+                    "language": {
+                        "id": "http://publications.europa.eu/resource/authority/language/ENG",
+                        "type": "Concept",
+                        "inScheme": {
+                            "id": "http://publications.europa.eu/resource/authority/language",
+                            "type": "ConceptScheme"
+                        },
+                        "notation": "language",
+                        "prefLabel": {
+                            "en": "English"
+                        }
+                    },
+                    "displayDetail": {
+                        "id": "urn:epass:displayDetail:1",
+                        "type": "DisplayDetail",
+                        "page": 1,
+                        "image": {
+                            "id": "urn:epass:mediaObject:1",
+                            "type": "MediaObject",
+                            "content": "[PLACEHOLDER]",
+                            "contentEncoding": {
+                                "id": "http://data.europa.eu/snb/encoding/6146cde7dd",
+                                "type": "Concept",
+                                "inScheme": {
+                                    "id": "http://data.europa.eu/snb/encoding/25831c2",
+                                    "type": "ConceptScheme"
+                                },
+                                "prefLabel": {
+                                    "en": "base64"
+                                }
+                            },
+                            "contentType": {
+                                "id": "http://publications.europa.eu/resource/authority/file-type/JPEG",
+                                "type": "Concept",
+                                "inScheme": {
+                                    "id": "http://publications.europa.eu/resource/authority/file-type",
+                                    "type": "ConceptScheme"
+                                },
+                                "notation": "file-type",
+                                "prefLabel": {
+                                    "en": "JPEG"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "credentialSchema": {
+                "id": "https://eudiw.org/credentials/schemas/EuropeanDigitalCredentialV3_3.json",
+                "type": "JsonSchema"
+            }
         });
     }
 }

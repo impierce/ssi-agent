@@ -407,8 +407,7 @@ pub mod tests {
     use super::test_utils::*;
     use crate::credential::aggregate::test_utils::notification_id;
     use crate::{
-        credential::aggregate::test_utils::OPENBADGE_VERIFIABLE_CREDENTIAL_JWT, offer,
-        server_config::aggregate::test_utils::*,
+        credential::aggregate::test_utils::JWT_VC_JSON_OBV3_JWT, offer, server_config::aggregate::test_utils::*,
     };
     use agent_secret_manager::service::Service;
     use cqrs_es::test::TestFramework;
@@ -639,10 +638,7 @@ pub mod tests {
             ])
             .when(OfferCommand::CreateCredentialResponse {
                 offer_id: offer_id.clone(),
-                signed_credentials: vec![(
-                    json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT),
-                    Some(notification_id.clone()),
-                )],
+                signed_credentials: vec![(json!(JWT_VC_JSON_OBV3_JWT), Some(notification_id.clone()))],
             })
             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
                 offer_id: offer_id.clone(),
@@ -695,10 +691,7 @@ pub mod tests {
             ])
             .when(OfferCommand::CreateCredentialResponse {
                 offer_id: offer_id.clone(),
-                signed_credentials: vec![(
-                    json!(OPENBADGE_VERIFIABLE_CREDENTIAL_JWT),
-                    Some(notification_id.clone()),
-                )],
+                signed_credentials: vec![(json!(JWT_VC_JSON_OBV3_JWT), Some(notification_id.clone()))],
             })
             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
                 offer_id: offer_id.clone(),
@@ -712,9 +705,7 @@ pub mod tests {
 pub mod test_utils {
     pub use super::*;
     use crate::credential::aggregate::test_utils::notification_id;
-    use crate::{
-        credential::aggregate::test_utils::OPENBADGE_VERIFIABLE_CREDENTIAL_JWT, server_config::aggregate::test_utils::*,
-    };
+    use crate::{credential::aggregate::test_utils::JWT_VC_JSON_OBV3_JWT, server_config::aggregate::test_utils::*};
     use agent_shared::generate_random_string;
     use jsonwebtoken::Algorithm;
     use oid4vc_core::Subject;
@@ -853,7 +844,7 @@ pub mod test_utils {
         CredentialResponse {
             credential: CredentialResponseType::Immediate {
                 credentials: vec![CredentialResponseObject {
-                    credential: OPENBADGE_VERIFIABLE_CREDENTIAL_JWT.to_string(),
+                    credential: JWT_VC_JSON_OBV3_JWT.to_string(),
                 }],
                 notification_id: Some(notification_id.clone()),
             },
