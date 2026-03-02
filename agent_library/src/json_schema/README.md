@@ -10,9 +10,9 @@ This folder contains the JSON Schemas of the digital credential data formats sup
   JSON Schema source: https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/snb-model
   - [Verifiable Credentials Data Model v1.1](https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/snb-model) EDC builds upon the VC DM 1.1 but on a different JSON Schema as defined by the European Publication Office: https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/snb-model
 
-
-
-*Important Notes:*
+\
+\
+**Important Notes:**
 - We cannot issue truly official ELM credentials until the following points have been resolved
   - “National authorities” have issued an eIDAS legal identifier to the organization that wants to issue ELM credentials:
     https://europa.eu/europass/elm-browser/documentation/3-2-0/rdf/ap/edc/documentation/edc-generic-no-cv_en.html#edcgn:IssuerNodeShape 
@@ -23,9 +23,9 @@ This folder contains the JSON Schemas of the digital credential data formats sup
 - The official location/resource of the Open Badges v3.0 JSON Schema is actually the link below which is not the same as the official specification URL:
 https://purl.imsglobal.org/spec/ob/v3p0/schema/json/ob_v3p0_achievementcredential_schema.json
 
-
-
-*Useful Resources:*
+\
+\
+**Useful Resources:**
 - [ELM publication office](https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/snb-model)
 - [Introduction to ELM](https://europa.eu/europass/elm-browser/index.html#ontology)
 - [ELM Ontology browser](https://europa.eu/europass/elm-browser/homepage/3-2-0/index-en.html)
