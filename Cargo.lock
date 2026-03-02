@@ -373,6 +373,7 @@ dependencies = [
  "tracing-test",
  "types-ob-v3",
  "url",
+ "utoipa",
 ]
 
 [[package]]
@@ -13255,6 +13256,7 @@ dependencies = [
  "quote",
  "regex",
  "syn 2.0.104",
+ "url",
 ]
 
 [[package]]

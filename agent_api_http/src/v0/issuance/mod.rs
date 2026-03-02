@@ -4,6 +4,7 @@ pub mod credential_issuer;
 pub mod credentials;
 pub mod nonce;
 pub mod offers;
+pub mod openapi;
 
 pub mod error;
 
