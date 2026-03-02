@@ -52,7 +52,7 @@ impl IntoApiErrorExt for CredentialError {
                 ))
                 .source(self)
                 .finish(),
-            BuildVcJwtError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            BuildCredentialError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Unexpected Error")
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
@@ -64,6 +64,8 @@ impl IntoApiErrorExt for CredentialError {
 
             // `/openid4vci/credential` endpoint
             MissingCredentialDataError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            InvalidIssuerDidError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            KeyIdError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
@@ -126,6 +128,11 @@ impl IntoApiErrorExt for ServerConfigError {
                 .type_url(type_url("issuance#remove-provisioned-credential-configuration-error"))
                 .source(self)
                 .finish(),
+            UnsupportedCredentialFormatIdentifierError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Unsupported Credential Format Identifier Error")
+                .type_url(type_url("issuance#unsupported-credential-format-identifier-error"))
+                .source(self)
+                .finish(),
         }
     }
 }
@@ -134,8 +141,9 @@ pub enum PublicError {
     TokenError(OID4VCError<TokenErrorResponse>),
     CredentialError(OID4VCError<CredentialErrorResponse>),
     NotificationError(OID4VCError<NotificationErrorResponse>),
-    InternalServerError,
     AccessTokenError(AccessTokenValidationError),
+    InternalServerError,
+    NotFoundError,
 }
 
 impl axum::response::IntoResponse for PublicError {
@@ -153,8 +161,9 @@ impl axum::response::IntoResponse for PublicError {
                 let status = oid4vc_error.error.status_code();
                 (status, axum::Json(oid4vc_error)).into_response()
             }
-            PublicError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
             PublicError::AccessTokenError(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            PublicError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            PublicError::NotFoundError => StatusCode::NOT_FOUND.into_response(),
         }
     }
 }
@@ -174,7 +183,9 @@ impl IntoPublicError for CredentialError {
             MissingCredentialDataError => PublicError::InternalServerError,
             InvalidExpirationDateError => PublicError::InternalServerError,
             InvalidCredentialStatus => PublicError::InternalServerError,
-            BuildVcJwtError(_) => PublicError::InternalServerError,
+            BuildCredentialError(_) => PublicError::InternalServerError,
+            InvalidIssuerDidError => PublicError::InternalServerError,
+            KeyIdError => PublicError::InternalServerError,
         }
     }
 }
@@ -204,6 +215,7 @@ impl IntoPublicError for ServerConfigError {
         match self {
             UpdateProvisionedCredentialConfigurationError => PublicError::InternalServerError,
             RemoveProvisionedCredentialConfigurationError => PublicError::InternalServerError,
+            UnsupportedCredentialFormatIdentifierError(_) => PublicError::InternalServerError,
         }
     }
 }

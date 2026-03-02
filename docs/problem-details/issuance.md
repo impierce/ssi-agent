@@ -211,3 +211,11 @@ This error is returned when there is an attempt to remove a provisioned credenti
 ### Resolution
 
 Provisioned credential configurations cannot be removed at runtime. To remove a configuration, update your server's configuration files and restart the service.
+
+## Unsupported Credential Format Identifier Error
+
+This error occurs when the `format` specified in a credential configuration is not supported by UniCore. This typically happens when the format does not match any of the recognized credential formats.
+
+### Resolution
+
+Ensure that the `format` field in the credential configuration is set to a supported value. Supported values include: `jwt_vc_json` and `dc+sd-jwt`.
