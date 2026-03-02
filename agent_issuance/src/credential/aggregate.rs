@@ -100,7 +100,9 @@ pub struct Credential {
     #[schema(schema_with = holder_notifications)]
     pub holder_notifications: Vec<NotificationRequest>,
     pub credential_status: CredentialStatus,
+    #[schema(value_type = Option<String>)]
     pub created_at: Option<Timestamp>,
+    #[schema(value_type = Option<String>)]
     pub expires_at: Option<Timestamp>,
 }
 
