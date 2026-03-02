@@ -133,7 +133,7 @@ impl Aggregate for Connection {
                         dids: self.dids.clone(),
                         display: new_display_properties,
                     };
-                    // Right now we are only checking this!
+                    // Right now we are only checking this! TODO: Add more checks.
                     Ok(vec![ConnectionSynced {
                         pending_changes: Some(proposed_changes),
                     }])

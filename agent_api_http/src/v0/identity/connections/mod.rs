@@ -135,3 +135,38 @@ pub(crate) async fn get_connection(
         .map(|connection_view| (StatusCode::OK, Json(connection_view)).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
+
+/// Sync connection by ID
+///
+/// Sync the latest version of a connection by its unique identifier.
+#[utoipa::path(
+    get,
+    path = "/connections/sync/{connection_id}",
+    operation_id = "sync_connection_by_id",
+    tags = ["Connections"],
+    responses(
+        (status = 200, description = "Connection synced successfully", body = Connection)
+    )
+)]
+#[axum_macros::debug_handler]
+pub(crate) async fn sync_connection(
+    State(state): State<Arc<IdentityState>>,
+    Path(connection_id): Path<String>,
+) -> Result<Response, ApiError> {
+    let command = ConnectionCommand::SyncConnection {
+        connection_id: connection_id.clone(),
+    };
+    command_handler(&connection_id, &state.command.connection, command).await?;
+    Ok(StatusCode::OK.into_response())
+}
+
+pub(crate) async fn accept_connection_changes(
+    State(state): State<Arc<IdentityState>>,
+    Path(connection_id): Path<String>,
+) -> Result<Response, ApiError> {
+    let command = ConnectionCommand::AcceptConnectionChanges {
+        connection_id: connection_id.clone(),
+    };
+    command_handler(&connection_id, &state.command.connection, command).await?;
+    Ok(StatusCode::OK.into_response())
+}

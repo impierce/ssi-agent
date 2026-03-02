@@ -12,14 +12,17 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use connections::{get_connection, get_connections, post_connections};
+use connections::{get_connection, get_connections, post_connections, sync_connection};
 use documents::{get_document, get_documents};
 use services::{linked_vp::linked_vp, service, services};
 use std::sync::Arc;
 use well_known::{did::did, did_configuration::did_configuration};
 
 use crate::{
-    v0::identity::profiles::{get_profile, patch_profile},
+    v0::identity::{
+        connections::accept_connection_changes,
+        profiles::{get_profile, patch_profile},
+    },
     API_VERSION,
 };
 
@@ -30,6 +33,11 @@ pub fn router(identity_state: Arc<IdentityState>) -> Router {
             Router::new()
                 .route("/connections", get(get_connections).post(post_connections))
                 .route("/connections/{connection_id}", get(get_connection))
+                .route("/connections/sync/{connection_id}", post(sync_connection))
+                .route(
+                    "/connections/sync-accept/{connection_id}",
+                    post(accept_connection_changes),
+                )
                 .route("/documents", get(get_documents))
                 .route("/documents/{document_id}", get(get_document))
                 .route("/profile", get(get_profile).patch(patch_profile))
