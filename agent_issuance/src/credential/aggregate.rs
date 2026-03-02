@@ -1192,7 +1192,8 @@ pub mod credential_tests {
             }])
     }
 
-    // TODO: enable sd-jwt testing, since the salts change everytime we need to come up with an alternative to `assert_eq!`
+    // TODO: enable sd-jwt testing, since the salts change everytime we need to come up with an alternative to `assert_eq!`,
+    // which is used by the `.then_expect_events` method in the tests.
     //
     // #[case::dc_sd_jwt(
     //     UNSIGNED_DC_SD_JWT_CREDENTIAL.clone(),
