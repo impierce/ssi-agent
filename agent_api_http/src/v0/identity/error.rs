@@ -37,7 +37,7 @@ impl IntoApiErrorExt for ConnectionError {
                 .type_url(type_url("bad-gateway#credential-issuer-metadata-fetch-failed"))
                 .message(format!("Failed to fetch credential issuer metadata from: {url}"))
                 .finish(),
-            DIDWebResolutionFailed(url) => ApiError::builder(StatusCode::BAD_GATEWAY)
+            DIDWebResolutionFailed(url) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("DID Web Resolution Failed")
                 .type_url(type_url("bad-gateway#did-web-resolution-failed"))
                 .message(format!("Failed to resolve DID Web for: {url}"))
@@ -46,6 +46,11 @@ impl IntoApiErrorExt for ConnectionError {
                 .title("Missing Domain")
                 .type_url(type_url("bad-request#missing-domain"))
                 .message(format!("Connection with id '{connection_id}' is missing a domain"))
+                .finish(),
+            DIDConfigurationResolutionFailed(url) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("DID Configurations could not be resolved")
+                .type_url(type_url("bad-request#did-config-failed"))
+                .message(format!("Failed to resolve DID Configurations from '{url}'"))
                 .finish(),
         }
     }

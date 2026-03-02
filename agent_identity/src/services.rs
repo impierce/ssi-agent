@@ -51,6 +51,34 @@ impl IdentityServices {
             .map_err(|e| ConnectionError::CredentialIssuerMetadataFetchFailed(e.to_string()))
     }
 
+    pub async fn fetch_linked_dids(&self, credential_issuer_url: &Url) -> Result<Vec<String>, ConnectionError> {
+        let mut did_configurations_endpoint = credential_issuer_url.clone();
+        did_configurations_endpoint.set_path("/.well-known/did-configuration.json");
+
+        let response: serde_json::Value = self
+            .client
+            .get(did_configurations_endpoint)
+            .send()
+            .await
+            .map_err(|e| ConnectionError::DIDConfigurationResolutionFailed(e.to_string()))?
+            .json()
+            .await
+            .map_err(|e| ConnectionError::DIDConfigurationResolutionFailed(e.to_string()))?;
+
+        // TODO: Add logic for if the linked_did is a JSON-LD VC.
+        let linked_dids: Vec<String> = response
+            .get("linked_dids")
+            .and_then(|v| v.as_array())
+            .ok_or(ConnectionError::DIDConfigurationResolutionFailed(
+                "no linked_dids found".to_string(),
+            ))?
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect();
+
+        Ok(linked_dids)
+    }
+
     pub async fn resolve_did_web(&self, credential_issuer_url: &Url) -> Result<DIDUrl, ConnectionError> {
         let mut did_web_url = credential_issuer_url.clone();
         did_web_url.set_path("/.well-known/did.json");

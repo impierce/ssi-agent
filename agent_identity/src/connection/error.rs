@@ -16,4 +16,6 @@ pub enum ConnectionError {
     DIDWebResolutionFailed(String),
     #[error("Domain Missing for connection '{0}'")]
     MissingDomain(String),
+    #[error("Failed to fetch DID Configurations")]
+    DIDConfigurationResolutionFailed(String),
 }
