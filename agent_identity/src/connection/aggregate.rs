@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_core::common::{Timestamp, Url};
 use identity_did::DIDUrl;
+use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -34,6 +35,19 @@ pub struct Connection {
     // pub issuer_options: Option<IssuerOptions>,
     // pub holder_options: Option<HolderOptions>,
     // pub verifier_options: Option<VerifierOptions>,
+    pub pending_changes: Option<ConnectionProperties>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
+pub struct ConnectionProperties {
+    #[serde(rename = "id")]
+    pub connection_id: String,
+    #[schema(value_type = Option<String>)]
+    pub domain: Option<Url>,
+    #[schema(value_type = Vec<String>)]
+    pub dids: Vec<DIDUrl>,
+    #[schema(value_type = Option<DisplayProperties>)]
+    pub display: Option<DisplayProperties>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
@@ -72,42 +86,16 @@ impl Aggregate for Connection {
         info!("Handling command: {:?}", command);
 
         match command {
-            AddConnection {
-                connection_id,
-                domain,
-                credential_offer_endpoint,
-            } => {
+            AddConnection { connection_id, domain } => {
                 let domain_ref = domain
                     .as_ref()
                     .ok_or(ConnectionError::MissingDomain(connection_id.clone()))?;
 
                 let metadata = services.fetch_credential_issuer_metadata(domain_ref).await?;
-                let display_properties: Option<DisplayProperties> = metadata
-                    .display
-                    .and_then(|displays: Vec<serde_json::Value>| displays.first().cloned())
-                    .and_then(|display: serde_json::Value| {
-                        Some(DisplayProperties {
-                            alias: display.get("name")?.as_str().map(String::from),
-                            locale: display
-                                .get("locale")
-                                .and_then(|locale| locale.as_str().map(String::from)),
-                            logo: display.get("logo").and_then(|logo| {
-                                Some(LogoProperties {
-                                    url: logo.get("uri").and_then(|uri| uri.as_str()?.parse().ok()),
-                                    alt_text: logo.get("alt_text").and_then(|alt| alt.as_str().map(String::from)),
-                                })
-                            }),
-                        })
-                    });
+                let display_properties = get_display_from_metadata(metadata.clone());
+                let supported_did_methods = get_did_methods_from_metadata(metadata);
 
-                let supported_did_methods: Vec<String> = metadata
-                    .credential_configurations_supported
-                    .values()
-                    .flat_map(|configs| configs.cryptographic_binding_methods_supported.clone())
-                    .collect::<HashSet<String>>()
-                    .into_iter()
-                    .collect();
-
+                // IMPORTANT TODO: DID Configuration
                 let mut dids: Vec<DIDUrl> = Vec::new();
                 for method in &supported_did_methods {
                     match method.as_str() {
@@ -127,10 +115,8 @@ impl Aggregate for Connection {
                     display: display_properties,
                     domain,
                     dids: dids.clone(),
-                    credential_offer_endpoint,
                 }])
             }
-
             SyncConnection { connection_id } => {
                 let domain = self
                     .credential_offer_endpoint
@@ -138,36 +124,37 @@ impl Aggregate for Connection {
                     .ok_or(ConnectionError::MissingCredentialOfferEndpoint)?;
 
                 let metadata = services.fetch_credential_issuer_metadata(&domain).await?;
-                // let new_credential_offer_endpoint = metadata.credential_endpoint.as_ref();
-                let new_display_properties: Option<DisplayProperties> = metadata
-                    .display
-                    .and_then(|displays: Vec<serde_json::Value>| displays.first().cloned())
-                    .and_then(|display: serde_json::Value| {
-                        Some(DisplayProperties {
-                            alias: display.get("name")?.as_str().map(String::from),
-                            locale: display
-                                .get("locale")
-                                .and_then(|locale| locale.as_str().map(String::from)),
-                            logo: display.get("logo").and_then(|logo| {
-                                Some(LogoProperties {
-                                    url: logo.get("uri").and_then(|uri| uri.as_str()?.parse().ok()),
-                                    alt_text: logo.get("alt_text").and_then(|alt| alt.as_str().map(String::from)),
-                                })
-                            }),
-                        })
-                    });
+                let new_display_properties = get_display_from_metadata(metadata);
 
                 if new_display_properties != self.display {
-                    Ok(vec![ConnectionUpdated {
-                        connection_id,
-                        display: new_display_properties,
+                    let proposed_changes = ConnectionProperties {
+                        connection_id: connection_id.clone(),
                         domain: self.domain.clone(),
                         dids: self.dids.clone(),
-                        credential_offer_endpoint: self.credential_offer_endpoint.clone(),
+                        display: new_display_properties,
+                    };
+                    // Right now we are only checking this!
+                    Ok(vec![ConnectionSynced {
+                        pending_changes: Some(proposed_changes),
                     }])
                 } else {
                     Ok(vec![])
                 }
+            }
+            AcceptConnectionChanges { connection_id } => {
+                let pending = self
+                    .pending_changes
+                    .as_ref()
+                    .ok_or(ConnectionError::ConnectionSyncFailed(
+                        "Failed to Accept Pending Changes".to_string(),
+                    ))?;
+
+                Ok(vec![ConnectionChangesAccepted {
+                    connection_id,
+                    display: pending.display.clone(),
+                    domain: pending.domain.clone(),
+                    dids: pending.dids.clone(),
+                }])
             }
             RemoveConnection { connection_id } => Ok(vec![ConnectionRemoved { connection_id }]),
         }
@@ -184,30 +171,62 @@ impl Aggregate for Connection {
                 display,
                 domain,
                 dids,
-                credential_offer_endpoint,
             } => {
                 self.connection_id = connection_id;
                 self.display = display;
                 self.domain = domain;
                 self.dids = dids;
-                self.credential_offer_endpoint = credential_offer_endpoint;
             }
-            ConnectionUpdated {
+            ConnectionSynced { pending_changes } => {
+                self.pending_changes = pending_changes;
+            }
+            ConnectionChangesAccepted {
                 connection_id,
                 display,
                 domain,
                 dids,
-                credential_offer_endpoint,
             } => {
                 self.connection_id = connection_id;
                 self.display = display;
                 self.domain = domain;
                 self.dids = dids;
-                self.credential_offer_endpoint = credential_offer_endpoint;
+                self.pending_changes = None;
             }
             ConnectionRemoved { connection_id: _ } => {}
         }
     }
+}
+
+// HELPER
+
+pub fn get_display_from_metadata(metadata: CredentialIssuerMetadata) -> Option<DisplayProperties> {
+    metadata
+        .display
+        .and_then(|displays: Vec<serde_json::Value>| displays.first().cloned())
+        .and_then(|display: serde_json::Value| {
+            Some(DisplayProperties {
+                alias: display.get("name")?.as_str().map(String::from),
+                locale: display
+                    .get("locale")
+                    .and_then(|locale| locale.as_str().map(String::from)),
+                logo: display.get("logo").and_then(|logo| {
+                    Some(LogoProperties {
+                        url: logo.get("uri").and_then(|uri| uri.as_str()?.parse().ok()),
+                        alt_text: logo.get("alt_text").and_then(|alt| alt.as_str().map(String::from)),
+                    })
+                }),
+            })
+        })
+}
+
+pub fn get_did_methods_from_metadata(metadata: CredentialIssuerMetadata) -> Vec<String> {
+    metadata
+        .credential_configurations_supported
+        .values()
+        .flat_map(|configs| configs.cryptographic_binding_methods_supported.clone())
+        .collect::<HashSet<String>>()
+        .into_iter()
+        .collect()
 }
 
 // #[cfg(test)]
