@@ -15,7 +15,6 @@ use super::{command::ConnectionCommand, error::ConnectionError, event::Connectio
 pub struct Connection {
     #[serde(rename = "id")]
     pub connection_id: String,
-    // moved alias into the display
     #[schema(value_type = Option<String>)]
     pub domain: Option<Url>,
     #[schema(value_type = Vec<String>)]

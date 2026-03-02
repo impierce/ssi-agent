@@ -7,6 +7,7 @@ use agent_identity::{
     connection::command::ConnectionCommand,
     state::IdentityState,
 };
+use agent_library::template::event::Display;
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
@@ -16,6 +17,7 @@ use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
 use identity_core::common::Url;
 use identity_did::DIDUrl;
+use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
 // use tracing::debug;
 
@@ -148,4 +150,26 @@ pub(crate) async fn get_connection(
         .await?
         .map(|connection_view| (StatusCode::OK, Json(connection_view)).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+}
+
+// Helper Functions
+
+pub async fn parse_display_from_metadata(metadata: &CredentialIssuerMetadata) -> Option<DisplayProperties> {
+    metadata
+        .display
+        .and_then(|displays: Vec<serde_json::Value>| displays.first().cloned())
+        .and_then(|display: serde_json::Value| {
+            Some(DisplayProperties {
+                alias: display.get("name")?.as_str().map(String::from),
+                locale: display
+                    .get("locale")
+                    .and_then(|locale| locale.as_str().map(String::from)),
+                logo: display.get("logo").and_then(|logo| {
+                    Some(LogoProperties {
+                        url: logo.get("uri").and_then(|uri| uri.as_str()?.parse().ok()),
+                        alt_text: logo.get("alt_text").and_then(|alt| alt.as_str().map(String::from)),
+                    })
+                }),
+            })
+        })
 }

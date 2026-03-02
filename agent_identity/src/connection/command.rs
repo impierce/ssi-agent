@@ -8,12 +8,10 @@ use serde::Deserialize;
 pub enum ConnectionCommand {
     AddConnection {
         connection_id: String,
-        // display: Option<DisplayProperties>,
         domain: Option<Url>,
-        // dids: Vec<DIDUrl>,
         credential_offer_endpoint: Option<Url>,
     },
-    SyncConnection {
+    UpdateConnection {
         connection_id: String,
     },
     RemoveConnection {
