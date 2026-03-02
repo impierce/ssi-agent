@@ -283,6 +283,10 @@ components:
       - holder_notifications
       - credential_status
       properties:
+        created_at:
+          type:
+          - string
+          - 'null'
         credential_configuration:
           type: object
           required:
@@ -347,6 +351,10 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/Data'
+        expires_at:
+          type:
+          - string
+          - 'null'
         holder_notifications:
           type: array
           items:
