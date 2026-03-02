@@ -231,39 +231,16 @@ fn compile_validator(json_schema_key: &str) -> Result<Validator, JsonSchemaError
         JsonSchemaError::InvalidJsonData("Failed to convert JSON Schema &str to serde_json::Value".to_string())
     })?;
 
-    // Select correct draft version for JSON Schema Validator and construct schema with LocalRetriever
-    // There is a method enabling schema autodetection `jsonschema::validate_for()` but this method cannot be combined with `options()`.
-    // Therefore, we have to implement a schema matcher manually, this match case misses quite a few draft versions but these seem not to be in use anymore.
-    let schema = match json_schema
-        .get("$schema")
-        .and_then(|value| value.to_clean_string())
-        .ok_or(JsonSchemaError::InvalidJsonData(
-            "Invalid or missing \"$schema\" field".to_string(),
-        ))?
-        .as_str()
-    {
-        "https://json-schema.org/draft/2019-09/schema#" => jsonschema::draft201909::options()
-            .with_retriever(MemoryRetriever {})
-            .should_validate_formats(true)
-            .build(json_schema)
-            .map_err(|_| {
-                JsonSchemaError::InvalidJsonData(format!(
-                    "Failed to compile JSON Schema from serde_json::Value: {json_schema}"
-                ))
-            })?,
-        // Default to draft 2020-12
-        _ => jsonschema::draft202012::options()
-            .with_retriever(MemoryRetriever {})
-            .should_validate_formats(true)
-            .build(json_schema)
-            .map_err(|_| {
-                JsonSchemaError::InvalidJsonData(format!(
-                    "Failed to compile JSON Schema from serde_json::Value: {json_schema}"
-                ))
-            })?,
-    };
-
-    Ok(schema)
+    // The build() function autodetects the Json Schema draft version so no need to set this manually.
+    jsonschema::options()
+        .with_retriever(MemoryRetriever {})
+        .should_validate_formats(true)
+        .build(json_schema)
+        .map_err(|_| {
+            JsonSchemaError::InvalidJsonData(format!(
+                "Failed to compile JSON Schema from serde_json::Value: {json_schema}"
+            ))
+        })
 }
 
 /// This struct is solely used to implement the `Retrieve` trait from the `jsonschema` crate,
