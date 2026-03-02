@@ -253,7 +253,7 @@ components:
         schema: {}
         status:
           oneOf:
-          - $ref: '#/components/schemas/Status'
+          - $ref: '#/components/schemas/TemplateStatus'
           default: draft
         tags:
           type: array
@@ -374,7 +374,7 @@ components:
           - 'null'
         signed: {}
         status:
-          $ref: '#/components/schemas/Status'
+          $ref: '#/components/schemas/IssuanceStatus'
     CredentialFormat:
       type: string
       enum:
@@ -441,6 +441,11 @@ components:
       enum:
       - individual
       - organization
+    IssuanceStatus:
+      type: string
+      enum:
+      - Pending
+      - Issued
     Logo:
       type: object
       required:
@@ -452,11 +457,6 @@ components:
           - 'null'
         uri:
           type: string
-    Status:
-      type: string
-      enum:
-      - Pending
-      - Issued
     Template:
       type: object
       description: Data transfer object for Templates.
@@ -499,7 +499,7 @@ components:
           - string
           - 'null'
         status:
-          $ref: '#/components/schemas/Status'
+          $ref: '#/components/schemas/TemplateStatus'
         tags:
           type: array
           items:
@@ -514,6 +514,13 @@ components:
             type: string
         visibility:
           $ref: '#/components/schemas/Visibility'
+    TemplateStatus:
+      type: string
+      enum:
+      - draft
+      - published
+      - archived
+      - deleted
     Visibility:
       type: string
       enum:

@@ -42,6 +42,7 @@ pub enum HolderType {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Eq, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
+#[schema(as = TemplateStatus)]
 pub enum Status {
     #[default]
     Draft,

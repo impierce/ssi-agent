@@ -35,6 +35,7 @@ use types_ob_v3::prelude::{
 use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
+#[schema(as = IssuanceStatus)]
 pub enum Status {
     #[default]
     Pending,
