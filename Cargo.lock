@@ -5021,6 +5021,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "identity_ecdsa_verifier"
+version = "1.9.1-beta.1"
+source = "git+https://github.com/iotaledger/identity?tag=v1.9.1-beta.1#e4c79b61c26f20e269abe63ec8adf7eb5ba50305"
+dependencies = [
+ "identity_verification",
+ "k256",
+ "p256 0.13.2",
+ "signature 2.2.0",
+]
+
+[[package]]
 name = "identity_eddsa_verifier"
 version = "1.9.1-beta.1"
 source = "git+https://github.com/iotaledger/identity?tag=v1.9.1-beta.1#e4c79b61c26f20e269abe63ec8adf7eb5ba50305"
@@ -8344,7 +8355,6 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=dc2c388#dc2c38846dcee5da35ef8592f647179de12a8e56"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8354,6 +8364,9 @@ dependencies = [
  "did_url",
  "ed25519-dalek 2.1.1",
  "getset",
+ "identity_ecdsa_verifier",
+ "identity_eddsa_verifier",
+ "identity_verification",
  "is_empty",
  "jsonwebtoken",
  "lazy_static",
@@ -8369,7 +8382,6 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=dc2c388#dc2c38846dcee5da35ef8592f647179de12a8e56"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8402,7 +8414,6 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=dc2c388#dc2c38846dcee5da35ef8592f647179de12a8e56"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8430,13 +8441,15 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=dc2c388#dc2c38846dcee5da35ef8592f647179de12a8e56"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "futures",
  "getset",
  "identity_credential",
+ "identity_document",
+ "identity_verification",
  "is_empty",
  "jsonwebtoken",
  "lazy_static",
@@ -11300,7 +11313,6 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=dc2c388#dc2c38846dcee5da35ef8592f647179de12a8e56"
 dependencies = [
  "anyhow",
  "async-trait",

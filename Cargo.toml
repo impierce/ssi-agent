@@ -93,3 +93,10 @@ url = "2.5"
 utoipa = { version = "5", features = ["axum_extras", "url", "yaml"] }
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"
+
+[patch.'https://github.com/impierce/openid4vc']
+siopv2 = { path = "../openid4vc/siopv2" }
+oid4vci = { path = "../openid4vc/oid4vci" }
+oid4vc-core = { path = "../openid4vc/oid4vc-core" }
+oid4vc-manager = { path = "../openid4vc/oid4vc-manager" }
+oid4vp = { path = "../openid4vc/oid4vp" }
