@@ -134,35 +134,21 @@
           style="height: 100%"
         />
       </div>
-
-      <p>
-        The application <strong>{{ client_id }}</strong> is requesting access to
-        the following data:
-      </p>
-
-      <h2>Credentials to be Shared</h2>
-      <ul>
-        {% for authorization_detail in authorization_details %}
-        <li>
-          {# Use a match statement to handle the enum and get the ID #} {% match
-          &authorization_detail.credential_configuration_or_format %} {# FIX:
-          Add `..` to ignore the other fields in the struct variant #} {% when
-          CredentialConfigurationOrFormat::CredentialConfigurationId with {
-          credential_configuration_id, .. } %}
-          <strong>{{ credential_configuration_id }}</strong>
-          {% when CredentialConfigurationOrFormat::CredentialFormat with
-          (format) %} {# Fallback for when a format is provided instead of an ID
-          #}
-          <strong>Credential defined by format</strong>
-          {% endmatch %} {# Use `if let` to safely handle the optional claims
-          vector #} {% if let Some(claims) = &authorization_detail.claims %} {%
-          endif %}
-        </li>
-        {% endfor %}
-      </ul>
-
-      <p>Do you want to allow this application to access your data?</p>
-
+<p>
+  The application <strong>{{ client_id }}</strong> is requesting access to
+  the following data:
+</p>
+<h2>Credentials to be Shared</h2>
+<ul>
+  {% for authorization_detail in authorization_details %}
+  <li>
+    <strong>{{ authorization_detail.credential_configuration_id }}</strong>
+    {% if let Some(claims) = &authorization_detail.claims %}
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+<p>Do you want to allow this application to access your data?</p>
       <form
         action="/auth/consent"
         method="post"

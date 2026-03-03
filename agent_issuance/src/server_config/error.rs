@@ -6,4 +6,6 @@ pub enum ServerConfigError {
     UpdateProvisionedCredentialConfigurationError,
     #[error("Cannot remove provisioned credential configuration during runtime")]
     RemoveProvisionedCredentialConfigurationError,
+    #[error("Unsupported credential format identifier: `{0}`")]
+    UnsupportedCredentialFormatIdentifierError(String),
 }

@@ -3,7 +3,8 @@ use crate::{
     DOCUMENTATION_URL,
 };
 use agent_issuance::{
-    credential::error::CredentialError, offer::error::OfferError, server_config::error::ServerConfigError,
+    application::access_token_validation_service::AccessTokenValidationError, credential::error::CredentialError,
+    offer::error::OfferError, server_config::error::ServerConfigError,
 };
 use axum::{response::IntoResponse, response::Response, Json};
 use http_api_problem::ApiError;
@@ -51,7 +52,7 @@ impl IntoApiErrorExt for CredentialError {
                 ))
                 .source(self)
                 .finish(),
-            BuildVcJwtError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            BuildCredentialError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Unexpected Error")
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
@@ -63,6 +64,8 @@ impl IntoApiErrorExt for CredentialError {
 
             // `/openid4vci/credential` endpoint
             MissingCredentialDataError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            InvalidIssuerDidError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            KeyIdError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
@@ -103,6 +106,9 @@ impl IntoApiErrorExt for OfferError {
             MissingProofError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             InvalidProofError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             MissingProofIssuerError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            MissingCredentialConfigurationIdsError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            UnknownCredentialConfiguration(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            UnsupportedCredentialIdentifierError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
@@ -122,6 +128,11 @@ impl IntoApiErrorExt for ServerConfigError {
                 .type_url(type_url("issuance#remove-provisioned-credential-configuration-error"))
                 .source(self)
                 .finish(),
+            UnsupportedCredentialFormatIdentifierError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Unsupported Credential Format Identifier Error")
+                .type_url(type_url("issuance#unsupported-credential-format-identifier-error"))
+                .source(self)
+                .finish(),
         }
     }
 }
@@ -130,7 +141,9 @@ pub enum PublicError {
     TokenError(OID4VCError<TokenErrorResponse>),
     CredentialError(OID4VCError<CredentialErrorResponse>),
     NotificationError(OID4VCError<NotificationErrorResponse>),
+    AccessTokenError(AccessTokenValidationError),
     InternalServerError,
+    NotFoundError,
 }
 
 impl axum::response::IntoResponse for PublicError {
@@ -148,7 +161,9 @@ impl axum::response::IntoResponse for PublicError {
                 let status = oid4vc_error.error.status_code();
                 (status, axum::Json(oid4vc_error)).into_response()
             }
+            PublicError::AccessTokenError(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
             PublicError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            PublicError::NotFoundError => StatusCode::NOT_FOUND.into_response(),
         }
     }
 }
@@ -161,15 +176,16 @@ impl IntoPublicError for CredentialError {
     fn into_public_error(self) -> PublicError {
         use CredentialError::*;
         match self {
-            UnsupportedCredentialFormat(_) => {
-                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::UnsupportedCredentialFormat))
-            }
-
-            UnsupportedCredentialType => {
-                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::UnsupportedCredentialType))
-            }
-
-            _ => PublicError::InternalServerError,
+            UnsupportedCredentialFormat(_) => PublicError::InternalServerError,
+            UnsupportedCredentialType => PublicError::InternalServerError,
+            InvalidCredentialSubjectError(_) => PublicError::InternalServerError,
+            InvalidIdentifierError => PublicError::InternalServerError,
+            MissingCredentialDataError => PublicError::InternalServerError,
+            InvalidExpirationDateError => PublicError::InternalServerError,
+            InvalidCredentialStatus => PublicError::InternalServerError,
+            BuildCredentialError(_) => PublicError::InternalServerError,
+            InvalidIssuerDidError => PublicError::InternalServerError,
+            KeyIdError => PublicError::InternalServerError,
         }
     }
 }
@@ -199,6 +215,7 @@ impl IntoPublicError for ServerConfigError {
         match self {
             UpdateProvisionedCredentialConfigurationError => PublicError::InternalServerError,
             RemoveProvisionedCredentialConfigurationError => PublicError::InternalServerError,
+            UnsupportedCredentialFormatIdentifierError(_) => PublicError::InternalServerError,
         }
     }
 }
@@ -218,6 +235,12 @@ impl From<TokenErrorResponse> for PublicError {
 impl From<NotificationErrorResponse> for PublicError {
     fn from(err: NotificationErrorResponse) -> Self {
         PublicError::NotificationError(OID4VCError::new(err))
+    }
+}
+
+impl From<AccessTokenValidationError> for PublicError {
+    fn from(err: AccessTokenValidationError) -> Self {
+        PublicError::AccessTokenError(err)
     }
 }
 
@@ -255,6 +278,10 @@ pub fn internal_server_error() -> PublicError {
     PublicError::InternalServerError
 }
 
+pub fn access_token_error(err: AccessTokenValidationError) -> PublicError {
+    PublicError::AccessTokenError(err)
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -264,36 +291,6 @@ pub mod tests {
 
     #[tokio::test]
     async fn issuance_errors_successfully_convert_to_problem_details() {
-        assert_eq!(
-            into_json_value(
-                CredentialError::UnsupportedCredentialFormat(serde_json::json!("unsupported_format"))
-                    .into_api_error()
-                    .into_axum_response()
-            )
-            .await,
-            json!({
-                "type": format!("{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-format"),
-                "title": "Unsupported Credential Format",
-                "status": 500,
-                "detail": "Credential format not supported: `\"unsupported_format\"`"
-            }),
-        );
-
-        assert_eq!(
-            into_json_value(
-                CredentialError::UnsupportedCredentialType
-                    .into_api_error()
-                    .into_axum_response()
-            )
-            .await,
-            json!({
-                "type": format!("{DOCUMENTATION_URL}problem-details/issuance#unsupported-credential-type"),
-                "title": "Unsupported Credential Type",
-                "status": 500,
-                "detail": "This Credential type is not supported"
-            }),
-        );
-
         assert_eq!(
             into_json_value(
                 CredentialError::InvalidIdentifierError

@@ -7,20 +7,20 @@ use tracing::{debug, info};
 use super::{command::TemplateCommand, error::TemplateError, event::TemplateEvent};
 
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
 pub struct Logo {
     pub uri: String,
     pub alt_text: Option<String>,
 }
 
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
 pub struct Display {
     pub name: String,
     pub logo: Option<Logo>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
 pub enum CredentialFormat {
     // See https://www.w3.org/TR/vc-data-model-1.1/
     #[serde(rename = "w3c_vc_data_model_v1-1")]
@@ -33,14 +33,14 @@ pub enum CredentialFormat {
     OpenBadges30,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum HolderType {
     Individual,
     Organization,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Eq, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
     #[default]
@@ -50,7 +50,7 @@ pub enum Status {
     Deleted,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Eq, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Visibility {
     #[default]

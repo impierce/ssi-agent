@@ -3,7 +3,6 @@ use crate::state::IssuanceState;
 use agent_shared::handlers::{command_handler, query_handler};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use oid4vci::credential_request::CredentialRequest;
-use oid4vci::proof::Proof;
 use thiserror::Error;
 
 pub struct NonceValidationService;
@@ -26,46 +25,67 @@ impl NonceValidationService {
         state: &IssuanceState,
         credential_request: &CredentialRequest,
     ) -> Result<(), NonceValidationError> {
-        if let Some(nonce) = extract_nonce_from_credential_request(credential_request) {
-            let nonce_status = query_handler(&nonce, &state.query.nonce)
-                .await
-                .map_err(|_| NonceValidationError::InvalidNonce)?;
+        let nonces = extract_nonce_from_credential_request(credential_request)?;
 
-            match nonce_status {
-                Some(n) if n.is_redeemed => Err(NonceValidationError::RedeemedNonce),
-                Some(_) => {
-                    let command = NonceCommand::RedeemNonce { c_nonce: nonce.clone() };
-                    command_handler(&nonce, &state.command.nonce, command)
-                        .await
-                        .map_err(|_| NonceValidationError::InvalidNonce)?;
-                    Ok(())
-                }
-                None => Err(NonceValidationError::MissingNonce),
+        if nonces.is_empty() {
+            return Err(NonceValidationError::MissingNonce);
+        }
+
+        // All the c_nonces within the proofs of a singular CredentialRequest should be the same.
+        if !nonces.iter().all(|n| n == &nonces[0]) {
+            return Err(NonceValidationError::InvalidNonce);
+        }
+
+        let nonce = &nonces[0];
+
+        let nonce_status = query_handler(nonce, &state.query.nonce)
+            .await
+            .map_err(|_| NonceValidationError::InvalidNonce)?;
+
+        match nonce_status {
+            Some(n) if n.is_redeemed => Err(NonceValidationError::RedeemedNonce),
+            Some(_) => {
+                let command = NonceCommand::RedeemNonce { c_nonce: nonce.clone() };
+                command_handler(nonce, &state.command.nonce, command)
+                    .await
+                    .map_err(|_| NonceValidationError::InvalidNonce)?;
+                Ok(())
             }
-        } else {
-            Ok(())
+            None => Err(NonceValidationError::MissingNonce),
         }
     }
 }
 
 // Helpers
-pub fn extract_nonce_from_credential_request(credential_request: &CredentialRequest) -> Option<String> {
-    let proof = credential_request.proof.as_ref()?;
+pub fn extract_nonce_from_credential_request(
+    credential_request: &CredentialRequest,
+) -> Result<Vec<String>, NonceValidationError> {
+    let Some(proofs) = &credential_request.proofs else {
+        return Ok(vec![]);
+    };
 
-    match proof {
-        Proof::Jwt { jwt } => {
+    proofs
+        .jwt
+        .iter()
+        .map(|jwt: &String| {
             let parts: Vec<&str> = jwt.split('.').collect();
             if parts.len() != 3 {
-                return None;
+                return Err(NonceValidationError::InvalidNonce);
             }
 
-            let payload = URL_SAFE_NO_PAD.decode(parts[1]).ok()?;
-            let claims: serde_json::Value = serde_json::from_slice(&payload).ok()?;
+            let payload = URL_SAFE_NO_PAD
+                .decode(parts[1])
+                .map_err(|_| NonceValidationError::InvalidNonce)?;
+            let claims: serde_json::Value =
+                serde_json::from_slice(&payload).map_err(|_| NonceValidationError::InvalidNonce)?;
 
-            // Extract nonce from claims
-            claims.get("nonce").and_then(|n| n.as_str()).map(|s| s.to_string())
-        }
-    }
+            claims
+                .get("nonce")
+                .and_then(|n| n.as_str())
+                .map(|s| s.to_string())
+                .ok_or(NonceValidationError::MissingNonce)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -79,7 +99,7 @@ mod tests {
     use agent_secret_manager::service::Service;
     use agent_shared::handlers::command_handler;
     use agent_store::in_memory::InMemory;
-    use oid4vci::Proof;
+    use oid4vci::proofs::Proofs;
 
     use agent_store::issuance_state;
     use oid4vci::credential_request::CredentialIdentifierOrCredentialConfigurationId;
@@ -94,20 +114,19 @@ mod tests {
     const NONCE_VALUE_2: &str = "8e03ad3f76cb3338c3a5642fe7634476aa3ad93fa1d584011ba2150d9da47133";
 
     #[test]
-    fn test_extract_nonce_from_proof() {
+    fn test_extract_nonce_from_credential_request() {
         let credential_request = CredentialRequest {
             credential_identifier_or_credential_configuration_id:
                 CredentialIdentifierOrCredentialConfigurationId::CredentialConfigurationId(
                     "test.credential".to_string(),
                 ),
-            proof: Some(Proof::Jwt {
-                jwt: PROOF_JWT.to_string(),
+            proofs: Some(Proofs {
+                jwt: vec![PROOF_JWT.to_string()],
             }),
-            proofs: None,
         };
 
-        let nonce = extract_nonce_from_credential_request(&credential_request);
-        assert_eq!(nonce, Some(NONCE_VALUE.to_string()));
+        let nonces = extract_nonce_from_credential_request(&credential_request).unwrap();
+        assert_eq!(nonces, vec![NONCE_VALUE.to_string()]);
     }
 
     #[test]
@@ -117,14 +136,13 @@ mod tests {
                 CredentialIdentifierOrCredentialConfigurationId::CredentialConfigurationId(
                     "test.credential".to_string(),
                 ),
-            proof: Some(Proof::Jwt {
-                jwt: "malformed.jwt".to_string(),
+            proofs: Some(Proofs {
+                jwt: vec!["malformed.jwt".to_string()],
             }),
-            proofs: None,
         };
 
-        let nonce = extract_nonce_from_credential_request(&credential_request);
-        assert_eq!(nonce, None);
+        let nonces = extract_nonce_from_credential_request(&credential_request);
+        assert!(nonces.is_err());
     }
 
     #[rstest]
@@ -185,10 +203,9 @@ mod tests {
     fn credential_request() -> CredentialRequest {
         CredentialRequest {
             credential_identifier_or_credential_configuration_id: CredentialConfigurationId("001".to_string()),
-            proof: Some(Proof::Jwt {
-                jwt: PROOF_JWT.to_string(),
+            proofs: Some(Proofs {
+                jwt: vec![PROOF_JWT.to_string()],
             }),
-            proofs: None,
         }
     }
 }
