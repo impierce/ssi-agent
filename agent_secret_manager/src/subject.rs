@@ -47,7 +47,7 @@ impl Subject {
         Self {
             stronghold_storage,
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
-            resolver: Resolver::new_with_options(None, Some(node_urls), username_password).await,
+            resolver: Resolver::new_with_options(None, Some(node_urls), username_password),
         }
     }
 
@@ -178,7 +178,7 @@ mod default_subject {
             Self {
                 stronghold_storage,
                 verification_method_ids,
-                resolver: Resolver::new().await,
+                resolver: Resolver::new(),
             }
         }
     }
