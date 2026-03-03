@@ -49,18 +49,16 @@ impl View<Connection> for ConnectionView {
             ConnectionChangesAccepted {
                 connection_id,
                 display,
-                domain,
                 dids,
                 last_interacted,
+                pending_changes,
             } => {
                 self.connection_id.clone_from(connection_id);
                 self.display.clone_from(display);
-                self.domain.clone_from(domain);
                 self.dids.clone_from(dids);
                 self.last_interacted.clone_from(last_interacted);
-                self.pending_changes = None;
+                self.pending_changes.clone_from(pending_changes);
             }
-            ConnectionChangesRejected { connection_id: _ } => {}
             ConnectionRemoved { connection_id: _ } => {}
         }
     }

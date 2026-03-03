@@ -160,10 +160,6 @@ components:
       - id
       - dids
       properties:
-        alias:
-          type:
-          - string
-          - 'null'
         credential_offer_endpoint:
           type:
           - string
@@ -172,6 +168,10 @@ components:
           type: array
           items:
             type: string
+        display:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/DisplayProperties'
         domain:
           type:
           - string
@@ -186,6 +186,23 @@ components:
           type:
           - string
           - 'null'
+        pending_changes:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/ConnectionProperties'
+    ConnectionProperties:
+      type: object
+      required:
+      - dids
+      properties:
+        dids:
+          type: array
+          items:
+            type: string
+        display:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/DisplayProperties'
     CreateTemplateEndpointRequest:
       type: object
       properties:
@@ -255,6 +272,21 @@ components:
           - $ref: '#/components/schemas/Logo'
         name:
           type: string
+    DisplayProperties:
+      type: object
+      properties:
+        alias:
+          type:
+          - string
+          - 'null'
+        locale:
+          type:
+          - string
+          - 'null'
+        logo:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/LogoProperties'
     DuplicateTemplateEndpointRequest:
       type: object
       required:
@@ -265,14 +297,14 @@ components:
     GetConnectionsEndpointRequest:
       type: object
       properties:
-        alias:
-          type:
-          - string
-          - 'null'
         did:
           type:
           - string
           - 'null'
+        display:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/DisplayProperties'
         domain:
           type:
           - string
@@ -293,6 +325,17 @@ components:
           - 'null'
         uri:
           type: string
+    LogoProperties:
+      type: object
+      properties:
+        alt_text:
+          type:
+          - string
+          - 'null'
+        url:
+          type:
+          - string
+          - 'null'
     Status:
       type: string
       enum:

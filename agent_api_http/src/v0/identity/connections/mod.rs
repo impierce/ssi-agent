@@ -157,6 +157,18 @@ pub(crate) async fn sync_connection(
     Ok(StatusCode::OK.into_response())
 }
 
+/// Sync connection by ID
+///
+/// Sync the latest version of a connection by its unique identifier.
+#[utoipa::path(
+    post,
+    path = "/connections/sync/{connection_id}",
+    operation_id = "sync_connection_by_id",
+    tags = ["Connections"],
+    responses(
+        (status = 200)
+    )
+)]
 pub(crate) async fn accept_connection_changes(
     State(state): State<Arc<IdentityState>>,
     Path(connection_id): Path<String>,
@@ -168,11 +180,11 @@ pub(crate) async fn accept_connection_changes(
     Ok(StatusCode::OK.into_response())
 }
 
-pub(crate) async fn reject_connection_changes(
+pub(crate) async fn remove_connection(
     State(state): State<Arc<IdentityState>>,
     Path(connection_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    let command = ConnectionCommand::RejectConnectionChanges {
+    let command = ConnectionCommand::RemoveConnection {
         connection_id: connection_id.clone(),
     };
     command_handler(&connection_id, &state.command.connection, command).await?;

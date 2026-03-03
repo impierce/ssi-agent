@@ -38,10 +38,6 @@ pub struct Connection {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
 pub struct ConnectionProperties {
-    #[serde(rename = "id")]
-    pub connection_id: String,
-    #[schema(value_type = Option<String>)]
-    pub domain: Option<Url>,
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
     #[schema(value_type = Option<DisplayProperties>)]
@@ -85,6 +81,7 @@ impl Aggregate for Connection {
 
         match command {
             AddConnection { connection_id, domain } => {
+                // todo wrap in schema
                 let domain_ref = domain
                     .as_ref()
                     .ok_or(ConnectionError::MissingDomain(connection_id.clone()))?;
@@ -114,15 +111,11 @@ impl Aggregate for Connection {
                 let new_dids = services.fetch_and_resolve_linked_dids(domain_ref).await?;
 
                 let proposed = ConnectionProperties {
-                    connection_id: connection_id.clone(),
-                    domain: self.domain.clone(),
                     dids: new_dids,
                     display: new_display,
                 };
 
                 let current = ConnectionProperties {
-                    connection_id: connection_id.clone(),
-                    domain: self.domain.clone(),
                     dids: self.dids.clone(),
                     display: self.display.clone(),
                 };
@@ -147,12 +140,11 @@ impl Aggregate for Connection {
                 Ok(vec![ConnectionChangesAccepted {
                     connection_id,
                     display: pending.display.clone(),
-                    domain: pending.domain.clone(),
                     dids: pending.dids.clone(),
                     last_interacted: Some(Utc::now()),
+                    pending_changes: None,
                 }])
             }
-            RejectConnectionChanges { connection_id } => Ok(vec![ConnectionChangesRejected { connection_id }]),
             RemoveConnection { connection_id } => Ok(vec![ConnectionRemoved { connection_id }]),
         }
     }
@@ -188,18 +180,16 @@ impl Aggregate for Connection {
             ConnectionChangesAccepted {
                 connection_id,
                 display,
-                domain,
                 dids,
                 last_interacted,
+                pending_changes,
             } => {
                 self.connection_id = connection_id;
                 self.display = display;
-                self.domain = domain;
                 self.dids = dids;
                 self.last_interacted = last_interacted;
-                self.pending_changes = None;
+                self.pending_changes = pending_changes;
             }
-            ConnectionChangesRejected { connection_id: _ } => {}
             ConnectionRemoved { connection_id: _ } => {}
         }
     }
@@ -238,26 +228,18 @@ pub fn get_display_from_metadata(metadata: CredentialIssuerMetadata) -> Option<D
 
 //     #[rstest]
 //     #[serial_test::serial]
-//     async fn test_add_connection(
-//         connection_id: String,
-//         domain: Url,
-//         credential_offer_endpoint: Url,
-//     ) {
+//     async fn test_add_connection(connection_id: String, domain: Url) {
 //         ConnectionTestFramework::with(IdentityServices::default())
 //             .given_no_previous_events()
 //             .when(ConnectionCommand::AddConnection {
 //                 connection_id: connection_id.clone(),
-//                 display: Some(display.clone()),
 //                 domain: Some(domain.clone()),
-//                 dids: dids.clone(),
-//                 credential_offer_endpoint: Some(credential_offer_endpoint.clone()),
 //             })
 //             .then_expect_events(vec![ConnectionEvent::ConnectionAdded {
 //                 connection_id: connection_id.clone(),
 //                 display: Some(display.clone()),
 //                 domain: Some(domain.clone()),
 //                 dids: dids.clone(),
-//                 credential_offer_endpoint: Some(credential_offer_endpoint.clone()),
 //             }])
 //     }
 // }
@@ -293,8 +275,8 @@ pub fn get_display_from_metadata(metadata: CredentialIssuerMetadata) -> Option<D
 //         vec!["did:example:123".parse().unwrap()]
 //     }
 
-//     #[fixture]
-//     pub fn credential_offer_endpoint() -> Url {
-//         "http://example.org/openid4vci/offers".parse().unwrap()
-//     }
+//     // #[fixture]
+//     // pub fn credential_offer_endpoint() -> Url {
+//     //     "http://example.org/openid4vci/offers".parse().unwrap()
+//     // }
 // }

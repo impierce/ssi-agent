@@ -26,12 +26,9 @@ pub enum ConnectionEvent {
     ConnectionChangesAccepted {
         connection_id: String,
         display: Option<DisplayProperties>,
-        domain: Option<Url>,
         dids: Vec<DIDUrl>,
         last_interacted: Option<DateTime<Utc>>,
-    },
-    ConnectionChangesRejected {
-        connection_id: String,
+        pending_changes: Option<ConnectionProperties>,
     },
 }
 

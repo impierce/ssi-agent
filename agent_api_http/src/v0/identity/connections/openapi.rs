@@ -1,9 +1,11 @@
-use crate::v0::identity::connections::{__path_get_connection, __path_get_connections};
+use crate::v0::identity::connections::{
+    __path_accept_connection_changes, __path_get_connection, __path_get_connections, __path_sync_connection,
+};
 use utoipa::OpenApi;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(get_connections, get_connection),
+    paths(get_connections, get_connection, sync_connection, accept_connection_changes),
     tags(
         (name = "Connections", description = "Manage trusted connections."),
     )
