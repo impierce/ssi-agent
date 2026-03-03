@@ -293,6 +293,7 @@ dependencies = [
  "async-trait",
  "axum 0.8.3",
  "base64 0.22.1",
+ "chrono",
  "cqrs-es",
  "derivative",
  "did-jwk",

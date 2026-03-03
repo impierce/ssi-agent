@@ -1,14 +1,14 @@
+use crate::services::IdentityServices;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use cqrs_es::Aggregate;
-use identity_core::common::{Timestamp, Url};
+use identity_core::common::Url;
 use identity_did::DIDUrl;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::{debug, info};
-
-use crate::services::IdentityServices;
 
 use super::{command::ConnectionCommand, error::ConnectionError, event::ConnectionEvent};
 
@@ -24,10 +24,10 @@ pub struct Connection {
     pub display: Option<DisplayProperties>,
     // TODO: use appropriate value_type for timestamps (also enable crate feature `chrono` or `time`)
     #[schema(value_type = Option<String>)]
-    pub first_interacted: Option<Timestamp>,
+    pub first_interacted: Option<DateTime<Utc>>,
     // TODO: use appropriate value_type for timestamps (also enable crate feature `chrono` or `time`)
     #[schema(value_type = Option<String>)]
-    pub last_interacted: Option<Timestamp>,
+    pub last_interacted: Option<DateTime<Utc>>,
 
     // TODO: How do we want to make distinction between issuer, holder, and verifier capabilities of the `Connection`?
     #[schema(value_type = Option<String>)]
@@ -48,6 +48,10 @@ pub struct ConnectionProperties {
     pub dids: Vec<DIDUrl>,
     #[schema(value_type = Option<DisplayProperties>)]
     pub display: Option<DisplayProperties>,
+    #[schema(value_type = Option<String>)]
+    pub first_interacted: Option<DateTime<Utc>>,
+    #[schema(value_type = Option<String>)]
+    pub last_interacted: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
@@ -95,6 +99,8 @@ impl Aggregate for Connection {
                 let display_properties = get_display_from_metadata(metadata.clone());
                 let supported_did_methods = get_did_methods_from_metadata(metadata);
 
+                let now = Utc::now();
+
                 // IMPORTANT TODO: DID Configuration
                 let mut dids: Vec<DIDUrl> = Vec::new();
                 for method in &supported_did_methods {
@@ -115,6 +121,8 @@ impl Aggregate for Connection {
                     display: display_properties,
                     domain,
                     dids: dids.clone(),
+                    first_interacted: Some(now),
+                    last_interacted: Some(now),
                 }])
             }
             SyncConnection { connection_id } => {
@@ -132,10 +140,13 @@ impl Aggregate for Connection {
                         domain: self.domain.clone(),
                         dids: self.dids.clone(),
                         display: new_display_properties,
+                        first_interacted: self.first_interacted,
+                        last_interacted: self.last_interacted,
                     };
                     // Right now we are only checking this! TODO: Add more checks.
                     Ok(vec![ConnectionSynced {
                         pending_changes: Some(proposed_changes),
+                        last_interacted: Some(Utc::now()),
                     }])
                 } else {
                     Ok(vec![])
@@ -154,6 +165,7 @@ impl Aggregate for Connection {
                     display: pending.display.clone(),
                     domain: pending.domain.clone(),
                     dids: pending.dids.clone(),
+                    last_interacted: Some(Utc::now()),
                 }])
             }
             RemoveConnection { connection_id } => Ok(vec![ConnectionRemoved { connection_id }]),
@@ -171,25 +183,35 @@ impl Aggregate for Connection {
                 display,
                 domain,
                 dids,
+                first_interacted,
+                last_interacted,
             } => {
                 self.connection_id = connection_id;
                 self.display = display;
                 self.domain = domain;
                 self.dids = dids;
+                self.first_interacted = first_interacted;
+                self.last_interacted = last_interacted;
             }
-            ConnectionSynced { pending_changes } => {
+            ConnectionSynced {
+                pending_changes,
+                last_interacted,
+            } => {
                 self.pending_changes = pending_changes;
+                self.last_interacted = last_interacted;
             }
             ConnectionChangesAccepted {
                 connection_id,
                 display,
                 domain,
                 dids,
+                last_interacted,
             } => {
                 self.connection_id = connection_id;
                 self.display = display;
                 self.domain = domain;
                 self.dids = dids;
+                self.last_interacted = last_interacted;
                 self.pending_changes = None;
             }
             ConnectionRemoved { connection_id: _ } => {}

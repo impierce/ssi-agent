@@ -2,6 +2,7 @@ pub mod all_connections;
 
 use super::event::ConnectionEvent;
 use crate::connection::aggregate::{Connection, ConnectionProperties, DisplayProperties};
+use chrono::{DateTime, Utc};
 use cqrs_es::{EventEnvelope, View};
 use identity_core::common::Url;
 use identity_did::DIDUrl;
@@ -14,6 +15,8 @@ pub struct ConnectionView {
     pub dids: Vec<DIDUrl>,
     pub display: Option<DisplayProperties>,
     pub pending_changes: Option<ConnectionProperties>,
+    pub first_interacted: Option<DateTime<Utc>>,
+    pub last_interacted: Option<DateTime<Utc>>,
 }
 
 impl View<Connection> for ConnectionView {
@@ -26,25 +29,35 @@ impl View<Connection> for ConnectionView {
                 display,
                 domain,
                 dids,
+                first_interacted,
+                last_interacted,
             } => {
                 self.connection_id.clone_from(connection_id);
                 self.display.clone_from(display);
                 self.domain.clone_from(domain);
                 self.dids.clone_from(dids);
+                self.first_interacted.clone_from(first_interacted);
+                self.last_interacted.clone_from(last_interacted);
             }
-            ConnectionSynced { pending_changes } => {
+            ConnectionSynced {
+                pending_changes,
+                last_interacted,
+            } => {
                 self.pending_changes = pending_changes.clone();
+                self.last_interacted = last_interacted.clone();
             }
             ConnectionChangesAccepted {
                 connection_id,
                 display,
                 domain,
                 dids,
+                last_interacted,
             } => {
                 self.connection_id.clone_from(connection_id);
                 self.display.clone_from(display);
                 self.domain.clone_from(domain);
                 self.dids.clone_from(dids);
+                self.last_interacted.clone_from(last_interacted);
                 self.pending_changes = None;
             }
             ConnectionRemoved { connection_id: _ } => {}
