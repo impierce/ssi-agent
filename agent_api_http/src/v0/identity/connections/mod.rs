@@ -157,13 +157,13 @@ pub(crate) async fn sync_connection(
     Ok(StatusCode::OK.into_response())
 }
 
-/// Sync connection by ID
+/// Accept Pending Changes
 ///
-/// Sync the latest version of a connection by its unique identifier.
+/// Accept pending changes to a connection
 #[utoipa::path(
     post,
     path = "/connections/sync/{connection_id}",
-    operation_id = "sync_connection_by_id",
+    operation_id = "accept_connection_changes",
     tags = ["Connections"],
     responses(
         (status = 200)
@@ -180,6 +180,18 @@ pub(crate) async fn accept_connection_changes(
     Ok(StatusCode::OK.into_response())
 }
 
+/// Remove Connection
+///
+/// Removes a connection
+#[utoipa::path(
+    post,
+    path = "/connections/sync/{connection_id}",
+    operation_id = "accept_connection_changes",
+    tags = ["Connections"],
+    responses(
+        (status = 200)
+    )
+)]
 pub(crate) async fn remove_connection(
     State(state): State<Arc<IdentityState>>,
     Path(connection_id): Path<String>,

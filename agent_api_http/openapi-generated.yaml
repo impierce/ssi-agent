@@ -31,6 +31,26 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Connection'
+  /v0/connections/sync/{connection_id}:
+    post:
+      tags:
+      - Connections
+      summary: Sync connection by ID
+      description: Sync the latest version of a connection by its unique identifier.
+      operationId: sync_connection_by_id
+      parameters:
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Connection synced successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Connection'
   /v0/connections/{connection_id}:
     get:
       tags:
@@ -160,10 +180,6 @@ components:
       - id
       - dids
       properties:
-        credential_offer_endpoint:
-          type:
-          - string
-          - 'null'
         dids:
           type: array
           items:
@@ -176,16 +192,19 @@ components:
           type:
           - string
           - 'null'
+          format: uri
         first_interacted:
           type:
           - string
           - 'null'
+          format: date-time
         id:
           type: string
         last_interacted:
           type:
           - string
           - 'null'
+          format: date-time
         pending_changes:
           oneOf:
           - type: 'null'
@@ -336,6 +355,7 @@ components:
           type:
           - string
           - 'null'
+          format: uri
     Status:
       type: string
       enum:

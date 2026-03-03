@@ -13126,6 +13126,7 @@ dependencies = [
  "quote",
  "regex",
  "syn 2.0.104",
+ "url",
 ]
 
 [[package]]

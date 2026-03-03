@@ -15,21 +15,15 @@ use super::{command::ConnectionCommand, error::ConnectionError, event::Connectio
 pub struct Connection {
     #[serde(rename = "id")]
     pub connection_id: String,
-    #[schema(value_type = Option<String>)]
     pub domain: Option<Url>,
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
-    #[schema(value_type = Option<DisplayProperties>)]
     pub display: Option<DisplayProperties>,
     // TODO: use appropriate value_type for timestamps (also enable crate feature `chrono` or `time`)
-    #[schema(value_type = Option<String>)]
     pub first_interacted: Option<DateTime<Utc>>,
     // TODO: use appropriate value_type for timestamps (also enable crate feature `chrono` or `time`)
-    #[schema(value_type = Option<String>)]
     pub last_interacted: Option<DateTime<Utc>>,
     // TODO: How do we want to make distinction between issuer, holder, and verifier capabilities of the `Connection`?
-    #[schema(value_type = Option<String>)]
-    pub credential_offer_endpoint: Option<Url>,
     // pub issuer_options: Option<IssuerOptions>,
     // pub holder_options: Option<HolderOptions>,
     // pub verifier_options: Option<VerifierOptions>,
@@ -40,25 +34,19 @@ pub struct Connection {
 pub struct ConnectionProperties {
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
-    #[schema(value_type = Option<DisplayProperties>)]
     pub display: Option<DisplayProperties>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
 pub struct DisplayProperties {
-    #[schema(value_type = Option<String>)]
     pub alias: Option<String>,
-    #[schema(value_type = Option<String>)]
     pub locale: Option<String>,
-    #[schema(value_type = Option<LogoProperties>)]
     pub logo: Option<LogoProperties>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
 pub struct LogoProperties {
-    #[schema(value_type = Option<String>)]
     pub url: Option<Url>,
-    #[schema(value_type = Option<String>)]
     pub alt_text: Option<String>,
 }
 
