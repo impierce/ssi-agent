@@ -17,7 +17,6 @@ use hyper::{header, StatusCode};
 use identity_core::common::Url;
 use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
-// use tracing::debug;
 
 pub mod openapi;
 
@@ -87,8 +86,6 @@ pub(crate) async fn get_connections(
     State(state): State<Arc<IdentityState>>,
     Form(GetConnectionsEndpointRequest { display, domain, did }): Form<GetConnectionsEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    // debug!("Request Params - display: {display:?}, domain: {domain:?}, did: {did:?}");
-
     let filtered_connections = query_handler("all_connections", &state.query.all_connections)
         .await?
         .map(|all_connections_view| {
@@ -140,7 +137,7 @@ pub(crate) async fn get_connection(
 ///
 /// Sync the latest version of a connection by its unique identifier.
 #[utoipa::path(
-    get,
+    post,
     path = "/connections/sync/{connection_id}",
     operation_id = "sync_connection_by_id",
     tags = ["Connections"],
