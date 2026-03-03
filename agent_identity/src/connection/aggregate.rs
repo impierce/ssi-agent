@@ -6,7 +6,6 @@ use identity_core::common::Url;
 use identity_did::DIDUrl;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::{debug, info};
 
@@ -92,24 +91,8 @@ impl Aggregate for Connection {
 
                 let metadata = services.fetch_credential_issuer_metadata(domain_ref).await?;
                 let display_properties = get_display_from_metadata(metadata.clone());
-                let supported_did_methods = get_did_methods_from_metadata(metadata);
-
+                let dids = services.fetch_and_resolve_linked_dids(domain_ref).await?;
                 let now = Utc::now();
-
-                // IMPORTANT TODO: DID Configuration
-                let mut dids: Vec<DIDUrl> = Vec::new();
-                for method in &supported_did_methods {
-                    match method.as_str() {
-                        "did:web" => {
-                            let did = services.resolve_did_web(domain_ref).await?;
-                            dids.push(did);
-                        }
-                        "did:iota" => {
-                            // TODO: implement did:iota resolution
-                        }
-                        _ => {}
-                    }
-                }
 
                 Ok(vec![ConnectionAdded {
                     connection_id,
@@ -121,26 +104,14 @@ impl Aggregate for Connection {
                 }])
             }
             SyncConnection { connection_id } => {
-                let domain = self
-                    .credential_offer_endpoint
+                let domain_ref = self
+                    .domain
                     .as_ref()
-                    .ok_or(ConnectionError::MissingCredentialOfferEndpoint)?;
+                    .ok_or(ConnectionError::MissingDomain(connection_id.clone()))?;
 
-                let metadata = services.fetch_credential_issuer_metadata(&domain).await?;
+                let metadata = services.fetch_credential_issuer_metadata(domain_ref).await?;
                 let new_display = get_display_from_metadata(metadata.clone());
-                let supported_did_methods = get_did_methods_from_metadata(metadata);
-
-                let mut new_dids: Vec<DIDUrl> = Vec::new();
-                for method in &supported_did_methods {
-                    match method.as_str() {
-                        "did:web" => {
-                            let did = services.resolve_did_web(domain).await?;
-                            new_dids.push(did);
-                        }
-                        "did:iota" => {}
-                        _ => {}
-                    }
-                }
+                let new_dids = services.fetch_and_resolve_linked_dids(domain_ref).await?;
 
                 let proposed = ConnectionProperties {
                     connection_id: connection_id.clone(),
@@ -181,6 +152,7 @@ impl Aggregate for Connection {
                     last_interacted: Some(Utc::now()),
                 }])
             }
+            RejectConnectionChanges { connection_id } => Ok(vec![ConnectionChangesRejected { connection_id }]),
             RemoveConnection { connection_id } => Ok(vec![ConnectionRemoved { connection_id }]),
         }
     }
@@ -227,12 +199,13 @@ impl Aggregate for Connection {
                 self.last_interacted = last_interacted;
                 self.pending_changes = None;
             }
+            ConnectionChangesRejected { connection_id: _ } => {}
             ConnectionRemoved { connection_id: _ } => {}
         }
     }
 }
 
-// HELPER
+// HELPERS
 
 pub fn get_display_from_metadata(metadata: CredentialIssuerMetadata) -> Option<DisplayProperties> {
     metadata
@@ -252,16 +225,6 @@ pub fn get_display_from_metadata(metadata: CredentialIssuerMetadata) -> Option<D
                 }),
             })
         })
-}
-
-pub fn get_did_methods_from_metadata(metadata: CredentialIssuerMetadata) -> Vec<String> {
-    metadata
-        .credential_configurations_supported
-        .values()
-        .flat_map(|configs| configs.cryptographic_binding_methods_supported.clone())
-        .collect::<HashSet<String>>()
-        .into_iter()
-        .collect()
 }
 
 // #[cfg(test)]

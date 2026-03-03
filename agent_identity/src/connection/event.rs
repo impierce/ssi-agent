@@ -30,6 +30,9 @@ pub enum ConnectionEvent {
         dids: Vec<DIDUrl>,
         last_interacted: Option<DateTime<Utc>>,
     },
+    ConnectionChangesRejected {
+        connection_id: String,
+    },
 }
 
 impl DomainEvent for ConnectionEvent {

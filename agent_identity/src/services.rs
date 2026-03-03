@@ -1,5 +1,6 @@
 use crate::connection::error::ConnectionError;
 use agent_secret_manager::subject::Subject;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use identity_did::DIDUrl;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use reqwest::Client;
@@ -51,7 +52,10 @@ impl IdentityServices {
             .map_err(|e| ConnectionError::CredentialIssuerMetadataFetchFailed(e.to_string()))
     }
 
-    pub async fn fetch_linked_dids(&self, credential_issuer_url: &Url) -> Result<Vec<String>, ConnectionError> {
+    pub async fn fetch_and_resolve_linked_dids(
+        &self,
+        credential_issuer_url: &Url,
+    ) -> Result<Vec<DIDUrl>, ConnectionError> {
         let mut did_configurations_endpoint = credential_issuer_url.clone();
         did_configurations_endpoint.set_path("/.well-known/did-configuration.json");
 
@@ -66,37 +70,39 @@ impl IdentityServices {
             .map_err(|e| ConnectionError::DIDConfigurationResolutionFailed(e.to_string()))?;
 
         // TODO: Add logic for if the linked_did is a JSON-LD VC.
-        let linked_dids: Vec<String> = response
+        let linked_dids: Vec<DIDUrl> = response
             .get("linked_dids")
             .and_then(|v| v.as_array())
             .ok_or(ConnectionError::DIDConfigurationResolutionFailed(
                 "no linked_dids found".to_string(),
             ))?
             .iter()
-            .filter_map(|v| v.as_str().map(String::from))
+            .filter_map(|jwt| {
+                let claims = get_unverified_jwt_claims(jwt).ok()?;
+                let did_str = claims
+                    .get("sub")
+                    .or_else(|| claims.get("iss"))
+                    .and_then(|v| v.as_str())?;
+                did_str.parse::<DIDUrl>().ok()
+            })
             .collect();
 
         Ok(linked_dids)
     }
 
-    pub async fn resolve_did_web(&self, credential_issuer_url: &Url) -> Result<DIDUrl, ConnectionError> {
-        let mut did_web_url = credential_issuer_url.clone();
-        did_web_url.set_path("/.well-known/did.json");
-
-        let response: serde_json::Value = self
-            .client
-            .get(did_web_url.as_str())
-            .send()
-            .await
-            .map_err(|e| ConnectionError::DIDWebResolutionFailed(e.to_string()))?
-            .json()
-            .await
-            .map_err(|e| ConnectionError::DIDWebResolutionFailed(e.to_string()))?;
-
-        response
-            .get("id")
-            .and_then(|id| id.as_str())
-            .and_then(|id| id.parse::<DIDUrl>().ok())
-            .ok_or(ConnectionError::DIDWebResolutionFailed("missing DID id".to_string()))
-    }
+}
+// HELPERS
+/// Get the claims from a JWT without performing validation.
+fn get_unverified_jwt_claims(jwt: &serde_json::Value) -> Result<serde_json::Value, ConnectionError> {
+    jwt.as_str()
+        .and_then(|string| string.splitn(3, '.').collect::<Vec<&str>>().get(1).cloned())
+        .and_then(|payload| {
+            URL_SAFE_NO_PAD
+                .decode(payload)
+                .ok()
+                .and_then(|payload_bytes| serde_json::from_slice::<serde_json::Value>(&payload_bytes).ok())
+        })
+        .ok_or(ConnectionError::DIDConfigurationResolutionFailed(
+            "Failed to decode JWT claims".to_string(),
+        ))
 }

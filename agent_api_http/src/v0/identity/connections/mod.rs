@@ -170,3 +170,14 @@ pub(crate) async fn accept_connection_changes(
     command_handler(&connection_id, &state.command.connection, command).await?;
     Ok(StatusCode::OK.into_response())
 }
+
+pub(crate) async fn reject_connection_changes(
+    State(state): State<Arc<IdentityState>>,
+    Path(connection_id): Path<String>,
+) -> Result<Response, ApiError> {
+    let command = ConnectionCommand::RejectConnectionChanges {
+        connection_id: connection_id.clone(),
+    };
+    command_handler(&connection_id, &state.command.connection, command).await?;
+    Ok(StatusCode::OK.into_response())
+}

@@ -60,6 +60,7 @@ impl View<Connection> for ConnectionView {
                 self.last_interacted.clone_from(last_interacted);
                 self.pending_changes = None;
             }
+            ConnectionChangesRejected { connection_id: _ } => {}
             ConnectionRemoved { connection_id: _ } => {}
         }
     }
