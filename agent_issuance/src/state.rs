@@ -1,4 +1,4 @@
-use agent_secret_manager::subject::SubjectExt;
+use agent_secret_manager::subject::Subject;
 use agent_shared::application_state::CommandHandler;
 use agent_shared::config::{
     config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, CredentialConfiguration,
@@ -28,7 +28,7 @@ use crate::server_config::views::ServerConfigView;
 pub struct IssuanceState {
     pub command: CommandHandlers,
     pub query: Queries,
-    pub subject: Arc<dyn SubjectExt>,
+    pub subject: Arc<Subject>,
 }
 
 /// The command handlers are used to execute commands on the aggregates.
@@ -221,19 +221,93 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                   {
                     "credential_configuration_id": "001",
                     "format": "jwt_vc_json",
-                    "credential_definition": {
-                      "type": ["VerifiableCredential"]
-                    },
+                    "type": ["VerifiableCredential"],
                     "credential_metadata": {
+                        "display": [
+                            {
+                                "name": "Verifiable Credential",
+                                "locale": "en",
+                                "logo": {
+                                "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                    "alt_text": "Impierce Logo"
+                                }
+                            }
+                        ],
+                        "claims": [
+                            {
+                                "path": ["credentialSubject", "first_name"],
+                                "display": [{
+                                    "name": "First Name",
+                                    "locale": "en"
+                                }],
+                            },
+                            {
+                                "path": ["credentialSubject", "last_name"],
+                                "display": [{
+                                    "name": "Last Name",
+                                    "locale": "en"
+                                }],
+                            },
+                            {
+                                "path": ["credentialSubject", "dob"],
+                                "display": [{
+                                    "name": "Date of Birth",
+                                    "locale": "en"
+                                }],
+                            }
+                        ]
+                    }
+                  },
+                  {
+                    "credential_configuration_id": "SD-JWT",
+                    "format": "dc+sd-jwt",
                     "display": [
-                      {
-                        "name": "Verifiable Credential",
-                        "locale": "en",
-                        "logo": {
-                          "uri": "https://www.impierce.com/external/impierce-logo.png",
-                          "alt_text": "Impierce Logo"
+                        {
+                            "name": "SD-JWT VC Credential",
+                            "locale": "en",
+                            "logo": {
+                            "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                "alt_text": "Impierce Logo"
+                            }
                         }
-                      }
+                    ],
+                    "claims": [
+                        {
+                            "path": ["first_name"],
+                            "display": [{
+                                "name": "First Name",
+                                "locale": "en"
+                            }],
+                        },
+                        {
+                            "path": ["last_name"],
+                            "display": [{
+                                "name": "Last Name",
+                                "locale": "en"
+                            }],
+                        },
+                        {
+                            "path": ["dob"],
+                            "display": [{
+                                "name": "Date of Birth",
+                                "locale": "en"
+                            }],
+                        }
+                    ]
+                  },
+                  {
+                    "credential_configuration_id": "VCDM 2.0 SD-JWT",
+                    "format": "vc+sd-jwt",
+                    "type": ["VerifiableCredential"],
+                    "display": [
+                        {
+                            "name": "VCDM 2.0 SD-JWT Credential",
+                            "locale": "en",
+                            "logo": {
+                            "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                "alt_text": "Impierce Logo"
+                            }
+                        }
                     ],
                     "claims": [
                         {
@@ -258,7 +332,6 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                             }],
                         }
                     ]
-                    }
                   }
                 ]))
                 .expect("Failed to parse default development credential configurations")

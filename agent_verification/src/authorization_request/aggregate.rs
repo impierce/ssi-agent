@@ -9,8 +9,8 @@ use crate::{
 use agent_shared::config::{config, get_preferred_signing_algorithm};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use oid4vc_core::client_metadata::ClientMetadataResource;
 use oid4vc_core::{authorization_request::ByReference, scope::Scope};
+use oid4vc_core::{client_metadata::ClientMetadataResource, Subject as _};
 use oid4vp::token::vp_token_builder::VpTokenBuilder;
 use oid4vp::{authorization_request::ClientId, oid4vp::DecodedVpToken};
 use serde::{Deserialize, Serialize};
@@ -725,12 +725,12 @@ pub mod tests {
                 id: CredentialQueryId::try_new("CredentialQuery".to_string()).unwrap(),
                 format: Format::JwtVcJson,
                 multiple: None,
-                meta: Some(MetaTypes::W3CFormatMeta {
+                meta: MetaTypes::W3CFormatMeta {
                     type_values: vec![
                         vec!["VerifiableCredential".to_string()],
                         vec!["PersonalInformation".to_string()]
                     ]
-                }),
+                },
                 trusted_authorities: None,
                 require_cryptographic_holder_binding: None,
                 claims: Some(vec![

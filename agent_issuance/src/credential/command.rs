@@ -1,6 +1,6 @@
 use oid4vci::{
     credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject,
-    notification_request::NotificationRequest,
+    notification_request::NotificationRequest, proofs::Proofs,
 };
 use serde::Deserialize;
 
@@ -27,6 +27,7 @@ pub enum CredentialCommand {
         subject_id: Option<String>,
         // When true, a credential will be re-signed if it already exists.
         overwrite: bool,
+        proofs: Option<Proofs>,
     },
     AddNotification {
         credential_id: String,
