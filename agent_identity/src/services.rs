@@ -64,18 +64,16 @@ impl IdentityServices {
             .get(did_configurations_endpoint)
             .send()
             .await
-            .map_err(|e| ConnectionError::DIDConfigurationResolutionFailed(e.to_string()))?
+            .map_err(|e| ConnectionError::DIDResolutionFailed(e.to_string()))?
             .json()
             .await
-            .map_err(|e| ConnectionError::DIDConfigurationResolutionFailed(e.to_string()))?;
+            .map_err(|e| ConnectionError::DIDResolutionFailed(e.to_string()))?;
 
         // TODO: Add logic for if the linked_did is a JSON-LD VC.
         let linked_dids: Vec<DIDUrl> = response
             .get("linked_dids")
             .and_then(|v| v.as_array())
-            .ok_or(ConnectionError::DIDConfigurationResolutionFailed(
-                "no linked_dids found".to_string(),
-            ))?
+            .ok_or(ConnectionError::DIDResolutionFailed("no linked dids found".to_string()))?
             .iter()
             .filter_map(|jwt| {
                 let claims = get_unverified_jwt_claims(jwt).ok()?;
@@ -89,7 +87,6 @@ impl IdentityServices {
 
         Ok(linked_dids)
     }
-
 }
 // HELPERS
 /// Get the claims from a JWT without performing validation.
@@ -102,7 +99,7 @@ fn get_unverified_jwt_claims(jwt: &serde_json::Value) -> Result<serde_json::Valu
                 .ok()
                 .and_then(|payload_bytes| serde_json::from_slice::<serde_json::Value>(&payload_bytes).ok())
         })
-        .ok_or(ConnectionError::DIDConfigurationResolutionFailed(
+        .ok_or(ConnectionError::DIDResolutionFailed(
             "Failed to decode JWT claims".to_string(),
         ))
 }

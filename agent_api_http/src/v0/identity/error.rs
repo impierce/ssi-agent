@@ -27,27 +27,17 @@ impl IntoApiErrorExt for ConnectionError {
                     "Failed to synchronize latest connection with id: {connection_id}"
                 ))
                 .finish(),
-            MissingCredentialOfferEndpoint => ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Missing Credential Offer Endpoint")
-                .type_url(type_url("bad-request#missing-credential-offer-endpoint"))
-                .message("Connection does not have a credential offer endpoint configured")
-                .finish(),
-            CredentialIssuerMetadataFetchFailed(url) => ApiError::builder(StatusCode::BAD_GATEWAY)
+            CredentialIssuerMetadataFetchFailed(url) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Credential Issuer Metadata Fetch Failed")
                 .type_url(type_url("bad-gateway#credential-issuer-metadata-fetch-failed"))
                 .message(format!("Failed to fetch credential issuer metadata from: {url}"))
-                .finish(),
-            DIDWebResolutionFailed(url) => ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("DID Web Resolution Failed")
-                .type_url(type_url("bad-gateway#did-web-resolution-failed"))
-                .message(format!("Failed to resolve DID Web for: {url}"))
                 .finish(),
             MissingDomain(connection_id) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Missing Domain")
                 .type_url(type_url("bad-request#missing-domain"))
                 .message(format!("Connection with id '{connection_id}' is missing a domain"))
                 .finish(),
-            DIDConfigurationResolutionFailed(url) => ApiError::builder(StatusCode::BAD_REQUEST)
+            DIDResolutionFailed(url) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("DID Configurations could not be resolved")
                 .type_url(type_url("bad-request#did-config-failed"))
                 .message(format!("Failed to resolve DID Configurations from '{url}'"))
