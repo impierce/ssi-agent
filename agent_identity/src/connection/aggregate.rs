@@ -28,7 +28,6 @@ pub struct Connection {
     // TODO: use appropriate value_type for timestamps (also enable crate feature `chrono` or `time`)
     #[schema(value_type = Option<String>)]
     pub last_interacted: Option<DateTime<Utc>>,
-
     // TODO: How do we want to make distinction between issuer, holder, and verifier capabilities of the `Connection`?
     #[schema(value_type = Option<String>)]
     pub credential_offer_endpoint: Option<Url>,
@@ -48,10 +47,6 @@ pub struct ConnectionProperties {
     pub dids: Vec<DIDUrl>,
     #[schema(value_type = Option<DisplayProperties>)]
     pub display: Option<DisplayProperties>,
-    #[schema(value_type = Option<String>)]
-    pub first_interacted: Option<DateTime<Utc>>,
-    #[schema(value_type = Option<String>)]
-    pub last_interacted: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
@@ -132,20 +127,38 @@ impl Aggregate for Connection {
                     .ok_or(ConnectionError::MissingCredentialOfferEndpoint)?;
 
                 let metadata = services.fetch_credential_issuer_metadata(&domain).await?;
-                let new_display_properties = get_display_from_metadata(metadata);
+                let new_display = get_display_from_metadata(metadata.clone());
+                let supported_did_methods = get_did_methods_from_metadata(metadata);
 
-                if new_display_properties != self.display {
-                    let proposed_changes = ConnectionProperties {
-                        connection_id: connection_id.clone(),
-                        domain: self.domain.clone(),
-                        dids: self.dids.clone(),
-                        display: new_display_properties,
-                        first_interacted: self.first_interacted,
-                        last_interacted: self.last_interacted,
-                    };
-                    // Right now we are only checking this! TODO: Add more checks.
+                let mut new_dids: Vec<DIDUrl> = Vec::new();
+                for method in &supported_did_methods {
+                    match method.as_str() {
+                        "did:web" => {
+                            let did = services.resolve_did_web(domain).await?;
+                            new_dids.push(did);
+                        }
+                        "did:iota" => {}
+                        _ => {}
+                    }
+                }
+
+                let proposed = ConnectionProperties {
+                    connection_id: connection_id.clone(),
+                    domain: self.domain.clone(),
+                    dids: new_dids,
+                    display: new_display,
+                };
+
+                let current = ConnectionProperties {
+                    connection_id: connection_id.clone(),
+                    domain: self.domain.clone(),
+                    dids: self.dids.clone(),
+                    display: self.display.clone(),
+                };
+
+                if proposed != current {
                     Ok(vec![ConnectionSynced {
-                        pending_changes: Some(proposed_changes),
+                        pending_changes: Some(proposed),
                         last_interacted: Some(Utc::now()),
                     }])
                 } else {
