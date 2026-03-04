@@ -69,7 +69,6 @@ impl Aggregate for Connection {
 
         match command {
             AddConnection { connection_id, domain } => {
-                // todo wrap in schema
                 let domain_ref = domain
                     .as_ref()
                     .ok_or(ConnectionError::MissingDomain(connection_id.clone()))?;
