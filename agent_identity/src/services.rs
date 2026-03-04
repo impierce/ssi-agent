@@ -69,7 +69,7 @@ impl IdentityServices {
             .await
             .map_err(|e| ConnectionError::DIDResolutionFailed(e.to_string()))?;
 
-        // TODO: Add logic for if the linked_did is a JSON-LD VC.
+        // TODO: Add logic for JSON-LD VC linked_dids.
         let linked_dids: Vec<DIDUrl> = response
             .get("linked_dids")
             .and_then(|v| v.as_array())
@@ -106,6 +106,7 @@ fn normalize_domain(domain: &Url) -> Result<Url, ConnectionError> {
 }
 
 /// Get the claims from a JWT without performing validation.
+/// TODO: Validate all claims
 fn get_unverified_jwt_claims(jwt: &serde_json::Value) -> Result<serde_json::Value, ConnectionError> {
     jwt.as_str()
         .and_then(|string| string.splitn(3, '.').collect::<Vec<&str>>().get(1).cloned())
