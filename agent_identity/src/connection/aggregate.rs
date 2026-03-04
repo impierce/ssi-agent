@@ -19,9 +19,7 @@ pub struct Connection {
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
     pub display: Option<DisplayProperties>,
-    // TODO: use appropriate value_type for timestamps (also enable crate feature `chrono` or `time`)
     pub first_interacted: Option<DateTime<Utc>>,
-    // TODO: use appropriate value_type for timestamps (also enable crate feature `chrono` or `time`)
     pub last_interacted: Option<DateTime<Utc>>,
     // TODO: How do we want to make distinction between issuer, holder, and verifier capabilities of the `Connection`?
     // pub issuer_options: Option<IssuerOptions>,
