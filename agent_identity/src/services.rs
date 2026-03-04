@@ -149,5 +149,4 @@ mod tests {
         let normalized_url = normalize_domain(&domain_url).unwrap();
         assert_eq!(normalized_url, Url::parse("https://thatslife.com/").unwrap())
     }
-
 }
