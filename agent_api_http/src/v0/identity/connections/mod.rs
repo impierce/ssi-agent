@@ -130,7 +130,7 @@ pub(crate) async fn get_connections(
     operation_id = "get_connection_by_id",
     tags = ["Connections"],
     responses(
-        (status = 200, description = "Connection retrieved successfully", body = Connection)
+        (status = 200)
     )
 )]
 #[axum_macros::debug_handler]
@@ -144,22 +144,29 @@ pub(crate) async fn get_connection(
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PostSyncConnectionRequest {
+    #[serde(default)]
+    connection_id: String,
+}
+
 /// Sync connection by ID
 ///
 /// Sync the latest version of a connection by its unique identifier.
 #[utoipa::path(
     post,
-    path = "/connections/sync/{connection_id}",
+    path = "/connections/sync-connection",
     operation_id = "sync_connection_by_id",
     tags = ["Connections"],
     responses(
-        (status = 200, description = "Connection synced successfully", body = Connection)
+        (status = 200)
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn sync_connection(
     State(state): State<Arc<IdentityState>>,
-    Path(connection_id): Path<String>,
+    Json(PostSyncConnectionRequest { connection_id }): Json<PostSyncConnectionRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::SyncConnection {
         connection_id: connection_id.clone(),
@@ -168,12 +175,18 @@ pub(crate) async fn sync_connection(
     Ok(StatusCode::OK.into_response())
 }
 
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PostAcceptConnectionChangesRequest {
+    #[serde(default)]
+    connection_id: String,
+}
 /// Accept Pending Changes
 ///
-/// Accept pending changes to a connection
+/// Accept pending changes to a connection.
 #[utoipa::path(
     post,
-    path = "/connections/sync/{connection_id}",
+    path = "/connections/accept-pending-changes",
     operation_id = "accept_connection_changes",
     tags = ["Connections"],
     responses(
@@ -182,7 +195,7 @@ pub(crate) async fn sync_connection(
 )]
 pub(crate) async fn accept_connection_changes(
     State(state): State<Arc<IdentityState>>,
-    Path(connection_id): Path<String>,
+    Json(PostAcceptConnectionChangesRequest { connection_id }): Json<PostAcceptConnectionChangesRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::AcceptConnectionChanges {
         connection_id: connection_id.clone(),
@@ -191,13 +204,19 @@ pub(crate) async fn accept_connection_changes(
     Ok(StatusCode::OK.into_response())
 }
 
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PostRemoveConnectionRequest {
+    #[serde(default)]
+    connection_id: String,
+}
 /// Remove Connection
 ///
 /// Removes a connection
 #[utoipa::path(
     post,
-    path = "/connections/sync/{connection_id}",
-    operation_id = "accept_connection_changes",
+    path = "/remove-connection",
+    operation_id = "remove_connection",
     tags = ["Connections"],
     responses(
         (status = 200)
@@ -205,7 +224,7 @@ pub(crate) async fn accept_connection_changes(
 )]
 pub(crate) async fn remove_connection(
     State(state): State<Arc<IdentityState>>,
-    Path(connection_id): Path<String>,
+    Json(PostRemoveConnectionRequest { connection_id }): Json<PostRemoveConnectionRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::RemoveConnection {
         connection_id: connection_id.clone(),

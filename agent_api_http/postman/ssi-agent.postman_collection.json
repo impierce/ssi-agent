@@ -1,10 +1,9 @@
 {
   "info": {
-    "_postman_id": "246c2e0c-a79a-4cb1-af6a-06476e3616db",
+    "_postman_id": "19732310-e48d-43e2-a2fa-93eb9cef5c81",
     "name": "ssi-agent",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "_exporter_id": "38461474",
-    "_collection_link": "https://go.postman.co/collection/41786572-bd568b99-121b-438e-afc1-2356f4ab1803?source=collection_link"
+    "_exporter_id": "41786572"
   },
   "item": [
     {
@@ -1574,7 +1573,8 @@
                       ""
                     ],
                     "type": "text/javascript",
-                    "packages": {}
+                    "packages": {},
+                    "requests": {}
                   }
                 },
                 {
@@ -1584,7 +1584,8 @@
                       ""
                     ],
                     "type": "text/javascript",
-                    "packages": {}
+                    "packages": {},
+                    "requests": {}
                   }
                 }
               ],
@@ -1593,7 +1594,7 @@
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"alias\": \"My Connection\",\n    \"domain\": \"http://example.org\",\n    \"dids\": [\"did:example:123\"],\n    \"credentialOfferEndpoint\": \"{{HOST}}/openid4vci/offers\"\n}",
+                  "raw": "{\n    \"domain\": \"{{HOST}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1881,6 +1882,54 @@
                     "v0",
                     "connections",
                     "{{CONNECTION_ID}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Sync Connection by ID",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"connectionId\": \"4a148b58-6a5c-4f4e-96f2-64ec405fd4f3\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/connections/sync-connection",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "connections",
+                    "sync-connection"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Remove Connection",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{HOST}}/v0/connections/{{CONNECTION_ID}}/remove",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "connections",
+                    "{{CONNECTION_ID}}",
+                    "remove"
                   ]
                 }
               },
