@@ -31,26 +31,38 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Connection'
-  /v0/connections/sync/{connection_id}:
+  /v0/connections/accept-pending-changes:
+    post:
+      tags:
+      - Connections
+      summary: Accept Pending Changes
+      description: Accept pending changes to a connection.
+      operationId: accept_connection_changes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostAcceptConnectionChangesRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+  /v0/connections/sync-connection:
     post:
       tags:
       - Connections
       summary: Sync connection by ID
       description: Sync the latest version of a connection by its unique identifier.
       operationId: sync_connection_by_id
-      parameters:
-      - name: connection_id
-        in: path
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostSyncConnectionRequest'
         required: true
-        schema:
-          type: string
       responses:
         '200':
-          description: Connection synced successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Connection'
+          description: ''
   /v0/connections/{connection_id}:
     get:
       tags:
@@ -66,11 +78,23 @@ paths:
           type: string
       responses:
         '200':
-          description: Connection retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Connection'
+          description: ''
+  /v0/remove-connection:
+    post:
+      tags:
+      - Connections
+      summary: Remove Connection
+      description: Removes a connection
+      operationId: remove_connection
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostRemoveConnectionRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
   /v0/templates/create-template:
     post:
       tags:
@@ -356,6 +380,21 @@ components:
           - string
           - 'null'
           format: uri
+    PostAcceptConnectionChangesRequest:
+      type: object
+      properties:
+        connectionId:
+          type: string
+    PostRemoveConnectionRequest:
+      type: object
+      properties:
+        connectionId:
+          type: string
+    PostSyncConnectionRequest:
+      type: object
+      properties:
+        connectionId:
+          type: string
     Status:
       type: string
       enum:
