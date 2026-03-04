@@ -141,4 +141,13 @@ mod tests {
             "did:key:z6MkoTHsgNNrby8JzCNQ1iRLyW5QQ6R8Xuu6AA8igGrMVPUM"
         );
     }
+
+    #[test]
+    fn test_domain_normalization() {
+        let domain = "http://www.thatslife.com/";
+        let domain_url = Url::parse(domain).unwrap();
+        let normalized_url = normalize_domain(&domain_url).unwrap();
+        assert_eq!(normalized_url, Url::parse("https://thatslife.com/").unwrap())
+    }
+
 }
