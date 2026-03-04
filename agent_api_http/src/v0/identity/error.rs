@@ -15,11 +15,6 @@ impl IntoApiErrorExt for ConnectionError {
                 .type_url(type_url("not-found#connection-not-found"))
                 .message(format!("No connection found with id: {connection_id}"))
                 .finish(),
-            ConnectionAlreadyExists(connection_id) => ApiError::builder(StatusCode::CONFLICT)
-                .title("Connection Already Exists")
-                .type_url(type_url("conflict#connection-already-exists"))
-                .message(format!("A connection with id '{connection_id}' already exists"))
-                .finish(),
             ConnectionSyncFailed(connection_id) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Connection Synchronization Failed")
                 .type_url(type_url("internal-server-error#connection-sync-failed"))
