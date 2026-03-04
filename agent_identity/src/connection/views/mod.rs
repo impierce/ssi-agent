@@ -59,7 +59,9 @@ impl View<Connection> for ConnectionView {
                 self.last_interacted.clone_from(last_interacted);
                 self.pending_changes.clone_from(pending_changes);
             }
-            ConnectionRemoved { connection_id: _ } => {}
+            ConnectionRemoved { connection_id: _ } => {
+                *self = ConnectionView::default();
+            }
         }
     }
 }
