@@ -24,7 +24,7 @@ pub mod openapi;
 #[serde(rename_all = "camelCase")]
 pub struct PostConnectionsEndpointRequest {
     #[serde(default)]
-    pub domain: Option<Url>,
+    pub domain: Option<String>,
 }
 
 #[axum_macros::debug_handler]
@@ -33,6 +33,17 @@ pub(crate) async fn post_connections(
     Json(PostConnectionsEndpointRequest { domain }): Json<PostConnectionsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let connection_id = uuid::Uuid::new_v4().to_string();
+    let domain: Option<Url> = domain
+        .map(|d| {
+            let s = if !d.starts_with("http://") && !d.starts_with("https://") {
+                format!("https://{d}")
+            } else {
+                d
+            };
+            Url::parse(&s)
+        })
+        .transpose()
+        .map_err(|e| ApiError::builder(StatusCode::BAD_REQUEST).message(format!("Invalid domain: {e}")))?;
 
     let command = ConnectionCommand::AddConnection {
         connection_id: connection_id.clone(),
