@@ -31,7 +31,7 @@ pub struct Connection {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
 pub struct PendingChanges {
     #[schema(value_type = Vec<String>)]
-    pub dids: Vec<DIDUrl>,
+    pub dids: Option<Vec<DIDUrl>>,
     pub display: Option<ConnectionDisplayProperties>,
 }
 
@@ -72,13 +72,13 @@ impl Aggregate for Connection {
                     .ok_or(ConnectionError::MissingDomain(connection_id.clone()))?;
 
                 let metadata = services.fetch_credential_issuer_metadata(domain_ref).await?;
-                let display_properties = get_display_from_metadata(metadata.clone());
+                let connection_display_properties = get_display_from_metadata(metadata.clone());
                 let dids = services.fetch_and_resolve_linked_dids(domain_ref).await?;
                 let now = services.now();
 
                 Ok(vec![ConnectionAdded {
                     connection_id,
-                    display: display_properties,
+                    display: connection_display_properties,
                     domain,
                     dids: dids.clone(),
                     first_interacted: Some(now),
@@ -96,12 +96,12 @@ impl Aggregate for Connection {
                 let new_dids = services.fetch_and_resolve_linked_dids(domain_ref).await?;
 
                 let proposed = PendingChanges {
-                    dids: new_dids,
+                    dids: Some(new_dids),
                     display: new_display,
                 };
 
                 let current = PendingChanges {
-                    dids: self.dids.clone(),
+                    dids: Some(self.dids.clone()),
                     display: self.display.clone(),
                 };
 
@@ -126,7 +126,7 @@ impl Aggregate for Connection {
                 Ok(vec![ConnectionChangesAccepted {
                     connection_id,
                     display: pending.display.clone(),
-                    dids: pending.dids.clone(),
+                    dids: pending.dids.clone().unwrap(),
                     last_interacted: Some(services.now()),
                     pending_changes: None,
                 }])
@@ -346,7 +346,7 @@ pub mod document_tests {
             .then_expect_events(vec![ConnectionEvent::ConnectionSynced {
                 connection_id: "abcd-123".to_string(),
                 pending_changes: Some(PendingChanges {
-                    dids: vec![TEST_DID.parse().unwrap()],
+                    dids: Some(vec![TEST_DID.parse().unwrap()]),
                     display: Some(ConnectionDisplayProperties {
                         name: Some("Timeless Institute".to_string()),
                         locale: Some("en".to_string()),
@@ -369,7 +369,7 @@ pub mod document_tests {
             .given(vec![ConnectionEvent::ConnectionSynced {
                 connection_id: "abcd1234".to_string(),
                 pending_changes: Some(PendingChanges {
-                    dids: vec![TEST_DID.parse().unwrap()],
+                    dids: Some(vec![TEST_DID.parse().unwrap()]),
                     display: Some(ConnectionDisplayProperties {
                         name: Some("Timeless Institute".to_string()),
                         locale: Some("en".to_string()),
