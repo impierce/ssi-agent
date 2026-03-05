@@ -37,14 +37,14 @@ pub struct PendingChanges {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
 pub struct ConnectionDisplayProperties {
-    pub alias: Option<String>,
+    pub name: Option<String>,
     pub locale: Option<String>,
     pub logo: Option<LogoProperties>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
 pub struct LogoProperties {
-    pub url: Option<Url>,
+    pub uri: Option<Url>,
     pub alt_text: Option<String>,
 }
 
@@ -188,13 +188,13 @@ pub fn get_display_from_metadata(metadata: CredentialIssuerMetadata) -> Option<C
         .and_then(|displays: Vec<serde_json::Value>| displays.first().cloned())
         .and_then(|display: serde_json::Value| {
             Some(ConnectionDisplayProperties {
-                alias: display.get("name")?.as_str().map(String::from),
+                name: display.get("name")?.as_str().map(String::from),
                 locale: display
                     .get("locale")
                     .and_then(|locale| locale.as_str().map(String::from)),
                 logo: display.get("logo").and_then(|logo| {
                     Some(LogoProperties {
-                        url: logo.get("uri").and_then(|uri| uri.as_str()?.parse().ok()),
+                        uri: logo.get("uri").and_then(|uri| uri.as_str()?.parse().ok()),
                         alt_text: logo.get("alt_text").and_then(|alt| alt.as_str().map(String::from)),
                     })
                 }),
@@ -268,10 +268,10 @@ pub mod document_tests {
             .then_expect_events(vec![ConnectionEvent::ConnectionAdded {
                 connection_id: "abcd1234".to_string(),
                 display: Some(ConnectionDisplayProperties {
-                    alias: Some("Time Regulation Institute".to_string()),
+                    name: Some("Time Regulation Institute".to_string()),
                     locale: Some("en".to_string()),
                     logo: Some(LogoProperties {
-                        url: Some("https://example.com/logo.png".parse().unwrap()),
+                        uri: Some("https://example.com/logo.png".parse().unwrap()),
                         alt_text: Some("Organisational Logo".to_string()),
                     }),
                 }),
