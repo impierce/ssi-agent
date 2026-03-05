@@ -195,11 +195,9 @@ pub fn get_display_from_metadata(metadata: CredentialIssuerMetadata) -> Option<C
                 locale: display
                     .get("locale")
                     .and_then(|locale| locale.as_str().map(String::from)),
-                logo: display.get("logo").and_then(|logo| {
-                    Some(LogoProperties {
-                        uri: logo.get("uri").and_then(|uri| uri.as_str()?.parse().ok()),
-                        alt_text: logo.get("alt_text").and_then(|alt| alt.as_str().map(String::from)),
-                    })
+                logo: display.get("logo").map(|logo| LogoProperties {
+                    uri: logo.get("uri").and_then(|uri| uri.as_str()?.parse().ok()),
+                    alt_text: logo.get("alt_text").and_then(|alt| alt.as_str().map(String::from)),
                 }),
             })
         })

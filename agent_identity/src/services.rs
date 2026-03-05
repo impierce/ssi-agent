@@ -36,7 +36,7 @@ impl IdentityServices {
     }
 
     pub fn now(&self) -> DateTime<Utc> {
-        self.mock_time.unwrap_or_else(|| Utc::now())
+        self.mock_time.unwrap_or_else(Utc::now)
     }
 
     pub async fn fetch_credential_issuer_metadata(

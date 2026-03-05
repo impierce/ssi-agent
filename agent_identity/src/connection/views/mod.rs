@@ -46,7 +46,7 @@ impl View<Connection> for ConnectionView {
             } => {
                 self.connection_id = connection_id.clone();
                 self.pending_changes = pending_changes.clone();
-                self.last_interacted = last_interacted.clone();
+                self.last_interacted = *last_interacted;
             }
             ConnectionChangesAccepted {
                 connection_id,
