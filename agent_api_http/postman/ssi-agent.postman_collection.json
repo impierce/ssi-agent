@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "19732310-e48d-43e2-a2fa-93eb9cef5c81",
+    "_postman_id": "0295e8ee-3798-4e17-b5d2-01a9d5c0b4ff",
     "name": "ssi-agent",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "41786572"
@@ -1894,7 +1894,7 @@
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"connectionId\": \"4a148b58-6a5c-4f4e-96f2-64ec405fd4f3\"\n}",
+                  "raw": "{\n    \"connectionId\": \"{{CONNECTION_ID}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1920,16 +1920,52 @@
               "request": {
                 "method": "POST",
                 "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"connectionId\": \"{{CONNECTION_ID}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
                 "url": {
-                  "raw": "{{HOST}}/v0/connections/{{CONNECTION_ID}}/remove",
+                  "raw": "{{HOST}}/v0/connections/remove-connection",
                   "host": [
                     "{{HOST}}"
                   ],
                   "path": [
                     "v0",
                     "connections",
-                    "{{CONNECTION_ID}}",
-                    "remove"
+                    "remove-connection"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Accept Pending Connection Changes",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"connectionId\": \"{{CONNECTION_ID}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/connections/accept-pending-changes",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "connections",
+                    "accept-pending-changes"
                   ]
                 }
               },
