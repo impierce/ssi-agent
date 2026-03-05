@@ -18,25 +18,25 @@ pub struct Connection {
     pub domain: Option<Url>,
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
-    pub display: Option<DisplayProperties>,
+    pub display: Option<ConnectionDisplayProperties>,
     pub first_interacted: Option<DateTime<Utc>>,
     pub last_interacted: Option<DateTime<Utc>>,
     // TODO: How do we want to make distinction between issuer, holder, and verifier capabilities of the `Connection`?
     // pub issuer_options: Option<IssuerOptions>,
     // pub holder_options: Option<HolderOptions>,
     // pub verifier_options: Option<VerifierOptions>,
-    pub pending_changes: Option<ConnectionProperties>,
+    pub pending_changes: Option<PendingChanges>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
-pub struct ConnectionProperties {
+pub struct PendingChanges {
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
-    pub display: Option<DisplayProperties>,
+    pub display: Option<ConnectionDisplayProperties>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
-pub struct DisplayProperties {
+pub struct ConnectionDisplayProperties {
     pub alias: Option<String>,
     pub locale: Option<String>,
     pub logo: Option<LogoProperties>,
@@ -74,7 +74,7 @@ impl Aggregate for Connection {
                 let metadata = services.fetch_credential_issuer_metadata(domain_ref).await?;
                 let display_properties = get_display_from_metadata(metadata.clone());
                 let dids = services.fetch_and_resolve_linked_dids(domain_ref).await?;
-                let now = Utc::now();
+                let now = services.now();
 
                 Ok(vec![ConnectionAdded {
                     connection_id,
@@ -95,12 +95,12 @@ impl Aggregate for Connection {
                 let new_display = get_display_from_metadata(metadata.clone());
                 let new_dids = services.fetch_and_resolve_linked_dids(domain_ref).await?;
 
-                let proposed = ConnectionProperties {
+                let proposed = PendingChanges {
                     dids: new_dids,
                     display: new_display,
                 };
 
-                let current = ConnectionProperties {
+                let current = PendingChanges {
                     dids: self.dids.clone(),
                     display: self.display.clone(),
                 };
@@ -108,7 +108,7 @@ impl Aggregate for Connection {
                 if proposed != current {
                     Ok(vec![ConnectionSynced {
                         pending_changes: Some(proposed),
-                        last_interacted: Some(Utc::now()),
+                        last_interacted: Some(services.now()),
                     }])
                 } else {
                     Ok(vec![])
@@ -126,7 +126,7 @@ impl Aggregate for Connection {
                     connection_id,
                     display: pending.display.clone(),
                     dids: pending.dids.clone(),
-                    last_interacted: Some(Utc::now()),
+                    last_interacted: Some(services.now()),
                     pending_changes: None,
                 }])
             }
@@ -182,12 +182,12 @@ impl Aggregate for Connection {
 
 // HELPERS
 
-pub fn get_display_from_metadata(metadata: CredentialIssuerMetadata) -> Option<DisplayProperties> {
+pub fn get_display_from_metadata(metadata: CredentialIssuerMetadata) -> Option<ConnectionDisplayProperties> {
     metadata
         .display
         .and_then(|displays: Vec<serde_json::Value>| displays.first().cloned())
         .and_then(|display: serde_json::Value| {
-            Some(DisplayProperties {
+            Some(ConnectionDisplayProperties {
                 alias: display.get("name")?.as_str().map(String::from),
                 locale: display
                     .get("locale")
@@ -202,66 +202,97 @@ pub fn get_display_from_metadata(metadata: CredentialIssuerMetadata) -> Option<D
         })
 }
 
-// #[cfg(test)]
-// pub mod document_tests {
-//     use super::test_utils::*;
-//     use super::*;
-//     use cqrs_es::test::TestFramework;
-//     use rstest::rstest;
+#[cfg(test)]
+pub mod document_tests {
+    use super::*;
+    use chrono::{DateTime, Utc};
+    use cqrs_es::test::TestFramework;
+    use tokio::runtime::Runtime;
+    use wiremock::{
+        matchers::{method, path},
+        Mock, MockServer, ResponseTemplate,
+    };
 
-//     type ConnectionTestFramework = TestFramework<Connection>;
+    type ConnectionTestFramework = TestFramework<Connection>;
 
-//     #[rstest]
-//     #[serial_test::serial]
-//     async fn test_add_connection(connection_id: String, domain: Url) {
-//         ConnectionTestFramework::with(IdentityServices::default())
-//             .given_no_previous_events()
-//             .when(ConnectionCommand::AddConnection {
-//                 connection_id: connection_id.clone(),
-//                 domain: Some(domain.clone()),
-//             })
-//             .then_expect_events(vec![ConnectionEvent::ConnectionAdded {
-//                 connection_id: connection_id.clone(),
-//                 display: Some(display.clone()),
-//                 domain: Some(domain.clone()),
-//                 dids: dids.clone(),
-//             }])
-//     }
-// }
+    const LINKED_DID_JWT: &str = "eyJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa29USHNnTk5yYnk4SnpDTlExaVJMeVc1UVE2UjhYdXU2QUE4aWdHck1WUFVNI3o2TWtvVEhzZ05OcmJ5OEp6Q05RMWlSTHlXNVFRNlI4WHV1NkFBOGlnR3JNVlBVTSJ9.eyJleHAiOjE3NjQ4NzkxMzksImlzcyI6ImRpZDprZXk6ejZNa29USHNnTk5yYnk4SnpDTlExaVJMeVc1UVE2UjhYdXU2QUE4aWdHck1WUFVNIiwibmJmIjoxNjA3MTEyNzM5LCJzdWIiOiJkaWQ6a2V5Ono2TWtvVEhzZ05OcmJ5OEp6Q05RMWlSTHlXNVFRNlI4WHV1NkFBOGlnR3JNVlBVTSIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9pZGVudGl0eS5mb3VuZGF0aW9uLy53ZWxsLWtub3duL2RpZC1jb25maWd1cmF0aW9uL3YxIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rb1RIc2dOTnJieThKekNOUTFpUkx5VzVRUTZSOFh1dTZBQThpZ0dyTVZQVU0iLCJvcmlnaW4iOiJpZGVudGl0eS5mb3VuZGF0aW9uIn0sImV4cGlyYXRpb25EYXRlIjoiMjAyNS0xMi0wNFQxNDoxMjoxOS0wNjowMCIsImlzc3VhbmNlRGF0ZSI6IjIwMjAtMTItMDRUMTQ6MTI6MTktMDY6MDAiLCJpc3N1ZXIiOiJkaWQ6a2V5Ono2TWtvVEhzZ05OcmJ5OEp6Q05RMWlSTHlXNVFRNlI4WHV1NkFBOGlnR3JNVlBVTSIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJEb21haW5MaW5rYWdlQ3JlZGVudGlhbCJdfX0.aUFNReA4R5rcX_oYm3sPXqWtso_gjPHnWZsB6pWcGv6m3K8-4JIAvFov3ZTM8HxPOrOL17Qf4vBFdY9oK0HeCQ";
+    const TEST_DID: &str = "did:key:z6MkoTHsgNNrby8JzCNQ1iRLyW5QQ6R8Xuu6AA8igGrMVPUM";
 
-// #[cfg(feature = "test_utils")]
-// pub mod test_utils {
-//     use super::DisplayProperties;
-//     use identity_core::common::Url;
-//     use identity_did::DIDUrl;
-//     use rstest::fixture;
+    #[test]
+    fn test_add_connection() {
+        let rt = Runtime::new().unwrap();
+        let _guard = rt.enter();
+        let mock_server = rt.block_on(MockServer::start());
 
-//     #[fixture]
-//     pub fn connection_id() -> String {
-//         "connection_id".to_string()
-//     }
+        rt.block_on(async {
+            Mock::given(method("GET"))
+                .and(path("/.well-known/openid-credential-issuer"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "credential_issuer": mock_server.uri(),
+                "credential_endpoint": format!("{}/credentials", mock_server.uri()),
+                "display": [
+                    {
+                        "name": "Time Regulation Institute",
+                        "locale": "en",
+                        "logo": {
+                            "uri": "https://example.com/logo.png",
+                            "alt_text": "Organisational Logo"
+                        }
+                    }
+                ],
+                "credential_configurations_supported": {}
+                    })))
+                .mount(&mock_server)
+                .await;
 
-//     #[fixture]
-//     pub fn display() -> DisplayProperties {
-//         DisplayProperties {
-//             alias: Some("The Cool Organisation".to_string()),
-//             locale: None,
-//             logo: None,
-//         }
-//     }
+            Mock::given(method("GET"))
+                .and(path("/.well-known/did-configuration.json"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "@context": "https://identity.foundation/.well-known/did-configuration/v1",
+                "linked_dids": [LINKED_DID_JWT]
+                    })))
+                .mount(&mock_server)
+                .await;
+        });
 
-//     #[fixture]
-//     pub fn domain() -> Url {
-//         "http://example.org".parse().unwrap()
-//     }
+        let mock_time = "2026-03-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
+        let domain: Url = mock_server.uri().parse().unwrap();
+        let services = IdentityServices::default();
 
-//     #[fixture]
-//     pub fn dids() -> Vec<DIDUrl> {
-//         vec!["did:example:123".parse().unwrap()]
-//     }
+        ConnectionTestFramework::with(services)
+            .given_no_previous_events()
+            .when(ConnectionCommand::AddConnection {
+                connection_id: "abcd1234".to_string(),
+                domain: Some(domain.clone()),
+            })
+            .then_expect_events(vec![ConnectionEvent::ConnectionAdded {
+                connection_id: "abcd1234".to_string(),
+                display: Some(ConnectionDisplayProperties {
+                    alias: Some("Time Regulation Institute".to_string()),
+                    locale: Some("en".to_string()),
+                    logo: Some(LogoProperties {
+                        url: Some("https://example.com/logo.png".parse().unwrap()),
+                        alt_text: Some("Organisational Logo".to_string()),
+                    }),
+                }),
+                domain: Some(domain),
+                dids: vec![TEST_DID.parse().unwrap()],
+                first_interacted: Some(mock_time),
+                last_interacted: Some(mock_time),
+            }]);
+    }
 
-//     // #[fixture]
-//     // pub fn credential_offer_endpoint() -> Url {
-//     //     "http://example.org/openid4vci/offers".parse().unwrap()
-//     // }
-// }
+    #[test]
+    fn test_remove_connection() {
+        let services = IdentityServices::default();
+
+        ConnectionTestFramework::with(services)
+            .given_no_previous_events()
+            .when(ConnectionCommand::RemoveConnection {
+                connection_id: "abcd1234".to_string(),
+            })
+            .then_expect_events(vec![ConnectionEvent::ConnectionRemoved {
+                connection_id: "abcd1234".to_string(),
+            }]);
+    }
+}

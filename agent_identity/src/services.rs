@@ -1,6 +1,7 @@
 use crate::connection::error::ConnectionError;
 use agent_secret_manager::subject::Subject;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use chrono::{DateTime, Utc};
 use identity_did::DIDUrl;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use reqwest::Client;
@@ -11,6 +12,7 @@ use url::Url;
 pub struct IdentityServices {
     pub subject: Arc<Subject>,
     pub client: Client,
+    pub mock_time: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 impl IdentityServices {
@@ -18,6 +20,7 @@ impl IdentityServices {
         Self {
             subject,
             client: Client::new(),
+            mock_time: None,
         }
     }
 
@@ -27,9 +30,13 @@ impl IdentityServices {
     where
         Self: Sized,
     {
-        Arc::new(Self::new(Arc::new(futures::executor::block_on(async {
-            Subject::new().await
-        }))))
+        let mut services = Self::new(Arc::new(futures::executor::block_on(async { Subject::new().await })));
+        services.mock_time = Some("2026-03-04T12:00:00Z".parse::<chrono::DateTime<chrono::Utc>>().unwrap());
+        Arc::new(services)
+    }
+
+    pub fn now(&self) -> DateTime<Utc> {
+        self.mock_time.unwrap_or_else(|| Utc::now())
     }
 
     pub async fn fetch_credential_issuer_metadata(
@@ -95,7 +102,10 @@ impl IdentityServices {
 /// e.g. `example.com/path` -> `https://example.com/path`
 fn normalize_domain(domain: &Url) -> Result<Url, ConnectionError> {
     let mut url = domain.clone();
-    let _ = url.set_scheme("https");
+    let host = url.host_str();
+    if host != Some("127.0.0.1") && host != Some("localhost") {
+        let _ = url.set_scheme("https");
+    }
     if let Some(host) = url.host_str().map(|h| h.to_string()) {
         if let Some(stripped) = host.strip_prefix("www.") {
             url.set_host(Some(stripped))
@@ -124,7 +134,7 @@ fn get_unverified_jwt_claims(jwt: &serde_json::Value) -> Result<serde_json::Valu
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     // https://identity.foundation/.well-known/did-configuration.json
     const LINKED_DID_JWT: &str = "eyJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa29USHNnTk5yYnk4SnpDTlExaVJMeVc1UVE2UjhYdXU2QUE4aWdHck1WUFVNI3o2TWtvVEhzZ05OcmJ5OEp6Q05RMWlSTHlXNVFRNlI4WHV1NkFBOGlnR3JNVlBVTSJ9.eyJleHAiOjE3NjQ4NzkxMzksImlzcyI6ImRpZDprZXk6ejZNa29USHNnTk5yYnk4SnpDTlExaVJMeVc1UVE2UjhYdXU2QUE4aWdHck1WUFVNIiwibmJmIjoxNjA3MTEyNzM5LCJzdWIiOiJkaWQ6a2V5Ono2TWtvVEhzZ05OcmJ5OEp6Q05RMWlSTHlXNVFRNlI4WHV1NkFBOGlnR3JNVlBVTSIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9pZGVudGl0eS5mb3VuZGF0aW9uLy53ZWxsLWtub3duL2RpZC1jb25maWd1cmF0aW9uL3YxIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rb1RIc2dOTnJieThKekNOUTFpUkx5VzVRUTZSOFh1dTZBQThpZ0dyTVZQVU0iLCJvcmlnaW4iOiJpZGVudGl0eS5mb3VuZGF0aW9uIn0sImV4cGlyYXRpb25EYXRlIjoiMjAyNS0xMi0wNFQxNDoxMjoxOS0wNjowMCIsImlzc3VhbmNlRGF0ZSI6IjIwMjAtMTItMDRUMTQ6MTI6MTktMDY6MDAiLCJpc3N1ZXIiOiJkaWQ6a2V5Ono2TWtvVEhzZ05OcmJ5OEp6Q05RMWlSTHlXNVFRNlI4WHV1NkFBOGlnR3JNVlBVTSIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJEb21haW5MaW5rYWdlQ3JlZGVudGlhbCJdfX0.aUFNReA4R5rcX_oYm3sPXqWtso_gjPHnWZsB6pWcGv6m3K8-4JIAvFov3ZTM8HxPOrOL17Qf4vBFdY9oK0HeCQ";
 

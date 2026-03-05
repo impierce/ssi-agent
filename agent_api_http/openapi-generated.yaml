@@ -211,7 +211,7 @@ components:
         display:
           oneOf:
           - type: 'null'
-          - $ref: '#/components/schemas/DisplayProperties'
+          - $ref: '#/components/schemas/ConnectionDisplayProperties'
         domain:
           type:
           - string
@@ -232,20 +232,22 @@ components:
         pending_changes:
           oneOf:
           - type: 'null'
-          - $ref: '#/components/schemas/ConnectionProperties'
-    ConnectionProperties:
+          - $ref: '#/components/schemas/PendingChanges'
+    ConnectionDisplayProperties:
       type: object
-      required:
-      - dids
       properties:
-        dids:
-          type: array
-          items:
-            type: string
-        display:
+        alias:
+          type:
+          - string
+          - 'null'
+        locale:
+          type:
+          - string
+          - 'null'
+        logo:
           oneOf:
           - type: 'null'
-          - $ref: '#/components/schemas/DisplayProperties'
+          - $ref: '#/components/schemas/LogoProperties'
     CreateTemplateEndpointRequest:
       type: object
       properties:
@@ -315,21 +317,6 @@ components:
           - $ref: '#/components/schemas/Logo'
         name:
           type: string
-    DisplayProperties:
-      type: object
-      properties:
-        alias:
-          type:
-          - string
-          - 'null'
-        locale:
-          type:
-          - string
-          - 'null'
-        logo:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/LogoProperties'
     DuplicateTemplateEndpointRequest:
       type: object
       required:
@@ -347,7 +334,7 @@ components:
         display:
           oneOf:
           - type: 'null'
-          - $ref: '#/components/schemas/DisplayProperties'
+          - $ref: '#/components/schemas/ConnectionDisplayProperties'
         domain:
           type:
           - string
@@ -380,6 +367,19 @@ components:
           - string
           - 'null'
           format: uri
+    PendingChanges:
+      type: object
+      required:
+      - dids
+      properties:
+        dids:
+          type: array
+          items:
+            type: string
+        display:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/ConnectionDisplayProperties'
     PostAcceptConnectionChangesRequest:
       type: object
       properties:

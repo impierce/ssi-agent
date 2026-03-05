@@ -1,4 +1,4 @@
-use crate::connection::aggregate::{ConnectionProperties, DisplayProperties};
+use crate::connection::aggregate::{ConnectionDisplayProperties, PendingChanges};
 use chrono::{DateTime, Utc};
 use cqrs_es::DomainEvent;
 use identity_core::common::Url;
@@ -10,7 +10,7 @@ use strum::Display;
 pub enum ConnectionEvent {
     ConnectionAdded {
         connection_id: String,
-        display: Option<DisplayProperties>,
+        display: Option<ConnectionDisplayProperties>,
         domain: Option<Url>,
         dids: Vec<DIDUrl>,
         first_interacted: Option<DateTime<Utc>>,
@@ -20,15 +20,15 @@ pub enum ConnectionEvent {
         connection_id: String,
     },
     ConnectionSynced {
-        pending_changes: Option<ConnectionProperties>,
+        pending_changes: Option<PendingChanges>,
         last_interacted: Option<DateTime<Utc>>,
     },
     ConnectionChangesAccepted {
         connection_id: String,
-        display: Option<DisplayProperties>,
+        display: Option<ConnectionDisplayProperties>,
         dids: Vec<DIDUrl>,
         last_interacted: Option<DateTime<Utc>>,
-        pending_changes: Option<ConnectionProperties>,
+        pending_changes: Option<PendingChanges>,
     },
 }
 

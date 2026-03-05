@@ -334,6 +334,7 @@ dependencies = [
  "urlencoding",
  "utoipa",
  "uuid",
+ "wiremock",
 ]
 
 [[package]]

@@ -43,6 +43,7 @@ url.workspace = true
 urlencoding = "2.1"
 utoipa.workspace = true
 uuid.workspace = true
+wiremock.workspace = true
 
 # `test_utils` dependencies
 futures = { workspace = true, optional = true }

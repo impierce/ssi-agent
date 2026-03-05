@@ -1,7 +1,7 @@
 pub mod all_connections;
 
 use super::event::ConnectionEvent;
-use crate::connection::aggregate::{Connection, ConnectionProperties, DisplayProperties};
+use crate::connection::aggregate::{Connection, ConnectionDisplayProperties, PendingChanges};
 use chrono::{DateTime, Utc};
 use cqrs_es::{EventEnvelope, View};
 use identity_core::common::Url;
@@ -13,8 +13,8 @@ pub struct ConnectionView {
     pub connection_id: String,
     pub domain: Option<Url>,
     pub dids: Vec<DIDUrl>,
-    pub display: Option<DisplayProperties>,
-    pub pending_changes: Option<ConnectionProperties>,
+    pub display: Option<ConnectionDisplayProperties>,
+    pub pending_changes: Option<PendingChanges>,
     pub first_interacted: Option<DateTime<Utc>>,
     pub last_interacted: Option<DateTime<Utc>>,
 }

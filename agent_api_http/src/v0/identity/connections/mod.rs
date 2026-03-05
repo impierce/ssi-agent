@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_identity::{
-    connection::aggregate::{Connection, DisplayProperties},
+    connection::aggregate::{Connection, ConnectionDisplayProperties},
     connection::command::ConnectionCommand,
     state::IdentityState,
 };
@@ -71,7 +71,7 @@ pub(crate) async fn post_connections(
 #[serde(rename_all = "camelCase")]
 pub struct GetConnectionsEndpointRequest {
     #[serde(default)]
-    pub display: Option<DisplayProperties>,
+    pub display: Option<ConnectionDisplayProperties>,
     #[serde(default)]
     #[schema(value_type = Option<String>)]
     pub domain: Option<Url>,
