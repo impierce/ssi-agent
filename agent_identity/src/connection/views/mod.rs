@@ -40,9 +40,11 @@ impl View<Connection> for ConnectionView {
                 self.last_interacted.clone_from(last_interacted);
             }
             ConnectionSynced {
+                connection_id,
                 pending_changes,
                 last_interacted,
             } => {
+                self.connection_id = connection_id.clone();
                 self.pending_changes = pending_changes.clone();
                 self.last_interacted = last_interacted.clone();
             }

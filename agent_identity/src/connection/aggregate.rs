@@ -107,6 +107,7 @@ impl Aggregate for Connection {
 
                 if proposed != current {
                     Ok(vec![ConnectionSynced {
+                        connection_id,
                         pending_changes: Some(proposed),
                         last_interacted: Some(services.now()),
                     }])
@@ -156,9 +157,11 @@ impl Aggregate for Connection {
                 self.last_interacted = last_interacted;
             }
             ConnectionSynced {
+                connection_id,
                 pending_changes,
                 last_interacted,
             } => {
+                self.connection_id = connection_id;
                 self.pending_changes = pending_changes;
                 self.last_interacted = last_interacted;
             }
@@ -279,6 +282,123 @@ pub mod document_tests {
                 dids: vec![TEST_DID.parse().unwrap()],
                 first_interacted: Some(mock_time),
                 last_interacted: Some(mock_time),
+            }]);
+    }
+
+    #[test]
+    fn test_sync_connection_with_changes() {
+        let rt = Runtime::new().unwrap();
+        let _guard = rt.enter();
+        let mock_server = rt.block_on(MockServer::start());
+
+        rt.block_on(async {
+            Mock::given(method("GET"))
+                .and(path("/.well-known/openid-credential-issuer"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "credential_issuer": mock_server.uri(),
+                "credential_endpoint": format!("{}/credentials", mock_server.uri()),
+                "display": [
+                    {
+                        "name": "Timeless Institute",
+                        "locale": "en",
+                        "logo": {
+                            "uri": "https://example.com/logo.png",
+                            "alt_text": "Organisational Logo"
+                        }
+                    }
+                ],
+                "credential_configurations_supported": {}
+                    })))
+                .mount(&mock_server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path("/.well-known/did-configuration.json"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "@context": "https://identity.foundation/.well-known/did-configuration/v1",
+                "linked_dids": [LINKED_DID_JWT]
+                    })))
+                .mount(&mock_server)
+                .await;
+        });
+
+        let mock_time = "2026-03-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
+        let domain: Url = mock_server.uri().parse().unwrap();
+        let services = IdentityServices::default();
+
+        ConnectionTestFramework::with(services)
+            .given(vec![ConnectionEvent::ConnectionAdded {
+                connection_id: "abcd-123".to_string(),
+                display: Some(ConnectionDisplayProperties {
+                    name: Some("Time Regulation Institute".to_string()),
+                    locale: Some("en".to_string()),
+                    logo: Some(LogoProperties {
+                        uri: Some("https://example.com/logo.png".parse().unwrap()),
+                        alt_text: Some("Organisational Logo".to_string()),
+                    }),
+                }),
+                domain: Some(domain.clone()),
+                dids: vec![TEST_DID.parse().unwrap()],
+                first_interacted: Some(mock_time),
+                last_interacted: Some(mock_time),
+            }])
+            .when(ConnectionCommand::SyncConnection {
+                connection_id: "abcd-123".to_string(),
+            })
+            .then_expect_events(vec![ConnectionEvent::ConnectionSynced {
+                connection_id: "abcd-123".to_string(),
+                pending_changes: Some(PendingChanges {
+                    dids: vec![TEST_DID.parse().unwrap()],
+                    display: Some(ConnectionDisplayProperties {
+                        name: Some("Timeless Institute".to_string()),
+                        locale: Some("en".to_string()),
+                        logo: Some(LogoProperties {
+                            uri: Some("https://example.com/logo.png".parse().unwrap()),
+                            alt_text: Some("Organisational Logo".to_string()),
+                        }),
+                    }),
+                }),
+                last_interacted: Some(mock_time),
+            }]);
+    }
+
+    #[test]
+    fn accept_connection_changes() {
+        let services = IdentityServices::default();
+        let mock_time = "2026-03-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
+
+        ConnectionTestFramework::with(services)
+            .given(vec![ConnectionEvent::ConnectionSynced {
+                connection_id: "abcd1234".to_string(),
+                pending_changes: Some(PendingChanges {
+                    dids: vec![TEST_DID.parse().unwrap()],
+                    display: Some(ConnectionDisplayProperties {
+                        name: Some("Timeless Institute".to_string()),
+                        locale: Some("en".to_string()),
+                        logo: Some(LogoProperties {
+                            uri: Some("https://example.com/logo.png".parse().unwrap()),
+                            alt_text: Some("Organisational Logo".to_string()),
+                        }),
+                    }),
+                }),
+                last_interacted: Some(mock_time),
+            }])
+            .when(ConnectionCommand::AcceptConnectionChanges {
+                connection_id: "abcd1234".to_string(),
+            })
+            .then_expect_events(vec![ConnectionEvent::ConnectionChangesAccepted {
+                connection_id: "abcd1234".to_string(),
+                display: Some(ConnectionDisplayProperties {
+                    name: Some("Timeless Institute".to_string()),
+                    locale: Some("en".to_string()),
+                    logo: Some(LogoProperties {
+                        uri: Some("https://example.com/logo.png".parse().unwrap()),
+                        alt_text: Some("Organisational Logo".to_string()),
+                    }),
+                }),
+                dids: vec![TEST_DID.parse().unwrap()],
+                last_interacted: Some(mock_time),
+                pending_changes: None,
             }]);
     }
 

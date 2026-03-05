@@ -20,6 +20,7 @@ pub enum ConnectionEvent {
         connection_id: String,
     },
     ConnectionSynced {
+        connection_id: String,
         pending_changes: Option<PendingChanges>,
         last_interacted: Option<DateTime<Utc>>,
     },
