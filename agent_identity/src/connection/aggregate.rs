@@ -32,6 +32,7 @@ pub struct Connection {
 pub struct PendingChanges {
     #[schema(value_type = Vec<String>)]
     pub dids: Option<Vec<DIDUrl>>,
+    // TODO: Should all changes to the display be notified to a user? Or only changes to the name
     pub display: Option<ConnectionDisplayProperties>,
 }
 
