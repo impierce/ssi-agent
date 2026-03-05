@@ -4,7 +4,7 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum ConnectionCommand {
-    AddConnection { connection_id: String, domain: Option<Url> },
+    AddConnection { connection_id: String, domain: Url },
     SyncConnection { connection_id: String },
     AcceptConnectionChanges { connection_id: String },
     RemoveConnection { connection_id: String },

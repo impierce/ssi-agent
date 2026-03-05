@@ -22,27 +22,23 @@ pub mod openapi;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PostConnectionsEndpointRequest {
+pub struct AddConnectionEndpointRequest {
     #[serde(default)]
-    pub domain: Option<String>,
+    pub domain: String,
 }
 
 #[axum_macros::debug_handler]
-pub(crate) async fn post_connections(
+pub(crate) async fn post_connection(
     State(state): State<Arc<IdentityState>>,
-    Json(PostConnectionsEndpointRequest { domain }): Json<PostConnectionsEndpointRequest>,
+    Json(AddConnectionEndpointRequest { domain }): Json<AddConnectionEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let connection_id = uuid::Uuid::new_v4().to_string();
-    let domain: Option<Url> = domain
-        .map(|d| {
-            let s = if !d.starts_with("http://") && !d.starts_with("https://") {
-                format!("https://{d}")
-            } else {
-                d
-            };
-            Url::parse(&s)
-        })
-        .transpose()
+    let normalized = if !domain.starts_with("http://") && !domain.starts_with("https://") {
+        format!("https://{domain}")
+    } else {
+        domain
+    };
+    let domain: Url = Url::parse(&normalized)
         .map_err(|e| ApiError::builder(StatusCode::BAD_REQUEST).message(format!("Invalid domain: {e}")))?;
 
     let command = ConnectionCommand::AddConnection {
@@ -146,7 +142,7 @@ pub(crate) async fn get_connection(
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct PostSyncConnectionRequest {
+pub struct SyncConnectionRequest {
     #[serde(default)]
     connection_id: String,
 }
@@ -166,7 +162,7 @@ pub struct PostSyncConnectionRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn sync_connection(
     State(state): State<Arc<IdentityState>>,
-    Json(PostSyncConnectionRequest { connection_id }): Json<PostSyncConnectionRequest>,
+    Json(SyncConnectionRequest { connection_id }): Json<SyncConnectionRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::SyncConnection {
         connection_id: connection_id.clone(),
@@ -177,7 +173,7 @@ pub(crate) async fn sync_connection(
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct PostAcceptConnectionChangesRequest {
+pub struct AcceptConnectionChangesRequest {
     #[serde(default)]
     connection_id: String,
 }
@@ -195,7 +191,7 @@ pub struct PostAcceptConnectionChangesRequest {
 )]
 pub(crate) async fn accept_connection_changes(
     State(state): State<Arc<IdentityState>>,
-    Json(PostAcceptConnectionChangesRequest { connection_id }): Json<PostAcceptConnectionChangesRequest>,
+    Json(AcceptConnectionChangesRequest { connection_id }): Json<AcceptConnectionChangesRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::AcceptConnectionChanges {
         connection_id: connection_id.clone(),
@@ -206,7 +202,7 @@ pub(crate) async fn accept_connection_changes(
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct PostRemoveConnectionRequest {
+pub struct RemoveConnectionRequest {
     #[serde(default)]
     connection_id: String,
 }
@@ -224,7 +220,7 @@ pub struct PostRemoveConnectionRequest {
 )]
 pub(crate) async fn remove_connection(
     State(state): State<Arc<IdentityState>>,
-    Json(PostRemoveConnectionRequest { connection_id }): Json<PostRemoveConnectionRequest>,
+    Json(RemoveConnectionRequest { connection_id }): Json<RemoveConnectionRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::RemoveConnection {
         connection_id: connection_id.clone(),

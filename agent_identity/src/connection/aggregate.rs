@@ -68,13 +68,9 @@ impl Aggregate for Connection {
 
         match command {
             AddConnection { connection_id, domain } => {
-                let domain_ref = domain
-                    .as_ref()
-                    .ok_or(ConnectionError::MissingDomain(connection_id.clone()))?;
-
-                let metadata = services.fetch_credential_issuer_metadata(domain_ref).await?;
+                let metadata = services.fetch_credential_issuer_metadata(&domain).await?;
                 let connection_display_properties = get_display_from_metadata(metadata.clone());
-                let dids = services.fetch_and_resolve_linked_dids(domain_ref).await?;
+                let dids = services.fetch_and_resolve_linked_dids(&domain).await?;
                 let now = services.now();
 
                 Ok(vec![ConnectionAdded {
@@ -152,7 +148,7 @@ impl Aggregate for Connection {
             } => {
                 self.connection_id = connection_id;
                 self.display = display;
-                self.domain = domain;
+                self.domain = Some(domain);
                 self.dids = dids;
                 self.first_interacted = first_interacted;
                 self.last_interacted = last_interacted;
@@ -258,14 +254,14 @@ pub mod document_tests {
         });
 
         let mock_time = "2026-03-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
-        let domain: Url = mock_server.uri().parse().unwrap();
+        let mock_domain: Url = mock_server.uri().parse().unwrap();
         let services = IdentityServices::default();
 
         ConnectionTestFramework::with(services)
             .given_no_previous_events()
             .when(ConnectionCommand::AddConnection {
                 connection_id: "abcd1234".to_string(),
-                domain: Some(domain.clone()),
+                domain: mock_domain.clone(),
             })
             .then_expect_events(vec![ConnectionEvent::ConnectionAdded {
                 connection_id: "abcd1234".to_string(),
@@ -277,7 +273,7 @@ pub mod document_tests {
                         alt_text: Some("Organisational Logo".to_string()),
                     }),
                 }),
-                domain: Some(domain),
+                domain: mock_domain,
                 dids: vec![TEST_DID.parse().unwrap()],
                 first_interacted: Some(mock_time),
                 last_interacted: Some(mock_time),
@@ -322,7 +318,7 @@ pub mod document_tests {
         });
 
         let mock_time = "2026-03-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
-        let domain: Url = mock_server.uri().parse().unwrap();
+        let mock_domain: Url = mock_server.uri().parse().unwrap();
         let services = IdentityServices::default();
 
         ConnectionTestFramework::with(services)
@@ -336,7 +332,7 @@ pub mod document_tests {
                         alt_text: Some("Organisational Logo".to_string()),
                     }),
                 }),
-                domain: Some(domain.clone()),
+                domain: mock_domain.clone(),
                 dids: vec![TEST_DID.parse().unwrap()],
                 first_interacted: Some(mock_time),
                 last_interacted: Some(mock_time),
