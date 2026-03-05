@@ -20,13 +20,25 @@ use serde::{Deserialize, Serialize};
 
 pub mod openapi;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AddConnectionEndpointRequest {
     #[serde(default)]
     pub domain: String,
 }
 
+/// Add a Connection
+///
+/// Adds a new connection based on the provided domain.
+#[utoipa::path(
+    post,
+    path = "/connections",
+    operation_id = "post_connection",
+    tags = ["Connections"],
+    responses(
+        (status = 200)
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn post_connection(
     State(state): State<Arc<IdentityState>>,

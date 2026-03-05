@@ -13,7 +13,7 @@ use axum::{
     Router,
 };
 use connections::{
-    accept_connection_changes, get_connection, get_connections, post_connections, remove_connection, sync_connection,
+    accept_connection_changes, get_connection, get_connections, post_connection, remove_connection, sync_connection,
 };
 use documents::{get_document, get_documents};
 use services::{linked_vp::linked_vp, service, services};
@@ -30,7 +30,7 @@ pub fn router(identity_state: Arc<IdentityState>) -> Router {
         .nest(
             API_VERSION,
             Router::new()
-                .route("/connections", get(get_connections).post(post_connections))
+                .route("/connections", get(get_connections).post(post_connection))
                 .route("/connections/{connection_id}", get(get_connection))
                 .route("/connections/sync-connection", post(sync_connection))
                 .route("/connections/accept-pending-changes", post(accept_connection_changes))

@@ -31,6 +31,21 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Connection'
+    post:
+      tags:
+      - Connections
+      summary: Add a Connection
+      description: Adds a new connection based on the provided domain.
+      operationId: post_connection
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddConnectionEndpointRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
   /v0/connections/accept-pending-changes:
     post:
       tags:
@@ -42,7 +57,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PostAcceptConnectionChangesRequest'
+              $ref: '#/components/schemas/AcceptConnectionChangesRequest'
         required: true
       responses:
         '200':
@@ -58,7 +73,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PostSyncConnectionRequest'
+              $ref: '#/components/schemas/SyncConnectionRequest'
         required: true
       responses:
         '200':
@@ -90,7 +105,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PostRemoveConnectionRequest'
+              $ref: '#/components/schemas/RemoveConnectionRequest'
         required: true
       responses:
         '200':
@@ -198,6 +213,16 @@ paths:
                 $ref: '#/components/schemas/Template'
 components:
   schemas:
+    AcceptConnectionChangesRequest:
+      type: object
+      properties:
+        connectionId:
+          type: string
+    AddConnectionEndpointRequest:
+      type: object
+      properties:
+        domain:
+          type: string
     Connection:
       type: object
       required:
@@ -380,17 +405,7 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
-    PostAcceptConnectionChangesRequest:
-      type: object
-      properties:
-        connectionId:
-          type: string
-    PostRemoveConnectionRequest:
-      type: object
-      properties:
-        connectionId:
-          type: string
-    PostSyncConnectionRequest:
+    RemoveConnectionRequest:
       type: object
       properties:
         connectionId:
@@ -402,6 +417,11 @@ components:
       - published
       - archived
       - deleted
+    SyncConnectionRequest:
+      type: object
+      properties:
+        connectionId:
+          type: string
     Template:
       type: object
       description: Data transfer object for Templates.
