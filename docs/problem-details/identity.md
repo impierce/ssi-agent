@@ -8,7 +8,7 @@ This error indicates that the system was unable to synchronize the latest state 
 
 ## Credential Issuer Metadata Fetch Failed
 
-This error occurs when the system is unable to retrieve credential issuer metadata from the connection's domain. This may be caused by the remote server being unreachable, the URL being incorrect, or the endpoint not returning a valid metadata response.
+This error occurs when the system is unable to retrieve credential issuer metadata from the connection's `/.well-known/openid-credential-issuer` endpoint. This may be caused by the remote server being unreachable, the URL being incorrect, or the endpoint not returning a valid metadata response.
 
 ## Missing Domain
 
