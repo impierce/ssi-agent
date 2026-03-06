@@ -78,7 +78,7 @@ paths:
       responses:
         '200':
           description: ''
-  /v0/connections/{connection_id}:
+  /v0/connections/{id}:
     get:
       tags:
       - Connections
@@ -86,7 +86,7 @@ paths:
       description: Retrieve a specific connection by its unique identifier.
       operationId: get_connection_by_id
       parameters:
-      - name: connection_id
+      - name: id
         in: path
         required: true
         schema:
@@ -216,7 +216,7 @@ components:
     AcceptConnectionChangesRequest:
       type: object
       properties:
-        connectionId:
+        id:
           type: string
     AddConnectionEndpointRequest:
       type: object
@@ -420,7 +420,7 @@ components:
     SyncConnectionRequest:
       type: object
       properties:
-        connectionId:
+        id:
           type: string
     Template:
       type: object

@@ -134,7 +134,7 @@ pub(crate) async fn get_connections(
 /// Retrieve a specific connection by its unique identifier.
 #[utoipa::path(
     get,
-    path = "/connections/{connection_id}",
+    path = "/connections/{id}",
     operation_id = "get_connection_by_id",
     tags = ["Connections"],
     responses(
@@ -144,9 +144,9 @@ pub(crate) async fn get_connections(
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connection(
     State(state): State<Arc<IdentityState>>,
-    Path(connection_id): Path<String>,
+    Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&connection_id, &state.query.connection)
+    query_handler(&id, &state.query.connection)
         .await?
         .map(|connection_view| (StatusCode::OK, Json(connection_view)).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
@@ -156,7 +156,7 @@ pub(crate) async fn get_connection(
 #[serde(rename_all = "camelCase")]
 pub struct SyncConnectionRequest {
     #[serde(default)]
-    connection_id: String,
+    id: String,
 }
 
 /// Sync connection by ID
@@ -174,12 +174,12 @@ pub struct SyncConnectionRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn sync_connection(
     State(state): State<Arc<IdentityState>>,
-    Json(SyncConnectionRequest { connection_id }): Json<SyncConnectionRequest>,
+    Json(SyncConnectionRequest { id }): Json<SyncConnectionRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::SyncConnection {
-        connection_id: connection_id.clone(),
+        connection_id: id.clone(),
     };
-    command_handler(&connection_id, &state.command.connection, command).await?;
+    command_handler(&id, &state.command.connection, command).await?;
     Ok(StatusCode::OK.into_response())
 }
 
@@ -187,7 +187,7 @@ pub(crate) async fn sync_connection(
 #[serde(rename_all = "camelCase")]
 pub struct AcceptConnectionChangesRequest {
     #[serde(default)]
-    connection_id: String,
+    id: String,
 }
 /// Accept Pending Changes
 ///
@@ -203,12 +203,12 @@ pub struct AcceptConnectionChangesRequest {
 )]
 pub(crate) async fn accept_connection_changes(
     State(state): State<Arc<IdentityState>>,
-    Json(AcceptConnectionChangesRequest { connection_id }): Json<AcceptConnectionChangesRequest>,
+    Json(AcceptConnectionChangesRequest { id }): Json<AcceptConnectionChangesRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::AcceptConnectionChanges {
-        connection_id: connection_id.clone(),
+        connection_id: id.clone(),
     };
-    command_handler(&connection_id, &state.command.connection, command).await?;
+    command_handler(&id, &state.command.connection, command).await?;
     Ok(StatusCode::OK.into_response())
 }
 
