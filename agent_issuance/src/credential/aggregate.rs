@@ -3,7 +3,7 @@ use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError::{self, *};
 use crate::credential::event::CredentialEvent;
 use crate::services::IssuanceServices;
-use agent_library::json_schema::{CredentialType, JsonSchemaError};
+use agent_library::json_schema_validation::{CredentialType, JsonSchemaError};
 use agent_shared::config::{
     config, get_preferred_did_method, get_preferred_signing_algorithm, AlgorithmExt, BITS_PER_STATUS,
     STATUS_LIST_BYTES_AMOUNT,

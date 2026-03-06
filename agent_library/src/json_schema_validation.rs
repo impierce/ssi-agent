@@ -11,15 +11,15 @@ lazy_static! {
     static ref SCHEMA_REGISTRY: HashMap<&'static str, Value> = {
         let mut json_schemas = HashMap::new();
             json_schemas.insert("VerifiableCredentialV1_1.json",
-                serde_json::from_str(include_str!("VerifiableCredentialV1_1.json")).unwrap());
+                serde_json::from_str(include_str!("json_schemas/VerifiableCredentialV1_1.json")).unwrap());
             json_schemas.insert("VerifiableCredentialV2.json",
-                serde_json::from_str(include_str!("VerifiableCredentialV2.json")).unwrap());
+                serde_json::from_str(include_str!("json_schemas/VerifiableCredentialV2.json")).unwrap());
             json_schemas.insert("OpenBadgeCredentialV3.json",
-                serde_json::from_str(include_str!("OpenBadgeCredentialV3.json")).unwrap());
+                serde_json::from_str(include_str!("json_schemas/OpenBadgeCredentialV3.json")).unwrap());
             json_schemas.insert("EDC_VerifiableCredentialV1_1.json",
-                serde_json::from_str(include_str!("EDC_VerifiableCredentialV1_1.json")).unwrap());
+                serde_json::from_str(include_str!("json_schemas/EDC_VerifiableCredentialV1_1.json")).unwrap());
             json_schemas.insert("EuropeanDigitalCredentialV3_3.json",
-                serde_json::from_str(include_str!("EuropeanDigitalCredentialV3_3.json")).unwrap());
+                serde_json::from_str(include_str!("json_schemas/EuropeanDigitalCredentialV3_3.json")).unwrap());
             json_schemas
         };
 
