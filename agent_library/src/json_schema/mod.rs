@@ -262,16 +262,18 @@ impl Retrieve for MemoryRetriever {
 
 /// This trait is solely to add a method to serde_json::Value for converting Values to Strings cleanly
 pub trait ValueToString {
-    fn to_clean_string(&self) -> Option<String>;
+    fn to_unescaped_string(&self) -> Option<String>;
 }
 
 impl ValueToString for serde_json::Value {
-    /// A simple helper function to convert a `serde_json::Value` to an `Option<String>`.
-    /// The original as_str or to_string methods work terribly due to including quotes characters.
-    /// The original as_str/to_string methods output the following: "/".../"" or Some("/".../"").
-    /// This function cleanly outputs Some("...").
-    /// Renaming this clarifies our code instead of having as_str and to_string calls everywhere.
-    fn to_clean_string(&self) -> Option<String> {
+    /// Helper to convert a `serde_json::Value` to an owned `Option<String>`.
+    ///
+    /// This resolves two common inconveniences:
+    /// 1. `to_string()` serializes the JSON, resulting in extra quotes (e.g., "\"value\"").
+    /// 2. `as_str()` returns a `&str`, but often an owned `String` is required.
+    ///
+    /// Returns `Some(String)` if the value is a JSON string, or `None` otherwise.
+    fn to_unescaped_string(&self) -> Option<String> {
         self.as_str().map(ToString::to_string)
     }
 }
@@ -420,5 +422,18 @@ mod tests {
 
         let result = validate_credential_types(&invalid_ob3);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_to_unescaped_string() {
+        let value = json!("Hello, World!");
+        // value.to_string() would return "\"Hello, World!\"", showcasing our inconvenience.
+        assert_eq!(value.to_string(), "\"Hello, World!\"".to_string());
+
+        // This is the result we want, giving us the unescaped string directly from the Value or a None which we can properly error handle.
+        assert_eq!(value.to_unescaped_string(), Some("Hello, World!".to_string()));
+
+        let non_string_value = json!(42);
+        assert_eq!(non_string_value.to_unescaped_string(), None);
     }
 }
