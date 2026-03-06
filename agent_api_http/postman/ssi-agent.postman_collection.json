@@ -1,7 +1,7 @@
 {
   "info": {
     "_postman_id": "7e7f70a4-fe08-4199-a479-a0fd5884bd71",
-    "name": "ssi-agent latest",
+    "name": "ssi-agent",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "37402219"
   },
@@ -10,10 +10,10 @@
       "name": "Issuance",
       "item": [
         {
-          "name": "vc+sd-jwt",
+          "name": "VC DM 2.0 SD-JWT",
           "item": [
             {
-              "name": "Create VC 2.0",
+              "name": "Create VC DM 2.0",
               "event": [
                 {
                   "listen": "test",
@@ -67,7 +67,7 @@
               "response": []
             },
             {
-              "name": "Create ELM",
+              "name": "Create ELM 3.3",
               "event": [
                 {
                   "listen": "test",
@@ -121,7 +121,7 @@
               "response": []
             },
             {
-              "name": "Create OBv3",
+              "name": "Create Open Badge 3.0",
               "event": [
                 {
                   "listen": "test",
@@ -175,7 +175,7 @@
               "response": []
             },
             {
-              "name": "Add Cred Config ELM",
+              "name": "Add Credential Configuration ELM",
               "request": {
                 "method": "POST",
                 "header": [],
@@ -202,7 +202,7 @@
               "response": []
             },
             {
-              "name": "Add Cred Config OBv3",
+              "name": "Add Credential Configuration OBv3",
               "request": {
                 "method": "POST",
                 "header": [],
@@ -231,7 +231,7 @@
           ]
         },
         {
-          "name": "jwt_vc_json",
+          "name": "W3C Verifiable Credentials 1.1",
           "item": [
             {
               "name": "Create VC 1.1",
@@ -288,7 +288,7 @@
               "response": []
             },
             {
-              "name": "Create ELM",
+              "name": "Create ELM 3.3",
               "event": [
                 {
                   "listen": "test",
@@ -342,7 +342,7 @@
               "response": []
             },
             {
-              "name": "Create OBv3",
+              "name": "Create Open Badges 3.0",
               "event": [
                 {
                   "listen": "test",
@@ -396,7 +396,7 @@
               "response": []
             },
             {
-              "name": "Add Cred Config ELM",
+              "name": "Add Credential Configuration ELM",
               "request": {
                 "method": "POST",
                 "header": [],
@@ -423,7 +423,7 @@
               "response": []
             },
             {
-              "name": "Add Cred Config OBv3",
+              "name": "Add Credential Configuration OBv3",
               "request": {
                 "method": "POST",
                 "header": [],
@@ -452,7 +452,7 @@
           ]
         },
         {
-          "name": "Create dc+sd-jwt Credential",
+          "name": "Create SD-JWT VC",
           "event": [
             {
               "listen": "test",
@@ -989,6 +989,24 @@
               "path": [
                 "auth",
                 "token"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "nonce",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{HOST}}/openid4vci/nonce",
+              "host": [
+                "{{HOST}}"
+              ],
+              "path": [
+                "openid4vci",
+                "nonce"
               ]
             }
           },
