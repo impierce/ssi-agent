@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use serde_json::Value;
 use std::collections::HashMap;
 use thiserror::Error;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 lazy_static! {
     static ref SCHEMA_REGISTRY: HashMap<&'static str, Value> = {
@@ -37,58 +37,6 @@ lazy_static! {
             compile_validator("OpenBadgeCredentialV3.json").expect("Failed to compile OpenBadgeCredentialV3"));
         validators
     };
-}
-
-/// Validate supported credential types against their corresponding JSON Schema.
-/// This function is only capable of validating VC's and subsequent Credential Formats/Types.
-/// All VC's must have a `type` field, which is either a string or an array of strings.
-pub fn validate_credential_types(data: &Value) -> Result<(), JsonSchemaError> {
-    // Data should be passed as a serde_json::Value::Object as per the VerifiableCredentialRecord::try_new() method.
-    // However this block double checks and emits the correct error message when this is not the case.
-    // Serde_json::Value typing is error prone and sometimes Objects are wrapped as Strings resulting in Value::String.
-    // Therefore, we try to "unwrap" the String type here once before also failing on that type.
-    let data = match data {
-        Value::String(str) => {
-            let parsed_data =
-                serde_json::from_str::<Value>(str).map_err(|e| JsonSchemaError::InvalidJsonData(e.to_string()))?;
-            if !parsed_data.is_object() {
-                return Err(JsonSchemaError::InvalidJsonData("Expected JSON object".to_string()));
-            }
-            parsed_data
-        }
-        Value::Object(_) => data.clone(),
-        _ => {
-            return Err(JsonSchemaError::InvalidJsonData("Expected JSON object".to_string()));
-        }
-    };
-
-    let type_field = data.get("type");
-
-    match type_field {
-        Some(_type) if !_type.is_null() => {
-            match serde_json::from_value::<StringOrArray>(_type.clone())
-                .map_err(|e| JsonSchemaError::GetCredentialTypeError(e.to_string()))?
-            {
-                StringOrArray::String(credential_type) => Ok(credential_type.validate(&data)?),
-                StringOrArray::Array(credential_type_array) => credential_type_array
-                    .iter()
-                    .try_for_each(|credential_type| credential_type.validate(&data)),
-            }
-        }
-        _ => {
-            debug!("No credential type found, skipping validation");
-            Ok(())
-        }
-    }
-}
-
-// Structs
-
-#[derive(serde::Deserialize)]
-#[serde(untagged)]
-pub enum StringOrArray {
-    String(CredentialType),
-    Array(Vec<CredentialType>),
 }
 
 #[derive(serde::Deserialize, PartialEq, Debug, strum::Display)]
@@ -244,8 +192,8 @@ fn compile_validator(json_schema_key: &str) -> Result<Validator, JsonSchemaError
 }
 
 /// This struct is solely used to implement the `Retrieve` trait from the `jsonschema` crate,
-/// allowing us to reference other JSON Schema's in this folder via $ref in any JSON Schema.
-struct MemoryRetriever {}
+/// allowing us to reference other JSON Schemas in this folder via $ref in any JSON Schema.
+struct MemoryRetriever;
 
 /// Implementation of the `Retrieve` trait for loading local JSON Schema files
 impl Retrieve for MemoryRetriever {
@@ -394,13 +342,15 @@ mod tests {
 
     #[test]
     fn credential_schema_validation_elm_edc_ok() {
-        let result = validate_credential_types(&EXAMPLE_BASIC_ELM_EDC);
+        let cred_type = CredentialType::EuropeanDigitalCredential;
+        let result = cred_type.validate(&EXAMPLE_BASIC_ELM_EDC);
         assert!(result.is_ok());
     }
 
     #[test]
     fn credential_schema_validation_obv3_ok() {
-        let result = validate_credential_types(&EXAMPLE_BASIC_OB3);
+        let cred_type = CredentialType::OpenBadgeCredential;
+        let result = cred_type.validate(&EXAMPLE_BASIC_OB3);
         assert!(result.is_ok());
     }
 
@@ -410,7 +360,8 @@ mod tests {
 
         *invalid_ob3.get_mut("id").unwrap() = json!(["InvalidId"]);
 
-        let result = validate_credential_types(&invalid_ob3);
+        let cred_type = CredentialType::OpenBadgeCredential;
+        let result = cred_type.validate(&invalid_ob3);
         assert!(result.is_err());
     }
 
@@ -420,7 +371,8 @@ mod tests {
 
         *invalid_ob3.get_mut("type").unwrap() = json!(["UnknownType"]);
 
-        let result = validate_credential_types(&invalid_ob3);
+        let cred_type = CredentialType::Unknown;
+        let result = cred_type.validate(&invalid_ob3);
         assert!(result.is_ok());
     }
 
