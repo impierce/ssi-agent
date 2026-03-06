@@ -408,7 +408,7 @@ components:
     RemoveConnectionRequest:
       type: object
       properties:
-        connectionId:
+        id:
           type: string
     Status:
       type: string

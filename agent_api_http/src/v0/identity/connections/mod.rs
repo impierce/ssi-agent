@@ -216,7 +216,7 @@ pub(crate) async fn accept_connection_changes(
 #[serde(rename_all = "camelCase")]
 pub struct RemoveConnectionRequest {
     #[serde(default)]
-    connection_id: String,
+    id: String,
 }
 /// Remove Connection
 ///
@@ -232,11 +232,11 @@ pub struct RemoveConnectionRequest {
 )]
 pub(crate) async fn remove_connection(
     State(state): State<Arc<IdentityState>>,
-    Json(RemoveConnectionRequest { connection_id }): Json<RemoveConnectionRequest>,
+    Json(RemoveConnectionRequest { id }): Json<RemoveConnectionRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::RemoveConnection {
-        connection_id: connection_id.clone(),
+        connection_id: id.clone(),
     };
-    command_handler(&connection_id, &state.command.connection, command).await?;
+    command_handler(&id, &state.command.connection, command).await?;
     Ok(StatusCode::OK.into_response())
 }
