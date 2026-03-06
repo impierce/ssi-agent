@@ -795,8 +795,6 @@ fn build_unsigned_w3c_credential_data(
                     ))?;
 
                 // If no root id is provided, convert the aggregate credential_id to an urn as sensible default.
-                println!("1credential_id: {credential_id:?}");
-
                 let root_id = uuid::Uuid::parse_str(credential_id).map_err(|e| {
                     BuildCredentialError(format!(
                         "Failed to parse credential_id `{credential_id}` as UUID: {}",
