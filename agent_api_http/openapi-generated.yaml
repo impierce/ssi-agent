@@ -44,8 +44,17 @@ paths:
               $ref: '#/components/schemas/AddConnectionEndpointRequest'
         required: true
       responses:
-        '200':
-          description: ''
+        '201':
+          description: Connection added successfully
+          headers:
+            Location:
+              schema:
+                type: string
+              description: URI of the newly created connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionView'
   /v0/connections/accept-pending-changes:
     post:
       tags:
