@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_identity::connection::views::ConnectionView;
+use agent_identity::connection::views::all_connections::AllConnectionsView;
 use agent_identity::{
     connection::aggregate::ConnectionDisplayProperties, connection::command::ConnectionCommand, state::IdentityState,
 };
@@ -35,7 +36,11 @@ pub struct AddConnectionEndpointRequest {
     operation_id = "add_connection",
     tags = ["Connections"],
     responses(
-        (status = 200)
+        (status = 201, description = "Connection added successfully", body = ConnectionView,
+            headers(
+                ("Location" = String, description = "URI of the newly created connection")
+            )
+        ),
     )
 )]
 #[axum_macros::debug_handler]
@@ -96,7 +101,7 @@ pub struct GetConnectionsEndpointRequest {
     operation_id = "get_all_connections",
     tags = ["Connections"],
     responses(
-        (status = 200, description = "All connections retrieved successfully", body = [ConnectionView])
+        (status = 200, description = "All connections retrieved successfully", body = [AllConnectionsView])
     )
 )]
 #[axum_macros::debug_handler]
@@ -243,3 +248,4 @@ pub(crate) async fn remove_connection(
 
 // Helper
 
+fn normalize_url(url: &Url) -> Result<Url, String. 
