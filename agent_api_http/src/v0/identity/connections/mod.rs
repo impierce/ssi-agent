@@ -223,7 +223,7 @@ pub struct RemoveConnectionRequest {
 /// Removes a connection
 #[utoipa::path(
     post,
-    path = "/remove-connection",
+    path = "/connections/remove-connection",
     operation_id = "remove_connection",
     tags = ["Connections"],
     responses(

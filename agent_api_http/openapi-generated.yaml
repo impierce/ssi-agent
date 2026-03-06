@@ -62,6 +62,22 @@ paths:
       responses:
         '200':
           description: ''
+  /v0/connections/remove-connection:
+    post:
+      tags:
+      - Connections
+      summary: Remove Connection
+      description: Removes a connection
+      operationId: remove_connection
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoveConnectionRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
   /v0/connections/sync-connection:
     post:
       tags:
@@ -91,22 +107,6 @@ paths:
         required: true
         schema:
           type: string
-      responses:
-        '200':
-          description: ''
-  /v0/remove-connection:
-    post:
-      tags:
-      - Connections
-      summary: Remove Connection
-      description: Removes a connection
-      operationId: remove_connection
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RemoveConnectionRequest'
-        required: true
       responses:
         '200':
           description: ''
