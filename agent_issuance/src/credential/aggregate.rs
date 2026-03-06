@@ -8,6 +8,7 @@ use agent_shared::config::{
     config, get_preferred_did_method, get_preferred_signing_algorithm, AlgorithmExt, BITS_PER_STATUS,
     STATUS_LIST_BYTES_AMOUNT,
 };
+use agent_shared::serde_json_value_ext::SerdeJsonValueExt;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use cqrs_es::Aggregate;
@@ -29,7 +30,7 @@ use oid4vci::notification_request::NotificationRequest;
 use oid4vci::VerifiableCredentialJwt;
 use sd_jwt::{RequiredKeyBinding, SdJwtBuilder};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 use std::sync::Arc;
 use tracing::{debug, info};
 use url::Url;
@@ -1041,64 +1042,6 @@ fn get_status_list_url(index: usize) -> Result<identity_core::common::Url, Crede
     Ok(status_list_url.into())
 }
 
-// Helper methods to simplify working with serde_json::Value.
-pub trait ExtraMethods {
-    /// Inserts a value at the specified path, creating intermediate objects as needed.
-    /// The path includes the final key name where the value will be inserted.
-    /// For example, to set `$.issuer.id = "123"`, use:
-    /// `credential.insert_at_path(&["issuer", "id"], json!("123"))`
-    ///
-    /// Returns `Some(&mut self)` on success, `None` on failure.
-    fn insert_at_path(&mut self, path: &[&str], value: serde_json::Value) -> Option<&mut Self>;
-
-    /// This method is the same as `insert_at_path` but it only inserts the value if there is no value already present at the path.
-    fn insert_if_none(&mut self, path: &[&str], value: serde_json::Value) -> Option<&mut Self>;
-}
-
-impl ExtraMethods for serde_json::Value {
-    fn insert_at_path(&mut self, path: &[&str], value: serde_json::Value) -> Option<&mut Self> {
-        let (last_key, parent_path) = path.split_last()?;
-
-        let mut current_value: &mut Value = self;
-
-        // Navigate/create path to parent of final key
-        for key in parent_path {
-            current_value = current_value
-                // TODO: add array handling here too?
-                .as_object_mut()?
-                .entry((*key).to_string())
-                .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
-        }
-
-        // Insert the value at the final key
-        current_value.as_object_mut()?.insert(last_key.to_string(), value);
-
-        Some(self)
-    }
-
-    fn insert_if_none(&mut self, path: &[&str], value: serde_json::Value) -> Option<&mut Self> {
-        let (last_key, parent_path) = path.split_last()?;
-
-        let mut current_value: &mut Value = self;
-
-        // Navigate/create path to parent of final key
-        for key in parent_path {
-            current_value = current_value
-                // TODO: add array handling here too?
-                .as_object_mut()?
-                .entry((*key).to_string())
-                .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
-        }
-
-        // Insert the value at the final key if it doesn't exist
-        current_value
-            .as_object_mut()?
-            .entry(last_key.to_string())
-            .or_insert(value);
-
-        Some(self)
-    }
-}
 #[cfg(test)]
 pub mod credential_tests {
     use super::test_utils::*;

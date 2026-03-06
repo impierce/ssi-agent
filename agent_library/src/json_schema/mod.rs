@@ -208,24 +208,6 @@ impl Retrieve for MemoryRetriever {
     }
 }
 
-/// This trait is solely to add a method to serde_json::Value for converting Values to Strings cleanly
-pub trait ValueToString {
-    fn to_unescaped_string(&self) -> Option<String>;
-}
-
-impl ValueToString for serde_json::Value {
-    /// Helper to convert a `serde_json::Value` to an owned `Option<String>`.
-    ///
-    /// This resolves two common inconveniences:
-    /// 1. `to_string()` serializes the JSON, resulting in extra quotes (e.g., "\"value\"").
-    /// 2. `as_str()` returns a `&str`, but often an owned `String` is required.
-    ///
-    /// Returns `Some(String)` if the value is a JSON string, or `None` otherwise.
-    fn to_unescaped_string(&self) -> Option<String> {
-        self.as_str().map(ToString::to_string)
-    }
-}
-
 #[derive(Error, Debug)]
 pub enum JsonSchemaError {
     #[error("Get Credential Type Error: `{0}`")]
@@ -374,18 +356,5 @@ mod tests {
         let cred_type = CredentialType::Unknown;
         let result = cred_type.validate(&invalid_ob3);
         assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_to_unescaped_string() {
-        let value = json!("Hello, World!");
-        // value.to_string() would return "\"Hello, World!\"", showcasing our inconvenience.
-        assert_eq!(value.to_string(), "\"Hello, World!\"".to_string());
-
-        // This is the result we want, giving us the unescaped string directly from the Value or a None which we can properly error handle.
-        assert_eq!(value.to_unescaped_string(), Some("Hello, World!".to_string()));
-
-        let non_string_value = json!(42);
-        assert_eq!(non_string_value.to_unescaped_string(), None);
     }
 }
