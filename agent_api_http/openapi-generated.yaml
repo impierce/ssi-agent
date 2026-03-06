@@ -36,7 +36,7 @@ paths:
       - Connections
       summary: Add a Connection
       description: Adds a new connection based on the provided domain.
-      operationId: post_connection
+      operationId: add_connection
       requestBody:
         content:
           application/json:

@@ -33,7 +33,7 @@ pub struct AddConnectionEndpointRequest {
 #[utoipa::path(
     post,
     path = "/connections",
-    operation_id = "post_connection",
+    operation_id = "add_connection",
     tags = ["Connections"],
     responses(
         (status = 200)
