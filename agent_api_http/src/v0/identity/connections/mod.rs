@@ -2,10 +2,9 @@ use std::sync::Arc;
 
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
+use agent_identity::connection::views::ConnectionView;
 use agent_identity::{
-    connection::aggregate::{Connection, ConnectionDisplayProperties},
-    connection::command::ConnectionCommand,
-    state::IdentityState,
+    connection::aggregate::ConnectionDisplayProperties, connection::command::ConnectionCommand, state::IdentityState,
 };
 use axum::{
     extract::{Path, State},
@@ -97,7 +96,7 @@ pub struct GetConnectionsEndpointRequest {
     operation_id = "get_all_connections",
     tags = ["Connections"],
     responses(
-        (status = 200, description = "All connections retrieved successfully", body = [Connection])
+        (status = 200, description = "All connections retrieved successfully", body = [ConnectionView])
     )
 )]
 #[axum_macros::debug_handler]
@@ -240,3 +239,7 @@ pub(crate) async fn remove_connection(
     command_handler(&id, &state.command.connection, command).await?;
     Ok(StatusCode::OK.into_response())
 }
+
+
+// Helper
+

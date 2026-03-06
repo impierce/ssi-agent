@@ -8,11 +8,12 @@ use identity_core::common::Url;
 use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 pub struct ConnectionView {
     #[serde(rename = "id")]
     pub connection_id: String,
     pub domain: Option<Url>,
+    #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
     pub display: Option<ConnectionDisplayProperties>,
     pub pending_changes: Option<PendingChanges>,

@@ -30,7 +30,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Connection'
+                  $ref: '#/components/schemas/ConnectionView'
     post:
       tags:
       - Connections
@@ -223,7 +223,22 @@ components:
       properties:
         domain:
           type: string
-    Connection:
+    ConnectionDisplayProperties:
+      type: object
+      properties:
+        locale:
+          type:
+          - string
+          - 'null'
+        logo:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/LogoProperties'
+        name:
+          type:
+          - string
+          - 'null'
+    ConnectionView:
       type: object
       required:
       - id
@@ -258,21 +273,6 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/PendingChanges'
-    ConnectionDisplayProperties:
-      type: object
-      properties:
-        locale:
-          type:
-          - string
-          - 'null'
-        logo:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/LogoProperties'
-        name:
-          type:
-          - string
-          - 'null'
     CreateTemplateEndpointRequest:
       type: object
       properties:
