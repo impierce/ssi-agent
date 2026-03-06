@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ConnectionView {
+    #[serde(rename = "id")]
     pub connection_id: String,
     pub domain: Option<Url>,
     pub dids: Vec<DIDUrl>,
