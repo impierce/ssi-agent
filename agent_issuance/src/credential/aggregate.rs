@@ -1048,10 +1048,12 @@ pub trait ExtraMethods {
     /// Inserts a value at the specified path, creating intermediate objects as needed.
     /// The path includes the final key name where the value will be inserted.
     /// For example, to set `$.issuer.id = "123"`, use:
-    /// `credential.add_value_or_insert(&["issuer", "id"], json!("123"))`
+    /// `credential.insert_at_path(&["issuer", "id"], json!("123"))`
     ///
     /// Returns `Some(&mut self)` on success, `None` on failure.
     fn insert_at_path(&mut self, path: &[&str], value: serde_json::Value) -> Option<&mut Self>;
+
+    /// This method is the same as `insert_at_path` but it only inserts the value if there is no value already present at the path.
     fn insert_if_none(&mut self, path: &[&str], value: serde_json::Value) -> Option<&mut Self>;
 }
 
