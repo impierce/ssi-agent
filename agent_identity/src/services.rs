@@ -41,18 +41,15 @@ impl IdentityServices {
 
     pub async fn fetch_credential_issuer_metadata(
         &self,
-        domain: &Url,
+        issuer_url: &Url,
     ) -> Result<CredentialIssuerMetadata, ConnectionError> {
-        let domain = &normalize_domain(domain)?;
-        let mut wellknown_endpoint = domain.clone();
-        if !domain.path().is_empty() {
-            wellknown_endpoint.set_path(&format!(".well-known/openid-credential-issuer{}", domain.path()));
-        } else {
-            wellknown_endpoint.set_path(".well-known/openid-credential-issuer");
-        }
+        let mut url = issuer_url.clone();
+        strip_www(&mut url)?;
+        let path = url.path().trim_end_matches('/');
+        url.set_path(&format!("/.well-known/openid-credential-issuer{path}"));
 
         self.client
-            .get(wellknown_endpoint.as_str().trim_end_matches('/'))
+            .get(url.as_str())
             .send()
             .await
             .map_err(|e| ConnectionError::CredentialIssuerMetadataFetchFailed(e.to_string()))?
@@ -61,14 +58,14 @@ impl IdentityServices {
             .map_err(|e| ConnectionError::CredentialIssuerMetadataFetchFailed(e.to_string()))
     }
 
-    pub async fn fetch_and_resolve_linked_dids(&self, domain: &Url) -> Result<Vec<DIDUrl>, ConnectionError> {
-        let domain = &normalize_domain(domain)?;
-        let mut did_configurations_endpoint = domain.clone();
-        did_configurations_endpoint.set_path(".well-known/did-configuration.json");
+    pub async fn fetch_and_resolve_linked_dids(&self, issuer_url: &Url) -> Result<Vec<DIDUrl>, ConnectionError> {
+        let mut url = issuer_url.clone();
+        strip_www(&mut url)?;
+        url.set_path("/.well-known/did-configuration.json");
 
         let response: serde_json::Value = self
             .client
-            .get(did_configurations_endpoint)
+            .get(url.as_str())
             .send()
             .await
             .map_err(|e| ConnectionError::DIDResolutionFailed(e.to_string()))?
@@ -97,22 +94,14 @@ impl IdentityServices {
 }
 
 // HELPERS
-
-/// Normalize a domain URL to `https://` without `www.`.
-/// e.g. `example.com/path` -> `https://example.com/path`
-fn normalize_domain(domain: &Url) -> Result<Url, ConnectionError> {
-    let mut url = domain.clone();
-    let host = url.host_str();
-    if host != Some("127.0.0.1") && host != Some("localhost") {
-        let _ = url.set_scheme("https");
-    }
+fn strip_www(url: &mut Url) -> Result<(), ConnectionError> {
     if let Some(host) = url.host_str().map(|h| h.to_string()) {
         if let Some(stripped) = host.strip_prefix("www.") {
             url.set_host(Some(stripped))
                 .map_err(|e| ConnectionError::MissingDomain(e.to_string()))?;
         }
     }
-    Ok(url)
+    Ok(())
 }
 
 /// Get the claims from a JWT without performing validation.
@@ -150,13 +139,5 @@ mod tests {
             claims["iss"],
             "did:key:z6MkoTHsgNNrby8JzCNQ1iRLyW5QQ6R8Xuu6AA8igGrMVPUM"
         );
-    }
-
-    #[test]
-    fn test_domain_normalization() {
-        let domain = "http://www.thatslife.com/";
-        let domain_url = Url::parse(domain).unwrap();
-        let normalized_url = normalize_domain(&domain_url).unwrap();
-        assert_eq!(normalized_url, Url::parse("https://thatslife.com/").unwrap())
     }
 }

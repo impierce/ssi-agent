@@ -15,7 +15,7 @@ use super::{command::ConnectionCommand, error::ConnectionError, event::Connectio
 pub struct Connection {
     #[serde(rename = "id")]
     pub connection_id: String,
-    pub domain: Option<Url>,
+    pub issuer_url: Option<Url>,
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
     pub display: Option<ConnectionDisplayProperties>,
@@ -67,16 +67,19 @@ impl Aggregate for Connection {
         info!("Handling command: {:?}", command);
 
         match command {
-            AddConnection { connection_id, domain } => {
-                let metadata = services.fetch_credential_issuer_metadata(&domain).await?;
+            AddConnection {
+                connection_id,
+                issuer_url,
+            } => {
+                let metadata = services.fetch_credential_issuer_metadata(&issuer_url).await?;
                 let connection_display_properties = get_display_from_metadata(metadata.clone());
-                let dids = services.fetch_and_resolve_linked_dids(&domain).await?;
+                let dids = services.fetch_and_resolve_linked_dids(&issuer_url).await?;
                 let now = services.now();
 
                 Ok(vec![ConnectionAdded {
                     connection_id,
                     display: connection_display_properties,
-                    domain,
+                    issuer_url,
                     dids: dids.clone(),
                     first_interacted: Some(now),
                     last_interacted: Some(now),
@@ -84,7 +87,7 @@ impl Aggregate for Connection {
             }
             SyncConnection { connection_id } => {
                 let domain_ref = self
-                    .domain
+                    .issuer_url
                     .as_ref()
                     .ok_or(ConnectionError::MissingDomain(connection_id.clone()))?;
 
@@ -141,14 +144,14 @@ impl Aggregate for Connection {
             ConnectionAdded {
                 connection_id,
                 display,
-                domain,
+                issuer_url,
                 dids,
                 first_interacted,
                 last_interacted,
             } => {
                 self.connection_id = connection_id;
                 self.display = display;
-                self.domain = Some(domain);
+                self.issuer_url = Some(issuer_url);
                 self.dids = dids;
                 self.first_interacted = first_interacted;
                 self.last_interacted = last_interacted;
@@ -254,14 +257,14 @@ pub mod document_tests {
         });
 
         let mock_time = "2026-03-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
-        let mock_domain: Url = mock_server.uri().parse().unwrap();
+        let mock_issuer: Url = mock_server.uri().parse().unwrap();
         let services = IdentityServices::default();
 
         ConnectionTestFramework::with(services)
             .given_no_previous_events()
             .when(ConnectionCommand::AddConnection {
                 connection_id: "abcd1234".to_string(),
-                domain: mock_domain.clone(),
+                issuer_url: mock_issuer.clone(),
             })
             .then_expect_events(vec![ConnectionEvent::ConnectionAdded {
                 connection_id: "abcd1234".to_string(),
@@ -273,7 +276,7 @@ pub mod document_tests {
                         alt_text: Some("Organisational Logo".to_string()),
                     }),
                 }),
-                domain: mock_domain,
+                issuer_url: mock_issuer,
                 dids: vec![TEST_DID.parse().unwrap()],
                 first_interacted: Some(mock_time),
                 last_interacted: Some(mock_time),
@@ -318,7 +321,7 @@ pub mod document_tests {
         });
 
         let mock_time = "2026-03-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
-        let mock_domain: Url = mock_server.uri().parse().unwrap();
+        let mock_issuer: Url = mock_server.uri().parse().unwrap();
         let services = IdentityServices::default();
 
         ConnectionTestFramework::with(services)
@@ -332,7 +335,7 @@ pub mod document_tests {
                         alt_text: Some("Organisational Logo".to_string()),
                     }),
                 }),
-                domain: mock_domain.clone(),
+                issuer_url: mock_issuer.clone(),
                 dids: vec![TEST_DID.parse().unwrap()],
                 first_interacted: Some(mock_time),
                 last_interacted: Some(mock_time),

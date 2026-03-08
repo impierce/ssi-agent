@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
-use agent_identity::connection::views::all_connections::AllConnectionsView;
 use agent_identity::connection::views::ConnectionView;
 use agent_identity::{
     connection::aggregate::ConnectionDisplayProperties, connection::command::ConnectionCommand, state::IdentityState,
@@ -24,12 +23,12 @@ pub mod openapi;
 #[serde(rename_all = "camelCase")]
 pub struct AddConnectionEndpointRequest {
     #[serde(default)]
-    pub domain: String,
+    pub issuer_url: String,
 }
 
 /// Add a Connection
 ///
-/// Adds a new connection based on the provided domain.
+/// Adds a new connection based on the provided url.
 #[utoipa::path(
     post,
     path = "/connections",
@@ -46,20 +45,14 @@ pub struct AddConnectionEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn post_connection(
     State(state): State<Arc<IdentityState>>,
-    Json(AddConnectionEndpointRequest { domain }): Json<AddConnectionEndpointRequest>,
+    Json(AddConnectionEndpointRequest { issuer_url }): Json<AddConnectionEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let connection_id = uuid::Uuid::new_v4().to_string();
-    let normalized = if !domain.starts_with("http://") && !domain.starts_with("https://") {
-        format!("https://{domain}")
-    } else {
-        domain
-    };
-    let domain: Url = Url::parse(&normalized)
-        .map_err(|e| ApiError::builder(StatusCode::BAD_REQUEST).message(format!("Invalid domain: {e}")))?;
 
+    let issuer_url = parse_url(&issuer_url)?;
     let command = ConnectionCommand::AddConnection {
         connection_id: connection_id.clone(),
-        domain,
+        issuer_url,
     };
 
     command_handler(&connection_id, &state.command.connection, command).await?;
@@ -86,7 +79,7 @@ pub struct GetConnectionsEndpointRequest {
     pub display: Option<ConnectionDisplayProperties>,
     #[serde(default)]
     #[schema(value_type = Option<String>)]
-    pub domain: Option<Url>,
+    pub issuer_url: Option<Url>,
     #[serde(default)]
     #[schema(value_type = Option<String>)]
     pub did: Option<DIDUrl>,
@@ -107,7 +100,11 @@ pub struct GetConnectionsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connections(
     State(state): State<Arc<IdentityState>>,
-    Form(GetConnectionsEndpointRequest { display, domain, did }): Form<GetConnectionsEndpointRequest>,
+    Form(GetConnectionsEndpointRequest {
+        display,
+        issuer_url,
+        did,
+    }): Form<GetConnectionsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let filtered_connections = query_handler("all_connections", &state.query.all_connections)
         .await?
@@ -119,9 +116,9 @@ pub(crate) async fn get_connections(
                     display
                         .as_ref()
                         .map_or(true, |display| connection.display.as_ref() == Some(display))
-                        && domain
+                        && issuer_url
                             .as_ref()
-                            .map_or(true, |domain| connection.domain.as_ref() == Some(domain))
+                            .map_or(true, |issuer_url| connection.issuer_url.as_ref() == Some(issuer_url))
                         && did.as_ref().map_or(true, |did| connection.dids.contains(did))
                 })
                 .collect();
@@ -243,4 +240,20 @@ pub(crate) async fn remove_connection(
     };
     command_handler(&id, &state.command.connection, command).await?;
     Ok(StatusCode::OK.into_response())
+}
+
+// HELPERS
+pub fn parse_url(input: &str) -> Result<Url, ApiError> {
+    let input = input.trim();
+    let with_scheme = match input.strip_prefix("http://") {
+        Some(rest) => format!("https://{rest}"),
+        None if input.starts_with("https://") => input.to_string(),
+        None => format!("https://{input}"),
+    };
+
+    Url::parse(&with_scheme).map_err(|e| {
+        ApiError::builder(StatusCode::BAD_REQUEST)
+            .message(format!("Invalid issuer URL: {e}"))
+            .finish()
+    })
 }

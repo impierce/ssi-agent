@@ -11,7 +11,7 @@ pub enum ConnectionEvent {
     ConnectionAdded {
         connection_id: String,
         display: Option<ConnectionDisplayProperties>,
-        domain: Url,
+        issuer_url: Url,
         dids: Vec<DIDUrl>,
         first_interacted: Option<DateTime<Utc>>,
         last_interacted: Option<DateTime<Utc>>,
