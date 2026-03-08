@@ -1594,7 +1594,7 @@
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"issuerUrl\": \"scilsy.dev2.impierce.com\"\n}",
+                  "raw": "{\n    \"issuerUrl\": \"{{HOST}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
