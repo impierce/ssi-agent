@@ -35,7 +35,7 @@ paths:
       tags:
       - Connections
       summary: Add a Connection
-      description: Adds a new connection based on the provided domain.
+      description: Adds a new connection based on the provided url.
       operationId: add_connection
       requestBody:
         content:
@@ -230,7 +230,7 @@ components:
     AddConnectionEndpointRequest:
       type: object
       properties:
-        domain:
+        issuerUrl:
           type: string
     ConnectionDisplayProperties:
       type: object
@@ -252,6 +252,7 @@ components:
       required:
       - id
       - dids
+      - domain_linkage_valid
       properties:
         dids:
           type: array
@@ -261,11 +262,8 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
-        domain:
-          type:
-          - string
-          - 'null'
-          format: uri
+        domain_linkage_valid:
+          type: boolean
         first_interacted:
           type:
           - string
@@ -273,6 +271,11 @@ components:
           format: date-time
         id:
           type: string
+        issuer_url:
+          type:
+          - string
+          - 'null'
+          format: uri
         last_interacted:
           type:
           - string
@@ -369,7 +372,7 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
-        domain:
+        issuerUrl:
           type:
           - string
           - 'null'
@@ -405,6 +408,7 @@ components:
       type: object
       required:
       - dids
+      - domain_linkage_valid
       properties:
         dids:
           type: array
@@ -414,6 +418,8 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
+        domain_linkage_valid:
+          type: boolean
     RemoveConnectionRequest:
       type: object
       properties:

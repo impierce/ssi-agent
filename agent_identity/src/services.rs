@@ -97,6 +97,11 @@ impl IdentityServices {
         let url = identity_iota::core::Url::from(issuer_url.clone());
         let mut all_valid = true;
 
+        if linked_dids.is_empty() {
+            info!("No linked DIDs found in configuration");
+            return Ok((linked_dids, false));
+        }
+
         for did in &linked_dids {
             match self.resolver.resolve(did.did().as_str()).await {
                 Ok(document) => {
@@ -130,7 +135,7 @@ impl IdentityServices {
 
         info!("Fetching DID configuration from: {url}");
 
-        // 2. Fetch the resource and parse to JSON value (mutable)
+        // Fetch the resource and parse to JSON value (mutable)
         let mut response: serde_json::Value = self
             .client
             .get(url.as_str())
@@ -141,18 +146,18 @@ impl IdentityServices {
             .await
             .map_err(|e| ConnectionError::DIDResolutionFailed(e.to_string()))?;
 
-        // 3. Remove all non-string values from `linked_dids` (JSON-LD)
+        // Remove all non-string values from `linked_dids` (JSON-LD)
         if let serde_json::Value::Object(ref mut root) = response {
             if let Some(serde_json::Value::Array(ref mut linked_dids)) = root.get_mut("linked_dids") {
                 linked_dids.retain(|did| matches!(did, serde_json::Value::String(_)));
                 info!("Removed non-string values from `linked_dids`");
             }
         }
-        // 5. Deserialize to `DomainLinkageConfiguration`
+        // Deserialize to `DomainLinkageConfiguration`
         let config = DomainLinkageConfiguration::from_json_value(response).map_err(|_| {
             ConnectionError::DIDResolutionFailed(
                 "failed to deserialize DomainLinkageConfiguration from JSON".to_string(),
-                // TODO: FIX ERROR - SOMETHING MORE FITTING THAN DIDRESOLUTION FAILED
+                // TODO: Add more detailed error info.
             )
         })?;
         Ok(config)
@@ -187,7 +192,7 @@ fn get_unverified_jwt_claims(jwt: &str) -> Result<serde_json::Value, ConnectionE
         ))
 }
 
-/// This `Verifier` uses `jsonwebtoken` under the hood to verify verification input. Copied
+/// This `Verifier` uses `jsonwebtoken` under the hood to verify verification input.
 pub struct Verifier;
 impl JwsVerifier for Verifier {
     fn verify(&self, input: VerificationInput, public_key: &IotaIdentityJwk) -> Result<(), SignatureVerificationError> {
@@ -225,24 +230,78 @@ impl JwsVerifier for Verifier {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wiremock::{
+        matchers::{method, path},
+        Mock, MockServer, ResponseTemplate,
+    };
+    // https://identity.foundation/.well-known/did-configuration.json
+    const LINKED_DID_JWT: &str = "eyJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa29USHNnTk5yYnk4SnpDTlExaVJMeVc1UVE2UjhYdXU2QUE4aWdHck1WUFVNI3o2TWtvVEhzZ05OcmJ5OEp6Q05RMWlSTHlXNVFRNlI4WHV1NkFBOGlnR3JNVlBVTSJ9.eyJleHAiOjE3NjQ4NzkxMzksImlzcyI6ImRpZDprZXk6ejZNa29USHNnTk5yYnk4SnpDTlExaVJMeVc1UVE2UjhYdXU2QUE4aWdHck1WUFVNIiwibmJmIjoxNjA3MTEyNzM5LCJzdWIiOiJkaWQ6a2V5Ono2TWtvVEhzZ05OcmJ5OEp6Q05RMWlSTHlXNVFRNlI4WHV1NkFBOGlnR3JNVlBVTSIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9pZGVudGl0eS5mb3VuZGF0aW9uLy53ZWxsLWtub3duL2RpZC1jb25maWd1cmF0aW9uL3YxIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rb1RIc2dOTnJieThKekNOUTFpUkx5VzVRUTZSOFh1dTZBQThpZ0dyTVZQVU0iLCJvcmlnaW4iOiJpZGVudGl0eS5mb3VuZGF0aW9uIn0sImV4cGlyYXRpb25EYXRlIjoiMjAyNS0xMi0wNFQxNDoxMjoxOS0wNjowMCIsImlzc3VhbmNlRGF0ZSI6IjIwMjAtMTItMDRUMTQ6MTI6MTktMDY6MDAiLCJpc3N1ZXIiOiJkaWQ6a2V5Ono2TWtvVEhzZ05OcmJ5OEp6Q05RMWlSTHlXNVFRNlI4WHV1NkFBOGlnR3JNVlBVTSIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJEb21haW5MaW5rYWdlQ3JlZGVudGlhbCJdfX0.aUFNReA4R5rcX_oYm3sPXqWtso_gjPHnWZsB6pWcGv6m3K8-4JIAvFov3ZTM8HxPOrOL17Qf4vBFdY9oK0HeCQ";
+    const TEST_DID: &str = "did:key:z6MkoTHsgNNrby8JzCNQ1iRLyW5QQ6R8Xuu6AA8igGrMVPUM";
 
-//     // https://identity.foundation/.well-known/did-configuration.json
-//     const LINKED_DID_JWT: &str = "eyJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa29USHNnTk5yYnk4SnpDTlExaVJMeVc1UVE2UjhYdXU2QUE4aWdHck1WUFVNI3o2TWtvVEhzZ05OcmJ5OEp6Q05RMWlSTHlXNVFRNlI4WHV1NkFBOGlnR3JNVlBVTSJ9.eyJleHAiOjE3NjQ4NzkxMzksImlzcyI6ImRpZDprZXk6ejZNa29USHNnTk5yYnk4SnpDTlExaVJMeVc1UVE2UjhYdXU2QUE4aWdHck1WUFVNIiwibmJmIjoxNjA3MTEyNzM5LCJzdWIiOiJkaWQ6a2V5Ono2TWtvVEhzZ05OcmJ5OEp6Q05RMWlSTHlXNVFRNlI4WHV1NkFBOGlnR3JNVlBVTSIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9pZGVudGl0eS5mb3VuZGF0aW9uLy53ZWxsLWtub3duL2RpZC1jb25maWd1cmF0aW9uL3YxIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rb1RIc2dOTnJieThKekNOUTFpUkx5VzVRUTZSOFh1dTZBQThpZ0dyTVZQVU0iLCJvcmlnaW4iOiJpZGVudGl0eS5mb3VuZGF0aW9uIn0sImV4cGlyYXRpb25EYXRlIjoiMjAyNS0xMi0wNFQxNDoxMjoxOS0wNjowMCIsImlzc3VhbmNlRGF0ZSI6IjIwMjAtMTItMDRUMTQ6MTI6MTktMDY6MDAiLCJpc3N1ZXIiOiJkaWQ6a2V5Ono2TWtvVEhzZ05OcmJ5OEp6Q05RMWlSTHlXNVFRNlI4WHV1NkFBOGlnR3JNVlBVTSIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJEb21haW5MaW5rYWdlQ3JlZGVudGlhbCJdfX0.aUFNReA4R5rcX_oYm3sPXqWtso_gjPHnWZsB6pWcGv6m3K8-4JIAvFov3ZTM8HxPOrOL17Qf4vBFdY9oK0HeCQ";
+    #[test]
+    fn test_decode_linked_did_jwt() {
+        let jwt = serde_json::json!(LINKED_DID_JWT);
+        let claims = get_unverified_jwt_claims(&jwt.to_string()).unwrap();
+        assert_eq!(
+            claims["sub"],
+            "did:key:z6MkoTHsgNNrby8JzCNQ1iRLyW5QQ6R8Xuu6AA8igGrMVPUM"
+        );
+        assert_eq!(
+            claims["iss"],
+            "did:key:z6MkoTHsgNNrby8JzCNQ1iRLyW5QQ6R8Xuu6AA8igGrMVPUM"
+        );
+    }
 
-//     #[test]
-//     fn test_decode_linked_did_jwt() {
-//         let jwt = serde_json::json!(LINKED_DID_JWT);
-//         let claims = get_unverified_jwt_claims(&jwt).unwrap();
-//         assert_eq!(
-//             claims["sub"],
-//             "did:key:z6MkoTHsgNNrby8JzCNQ1iRLyW5QQ6R8Xuu6AA8igGrMVPUM"
-//         );
-//         assert_eq!(
-//             claims["iss"],
-//             "did:key:z6MkoTHsgNNrby8JzCNQ1iRLyW5QQ6R8Xuu6AA8igGrMVPUM"
-//         );
-//     }
-// }
+    #[tokio::test]
+    async fn test_fetch_linked_dids_extracts_dids() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/.well-known/did-configuration.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "@context": "https://identity.foundation/.well-known/did-configuration/v1",
+                "linked_dids": [LINKED_DID_JWT]
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let subject = Arc::new(Subject::new().await);
+        let resolver = Resolver::new();
+        let services = IdentityServices::new(subject, resolver);
+
+        let issuer_url: Url = mock_server.uri().parse().unwrap();
+        let (dids, domain_linkage_valid) = services.fetch_linked_dids(&issuer_url).await.unwrap();
+
+        assert_eq!(dids.len(), 1);
+        assert_eq!(dids[0].did().as_str(), TEST_DID);
+
+        // Validation will fail because the origin in the JWT is "identity.foundation" because we are fetching the did from the mockserver.
+        assert!(!domain_linkage_valid);
+    }
+
+    #[tokio::test]
+    async fn test_fetch_linked_dids_empty() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/.well-known/did-configuration.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "@context": "https://identity.foundation/.well-known/did-configuration/v1",
+                "linked_dids": []
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let subject = Arc::new(Subject::new().await);
+        let resolver = Resolver::new();
+        let services = IdentityServices::new(subject, resolver);
+
+        let issuer_url: Url = mock_server.uri().parse().unwrap();
+        let result = services.fetch_linked_dids(&issuer_url).await;
+
+        assert!(result.is_err());
+    }
+}
