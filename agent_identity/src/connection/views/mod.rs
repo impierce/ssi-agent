@@ -15,6 +15,7 @@ pub struct ConnectionView {
     pub issuer_url: Option<Url>,
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
+    pub domain_linkage_valid: bool,
     pub display: Option<ConnectionDisplayProperties>,
     pub pending_changes: Option<PendingChanges>,
     pub first_interacted: Option<DateTime<Utc>>,
@@ -31,6 +32,7 @@ impl View<Connection> for ConnectionView {
                 display,
                 issuer_url,
                 dids,
+                domain_linkage_valid,
                 first_interacted,
                 last_interacted,
             } => {
@@ -38,6 +40,7 @@ impl View<Connection> for ConnectionView {
                 self.display.clone_from(display);
                 self.issuer_url = Some(issuer_url.clone());
                 self.dids.clone_from(dids);
+                self.domain_linkage_valid = *domain_linkage_valid;
                 self.first_interacted = *first_interacted;
                 self.last_interacted = *last_interacted;
             }
@@ -54,11 +57,13 @@ impl View<Connection> for ConnectionView {
                 connection_id,
                 display,
                 dids,
+                domain_linkage_valid,
                 last_interacted,
                 pending_changes,
             } => {
                 self.connection_id.clone_from(connection_id);
                 self.display.clone_from(display);
+                self.domain_linkage_valid = *domain_linkage_valid;
                 self.dids.clone_from(dids);
                 self.last_interacted = *last_interacted;
                 self.pending_changes.clone_from(pending_changes);

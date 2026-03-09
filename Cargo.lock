@@ -150,6 +150,7 @@ dependencies = [
  "anyhow",
  "axum 0.8.3",
  "chrono",
+ "did_manager",
  "serde",
  "serde_json",
  "serde_with 3.13.0",
@@ -299,6 +300,7 @@ dependencies = [
  "derivative",
  "did-jwk",
  "did-method-key",
+ "did_manager",
  "futures",
  "identity_core",
  "identity_credential",
@@ -3130,6 +3132,15 @@ dependencies = [
  "ssi-dids 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ssi-jwk 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio",
+]
+
+[[package]]
+name = "did_manager"
+version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.8#7763b585447877c3a02fcd3e2fc2f3f0f20bf037"
+dependencies = [
+ "consumer",
+ "producer",
 ]
 
 [[package]]
@@ -9285,6 +9296,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02b3e5e68a3a1a02aad3ec490a98007cbc13c37cbe84a3cd7b8e406d76e7f778"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "producer"
+version = "0.1.0"
+source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.8#7763b585447877c3a02fcd3e2fc2f3f0f20bf037"
+dependencies = [
+ "did_iota",
+ "did_jwk",
+ "did_key",
+ "did_web",
+ "identity_iota",
+ "identity_storage",
+ "identity_stronghold",
+ "identity_stronghold_ext",
+ "iota-sdk 1.1.5",
+ "iota_stronghold",
+ "log",
+ "serde",
+ "serde_json",
+ "shared",
+ "url",
 ]
 
 [[package]]

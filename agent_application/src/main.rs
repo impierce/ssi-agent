@@ -21,6 +21,7 @@ use agent_secret_manager::{service::Service as _, subject::Subject};
 use agent_shared::config::{config, EventStoreType};
 use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
+use did_manager::Resolver;
 use probes::liveness::healthz;
 use std::sync::Arc;
 use tokio::io;
@@ -30,8 +31,9 @@ use tracing::info;
 #[tokio::main]
 async fn main() -> io::Result<()> {
     let subject = Arc::new(Subject::new().await);
+    let resolver = Resolver::new();
 
-    let identity_services = Arc::new(IdentityServices::new(subject.clone()));
+    let identity_services = Arc::new(IdentityServices::new(subject.clone(), resolver));
     let authorization_services = Arc::new(AuthorizationServices::new(subject.clone()));
     let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
     let holder_services = Arc::new(HolderServices::new(subject.clone()));

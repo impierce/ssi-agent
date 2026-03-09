@@ -18,6 +18,7 @@ pub struct Connection {
     pub issuer_url: Option<Url>,
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
+    pub domain_linkage_valid: bool,
     pub display: Option<ConnectionDisplayProperties>,
     pub first_interacted: Option<DateTime<Utc>>,
     pub last_interacted: Option<DateTime<Utc>>,
@@ -32,6 +33,7 @@ pub struct Connection {
 pub struct PendingChanges {
     #[schema(value_type = Vec<String>)]
     pub dids: Option<Vec<DIDUrl>>,
+    pub domain_linkage_valid: bool,
     // TODO: Should all changes to the display be notified to a user? Or only changes to the name
     pub display: Option<ConnectionDisplayProperties>,
 }
@@ -73,7 +75,7 @@ impl Aggregate for Connection {
             } => {
                 let metadata = services.fetch_credential_issuer_metadata(&issuer_url).await?;
                 let connection_display_properties = get_display_from_metadata(metadata.clone());
-                let dids = services.fetch_and_resolve_linked_dids(&issuer_url).await?;
+                let (dids, domain_linkage_valid) = services.fetch_linked_dids(&issuer_url).await?;
                 let now = services.now();
 
                 Ok(vec![ConnectionAdded {
@@ -81,6 +83,7 @@ impl Aggregate for Connection {
                     display: connection_display_properties,
                     issuer_url,
                     dids: dids.clone(),
+                    domain_linkage_valid,
                     first_interacted: Some(now),
                     last_interacted: Some(now),
                 }])
@@ -93,16 +96,18 @@ impl Aggregate for Connection {
 
                 let metadata = services.fetch_credential_issuer_metadata(domain_ref).await?;
                 let new_display = get_display_from_metadata(metadata.clone());
-                let new_dids = services.fetch_and_resolve_linked_dids(domain_ref).await?;
+                let (new_dids, domain_linkage_valid) = services.fetch_linked_dids(domain_ref).await?;
 
                 let proposed = PendingChanges {
                     dids: Some(new_dids),
                     display: new_display,
+                    domain_linkage_valid,
                 };
 
                 let current = PendingChanges {
                     dids: Some(self.dids.clone()),
                     display: self.display.clone(),
+                    domain_linkage_valid: self.domain_linkage_valid,
                 };
 
                 if proposed != current {
@@ -127,6 +132,7 @@ impl Aggregate for Connection {
                     connection_id,
                     display: pending.display.clone(),
                     dids: pending.dids.clone().unwrap(),
+                    domain_linkage_valid: pending.domain_linkage_valid,
                     last_interacted: Some(services.now()),
                     pending_changes: None,
                 }])
@@ -144,6 +150,7 @@ impl Aggregate for Connection {
             ConnectionAdded {
                 connection_id,
                 display,
+                domain_linkage_valid,
                 issuer_url,
                 dids,
                 first_interacted,
@@ -153,6 +160,7 @@ impl Aggregate for Connection {
                 self.display = display;
                 self.issuer_url = Some(issuer_url);
                 self.dids = dids;
+                self.domain_linkage_valid = domain_linkage_valid;
                 self.first_interacted = first_interacted;
                 self.last_interacted = last_interacted;
             }
@@ -169,12 +177,14 @@ impl Aggregate for Connection {
                 connection_id,
                 display,
                 dids,
+                domain_linkage_valid,
                 last_interacted,
                 pending_changes,
             } => {
                 self.connection_id = connection_id;
                 self.display = display;
                 self.dids = dids;
+                self.domain_linkage_valid = domain_linkage_valid;
                 self.last_interacted = last_interacted;
                 self.pending_changes = pending_changes;
             }
@@ -278,6 +288,7 @@ pub mod document_tests {
                 }),
                 issuer_url: mock_issuer,
                 dids: vec![TEST_DID.parse().unwrap()],
+                domain_linkage_valid: false,
                 first_interacted: Some(mock_time),
                 last_interacted: Some(mock_time),
             }]);
@@ -337,6 +348,7 @@ pub mod document_tests {
                 }),
                 issuer_url: mock_issuer.clone(),
                 dids: vec![TEST_DID.parse().unwrap()],
+                domain_linkage_valid: false,
                 first_interacted: Some(mock_time),
                 last_interacted: Some(mock_time),
             }])
@@ -347,6 +359,7 @@ pub mod document_tests {
                 connection_id: "abcd-123".to_string(),
                 pending_changes: Some(PendingChanges {
                     dids: Some(vec![TEST_DID.parse().unwrap()]),
+                    domain_linkage_valid: false,
                     display: Some(ConnectionDisplayProperties {
                         name: Some("Timeless Institute".to_string()),
                         locale: Some("en".to_string()),
@@ -370,6 +383,7 @@ pub mod document_tests {
                 connection_id: "abcd1234".to_string(),
                 pending_changes: Some(PendingChanges {
                     dids: Some(vec![TEST_DID.parse().unwrap()]),
+                    domain_linkage_valid: false,
                     display: Some(ConnectionDisplayProperties {
                         name: Some("Timeless Institute".to_string()),
                         locale: Some("en".to_string()),
@@ -395,6 +409,7 @@ pub mod document_tests {
                     }),
                 }),
                 dids: vec![TEST_DID.parse().unwrap()],
+                domain_linkage_valid: false,
                 last_interacted: Some(mock_time),
                 pending_changes: None,
             }]);
