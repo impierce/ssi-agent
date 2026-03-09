@@ -277,7 +277,7 @@ mod tests {
         assert_eq!(dids.len(), 1);
         assert_eq!(dids[0].did().as_str(), TEST_DID);
 
-        // Validation will fail because the origin in the JWT is "identity.foundation" because we are fetching the did from the mockserver.
+        // Validation will fail because the origin in the JWT is "identity.foundation" and we are fetching the did from the mockserver.
         assert!(!domain_linkage_valid);
     }
 
