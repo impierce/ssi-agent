@@ -243,6 +243,7 @@ pub(crate) async fn remove_connection(
 }
 
 // HELPERS
+#[allow(clippy::result_large_err)]
 pub fn parse_url(input: &str) -> Result<Url, ApiError> {
     let input = input.trim();
     let with_scheme = match input.strip_prefix("http://") {
