@@ -167,7 +167,6 @@ impl Aggregate for Credential {
                             &credential_configuration,
                             &credential_id,
                             expires_at,
-                            credential_status_index,
                         )?
                     }
                     CredentialFormats::DcSdJwt(Parameters::<DcSdJwt> {
@@ -197,7 +196,6 @@ impl Aggregate for Credential {
                             &credential_configuration,
                             &credential_id,
                             expires_at,
-                            self.credential_status.index,
                         )?
                     },
                     _ => return Err(UnsupportedCredentialFormat(serde_json::json!(
@@ -297,6 +295,7 @@ impl Aggregate for Credential {
                             created_at,
                             iss.to_string(),
                             subject_id.clone(),
+                            self.credential_status.index,
                         )?;
 
                         // TODO: Would it be more straightforward to add the JWT claims similarly to all our jwt formats?
@@ -409,6 +408,7 @@ impl Aggregate for Credential {
                             created_at,
                             iss.to_string(),
                             subject_id.clone(),
+                            self.credential_status.index,
                         )?;
 
                         // Get the kid for the header of the VcSdJwt
@@ -565,6 +565,7 @@ fn build_signed_w3c_credential_data(
     created_at: String,
     iss: String,
     subject_id: Option<String>,
+    credential_status_index: usize,
 ) -> Result<serde_json::Value, CredentialError> {
     let credential_types = credential_data
         .get("type")
@@ -595,6 +596,19 @@ fn build_signed_w3c_credential_data(
     if let Some(subject_id) = &subject_id {
         credential_data.insert_at_path(&["credentialSubject", "id"], json!(subject_id));
     }
+
+    // Add credential status
+    let status_list_url = get_status_list_url(credential_status_index)?;
+
+    credential_data.insert_if_none(
+        &["credentialStatus"],
+        json!({
+            "type": StatusListTyp::Jwt.to_string(),
+            "id": status_list_url.to_string(),
+            "uri": status_list_url.to_string(),
+            "idx": credential_status_index,
+        }),
+    );
     // Loop through all the items in the `type` array in reverse until we find a match.
     // This looping assumes the most specific type to match on is the latest one in the array.
     // This is an implicit consequence of the typing rules in digital credential formats.
@@ -620,6 +634,14 @@ fn build_signed_w3c_credential_data(
                     .insert_if_none(&["issued"], json!(created_at))
                     .ok_or(BuildCredentialError(
                         "Failed to enter the issued date into the credential".to_string(),
+                    ))?;
+
+                // The ELM Data Model only allows two different types: "CredentialStatus", "TrustedCredentialStatus2021".
+                // Therefore, we have no choice but to type it as the generic "CredentialStatus".
+                credential_data
+                    .insert_at_path(&["credentialStatus", "type"], json!("CredentialStatus"))
+                    .ok_or(BuildCredentialError(
+                        "Failed to enter the credentialStatus.type into the credential".to_string(),
                     ))?;
 
                 // TODO: Due to the complexity of the different allowed issuer types (Agent, Person, Organisation) we keep it simple for now and pass the issuer as entered at the top of this fn.
@@ -660,7 +682,6 @@ fn build_unsigned_w3c_credential_data(
     credential_configuration: &CredentialConfigurationsSupportedObject,
     credential_id: &str,
     expires_at: Option<chrono::DateTime<chrono::Utc>>,
-    credential_status_index: usize,
 ) -> Result<serde_json::Value, CredentialError> {
     let credential_name = credential_configuration
         .credential_metadata
@@ -687,19 +708,6 @@ fn build_unsigned_w3c_credential_data(
         .ok_or(BuildCredentialError(
             "Failed to enter the issuer.name into the credential".to_string(),
         ))?;
-
-    // Add credential status
-    let status_list_url = get_status_list_url(credential_status_index)?;
-
-    credential_data.insert_if_none(
-        &["credentialStatus"],
-        json!({
-            "type": StatusListTyp::Jwt.to_string(),
-            "id": status_list_url.to_string(),
-            "uri": status_list_url.to_string(),
-            "idx": credential_status_index,
-        }),
-    );
 
     // Set both the expirationDate and validUntil for forward/backward (maximum) compatibility.
     if let Some(expiration_date) = expires_at {
@@ -880,14 +888,6 @@ fn build_unsigned_w3c_credential_data(
                     )
                     .ok_or(BuildCredentialError(
                         "Failed to enter the credentialSchema into the credential".to_string(),
-                    ))?;
-
-                // The ELM Data Model only allows two different types: "CredentialStatus", "TrustedCredentialStatus2021".
-                // Therefore, we have no choice but to type it as the generic "CredentialStatus".
-                credential_data
-                    .insert_at_path(&["credentialStatus", "type"], json!("CredentialStatus"))
-                    .ok_or(BuildCredentialError(
-                        "Failed to enter the credentialStatus.type into the credential".to_string(),
                     ))?;
 
                 // Validate credential data before returning
