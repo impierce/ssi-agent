@@ -230,7 +230,7 @@ components:
     AddConnectionEndpointRequest:
       type: object
       properties:
-        issuerUrl:
+        url:
           type: string
     ConnectionDisplayProperties:
       type: object
@@ -271,11 +271,6 @@ components:
           format: date-time
         id:
           type: string
-        issuer_url:
-          type:
-          - string
-          - 'null'
-          format: uri
         last_interacted:
           type:
           - string
@@ -285,6 +280,11 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/PendingChanges'
+        url:
+          type:
+          - string
+          - 'null'
+          format: uri
     CreateTemplateEndpointRequest:
       type: object
       properties:
@@ -372,7 +372,7 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
-        issuerUrl:
+        url:
           type:
           - string
           - 'null'
