@@ -357,7 +357,13 @@ mod tests {
         let mut invalid_ob3 = EXAMPLE_BASIC_OB3.clone();
 
         *invalid_ob3.get_mut("id").unwrap() = json!(["InvalidId"]);
-        *invalid_ob3.get_mut("credentialSubject").unwrap().get_mut("achievement").unwrap().get_mut("id").unwrap() = json!(["InvalidId"]);
+        *invalid_ob3
+            .get_mut("credentialSubject")
+            .unwrap()
+            .get_mut("achievement")
+            .unwrap()
+            .get_mut("id")
+            .unwrap() = json!(["InvalidId"]);
 
         let cred_type = CredentialType::OpenBadgeCredential;
         let result = cred_type.validate(&invalid_ob3);

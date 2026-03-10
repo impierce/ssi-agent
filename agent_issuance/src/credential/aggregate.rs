@@ -197,12 +197,14 @@ impl Aggregate for Credential {
                             &credential_id,
                             expires_at,
                         )?
-                    },
-                    _ => return Err(UnsupportedCredentialFormat(serde_json::json!(
-                        credential_configuration.credential_format
-                    )))
+                    }
+                    _ => {
+                        return Err(UnsupportedCredentialFormat(serde_json::json!(
+                            credential_configuration.credential_format
+                        )))
+                    }
                 };
-            
+
                 return Ok(vec![UnsignedCredentialCreated {
                     credential_id,
                     notification_id: Some(notification_id),
@@ -841,10 +843,7 @@ fn build_unsigned_w3c_credential_data(
                 // No fields in credentialProfiles are actually required by the ELM schema.
                 // Since we do not fully understand the use of this property yet, we enter an empty object.
                 credential_data
-                    .insert_if_none(
-                        &["credentialProfiles"],
-                        json!({}),
-                    )
+                    .insert_if_none(&["credentialProfiles"], json!({}))
                     .ok_or(BuildCredentialError(
                         "Failed to enter the credentialProfiles into the credential".to_string(),
                     ))?;
