@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "3e4c6a8e-3c0e-4edf-9c1a-5e227e91e1db",
+    "_postman_id": "87e6bc30-258e-4ee8-8afa-37605eed2677",
     "name": "ssi-agent",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "41786572"
@@ -1594,7 +1594,7 @@
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"issuerUrl\": \"{{HOST}}\"\n}",
+                  "raw": "{\n    \"url\": \"{{HOST}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
