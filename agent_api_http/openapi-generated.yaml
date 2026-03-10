@@ -120,6 +120,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Template'
+  /v0/templates/delete-template:
+    post:
+      tags:
+      - Library
+      - Templates
+      summary: Delete a template
+      description: Deletes a template by marking its status as `Deleted`. Deleted templates will no longer appear in any views.
+      operationId: delete_template_by_id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteTemplateEndpointRequest'
+        required: true
+      responses:
+        '204':
+          description: Template deleted successfully
   /v0/templates/duplicate-template:
     post:
       tags:
@@ -167,6 +184,23 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Template'
+  /v0/templates/update-template:
+    post:
+      tags:
+      - Library
+      - Templates
+      summary: Update a template
+      description: Updates an existing template with the provided content.
+      operationId: update_template
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTemplateEndpointRequest'
+        required: true
+      responses:
+        '204':
+          description: Template updated successfully
   /v0/templates/{template_id}:
     get:
       tags:
@@ -411,6 +445,13 @@ components:
       - raw
       properties:
         raw: {}
+    DeleteTemplateEndpointRequest:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
     Display:
       type: object
       required:
@@ -529,6 +570,63 @@ components:
       - published
       - archived
       - deleted
+    UpdateTemplateEndpointRequest:
+      type: object
+      properties:
+        creator:
+          type:
+          - string
+          - 'null'
+          default: null
+        credentialFormat:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/CredentialFormat'
+          default: null
+        description:
+          type:
+          - string
+          - 'null'
+          default: null
+        display:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Display'
+          default: null
+        holderType:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/HolderType'
+          default: null
+        id:
+          type: string
+          default: ''
+        schema: {}
+        status:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/TemplateStatus'
+          default: null
+        tags:
+          type: array
+          items:
+            type: string
+          default: []
+        title:
+          type:
+          - string
+          - 'null'
+          default: null
+        type:
+          type: array
+          items:
+            type: string
+          default: []
+        visibility:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Visibility'
+          default: null
     Visibility:
       type: string
       enum:
