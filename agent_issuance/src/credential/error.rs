@@ -1,3 +1,4 @@
+use agent_library::json_schema_validation::JsonSchemaError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -9,7 +10,7 @@ pub enum CredentialError {
     #[error("This Credential type is not supported")]
     UnsupportedCredentialType,
     #[error("The credential data payload is invalid: {0}")]
-    InvalidCredentialPayloadError(String),
+    InvalidCredentialPayloadError(JsonSchemaError),
     #[error("The `id` value could not be parsed to a valid URI")]
     InvalidIdentifierError,
     #[error("Could not find valid data or missing data to be signed")]

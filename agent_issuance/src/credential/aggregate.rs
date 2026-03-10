@@ -146,7 +146,7 @@ impl Aggregate for Credential {
 
                 let mut credential_data = data.raw.clone();
 
-                match &credential_configuration.credential_format {
+                let credential_data = match &credential_configuration.credential_format {
                     CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
                         parameters:
                             JwtVcJsonParameters {
@@ -161,45 +161,21 @@ impl Aggregate for Credential {
                                 "Failed to enter the type into the credential".to_string(),
                             ))?;
 
-                        match build_unsigned_w3c_credential_data(
+                        build_unsigned_w3c_credential_data(
                             type_,
                             &mut credential_data,
                             &credential_configuration,
                             &credential_id,
                             expires_at,
                             credential_status_index,
-                        ) {
-                            Ok(credential_data) => {
-                                return Ok(vec![UnsignedCredentialCreated {
-                                    credential_id,
-                                    notification_id: Some(notification_id),
-                                    data: Data { raw: credential_data },
-                                    credential_configuration,
-                                    credential_status,
-                                    created_at: Some(created_at),
-                                    expires_at,
-                                }]);
-                            }
-                            Err(e) => {
-                                return Err(BuildCredentialError(e.to_string()));
-                            }
-                        }
+                        )?
                     }
                     CredentialFormats::DcSdJwt(Parameters::<DcSdJwt> {
                         parameters: DcSdJwtParameters { vct },
                     }) => {
-                        let mut raw = data.raw;
-                        raw["vct"] = json!(vct);
+                        credential_data.insert_at_path(&["vct"], json!(vct));
 
-                        return Ok(vec![UnsignedCredentialCreated {
-                            credential_id,
-                            notification_id: Some(notification_id),
-                            data: Data { raw },
-                            credential_configuration,
-                            credential_status,
-                            created_at: Some(created_at),
-                            expires_at,
-                        }]);
+                        credential_data
                     }
                     CredentialFormats::VcSdJwt(Parameters::<VcSdJwt> {
                         parameters:
@@ -215,34 +191,29 @@ impl Aggregate for Credential {
                                 "Failed to enter the type into the credential".to_string(),
                             ))?;
 
-                        match build_unsigned_w3c_credential_data(
+                        build_unsigned_w3c_credential_data(
                             type_,
                             &mut credential_data,
                             &credential_configuration,
                             &credential_id,
                             expires_at,
                             self.credential_status.index,
-                        ) {
-                            Ok(credential_data) => {
-                                return Ok(vec![UnsignedCredentialCreated {
-                                    credential_id,
-                                    notification_id: Some(notification_id),
-                                    data: Data { raw: credential_data },
-                                    credential_configuration,
-                                    credential_status,
-                                    created_at: Some(created_at),
-                                    expires_at,
-                                }]);
-                            }
-                            Err(e) => {
-                                return Err(BuildCredentialError(e.to_string()));
-                            }
-                        }
-                    }
-                    _ => Err(UnsupportedCredentialFormat(serde_json::json!(
+                        )?
+                    },
+                    _ => return Err(UnsupportedCredentialFormat(serde_json::json!(
                         credential_configuration.credential_format
-                    ))),
-                }
+                    )))
+                };
+            
+                return Ok(vec![UnsignedCredentialCreated {
+                    credential_id,
+                    notification_id: Some(notification_id),
+                    data: Data { raw: credential_data },
+                    credential_configuration,
+                    credential_status,
+                    created_at: Some(created_at),
+                    expires_at,
+                }]);
             }
 
             CreateSignedCredential {
@@ -778,7 +749,7 @@ fn build_unsigned_w3c_credential_data(
                         if filter_schema_errors(&mut errors) {
                             return Ok(credential_data.clone());
                         }
-                        return Err(BuildCredentialError(errors.to_string()));
+                        return Err(InvalidCredentialPayloadError(errors));
                     }
                 }
             }
@@ -830,7 +801,7 @@ fn build_unsigned_w3c_credential_data(
                         if filter_schema_errors(&mut errors) {
                             return Ok(credential_data.clone());
                         }
-                        return Err(BuildCredentialError(errors.to_string()));
+                        return Err(InvalidCredentialPayloadError(errors));
                     }
                 }
             }
@@ -859,20 +830,12 @@ fn build_unsigned_w3c_credential_data(
                         "Failed to enter the id into the credential".to_string(),
                     ))?;
 
-                // No fields in credentialProfiles are actually required by the ELM schema
-                // For now entering this dummy default as it is the same in every example under this link:
-                // https://github.com/european-commission-empl/European-Learning-Model/tree/master/Credentials/JSON-LD%20Examples%20(ELM%20v3)
+                // No fields in credentialProfiles are actually required by the ELM schema.
+                // Since we do not fully understand the use of this property yet, we enter an empty object.
                 credential_data
                     .insert_if_none(
                         &["credentialProfiles"],
-                        json!({
-                            "id":"http://data.europa.eu/snb/credential/bdc47cb449",
-                            "type":"Concept",
-                            "inScheme":{
-                                "id":"http://data.europa.eu/snb/credential/25831c2",
-                                "type": "ConceptScheme"
-                            }
-                        }),
+                        json!({}),
                     )
                     .ok_or(BuildCredentialError(
                         "Failed to enter the credentialProfiles into the credential".to_string(),
@@ -884,82 +847,20 @@ fn build_unsigned_w3c_credential_data(
                     .insert_if_none(
                         &["displayParameter"],
                         json!({
-                            "id": "urn:epass:displayParameter:1",
-                            "type": "DisplayParameter",
                             "title": {
                                 "en": credential_name
                             },
-                            "primaryLanguage": {
-                                "id": "http://publications.europa.eu/resource/authority/language/ENG",
-                                "type": "Concept",
-                                "inScheme": {
-                                "id": "http://publications.europa.eu/resource/authority/language",
-                                "type": "ConceptScheme"
-                                },
-                                "notation": "language",
-                                "prefLabel": {
-                                "en": "English"
-                                }
-                            },
-                            "language": {
-                                "id": "http://publications.europa.eu/resource/authority/language/ENG",
-                                "type": "Concept",
-                                "inScheme": {
-                                "id": "http://publications.europa.eu/resource/authority/language",
-                                "type": "ConceptScheme"
-                                },
-                                "notation": "language",
-                                "prefLabel": {
-                                "en": "English"
-                                }
-                            },
+                            "language": {},
+                            "primaryLanguage": {},
                             "individualDisplay": {
-                                "id": "urn:epass:individualDisplay:1",
-                                "type": "IndividualDisplay",
-                                "language": {
-                                    "id": "http://publications.europa.eu/resource/authority/language/ENG",
-                                    "type": "Concept",
-                                    "inScheme": {
-                                        "id": "http://publications.europa.eu/resource/authority/language",
-                                        "type": "ConceptScheme"
-                                    },
-                                    "notation": "language",
-                                    "prefLabel": {
-                                        "en": "English"
-                                    }
-                                },
+                                "language": {},
                                 "displayDetail": {
-                                    "id": "urn:epass:displayDetail:1",
-                                    "type": "DisplayDetail",
                                     "page": 1,
                                     "image": {
-                                        "id": "urn:epass:mediaObject:1",
-                                        "type": "MediaObject",
                                         // TODO: this field needs an actual baked in image, binary data, with live data the encoding and type need to be changed accordingly
                                         "content": "[PLACEHOLDER]",
-                                        "contentEncoding": {
-                                            "id": "http://data.europa.eu/snb/encoding/6146cde7dd",
-                                            "type": "Concept",
-                                            "inScheme": {
-                                                "id": "http://data.europa.eu/snb/encoding/25831c2",
-                                                "type": "ConceptScheme"
-                                            },
-                                            "prefLabel": {
-                                                "en": "base64"
-                                            }
-                                        },
-                                        "contentType": {
-                                            "id": "http://publications.europa.eu/resource/authority/file-type/JPEG",
-                                            "type": "Concept",
-                                            "inScheme": {
-                                                "id": "http://publications.europa.eu/resource/authority/file-type",
-                                                "type": "ConceptScheme"
-                                            },
-                                            "notation": "file-type",
-                                            "prefLabel": {
-                                                "en": "JPEG"
-                                            }
-                                        }
+                                        "contentEncoding": {},
+                                        "contentType": {}
                                     },
                                 },
                             },
@@ -998,7 +899,7 @@ fn build_unsigned_w3c_credential_data(
                         if filter_schema_errors(&mut errors) {
                             return Ok(credential_data.clone());
                         }
-                        return Err(InvalidCredentialPayloadError(errors.to_string()));
+                        return Err(InvalidCredentialPayloadError(errors));
                     }
                 }
             }
