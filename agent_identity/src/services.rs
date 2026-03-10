@@ -15,9 +15,9 @@ use identity_iota::{
     },
 };
 use jsonwebtoken::{crypto::verify, jwk::Jwk as JsonWebTokenJwk, Algorithm, DecodingKey, Validation};
-use std::str::FromStr;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use reqwest::Client;
+use std::str::FromStr;
 use std::sync::Arc;
 use tracing::info;
 use url::Url;
@@ -76,8 +76,8 @@ impl IdentityServices {
             .map_err(|e| ConnectionError::CredentialIssuerMetadataFetchFailed(e.to_string()))
     }
 
-    pub async fn fetch_linked_dids(&self, issuer_url: &Url) -> Result<(Vec<DIDUrl>, bool), ConnectionError> {
-        let config = self.fetch_domain_linkage_configuration(issuer_url).await?;
+    pub async fn fetch_linked_dids(&self, url: &Url) -> Result<(Vec<DIDUrl>, bool), ConnectionError> {
+        let config = self.fetch_domain_linkage_configuration(url).await?;
         let linked_dids: Vec<DIDUrl> = config
             .linked_dids()
             .iter()
@@ -92,7 +92,7 @@ impl IdentityServices {
             .collect();
 
         let validator = JwtDomainLinkageValidator::with_signature_verifier(Verifier);
-        let url = identity_iota::core::Url::from(issuer_url.clone());
+        let url = identity_iota::core::Url::from(url.clone());
         let mut all_valid = true;
 
         if linked_dids.is_empty() {
@@ -125,9 +125,9 @@ impl IdentityServices {
 
     async fn fetch_domain_linkage_configuration(
         &self,
-        issuer_url: &Url,
+        url: &Url,
     ) -> Result<DomainLinkageConfiguration, ConnectionError> {
-        let mut url = issuer_url.clone();
+        let mut url = url.clone();
         strip_www(&mut url)?;
         url.set_path("/.well-known/did-configuration.json");
 
