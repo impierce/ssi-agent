@@ -15,7 +15,7 @@ use super::{command::ConnectionCommand, error::ConnectionError, event::Connectio
 pub struct Connection {
     #[serde(rename = "id")]
     pub connection_id: String,
-    pub issuer_url: Option<Url>,
+    pub url: Option<Url>,
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
     pub domain_linkage_valid: bool,
@@ -69,19 +69,16 @@ impl Aggregate for Connection {
         info!("Handling command: {:?}", command);
 
         match command {
-            AddConnection {
-                connection_id,
-                issuer_url,
-            } => {
-                let metadata = services.fetch_credential_issuer_metadata(&issuer_url).await?;
+            AddConnection { connection_id, url } => {
+                let metadata = services.fetch_credential_issuer_metadata(&url).await?;
                 let connection_display_properties = get_display_from_metadata(metadata.clone());
-                let (dids, domain_linkage_valid) = services.fetch_linked_dids(&issuer_url).await?;
+                let (dids, domain_linkage_valid) = services.fetch_linked_dids(&url).await?;
                 let now = services.now();
 
                 Ok(vec![ConnectionAdded {
                     connection_id,
                     display: connection_display_properties,
-                    issuer_url,
+                    url,
                     dids: dids.clone(),
                     domain_linkage_valid,
                     first_interacted: Some(now),
@@ -90,7 +87,7 @@ impl Aggregate for Connection {
             }
             SyncConnection { connection_id } => {
                 let domain_ref = self
-                    .issuer_url
+                    .url
                     .as_ref()
                     .ok_or(ConnectionError::MissingDomain(connection_id.clone()))?;
 
@@ -151,14 +148,14 @@ impl Aggregate for Connection {
                 connection_id,
                 display,
                 domain_linkage_valid,
-                issuer_url,
+                url,
                 dids,
                 first_interacted,
                 last_interacted,
             } => {
                 self.connection_id = connection_id;
                 self.display = display;
-                self.issuer_url = Some(issuer_url);
+                self.url = Some(url);
                 self.dids = dids;
                 self.domain_linkage_valid = domain_linkage_valid;
                 self.first_interacted = first_interacted;
@@ -275,7 +272,7 @@ pub mod document_tests {
             .given_no_previous_events()
             .when(ConnectionCommand::AddConnection {
                 connection_id: "abcd1234".to_string(),
-                issuer_url: mock_issuer.clone(),
+                url: mock_issuer.clone(),
             })
             .then_expect_events(vec![ConnectionEvent::ConnectionAdded {
                 connection_id: "abcd1234".to_string(),
@@ -287,7 +284,7 @@ pub mod document_tests {
                         alt_text: Some("Organisational Logo".to_string()),
                     }),
                 }),
-                issuer_url: mock_issuer,
+                url: mock_issuer,
                 dids: vec![TEST_DID.parse().unwrap()],
                 domain_linkage_valid: false,
                 first_interacted: Some(mock_time),
@@ -347,7 +344,7 @@ pub mod document_tests {
                         alt_text: Some("Organisational Logo".to_string()),
                     }),
                 }),
-                issuer_url: mock_issuer.clone(),
+                url: mock_issuer.clone(),
                 dids: vec![TEST_DID.parse().unwrap()],
                 domain_linkage_valid: false,
                 first_interacted: Some(mock_time),

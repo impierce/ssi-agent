@@ -23,7 +23,7 @@ pub mod openapi;
 #[serde(rename_all = "camelCase")]
 pub struct AddConnectionEndpointRequest {
     #[serde(default)]
-    pub issuer_url: String,
+    pub url: String,
 }
 
 /// Add a Connection
@@ -45,14 +45,14 @@ pub struct AddConnectionEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn post_connection(
     State(state): State<Arc<IdentityState>>,
-    Json(AddConnectionEndpointRequest { issuer_url }): Json<AddConnectionEndpointRequest>,
+    Json(AddConnectionEndpointRequest { url }): Json<AddConnectionEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let connection_id = uuid::Uuid::new_v4().to_string();
 
-    let issuer_url = parse_url(&issuer_url)?;
+    let url = parse_url(&url)?;
     let command = ConnectionCommand::AddConnection {
         connection_id: connection_id.clone(),
-        issuer_url,
+        url,
     };
 
     command_handler(&connection_id, &state.command.connection, command).await?;
@@ -79,7 +79,7 @@ pub struct GetConnectionsEndpointRequest {
     pub display: Option<ConnectionDisplayProperties>,
     #[serde(default)]
     #[schema(value_type = Option<String>)]
-    pub issuer_url: Option<Url>,
+    pub url: Option<Url>,
     #[serde(default)]
     #[schema(value_type = Option<String>)]
     pub did: Option<DIDUrl>,
@@ -100,11 +100,7 @@ pub struct GetConnectionsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connections(
     State(state): State<Arc<IdentityState>>,
-    Form(GetConnectionsEndpointRequest {
-        display,
-        issuer_url,
-        did,
-    }): Form<GetConnectionsEndpointRequest>,
+    Form(GetConnectionsEndpointRequest { display, url, did }): Form<GetConnectionsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let filtered_connections = query_handler("all_connections", &state.query.all_connections)
         .await?
@@ -116,9 +112,7 @@ pub(crate) async fn get_connections(
                     display
                         .as_ref()
                         .map_or(true, |display| connection.display.as_ref() == Some(display))
-                        && issuer_url
-                            .as_ref()
-                            .map_or(true, |issuer_url| connection.issuer_url.as_ref() == Some(issuer_url))
+                        && url.as_ref().map_or(true, |url| connection.url.as_ref() == Some(url))
                         && did.as_ref().map_or(true, |did| connection.dids.contains(did))
                 })
                 .collect();

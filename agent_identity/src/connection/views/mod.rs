@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 pub struct ConnectionView {
     #[serde(rename = "id")]
     pub connection_id: String,
-    pub issuer_url: Option<Url>,
+    pub url: Option<Url>,
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
     pub domain_linkage_valid: bool,
@@ -30,7 +30,7 @@ impl View<Connection> for ConnectionView {
             ConnectionAdded {
                 connection_id,
                 display,
-                issuer_url,
+                url,
                 dids,
                 domain_linkage_valid,
                 first_interacted,
@@ -38,7 +38,7 @@ impl View<Connection> for ConnectionView {
             } => {
                 self.connection_id.clone_from(connection_id);
                 self.display.clone_from(display);
-                self.issuer_url = Some(issuer_url.clone());
+                self.url = Some(url.clone());
                 self.dids.clone_from(dids);
                 self.domain_linkage_valid = *domain_linkage_valid;
                 self.first_interacted = *first_interacted;
