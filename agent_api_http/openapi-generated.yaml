@@ -51,6 +51,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Connection'
+  /v0/credentials:
+    get:
+      tags:
+      - Issuance
+      summary: List all credentials
+      description: Lists all credentials including their current status and metadata.
+      operationId: get_all_credentials
+      responses:
+        '200':
+          description: List of all credentials
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Credential'
+  /v0/credentials/{credential_id}:
+    get:
+      tags:
+      - Issuance
+      summary: Get credential by ID
+      description: Retrieves a credential by its ID.
+      operationId: get_credential_by_id
+      parameters:
+      - name: credential_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Successfully retrieved credential
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credential'
   /v0/templates/create-template:
     post:
       tags:
@@ -251,7 +287,7 @@ components:
         schema: {}
         status:
           oneOf:
-          - $ref: '#/components/schemas/Status'
+          - $ref: '#/components/schemas/TemplateStatus'
           default: draft
         tags:
           type: array
@@ -272,12 +308,143 @@ components:
           oneOf:
           - $ref: '#/components/schemas/Visibility'
           default: private
+    Credential:
+      type: object
+      required:
+      - id
+      - credential_configuration
+      - status
+      - holder_notifications
+      - credential_status
+      properties:
+        created_at:
+          type:
+          - string
+          - 'null'
+        credential_configuration:
+          type: object
+          required:
+          - credential_format
+          properties:
+            credential_format:
+              type: object
+              enum:
+              - jwt_vc_json
+              - dc+sd-jwt
+              - vc+sd-jwt
+            credential_metadata:
+              type: object
+              properties:
+                claims:
+                  type: array
+                  items: {}
+                display:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                    - name
+                    properties:
+                      background_color:
+                        type: string
+                      background_image:
+                        type: string
+                      description:
+                        type: string
+                      locale:
+                        type: string
+                      logo:
+                        type: object
+                        required:
+                        - uri
+                        properties:
+                          alt_text:
+                            type: string
+                          uri:
+                            type: string
+                            format: uri
+                      name:
+                        type: string
+                      text_color:
+                        type: string
+            credential_signing_alg_values_supported:
+              type: array
+              items:
+                type: string
+            cryptographic_binding_methods_supported:
+              type: array
+              items:
+                type: string
+            proof_types_supported:
+              type: object
+            scope:
+              type: object
+        credential_status:
+          $ref: '#/components/schemas/CredentialStatus'
+        data:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Data'
+        expires_at:
+          type:
+          - string
+          - 'null'
+        holder_notifications:
+          type: array
+          items:
+            type: object
+            required:
+            - notification_id
+            - event
+            properties:
+              event:
+                type: string
+                enum:
+                - credential_accepted
+                - credential_failure
+                - credential_deleted
+              event_description:
+                type: string
+              notification_id:
+                type: string
+          description: this is notification request
+        id:
+          type: string
+        notification_id:
+          type:
+          - string
+          - 'null'
+        signed: {}
+        status:
+          $ref: '#/components/schemas/IssuanceStatus'
     CredentialFormat:
       type: string
       enum:
       - w3c_vc_data_model_v1-1
       - w3c_vc_data_model_v2-0
       - open_badges_3-0
+    CredentialStatus:
+      type: object
+      required:
+      - index
+      - status
+      properties:
+        index:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+          enum:
+          - VALID
+          - INVALID
+          - SUSPENDED
+          - UNDEFINED
+    Data:
+      type: object
+      required:
+      - raw
+      properties:
+        raw: {}
     DeleteTemplateEndpointRequest:
       type: object
       required:
@@ -323,6 +490,11 @@ components:
       enum:
       - individual
       - organization
+    IssuanceStatus:
+      type: string
+      enum:
+      - Pending
+      - Issued
     Logo:
       type: object
       required:
@@ -334,13 +506,6 @@ components:
           - 'null'
         uri:
           type: string
-    Status:
-      type: string
-      enum:
-      - draft
-      - published
-      - archived
-      - deleted
     Template:
       type: object
       description: Data transfer object for Templates.
@@ -383,7 +548,7 @@ components:
           - string
           - 'null'
         status:
-          $ref: '#/components/schemas/Status'
+          $ref: '#/components/schemas/TemplateStatus'
         tags:
           type: array
           items:
@@ -398,6 +563,13 @@ components:
             type: string
         visibility:
           $ref: '#/components/schemas/Visibility'
+    TemplateStatus:
+      type: string
+      enum:
+      - draft
+      - published
+      - archived
+      - deleted
     UpdateTemplateEndpointRequest:
       type: object
       properties:
@@ -433,7 +605,7 @@ components:
         status:
           oneOf:
           - type: 'null'
-          - $ref: '#/components/schemas/Status'
+          - $ref: '#/components/schemas/TemplateStatus'
           default: null
         tags:
           type: array
@@ -463,6 +635,8 @@ components:
 tags:
 - name: Connections
   description: Manage trusted connections.
+- name: Issuance
+  description: Issue credentials to individuals and organizations, manage credential offers and track their status.
 - name: Library
   description: Manage your own templates, browse and import external templates.
 - name: Templates
