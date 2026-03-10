@@ -1,17 +1,11 @@
-### Credential Offer Delivery
-
-Credential offers can be delivered either B2C (via a recipient email) or B2B between other business Wallets via a Target Url. These delivery options are specified under the DeliveryMethod field in offer issuance.
-
-When email delivery is selected, the issuance publishes a `CredentialOfferEmailSent` event containing the recipient email and credential offer details. External email delivery services can subscribe to these events and handle the actual email transmission.
-
-### Credential Types and Verifiable Formats
+## Credential Types and Verifiable Formats
 
 Credentials can be issued in 4 different **Digital Credential Data Formats**:
-- Verifiable Credential Data Model 1.1 (VC DM 1.1)
-- Verifiable Credential Data Model 2.0 (VC DM 2.0)
-- Open Badges 3.0 (OB 3.0)
-- European Digital Credential 3.3 (ELM 3.3)
-> For more resources on these specifications please refer to the `README.md` file in the `agent_library/src/json_schemas` folder.
+- [Verifiable Credential Data Model 1.1](https://www.w3.org/TR/vc-data-model-1.1) (VC DM 1.1)
+- [Verifiable Credential Data Model 2.0](https://www.w3.org/TR/vc-data-model/) (VC DM 2.0)
+- [Open Badges 3.0](https://www.imsglobal.org/spec/ob/v3p0) (OB 3.0)
+- [European Digital Credential 3.3](https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/snb-model) (ELM 3.3)
+> For more resources on these specifications please refer to the `README.md` file at https://github.com/impierce/ssi-agent/tree/beta/agent_library/src/json_schemas/README.md.
 
 Furthermore, there are 3 supported formats in which these credentials can be made verifiable, all of which are **envelopping methods**:
 - [W3C Verifiable Credentials 1.1](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-w3c-verifiable-credentials) (`jwt_vc_json`)
