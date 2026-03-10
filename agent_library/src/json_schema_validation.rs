@@ -160,7 +160,14 @@ impl CredentialType {
                 let errors: Vec<_> = version
                     .get_validator()?
                     .iter_errors(data)
-                    .map(|e| format!("{e:?}"))
+                    .map(|e| {
+                        format!(
+                            "Error: {}\nField: {}\nSchema Path: {}\n",
+                            e, // The Display implementation of ValidationError provides a human-readable error message, however it drops a lot of valuable information. Hence, the addition of the subsequent 2 fields.
+                            e.instance_path(),
+                            e.schema_path()
+                        )
+                    })
                     .collect();
                 if !errors.is_empty() {
                     Err(JsonSchemaError::CredentialValidationError(version.to_string(), errors))
@@ -214,8 +221,17 @@ pub enum JsonSchemaError {
     GetCredentialTypeError(String),
     #[error("Failed to parse JSON data: `{0}`")]
     InvalidJsonData(String),
-    #[error("Credential data validation, according to its type `{0}`, results in the following errors: `{1:#?}`")]
+    #[error("Credential validation failed for type `{0}`:\n{}", format_errors(.1))]
     CredentialValidationError(String, Vec<String>),
+}
+
+fn format_errors(errors: &[String]) -> String {
+    errors
+        .iter()
+        .enumerate()
+        .map(|(i, e)| format!("  [{}] {}", i + 1, e))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[cfg(test)]
@@ -341,6 +357,7 @@ mod tests {
         let mut invalid_ob3 = EXAMPLE_BASIC_OB3.clone();
 
         *invalid_ob3.get_mut("id").unwrap() = json!(["InvalidId"]);
+        *invalid_ob3.get_mut("credentialSubject").unwrap().get_mut("achievement").unwrap().get_mut("id").unwrap() = json!(["InvalidId"]);
 
         let cred_type = CredentialType::OpenBadgeCredential;
         let result = cred_type.validate(&invalid_ob3);
