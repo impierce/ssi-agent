@@ -998,7 +998,7 @@ fn build_unsigned_w3c_credential_data(
                         if filter_schema_errors(&mut errors) {
                             return Ok(credential_data.clone());
                         }
-                        return Err(BuildCredentialError(errors.to_string()));
+                        return Err(InvalidCredentialPayloadError(errors.to_string()));
                     }
                 }
             }

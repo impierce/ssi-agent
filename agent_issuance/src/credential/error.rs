@@ -8,8 +8,8 @@ pub enum CredentialError {
     // TODO: Remove this error when fixing: https://github.com/impierce/ssi-agent/issues/136
     #[error("This Credential type is not supported")]
     UnsupportedCredentialType,
-    #[error("The `credentialSubject` value is invalid: {0}")]
-    InvalidCredentialSubjectError(String),
+    #[error("The credential data payload is invalid: {0}")]
+    InvalidCredentialPayloadError(String),
     #[error("The `id` value could not be parsed to a valid URI")]
     InvalidIdentifierError,
     #[error("Could not find valid data or missing data to be signed")]
