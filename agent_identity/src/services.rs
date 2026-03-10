@@ -16,7 +16,6 @@ use identity_iota::{
 };
 use jsonwebtoken::{crypto::verify, jwk::Jwk as JsonWebTokenJwk, Algorithm, DecodingKey, Validation};
 use std::str::FromStr;
-
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use reqwest::Client;
 use std::sync::Arc;
