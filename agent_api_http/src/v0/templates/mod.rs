@@ -218,7 +218,7 @@ pub(crate) async fn duplicate_template(
         .into_response())
 }
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
 #[serde(default, rename_all = "camelCase")]
 pub struct UpdateTemplateEndpointRequest {
     #[serde(rename = "id")]
@@ -236,6 +236,18 @@ pub struct UpdateTemplateEndpointRequest {
     pub schema: Option<serde_json::Value>,
 }
 
+/// Update a template
+///
+/// Updates an existing template with the provided content.
+#[utoipa::path(
+    post,
+    path = "/templates/update-template",
+    operation_id = "update_template",
+    tags = ["Library", "Templates"],
+    responses(
+        (status = 204, description = "Template updated successfully")
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn update_template(
     State(state): State<Arc<LibraryState>>,
@@ -427,13 +439,25 @@ pub(crate) async fn get_template(
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteTemplateEndpointRequest {
     #[serde(rename = "id")]
     pub template_id: String,
 }
 
+/// Delete a template
+///
+/// Deletes a template by marking its status as `Deleted`. Deleted templates will no longer appear in any views.
+#[utoipa::path(
+    post,
+    path = "/templates/delete-template",
+    operation_id = "delete_template_by_id",
+    tags = ["Library", "Templates"],
+    responses(
+        (status = 204, description = "Template deleted successfully")
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_template(
     State(state): State<Arc<LibraryState>>,

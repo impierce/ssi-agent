@@ -380,6 +380,7 @@ dependencies = [
  "tracing-test",
  "types-ob-v3",
  "url",
+ "utoipa",
 ]
 
 [[package]]

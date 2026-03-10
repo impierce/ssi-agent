@@ -11,6 +11,7 @@ use identity_iota::iota::rebased::client::{get_object_id_from_did, IdentityClien
 use identity_iota::iota::rebased::migration::{ControllerToken, Identity, OnChainIdentity};
 use identity_iota::iota::{rebased, IotaDID};
 use identity_iota::storage::{Storage, StorageSigner};
+use identity_iota::verification::MethodRelationship;
 use identity_iota::{
     iota::IotaDocument,
     verification::{MethodScope, MethodType, VerificationMethod},
@@ -359,8 +360,30 @@ impl Aggregate for Document {
                         .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
 
                     document
-                        .insert_method(verification_method, MethodScope::VerificationMethod) // TODO: add relationships, also TODO: adjust KID insertion elsewhere
+                        .insert_method(verification_method.clone(), MethodScope::VerificationMethod) // TODO: adjust KID insertion elsewhere
                         .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
+
+                    // Attach all possible relationships to the verification method.
+                    document.attach_method_relationship(
+                        verification_method.id().clone(),
+                        MethodRelationship::Authentication,
+                    )?;
+                    document.attach_method_relationship(
+                        verification_method.id().clone(),
+                        MethodRelationship::AssertionMethod,
+                    )?;
+                    document.attach_method_relationship(
+                        verification_method.id().clone(),
+                        MethodRelationship::KeyAgreement,
+                    )?;
+                    document.attach_method_relationship(
+                        verification_method.id().clone(),
+                        MethodRelationship::CapabilityDelegation,
+                    )?;
+                    document.attach_method_relationship(
+                        verification_method.id().clone(),
+                        MethodRelationship::CapabilityInvocation,
+                    )?;
 
                     events.push(PublicKeyUpdated {
                         document_id: self.document_id.clone(),
@@ -975,7 +998,7 @@ pub mod test_utils {
         document::CoreDocument,
         service::{Service, ServiceEndpoint},
     };
-    use identity_iota::verification::jwk::Jwk;
+    use identity_iota::verification::{jwk::Jwk, MethodRelationship};
     use identity_iota::verification::{MethodData, MethodScope, MethodType, VerificationMethod};
     use rstest::*;
     use serde_json::json;
@@ -1062,8 +1085,27 @@ pub mod test_utils {
         mut document: CoreDocument,
         es256_verification_method: VerificationMethod,
     ) -> CoreDocument {
+        let verification_method_id = es256_verification_method.id().clone();
+
         document
             .insert_method(es256_verification_method, MethodScope::VerificationMethod)
+            .unwrap();
+
+        // Attach all possible relationships to the verification method.
+        document
+            .attach_method_relationship(verification_method_id.clone(), MethodRelationship::Authentication)
+            .unwrap();
+        document
+            .attach_method_relationship(verification_method_id.clone(), MethodRelationship::AssertionMethod)
+            .unwrap();
+        document
+            .attach_method_relationship(verification_method_id.clone(), MethodRelationship::KeyAgreement)
+            .unwrap();
+        document
+            .attach_method_relationship(verification_method_id.clone(), MethodRelationship::CapabilityDelegation)
+            .unwrap();
+        document
+            .attach_method_relationship(verification_method_id, MethodRelationship::CapabilityInvocation)
             .unwrap();
 
         document
@@ -1075,8 +1117,26 @@ pub mod test_utils {
         both_verification_methods: Vec<VerificationMethod>,
     ) -> CoreDocument {
         for verification_method in both_verification_methods {
+            let verification_method_id = verification_method.id().clone();
+
             document
                 .insert_method(verification_method, MethodScope::VerificationMethod)
+                .unwrap();
+
+            document
+                .attach_method_relationship(verification_method_id.clone(), MethodRelationship::Authentication)
+                .unwrap();
+            document
+                .attach_method_relationship(verification_method_id.clone(), MethodRelationship::AssertionMethod)
+                .unwrap();
+            document
+                .attach_method_relationship(verification_method_id.clone(), MethodRelationship::KeyAgreement)
+                .unwrap();
+            document
+                .attach_method_relationship(verification_method_id.clone(), MethodRelationship::CapabilityDelegation)
+                .unwrap();
+            document
+                .attach_method_relationship(verification_method_id, MethodRelationship::CapabilityInvocation)
                 .unwrap();
         }
 
