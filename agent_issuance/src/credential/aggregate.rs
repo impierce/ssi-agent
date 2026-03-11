@@ -77,6 +77,7 @@ mod never_as_str {
 pub struct CredentialStatus {
     pub index: usize,
     pub status: StatusType,
+    pub status_list_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -118,7 +119,6 @@ impl Aggregate for Credential {
                 data,
                 credential_configuration,
                 expires_at,
-                credential_status_index,
             } => {
                 #[cfg(feature = "test_utils")]
                 let notification_id = test_utils::notification_id();
@@ -137,11 +137,6 @@ impl Aggregate for Credential {
                 let expires_at = match expires_at {
                     CredentialExpiry::Fixed(fixed) => Some(fixed),
                     CredentialExpiry::Never => None,
-                };
-
-                let credential_status = CredentialStatus {
-                    index: credential_status_index,
-                    status: StatusType::VALID,
                 };
 
                 let mut credential_data = data.raw.clone();
@@ -210,7 +205,6 @@ impl Aggregate for Credential {
                     notification_id: Some(notification_id),
                     data: Data { raw: credential_data },
                     credential_configuration,
-                    credential_status,
                     created_at: Some(created_at),
                     expires_at,
                 }]);
@@ -508,7 +502,6 @@ impl Aggregate for Credential {
                 data,
                 credential_configuration,
                 notification_id,
-                credential_status,
                 created_at,
                 expires_at,
             } => {
@@ -516,7 +509,6 @@ impl Aggregate for Credential {
                 self.data.replace(data);
                 self.credential_configuration = *credential_configuration;
                 self.notification_id = notification_id;
-                self.credential_status = credential_status;
                 self.created_at = created_at;
                 self.expires_at = expires_at;
             }
@@ -1017,7 +1009,6 @@ pub mod credential_tests {
                 },
                 credential_configuration: Box::new(credential_configuration.clone()),
                 expires_at: CredentialExpiry::Never,
-                credential_status_index: 0,
             })
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id,
@@ -1026,10 +1017,6 @@ pub mod credential_tests {
                 },
                 notification_id: Some(notification_id.clone()),
                 credential_configuration: Box::new(credential_configuration),
-                credential_status: CredentialStatus {
-                    index: 0,
-                    status: StatusType::VALID,
-                },
                 created_at: Some(created_at),
                 expires_at: None,
             }])
@@ -1091,10 +1078,6 @@ pub mod credential_tests {
                 },
                 credential_configuration: Box::new(credential_configuration),
                 notification_id: None,
-                credential_status: CredentialStatus {
-                    index: 0,
-                    status: StatusType::VALID,
-                },
                 created_at: Some(created_at),
                 expires_at: None,
             }])

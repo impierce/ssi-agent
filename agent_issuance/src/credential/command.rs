@@ -16,7 +16,6 @@ pub enum CredentialCommand {
         data: Data,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
         expires_at: CredentialExpiry,
-        credential_status_index: usize,
     },
     CreateSignedCredential {
         credential_id: String,

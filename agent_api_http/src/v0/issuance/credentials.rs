@@ -141,7 +141,6 @@ pub(crate) async fn credentials(
             data: Data { raw: credential },
             credential_configuration: Box::new(credential_configuration.clone()),
             expires_at,
-            credential_status_index: random_index,
         }
     };
 
@@ -225,6 +224,7 @@ pub async fn patch_credential(
         let credential_status = CredentialStatus {
             index: credential.credential_status.index,
             status,
+            status_list_id: "".to_string(), // TODO: set a real status_list_id
         };
 
         let command = CredentialCommand::UpdateCredentialStatus {
