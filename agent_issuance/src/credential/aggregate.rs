@@ -1524,90 +1524,21 @@ pub mod test_utils {
                 "name": "UniCore"
             },
             "name": "European Digital Credential",
-            "credentialProfiles": {
-                "id": "http://data.europa.eu/snb/credential/bdc47cb449",
-                "type": "Concept",
-                "inScheme": {
-                    "id": "http://data.europa.eu/snb/credential/25831c2",
-                    "type": "ConceptScheme"
-                }
-            },
+            "credentialProfiles": {},
             "displayParameter": {
-                "id": "urn:epass:displayParameter:1",
-                "type": "DisplayParameter",
                 "title": {
                     "en": "European Digital Credential"
                 },
-                "primaryLanguage": {
-                    "id": "http://publications.europa.eu/resource/authority/language/ENG",
-                    "type": "Concept",
-                    "inScheme": {
-                        "id": "http://publications.europa.eu/resource/authority/language",
-                        "type": "ConceptScheme"
-                    },
-                    "notation": "language",
-                    "prefLabel": {
-                        "en": "English"
-                    }
-                },
-                "language": {
-                    "id": "http://publications.europa.eu/resource/authority/language/ENG",
-                    "type": "Concept",
-                    "inScheme": {
-                        "id": "http://publications.europa.eu/resource/authority/language",
-                        "type": "ConceptScheme"
-                    },
-                    "notation": "language",
-                    "prefLabel": {
-                        "en": "English"
-                    }
-                },
+                "primaryLanguage": {},
+                "language": {},
                 "individualDisplay": {
-                    "id": "urn:epass:individualDisplay:1",
-                    "type": "IndividualDisplay",
-                    "language": {
-                        "id": "http://publications.europa.eu/resource/authority/language/ENG",
-                        "type": "Concept",
-                        "inScheme": {
-                            "id": "http://publications.europa.eu/resource/authority/language",
-                            "type": "ConceptScheme"
-                        },
-                        "notation": "language",
-                        "prefLabel": {
-                            "en": "English"
-                        }
-                    },
+                    "language": {},
                     "displayDetail": {
-                        "id": "urn:epass:displayDetail:1",
-                        "type": "DisplayDetail",
                         "page": 1,
                         "image": {
-                            "id": "urn:epass:mediaObject:1",
-                            "type": "MediaObject",
                             "content": "[PLACEHOLDER]",
-                            "contentEncoding": {
-                                "id": "http://data.europa.eu/snb/encoding/6146cde7dd",
-                                "type": "Concept",
-                                "inScheme": {
-                                    "id": "http://data.europa.eu/snb/encoding/25831c2",
-                                    "type": "ConceptScheme"
-                                },
-                                "prefLabel": {
-                                    "en": "base64"
-                                }
-                            },
-                            "contentType": {
-                                "id": "http://publications.europa.eu/resource/authority/file-type/JPEG",
-                                "type": "Concept",
-                                "inScheme": {
-                                    "id": "http://publications.europa.eu/resource/authority/file-type",
-                                    "type": "ConceptScheme"
-                                },
-                                "notation": "file-type",
-                                "prefLabel": {
-                                    "en": "JPEG"
-                                }
-                            }
+                            "contentEncoding": {},
+                            "contentType": {}
                         }
                     }
                 }
