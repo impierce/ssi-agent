@@ -611,6 +611,8 @@ components:
       enum:
       - Pending
       - Issued
+    LinkedVpValidation:
+      type: object
     Logo:
       type: object
       required:
@@ -786,6 +788,12 @@ components:
         properties:
           DomainLinkage:
             $ref: '#/components/schemas/DomainLinkageValidation'
+      - type: object
+        required:
+        - LinkedVp
+        properties:
+          LinkedVp:
+            $ref: '#/components/schemas/LinkedVpValidation'
     ValidationResult:
       type: object
       required:

@@ -32,6 +32,12 @@ pub struct Connection {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub enum Validation {
     DomainLinkage(DomainLinkageValidation),
+    LinkedVp(LinkedVpValidation),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
+pub struct LinkedVpValidation {
+    // TODO: add validation!
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
