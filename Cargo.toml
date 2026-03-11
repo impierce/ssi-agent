@@ -40,11 +40,9 @@ derivative = "2.2"
 futures = "0.3"
 identity_core = { git = "https://github.com/iotaledger/identity", tag = "v1.9.1-beta.1" }
 identity_credential = { git = "https://github.com/iotaledger/identity", tag = "v1.9.1-beta.1", default-features = false, features = [
-    "credential",
     "domain-linkage",
     "presentation",
     "sd-jwt-vc",
-    "validator",
 ] }
 identity_did = { git = "https://github.com/iotaledger/identity", tag = "v1.9.1-beta.1" }
 identity_document = { git = "https://github.com/iotaledger/identity", tag = "v1.9.1-beta.1" }

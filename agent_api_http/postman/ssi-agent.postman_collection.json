@@ -1,125 +1,468 @@
 {
   "info": {
-    "_postman_id": "246c2e0c-a79a-4cb1-af6a-06476e3616db",
+    "_postman_id": "7e7f70a4-fe08-4199-a479-a0fd5884bd71",
     "name": "ssi-agent",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "_exporter_id": "38461474",
-    "_collection_link": "https://go.postman.co/collection/41786572-bd568b99-121b-438e-afc1-2356f4ab1803?source=collection_link"
+    "_exporter_id": "37402219"
   },
   "item": [
     {
       "name": "Issuance",
       "item": [
         {
-          "name": "openbadgesv3_credentials",
-          "event": [
+          "name": "VC DM 2.0 SD-JWT",
+          "item": [
             {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "const location = pm.response.headers.get(\"LOCATION\");",
-                  "",
-                  "if(location){",
-                  "    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
-                  "}",
-                  ""
-                ],
-                "type": "text/javascript",
-                "packages": {}
-              }
-            },
-            {
-              "listen": "prerequest",
-              "script": {
-                "exec": [
-                  ""
-                ],
-                "type": "text/javascript",
-                "packages": {}
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"openbadge_credential\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"type\": [ \"AchievementSubject\" ],\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    },\n    \"expiresAt\": \"2028-04-12T09:15:23Z\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
+              "name": "Create VC DM 2.0",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "const location = pm.response.headers.get(\"LOCATION\");",
+                      "",
+                      "if(location){",
+                      "    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
+                      "}",
+                      ""
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                },
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      ""
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
                 }
-              }
-            },
-            "url": {
-              "raw": "{{HOST}}/v0/credentials",
-              "host": [
-                "{{HOST}}"
               ],
-              "path": [
-                "v0",
-                "credentials"
-              ]
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"VCDM 2.0 SD-JWT\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    },\n    \"expiresAt\": \"never\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/credentials",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "credentials"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create ELM 3.3",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "const location = pm.response.headers.get(\"LOCATION\");",
+                      "",
+                      "if(location){",
+                      "    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
+                      "}",
+                      ""
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                },
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      ""
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"ELM SD-JWT\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    },\n    \"expiresAt\": \"never\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/credentials",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "credentials"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Open Badge 3.0",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "const location = pm.response.headers.get(\"LOCATION\");",
+                      "",
+                      "if(location){",
+                      "    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
+                      "}",
+                      ""
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                },
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      ""
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"OBv3 SD-JWT\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"type\": [ \"AchievementSubject\" ],\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    },\n    \"expiresAt\": \"2028-04-12T09:15:23Z\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/credentials",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "credentials"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Add Credential Configuration ELM",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"credential_configuration_id\": \"ELM SD-JWT\",\n    \"format\": \"vc+sd-jwt\",\n    \"type\": [\"VerifiableCredential\", \"EuropeanDigitalCredential\"],\n    \"display\": [\n        {\n        \"name\": \"ELM - vc+sd-jwt\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"uri\": \"https://www.impierce.com/external/impierce-logo.png\",\n            \"alt_text\": \"Impierce Logo\"\n        }\n        }\n    ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/credential-configurations",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "credential-configurations"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Add Credential Configuration OBv3",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"credential_configuration_id\": \"OBv3 SD-JWT\",\n    \"format\": \"vc+sd-jwt\",\n    \"type\": [\"VerifiableCredential\", \"OpenBadgeCredential\"],\n    \"display\": [\n        {\n        \"name\": \"OBv3 - vc+sd-jwt\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"uri\": \"https://www.impierce.com/external/impierce-logo.png\",\n            \"alt_text\": \"Impierce Logo\"\n        }\n        }\n    ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/credential-configurations",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "credential-configurations"
+                  ]
+                }
+              },
+              "response": []
             }
-          },
-          "response": []
+          ]
         },
         {
-          "name": "w3c_vc_credentials",
-          "event": [
+          "name": "W3C Verifiable Credentials 1.1",
+          "item": [
             {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "const location = pm.response.headers.get(\"LOCATION\");",
-                  "",
-                  "if(location){",
-                  "    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
-                  "}",
-                  ""
-                ],
-                "type": "text/javascript",
-                "packages": {}
-              }
-            },
-            {
-              "listen": "prerequest",
-              "script": {
-                "exec": [
-                  ""
-                ],
-                "type": "text/javascript",
-                "packages": {}
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"001\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    },\n    \"expiresAt\": \"never\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
+              "name": "Create VC 1.1",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "const location = pm.response.headers.get(\"LOCATION\");",
+                      "",
+                      "if(location){",
+                      "    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
+                      "}",
+                      ""
+                    ],
+                    "type": "text/javascript",
+                    "packages": {}
+                  }
+                },
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      ""
+                    ],
+                    "type": "text/javascript",
+                    "packages": {}
+                  }
                 }
-              }
-            },
-            "url": {
-              "raw": "{{HOST}}/v0/credentials",
-              "host": [
-                "{{HOST}}"
               ],
-              "path": [
-                "v0",
-                "credentials"
-              ]
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"001\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    },\n    \"expiresAt\": \"never\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/credentials",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "credentials"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create ELM 3.3",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "const location = pm.response.headers.get(\"LOCATION\");",
+                      "",
+                      "if(location){",
+                      "    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
+                      "}",
+                      ""
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                },
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      ""
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"JWT_VC_JSON ELM\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    },\n    \"expiresAt\": \"never\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/credentials",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "credentials"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Open Badges 3.0",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "const location = pm.response.headers.get(\"LOCATION\");",
+                      "",
+                      "if(location){",
+                      "    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
+                      "}",
+                      ""
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                },
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      ""
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"JWT_VC_JSON OBv3\",\n    \"credential\": {\n        \"credentialSubject\": {\n            \"type\": [ \"AchievementSubject\" ],\n            \"achievement\": {\n                \"id\": \"https://example.com/achievements/21st-century-skills/teamwork\",\n                \"type\": \"Achievement\",\n                \"criteria\": {\n                    \"narrative\": \"Team members are nominated for this badge by their peers and recognized upon review by Example Corp management.\"\n                },\n                \"description\": \"This badge recognizes the development of the capacity to collaborate within a group environment.\",\n                \"name\": \"Teamwork\"\n            }\n        }\n    },\n    \"expiresAt\": \"2028-04-12T09:15:23Z\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/credentials",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "credentials"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Add Credential Configuration ELM",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"credential_configuration_id\": \"JWT_VC_JSON ELM\",\n    \"format\": \"jwt_vc_json\",\n    \"type\": [\"VerifiableCredential\", \"EuropeanDigitalCredential\"],\n    \"display\": [\n        {\n        \"name\": \"ELM - jwt_vc_json\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"uri\": \"https://www.impierce.com/external/impierce-logo.png\",\n            \"alt_text\": \"Impierce Logo\"\n        }\n        }\n    ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/credential-configurations",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "credential-configurations"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Add Credential Configuration OBv3",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"credential_configuration_id\": \"JWT_VC_JSON OBv3\",\n    \"format\": \"jwt_vc_json\",\n    \"type\": [\"VerifiableCredential\", \"OpenBadgeCredential\"],\n    \"display\": [\n        {\n        \"name\": \"OBv3 - jwt_vc_json\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"uri\": \"https://www.impierce.com/external/impierce-logo.png\",\n            \"alt_text\": \"Impierce Logo\"\n        }\n        }\n    ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/credential-configurations",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "credential-configurations"
+                  ]
+                }
+              },
+              "response": []
             }
-          },
-          "response": []
+          ]
         },
         {
-          "name": "Create an SD-JWT VC Credential",
+          "name": "Create SD-JWT VC",
           "event": [
             {
               "listen": "test",
@@ -133,7 +476,8 @@
                   ""
                 ],
                 "type": "text/javascript",
-                "packages": {}
+                "packages": {},
+                "requests": {}
               }
             },
             {
@@ -143,7 +487,8 @@
                   ""
                 ],
                 "type": "text/javascript",
-                "packages": {}
+                "packages": {},
+                "requests": {}
               }
             }
           ],
@@ -152,61 +497,7 @@
             "header": [],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"SD-JWT\",\n    \"credential\": {\n        \"first_name\": \"Ferris\",\n        \"last_name\": \"Crabman\",\n        \"dob\": \"1982-01-01\"\n    },\n    \"expiresAt\": \"never\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{HOST}}/v0/credentials",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "credentials"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Create a VCDM 2.0 SD-JWT Credential",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "const location = pm.response.headers.get(\"LOCATION\");",
-                  "",
-                  "if(location){",
-                  "    pm.collectionVariables.set(\"CREDENTIAL_LOCATION\",location)",
-                  "}",
-                  ""
-                ],
-                "type": "text/javascript",
-                "packages": {}
-              }
-            },
-            {
-              "listen": "prerequest",
-              "script": {
-                "exec": [
-                  ""
-                ],
-                "type": "text/javascript",
-                "packages": {}
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"VCDM 2.0 SD-JWT\",\n    \"type\": [\n        \"VerifiableCredential\"\n    ],\n    \"credential\": {\n        \"credentialSubject\": {\n            \"first_name\": \"Ferris\",\n            \"last_name\": \"Crabman\",\n            \"dob\": \"1982-01-01\"\n        }\n    },\n    \"expiresAt\": \"never\"\n}",
+              "raw": "{\n    \"offerId\":\"{{OFFER_ID}}\",\n    \"credentialConfigurationId\": \"SD-JWT VC\",\n    \"credential\": {\n        \"first_name\": \"Ferris\",\n        \"last_name\": \"Crabman\",\n        \"dob\": \"1982-01-01\"\n    },\n    \"expiresAt\": \"never\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -563,33 +854,6 @@
                 "v0",
                 "offers",
                 "send-offer-to-individual"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Create a new Credential Configuration",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n    \"credential_configuration_id\": \"002\",\n    \"format\": \"jwt_vc_json\",\n    \"credential_definition\": {\n        \"type\": [\"VerifiableCredential\"]\n    },\n    \"display\": [\n        {\n        \"name\": \"Verifiable Credential\",\n        \"locale\": \"en\",\n        \"logo\": {\n            \"uri\": \"https://www.impierce.com/external/impierce-logo.png\",\n            \"alt_text\": \"Impierce Logo\"\n        }\n        }\n    ]\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{HOST}}/v0/credential-configurations",
-              "host": [
-                "{{HOST}}"
-              ],
-              "path": [
-                "v0",
-                "credential-configurations"
               ]
             }
           },

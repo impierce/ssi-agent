@@ -299,21 +299,16 @@ pub mod tests {
         });
 
         // The credentialStatus id/uri only contains a relative path, since we only need to have the correct route for them in the tests.
-        pub static ref CREDENTIAL: serde_json::Value = json!({
+        // This test credential is tested after creation but before signing, therefore it misses a few last fields which are set during signing.
+        // Please look at the comments in agent_issuance/src/credential/aggregate.rs `SignCredential` for more information.
+        pub static ref VC_DM_1_1_CREDENTIAL: serde_json::Value = json!({
             "@context": [ "https://www.w3.org/2018/credentials/v1" ],
             "type": [ "VerifiableCredential" ],
+            "name": "Verifiable Credential",
             "issuer": {
-                "id": "https://my-domain.example.org/",
                 "name": "UniCore"
             },
-            "issuanceDate": "2010-01-01T00:00:00Z",
             "credentialSubject": CREDENTIAL_SUBJECT.clone(),
-            "credentialStatus": {
-                "id": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
-                "type": "statuslist+jwt",
-                "idx": TESTINDEX,
-                "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0"
-            }
         });
     }
 
@@ -354,7 +349,7 @@ pub mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body, CREDENTIAL.clone());
+        assert_eq!(body, VC_DM_1_1_CREDENTIAL.clone());
 
         let response = app
             .call(
@@ -373,7 +368,7 @@ pub mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["data"]["raw"], CREDENTIAL.clone());
+        assert_eq!(body["data"]["raw"], VC_DM_1_1_CREDENTIAL.clone());
 
         get_credentials_endpoint
     }

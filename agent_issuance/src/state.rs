@@ -259,7 +259,7 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                     }
                   },
                   {
-                    "credential_configuration_id": "SD-JWT",
+                    "credential_configuration_id": "SD-JWT VC",
                     "format": "dc+sd-jwt",
                     "display": [
                         {

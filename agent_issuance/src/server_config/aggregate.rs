@@ -444,7 +444,7 @@ pub mod server_config_tests {
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::*;
-    use crate::credential::aggregate::test_utils::W3C_VC_CREDENTIAL_CONFIGURATION;
+    use crate::credential::aggregate::test_utils::JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION;
     use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
     use rstest::*;
     use url::Url;
@@ -477,7 +477,7 @@ pub mod test_utils {
             credential_configuration_id,
             (
                 false,
-                W3C_VC_CREDENTIAL_CONFIGURATION.clone(),
+                JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone(),
                 Authorization {
                     pre_authorized: true,
                     tx_code_constraints: None,

@@ -1,3 +1,6 @@
+// This line is added to allow for large Json strings to be serialized by the `json!` macro.
+#![recursion_limit = "256"]
+
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, EventEnvelope, Query};
 use tracing::info;

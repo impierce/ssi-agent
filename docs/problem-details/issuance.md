@@ -116,9 +116,9 @@ credential_configurations:
         - MyCustomCredential
 ```
 
-## Invalid Credential Subject
+## Invalid Credential Payload
 
-This error occurs when the `credentialSubject` provided during credential creation does not adhere to the expected format or schema. In other words, the data representing the credential's subject is either malformed, missing required properties, or contains values that fail to meet the validation criteria for the specified credential type.
+This error occurs when the credential data inside the payload provided during credential creation does not adhere to the expected format or schema. In other words, the data representing the credential is either malformed, missing required properties, or contains values that fail to meet the validation criteria for the specified credential type.
 
 ### Resolution
 
