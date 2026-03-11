@@ -256,12 +256,13 @@ impl Aggregate for Credential {
                     .and_then(|did| did.parse().ok())
                     .ok_or(InvalidIssuerDidError)?;
 
+                // TODO: self. doesnt have an index here yet, ideally should be init in this function
                 // Status claim as per the IETF OAuth Token Status List specification.
                 let status_list_url = get_status_list_url(self.credential_status.index)?;
 
                 let status_claim = sd_jwt_vc::Status(StatusMechanism::StatusList(StatusListRef {
                     idx: self.credential_status.index,
-                    uri: status_list_url,
+                    uri: status_list_url.clone(),
                 }));
 
                 // The sensible default for the jti is equal to the credential root `id` field
@@ -471,7 +472,11 @@ impl Aggregate for Credential {
                 Ok(vec![CredentialSigned {
                     credential_id,
                     signed_credential,
-                    credential_status,
+                    credential_status: CredentialStatus {
+                        index: self.credential_status.index,
+                        status: StatusType::VALID,
+                        status_list_id: status_list_url.to_string(),
+                    },
                     status: Status::Issued,
                 }])
             }
@@ -1073,6 +1078,12 @@ pub mod credential_tests {
         credential_id: String,
         created_at: DateTime<Utc>,
     ) {
+        let credential_status = CredentialStatus {
+            index: 0, // TODO make sure this is the correct index
+            status_list_id: get_status_list_url(0).unwrap().to_string(), // TODO
+            status: StatusType::VALID,
+        };
+
         CredentialTestFramework::with(IssuanceServices::default().await)
             .given(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id: credential_id.clone(),
@@ -1093,7 +1104,7 @@ pub mod credential_tests {
             .then_expect_events(vec![CredentialEvent::CredentialSigned {
                 credential_id,
                 signed_credential: json!(verifiable_credential_jwt),
-                credential_status, // TODO how is this not an error? there is no initialized credential status
+                credential_status,
                 status: Status::Issued,
             }])
     }
