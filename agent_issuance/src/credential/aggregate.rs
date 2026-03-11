@@ -471,6 +471,7 @@ impl Aggregate for Credential {
                 Ok(vec![CredentialSigned {
                     credential_id,
                     signed_credential,
+                    credential_status,
                     status: Status::Issued,
                 }])
             }
@@ -524,10 +525,12 @@ impl Aggregate for Credential {
             CredentialSigned {
                 credential_id,
                 signed_credential,
+                credential_status,
                 status,
             } => {
                 self.credential_id = credential_id;
                 self.signed.replace(signed_credential);
+                self.credential_status = credential_status;
                 self.status = status;
             }
             NotificationReceived {
@@ -1090,6 +1093,7 @@ pub mod credential_tests {
             .then_expect_events(vec![CredentialEvent::CredentialSigned {
                 credential_id,
                 signed_credential: json!(verifiable_credential_jwt),
+                credential_status, // TODO how is this not an error? there is no initialized credential status
                 status: Status::Issued,
             }])
     }

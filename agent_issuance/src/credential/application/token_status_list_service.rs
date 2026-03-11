@@ -72,7 +72,7 @@ impl TokenStatusListService {
                     indices.push(CredentialStatus {
                         index: random_index,
                         status: status_type.try_into().map_err(TokenStatusListError::StatusTypeError)?,
-                        status_list_id: "".to_string(), // TODO
+                        status_list_id: "".to_string(), // TODO 
                     });
                 }
             }

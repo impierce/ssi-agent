@@ -29,6 +29,7 @@ pub enum CredentialEvent {
     CredentialSigned {
         credential_id: String,
         signed_credential: serde_json::Value,
+        credential_status: CredentialStatus,
         status: Status,
     },
     NotificationReceived {

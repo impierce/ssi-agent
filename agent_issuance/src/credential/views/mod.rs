@@ -36,10 +36,12 @@ impl View<Credential> for Credential {
             CredentialEvent::CredentialSigned {
                 credential_id,
                 signed_credential,
+                credential_status,
                 status,
             } => {
                 self.credential_id.clone_from(credential_id);
                 self.signed.replace(signed_credential.clone());
+                self.credential_status.clone_from(credential_status);
                 self.status.clone_from(status);
             }
             CredentialEvent::NotificationReceived {
