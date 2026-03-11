@@ -5,6 +5,7 @@ pub mod credentials;
 pub mod ietf_oauth_sd_jwt_vc;
 pub mod nonce;
 pub mod offers;
+pub mod openapi;
 
 pub mod error;
 

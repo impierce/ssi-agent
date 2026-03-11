@@ -1,9 +1,12 @@
 use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
-use agent_issuance::credential::aggregate::CredentialStatus;
 use agent_issuance::{
-    credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data},
+    credential::{
+        aggregate::{Credential, CredentialExpiry, CredentialStatus},
+        command::CredentialCommand,
+        entity::Data,
+    },
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
@@ -23,6 +26,18 @@ use std::sync::Arc;
 #[cfg(feature = "test_utils")]
 pub const TESTINDEX: usize = 123;
 
+/// Get credential by ID
+///
+/// Retrieves a credential by its ID.
+#[utoipa::path(
+    get,
+    path = "/credentials/{credential_id}",
+    operation_id = "get_credential_by_id",
+    tags = ["Issuance"],
+    responses(
+        (status = 200, description = "Successfully retrieved credential", body = Credential)
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<IssuanceState>>,
@@ -197,6 +212,18 @@ pub(crate) async fn credentials(
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
+/// List all credentials
+///
+/// Lists all credentials including their current status and metadata.
+#[utoipa::path(
+    get,
+    path = "/credentials",
+    operation_id = "get_all_credentials",
+    tags = ["Issuance"],
+    responses(
+        (status = 200, description = "List of all credentials", body = [Credential])
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn all_credentials(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
     let all_credentials = query_handler("all_credentials", &state.query.all_credentials)

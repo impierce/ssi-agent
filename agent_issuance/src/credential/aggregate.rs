@@ -2,6 +2,7 @@ use super::entity::Data;
 use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError::{self, *};
 use crate::credential::event::CredentialEvent;
+use crate::credential::openapi::{credential_configurations_supported, holder_notifications, status_type};
 use crate::services::IssuanceServices;
 use agent_library::json_schema_validation::{CredentialType, JsonSchemaError};
 use agent_shared::config::{
@@ -35,7 +36,8 @@ use std::sync::Arc;
 use tracing::{debug, info};
 use url::Url;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
+#[schema(as = IssuanceStatus)]
 pub enum Status {
     #[default]
     Pending,
@@ -73,24 +75,29 @@ mod never_as_str {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
 pub struct CredentialStatus {
     pub index: usize,
+    #[schema(schema_with = status_type)]
     pub status: StatusType,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
 pub struct Credential {
     #[serde(rename = "id")]
     pub credential_id: String,
     pub notification_id: Option<String>,
     pub data: Option<Data>,
+    #[schema(schema_with = credential_configurations_supported)]
     pub credential_configuration: CredentialConfigurationsSupportedObject,
     pub signed: Option<serde_json::Value>,
     pub status: Status,
+    #[schema(schema_with = holder_notifications)]
     pub holder_notifications: Vec<NotificationRequest>,
     pub credential_status: CredentialStatus,
+    #[schema(value_type = Option<String>)]
     pub created_at: Option<DateTime<Utc>>,
+    #[schema(value_type = Option<String>)]
     pub expires_at: Option<DateTime<Utc>>,
 }
 
