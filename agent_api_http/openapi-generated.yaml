@@ -30,7 +30,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/ConnectionView'
+                  $ref: '#/components/schemas/Connection'
     post:
       tags:
       - Connections
@@ -54,7 +54,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ConnectionView'
+                $ref: '#/components/schemas/Connection'
   /v0/connections/accept-pending-changes:
     post:
       tags:
@@ -122,7 +122,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ConnectionView'
+                $ref: '#/components/schemas/Connection'
   /v0/credentials:
     get:
       tags:
@@ -306,22 +306,7 @@ components:
       properties:
         url:
           type: string
-    ConnectionDisplayProperties:
-      type: object
-      properties:
-        locale:
-          type:
-          - string
-          - 'null'
-        logo:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/LogoProperties'
-        name:
-          type:
-          - string
-          - 'null'
-    ConnectionView:
+    Connection:
       type: object
       required:
       - id
@@ -361,6 +346,21 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Validation'
+    ConnectionDisplayProperties:
+      type: object
+      properties:
+        locale:
+          type:
+          - string
+          - 'null'
+        logo:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/LogoProperties'
+        name:
+          type:
+          - string
+          - 'null'
     CreateTemplateEndpointRequest:
       type: object
       properties:

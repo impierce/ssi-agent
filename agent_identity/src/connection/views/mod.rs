@@ -9,6 +9,7 @@ use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
+#[schema(as = Connection)]
 pub struct ConnectionView {
     #[serde(rename = "id")]
     pub connection_id: String,
