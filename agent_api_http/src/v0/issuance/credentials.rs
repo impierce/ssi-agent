@@ -309,12 +309,6 @@ pub mod tests {
                 "name": "UniCore"
             },
             "credentialSubject": CREDENTIAL_SUBJECT.clone(),
-            "credentialStatus": {
-                "id": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
-                "type": "statuslist+jwt",
-                "idx": TESTINDEX,
-                "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0"
-            }
         });
     }
 

@@ -569,6 +569,7 @@ impl Aggregate for Credential {
 /// - issuer.id
 /// - credentialSubject.id
 /// - validFrom/issuanceDate/issued
+/// - credentialStatus, if not already set, according to the IETF OAuth Token Status List specification in combination with the DIIP profile.
 fn build_signed_w3c_credential_data(
     mut credential_data: serde_json::Value,
     created_at: String,
@@ -682,7 +683,6 @@ fn build_signed_w3c_credential_data(
 /// - `name`, if not already set
 /// - `id`, if not already set, and for OBv3/ELM set to urn based on the aggregate credential_id
 /// - `issuer.name`, reflecting the UniCore configuration
-/// - `credentialStatus`, if not already set, according to the IETF OAuth Token Status List specification in combination with the DIIP profile.
 /// - `expirationDate`, if expires_at is provided
 /// - All ELM required fields:
 fn build_unsigned_w3c_credential_data(
@@ -1482,12 +1482,6 @@ pub mod test_utils {
           },
           "name": "Teamwork Badge",
           "credentialSubject": OPENBADGE_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
-          "credentialStatus": {
-              "id": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
-              "type": "statuslist+jwt",
-              "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
-              "idx": 0
-          }
         });
         pub static ref UNSIGNED_VC1_1_CREDENTIAL: serde_json::Value = json!({
           "@context": [ "https://www.w3.org/2018/credentials/v1" ],
@@ -1495,12 +1489,6 @@ pub mod test_utils {
           "credentialSubject": BASIC_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
           "issuer": {
             "name": "UniCore"
-          },
-          "credentialStatus": {
-              "id": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
-              "type": "statuslist+jwt",
-              "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
-              "idx": 0
           },
           "name": "Verifiable Credential"
         });
@@ -1515,12 +1503,6 @@ pub mod test_utils {
           "credentialSubject": BASIC_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
           "issuer": {
             "name": "UniCore"
-          },
-          "credentialStatus": {
-              "id": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
-              "type": "statuslist+jwt",
-              "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
-              "idx": 0
           },
           "name": "VCDM2.0 SD-JWT Credential"
         });
@@ -1540,12 +1522,6 @@ pub mod test_utils {
             },
             "issuer": {
                 "name": "UniCore"
-            },
-            "credentialStatus": {
-                "type": "CredentialStatus",
-                "id": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
-                "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
-                "idx": 0
             },
             "name": "European Digital Credential",
             "credentialProfiles": {
