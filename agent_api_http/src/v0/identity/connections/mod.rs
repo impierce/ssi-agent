@@ -133,7 +133,7 @@ pub(crate) async fn get_connections(
     operation_id = "get_connection_by_id",
     tags = ["Connections"],
     responses(
-        (status = 200)
+        (status = 200, description = "Connection retrieved successfully", body = ConnectionView),
     )
 )]
 #[axum_macros::debug_handler]

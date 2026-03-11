@@ -1894,7 +1894,7 @@
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"connectionId\": \"{{CONNECTION_ID}}\"\n}",
+                  "raw": "{\n    \"id\": \"{{CONNECTION_ID}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1922,7 +1922,7 @@
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"connectionId\": \"{{CONNECTION_ID}}\"\n}",
+                  "raw": "{\n    \"id\": \"{{CONNECTION_ID}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1950,7 +1950,7 @@
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"connectionId\": \"{{CONNECTION_ID}}\"\n}",
+                  "raw": "{\n    \"id\": \"{{CONNECTION_ID}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"

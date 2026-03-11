@@ -1,7 +1,7 @@
 pub mod all_connections;
 
 use super::event::ConnectionEvent;
-use crate::connection::aggregate::{Connection, ConnectionDisplayProperties, PendingChanges};
+use crate::connection::aggregate::{Connection, ConnectionDisplayProperties, PendingChanges, Validation};
 use chrono::{DateTime, Utc};
 use cqrs_es::{EventEnvelope, View};
 use identity_core::common::Url;
@@ -15,7 +15,7 @@ pub struct ConnectionView {
     pub url: Option<Url>,
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
-    pub domain_linkage_valid: bool,
+    pub validations: Vec<Validation>,
     pub display: Option<ConnectionDisplayProperties>,
     pub pending_changes: Option<PendingChanges>,
     pub first_interacted: Option<DateTime<Utc>>,
@@ -32,7 +32,7 @@ impl View<Connection> for ConnectionView {
                 display,
                 url,
                 dids,
-                domain_linkage_valid,
+                validations,
                 first_interacted,
                 last_interacted,
             } => {
@@ -40,7 +40,7 @@ impl View<Connection> for ConnectionView {
                 self.display.clone_from(display);
                 self.url = Some(url.clone());
                 self.dids.clone_from(dids);
-                self.domain_linkage_valid = *domain_linkage_valid;
+                self.validations.clone_from(validations);
                 self.first_interacted = *first_interacted;
                 self.last_interacted = *last_interacted;
             }
@@ -48,22 +48,22 @@ impl View<Connection> for ConnectionView {
                 connection_id,
                 pending_changes,
                 last_interacted,
+                validations,
             } => {
                 self.connection_id = connection_id.clone();
                 self.pending_changes = pending_changes.clone();
                 self.last_interacted = *last_interacted;
+                self.validations.clone_from(validations);
             }
             ConnectionChangesAccepted {
                 connection_id,
                 display,
                 dids,
-                domain_linkage_valid,
                 last_interacted,
                 pending_changes,
             } => {
                 self.connection_id.clone_from(connection_id);
                 self.display.clone_from(display);
-                self.domain_linkage_valid = *domain_linkage_valid;
                 self.dids.clone_from(dids);
                 self.last_interacted = *last_interacted;
                 self.pending_changes.clone_from(pending_changes);

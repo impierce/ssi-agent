@@ -122,7 +122,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Connection'
+                $ref: '#/components/schemas/ConnectionView'
   /v0/credentials:
     get:
       tags:
@@ -326,7 +326,7 @@ components:
       required:
       - id
       - dids
-      - domain_linkage_valid
+      - validations
       properties:
         dids:
           type: array
@@ -336,8 +336,6 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
-        domain_linkage_valid:
-          type: boolean
         first_interacted:
           type:
           - string
@@ -359,6 +357,10 @@ components:
           - string
           - 'null'
           format: uri
+        validations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Validation'
     CreateTemplateEndpointRequest:
       type: object
       properties:
@@ -566,6 +568,17 @@ components:
           - $ref: '#/components/schemas/Logo'
         name:
           type: string
+    DomainLinkageValidation:
+      type: object
+      required:
+      - domain
+      - result
+      properties:
+        domain:
+          type: string
+          format: uri
+        result:
+          $ref: '#/components/schemas/ValidationResult'
     DuplicateTemplateEndpointRequest:
       type: object
       required:
@@ -625,7 +638,6 @@ components:
       type: object
       required:
       - dids
-      - domain_linkage_valid
       properties:
         dids:
           type: array
@@ -635,20 +647,11 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
-        domain_linkage_valid:
-          type: boolean
     RemoveConnectionRequest:
       type: object
       properties:
         id:
           type: string
-    Status:
-      type: string
-      enum:
-      - draft
-      - published
-      - archived
-      - deleted
     SyncConnectionRequest:
       type: object
       properties:
@@ -775,6 +778,29 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/Visibility'
           default: null
+    Validation:
+      oneOf:
+      - type: object
+        required:
+        - DomainLinkage
+        properties:
+          DomainLinkage:
+            $ref: '#/components/schemas/DomainLinkageValidation'
+    ValidationResult:
+      type: object
+      required:
+      - valid
+      - last_validated
+      properties:
+        error:
+          type:
+          - string
+          - 'null'
+        last_validated:
+          type: string
+          format: date-time
+        valid:
+          type: boolean
     Visibility:
       type: string
       enum:
