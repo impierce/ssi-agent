@@ -9,9 +9,9 @@ pub enum StatusListEvent {
     IndexAdded {
         id: Url,
         status_list: StatusList,
+        used_indices: Vec<usize>,
         index: usize,
         status: StatusType,
-        used_indices: Vec<usize>,
     },
     IndexUpdated {
         id: Url,

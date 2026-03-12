@@ -49,26 +49,23 @@ impl Aggregate for StatusListAggregate {
                 // We only add a new status list if the current one is full.
                 // Once we implement being able to use multiple status lists by specifying an ID in the command, this logic will need to be updated.
                 if !full {
-                    let mut status_list = self.list.clone();
-                    let mut used_indices = self.used_indices.clone();
-
                     let mut rng = rand::rng();
                     let index = loop {
                         let candidate = rng.random_range(0..max_amount_indices - 1);
-                        if !used_indices.contains(&candidate) {
+                        if !self.used_indices.contains(&candidate) {
                             break candidate;
                         }
                     };
 
-                    status_list.set_status(index, status as u8);
-                    used_indices.push(index);
+                    self.list.set_status(index, status as u8);
+                    self.used_indices.push(index);
 
                     Ok(vec![IndexAdded {
                         id: self.id,
-                        status_list,
+                        status_list: self.list.clone(),
+                        used_indices: self.used_indices.clone(),
                         index,
                         status,
-                        used_indices,
                     }])
                 } else {
                     // Create a new Status List with a new ID
@@ -83,21 +80,34 @@ impl Aggregate for StatusListAggregate {
                     Ok(vec![IndexAdded {
                         id: new_aggregate.id,
                         status_list: new_aggregate.list,
+                        used_indices: new_aggregate.used_indices,
                         index,
                         status,
-                        used_indices: new_aggregate.used_indices,
                     }])
                 }
             }
+
             UpdateIndex { id, index, status } => {
-                // query the status list by id
-                // update the index
-                Ok(vec![IndexUpdated {
-                    id,
-                    status_list,
-                    index,
-                    status,
-                }])
+                if id == self.id {
+                    let mut status_list = self.list.clone();
+                    status_list.set_status(index, status as u8);
+
+                    Ok(vec![IndexUpdated {
+                        id,
+                        status_list,
+                        index,
+                        status,
+                    }])
+                } else {
+                    // TODO: how to query the status list by id?
+                    // update the index
+                    Ok(vec![IndexUpdated {
+                        id,
+                        status_list,
+                        index,
+                        status,
+                    }])
+                }
             }
         }
     }
@@ -109,15 +119,13 @@ impl Aggregate for StatusListAggregate {
             IndexAdded {
                 id,
                 status_list,
+                used_indices,
                 index: _,
                 status: _,
-                full,
             } => {
                 self.id = id;
                 self.list = status_list;
-                self.full = full;
-                // self.index = index;
-                // self.status = status;
+                self.used_indices = used_indices;
             }
             IndexUpdated {
                 id,
@@ -127,8 +135,6 @@ impl Aggregate for StatusListAggregate {
             } => {
                 self.id = id;
                 self.list = status_list;
-                // self.index = index;
-                // self.status = status;
             }
         }
     }
@@ -156,7 +162,7 @@ impl Default for StatusListAggregate {
                 status_list: vec![0; STATUS_LIST_BYTES_AMOUNT],
                 aggregation_uri: None,
             },
-            full: false,
+            used_indices: vec![],
         }
     }
 }
