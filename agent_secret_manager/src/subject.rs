@@ -145,7 +145,7 @@ impl VerificationMaterialResolver for Subject {
     }
 
     async fn resolve_public_key(&self, kid: &str) -> Result<Jwk, Box<dyn std::error::Error>> {
-        self.resolve_public_key(kid).await.map_err(|e| e.into())
+        Subject::resolve_public_key(self, kid).await.map_err(|e| e.into())
     }
 }
 
