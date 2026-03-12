@@ -21,7 +21,10 @@ anyhow.workspace = true
 async-trait.workspace = true
 base64.workspace = true
 futures.workspace = true
+identity_did.workspace = true
+identity_document.workspace = true
 identity_iota.workspace = true
+identity_jose.workspace = true
 iota-sdk.workspace = true
 iota-sdk-legacy.workspace = true
 iota_stronghold = { version = "2.1" }
