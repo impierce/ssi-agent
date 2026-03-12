@@ -1079,7 +1079,7 @@ pub mod credential_tests {
         created_at: DateTime<Utc>,
     ) {
         let credential_status = CredentialStatus {
-            index: 0, // TODO make sure this is the correct index
+            index: 0,                                                    // TODO make sure this is the correct index
             status_list_id: get_status_list_url(0).unwrap().to_string(), // TODO
             status: StatusType::VALID,
         };

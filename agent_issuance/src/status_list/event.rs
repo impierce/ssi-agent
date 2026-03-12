@@ -6,9 +6,19 @@ use url::Url;
 
 #[derive(Clone, Debug, Deserialize, Display, PartialEq, Serialize)]
 pub enum StatusListEvent {
-    IndexAdded { id: Url, status_list: StatusList, index: usize, status: StatusType },
-    IndexUpdated { id: Url, index: usize, status: StatusType },
-    TokenCreated { id: Url },
+    IndexAdded {
+        id: Url,
+        status_list: StatusList,
+        index: usize,
+        status: StatusType,
+        used_indices: Vec<usize>,
+    },
+    IndexUpdated {
+        id: Url,
+        status_list: StatusList,
+        index: usize,
+        status: StatusType,
+    },
 }
 
 impl DomainEvent for StatusListEvent {
