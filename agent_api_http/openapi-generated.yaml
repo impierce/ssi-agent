@@ -1,18 +1,18 @@
 openapi: 3.1.0
 info:
   title: UniCore HTTP API
-  description: ""
+  description: ''
   license:
     name: Apache 2.0
   version: 0.0.0-semantically-released
 servers:
-  - url: http://localhost:3033
-    description: Local development
+- url: http://localhost:3033
+  description: Local development
 paths:
   /v0/connections:
     get:
       tags:
-        - Connections
+      - Connections
       summary: List all connections
       description: List all available connections.
       operationId: get_all_connections
@@ -20,78 +20,78 @@ paths:
         content:
           application/x-www-form-urlencoded:
             schema:
-              $ref: "#/components/schemas/GetConnectionsEndpointRequest"
+              $ref: '#/components/schemas/GetConnectionsEndpointRequest'
         required: true
       responses:
-        "200":
+        '200':
           description: All connections retrieved successfully
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Connection"
+                  $ref: '#/components/schemas/Connection'
   /v0/connections/{connection_id}:
     get:
       tags:
-        - Connections
+      - Connections
       summary: Get connection by ID
       description: Retrieve a specific connection by its unique identifier.
       operationId: get_connection_by_id
       parameters:
-        - name: connection_id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: connection_id
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
-        "200":
+        '200':
           description: Connection retrieved successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Connection"
+                $ref: '#/components/schemas/Connection'
   /v0/credentials:
     get:
       tags:
-        - Issuance
+      - Issuance
       summary: List all credentials
       description: Lists all credentials including their current status and metadata.
       operationId: get_all_credentials
       responses:
-        "200":
+        '200':
           description: List of all credentials
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Credential"
+                  $ref: '#/components/schemas/Credential'
   /v0/credentials/{credential_id}:
     get:
       tags:
-        - Issuance
+      - Issuance
       summary: Get credential by ID
       description: Retrieves a credential by its ID.
       operationId: get_credential_by_id
       parameters:
-        - name: credential_id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: credential_id
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
-        "200":
+        '200':
           description: Successfully retrieved credential
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Credential"
+                $ref: '#/components/schemas/Credential'
   /v0/templates/create-template:
     post:
       tags:
-        - Library
-        - Templates
+      - Library
+      - Templates
       summary: Create a new template
       description: Creates a new template which can be used to issue credentials.
       operationId: create_template
@@ -99,7 +99,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateTemplateEndpointRequest"
+              $ref: '#/components/schemas/CreateTemplateEndpointRequest'
             examples:
               Standard template:
                 description: A simple example that will issue credentials in the W3C Verifiable Credentials Data Model v1.1 format.
@@ -109,7 +109,7 @@ paths:
                   holderType: individual
         required: true
       responses:
-        "201":
+        '201':
           description: New template created successfully
           headers:
             Location:
@@ -119,12 +119,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Template"
+                $ref: '#/components/schemas/Template'
   /v0/templates/delete-template:
     post:
       tags:
-        - Library
-        - Templates
+      - Library
+      - Templates
       summary: Delete a template
       description: Deletes a template by marking its status as `Deleted`. Deleted templates will no longer appear in any views.
       operationId: delete_template_by_id
@@ -132,16 +132,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DeleteTemplateEndpointRequest"
+              $ref: '#/components/schemas/DeleteTemplateEndpointRequest'
         required: true
       responses:
-        "204":
+        '204':
           description: Template deleted successfully
   /v0/templates/duplicate-template:
     post:
       tags:
-        - Library
-        - Templates
+      - Library
+      - Templates
       summary: Duplicate existing template
       description: Creates a duplicate of an existing template.
       operationId: duplicate_template
@@ -149,12 +149,12 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DuplicateTemplateEndpointRequest"
+              $ref: '#/components/schemas/DuplicateTemplateEndpointRequest'
             example:
               sourceTemplateId: 91fc790f-d876-4827-9a9d-0fb0f6766dca
         required: true
       responses:
-        "201":
+        '201':
           description: Duplicate created successfully
           headers:
             Location:
@@ -164,31 +164,31 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Template"
-        "422":
+                $ref: '#/components/schemas/Template'
+        '422':
           description: Source Template Not Found
   /v0/templates/get-all-templates:
     get:
       tags:
-        - Library
-        - Templates
+      - Library
+      - Templates
       summary: List all templates
       description: List all available templates.
       operationId: get_all_templates
       responses:
-        "200":
+        '200':
           description: All templates retrieved successfully
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Template"
+                  $ref: '#/components/schemas/Template'
   /v0/templates/update-template:
     post:
       tags:
-        - Library
-        - Templates
+      - Library
+      - Templates
       summary: Update a template
       description: Updates an existing template with the provided content.
       operationId: update_template
@@ -196,98 +196,98 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UpdateTemplateEndpointRequest"
+              $ref: '#/components/schemas/UpdateTemplateEndpointRequest'
         required: true
       responses:
-        "204":
+        '204':
           description: Template updated successfully
   /v0/templates/{template_id}:
     get:
       tags:
-        - Library
-        - Templates
+      - Library
+      - Templates
       summary: Get template by ID
       description: Retrieve a specific template by its ID.
       operationId: get_template_by_id
       parameters:
-        - name: template_id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
-        "200":
+        '200':
           description: Template retrieved successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Template"
+                $ref: '#/components/schemas/Template'
 components:
   schemas:
     Connection:
       type: object
       required:
-        - id
-        - dids
+      - id
+      - dids
       properties:
         alias:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
         credential_offer_endpoint:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
         dids:
           type: array
           items:
             type: string
         domain:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
         first_interacted:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
         id:
           type: string
         last_interacted:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
     CreateTemplateEndpointRequest:
       type: object
       properties:
         creator:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
           default: null
         dataModel:
           oneOf:
-            - type: "null"
-            - $ref: "#/components/schemas/CredentialFormat"
+          - type: 'null'
+          - $ref: '#/components/schemas/DataModel'
           default: null
         description:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
           default: null
         display:
           oneOf:
-            - type: "null"
-            - $ref: "#/components/schemas/Display"
+          - type: 'null'
+          - $ref: '#/components/schemas/Display'
           default: null
         holderType:
           oneOf:
-            - type: "null"
-            - $ref: "#/components/schemas/HolderType"
+          - type: 'null'
+          - $ref: '#/components/schemas/HolderType'
           default: null
         schema: {}
         status:
           oneOf:
-            - $ref: "#/components/schemas/TemplateStatus"
+          - $ref: '#/components/schemas/TemplateStatus'
           default: draft
         tags:
           type: array
@@ -296,8 +296,8 @@ components:
           default: []
         title:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
           default: null
         type:
           type: array
@@ -306,32 +306,32 @@ components:
           default: []
         visibility:
           oneOf:
-            - $ref: "#/components/schemas/Visibility"
+          - $ref: '#/components/schemas/Visibility'
           default: private
     Credential:
       type: object
       required:
-        - id
-        - credential_configuration
-        - status
-        - holder_notifications
-        - credential_status
+      - id
+      - credential_configuration
+      - status
+      - holder_notifications
+      - credential_status
       properties:
         created_at:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
         credential_configuration:
           type: object
           required:
-            - credential_format
+          - credential_format
           properties:
             credential_format:
               type: object
               enum:
-                - jwt_vc_json
-                - dc+sd-jwt
-                - vc+sd-jwt
+              - jwt_vc_json
+              - dc+sd-jwt
+              - vc+sd-jwt
             credential_metadata:
               type: object
               properties:
@@ -343,7 +343,7 @@ components:
                   items:
                     type: object
                     required:
-                      - name
+                    - name
                     properties:
                       background_color:
                         type: string
@@ -356,7 +356,7 @@ components:
                       logo:
                         type: object
                         required:
-                          - uri
+                        - uri
                         properties:
                           alt_text:
                             type: string
@@ -380,29 +380,29 @@ components:
             scope:
               type: object
         credential_status:
-          $ref: "#/components/schemas/CredentialStatus"
+          $ref: '#/components/schemas/CredentialStatus'
         data:
           oneOf:
-            - type: "null"
-            - $ref: "#/components/schemas/Data"
+          - type: 'null'
+          - $ref: '#/components/schemas/Data'
         expires_at:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
         holder_notifications:
           type: array
           items:
             type: object
             required:
-              - notification_id
-              - event
+            - notification_id
+            - event
             properties:
               event:
                 type: string
                 enum:
-                  - credential_accepted
-                  - credential_failure
-                  - credential_deleted
+                - credential_accepted
+                - credential_failure
+                - credential_deleted
               event_description:
                 type: string
               notification_id:
@@ -412,22 +412,16 @@ components:
           type: string
         notification_id:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
         signed: {}
         status:
-          $ref: "#/components/schemas/IssuanceStatus"
-    dataModel:
-      type: string
-      enum:
-        - w3c_vc_data_model_v1-1
-        - w3c_vc_data_model_v2-0
-        - open_badges_3-0
+          $ref: '#/components/schemas/IssuanceStatus'
     CredentialStatus:
       type: object
       required:
-        - index
-        - status
+      - index
+      - status
       properties:
         index:
           type: integer
@@ -435,38 +429,45 @@ components:
         status:
           type: string
           enum:
-            - VALID
-            - INVALID
-            - SUSPENDED
-            - UNDEFINED
+          - VALID
+          - INVALID
+          - SUSPENDED
+          - UNDEFINED
     Data:
       type: object
       required:
-        - raw
+      - raw
       properties:
         raw: {}
+    DataModel:
+      type: string
+      enum:
+      - w3c_vc_data_model_v1-1
+      - w3c_vc_data_model_v2-0
+      - open_badges_3-0
+      - europen_digital_credential_3-3
     DeleteTemplateEndpointRequest:
       type: object
       required:
-        - id
+      - id
       properties:
         id:
           type: string
     Display:
       type: object
       required:
-        - name
+      - name
       properties:
         logo:
           oneOf:
-            - type: "null"
-            - $ref: "#/components/schemas/Logo"
+          - type: 'null'
+          - $ref: '#/components/schemas/Logo'
         name:
           type: string
     DuplicateTemplateEndpointRequest:
       type: object
       required:
-        - sourceTemplateId
+      - sourceTemplateId
       properties:
         sourceTemplateId:
           type: string
@@ -475,137 +476,137 @@ components:
       properties:
         alias:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
         did:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
         domain:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
     HolderType:
       type: string
       enum:
-        - individual
-        - organization
+      - individual
+      - organization
     IssuanceStatus:
       type: string
       enum:
-        - Pending
-        - Issued
+      - Pending
+      - Issued
     Logo:
       type: object
       required:
-        - uri
+      - uri
       properties:
         alt_text:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
         uri:
           type: string
     Template:
       type: object
       description: Data transfer object for Templates.
       required:
-        - id
-        - tags
-        - status
-        - visibility
-        - type
+      - id
+      - tags
+      - status
+      - visibility
+      - type
       properties:
         creator:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
         dataModel:
           oneOf:
-            - type: "null"
-            - $ref: "#/components/schemas/CredentialFormat"
+          - type: 'null'
+          - $ref: '#/components/schemas/DataModel'
         description:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
         display:
           oneOf:
-            - type: "null"
-            - $ref: "#/components/schemas/Display"
+          - type: 'null'
+          - $ref: '#/components/schemas/Display'
         holderType:
           oneOf:
-            - type: "null"
-            - $ref: "#/components/schemas/HolderType"
+          - type: 'null'
+          - $ref: '#/components/schemas/HolderType'
         id:
           type: string
         modifiedAt:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
         schema: {}
         sourceTemplateId:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
         status:
-          $ref: "#/components/schemas/TemplateStatus"
+          $ref: '#/components/schemas/TemplateStatus'
         tags:
           type: array
           items:
             type: string
         title:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
         type:
           type: array
           items:
             type: string
         visibility:
-          $ref: "#/components/schemas/Visibility"
+          $ref: '#/components/schemas/Visibility'
     TemplateStatus:
       type: string
       enum:
-        - draft
-        - published
-        - archived
-        - deleted
+      - draft
+      - published
+      - archived
+      - deleted
     UpdateTemplateEndpointRequest:
       type: object
       properties:
         creator:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
           default: null
         dataModel:
           oneOf:
-            - type: "null"
-            - $ref: "#/components/schemas/CredentialFormat"
+          - type: 'null'
+          - $ref: '#/components/schemas/DataModel'
           default: null
         description:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
           default: null
         display:
           oneOf:
-            - type: "null"
-            - $ref: "#/components/schemas/Display"
+          - type: 'null'
+          - $ref: '#/components/schemas/Display'
           default: null
         holderType:
           oneOf:
-            - type: "null"
-            - $ref: "#/components/schemas/HolderType"
+          - type: 'null'
+          - $ref: '#/components/schemas/HolderType'
           default: null
         id:
           type: string
-          default: ""
+          default: ''
         schema: {}
         status:
           oneOf:
-            - type: "null"
-            - $ref: "#/components/schemas/TemplateStatus"
+          - type: 'null'
+          - $ref: '#/components/schemas/TemplateStatus'
           default: null
         tags:
           type: array
@@ -614,8 +615,8 @@ components:
           default: []
         title:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
           default: null
         type:
           type: array
@@ -624,23 +625,23 @@ components:
           default: []
         visibility:
           oneOf:
-            - type: "null"
-            - $ref: "#/components/schemas/Visibility"
+          - type: 'null'
+          - $ref: '#/components/schemas/Visibility'
           default: null
     Visibility:
       type: string
       enum:
-        - private
-        - public
+      - private
+      - public
 tags:
-  - name: Connections
-    description: Manage trusted connections.
-  - name: Issuance
-    description: Issue credentials to individuals and organizations, manage credential offers and track their status.
-  - name: Library
-    description: Manage your own templates, browse and import external templates.
-  - name: Templates
-    description: Create and manage templates which provide the structure for credentials to be issued.
+- name: Connections
+  description: Manage trusted connections.
+- name: Issuance
+  description: Issue credentials to individuals and organizations, manage credential offers and track their status.
+- name: Library
+  description: Manage your own templates, browse and import external templates.
+- name: Templates
+  description: Create and manage templates which provide the structure for credentials to be issued.
 externalDocs:
   url: https://docs.impierce.com/unicore
   description: Official UniCore documentation
