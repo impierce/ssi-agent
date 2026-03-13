@@ -685,7 +685,7 @@ pub enum TemplateEvent {
     TemplateCreated,
     TitleUpdated,
     DisplayUpdated,
-    CredentialFormatUpdated,
+    DataModelUpdated,
     CreatorUpdated,
     HolderTypeUpdated,
     TagsUpdated,

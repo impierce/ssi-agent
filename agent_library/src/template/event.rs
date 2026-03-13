@@ -1,4 +1,4 @@
-pub use super::aggregate::{CredentialFormat, Display, HolderType, Status, Visibility};
+pub use super::aggregate::{DataModel, Display, HolderType, Status, Visibility};
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 use strum::Display;
@@ -12,7 +12,7 @@ pub enum TemplateEvent {
         // TODO: Make this a required field.
         title: Option<String>,
         display: Option<Display>,
-        credential_format: Option<CredentialFormat>,
+        data_model: Option<DataModel>,
         creator: Option<String>,
         holder_type: Option<HolderType>,
         modified_at: String,
@@ -33,9 +33,9 @@ pub enum TemplateEvent {
         display: Display,
         modified_at: String,
     },
-    CredentialFormatUpdated {
+    DataModelUpdated {
         template_id: String,
-        credential_format: CredentialFormat,
+        data_model: DataModel,
         modified_at: String,
     },
     CreatorUpdated {

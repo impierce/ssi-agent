@@ -1,4 +1,4 @@
-pub use super::aggregate::{CredentialFormat, Display, HolderType, Status, Visibility};
+pub use super::aggregate::{DataModel, Display, HolderType, Status, Visibility};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -9,7 +9,7 @@ pub enum TemplateCommand {
         source_template_id: Option<String>,
         title: Option<String>,
         display: Option<Display>,
-        credential_format: Option<CredentialFormat>,
+        data_model: Option<DataModel>,
         creator: Option<String>,
         holder_type: Option<HolderType>,
         tags: Vec<String>,
@@ -27,9 +27,9 @@ pub enum TemplateCommand {
         template_id: String,
         display: Display,
     },
-    UpdateCredentialFormat {
+    UpdateDataModel {
         template_id: String,
-        credential_format: CredentialFormat,
+        data_model: DataModel,
     },
     UpdateCreator {
         template_id: String,

@@ -20,9 +20,8 @@ pub struct Display {
     pub logo: Option<Logo>,
 }
 
-// TODO: rename to CredentialDataFormat since elsewhere we use `format` to indicate credential format identifiers.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
-pub enum CredentialFormat {
+pub enum DataModel {
     // See https://www.w3.org/TR/vc-data-model-1.1/
     #[serde(rename = "w3c_vc_data_model_v1-1")]
     W3CVcDataModelV11,
@@ -71,7 +70,7 @@ pub struct Template {
     pub source_template_id: Option<String>,
     pub title: Option<String>,
     pub display: Option<Display>,
-    pub credential_format: Option<CredentialFormat>,
+    pub data_model: Option<DataModel>,
     pub creator: Option<String>,
     pub holder_type: Option<HolderType>,
     pub modified_at: Option<String>,
@@ -110,7 +109,7 @@ impl Aggregate for Template {
                 source_template_id,
                 title,
                 display,
-                credential_format,
+                data_model,
                 creator,
                 holder_type,
                 tags,
@@ -130,7 +129,7 @@ impl Aggregate for Template {
                     source_template_id,
                     title,
                     display,
-                    credential_format,
+                    data_model,
                     creator,
                     holder_type,
                     modified_at,
@@ -166,18 +165,18 @@ impl Aggregate for Template {
                     modified_at,
                 }])
             }
-            UpdateCredentialFormat {
+            UpdateDataModel {
                 template_id,
-                credential_format,
+                data_model,
             } => {
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
                 #[cfg(test)]
                 let modified_at = test_utils::modified_at();
 
-                Ok(vec![CredentialFormatUpdated {
+                Ok(vec![DataModelUpdated {
                     template_id,
-                    credential_format,
+                    data_model,
                     modified_at,
                 }])
             }
@@ -301,7 +300,7 @@ impl Aggregate for Template {
                 source_template_id,
                 title,
                 display,
-                credential_format,
+                data_model,
                 creator,
                 holder_type,
                 modified_at,
@@ -316,7 +315,7 @@ impl Aggregate for Template {
                 self.source_template_id = source_template_id;
                 self.title = title;
                 self.display = display;
-                self.credential_format = credential_format;
+                self.data_model = data_model;
                 self.creator = creator;
                 self.holder_type = holder_type;
                 self.modified_at.replace(modified_at);
@@ -343,12 +342,12 @@ impl Aggregate for Template {
                 self.display = Some(display);
                 self.modified_at.replace(modified_at);
             }
-            CredentialFormatUpdated {
+            DataModelUpdated {
                 template_id: _,
-                credential_format,
+                data_model,
                 modified_at,
             } => {
-                self.credential_format = Some(credential_format);
+                self.data_model = Some(data_model);
                 self.modified_at.replace(modified_at);
             }
             CreatorUpdated {
@@ -440,7 +439,7 @@ pub mod document_tests {
         template_id: String,
         title: Option<String>,
         display: Option<Display>,
-        credential_format: Option<CredentialFormat>,
+        data_model: Option<DataModel>,
         creator: Option<String>,
         holder_type: Option<HolderType>,
         modified_at: String,
@@ -458,7 +457,7 @@ pub mod document_tests {
                 source_template_id: None,
                 title: title.clone(),
                 display: display.clone(),
-                credential_format: credential_format.clone(),
+                data_model: data_model.clone(),
                 creator: creator.clone(),
                 holder_type: holder_type.clone(),
                 tags: tags.clone(),
@@ -473,7 +472,7 @@ pub mod document_tests {
                 source_template_id: None,
                 title,
                 display,
-                credential_format,
+                data_model,
                 creator,
                 holder_type,
                 modified_at,
@@ -511,8 +510,8 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn credential_format() -> Option<CredentialFormat> {
-        Some(CredentialFormat::W3CVcDataModelV11)
+    pub fn data_model() -> Option<DataModel> {
+        Some(DataModel::W3CVcDataModelV11)
     }
 
     #[fixture]
