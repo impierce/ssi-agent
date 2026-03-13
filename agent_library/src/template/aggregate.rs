@@ -20,6 +20,7 @@ pub struct Display {
     pub logo: Option<Logo>,
 }
 
+// TODO: rename to CredentialDataFormat since elsewhere we use `format` to indicate credential format identifiers.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
 pub enum CredentialFormat {
     // See https://www.w3.org/TR/vc-data-model-1.1/
@@ -31,6 +32,9 @@ pub enum CredentialFormat {
     // See https://www.imsglobal.org/spec/ob/v3p0/
     #[serde(rename = "open_badges_3-0")]
     OpenBadges30,
+    // See https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/snb-model
+    #[serde(rename = "europen_digital_credential_3-3")]
+    EuropenDigitalCredential33,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
