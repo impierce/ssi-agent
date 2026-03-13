@@ -24,16 +24,16 @@ pub struct Display {
 pub enum DataModel {
     // See https://www.w3.org/TR/vc-data-model-1.1/
     #[serde(rename = "w3c_vc_data_model_v1-1")]
-    W3CVcDataModelV11,
+    W3CVcDataModelV1_1,
     // See https://www.w3.org/TR/vc-data-model-2.0/
     #[serde(rename = "w3c_vc_data_model_v2-0")]
-    W3CVcDataModelV20,
+    W3CVcDataModelV2_0,
     // See https://www.imsglobal.org/spec/ob/v3p0/
     #[serde(rename = "open_badges_3-0")]
-    OpenBadges30,
+    OpenBadges3_0,
     // See https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/snb-model
     #[serde(rename = "european_learning_model_v3-3")]
-    EuropeanLearningModelV33,
+    EuropeanLearningModelV3_3,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
@@ -511,7 +511,7 @@ pub mod test_utils {
 
     #[fixture]
     pub fn data_model() -> Option<DataModel> {
-        Some(DataModel::W3CVcDataModelV11)
+        Some(DataModel::W3CVcDataModelV1_1)
     }
 
     #[fixture]
