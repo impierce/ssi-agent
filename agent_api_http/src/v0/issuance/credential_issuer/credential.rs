@@ -6,14 +6,13 @@ use crate::{
     v0::issuance::error::PublicError,
 };
 use agent_issuance::{
-    application::access_token_validation_service::AccessTokenValidationService,
-    application::nonce_validation_service::NonceValidationService,
+    application::{access_token_validation_service::AccessTokenValidationService, nonce_validation_service::NonceValidationService},
     credential::{command::CredentialCommand, views::CredentialView},
     offer::{command::OfferCommand, views::OfferView},
     server_config::views::ServerConfigView,
-    state::{IssuanceState, SERVER_CONFIG_ID},
+    state::{IssuanceState, SERVER_CONFIG_ID}, status_list::command::StatusListCommand,
 };
-use agent_shared::config::config;
+use agent_shared::{config::{BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT, config}, generate_random_string};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -102,16 +101,55 @@ pub(crate) async fn credential(
         }
     };
 
+    // query all status_lists
+    let all_status_lists = query_handler("all_status_lists", &state.query.all_status_lists)
+        .await?
+        .map(|all_status_lists_view| all_status_lists_view.status_lists.into_values().collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    // find status list not full
+    let available_status_list = all_status_lists.into_iter().find(|status_list| {
+        let max_amount_indices = STATUS_LIST_BYTES_AMOUNT * BITS_PER_STATUS as usize;
+        status_list.used_indices.len() + credential_ids.len() <= max_amount_indices
+    });
+
+
+    if let Some(status_list) = available_status_list {
+
+    }
+    else {
+        let id = generate_random_string();
+
+        let command = StatusListCommand:: {
+            status_list_id: status_list.id.clone(),
+            index
+            status
+        };
+
+        command_handler(&credential_id, &state.command.credential, command).await?;
+
+        // create new status list
+    }
+
     // Use the `credential_ids` and `subject_id` to sign all the credentials.
     let mut signed_credentials = vec![];
     for credential_id in credential_ids {
+
+        // pass AGGREGATE id to command handler
+
         let command = CredentialCommand::SignCredential {
             credential_id: credential_id.clone(),
             subject_id: subject_id.clone(),
             overwrite: false,
             proofs: proofs.clone(),
+            status_list_id: status_list.id.clone(),
+            index
+            status
+            // status ID and Index should be added here
         };
 
+        // how to know when to create a new id? what ID to query to check this
+        // to create new aggregate, a new id must be used here
         command_handler(&credential_id, &state.command.credential, command).await?;
 
         let signed_credential = match query_handler(&credential_id, &state.query.credential).await? {

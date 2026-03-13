@@ -17,7 +17,7 @@ use crate::{
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatusListAggregate {
-    pub id: Url, // Since the referenced token in a credential also only has the URL as a unique identifier, which is fixed. Aligning these a 100% is therefore best.
+    pub id: Url, // Must be a valid URL // Since the referenced token in a credential also only has the URL as a unique identifier, which is fixed. Aligning these a 100% is therefore best.
     pub list: StatusList,
     pub used_indices: Vec<usize>,
 }
@@ -42,6 +42,18 @@ impl Aggregate for StatusListAggregate {
         use StatusListEvent::*;
 
         match command {
+            CreateStatusList { id } => {
+                let mut status_list = StatusListAggregate::default();
+                status_list.id = id.clone();
+
+                Ok(vec![IndexAdded {
+                    id,
+                    status_list: status_list.list,
+                    used_indices: status_list.used_indices,
+                    index: 0, // The index is not relevant for the creation of the status list, but we need to provide it for the event. It will be ignored by the event handler.
+                    status: 0, // The status is not relevant for the creation of the status list, but we need to provide it for the event. It will be ignored by the event handler.
+                }])
+            }
             AddIndex { status } => {
                 let max_amount_indices = STATUS_LIST_BYTES_AMOUNT * BITS_PER_STATUS as usize;
                 let full = self.used_indices.len() >= max_amount_indices;
@@ -68,6 +80,7 @@ impl Aggregate for StatusListAggregate {
                         status,
                     }])
                 } else {
+                    // Cannot change ID within one aggregate scope. so separate CreateStatusList logic into
                     // Create a new Status List with a new ID
                     let mut new_aggregate = StatusListAggregate::default();
 
@@ -99,7 +112,7 @@ impl Aggregate for StatusListAggregate {
                         status,
                     }])
                 } else {
-                    // TODO: how to query the status list by id?
+                    // TODO: how to query a status list by id?
                     // update the index
                     Ok(vec![IndexUpdated {
                         id,

@@ -1,3 +1,5 @@
+pub mod all_status_lists;
+
 use crate::status_list::{aggregate::StatusListAggregate, event::StatusListEvent::*};
 use cqrs_es::View;
 
