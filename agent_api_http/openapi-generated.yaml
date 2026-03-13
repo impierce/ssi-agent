@@ -445,7 +445,7 @@ components:
       - w3c_vc_data_model_v1-1
       - w3c_vc_data_model_v2-0
       - open_badges_3-0
-      - europen_digital_credential_3-3
+      - european_learning_model_v3-3
     DeleteTemplateEndpointRequest:
       type: object
       required:

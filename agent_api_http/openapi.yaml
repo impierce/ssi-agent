@@ -517,7 +517,7 @@ paths:
                       name: Identity Credential
                   format: vc+sd-jwt
               elm_sd_jwt_credential_configurations:
-                summary: Europen Digital Credential V3.3 SD-JWT
+                summary: European Digital Credential V3.3 SD-JWT
                 value:
                   credential_configuration_id: elm_vc+sd-jwt
                   type:

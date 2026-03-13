@@ -32,8 +32,8 @@ pub enum DataModel {
     #[serde(rename = "open_badges_3-0")]
     OpenBadges30,
     // See https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/snb-model
-    #[serde(rename = "europen_digital_credential_3-3")]
-    EuropenDigitalCredential33,
+    #[serde(rename = "european_learning_model_v3-3")]
+    EuropeanLearningModelV33,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
