@@ -50,7 +50,7 @@ pub struct DomainLinkageValidation {
 pub struct ValidationResult {
     pub valid: bool,
     pub error: Option<String>,
-    pub last_validated: DateTime<Utc>,
+    pub last_validated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
@@ -103,7 +103,7 @@ impl Aggregate for Connection {
                     result: ValidationResult {
                         valid: domain_linkage_valid,
                         error: None,
-                        last_validated: now,
+                        last_validated_at: now,
                     },
                 })];
 
@@ -133,7 +133,7 @@ impl Aggregate for Connection {
                     result: ValidationResult {
                         valid: domain_linkage_valid,
                         error: None,
-                        last_validated: now,
+                        last_validated_at: now,
                     },
                 })];
 
@@ -330,7 +330,7 @@ pub mod document_tests {
                     result: ValidationResult {
                         valid: false,
                         error: None,
-                        last_validated: mock_time,
+                        last_validated_at: mock_time,
                     },
                 })],
                 first_interacted_at: Some(mock_time),
@@ -397,7 +397,7 @@ pub mod document_tests {
                     result: ValidationResult {
                         valid: false,
                         error: None,
-                        last_validated: mock_time,
+                        last_validated_at: mock_time,
                     },
                 })],
                 first_interacted_at: Some(mock_time),
@@ -413,7 +413,7 @@ pub mod document_tests {
                     result: ValidationResult {
                         valid: false,
                         error: None,
-                        last_validated: mock_time,
+                        last_validated_at: mock_time,
                     },
                 })],
                 pending_changes: Some(PendingChanges {
@@ -445,7 +445,7 @@ pub mod document_tests {
                     result: ValidationResult {
                         valid: false,
                         error: None,
-                        last_validated: mock_time,
+                        last_validated_at: mock_time,
                     },
                 })],
                 pending_changes: Some(PendingChanges {
