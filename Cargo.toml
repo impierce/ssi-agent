@@ -23,12 +23,11 @@ edition = "2021"
 rust-version = "1.76.0"
 
 [workspace.dependencies]
-# DO NOT MERGE: Update `rev` once https://github.com/impierce/openid4vc/pull/121 is merged.
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "2b50847" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "2b50847" }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "2b50847" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "2b50847" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "2b50847" }
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "2f27e41" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "2f27e41" }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "2f27e41" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "2f27e41" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "2f27e41" }
 
 anyhow = "1.0"
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
