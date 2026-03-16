@@ -178,6 +178,10 @@ pub async fn run() -> io::Result<()> {
     agent_identity::state::initialize(&identity_state).await.unwrap();
     agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
+    let _guard = init_tracing_opentelemetry::TracingConfig::production()
+        .init_subscriber()
+        .unwrap();
+
     let app = app(ApplicationState {
         identity_state: Some(identity_state),
         library_state: Some(library_state),

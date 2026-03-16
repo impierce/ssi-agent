@@ -20,6 +20,9 @@ agent_verification = { path = "../agent_verification" }
 anyhow.workspace = true
 axum.workspace = true
 chrono.workspace = true
+init-tracing-opentelemetry = { version = "0.36", features = [
+    "tracing_subscriber_ext",
+] }
 serde.workspace = true
 serde_json.workspace = true
 serde_with.workspace = true

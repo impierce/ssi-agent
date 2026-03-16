@@ -49,16 +49,6 @@ pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
     #[cfg(not(feature = "test_utils"))]
     {
         use tracing::{debug, info};
-        use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
-        let tracing_subscriber = tracing_subscriber::registry()
-            // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
-            .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
-
-        match application_configuration.log_format {
-            LogFormat::Json => tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init(),
-            LogFormat::Text => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
-        }
 
         info!("Configuration loaded successfully");
         debug!("{:#?}", application_configuration);
@@ -101,6 +91,8 @@ pub fn config_mut() -> std::sync::RwLockWriteGuard<'static, ApplicationConfigura
 pub struct ApplicationConfiguration {
     #[config(default)]
     pub log_format: LogFormat,
+    #[config(default, production_default = true)]
+    pub opentelemetry_enabled: bool,
     #[config(development_default = "EventStoreConfig {
             type_: EventStoreType::InMemory,
             connection_string: None
