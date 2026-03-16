@@ -437,10 +437,23 @@ paths:
                 - format
                 - credential_definition
             examples:
-              openbadgesv3_credential_configurations:
-                summary: Open Badges 3.0
+              jwt_vc_json_vc1_1_credential_configurations:
+                summary: JwtVcJson VC DM V1.1
                 value:
-                  credential_configuration_id: openbadge_credential
+                  credential_configuration_id: jwt_vc_json_vc1_1_credential
+                  type:
+                    - VerifiableCredential
+                  display:
+                    - locale: en
+                      logo:
+                        alt_text: UniCore Logo
+                        uri: https://impierce.com/images/logo-blue.png
+                      name: Identity Credential
+                  format: jwt_vc_json
+              jwt_vc_json_obv3_credential_configurations:
+                summary: JwtVcJson Open Badges V3.0
+                value:
+                  credential_configuration_id: jwt_vc_json_obv3_credential
                   type:
                     - VerifiableCredential
                     - OpenBadgeCredential
@@ -451,12 +464,13 @@ paths:
                         uri: https://impierce.com/images/logo-blue.png
                       name: Identity Credential
                   format: jwt_vc_json
-              w3c_vc_credential_configurations:
-                summary: W3C VC Data Model
+              jwt_vc_json_elm_credential_configurations:
+                summary: JwtVcJson European Digital Credental V3.3
                 value:
-                  credential_configuration_id: w3c_vc_credential
+                  credential_configuration_id: jwt_vc_json_elm_credential
                   type:
                     - VerifiableCredential
+                    - EuropeanDigitalCredential
                   display:
                     - locale: en
                       logo:
@@ -464,10 +478,10 @@ paths:
                         uri: https://impierce.com/images/logo-blue.png
                       name: Identity Credential
                   format: jwt_vc_json
-              sd_jwt_vc_credential_configurations:
+              dc+sd-jwt_credential_configurations:
                 summary: SD-JWT VC
                 value:
-                  credential_configuration_id: SD-JWT VC
+                  credential_configuration_id: dc+sd-jwt
                   display:
                     - locale: en
                       logo:
@@ -476,11 +490,39 @@ paths:
                       name: Identity Credential
                   format: dc+sd-jwt
               vcdm2_sd_jwt_credential_configurations:
-                summary: VCDM2.0 SD-JWT
+                summary: VC DM V2.0 SD-JWT
                 value:
-                  credential_configuration_id: VCDM2.0 SD-JWT
+                  credential_configuration_id: vc2_vc+sd-jwt
                   type:
                     - VerifiableCredential
+                  display:
+                    - locale: en
+                      logo:
+                        alt_text: UniCore Logo
+                        uri: https://impierce.com/images/logo-blue.png
+                      name: Identity Credential
+                  format: vc+sd-jwt
+              obv3_sd_jwt_credential_configurations:
+                summary: Open Badges V3.0 SD-JWT
+                value:
+                  credential_configuration_id: obv3_vc+sd-jwt
+                  type:
+                    - VerifiableCredential
+                    - OpenBadgeCredential
+                  display:
+                    - locale: en
+                      logo:
+                        alt_text: UniCore Logo
+                        uri: https://impierce.com/images/logo-blue.png
+                      name: Identity Credential
+                  format: vc+sd-jwt
+              elm_sd_jwt_credential_configurations:
+                summary: Europen Digital Credential V3.3 SD-JWT
+                value:
+                  credential_configuration_id: elm_vc+sd-jwt
+                  type:
+                    - VerifiableCredential
+                    - EuropeanDigitalCredential
                   display:
                     - locale: en
                       logo:
@@ -599,8 +641,19 @@ paths:
                 - credential
                 - expiresAt
             examples:
-              open-badges-3:
-                summary: Open Badges 3.0
+              jwt_vc_json_vc1_1:
+                summary: JwtVcJson VC Data Model V1.1
+                value:
+                  credential:
+                    credentialSubject:
+                      dob: "1982-01-01"
+                      first_name: Ferris
+                      last_name: Crabman
+                  credentialConfigurationId: jwt_vc_json_vc1_1_credential
+                  offerId: "001"
+                  expiresAt: "3025-10-24 11:34:00Z"
+              jwt_vc_json_obv3:
+                summary: JwtVcJson Open Badges V3.0
                 value:
                   credential:
                     id: https://example.com/badges/teamwork
@@ -614,39 +667,61 @@ paths:
                         type: Achievement
                       type:
                         - AchievementSubject
-                  credentialConfigurationId: openbadge_credential
+                  credentialConfigurationId: jwt_vc_json_obv3_credential
                   offerId: "001"
                   expiresAt: "3025-10-24 11:34:00Z"
-              w3c-vc-dm:
-                summary: W3C VC Data Model
+              jwt_vc_json_elm:
+                summary: JwtVcJson European Digital Credential V3.3
                 value:
                   credential:
                     credentialSubject:
                       dob: "1982-01-01"
                       first_name: Ferris
                       last_name: Crabman
-                  credentialConfigurationId: w3c_vc_credential
+                  credentialConfigurationId: jwt_vc_json_elm_credential
                   offerId: "001"
                   expiresAt: "3025-10-24 11:34:00Z"
-              sd-jwt-vc:
+              dc+sd-jwt:
                 summary: SD-JWT VC
                 value:
                   credential:
                     dob: "1982-01-01"
                     first_name: Ferris
                     last_name: Crabman
-                  credentialConfigurationId: SD-JWT VC
+                  credentialConfigurationId: dc+sd-jwt
                   offerId: "001"
                   expiresAt: "3025-10-24 11:34:00Z"
               vcdm2-sd-jwt:
-                summary: VCDM2.0 SD-JWT
+                summary: VC DM V2.0 SD-JWT
                 value:
                   credential:
                     credentialSubject:
                       dob: "1982-01-01"
                       first_name: Ferris
                       last_name: Crabman
-                  credentialConfigurationId: VCDM2.0 SD-JWT
+                  credentialConfigurationId: vc2_vc+sd-jwt
+                  offerId: "001"
+                  expiresAt: "3025-10-24 11:34:00Z"
+              obv3-sd-jwt:
+                summary: Open Badges V3.0 SD-JWT
+                value:
+                  credential:
+                    credentialSubject:
+                      dob: "1982-01-01"
+                      first_name: Ferris
+                      last_name: Crabman
+                  credentialConfigurationId: obv3_vc+sd-jwt
+                  offerId: "001"
+                  expiresAt: "3025-10-24 11:34:00Z"
+              elm-sd-jwt:
+                summary: European Digital Credential V3.3 SD-JWT
+                value:
+                  credential:
+                    credentialSubject:
+                      dob: "1982-01-01"
+                      first_name: Ferris
+                      last_name: Crabman
+                  credentialConfigurationId: elm_vc+sd-jwt
                   offerId: "001"
                   expiresAt: "3025-10-24 11:34:00Z"
       responses:

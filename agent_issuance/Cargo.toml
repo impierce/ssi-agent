@@ -14,11 +14,11 @@ async-trait.workspace = true
 base64.workspace = true
 cqrs-es.workspace = true
 chrono.workspace = true
-types-ob-v3 = { git = "https://github.com/impierce/digital-credential-data-models", rev = "9f16c27" }
 derivative.workspace = true
 identity_core.workspace = true
 identity_credential.workspace = true
 jsonwebtoken.workspace = true
+lazy_static.workspace = true
 oauth_tsl.workspace = true
 oid4vci.workspace = true
 oid4vc-core.workspace = true
@@ -27,17 +27,16 @@ reqwest.workspace = true
 sd-jwt.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-serde_json_path_to_error.workspace = true
 serde_with.workspace = true
 strum.workspace = true
 strum_macros.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 url.workspace = true
+uuid.workspace = true
 utoipa.workspace = true
 
 # `test_utils` dependencies
-lazy_static = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }
 rstest = { workspace = true, optional = true }
 
@@ -54,4 +53,4 @@ serial_test = "3.0"
 tracing-test.workspace = true
 
 [features]
-test_utils = ["dep:lazy_static", "dep:once_cell", "dep:rstest"]
+test_utils = ["dep:once_cell", "dep:rstest"]
