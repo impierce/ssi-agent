@@ -15,13 +15,6 @@ impl IntoApiErrorExt for ConnectionError {
                 .type_url(type_url("identityd#connection-not-found"))
                 .message(format!("No connection found with id: {connection_id}"))
                 .finish(),
-            ConnectionSyncFailed(connection_id) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Connection Synchronization Failed")
-                .type_url(type_url("identity#connection-sync-failed"))
-                .message(format!(
-                    "Failed to synchronize latest connection with id: {connection_id}"
-                ))
-                .finish(),
             CredentialIssuerMetadataFetchFailed(url) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Credential Issuer Metadata Fetch Failed")
                 .type_url(type_url("identity#credential-issuer-metadata-fetch-failed"))

@@ -163,22 +163,16 @@ impl Aggregate for Connection {
                     }])
                 }
             }
-            AcceptConnectionChanges { connection_id } => {
-                let pending = self
-                    .pending_changes
-                    .as_ref()
-                    .ok_or(ConnectionError::ConnectionSyncFailed(
-                        "Failed to Accept Pending Changes".to_string(),
-                    ))?;
-
-                Ok(vec![ConnectionChangesAccepted {
+            AcceptConnectionChanges { connection_id } => match &self.pending_changes {
+                Some(pending) => Ok(vec![ConnectionChangesAccepted {
                     connection_id,
                     display: pending.display.clone(),
                     dids: pending.dids.clone().unwrap(),
                     last_interacted_at: Some(services.now()),
                     pending_changes: None,
-                }])
-            }
+                }]),
+                None => Ok(vec![]),
+            },
             RemoveConnection { connection_id } => Ok(vec![ConnectionRemoved { connection_id }]),
         }
     }
