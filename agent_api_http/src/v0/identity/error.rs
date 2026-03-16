@@ -10,10 +10,10 @@ impl IntoApiErrorExt for ConnectionError {
     fn into_api_error(self) -> ApiError {
         use ConnectionError::*;
         match self {
-            ConnectionNotFound(connection_id) => ApiError::builder(StatusCode::NOT_FOUND)
+            ConnectionNotFound => ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Connection Not Found")
                 .type_url(type_url("identityd#connection-not-found"))
-                .message(format!("No connection found with id: {connection_id}"))
+                .message(format!("No connection found."))
                 .finish(),
             CredentialIssuerMetadataFetchFailed(url) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Credential Issuer Metadata Fetch Failed")

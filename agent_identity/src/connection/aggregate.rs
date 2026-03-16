@@ -117,6 +117,8 @@ impl Aggregate for Connection {
                     last_interacted_at: Some(now),
                 }])
             }
+            _ if self.connection_id.is_empty() => return Err(ConnectionError::ConnectionNotFound),
+
             SyncConnection { connection_id } => {
                 let domain_ref = self
                     .url
@@ -224,14 +226,14 @@ impl Aggregate for Connection {
                 self.last_interacted_at = last_interacted_at;
                 self.pending_changes = pending_changes;
             }
-            ConnectionRemoved { connection_id: _ } => {}
+            ConnectionRemoved { connection_id: _ } => self.connection_id = Default::default(),
         }
     }
 }
 
 // HELPERS
 
-pub fn get_display_from_metadata(metadata: CredentialIssuerMetadata) -> Option<ConnectionDisplayProperties> {
+fn get_display_from_metadata(metadata: CredentialIssuerMetadata) -> Option<ConnectionDisplayProperties> {
     metadata
         .display
         .and_then(|displays: Vec<serde_json::Value>| displays.first().cloned())
