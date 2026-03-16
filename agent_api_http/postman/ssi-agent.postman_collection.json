@@ -2451,7 +2451,7 @@
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"title\": \"My Example Template\",\n    \"credentialFormat\": \"w3c_vc_data_model_v1-1\",\n    \"holderType\": \"organization\"\n}",
+                  "raw": "{\n    \"title\": \"My Example Template\",\n    \"dataModel\": \"w3c_vc_data_model_v1-1\",\n    \"holderType\": \"organization\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"

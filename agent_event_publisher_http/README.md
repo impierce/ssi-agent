@@ -110,7 +110,7 @@ LinkedVerifiablePresentationServiceCreated
 TemplateCreated
 TitleUpdated
 DisplayUpdated
-CredentialFormatUpdated
+DataModelUpdated
 CreatorUpdated
 HolderTypeUpdated
 TagsUpdated

@@ -105,7 +105,7 @@ paths:
                 description: A simple example that will issue credentials in the W3C Verifiable Credentials Data Model v1.1 format.
                 value:
                   title: Standard template
-                  credentialFormat: w3c_vc_data_model_v1-1
+                  dataModel: w3c_vc_data_model_v1-1
                   holderType: individual
         required: true
       responses:
@@ -264,10 +264,10 @@ components:
           - string
           - 'null'
           default: null
-        credentialFormat:
+        dataModel:
           oneOf:
           - type: 'null'
-          - $ref: '#/components/schemas/CredentialFormat'
+          - $ref: '#/components/schemas/DataModel'
           default: null
         description:
           type:
@@ -417,12 +417,6 @@ components:
         signed: {}
         status:
           $ref: '#/components/schemas/IssuanceStatus'
-    CredentialFormat:
-      type: string
-      enum:
-      - w3c_vc_data_model_v1-1
-      - w3c_vc_data_model_v2-0
-      - open_badges_3-0
     CredentialStatus:
       type: object
       required:
@@ -445,6 +439,13 @@ components:
       - raw
       properties:
         raw: {}
+    DataModel:
+      type: string
+      enum:
+      - w3c_vc_data_model_v1-1
+      - w3c_vc_data_model_v2-0
+      - open_badges_3-0
+      - european_learning_model_v3-3
     DeleteTemplateEndpointRequest:
       type: object
       required:
@@ -520,10 +521,10 @@ components:
           type:
           - string
           - 'null'
-        credentialFormat:
+        dataModel:
           oneOf:
           - type: 'null'
-          - $ref: '#/components/schemas/CredentialFormat'
+          - $ref: '#/components/schemas/DataModel'
         description:
           type:
           - string
@@ -578,10 +579,10 @@ components:
           - string
           - 'null'
           default: null
-        credentialFormat:
+        dataModel:
           oneOf:
           - type: 'null'
-          - $ref: '#/components/schemas/CredentialFormat'
+          - $ref: '#/components/schemas/DataModel'
           default: null
         description:
           type:

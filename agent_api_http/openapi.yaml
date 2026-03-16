@@ -517,7 +517,7 @@ paths:
                       name: Identity Credential
                   format: vc+sd-jwt
               elm_sd_jwt_credential_configurations:
-                summary: Europen Digital Credential V3.3 SD-JWT
+                summary: European Digital Credential V3.3 SD-JWT
                 value:
                   credential_configuration_id: elm_vc+sd-jwt
                   type:
@@ -1054,7 +1054,7 @@ paths:
                   value:
                     - id: "550e8400-e29b-41d4-a716-446655440000"
                       title: "Employee ID Credential"
-                      credentialFormat: "w3c_vc_data_model_v1-1"
+                      dataModel: "w3c_vc_data_model_v1-1"
                       status: "published"
                       visibility: "public"
                       type:
@@ -1105,8 +1105,8 @@ paths:
                   example: "Employee ID Credential"
                 display:
                   $ref: "#/components/schemas/Display"
-                credentialFormat:
-                  $ref: "#/components/schemas/CredentialFormat"
+                dataModel:
+                  $ref: "#/components/schemas/DataModel"
                 creator:
                   type: string
                 holderType:
@@ -1168,8 +1168,8 @@ paths:
                   type: string
                 display:
                   $ref: "#/components/schemas/Display"
-                credentialFormat:
-                  $ref: "#/components/schemas/CredentialFormat"
+                dataModel:
+                  $ref: "#/components/schemas/DataModel"
                 creator:
                   type: string
                 holderType:
@@ -2044,7 +2044,7 @@ components:
         logo:
           $ref: "#/components/schemas/Logo"
 
-    CredentialFormat:
+    DataModel:
       type: string
       enum:
         - "w3c_vc_data_model_v1-1"
@@ -2099,9 +2099,9 @@ components:
         display:
           allOf:
             - $ref: "#/components/schemas/Display"
-        credentialFormat:
+        dataModel:
           allOf:
-            - $ref: "#/components/schemas/CredentialFormat"
+            - $ref: "#/components/schemas/DataModel"
         creator:
           type: string
           description: Identifier of the template creator
