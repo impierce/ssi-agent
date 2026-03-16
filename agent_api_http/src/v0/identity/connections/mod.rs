@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
-use agent_identity::connection::views::ConnectionView;
 use agent_identity::{
-    connection::aggregate::ConnectionDisplayProperties, connection::command::ConnectionCommand, state::IdentityState,
+    connection::{aggregate::ConnectionDisplayProperties, command::ConnectionCommand, views::ConnectionView},
+    state::IdentityState,
 };
 use axum::{
     extract::{Path, State},
