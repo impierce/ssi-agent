@@ -485,9 +485,33 @@ pub mod document_tests {
     #[test]
     fn test_remove_connection() {
         let services = IdentityServices::default();
+        let mock_time = "2026-03-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
+        let mock_issuer: Url = "https://example.com".parse().unwrap();
 
         ConnectionTestFramework::with(services)
-            .given_no_previous_events()
+            .given(vec![ConnectionEvent::ConnectionAdded {
+                connection_id: "abcd1233".to_string(),
+                display: Some(ConnectionDisplayProperties {
+                    name: Some("Time Regulation Institute".to_string()),
+                    locale: Some("en".to_string()),
+                    logo: Some(LogoProperties {
+                        uri: Some("https://example.com/logo.png".parse().unwrap()),
+                        alt_text: Some("Organisational Logo".to_string()),
+                    }),
+                }),
+                url: mock_issuer.clone(),
+                dids: vec![TEST_DID.parse().unwrap()],
+                validations: vec![Validation::DomainLinkage(DomainLinkageValidation {
+                    domain: mock_issuer.clone(),
+                    result: ValidationResult {
+                        valid: false,
+                        error: None,
+                        last_validated_at: mock_time,
+                    },
+                })],
+                first_interacted_at: Some(mock_time),
+                last_interacted_at: Some(mock_time),
+            }])
             .when(ConnectionCommand::RemoveConnection {
                 connection_id: "abcd1234".to_string(),
             })
