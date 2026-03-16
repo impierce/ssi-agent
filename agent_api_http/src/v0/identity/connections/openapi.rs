@@ -6,7 +6,7 @@ use utoipa::OpenApi;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(post_connection, get_connections, get_connection, sync_connection, accept_connection_changes, remove_connection),
+    paths(accept_connection_changes, get_connection, get_connections, post_connection,  remove_connection, sync_connection),
     tags(
         (name = "Connections", description = "Manage trusted connections."),
     )

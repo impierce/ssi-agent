@@ -7,7 +7,7 @@ rust-version.workspace = true
 [dependencies]
 agent_shared = { path = "../agent_shared" }
 agent_secret_manager = { path = "../agent_secret_manager" }
-did_manager = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.8" }
+did_manager_consumer = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.8", package = "consumer" }
 
 anyhow.workspace = true
 async-trait.workspace = true
@@ -44,7 +44,6 @@ url.workspace = true
 urlencoding = "2.1"
 utoipa.workspace = true
 uuid.workspace = true
-wiremock.workspace = true
 
 # `test_utils` dependencies
 futures = { workspace = true, optional = true }
@@ -70,6 +69,7 @@ reqwest.workspace = true
 serial_test = "3.0"
 tower.workspace = true
 tracing-test.workspace = true
+wiremock.workspace = true
 
 [features]
 test_utils = ["dep:futures", "dep:rstest"]

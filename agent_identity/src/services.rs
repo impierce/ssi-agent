@@ -2,7 +2,7 @@ use crate::connection::error::ConnectionError;
 use agent_secret_manager::subject::Subject;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::{DateTime, Utc};
-use did_manager::Resolver;
+use did_manager_consumer::resolver::Resolver;
 use identity_credential::domain_linkage::{DomainLinkageConfiguration, JwtDomainLinkageValidator};
 use identity_did::DIDUrl;
 use identity_did::DID;
@@ -26,7 +26,6 @@ use url::Url;
 pub struct IdentityServices {
     pub subject: Arc<Subject>,
     pub client: Client,
-    pub mock_time: Option<chrono::DateTime<chrono::Utc>>,
     pub resolver: Resolver,
 }
 
@@ -35,7 +34,6 @@ impl IdentityServices {
         Self {
             subject,
             client: Client::new(),
-            mock_time: None,
             resolver,
         }
     }
@@ -48,21 +46,22 @@ impl IdentityServices {
     {
         let (subject, resolver) = futures::executor::block_on(async { (Subject::new().await, Resolver::new()) });
 
-        let mut services = Self::new(Arc::new(subject), resolver);
-        services.mock_time = Some("2026-03-04T12:00:00Z".parse::<chrono::DateTime<chrono::Utc>>().unwrap());
-        Arc::new(services)
+        Arc::new(Self::new(Arc::new(subject), resolver))
     }
 
     pub fn now(&self) -> DateTime<Utc> {
-        self.mock_time.unwrap_or_else(Utc::now)
+        #[cfg(feature = "test_utils")]
+        return "2026-03-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
+
+        #[cfg(not(feature = "test_utils"))]
+        Utc::now()
     }
 
     pub async fn fetch_credential_issuer_metadata(
         &self,
         issuer_url: &Url,
     ) -> Result<CredentialIssuerMetadata, ConnectionError> {
-        let mut url = issuer_url.clone();
-        strip_www(&mut url)?;
+        let mut url = strip_www(issuer_url.clone())?;
         let path = url.path().trim_end_matches('/');
         url.set_path(&format!("/.well-known/openid-credential-issuer{path}"));
 
@@ -127,8 +126,7 @@ impl IdentityServices {
         &self,
         url: &Url,
     ) -> Result<DomainLinkageConfiguration, ConnectionError> {
-        let mut url = url.clone();
-        strip_www(&mut url)?;
+        let mut url = strip_www(url.clone())?;
         url.set_path("/.well-known/did-configuration.json");
 
         info!("Fetching DID configuration from: {url}");
@@ -163,14 +161,14 @@ impl IdentityServices {
 }
 
 // HELPERS
-fn strip_www(url: &mut Url) -> Result<(), ConnectionError> {
+fn strip_www(mut url: Url) -> Result<Url, ConnectionError> {
     if let Some(host) = url.host_str().map(|h| h.to_string()) {
         if let Some(stripped) = host.strip_prefix("www.") {
             url.set_host(Some(stripped))
                 .map_err(|e| ConnectionError::MissingDomain(e.to_string()))?;
         }
     }
-    Ok(())
+    Ok(url)
 }
 
 /// Get the claims from a jwt string without performing validation.
@@ -196,7 +194,10 @@ impl JwsVerifier for Verifier {
     fn verify(&self, input: VerificationInput, public_key: &IotaIdentityJwk) -> Result<(), SignatureVerificationError> {
         use SignatureVerificationErrorKind::*;
 
-        info!("Verifying input");
+        info!(
+            "Verifying JWS signature using algorithm '{}' against public key.",
+            input.alg
+        );
 
         let algorithm =
             Algorithm::from_str(&input.alg.to_string()).map_err(|_| SignatureVerificationError::new(UnsupportedAlg))?;
@@ -251,6 +252,20 @@ mod tests {
             claims["iss"],
             "did:key:z6MkoTHsgNNrby8JzCNQ1iRLyW5QQ6R8Xuu6AA8igGrMVPUM"
         );
+    }
+
+    #[test]
+    fn test_www_stripping() {
+        let input_url = Url::parse("https://www.example.com/").unwrap();
+        let result = strip_www(input_url).unwrap();
+        assert_eq!(result, Url::parse("https://example.com/").unwrap());
+    }
+
+    #[test]
+    fn test_www_stripping_no_www() {
+        let input_url = Url::parse("https://example.com/").unwrap();
+        let result = strip_www(input_url).unwrap();
+        assert_eq!(result, Url::parse("https://example.com/").unwrap());
     }
 
     #[tokio::test]

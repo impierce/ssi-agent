@@ -13,8 +13,8 @@ pub enum ConnectionEvent {
         display: Option<ConnectionDisplayProperties>,
         url: Url,
         dids: Vec<DIDUrl>,
-        first_interacted: Option<DateTime<Utc>>,
-        last_interacted: Option<DateTime<Utc>>,
+        first_interacted_at: Option<DateTime<Utc>>,
+        last_interacted_at: Option<DateTime<Utc>>,
         validations: Vec<Validation>,
     },
     ConnectionRemoved {
@@ -24,13 +24,13 @@ pub enum ConnectionEvent {
         connection_id: String,
         validations: Vec<Validation>,
         pending_changes: Option<PendingChanges>,
-        last_interacted: Option<DateTime<Utc>>,
+        last_interacted_at: Option<DateTime<Utc>>,
     },
     ConnectionChangesAccepted {
         connection_id: String,
         display: Option<ConnectionDisplayProperties>,
         dids: Vec<DIDUrl>,
-        last_interacted: Option<DateTime<Utc>>,
+        last_interacted_at: Option<DateTime<Utc>>,
         pending_changes: Option<PendingChanges>,
     },
 }

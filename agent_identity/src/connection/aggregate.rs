@@ -19,8 +19,8 @@ pub struct Connection {
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
     pub display: Option<ConnectionDisplayProperties>,
-    pub first_interacted: Option<DateTime<Utc>>,
-    pub last_interacted: Option<DateTime<Utc>>,
+    pub first_interacted_at: Option<DateTime<Utc>>,
+    pub last_interacted_at: Option<DateTime<Utc>>,
     // TODO: How do we want to make distinction between issuer, holder, and verifier capabilities of the `Connection`?
     // pub issuer_options: Option<IssuerOptions>,
     // pub holder_options: Option<HolderOptions>,
@@ -113,8 +113,8 @@ impl Aggregate for Connection {
                     url,
                     dids: dids.clone(),
                     validations,
-                    first_interacted: Some(now),
-                    last_interacted: Some(now),
+                    first_interacted_at: Some(now),
+                    last_interacted_at: Some(now),
                 }])
             }
             SyncConnection { connection_id } => {
@@ -152,14 +152,14 @@ impl Aggregate for Connection {
                         connection_id,
                         validations,
                         pending_changes: Some(proposed),
-                        last_interacted: Some(now),
+                        last_interacted_at: Some(now),
                     }])
                 } else {
                     Ok(vec![ConnectionSynced {
                         connection_id,
                         validations,
                         pending_changes: None,
-                        last_interacted: Some(now),
+                        last_interacted_at: Some(now),
                     }])
                 }
             }
@@ -175,7 +175,7 @@ impl Aggregate for Connection {
                     connection_id,
                     display: pending.display.clone(),
                     dids: pending.dids.clone().unwrap(),
-                    last_interacted: Some(services.now()),
+                    last_interacted_at: Some(services.now()),
                     pending_changes: None,
                 }])
             }
@@ -195,39 +195,39 @@ impl Aggregate for Connection {
                 validations,
                 url,
                 dids,
-                first_interacted,
-                last_interacted,
+                first_interacted_at,
+                last_interacted_at,
             } => {
                 self.connection_id = connection_id;
                 self.display = display;
                 self.url = Some(url);
                 self.dids = dids;
                 self.validations = validations;
-                self.first_interacted = first_interacted;
-                self.last_interacted = last_interacted;
+                self.first_interacted_at = first_interacted_at;
+                self.last_interacted_at = last_interacted_at;
             }
             ConnectionSynced {
                 connection_id,
                 pending_changes,
-                last_interacted,
+                last_interacted_at,
                 validations,
             } => {
                 self.connection_id = connection_id;
                 self.pending_changes = pending_changes;
-                self.last_interacted = last_interacted;
+                self.last_interacted_at = last_interacted_at;
                 self.validations = validations;
             }
             ConnectionChangesAccepted {
                 connection_id,
                 display,
                 dids,
-                last_interacted,
+                last_interacted_at,
                 pending_changes,
             } => {
                 self.connection_id = connection_id;
                 self.display = display;
                 self.dids = dids;
-                self.last_interacted = last_interacted;
+                self.last_interacted_at = last_interacted_at;
                 self.pending_changes = pending_changes;
             }
             ConnectionRemoved { connection_id: _ } => {}
@@ -339,8 +339,8 @@ pub mod document_tests {
                         last_validated: mock_time,
                     },
                 })],
-                first_interacted: Some(mock_time),
-                last_interacted: Some(mock_time),
+                first_interacted_at: Some(mock_time),
+                last_interacted_at: Some(mock_time),
             }]);
     }
 
@@ -406,8 +406,8 @@ pub mod document_tests {
                         last_validated: mock_time,
                     },
                 })],
-                first_interacted: Some(mock_time),
-                last_interacted: Some(mock_time),
+                first_interacted_at: Some(mock_time),
+                last_interacted_at: Some(mock_time),
             }])
             .when(ConnectionCommand::SyncConnection {
                 connection_id: "abcd-123".to_string(),
@@ -433,7 +433,7 @@ pub mod document_tests {
                         }),
                     }),
                 }),
-                last_interacted: Some(mock_time),
+                last_interacted_at: Some(mock_time),
             }]);
     }
 
@@ -465,7 +465,7 @@ pub mod document_tests {
                         }),
                     }),
                 }),
-                last_interacted: Some(mock_time),
+                last_interacted_at: Some(mock_time),
             }])
             .when(ConnectionCommand::AcceptConnectionChanges {
                 connection_id: "abcd1234".to_string(),
@@ -481,7 +481,7 @@ pub mod document_tests {
                     }),
                 }),
                 dids: vec![TEST_DID.parse().unwrap()],
-                last_interacted: Some(mock_time),
+                last_interacted_at: Some(mock_time),
                 pending_changes: None,
             }]);
     }

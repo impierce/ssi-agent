@@ -143,6 +143,7 @@ pub(crate) async fn get_connection(
 ) -> Result<Response, ApiError> {
     query_handler(&id, &state.query.connection)
         .await?
+        .filter(|view| !view.deleted)
         .map(|connection_view| (StatusCode::OK, Json(connection_view)).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
@@ -184,6 +185,7 @@ pub struct AcceptConnectionChangesRequest {
     #[serde(default)]
     id: String,
 }
+
 /// Accept Pending Changes
 ///
 /// Accept pending changes to a connection.
@@ -213,9 +215,10 @@ pub struct RemoveConnectionRequest {
     #[serde(default)]
     id: String,
 }
+
 /// Remove Connection
 ///
-/// Removes a connection
+/// Removes a connection by its ID.
 #[utoipa::path(
     post,
     path = "/connections/remove-connection",
@@ -251,4 +254,47 @@ pub fn parse_url(input: &str) -> Result<Url, ApiError> {
             .message(format!("Invalid issuer URL: {e}"))
             .finish()
     })
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parsing_with_http_prefix() {
+        let input_string = "http://a-via-lactea.example.com/";
+        let parsed = parse_url(input_string).unwrap();
+
+        assert_eq!(parsed, Url::parse("https://a-via-lactea.example.com/").unwrap());
+    }
+
+    #[test]
+    fn test_parsing_with_no_prefix() {
+        let input_string = "a-via-lactea.example.com/";
+        let parsed = parse_url(input_string).unwrap();
+
+        assert_eq!(parsed, Url::parse("https://a-via-lactea.example.com/").unwrap());
+    }
+
+    #[test]
+    fn test_parsing_www() {
+        let input_string = "www.a-via-lactea.example.com/";
+        let parsed = parse_url(input_string).unwrap();
+
+        assert_eq!(parsed, Url::parse("https://www.a-via-lactea.example.com/").unwrap());
+    }
+
+    #[test]
+    fn test_parsing_already_https() {
+        let input_string = "https://a-via-lactea.example.com/";
+        let parsed = parse_url(input_string).unwrap();
+
+        assert_eq!(parsed, Url::parse("https://a-via-lactea.example.com/").unwrap());
+    }
+
+    #[test]
+    fn invalid_input() {
+        let input_string = "a-via-lactea";
+        assert!(parse_url(input_string).is_err());
+    }
 }
