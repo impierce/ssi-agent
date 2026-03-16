@@ -249,11 +249,25 @@ pub fn parse_url(input: &str) -> Result<Url, ApiError> {
         None => format!("https://{input}"),
     };
 
-    Url::parse(&with_scheme).map_err(|e| {
+    let url = Url::parse(&with_scheme).map_err(|e| {
         ApiError::builder(StatusCode::BAD_REQUEST)
             .message(format!("Invalid issuer URL: {e}"))
             .finish()
-    })
+    })?;
+
+    let host = url.host_str().ok_or_else(|| {
+        ApiError::builder(StatusCode::BAD_REQUEST)
+            .message("Url missing host".to_string())
+            .finish()
+    })?;
+
+    if !host.contains('.') {
+        return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+            .message("Url must contain a top-level domain (e.g. .com, .nl, .eu).".to_string())
+            .finish());
+    }
+
+    Ok(url)
 }
 
 #[cfg(test)]
@@ -293,7 +307,7 @@ pub mod tests {
     }
 
     #[test]
-    fn invalid_input() {
+    fn invalid_input_no_tld() {
         let input_string = "a-via-lactea";
         assert!(parse_url(input_string).is_err());
     }
