@@ -76,7 +76,7 @@ paths:
       tags:
       - Connections
       summary: Remove Connection
-      description: Removes a connection
+      description: Removes a connection by its ID.
       operationId: remove_connection
       requestBody:
         content:
@@ -312,7 +312,10 @@ components:
       - id
       - dids
       - validations
+      - deleted
       properties:
+        deleted:
+          type: boolean
         dids:
           type: array
           items:
@@ -321,14 +324,14 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
-        first_interacted:
+        first_interacted_at:
           type:
           - string
           - 'null'
           format: date-time
         id:
           type: string
-        last_interacted:
+        last_interacted_at:
           type:
           - string
           - 'null'
@@ -798,13 +801,13 @@ components:
       type: object
       required:
       - valid
-      - last_validated
+      - last_validated_at
       properties:
         error:
           type:
           - string
           - 'null'
-        last_validated:
+        last_validated_at:
           type: string
           format: date-time
         valid:
