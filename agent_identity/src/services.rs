@@ -2,22 +2,13 @@ use crate::connection::error::ConnectionError;
 use agent_secret_manager::subject::Subject;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::{DateTime, Utc};
-use did_manager_consumer::resolver::Resolver;
 use identity_credential::domain_linkage::{DomainLinkageConfiguration, JwtDomainLinkageValidator};
 use identity_did::DIDUrl;
 use identity_did::DID;
-use identity_iota::{
-    core::{FromJson, ToJson},
-    credential::JwtCredentialValidationOptions,
-    verification::{
-        jwk::Jwk as IotaIdentityJwk,
-        jws::{JwsVerifier, SignatureVerificationError, SignatureVerificationErrorKind, VerificationInput},
-    },
-};
-use jsonwebtoken::{crypto::verify, jwk::Jwk as JsonWebTokenJwk, Algorithm, DecodingKey, Validation};
+use identity_iota::{core::FromJson, credential::JwtCredentialValidationOptions};
+use oid4vc_core::verifier::SignatureVerifier;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use reqwest::Client;
-use std::str::FromStr;
 use std::sync::Arc;
 use tracing::info;
 use url::Url;
@@ -26,15 +17,14 @@ use url::Url;
 pub struct IdentityServices {
     pub subject: Arc<Subject>,
     pub client: Client,
-    pub resolver: Resolver,
+    // pub resolver: Resolver,
 }
 
 impl IdentityServices {
-    pub fn new(subject: Arc<Subject>, resolver: Resolver) -> Self {
+    pub fn new(subject: Arc<Subject>) -> Self {
         Self {
             subject,
             client: Client::new(),
-            resolver,
         }
     }
 
@@ -44,9 +34,9 @@ impl IdentityServices {
     where
         Self: Sized,
     {
-        let (subject, resolver) = futures::executor::block_on(async { (Subject::new().await, Resolver::new()) });
+        let subject = futures::executor::block_on(async { Subject::new().await });
 
-        Arc::new(Self::new(Arc::new(subject), resolver))
+        Arc::new(Self::new(Arc::new(subject)))
     }
 
     pub fn now(&self) -> DateTime<Utc> {
@@ -90,7 +80,7 @@ impl IdentityServices {
             })
             .collect();
 
-        let validator = JwtDomainLinkageValidator::with_signature_verifier(Verifier);
+        let validator = JwtDomainLinkageValidator::with_signature_verifier(SignatureVerifier);
         let url = identity_iota::core::Url::from(url.clone());
         let mut all_valid = true;
 
@@ -100,7 +90,7 @@ impl IdentityServices {
         }
 
         for did in &linked_dids {
-            match self.resolver.resolve(did.did().as_str()).await {
+            match self.subject.resolver.resolve(did.did().as_str()).await {
                 Ok(document) => {
                     if validator
                         .validate_linkage(&document, &config, &url, &JwtCredentialValidationOptions::default())
@@ -177,46 +167,46 @@ fn get_unverified_jwt_claims(jwt: &str) -> Result<serde_json::Value, ConnectionE
         ))
 }
 
-/// This `Verifier` uses `jsonwebtoken` under the hood to verify verification input.
-pub struct Verifier;
-impl JwsVerifier for Verifier {
-    fn verify(&self, input: VerificationInput, public_key: &IotaIdentityJwk) -> Result<(), SignatureVerificationError> {
-        use SignatureVerificationErrorKind::*;
+// /// This `Verifier` uses `jsonwebtoken` under the hood to verify verification input.
+// pub struct Verifier;
+// impl JwsVerifier for Verifier {
+//     fn verify(&self, input: VerificationInput, public_key: &IotaIdentityJwk) -> Result<(), SignatureVerificationError> {
+//         use SignatureVerificationErrorKind::*;
 
-        info!(
-            "Verifying JWS signature using algorithm '{}' against public key.",
-            input.alg
-        );
+//         info!(
+//             "Verifying JWS signature using algorithm '{}' against public key.",
+//             input.alg
+//         );
 
-        let algorithm =
-            Algorithm::from_str(&input.alg.to_string()).map_err(|_| SignatureVerificationError::new(UnsupportedAlg))?;
+//         let algorithm =
+//             Algorithm::from_str(&input.alg.to_string()).map_err(|_| SignatureVerificationError::new(UnsupportedAlg))?;
 
-        // Convert the `IotaIdentityJwk` first into a `JsonWebTokenJwk` and then into a `DecodingKey`.
-        let decoding_key = public_key
-            .to_json()
-            .ok()
-            .and_then(|public_key| JsonWebTokenJwk::from_json(&public_key).ok())
-            .and_then(|jwk| DecodingKey::from_jwk(&jwk).ok())
-            .ok_or(SignatureVerificationError::new(KeyDecodingFailure))?;
+//         // Convert the `IotaIdentityJwk` first into a `JsonWebTokenJwk` and then into a `DecodingKey`.
+//         let decoding_key = public_key
+//             .to_json()
+//             .ok()
+//             .and_then(|public_key| JsonWebTokenJwk::from_json(&public_key).ok())
+//             .and_then(|jwk| DecodingKey::from_jwk(&jwk).ok())
+//             .ok_or(SignatureVerificationError::new(KeyDecodingFailure))?;
 
-        let mut validation = Validation::new(algorithm);
-        validation.validate_aud = false;
-        validation.required_spec_claims.clear();
+//         let mut validation = Validation::new(algorithm);
+//         validation.validate_aud = false;
+//         validation.required_spec_claims.clear();
 
-        match verify(
-            &URL_SAFE_NO_PAD.encode(input.decoded_signature),
-            &input.signing_input,
-            &decoding_key,
-            algorithm,
-        ) {
-            Ok(true) => Ok(()),
-            Err(_) | Ok(false) => Err(SignatureVerificationError::new(
-                // TODO: more fine-grained error handling?
-                InvalidSignature,
-            )),
-        }
-    }
-}
+//         match verify(
+//             &URL_SAFE_NO_PAD.encode(input.decoded_signature),
+//             &input.signing_input,
+//             &decoding_key,
+//             algorithm,
+//         ) {
+//             Ok(true) => Ok(()),
+//             Err(_) | Ok(false) => Err(SignatureVerificationError::new(
+//                 // TODO: more fine-grained error handling?
+//                 InvalidSignature,
+//             )),
+//         }
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
@@ -257,8 +247,7 @@ mod tests {
             .await;
 
         let subject = Arc::new(Subject::new().await);
-        let resolver = Resolver::new();
-        let services = IdentityServices::new(subject, resolver);
+        let services = IdentityServices::new(subject);
 
         let issuer_url: Url = mock_server.uri().parse().unwrap();
         let (dids, domain_linkage_valid) = services.fetch_linked_dids(&issuer_url).await.unwrap();
@@ -284,8 +273,7 @@ mod tests {
             .await;
 
         let subject = Arc::new(Subject::new().await);
-        let resolver = Resolver::new();
-        let services = IdentityServices::new(subject, resolver);
+        let services = IdentityServices::new(subject);
 
         let issuer_url: Url = mock_server.uri().parse().unwrap();
         let result = services.fetch_linked_dids(&issuer_url).await;
