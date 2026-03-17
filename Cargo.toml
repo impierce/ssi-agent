@@ -91,7 +91,7 @@ tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tracing-test = { version = "0.2" }
 url = "2.5"
-utoipa = { version = "5", features = ["axum_extras", "url", "yaml"] }
+utoipa = { version = "5", features = ["axum_extras", "chrono", "url", "yaml"] }
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"
 

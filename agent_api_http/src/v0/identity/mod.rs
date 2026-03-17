@@ -12,7 +12,9 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use connections::{get_connection, get_connections, post_connections};
+use connections::{
+    accept_connection_changes, get_connection, get_connections, post_connection, remove_connection, sync_connection,
+};
 use documents::{get_document, get_documents};
 use services::{linked_vp::linked_vp, service, services};
 use std::sync::Arc;
@@ -28,8 +30,11 @@ pub fn router(identity_state: Arc<IdentityState>) -> Router {
         .nest(
             API_VERSION,
             Router::new()
-                .route("/connections", get(get_connections).post(post_connections))
+                .route("/connections", get(get_connections).post(post_connection))
                 .route("/connections/{connection_id}", get(get_connection))
+                .route("/connections/sync-connection", post(sync_connection))
+                .route("/connections/accept-pending-changes", post(accept_connection_changes))
+                .route("/connections/remove-connection", post(remove_connection))
                 .route("/documents", get(get_documents))
                 .route("/documents/{document_id}", get(get_document))
                 .route("/profile", get(get_profile).patch(patch_profile))

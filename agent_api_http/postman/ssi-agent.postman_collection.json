@@ -1,9 +1,9 @@
 {
   "info": {
-    "_postman_id": "3ef8a16d-4ea5-4922-8e45-30bf7353f31b",
+    "_postman_id": "87e6bc30-258e-4ee8-8afa-37605eed2677",
     "name": "ssi-agent",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "_exporter_id": "38461474"
+    "_exporter_id": "41786572"
   },
   "item": [
     {
@@ -1976,7 +1976,8 @@
                       ""
                     ],
                     "type": "text/javascript",
-                    "packages": {}
+                    "packages": {},
+                    "requests": {}
                   }
                 },
                 {
@@ -1986,7 +1987,8 @@
                       ""
                     ],
                     "type": "text/javascript",
-                    "packages": {}
+                    "packages": {},
+                    "requests": {}
                   }
                 }
               ],
@@ -1995,7 +1997,7 @@
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"alias\": \"My Connection\",\n    \"domain\": \"http://example.org\",\n    \"dids\": [\"did:example:123\"],\n    \"credentialOfferEndpoint\": \"{{HOST}}/openid4vci/offers\"\n}",
+                  "raw": "{\n    \"url\": \"{{HOST}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -2283,6 +2285,90 @@
                     "v0",
                     "connections",
                     "{{CONNECTION_ID}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Sync Connection by ID",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"id\": \"{{CONNECTION_ID}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/connections/sync-connection",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "connections",
+                    "sync-connection"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Remove Connection",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"id\": \"{{CONNECTION_ID}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/connections/remove-connection",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "connections",
+                    "remove-connection"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Accept Pending Connection Changes",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"id\": \"{{CONNECTION_ID}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/connections/accept-pending-changes",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "connections",
+                    "accept-pending-changes"
                   ]
                 }
               },

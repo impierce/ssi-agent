@@ -31,7 +31,79 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Connection'
-  /v0/connections/{connection_id}:
+    post:
+      tags:
+      - Connections
+      summary: Add a Connection
+      description: Adds a new connection based on the provided url.
+      operationId: add_connection
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddConnectionEndpointRequest'
+        required: true
+      responses:
+        '201':
+          description: Connection added successfully
+          headers:
+            Location:
+              schema:
+                type: string
+              description: URI of the newly created connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Connection'
+  /v0/connections/accept-pending-changes:
+    post:
+      tags:
+      - Connections
+      summary: Accept Pending Changes
+      description: Accept pending changes to a connection.
+      operationId: accept_connection_changes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptConnectionChangesRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+  /v0/connections/remove-connection:
+    post:
+      tags:
+      - Connections
+      summary: Remove Connection
+      description: Removes a connection by its ID.
+      operationId: remove_connection
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoveConnectionRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+  /v0/connections/sync-connection:
+    post:
+      tags:
+      - Connections
+      summary: Sync connection by ID
+      description: Sync the latest version of a connection by its unique identifier.
+      operationId: sync_connection_by_id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncConnectionRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+  /v0/connections/{id}:
     get:
       tags:
       - Connections
@@ -39,7 +111,7 @@ paths:
       description: Retrieve a specific connection by its unique identifier.
       operationId: get_connection_by_id
       parameters:
-      - name: connection_id
+      - name: id
         in: path
         required: true
         schema:
@@ -224,35 +296,71 @@ paths:
                 $ref: '#/components/schemas/Template'
 components:
   schemas:
+    AcceptConnectionChangesRequest:
+      type: object
+      properties:
+        id:
+          type: string
+    AddConnectionEndpointRequest:
+      type: object
+      properties:
+        url:
+          type: string
     Connection:
       type: object
       required:
       - id
       - dids
+      - validations
+      - deleted
       properties:
-        alias:
-          type:
-          - string
-          - 'null'
-        credential_offer_endpoint:
-          type:
-          - string
-          - 'null'
+        deleted:
+          type: boolean
         dids:
           type: array
           items:
             type: string
-        domain:
+        display:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/ConnectionDisplayProperties'
+        first_interacted_at:
           type:
           - string
           - 'null'
-        first_interacted:
-          type:
-          - string
-          - 'null'
+          format: date-time
         id:
           type: string
-        last_interacted:
+        last_interacted_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        pending_changes:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/PendingChanges'
+        url:
+          type:
+          - string
+          - 'null'
+          format: uri
+        validations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Validation'
+    ConnectionDisplayProperties:
+      type: object
+      properties:
+        locale:
+          type:
+          - string
+          - 'null'
+        logo:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/LogoProperties'
+        name:
           type:
           - string
           - 'null'
@@ -464,6 +572,17 @@ components:
           - $ref: '#/components/schemas/Logo'
         name:
           type: string
+    DomainLinkageValidation:
+      type: object
+      required:
+      - domain
+      - result
+      properties:
+        domain:
+          type: string
+          format: uri
+        result:
+          $ref: '#/components/schemas/ValidationResult'
     DuplicateTemplateEndpointRequest:
       type: object
       required:
@@ -474,15 +593,15 @@ components:
     GetConnectionsEndpointRequest:
       type: object
       properties:
-        alias:
-          type:
-          - string
-          - 'null'
         did:
           type:
           - string
           - 'null'
-        domain:
+        display:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/ConnectionDisplayProperties'
+        url:
           type:
           - string
           - 'null'
@@ -496,6 +615,8 @@ components:
       enum:
       - Pending
       - Issued
+    LinkedVpValidation:
+      type: object
     Logo:
       type: object
       required:
@@ -506,6 +627,41 @@ components:
           - string
           - 'null'
         uri:
+          type: string
+    LogoProperties:
+      type: object
+      properties:
+        alt_text:
+          type:
+          - string
+          - 'null'
+        uri:
+          type:
+          - string
+          - 'null'
+          format: uri
+    PendingChanges:
+      type: object
+      required:
+      - dids
+      properties:
+        dids:
+          type: array
+          items:
+            type: string
+        display:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/ConnectionDisplayProperties'
+    RemoveConnectionRequest:
+      type: object
+      properties:
+        id:
+          type: string
+    SyncConnectionRequest:
+      type: object
+      properties:
+        id:
           type: string
     Template:
       type: object
@@ -628,6 +784,35 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/Visibility'
           default: null
+    Validation:
+      oneOf:
+      - type: object
+        required:
+        - DomainLinkage
+        properties:
+          DomainLinkage:
+            $ref: '#/components/schemas/DomainLinkageValidation'
+      - type: object
+        required:
+        - LinkedVp
+        properties:
+          LinkedVp:
+            $ref: '#/components/schemas/LinkedVpValidation'
+    ValidationResult:
+      type: object
+      required:
+      - valid
+      - last_validated_at
+      properties:
+        error:
+          type:
+          - string
+          - 'null'
+        last_validated_at:
+          type: string
+          format: date-time
+        valid:
+          type: boolean
     Visibility:
       type: string
       enum:
