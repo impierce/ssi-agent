@@ -24,6 +24,12 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.76.0"
 
+[workspace.lints.clippy]
+# Enables a large group of strict lints for idiomatic Rust. 
+# Note: This includes opinionated rules that can be overly strict. We may selectively disable specific lints if they 
+# prove too noisy.
+pedantic = "warn"
+
 [workspace.dependencies]
 siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "dc2c388" }
 oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "dc2c388" }
