@@ -1,3 +1,7 @@
+//! Test utilities for the shared kernel.
+//!
+//! Enable with `features = ["test-utils"]` in your `Cargo.toml`.
+
 use crate::command_handler::CommandExecutor;
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, AggregateError};
@@ -5,6 +9,9 @@ use std::collections::HashMap;
 
 pub mod in_memory;
 
+/// A no-op [`CommandExecutor`] for unit tests.
+///
+/// Always returns `Ok(())` regardless of the command or aggregate ID.
 pub struct MockCommandHandler;
 
 #[async_trait]

@@ -6,11 +6,12 @@ use cqrs_es::{
     persist::{PersistenceError, ViewContext, ViewRepository as CoreViewRepository},
     Aggregate, Query, View,
 };
-use std::future::Future;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 
-/// An in-memory store backend that implements [`ViewRepositoryFactory`] and [`AggregateHandlerFactory`].
+/// An in-memory store backend that implements [`ViewRepositoryFactory`] and [`CommandHandlerFactory`].
+///
+/// Useful for unit and integration tests where persistence is not needed.
 pub struct InMemoryStore;
 
 impl ViewRepositoryFactory for InMemoryStore {
@@ -24,19 +25,18 @@ impl ViewRepositoryFactory for InMemoryStore {
 }
 
 impl CommandHandlerFactory for InMemoryStore {
-    fn create_handler<A>(
-        &self,
-        services: A::Services,
-        queries: Vec<Box<dyn Query<A>>>,
-    ) -> impl Future<Output = CommandHandler<A>> + Send
+    async fn create_handler<A>(&self, services: A::Services, queries: Vec<Box<dyn Query<A>>>) -> CommandHandler<A>
     where
         A: Aggregate + 'static,
         <A as Aggregate>::Command: Send,
     {
-        async move { Arc::new(CqrsFramework::new(MemStore::default(), queries, services)) as CommandHandler<A> }
+        Arc::new(CqrsFramework::new(MemStore::default(), queries, services)) as CommandHandler<A>
     }
 }
 
+/// A simple in-memory [`ViewRepository`](CoreViewRepository) backed by a `HashMap`.
+///
+/// Clones views on read. Suitable for testing only.
 #[derive(Default)]
 pub struct MemViewRepository<V: View<A> + Clone, A: Aggregate> {
     map: Mutex<HashMap<String, V>>,

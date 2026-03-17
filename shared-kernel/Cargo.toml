@@ -10,12 +10,16 @@ chrono = { version = "0.4", features = ["serde"] }
 convert_case = "0.11"
 cqrs-es = "0.5"
 strum = { version = "0.28", features = ["derive"] }
+thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+serde = { version = "1.0", features = ["derive"] }
 
 [features]
 default = []
