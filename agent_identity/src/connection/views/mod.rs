@@ -21,6 +21,7 @@ pub struct ConnectionView {
     pub pending_changes: Option<PendingChanges>,
     pub first_interacted_at: Option<DateTime<Utc>>,
     pub last_interacted_at: Option<DateTime<Utc>>,
+    #[serde(skip)]
     pub deleted: bool,
 }
 

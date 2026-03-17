@@ -312,10 +312,7 @@ components:
       - id
       - dids
       - validations
-      - deleted
       properties:
-        deleted:
-          type: boolean
         dids:
           type: array
           items:
