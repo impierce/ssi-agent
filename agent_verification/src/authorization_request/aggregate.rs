@@ -9,10 +9,10 @@ use crate::{
 use agent_shared::config::{config, get_preferred_signing_algorithm};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
-use oid4vc_core::{authorization_request::ByReference, scope::Scope};
+use oid4vc_core::{authorization_request::ByReference, scope::Scope, verifier::SignatureVerifier};
 use oid4vc_core::{client_metadata::ClientMetadataResource, Subject as _};
-use oid4vp::token::vp_token_builder::VpTokenBuilder;
-use oid4vp::{authorization_request::ClientId, oid4vp::DecodedVpToken};
+use oid4vp::token::vp_token_validator::VpTokenValidator;
+use oid4vp::{authorization_request::ClientId, token::vp_token_validator::DecodedVpToken};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -174,11 +174,7 @@ impl Aggregate for AuthorizationRequest {
                     signed_authorization_request_object,
                 }])
             }
-            VerifyAuthorizationResponse {
-                // TODO: use this once `RelyingPartyManager` uses the official SIOPv2 validation logic.
-                authorization_request,
-                authorization_response,
-            } => {
+            VerifyAuthorizationResponse { authorization_response } => {
                 let relying_party = &services.relying_party;
 
                 if self.validated {
@@ -189,6 +185,7 @@ impl Aggregate for AuthorizationRequest {
 
                 match authorization_response {
                     GenericAuthorizationResponse::SIOPv2(authorization_response) => {
+                        #[allow(deprecated)]
                         let _ = relying_party
                             .validate_response(&authorization_response)
                             .await
@@ -203,56 +200,30 @@ impl Aggregate for AuthorizationRequest {
                         }])
                     }
                     GenericAuthorizationResponse::OID4VP(oid4vp_authorization_response) => {
-                        let decoded_vp_token = relying_party
-                            .validate_response(&oid4vp_authorization_response)
-                            .await
-                            .map_err(InvalidOID4VPAuthorizationResponse)?;
+                        if let GenericAuthorizationRequest::OID4VP(authorization_request) =
+                            self.authorization_request.as_ref().ok_or(MissingAuthorizationRequest)?
+                        {
+                            let dcql_query = &authorization_request.body.extension.dcql_query;
 
-                        let expected_nonce = match &authorization_request {
-                            GenericAuthorizationRequest::OID4VP(request) => &request.body.extension.nonce,
-                            _ => {
-                                return Err(AuthorizationRequestError::InvalidOID4VPAuthorizationResponse(
-                                    anyhow::anyhow!("Mismatch between AuthorizationRequest and nonce contents"),
-                                ))
-                            }
-                        };
+                            let vp_token = &oid4vp_authorization_response.extension.vp_token;
 
-                        decoded_vp_token
-                            .validate_nonce(expected_nonce)
-                            .map_err(|e| InvalidOID4VPAuthorizationResponse(anyhow::anyhow!("{}", e)))?;
+                            let nonce = &authorization_request.body.extension.nonce;
+                            let client_id = &authorization_request.body.client_id;
 
-                        let dcql_query = match &authorization_request {
-                            GenericAuthorizationRequest::OID4VP(oid4vp_request) => {
-                                &oid4vp_request.body.extension.dcql_query
-                            }
-                            _ => {
-                                return Err(AuthorizationRequestError::AuthorizationRequestBuilderError(
-                                    anyhow::anyhow!("Mismatch between AuthorizationRequest and DCQL query contents"),
-                                ))
-                            }
-                        };
-                        let vp_token = &oid4vp_authorization_response.extension.vp_token;
+                            let decoded_vp_token =
+                                VpTokenValidator::new(&SignatureVerifier, services.verifier.as_ref())
+                                    .validate_vp_token(dcql_query, vp_token, client_id, Some(nonce))
+                                    .await
+                                    .map_err(|e| InvalidOID4VPAuthorizationResponse(e.into()))?;
 
-                        let mut builder = VpTokenBuilder::builder_dcql_query(dcql_query.clone());
-
-                        // Add presentations from the received VP token
-                        for (credential_id, presentations) in vp_token.presentations() {
-                            for presentation in presentations {
-                                builder = builder.add_presentation(credential_id.clone(), presentation.clone());
-                            }
+                            Ok(vec![OID4VPAuthorizationResponseVerified {
+                                vp_token: decoded_vp_token,
+                                state: oid4vp_authorization_response.state,
+                                validated: true,
+                            }])
+                        } else {
+                            Err(MissingAuthorizationRequest)
                         }
-
-                        builder.build().map_err(|_| {
-                            AuthorizationRequestError::InvalidOID4VPAuthorizationResponse(anyhow::anyhow!(
-                                "VpToken validation failed against DCQL query"
-                            ))
-                        })?;
-
-                        Ok(vec![OID4VPAuthorizationResponseVerified {
-                            vp_token: decoded_vp_token,
-                            state: oid4vp_authorization_response.state,
-                            validated: true,
-                        }])
                     }
                 }
             }
@@ -309,6 +280,7 @@ pub mod tests {
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::set_config;
     use agent_shared::config::SupportedDidMethod;
+    use chrono::DateTime;
     use chrono::{Duration, Utc};
     use cqrs_es::test::TestFramework;
     use did_key::{generate, Ed25519KeyPair};
@@ -319,6 +291,7 @@ pub mod tests {
     use oid4vc_core::claim_path_pointer::{ClaimPathElement, ClaimPathPointer};
     use oid4vc_core::client_metadata::ClientMetadataResource;
     use oid4vc_core::jwt;
+    use oid4vc_core::types::string_or_object::StringOrObject;
     use oid4vc_core::Subject as _;
     use oid4vc_manager::methods::key_method::KeySubject;
     use oid4vc_manager::ProviderManager;
@@ -326,8 +299,11 @@ pub mod tests {
     use oid4vp::authorization_request::ClientId;
     use oid4vp::dcql::dcql_query::{ClaimQuery, CredentialQuery, CredentialQueryId, DcqlQuery, Format, MetaTypes};
     use oid4vp::token::verifiable_presentation_jwt::VerifiablePresentationJwt;
-    use oid4vp::token::vp_token::{PresentationFormat, VpToken};
+    use oid4vp::token::vp_token::Presentations;
+    use oid4vp::token::vp_token::VpToken;
     use oid4vp::token::vp_token_builder::VpTokenBuilder;
+    use oid4vp::token::vp_token_validator::DecodedVpTokenBuilder;
+    use rstest::fixture;
     use rstest::rstest;
     use std::str::FromStr;
     use std::sync::Arc;
@@ -345,7 +321,6 @@ pub mod tests {
 
         let verification_services = VerificationServices::default().await;
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
-        let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
 
         AuthorizationRequestTestFramework::with(verification_services)
             .given_no_previous_events()
@@ -356,15 +331,9 @@ pub mod tests {
             })
             .then_expect_events(vec![
                 AuthorizationRequestEvent::AuthorizationRequestCreated {
-                    authorization_request: Box::new(
-                        authorization_request(
-                            "id_token",
-                            &verifier_did_method.to_string(),
-                            siopv2_client_metadata,
-                            oid4vp_client_metadata,
-                        )
-                        .await,
-                    ),
+                    authorization_request: Box::new(GenericAuthorizationRequest::SIOPv2(Box::new(
+                        siopv2_authorization_request(&verifier_did_method.to_string(), siopv2_client_metadata).await,
+                    ))),
                 },
                 AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
                     form_url_encoded_authorization_request: form_url_encoded_authorization_request(
@@ -384,20 +353,13 @@ pub mod tests {
 
         let verification_services = VerificationServices::default().await;
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
-        let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
 
         AuthorizationRequestTestFramework::with(verification_services)
             .given(vec![
                 AuthorizationRequestEvent::AuthorizationRequestCreated {
-                    authorization_request: Box::new(
-                        authorization_request(
-                            "id_token",
-                            &verifier_did_method.to_string(),
-                            siopv2_client_metadata,
-                            oid4vp_client_metadata,
-                        )
-                        .await,
-                    ),
+                    authorization_request: Box::new(GenericAuthorizationRequest::SIOPv2(Box::new(
+                        siopv2_authorization_request(&verifier_did_method.to_string(), siopv2_client_metadata).await,
+                    ))),
                 },
                 AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
                     form_url_encoded_authorization_request: form_url_encoded_authorization_request(
@@ -425,15 +387,10 @@ pub mod tests {
 
         let verification_services = VerificationServices::default().await;
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
-        let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
 
-        let authorization_request = authorization_request(
-            "id_token",
-            &verifier_did_method.to_string(),
-            siopv2_client_metadata,
-            oid4vp_client_metadata,
-        )
-        .await;
+        let authorization_request = GenericAuthorizationRequest::SIOPv2(Box::new(
+            siopv2_authorization_request(&verifier_did_method.to_string(), siopv2_client_metadata.clone()).await,
+        ));
 
         let authorization_response =
             authorization_response(&provider_did_method.to_string(), &authorization_request, "nonce").await;
@@ -444,11 +401,20 @@ pub mod tests {
         };
 
         AuthorizationRequestTestFramework::with(verification_services)
-            .given_no_previous_events()
-            .when(AuthorizationRequestCommand::VerifyAuthorizationResponse {
-                authorization_request,
-                authorization_response,
-            })
+            .given(vec![
+                AuthorizationRequestEvent::AuthorizationRequestCreated {
+                    authorization_request: Box::new(GenericAuthorizationRequest::SIOPv2(Box::new(
+                        siopv2_authorization_request(&verifier_did_method.to_string(), siopv2_client_metadata).await,
+                    ))),
+                },
+                AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
+                    form_url_encoded_authorization_request: form_url_encoded_authorization_request(
+                        "id_token",
+                        &verifier_did_method.to_string(),
+                    ),
+                },
+            ])
+            .when(AuthorizationRequestCommand::VerifyAuthorizationResponse { authorization_response })
             .then_expect_events(vec![AuthorizationRequestEvent::SIOPv2AuthorizationResponseVerified {
                 id_token,
                 state: Some("state".to_string()),
@@ -467,34 +433,54 @@ pub mod tests {
 
         let verification_services = VerificationServices::default().await;
         let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
-        let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
 
-        let authorization_request = authorization_request(
-            "vp_token",
-            &verifier_did_method.to_string(),
-            siopv2_client_metadata,
-            oid4vp_client_metadata,
-        )
-        .await;
+        let authorization_request =
+            oid4vp_authorization_request(&verifier_did_method.to_string(), oid4vp_client_metadata.clone()).await;
+
+        let authorization_request = GenericAuthorizationRequest::OID4VP(Box::new(authorization_request));
 
         let authorization_response =
             authorization_response(&provider_did_method.to_string(), &authorization_request, "nonce").await;
 
-        let decoded_vp_token = match &authorization_response {
-            GenericAuthorizationResponse::OID4VP(oid4vp_response) => verification_services
-                .relying_party
-                .validate_response(oid4vp_response)
-                .await
-                .unwrap(),
-            _ => panic!("Expected OID4VP response"),
-        };
+        let decoded_vp_token = DecodedVpTokenBuilder::new()
+            .insert(
+                CredentialQueryId::try_new("CredentialQuery").unwrap(),
+                vec![serde_json::json!({
+                    "@context": ["https://www.w3.org/2018/credentials/v1"],
+                    "type": ["VerifiableCredential", "PersonalInformation"],
+                    "issuanceDate": issuance_date(),
+                    "issuer": "did:key:z6MkmYc7aJCBhejDpY9nYS5RMWniergAJBAzomtrqhqG2Ah5",
+                    "credentialSubject": {
+                        "id": "did:key:z6MkmDhE9TjaaME2ApzpWx7g2xZE3zivnEJdZT8avPUBZjuE",
+                        "givenName": "Ferris",
+                        "familyName": "Crabman",
+                        "email": "ferris.crabman@crabmail.com",
+                        "birthdate": "1985-05-21"
+                    },
+                    "expirationDate": expiration_date(),
+                })
+                .as_object()
+                .unwrap()
+                .clone()],
+            )
+            .unwrap()
+            .build();
 
         AuthorizationRequestTestFramework::with(verification_services)
-            .given_no_previous_events()
-            .when(AuthorizationRequestCommand::VerifyAuthorizationResponse {
-                authorization_request,
-                authorization_response,
-            })
+            .given(vec![
+                AuthorizationRequestEvent::AuthorizationRequestCreated {
+                    authorization_request: Box::new(GenericAuthorizationRequest::OID4VP(Box::new(
+                        oid4vp_authorization_request(&verifier_did_method.to_string(), oid4vp_client_metadata).await,
+                    ))),
+                },
+                AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
+                    form_url_encoded_authorization_request: form_url_encoded_authorization_request(
+                        "vp_token",
+                        &verifier_did_method.to_string(),
+                    ),
+                },
+            ])
+            .when(AuthorizationRequestCommand::VerifyAuthorizationResponse { authorization_response })
             .then_expect_events(vec![AuthorizationRequestEvent::OID4VPAuthorizationResponseVerified {
                 vp_token: decoded_vp_token,
                 state: Some("state".to_string()),
@@ -512,15 +498,10 @@ pub mod tests {
 
         let verification_services = VerificationServices::default().await;
         let oid4vp_client_metadata = verification_services.oid4vp_client_metadata.clone();
-        let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
 
-        let authorization_request = authorization_request(
-            "vp_token",
-            &verifier_did_method.to_string(),
-            siopv2_client_metadata,
-            oid4vp_client_metadata,
-        )
-        .await;
+        let authorization_request = GenericAuthorizationRequest::OID4VP(Box::new(
+            oid4vp_authorization_request(&verifier_did_method.to_string(), oid4vp_client_metadata.clone()).await,
+        ));
 
         let authorization_response = authorization_response(
             &provider_did_method.to_string(),
@@ -530,12 +511,23 @@ pub mod tests {
         .await;
 
         AuthorizationRequestTestFramework::with(verification_services)
-            .given_no_previous_events()
+            .given(vec![
+                AuthorizationRequestEvent::AuthorizationRequestCreated {
+                    authorization_request: Box::new(GenericAuthorizationRequest::OID4VP(Box::new(
+                        oid4vp_authorization_request(&verifier_did_method.to_string(), oid4vp_client_metadata).await,
+                    ))),
+                },
+                AuthorizationRequestEvent::FormUrlEncodedAuthorizationRequestCreated {
+                    form_url_encoded_authorization_request: form_url_encoded_authorization_request(
+                        "vp_token",
+                        &verifier_did_method.to_string(),
+                    ),
+                },
+            ])
             .when(AuthorizationRequestCommand::VerifyAuthorizationResponse {
-                authorization_request,
                 authorization_response,
             })
-            .then_expect_error_message("Invalid OID4VP Authorization Response: Nonce mismatch in VP for credential query ID CredentialQueryId(\"CredentialQuery\") at index 0");
+            .then_expect_error_message("Invalid OID4VP Authorization Response: Invalid nonce: expected Some(\"nonce\"), found Some(\"mismatched-nonce\")");
     }
 
     async fn authorization_response(
@@ -558,7 +550,8 @@ pub mod tests {
                     .unwrap(),
             ),
             GenericAuthorizationRequest::OID4VP(oid4vp_authorization_request) => {
-                let vp_token = create_simple_vp_token(provider_did_method, nonce).await;
+                let audience = oid4vp_authorization_request.body.client_id.to_string();
+                let vp_token = create_simple_vp_token(provider_did_method, nonce, audience).await;
 
                 GenericAuthorizationResponse::OID4VP(
                     provider_manager
@@ -578,64 +571,65 @@ pub mod tests {
             .unwrap()
     }
 
-    pub async fn authorization_request(
-        response_type: &str,
+    pub async fn siopv2_authorization_request(
         did_method: &str,
         siopv2_client_metadata: ClientMetadataResource<siopv2::authorization_request::ClientMetadataParameters>,
-        oid4vp_client_metadata: ClientMetadataResource<oid4vp::authorization_request::ClientMetadataParameters>,
-    ) -> GenericAuthorizationRequest {
-        match response_type {
-            "id_token" => GenericAuthorizationRequest::SIOPv2(Box::new(
-                SIOPv2AuthorizationRequest::builder()
-                    .client_id(verifier_did(did_method).await)
-                    .scope(Scope::openid())
-                    .redirect_uri(REDIRECT_URI.clone())
-                    .response_mode("direct_post".to_string())
-                    .client_metadata(siopv2_client_metadata)
-                    .nonce("nonce".to_string())
-                    .state("state".to_string())
-                    .build()
-                    .unwrap(),
-            )),
-            "vp_token" => GenericAuthorizationRequest::OID4VP(Box::new(
-                OID4VPAuthorizationRequest::builder()
-                    .dcql_query(DCQL_QUERY.clone())
-                    .client_id(
-                        ClientId::from_str(&format!("decentralized_identifier:{}", verifier_did(did_method).await))
-                            .unwrap(),
-                    )
-                    .scope(Scope::openid())
-                    .response_uri(RESPONSE_URI.clone())
-                    .response_mode("direct_post".to_string())
-                    .client_metadata(oid4vp_client_metadata)
-                    .nonce("nonce".to_string())
-                    .state("state".to_string())
-                    .build()
-                    .unwrap(),
-            )),
-            _ => unimplemented!(),
-        }
+    ) -> SIOPv2AuthorizationRequest {
+        SIOPv2AuthorizationRequest::builder()
+            .client_id(verifier_did(did_method).await)
+            .scope(Scope::openid())
+            .redirect_uri(REDIRECT_URI.clone())
+            .response_mode("direct_post".to_string())
+            .client_metadata(siopv2_client_metadata)
+            .nonce("nonce".to_string())
+            .state("state".to_string())
+            .build()
+            .unwrap()
     }
 
-    async fn create_simple_vp_token(provider_did_method: &str, nonce: &str) -> VpToken {
-        let issuer = KeySubject::from_keypair(generate::<Ed25519KeyPair>(Some("test-issuer-key".as_bytes())), None);
+    pub async fn oid4vp_authorization_request(
+        did_method: &str,
+        oid4vp_client_metadata: ClientMetadataResource<oid4vp::authorization_request::ClientMetadataParameters>,
+    ) -> OID4VPAuthorizationRequest {
+        OID4VPAuthorizationRequest::builder()
+            .dcql_query(DCQL_QUERY.clone())
+            .client_id(
+                ClientId::from_str(&format!("decentralized_identifier:{}", verifier_did(did_method).await)).unwrap(),
+            )
+            .scope(Scope::openid())
+            .response_uri(RESPONSE_URI.clone())
+            .response_mode("direct_post".to_string())
+            .client_metadata(oid4vp_client_metadata)
+            .nonce("nonce".to_string())
+            .state("state".to_string())
+            .build()
+            .unwrap()
+    }
+
+    async fn create_simple_vp_token(provider_did_method: &str, nonce: &str, audience: String) -> VpToken {
+        let issuer = Arc::new(KeySubject::from_keypair(
+            generate::<Ed25519KeyPair>(Some("test-issuer-key.................".as_bytes())),
+            None,
+        ));
         let issuer_did = issuer.identifier(provider_did_method, Algorithm::EdDSA).await.unwrap();
 
         let subject = Arc::new(KeySubject::from_keypair(
-            generate::<Ed25519KeyPair>(Some("test-subject-key".as_bytes())),
+            generate::<Ed25519KeyPair>(Some("test-subject-key................".as_bytes())),
             None,
         ));
         let subject_did = subject.identifier(provider_did_method, Algorithm::EdDSA).await.unwrap();
 
+        let issuance_date = issuance_date();
+
         let verifiable_credential = VerifiableCredentialJwt::builder()
             .sub(&subject_did)
             .iss(&issuer_did)
-            .iat(0)
-            .exp(9999999999i64)
+            .iat(issuance_date.timestamp())
+            .exp(expiration_date().timestamp())
             .verifiable_credential(serde_json::json!({
                 "@context": ["https://www.w3.org/2018/credentials/v1"],
                 "type": ["VerifiableCredential", "PersonalInformation"],
-                "issuanceDate": "2022-01-01T00:00:00Z",
+                "issuanceDate": issuance_date,
                 "issuer": issuer_did,
                 "credentialSubject": {
                     "id": subject_did,
@@ -650,7 +644,7 @@ pub mod tests {
 
         // Encode as JWT with proper headers
         let vc_jwt = jwt::encode(
-            subject.clone(),
+            issuer.clone(),
             Header {
                 alg: Algorithm::EdDSA,
                 ..Default::default()
@@ -670,7 +664,7 @@ pub mod tests {
         let vp_jwt_claims = VerifiablePresentationJwt::builder()
             .iss(subject_did.clone())
             .sub(subject_did)
-            .aud("test_audience".to_string()) // might need to adjust this
+            .aud(audience)
             .nonce(nonce.to_string())
             .exp((Utc::now() + Duration::minutes(10)).timestamp())
             .iat(Utc::now().timestamp())
@@ -690,10 +684,12 @@ pub mod tests {
         .await
         .unwrap();
 
+        let presentations = Presentations::try_new(vec![StringOrObject::from(vp_jwt)]).unwrap();
+
         VpTokenBuilder::new()
-            .add_presentation(
+            .add_presentations(
                 CredentialQueryId::try_new("CredentialQuery".to_string()).unwrap(),
-                PresentationFormat::JwtVcJson(vp_jwt),
+                presentations,
             )
             .build()
             .unwrap()
@@ -715,6 +711,16 @@ pub mod tests {
             "did:jwk" => SIGNED_AUTHORIZATION_REQUEST_OBJECT_DID_JWK.to_string(),
             _ => unimplemented!("Unknown DID method: {}", did_method),
         }
+    }
+
+    #[fixture]
+    fn issuance_date() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1773187205, 0).unwrap()
+    }
+
+    #[fixture]
+    fn expiration_date() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(9999999999i64, 0).unwrap()
     }
 
     lazy_static! {

@@ -6,11 +6,14 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager_consumer::resolver::Resolver;
 use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use did_manager_iota::consumer::NodeUrls;
+use identity_did::CoreDID;
 use identity_iota::did::DIDUrl;
+use identity_iota::document::CoreDocument;
 use identity_iota::storage::{JwkStorage, KeyId};
 use identity_iota::verification::jwk::Jwk;
 use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
 use jsonwebtoken::Algorithm;
+use oid4vc_core::verification_material_resolver::VerificationMaterialResolver;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
 use sd_jwt::{JsonObject, JwsSigner};
 use std::collections::HashMap;
@@ -132,6 +135,17 @@ impl JwsSigner for Subject {
         let message = [message, signature].join(".");
 
         Ok(message.as_bytes().to_vec())
+    }
+}
+
+#[async_trait]
+impl VerificationMaterialResolver for Subject {
+    async fn resolve_did_document(&self, did: &CoreDID) -> Result<CoreDocument, Box<dyn std::error::Error>> {
+        self.resolver.resolve(did.as_str()).await.map_err(|e| e.into())
+    }
+
+    async fn resolve_public_key(&self, kid: &str) -> Result<Jwk, Box<dyn std::error::Error>> {
+        Subject::resolve_public_key(self, kid).await.map_err(|e| e.into())
     }
 }
 
