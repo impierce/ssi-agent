@@ -17,7 +17,6 @@ use url::Url;
 pub struct IdentityServices {
     pub subject: Arc<Subject>,
     pub client: Client,
-    // pub resolver: Resolver,
 }
 
 impl IdentityServices {
