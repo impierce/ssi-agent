@@ -28,6 +28,7 @@ use tracing::info;
 
 pub async fn run() -> io::Result<()> {
     let subject = Arc::new(Subject::new().await);
+    
     let identity_services = Arc::new(IdentityServices::new(subject.clone(), Resolver::new()));
     let authorization_services = Arc::new(AuthorizationServices::new(subject.clone()));
     let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
