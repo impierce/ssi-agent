@@ -61,7 +61,7 @@ impl IdentityServices {
         &self,
         issuer_url: &Url,
     ) -> Result<CredentialIssuerMetadata, ConnectionError> {
-        let mut url = strip_www(issuer_url.clone())?;
+        let mut url = issuer_url.clone();
         let path = url.path().trim_end_matches('/');
         url.set_path(&format!("/.well-known/openid-credential-issuer{path}"));
 
@@ -126,7 +126,7 @@ impl IdentityServices {
         &self,
         url: &Url,
     ) -> Result<DomainLinkageConfiguration, ConnectionError> {
-        let mut url = strip_www(url.clone())?;
+        let mut url = url.clone();
         url.set_path("/.well-known/did-configuration.json");
 
         info!("Fetching DID configuration from: {url}");
@@ -158,17 +158,6 @@ impl IdentityServices {
         })?;
         Ok(config)
     }
-}
-
-// HELPERS
-fn strip_www(mut url: Url) -> Result<Url, ConnectionError> {
-    if let Some(host) = url.host_str().map(|h| h.to_string()) {
-        if let Some(stripped) = host.strip_prefix("www.") {
-            url.set_host(Some(stripped))
-                .map_err(|e| ConnectionError::MissingDomain(e.to_string()))?;
-        }
-    }
-    Ok(url)
 }
 
 /// Get the claims from a jwt string without performing validation.
@@ -252,20 +241,6 @@ mod tests {
             claims["iss"],
             "did:key:z6MkoTHsgNNrby8JzCNQ1iRLyW5QQ6R8Xuu6AA8igGrMVPUM"
         );
-    }
-
-    #[test]
-    fn test_www_stripping() {
-        let input_url = Url::parse("https://www.example.com/").unwrap();
-        let result = strip_www(input_url).unwrap();
-        assert_eq!(result, Url::parse("https://example.com/").unwrap());
-    }
-
-    #[test]
-    fn test_www_stripping_no_www() {
-        let input_url = Url::parse("https://example.com/").unwrap();
-        let result = strip_www(input_url).unwrap();
-        assert_eq!(result, Url::parse("https://example.com/").unwrap());
     }
 
     #[tokio::test]
