@@ -2,22 +2,26 @@ use cqrs_es::DomainEvent;
 use oauth_tsl::status_list::{StatusList, StatusType};
 use serde::{Deserialize, Serialize};
 use strum::Display;
-use url::Url;
 
 #[derive(Clone, Debug, Deserialize, Display, PartialEq, Serialize)]
 pub enum StatusListEvent {
-    IndexAdded {
-        id: Url,
+    StatusListCreated {
+        id: String,
         status_list: StatusList,
         used_indices: Vec<usize>,
-        index: usize,
-        status: StatusType,
+    },
+    IndexAdded {
+        id: String,
+        status_list: StatusList,
+        used_indices: Vec<usize>,
+        index: usize,       // Metadata, not used in the event
+        status: StatusType, // Metadata
     },
     IndexUpdated {
-        id: Url,
+        id: String,
         status_list: StatusList,
-        index: usize,
-        status: StatusType,
+        index: usize,       // Metadata
+        status: StatusType, // Metadata
     },
 }
 

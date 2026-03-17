@@ -9,18 +9,25 @@ impl View<StatusListAggregate> for StatusListAggregate {
     fn update(&mut self, event: &cqrs_es::EventEnvelope<StatusListAggregate>) {
         // The aggregate doesn't need to save the index but the event needs it to be useful
         match &event.payload {
-            IndexAdded {
+            StatusListCreated {
                 id,
                 status_list,
-                index: _,
-                status: _,
                 used_indices,
             } => {
                 self.id.clone_from(id);
                 self.list.clone_from(status_list);
                 self.used_indices.clone_from(used_indices);
-                // self.index = index;
-                // self.status = status;
+            }
+            IndexAdded {
+                id,
+                status_list,
+                used_indices,
+                index: _,
+                status: _,
+            } => {
+                self.id.clone_from(id);
+                self.list.clone_from(status_list);
+                self.used_indices.clone_from(used_indices);
             }
             IndexUpdated {
                 id,
@@ -30,8 +37,6 @@ impl View<StatusListAggregate> for StatusListAggregate {
             } => {
                 self.id.clone_from(id);
                 self.list.clone_from(status_list);
-                // self.index = index;
-                // self.status = status;
             }
         }
     }

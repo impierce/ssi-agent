@@ -4,17 +4,16 @@ use agent_shared::{
     },
     handlers::query_handler,
 };
-use cqrs_es::persist::PersistenceError;
 use oauth_tsl::{
     error::OAuthTSLError,
-    status_list::{Bits, EncodedStatusList, StatusList, StatusType},
+    status_list::{EncodedStatusList, StatusType},
     tokens::status_list_token::{compress_gzip, StatusListToken, StatusListTokenClaims},
 };
 use oid4vc_core::jwt::encode;
 use rand::Rng;
 use thiserror::Error;
 
-use crate::{credential::aggregate::CredentialStatus, state::IssuanceState};
+use crate::state::IssuanceState;
 
 pub struct TokenStatusListService {}
 
@@ -26,87 +25,63 @@ impl TokenStatusListService {
     /// At last the remaining steps are executed according to the OAuth TSL specification to encode and compress the Status List Token.
     pub async fn create_gzip_status_list_jwt_token(
         self,
-        status_list_number: usize,
+        status_list_id: String,
         state: &IssuanceState,
     ) -> Result<Vec<u8>, TokenStatusListError> {
-        let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
-            .await?
-            .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
-            .unwrap_or_default();
+        let mut status_list = query_handler(&status_list_id, &state.query.status_list)
+            .await
+            .map_err(|_| TokenStatusListError::StatusListQueryError)?
+            .ok_or(TokenStatusListError::StatusListNotFound(status_list_id.clone()))?;
 
         let amount_indices = STATUS_LIST_BYTES_AMOUNT * 8 / BITS_PER_STATUS as usize;
-
-        let lower_bound = status_list_number * amount_indices;
-        let upper_bound = (status_list_number + 1) * amount_indices;
-
-        let mut used_indices: Vec<CredentialStatus> = all_credentials
-            .iter()
-            .filter_map(|c| {
-                let index = c.credential_status.index;
-                if index >= lower_bound && index < upper_bound {
-                    Some(c.credential_status.clone())
-                } else {
-                    None
-                }
-            })
-            .collect();
 
         // TODO move this block to a separate function in the library oauth_tsl. Argument should be the indices and either
         // - the status_list size from which we can derive that the difference is to be filled with random values,
         // - or the percentage of random values desired (e.g. 30%). One is from a payload/latency perspective, the other from a privacy/security perspective.
-
-        // This block ensures that the remaining empty 30% of a status list is filled with random values.
+        //
+        // This block ensures that the remaining empty 30% or more of a status list is filled with random values.
         // This block works in tandem with the part of `fn patch_credential` which only fills 70% of a status list.
-        used_indices = {
-            let mut indices = used_indices.clone();
 
-            let mut rng = rand::rng();
-            while indices.len() < amount_indices {
-                let random_index = rng.random_range(lower_bound..upper_bound);
-                if !indices
-                    .iter()
-                    .any(|credential_status| credential_status.index == random_index)
-                {
-                    // the range is 0..2 because BITS_PER_STATUS is set to 2, meaning 4 options, but we only have 3 options defined (VALID, UNVALID, SUSPENDED)
-                    let status_type = rng.random_range(0..2);
-                    indices.push(CredentialStatus {
-                        index: random_index,
-                        status: status_type.try_into().map_err(TokenStatusListError::StatusTypeError)?,
-                        status_list_id: "".to_string(), // TODO
-                    });
-                }
+        for i in 0..amount_indices {
+            if !status_list.used_indices.contains(&i) {
+                // rng must be initialized here otherwise errors occur with axum due to thread unsafe problems and the Send trait
+                let mut rng = rand::rng();
+                // the range is 0..2 because BITS_PER_STATUS is set to 2, meaning 4 options, but we only have 3 options defined (VALID, UNVALID, SUSPENDED)
+                status_list.list.status_list.insert(i, rng.random_range(0..2));
             }
-
-            indices
-        };
-
-        used_indices.sort_by_key(|credential_status| credential_status.index);
+        }
 
         // TODO move whats below to a builder function in the library oauth_tsl.
         // - sensible default bitsize = 2
         // - sensible default random percentage = 30%
         // - amount of statuses is derived from the input vector of indices
 
-        let mut status_list = StatusList {
-            status_size: Bits::try_from(BITS_PER_STATUS).map_err(TokenStatusListError::InvalidStatusSize)?,
-            ..Default::default()
-        };
+        let statusses: Vec<StatusType> = status_list
+            .list
+            .status_list
+            .iter()
+            .map(|status| StatusType::try_from(*status))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(TokenStatusListError::StatusTypeError)?;
+
+        // TODO: check if this whole status packing thing makes sense
         status_list
-            .pack_statuses_into_bytes(used_indices.iter().map(|s| s.status).collect::<Vec<StatusType>>())
+            .list
+            .pack_statuses_into_bytes(statusses)
             .map_err(TokenStatusListError::InvalidStatusSize)?;
 
         let mut sub_url = config().ietf_oauth_token_status_list_uri.clone();
         sub_url
             .path_segments_mut()
             .map_err(|_| TokenStatusListError::SubUrlParsingError)?
-            .push(&status_list_number.to_string());
+            .push(&status_list_id.to_string());
 
         let status_list_claims = StatusListTokenClaims {
             sub: sub_url.to_string(),
             iat: chrono::Utc::now().timestamp(),
             exp: None,
             ttl: None,
-            encoded_status_list: EncodedStatusList::try_from(status_list)
+            encoded_status_list: EncodedStatusList::try_from(status_list.list)
                 .map_err(TokenStatusListError::StatusListEncodingError)?,
         };
 
@@ -136,8 +111,6 @@ impl TokenStatusListService {
 
 #[derive(Error, Debug)]
 pub enum TokenStatusListError {
-    #[error("Failed to query credentials in order to create the status list token: {0}")]
-    QueryCredentialsError(#[from] PersistenceError),
     #[error("Failed to encode and compress the status list claim: {0:?}")]
     StatusListEncodingError(OAuthTSLError),
     #[error("Failed to convert/parse status type: {0:?}")]
@@ -150,4 +123,8 @@ pub enum TokenStatusListError {
     JwtEncodeError,
     #[error("Failed to Gzip compress the JWT token.")]
     GzipCompressionError,
+    #[error("Error querying the status list")]
+    StatusListQueryError,
+    #[error("Status list not found for the provided id: {0}")]
+    StatusListNotFound(String),
 }

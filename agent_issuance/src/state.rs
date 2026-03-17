@@ -24,8 +24,8 @@ use crate::server_config::aggregate::ServerConfig;
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::views::ServerConfigView;
 use crate::status_list::aggregate::StatusListAggregate;
-use crate::status_list::views::StatusListView;
 use crate::status_list::views::all_status_lists::AllStatusListsView;
+use crate::status_list::views::StatusListView;
 
 #[derive(Clone)]
 pub struct IssuanceState {
@@ -76,7 +76,7 @@ where
     pub all_offers: Arc<O1>,
     pub nonce: Arc<N>,
     pub status_list: Arc<SL>,
-    pub all_status_lists: Arc<SL1>
+    pub all_status_lists: Arc<SL1>,
 }
 
 impl Clone for Queries {

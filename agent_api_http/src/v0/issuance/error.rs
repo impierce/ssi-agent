@@ -3,8 +3,11 @@ use crate::{
     DOCUMENTATION_URL,
 };
 use agent_issuance::{
-    application::access_token_validation_service::AccessTokenValidationError, credential::error::CredentialError,
-    offer::error::OfferError, server_config::error::ServerConfigError,
+    application::access_token_validation_service::AccessTokenValidationError,
+    credential::{application::token_status_list_service::TokenStatusListError, error::CredentialError},
+    offer::error::OfferError,
+    server_config::error::ServerConfigError,
+    status_list::error::StatusListError,
 };
 use axum::{response::IntoResponse, response::Response, Json};
 use http_api_problem::ApiError;
@@ -217,6 +220,39 @@ impl IntoPublicError for ServerConfigError {
             RemoveProvisionedCredentialConfigurationError => PublicError::InternalServerError,
             UnsupportedCredentialFormatIdentifierError(_) => PublicError::InternalServerError,
         }
+    }
+}
+
+impl IntoPublicError for StatusListError {
+    fn into_public_error(self) -> PublicError {
+        use StatusListError::*;
+        match self {
+            InvalidURL(_) => PublicError::InternalServerError,
+            FailedToSetIndex(_, _) => PublicError::InternalServerError,
+        }
+    }
+}
+
+// TODO: improve this duplicate error enum
+impl IntoPublicError for TokenStatusListError {
+    fn into_public_error(self) -> PublicError {
+        use TokenStatusListError::*;
+        match self {
+            StatusListEncodingError(_) => PublicError::InternalServerError,
+            GzipCompressionError => PublicError::InternalServerError,
+            StatusListQueryError => PublicError::InternalServerError,
+            StatusListNotFound(_) => PublicError::NotFoundError,
+            JwtEncodeError => PublicError::InternalServerError,
+            StatusTypeError(_) => PublicError::InternalServerError, // TODO: This should be an Unproccesable Entity error
+            InvalidStatusSize(_) => PublicError::InternalServerError,
+            SubUrlParsingError => PublicError::InternalServerError,
+        }
+    }
+}
+
+impl From<TokenStatusListError> for PublicError {
+    fn from(err: TokenStatusListError) -> Self {
+        err.into_public_error()
     }
 }
 

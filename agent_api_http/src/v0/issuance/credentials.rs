@@ -100,42 +100,6 @@ pub(crate) async fn credentials(
                 .finish());
         }
 
-        // Create the new CredentialStatus index randomly.
-        let random_index;
-        #[cfg(not(feature = "test_utils"))]
-        {
-            use agent_shared::config::{BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
-            use rand::Rng;
-
-            let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
-                .await?
-                .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
-                .unwrap_or_default();
-
-            // Status Lists should only be filled up to 70%, the remaining 30% will be used for decoy/psuedo indices.
-            // This greatly improves the privacy of the issuer.
-            let used_indices: Vec<usize> = all_credentials.iter().map(|c| c.credential_status.index).collect();
-            let statuses_per_byte: usize = 8 / BITS_PER_STATUS as usize;
-            let status_list_number =
-                used_indices.len() / ((STATUS_LIST_BYTES_AMOUNT * statuses_per_byte) as f64 * 0.7) as usize;
-
-            let mut rng = rand::rng();
-            let lower_bound = status_list_number * STATUS_LIST_BYTES_AMOUNT * statuses_per_byte;
-            let upper_bound = (status_list_number + 1) * STATUS_LIST_BYTES_AMOUNT * statuses_per_byte;
-            loop {
-                let candidate = rng.random_range(lower_bound..upper_bound);
-                if !used_indices.contains(&candidate) {
-                    random_index = candidate;
-                    break;
-                }
-            }
-        }
-
-        #[cfg(feature = "test_utils")]
-        {
-            random_index = TESTINDEX;
-        }
-
         CredentialCommand::CreateUnsignedCredential {
             credential_id: credential_id.clone(),
             data: Data { raw: credential },

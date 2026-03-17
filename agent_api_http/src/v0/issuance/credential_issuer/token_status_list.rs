@@ -15,13 +15,13 @@ use crate::v0::issuance::error::PublicError;
 
 pub async fn token_status_list(
     State(state): State<Arc<IssuanceState>>,
-    Path(status_list_number): Path<usize>,
+    Path(status_list_id): Path<String>,
 ) -> Result<Response, PublicError> {
     let token_status_list_service = TokenStatusListService {};
+
     let compressed_jwt_token = token_status_list_service
-        .create_gzip_status_list_jwt_token(status_list_number, &state)
-        .await
-        .map_err(|_| PublicError::InternalServerError)?;
+        .create_gzip_status_list_jwt_token(status_list_id, &state)
+        .await?;
 
     Ok((
         StatusCode::OK,

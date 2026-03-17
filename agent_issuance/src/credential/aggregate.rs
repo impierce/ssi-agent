@@ -4,10 +4,7 @@ use crate::credential::error::CredentialError::{self, *};
 use crate::credential::event::CredentialEvent;
 use crate::services::IssuanceServices;
 use agent_library::json_schema_validation::{CredentialType, JsonSchemaError};
-use agent_shared::config::{
-    config, get_preferred_did_method, get_preferred_signing_algorithm, AlgorithmExt, BITS_PER_STATUS,
-    STATUS_LIST_BYTES_AMOUNT,
-};
+use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm, AlgorithmExt};
 use agent_shared::serde_json_value_ext::SerdeJsonValueExt;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -230,6 +227,8 @@ impl Aggregate for Credential {
                 subject_id,
                 overwrite,
                 proofs,
+                status_list_id,
+                index,
             } => {
                 if self.signed.is_some() && !overwrite {
                     return Ok(vec![]);
@@ -256,12 +255,11 @@ impl Aggregate for Credential {
                     .and_then(|did| did.parse().ok())
                     .ok_or(InvalidIssuerDidError)?;
 
-                // TODO: self. doesnt have an index here yet, ideally should be init in this function
                 // Status claim as per the IETF OAuth Token Status List specification.
-                let status_list_url = get_status_list_url(self.credential_status.index)?;
+                let status_list_url = get_status_list_url(status_list_id)?;
 
                 let status_claim = sd_jwt_vc::Status(StatusMechanism::StatusList(StatusListRef {
-                    idx: self.credential_status.index,
+                    idx: index,
                     uri: status_list_url.clone(),
                 }));
 
@@ -292,7 +290,8 @@ impl Aggregate for Credential {
                             created_at,
                             iss.to_string(),
                             subject_id.clone(),
-                            self.credential_status.index,
+                            index,
+                            status_list_url.to_string(),
                         )?;
 
                         // TODO: Would it be more straightforward to add the JWT claims similarly to all our jwt formats?
@@ -405,7 +404,8 @@ impl Aggregate for Credential {
                             created_at,
                             iss.to_string(),
                             subject_id.clone(),
-                            self.credential_status.index,
+                            index,
+                            status_list_url.to_string(),
                         )?;
 
                         // Get the kid for the header of the VcSdJwt
@@ -567,9 +567,10 @@ fn build_signed_w3c_credential_data(
     created_at: String,
     iss: String,
     subject_id: Option<String>,
-    credential_status_index: usize,
+    status_index: usize,
+    status_list_url: String,
 ) -> Result<serde_json::Value, CredentialError> {
-    let credential_types = credential_data
+    let credential_types: Vec<String> = credential_data
         .get("type")
         .and_then(|t| t.as_array())
         .ok_or(InvalidCredentialDataError)?
@@ -600,17 +601,16 @@ fn build_signed_w3c_credential_data(
     }
 
     // Add credential status
-    let status_list_url = get_status_list_url(credential_status_index)?;
-
     credential_data.insert_if_none(
         &["credentialStatus"],
         json!({
             "type": StatusListTyp::Jwt.to_string(),
             "id": status_list_url.to_string(),
             "uri": status_list_url.to_string(),
-            "idx": credential_status_index,
+            "idx": status_index,
         }),
     );
+
     // Loop through all the items in the `type` array in reverse until we find a match.
     // This looping assumes the most specific type to match on is the latest one in the array.
     // This is an implicit consequence of the typing rules in digital credential formats.
@@ -929,15 +929,12 @@ fn filter_schema_errors(errors: &mut JsonSchemaError) -> bool {
     }
 }
 
-fn get_status_list_url(index: usize) -> Result<identity_core::common::Url, CredentialError> {
-    let statuses_per_byte: usize = 8 / BITS_PER_STATUS as usize;
-    let status_list_number = index / ((STATUS_LIST_BYTES_AMOUNT * statuses_per_byte) as f64 * 0.7) as usize;
-
+fn get_status_list_url(id: String) -> Result<identity_core::common::Url, CredentialError> {
     let mut status_list_url = config().ietf_oauth_token_status_list_uri.clone();
     status_list_url
         .path_segments_mut()
         .map_err(|_| CredentialError::InvalidCredentialStatus)?
-        .push(&status_list_number.to_string());
+        .push(&id);
 
     Ok(status_list_url.into())
 }
@@ -1079,8 +1076,8 @@ pub mod credential_tests {
         created_at: DateTime<Utc>,
     ) {
         let credential_status = CredentialStatus {
-            index: 0,                                                    // TODO make sure this is the correct index
-            status_list_id: get_status_list_url(0).unwrap().to_string(), // TODO
+            index: 0, // TODO make sure this is the correct index
+            status_list_id: get_status_list_url("TODO".to_string()).unwrap().to_string(), // TODO
             status: StatusType::VALID,
         };
 
@@ -1100,6 +1097,8 @@ pub mod credential_tests {
                 subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
                 overwrite: false,
                 proofs: None,
+                status_list_id: credential_status.status_list_id.clone(),
+                index: 0,
             })
             .then_expect_events(vec![CredentialEvent::CredentialSigned {
                 credential_id,

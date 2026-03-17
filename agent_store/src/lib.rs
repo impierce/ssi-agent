@@ -35,6 +35,9 @@ use agent_issuance::nonce::views::NonceView;
 use agent_issuance::offer::views::all_offers::AllOffersView;
 use agent_issuance::offer::views::OfferView;
 use agent_issuance::server_config::views::ServerConfigView;
+use agent_issuance::status_list::aggregate::StatusListAggregate;
+use agent_issuance::status_list::views::all_status_lists::AllStatusListsView;
+use agent_issuance::status_list::views::StatusListView;
 use agent_issuance::SimpleLoggingQuery;
 use agent_issuance::{
     credential::aggregate::Credential, nonce::aggregate::Nonce, offer::aggregate::Offer,
@@ -312,6 +315,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
         offer_event_publishers,
         server_config_event_publishers,
         nonce_event_publishers,
+        status_list_event_publishers,
         ..
     } = partition_event_publishers(event_publishers);
 
@@ -333,6 +337,12 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
     let (nonce_command_handler, nonce, _) = builder
         .commands_and_queries::<NonceView, Nonce, NonceView>(services.clone(), nonce_event_publishers)
         .await;
+    let (status_list_command_handler, status_list, all_status_lists) = builder
+        .commands_and_queries::<StatusListView, StatusListAggregate, AllStatusListsView>(
+            services.clone(),
+            status_list_event_publishers,
+        )
+        .await;
 
     agent_issuance::state::IssuanceState {
         command: agent_issuance::state::CommandHandlers {
@@ -340,6 +350,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
             offer: offer_command_handler,
             server_config: server_config_command_handler,
             nonce: nonce_command_handler,
+            status_list: status_list_command_handler,
         },
         query: agent_issuance::state::ViewRepositories {
             server_config,
@@ -348,6 +359,8 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
             offer,
             all_offers,
             nonce,
+            status_list,
+            all_status_lists,
         },
         subject: services.issuer.clone(),
     }
@@ -444,6 +457,7 @@ pub type OAuth2AuthorizationRequestEventPublisher = Box<dyn Query<OAuth2Authoriz
 pub type AccessTokenEventPublisher = Box<dyn Query<AccessToken>>;
 pub type ServerConfigEventPublisher = Box<dyn Query<ServerConfig>>;
 pub type CredentialEventPublisher = Box<dyn Query<Credential>>;
+pub type StatusListEventPublisher = Box<dyn Query<StatusListAggregate>>;
 pub type OfferEventPublisher = Box<dyn Query<Offer>>;
 pub type NonceEventPublisher = Box<dyn Query<Nonce>>;
 pub type HolderCredentialEventPublisher = Box<dyn Query<agent_holder::credential::aggregate::Credential>>;
@@ -465,6 +479,7 @@ pub struct Partitions {
     pub access_token_event_publishers: Vec<AccessTokenEventPublisher>,
     pub server_config_event_publishers: Vec<ServerConfigEventPublisher>,
     pub credential_event_publishers: Vec<CredentialEventPublisher>,
+    pub status_list_event_publishers: Vec<StatusListEventPublisher>,
     pub offer_event_publishers: Vec<OfferEventPublisher>,
     pub nonce_event_publishers: Vec<NonceEventPublisher>,
     pub holder_credential_event_publishers: Vec<HolderCredentialEventPublisher>,
@@ -747,6 +762,7 @@ mod test {
             access_token_event_publishers: token_event_publishers,
             server_config_event_publishers,
             credential_event_publishers,
+            status_list_event_publishers,
             offer_event_publishers,
             nonce_event_publishers,
             holder_credential_event_publishers,
@@ -766,6 +782,7 @@ mod test {
         assert_eq!(token_event_publishers.len(), 0);
         assert_eq!(server_config_event_publishers.len(), 1);
         assert_eq!(credential_event_publishers.len(), 0);
+        assert_eq!(status_list_event_publishers.len(), 0);
         assert_eq!(offer_event_publishers.len(), 0);
         assert_eq!(nonce_event_publishers.len(), 0);
         assert_eq!(holder_credential_event_publishers.len(), 0);
