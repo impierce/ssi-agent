@@ -1,7 +1,7 @@
 use oid4vp::dcql::dcql_query::DcqlQuery;
 use serde::Deserialize;
 
-use crate::generic_oid4vc::{GenericAuthorizationRequest, GenericAuthorizationResponse};
+use crate::generic_oid4vc::GenericAuthorizationResponse;
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -13,7 +13,6 @@ pub enum AuthorizationRequestCommand {
     },
     SignAuthorizationRequestObject,
     VerifyAuthorizationResponse {
-        authorization_request: GenericAuthorizationRequest,
         authorization_response: GenericAuthorizationResponse,
     },
 }

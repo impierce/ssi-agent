@@ -31,11 +31,11 @@ rust-version = "1.76.0"
 pedantic = "warn"
 
 [workspace.dependencies]
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "dc2c388" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "dc2c388" }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "dc2c388" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "dc2c388" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "dc2c388" }
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "2f27e41" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "2f27e41" }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "2f27e41" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "2f27e41" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "2f27e41" }
 
 shared-kernel = { path = "shared-kernel" }
 
@@ -57,6 +57,7 @@ identity_credential = { git = "https://github.com/iotaledger/identity", tag = "v
 identity_did = { git = "https://github.com/iotaledger/identity", tag = "v1.9.1-beta.1" }
 identity_document = { git = "https://github.com/iotaledger/identity", tag = "v1.9.1-beta.1" }
 identity_iota = { git = "https://github.com/iotaledger/identity", tag = "v1.9.1-beta.1" }
+identity_jose = { git = "https://github.com/iotaledger/identity", tag = "v1.9.1-beta.1" }
 identity_storage = { git = "https://github.com/iotaledger/identity", tag = "v1.9.1-beta.1" }
 identity_verification = { git = "https://github.com/iotaledger/identity", tag = "v1.9.1-beta.1", default-features = false }
 iota-sdk = { git = "https://github.com/iotaledger/iota", package = "iota-sdk", tag = "v1.16.2" }
@@ -100,6 +101,24 @@ tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tracing-test = { version = "0.2" }
 url = "2.5"
-utoipa = { version = "5", features = ["axum_extras", "url", "yaml"] }
+utoipa = { version = "5", features = ["axum_extras", "chrono", "url", "yaml"] }
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"
+
+
+# TODO: remove these patches once these changes are merged: https://github.com/iotaledger/identity/compare/v1.9.1-beta.1...impierce:identity.rs:fix/issues?expand=1
+[patch.'https://github.com/iotaledger/identity']
+identity_core = { git = "https://github.com/impierce/identity.rs", rev = "0422797b" }
+identity_credential = { git = "https://github.com/impierce/identity.rs", rev = "0422797b" }
+identity_did = { git = "https://github.com/impierce/identity.rs", rev = "0422797b" }
+identity_document = { git = "https://github.com/impierce/identity.rs", rev = "0422797b" }
+identity_iota = { git = "https://github.com/impierce/identity.rs", rev = "0422797b" }
+identity_jose = { git = "https://github.com/impierce/identity.rs", rev = "0422797b" }
+identity_storage = { git = "https://github.com/impierce/identity.rs", rev = "0422797b" }
+identity_verification = { git = "https://github.com/impierce/identity.rs", rev = "0422797b" }
+identity_ecdsa_verifier = { git = "https://github.com/impierce/identity.rs", rev = "0422797b" }
+identity_eddsa_verifier = { git = "https://github.com/impierce/identity.rs", rev = "0422797b" }
+
+[patch.crates-io]
+# We need this patch because it makes the `Hasher` trait `Send` and `Sync`. See: https://github.com/iotaledger/sd-jwt-payload/compare/main...impierce:sd-jwt-payload:fix/hasher-send-sync
+sd-jwt = { git = "https://github.com/impierce/sd-jwt-payload", rev = "f28789a", package = "sd-jwt-payload" }
