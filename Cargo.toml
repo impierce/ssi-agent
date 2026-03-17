@@ -17,6 +17,8 @@ members = [
     "agent_verification",
 
     "shared-kernel",
+
+    "infrastructure/stores/store-mongodb",
 ]
 
 [workspace.package]
