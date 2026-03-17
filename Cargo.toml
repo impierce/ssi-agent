@@ -37,6 +37,8 @@ oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "7bb7d52" }
 oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "7bb7d52" }
 oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "7bb7d52" }
 
+shared-kernel = { path = "shared-kernel" }
+
 anyhow = "1.0"
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 async-trait = "0.1"
