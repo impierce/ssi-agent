@@ -85,13 +85,15 @@ where
 /// Bounded context builders use it to construct aggregate handlers for all their
 /// aggregates without coupling to a specific store implementation.
 pub trait CommandHandlerFactory: Send + Sync {
+    type Error: std::error::Error + Send + Sync + 'static;
+
     /// Create a new [`CommandHandler`] for aggregate `A`, wiring in the given
     /// domain services and event-driven queries.
     fn create_handler<A>(
         &self,
         services: A::Services,
         queries: Vec<Box<dyn Query<A>>>,
-    ) -> impl Future<Output = CommandHandler<A>> + Send
+    ) -> impl Future<Output = Result<CommandHandler<A>, Self::Error>> + Send
     where
         A: Aggregate + 'static,
         <A as Aggregate>::Command: Send;

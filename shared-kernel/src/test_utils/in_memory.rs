@@ -25,12 +25,18 @@ impl ViewRepositoryFactory for InMemoryStore {
 }
 
 impl CommandHandlerFactory for InMemoryStore {
-    async fn create_handler<A>(&self, services: A::Services, queries: Vec<Box<dyn Query<A>>>) -> CommandHandler<A>
+    type Error = std::convert::Infallible;
+
+    async fn create_handler<A>(
+        &self,
+        services: A::Services,
+        queries: Vec<Box<dyn Query<A>>>,
+    ) -> Result<CommandHandler<A>, Self::Error>
     where
         A: Aggregate + 'static,
         <A as Aggregate>::Command: Send,
     {
-        Arc::new(CqrsFramework::new(MemStore::default(), queries, services)) as CommandHandler<A>
+        Ok(Arc::new(CqrsFramework::new(MemStore::default(), queries, services)) as CommandHandler<A>)
     }
 }
 
