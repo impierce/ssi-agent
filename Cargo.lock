@@ -12085,6 +12085,7 @@ version = "0.1.0"
 dependencies = [
  "mongo-es 0.4.0",
  "shared-kernel",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

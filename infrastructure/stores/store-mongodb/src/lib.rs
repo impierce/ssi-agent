@@ -28,12 +28,20 @@ impl ViewRepositoryFactory for MongoDBStore {
     }
 }
 
+// TODO: re-expose `mongodb::error::Result` through `mongo_es` and use it as the error type here instead of defining a
+// new one.
+#[derive(Debug, thiserror::Error)]
+#[error("MongoDB aggregate error: {0}")]
+pub struct MongoDBAggregateError(String);
+
 impl CommandHandlerFactory for MongoDBStore {
+    type Error = MongoDBAggregateError;
+
     fn create_handler<A>(
         &self,
         services: A::Services,
         queries: Vec<Box<dyn Query<A>>>,
-    ) -> impl Future<Output = CommandHandler<A>> + Send
+    ) -> impl Future<Output = Result<CommandHandler<A>, Self::Error>> + Send
     where
         A: Aggregate + 'static,
         <A as Aggregate>::Command: Send,
@@ -43,11 +51,10 @@ impl CommandHandlerFactory for MongoDBStore {
         async move {
             let repo = MongoEventRepository::new(client)
                 .await
-                // Return Result
-                .expect("Failed to create MongoEventRepository");
+                .map_err(|e| MongoDBAggregateError(e.to_string()))?;
             let store = PersistedEventStore::new_event_store(repo);
 
-            Arc::new(CqrsFramework::new(store, queries, services)) as CommandHandler<A>
+            Ok(Arc::new(CqrsFramework::new(store, queries, services)) as CommandHandler<A>)
         }
     }
 }
