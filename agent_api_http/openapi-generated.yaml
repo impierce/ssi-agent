@@ -298,11 +298,15 @@ components:
   schemas:
     AcceptConnectionChangesRequest:
       type: object
+      required:
+      - id
       properties:
         id:
           type: string
     AddConnectionEndpointRequest:
       type: object
+      required:
+      - url
       properties:
         url:
           type: string
@@ -310,6 +314,7 @@ components:
       type: object
       required:
       - id
+      - url
       - dids
       - validations
       properties:
@@ -338,9 +343,7 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/PendingChanges'
         url:
-          type:
-          - string
-          - 'null'
+          type: string
           format: uri
         validations:
           type: array
@@ -652,11 +655,15 @@ components:
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
     RemoveConnectionRequest:
       type: object
+      required:
+      - id
       properties:
         id:
           type: string
     SyncConnectionRequest:
       type: object
+      required:
+      - id
       properties:
         id:
           type: string

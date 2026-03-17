@@ -22,7 +22,6 @@ pub mod openapi;
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AddConnectionEndpointRequest {
-    #[serde(default)]
     pub url: String,
 }
 
@@ -112,7 +111,9 @@ pub(crate) async fn get_connections(
                     display
                         .as_ref()
                         .map_or(true, |display| connection.display.as_ref() == Some(display))
-                        && url.as_ref().map_or(true, |url| connection.url.as_ref() == Some(url))
+                        && url
+                            .as_ref()
+                            .map_or(true, |url| connection.url.to_string() == url.to_string())
                         && did.as_ref().map_or(true, |did| connection.dids.contains(did))
                 })
                 .collect();
@@ -151,7 +152,6 @@ pub(crate) async fn get_connection(
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncConnectionRequest {
-    #[serde(default)]
     id: String,
 }
 
@@ -182,7 +182,6 @@ pub(crate) async fn sync_connection(
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AcceptConnectionChangesRequest {
-    #[serde(default)]
     id: String,
 }
 
@@ -212,7 +211,6 @@ pub(crate) async fn accept_connection_changes(
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoveConnectionRequest {
-    #[serde(default)]
     id: String,
 }
 

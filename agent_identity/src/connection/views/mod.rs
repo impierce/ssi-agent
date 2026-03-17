@@ -8,12 +8,12 @@ use identity_core::common::Url;
 use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[schema(as = Connection)]
 pub struct ConnectionView {
     #[serde(rename = "id")]
     pub connection_id: String,
-    pub url: Option<Url>,
+    pub url: Url,
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
     pub validations: Vec<Validation>,
@@ -41,7 +41,7 @@ impl View<Connection> for ConnectionView {
             } => {
                 self.connection_id.clone_from(connection_id);
                 self.display.clone_from(display);
-                self.url = Some(url.clone());
+                self.url = url.clone();
                 self.dids.clone_from(dids);
                 self.validations.clone_from(validations);
                 self.first_interacted_at = *first_interacted_at;
@@ -74,6 +74,24 @@ impl View<Connection> for ConnectionView {
             ConnectionRemoved { connection_id: _ } => {
                 self.deleted = true;
             }
+        }
+    }
+}
+
+// `View` requires a `Default` which `identity_core::common::url::Url` doesn't provide.
+// The `ConnectionView` default is never called in practice.
+impl std::default::Default for ConnectionView {
+    fn default() -> Self {
+        ConnectionView {
+            connection_id: String::new(),
+            url: Url::parse("http://localhost").unwrap(),
+            dids: Vec::new(),
+            validations: Vec::new(),
+            display: None,
+            pending_changes: None,
+            first_interacted_at: None,
+            last_interacted_at: None,
+            deleted: false,
         }
     }
 }
