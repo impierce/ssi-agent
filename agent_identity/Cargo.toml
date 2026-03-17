@@ -16,7 +16,6 @@ cqrs-es.workspace = true
 derivative.workspace = true
 did-jwk-extern = { version = "0.1.1", package = "did-jwk" }
 did-key-extern = { version = "0.2.2", package = "did-method-key" }
-did_manager_consumer = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.8", package = "consumer" }
 identity_credential.workspace = true
 identity_core.workspace = true
 identity_did.workspace = true
