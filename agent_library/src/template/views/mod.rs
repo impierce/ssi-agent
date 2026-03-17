@@ -16,7 +16,7 @@ impl View<Template> for Template {
                 source_template_id,
                 title,
                 display,
-                credential_format,
+                data_model,
                 creator,
                 holder_type,
                 modified_at,
@@ -31,7 +31,7 @@ impl View<Template> for Template {
                 self.source_template_id.clone_from(source_template_id);
                 self.title.clone_from(title);
                 self.display.clone_from(display);
-                self.credential_format.clone_from(credential_format);
+                self.data_model.clone_from(data_model);
                 self.creator.clone_from(creator);
                 self.holder_type.clone_from(holder_type);
                 self.modified_at.replace(modified_at.clone());
@@ -58,12 +58,12 @@ impl View<Template> for Template {
                 self.display.replace(display.clone());
                 self.modified_at.replace(modified_at.clone());
             }
-            CredentialFormatUpdated {
+            DataModelUpdated {
                 template_id: _,
-                credential_format,
+                data_model,
                 modified_at,
             } => {
-                self.credential_format.replace(credential_format.clone());
+                self.data_model.replace(data_model.clone());
                 self.modified_at.replace(modified_at.clone());
             }
             CreatorUpdated {

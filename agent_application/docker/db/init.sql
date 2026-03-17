@@ -170,14 +170,6 @@ CREATE TABLE pre_authorized_code
     PRIMARY KEY (view_id)
 );
 
-CREATE TABLE access_token
-(
-    view_id           text                        NOT NULL,
-    version           bigint CHECK (version >= 0) NOT NULL,
-    payload           json                        NOT NULL,
-    PRIMARY KEY (view_id)
-);
-
 CREATE TABLE credential
 (
     view_id           text                        NOT NULL,
