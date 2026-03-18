@@ -6,4 +6,6 @@ pub enum StatusListError {
     InvalidURL(String),
     #[error("Failed to set index `{0}` due to error: {1}")]
     FailedToSetIndex(usize, String),
+    #[error("Status List Aggregate not found")]
+    AggregateNotFound,
 }

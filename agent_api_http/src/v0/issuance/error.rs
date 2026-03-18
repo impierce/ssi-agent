@@ -235,6 +235,7 @@ impl IntoPublicError for StatusListError {
         match self {
             InvalidURL(_) => PublicError::InternalServerError,
             FailedToSetIndex(_, _) => PublicError::InternalServerError,
+            AggregateNotFound => PublicError::InternalServerError,
         }
     }
 }

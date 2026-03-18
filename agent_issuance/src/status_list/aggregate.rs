@@ -53,6 +53,7 @@ impl Aggregate for StatusListAggregate {
                 },
                 used_indices: vec![],
             }]),
+            _ if self.id.is_empty() => return Err(StatusListError::AggregateNotFound),
             AddIndex { status } => {
                 let mut status_list = self.list.clone();
                 let mut used_indices = self.used_indices.clone();
