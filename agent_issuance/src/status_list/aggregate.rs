@@ -1,6 +1,8 @@
+#[cfg(not(feature = "test_utils"))]
+use agent_shared::config::BITS_PER_STATUS;
+use agent_shared::config::STATUS_LIST_BYTES_AMOUNT;
 #[cfg(feature = "test_utils")]
 use agent_shared::config::TESTINDEX;
-use agent_shared::config::{BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use oauth_tsl::status_list::{Bits, StatusList};
@@ -15,7 +17,7 @@ use crate::{
     status_list::{command::StatusListCommand, error::StatusListError, event::StatusListEvent},
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StatusListAggregate {
     pub id: String,
     pub list: StatusList,
@@ -45,7 +47,7 @@ impl Aggregate for StatusListAggregate {
             CreateStatusList { id } => Ok(vec![StatusListCreated {
                 id,
                 status_list: StatusList {
-                    status_size: Bits::Two,
+                    status_size: Bits::Two, // must be equal to BITS_PER_STATUS
                     status_list: vec![0; STATUS_LIST_BYTES_AMOUNT],
                     aggregation_uri: None,
                 },
@@ -133,25 +135,6 @@ impl Aggregate for StatusListAggregate {
                 self.id = id;
                 self.list = status_list;
             }
-        }
-    }
-}
-
-// TODO this whole default is not needed
-
-// The Aggregate is initialized with the Default impl, in this case that means we need to default to the first Status List, ready to be used.
-// We default the Status Size to 2 bits, the Status List amount of bytes is a const defined in agent_shared
-impl Default for StatusListAggregate {
-    // The default implementation is only for testing purposes and to satisfy the trait requirements for the Aggregate.
-    fn default() -> Self {
-        Self {
-            id: "".to_string(),
-            list: StatusList {
-                status_size: Bits::Two, // equal to BITS_PER_STATUS
-                status_list: vec![0; STATUS_LIST_BYTES_AMOUNT * 8 / BITS_PER_STATUS as usize], // This is were it becomes confusing between before and after packing the statuses from a Vec<u8>, holding one u8 per status, to a Vec<u8> holding the multipe statusses per byte as determined by the BITS_PER_STATUS const.
-                aggregation_uri: None,
-            },
-            used_indices: vec![],
         }
     }
 }

@@ -120,7 +120,7 @@ pub(crate) async fn credential(
     let max_amount_indices = STATUS_LIST_BYTES_AMOUNT * 8 / BITS_PER_STATUS as usize;
     let available_status_list = all_status_lists
         .into_iter()
-        .find(|status_list| status_list.used_indices.len() + credential_ids.len() <= max_amount_indices);
+        .find(|status_list| status_list.used_indices.len() + credential_ids.len() <= (max_amount_indices * 7) / 10); // The 7/10 factor ensures status lists are at most 70% full, the remainder will always be preserverd for random values protecting Issuer and Holder privacy.
 
     let status_list_id = match available_status_list {
         Some(status_list) => status_list.id.clone(),
