@@ -41,8 +41,6 @@ impl Aggregate for StatusListAggregate {
         use StatusListCommand::*;
         use StatusListEvent::*;
 
-        // TODO: I think all commands are currently Genesis commands while only CreateStatusList should be.
-        // The other two will simply write over the Default value and store that, generating an incorrect StatusListAggregate.
         match command {
             CreateStatusList { id } => Ok(vec![StatusListCreated {
                 id,
