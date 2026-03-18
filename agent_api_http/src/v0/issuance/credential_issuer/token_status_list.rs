@@ -42,11 +42,17 @@ pub mod tests {
     use std::sync::Arc;
 
     use agent_authorization::services::AuthorizationServices;
-    use agent_issuance::{services::IssuanceServices, state::initialize};
+    use agent_issuance::{
+        services::IssuanceServices,
+        state::{initialize, IssuanceState},
+    };
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
     use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
-    use axum::body::{self, Body};
+    use axum::{
+        body::{self, Body},
+        Router,
+    };
     use http::{Request, StatusCode};
     use jsonwebtoken::{decode_header, Algorithm, DecodingKey};
     use oauth_tsl::{
@@ -75,55 +81,10 @@ pub mod tests {
 
         let mut app = router(issuance_state.clone());
 
-        let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
-            c_nonce: TEST_NONCE.to_string(),
-        };
-        agent_shared::handlers::command_handler(TEST_NONCE, &issuance_state.command.nonce, command)
-            .await
-            .unwrap();
+        // We must create a signed credential first to initiate the status list creation. There is no other way we expose Status List creation through the endpoints.
+        create_test_signed_credential(&mut app, &issuance_state).await;
 
-        let credential_configuration_id = "001".to_string();
-
-        credentials(&mut app, &credential_configuration_id).await;
-
-        let grants = offers(&mut app, &credential_configuration_id).await.unwrap();
-
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
-        agent_authorization::state::initialize(&authorization_state)
-            .await
-            .unwrap();
-
-        let mut authorization_app = authorization::router((authorization_state, issuance_state));
-
-        let access_token: String = token(&mut authorization_app, true, grants).await;
-        let jwt = "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ";
-
-        let response = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method(http::Method::POST)
-                    .uri("/openid4vci/credential")
-                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-                    .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
-                    .body(Body::from(
-                        serde_json::to_vec(&json!({
-                            "credential_configuration_id": credential_configuration_id,
-                            "proofs": {
-                                "jwt":[jwt]
-                            }
-                        }))
-                        .unwrap(),
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-
-        // Fetch the Status List Token to check the updated status
+        // Fetch the Status List Token
         let token_status_list_response = app
             .oneshot(
                 Request::builder()
@@ -173,5 +134,64 @@ pub mod tests {
 
         let status_list = decoded_jwt.claims.encoded_status_list.decode_decompress().unwrap();
         assert_eq!(status_list.len(), STATUS_LIST_BYTES_AMOUNT);
+    }
+
+    /// This test helper creates a signed credential with the following parameters:
+    /// - format: jwt_vc_json
+    /// - data model: VC DM 1.1
+    /// - is_pre_authorized: true
+    /// - with_anonymous_access: false
+    /// - with_external_server: false
+    /// - is_self_signed: false
+    pub async fn create_test_signed_credential(mut app: &mut Router, issuance_state: &Arc<IssuanceState>) -> String {
+        let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
+            c_nonce: TEST_NONCE.to_string(),
+        };
+        agent_shared::handlers::command_handler(TEST_NONCE, &issuance_state.command.nonce, command)
+            .await
+            .unwrap();
+
+        let credential_configuration_id = "001".to_string();
+
+        let credential_endpoint = credentials(&mut app, &credential_configuration_id).await;
+
+        let grants = offers(&mut app, &credential_configuration_id).await.unwrap();
+
+        let authorization_state =
+            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
+
+        let mut authorization_app = authorization::router((authorization_state, issuance_state.to_owned()));
+
+        let access_token: String = token(&mut authorization_app, true, grants).await;
+        let jwt = "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ";
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/openid4vci/credential")
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "credential_configuration_id": credential_configuration_id,
+                            "proofs": {
+                                "jwt":[jwt]
+                            }
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        credential_endpoint
     }
 }

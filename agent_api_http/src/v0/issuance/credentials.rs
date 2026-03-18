@@ -245,19 +245,16 @@ pub async fn patch_credential(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::v0::authorization;
-    use crate::v0::authorization::authorization_server::token::tests::token;
-    use crate::v0::issuance::offers::tests::offers;
+    use crate::tests::OFFER_ID;
+    use crate::v0::issuance::credential_issuer::token_status_list::tests::create_test_signed_credential;
     use crate::v0::issuance::router;
     use crate::API_VERSION;
-    use crate::{tests::OFFER_ID, v0::issuance::credential_issuer::credential::tests::TEST_NONCE};
-    use agent_authorization::services::AuthorizationServices;
     use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_secret_manager::service::Service;
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::TESTINDEX;
     use agent_store::in_memory::InMemory;
-    use agent_store::{authorization_state, issuance_state};
+    use agent_store::issuance_state;
     use axum::{
         body::{self, Body},
         http::{self, Request, StatusCode},
@@ -267,7 +264,7 @@ pub mod tests {
     use oauth_tsl::relying_party::check_status_in_status_list_token_jwt;
     use oauth_tsl::relying_party::{decompress_gzip, StatusListTokenResponseType};
     use serde_json::json;
-    use tower::{Service as _, ServiceExt};
+    use tower::Service as _;
 
     use jsonwebtoken::{decode_header, Algorithm, DecodingKey};
     use oid4vc_core::authentication::verify::Verify;
@@ -353,54 +350,7 @@ pub mod tests {
         get_credentials_endpoint
     }
 
-    pub async fn patch_credential(app: &mut Router, issuance_state: Arc<IssuanceState>) {
-        let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
-            c_nonce: TEST_NONCE.to_string(),
-        };
-        agent_shared::handlers::command_handler(TEST_NONCE, &issuance_state.command.nonce, command)
-            .await
-            .unwrap();
-
-        let credential_configuration_id = "001".to_string();
-
-        let credential_endpoint = credentials(app, &credential_configuration_id).await;
-
-        let grants = offers(app, &credential_configuration_id).await.unwrap();
-
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
-        agent_authorization::state::initialize(&authorization_state)
-            .await
-            .unwrap();
-
-        let mut authorization_app = authorization::router((authorization_state, issuance_state));
-
-        let access_token: String = token(&mut authorization_app, true, grants).await;
-        let jwt = "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ";
-
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .method(http::Method::POST)
-                    .uri("/openid4vci/credential")
-                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-                    .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
-                    .body(Body::from(
-                        serde_json::to_vec(&json!({
-                            "credential_configuration_id": credential_configuration_id,
-                            "proofs": {
-                                "jwt":[jwt]
-                            }
-                        }))
-                        .unwrap(),
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-
+    pub async fn patch_credential(app: &mut Router, credential_endpoint: String) {
         let patch_response = app
             .call(
                 Request::builder()
@@ -463,7 +413,8 @@ pub mod tests {
 
         let mut app = router(issuance_state.clone());
 
-        patch_credential(&mut app, issuance_state).await;
+        let credential_endpoint = create_test_signed_credential(&mut app, &issuance_state).await;
+        patch_credential(&mut app, credential_endpoint).await;
     }
 
     #[tokio::test]
