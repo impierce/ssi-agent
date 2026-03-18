@@ -202,14 +202,12 @@ pub async fn patch_credential(
         };
 
         let status_list_url = credential_status.status_list_id.clone();
-        let status_list_id = status_list_url.split('/').last().ok_or(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?; // TODO is this the correct error message?
+        let status_list_id = status_list_url
+            .split('/')
+            .next_back()
+            .ok_or(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?; // TODO is this the correct error message?
 
-        command_handler(
-            &status_list_id,
-            &state.command.status_list,
-            command,
-        )
-        .await?;
+        command_handler(status_list_id, &state.command.status_list, command).await?;
 
         Ok(StatusCode::NO_CONTENT.into_response())
     } else {

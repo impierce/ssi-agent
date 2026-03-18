@@ -15,10 +15,7 @@ use agent_issuance::{
     state::{IssuanceState, SERVER_CONFIG_ID},
     status_list::command::StatusListCommand,
 };
-use agent_shared::{
-    config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT, TEST_STATUS_LIST_ID},
-    generate_random_string,
-};
+use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -31,6 +28,12 @@ use oid4vci::errors::CredentialErrorResponse;
 use std::sync::Arc;
 use tokio::time::sleep;
 use tracing::error;
+
+#[cfg(feature = "test_utils")]
+use agent_shared::config::TEST_STATUS_LIST_ID;
+
+#[cfg(not(feature = "test_utils"))]
+use agent_shared::generate_random_string;
 
 const POLLING_INTERVAL_MS: u64 = 100;
 
@@ -122,6 +125,7 @@ pub(crate) async fn credential(
     let status_list_id = match available_status_list {
         Some(status_list) => status_list.id.clone(),
         None => {
+            #[cfg(not(feature = "test_utils"))]
             let id = generate_random_string();
 
             #[cfg(feature = "test_utils")]

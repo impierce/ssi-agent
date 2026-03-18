@@ -1080,7 +1080,9 @@ pub mod credential_tests {
 
         let credential_status = CredentialStatus {
             index: TESTINDEX,
-            status_list_id: get_status_list_url(TEST_STATUS_LIST_ID.to_string()).unwrap().to_string(),
+            status_list_id: get_status_list_url(TEST_STATUS_LIST_ID.to_string())
+                .unwrap()
+                .to_string(),
             status: StatusType::VALID,
         };
 
