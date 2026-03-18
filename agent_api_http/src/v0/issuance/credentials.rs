@@ -213,7 +213,7 @@ pub async fn patch_credential(
         let credential_status = CredentialStatus {
             index: credential.credential_status.index,
             status,
-            status_list_id: credential.credential_status.status_list_id.clone(),
+            status_list_url: credential.credential_status.status_list_url.clone(),
         };
 
         let command = CredentialCommand::UpdateCredentialStatus {
@@ -228,7 +228,7 @@ pub async fn patch_credential(
             status,
         };
 
-        let status_list_url = credential_status.status_list_id.clone();
+        let status_list_url = credential_status.status_list_url.clone();
         let status_list_id = status_list_url
             .split('/')
             .next_back()

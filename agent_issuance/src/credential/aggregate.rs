@@ -77,7 +77,7 @@ pub struct CredentialStatus {
     pub index: usize,
     #[schema(schema_with = status_type)]
     pub status: StatusType,
-    pub status_list_id: String, // The full status list URL is stored here
+    pub status_list_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
@@ -482,7 +482,7 @@ impl Aggregate for Credential {
                     credential_status: CredentialStatus {
                         index,
                         status: StatusType::VALID, // TODO: this is actually hardcode, but currently we don't support signing a credential with anything other than a VALID status.
-                        status_list_id: status_list_url.to_string(),
+                        status_list_url: status_list_url.to_string(),
                     },
                     status: Status::Issued,
                 }])
@@ -1087,7 +1087,7 @@ pub mod credential_tests {
 
         let credential_status = CredentialStatus {
             index: TESTINDEX,
-            status_list_id: get_status_list_url(TEST_STATUS_LIST_ID.to_string())
+            status_list_url: get_status_list_url(TEST_STATUS_LIST_ID.to_string())
                 .unwrap()
                 .to_string(),
             status: StatusType::VALID,
