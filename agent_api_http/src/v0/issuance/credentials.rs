@@ -353,7 +353,7 @@ pub mod tests {
         get_credentials_endpoint
     }
 
-    pub async fn patch_credential(mut app: &mut Router, issuance_state: Arc<IssuanceState>) {
+    pub async fn patch_credential(app: &mut Router, issuance_state: Arc<IssuanceState>) {
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),
         };
@@ -363,9 +363,9 @@ pub mod tests {
 
         let credential_configuration_id = "001".to_string();
 
-        let credential_endpoint = credentials(&mut app, &credential_configuration_id).await;
+        let credential_endpoint = credentials(app, &credential_configuration_id).await;
 
-        let grants = offers(&mut app, &credential_configuration_id).await.unwrap();
+        let grants = offers(app, &credential_configuration_id).await.unwrap();
 
         let authorization_state =
             Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
