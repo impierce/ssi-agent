@@ -232,7 +232,7 @@ pub async fn patch_credential(
         let status_list_id = status_list_url
             .split('/')
             .next_back()
-            .ok_or(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?; // TODO is this the correct error message?
+            .ok_or(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?; // This is an Internal Server Error because if this line fails that means we stored an incorect URL in our own credential.
 
         command_handler(status_list_id, &state.command.status_list, command).await?;
 
