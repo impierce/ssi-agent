@@ -4,7 +4,6 @@ use super::event::ConnectionEvent;
 use crate::connection::aggregate::{Connection, ConnectionDisplayProperties, PendingChanges, Validation};
 use chrono::{DateTime, Utc};
 use cqrs_es::{EventEnvelope, View};
-use identity_core::common::Url;
 use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
 
@@ -13,7 +12,9 @@ use serde::{Deserialize, Serialize};
 pub struct ConnectionView {
     #[serde(rename = "id")]
     pub connection_id: String,
-    pub url: Option<Url>,
+    // `identity_core::common::url::Url` doesn't implement a `Default`, which is why we use `String`.
+    #[schema(value_type = url::Url)]
+    pub url: String,
     #[schema(value_type = Vec<String>)]
     pub dids: Vec<DIDUrl>,
     pub validations: Vec<Validation>,
@@ -21,6 +22,7 @@ pub struct ConnectionView {
     pub pending_changes: Option<PendingChanges>,
     pub first_interacted_at: Option<DateTime<Utc>>,
     pub last_interacted_at: Option<DateTime<Utc>>,
+    #[serde(skip)]
     pub deleted: bool,
 }
 
@@ -40,7 +42,7 @@ impl View<Connection> for ConnectionView {
             } => {
                 self.connection_id.clone_from(connection_id);
                 self.display.clone_from(display);
-                self.url = Some(url.clone());
+                self.url = url.to_string();
                 self.dids.clone_from(dids);
                 self.validations.clone_from(validations);
                 self.first_interacted_at = *first_interacted_at;
