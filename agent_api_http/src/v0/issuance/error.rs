@@ -151,7 +151,7 @@ impl IntoApiErrorExt for StatusListError {
                 .source(self)
                 .finish(),
             JwtEncodeError => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("JWT Encode Error")
+                .title("Status List Token JWT Encoding Error")
                 .source(self)
                 .finish(),
             StatusListEncodingError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
