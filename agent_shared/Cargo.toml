@@ -20,6 +20,10 @@ oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true
 once_cell.workspace = true
+opentelemetry.workspace = true
+opentelemetry_sdk.workspace = true
+opentelemetry-otlp.workspace = true
+opentelemetry-appender-tracing.workspace = true
 rand.workspace = true
 reqwest.workspace = true
 serde.workspace = true
@@ -30,6 +34,7 @@ temp-env = "0.3"
 thiserror.workspace = true
 time = { version = "0.3" }
 tracing.workspace = true
+tracing-opentelemetry.workspace = true
 tracing-subscriber.workspace = true
 url.workspace = true
 

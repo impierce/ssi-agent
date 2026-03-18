@@ -12,7 +12,7 @@ use oid4vci::credential_issuer::credential_configurations_supported::CredentialM
 use oid4vci::credential_offer::TxCodeConstraints;
 use oid4vp::authorization_request::AlgValues;
 use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported};
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -39,6 +39,11 @@ static STRONGHOLD_PATH: &str = "./stronghold.dat";
 static ED25519_KEY_ID: &str = "ed25519-0";
 static ES256_KEY_ID: &str = "es256-0";
 
+// OpenTelemetry provider instances for graceful shutdown
+static TRACER_PROVIDER: OnceCell<opentelemetry_sdk::trace::SdkTracerProvider> = OnceCell::new();
+static LOGGER_PROVIDER: OnceCell<opentelemetry_sdk::logs::SdkLoggerProvider> = OnceCell::new();
+static METER_PROVIDER: OnceCell<opentelemetry_sdk::metrics::SdkMeterProvider> = OnceCell::new();
+
 // Static configuration instance
 pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
     let application_configuration =
@@ -48,16 +53,79 @@ pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
 
     #[cfg(not(feature = "test_utils"))]
     {
+        use opentelemetry::trace::TracerProvider as _;
+        use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
+        use opentelemetry_otlp::WithExportConfig;
         use tracing::{debug, info};
-        use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+        use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
-        let tracing_subscriber = tracing_subscriber::registry()
-            // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
-            .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
+        let env_filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
 
-        match application_configuration.log_format {
-            LogFormat::Json => tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init(),
-            LogFormat::Text => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
+        if application_configuration.opentelemetry.enabled {
+            let endpoint = application_configuration
+                .opentelemetry
+                .endpoint
+                .clone()
+                .unwrap_or_else(|| "http://localhost:4317".to_string());
+
+            let span_exporter = opentelemetry_otlp::SpanExporter::builder()
+                .with_tonic()
+                .with_endpoint(endpoint.clone())
+                .build()
+                .expect("Failed to build OpenTelemetry span exporter");
+
+            let tracer_provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
+                .with_batch_exporter(span_exporter)
+                .build();
+
+            let tracer = tracer_provider.tracer(env!("CARGO_PKG_NAME"));
+
+            let log_exporter = opentelemetry_otlp::LogExporter::builder()
+                .with_tonic()
+                .with_endpoint(endpoint.clone())
+                .build()
+                .expect("Failed to build OpenTelemetry log exporter");
+
+            let logger_provider = opentelemetry_sdk::logs::SdkLoggerProvider::builder()
+                .with_batch_exporter(log_exporter)
+                .build();
+
+            let metric_exporter = opentelemetry_otlp::MetricExporter::builder()
+                .with_tonic()
+                .with_endpoint(endpoint.clone())
+                .build()
+                .expect("Failed to build OpenTelemetry metric exporter");
+
+            let meter_provider = opentelemetry_sdk::metrics::SdkMeterProvider::builder()
+                .with_periodic_exporter(metric_exporter)
+                .build();
+
+            opentelemetry::global::set_tracer_provider(tracer_provider.clone());
+            opentelemetry::global::set_meter_provider(meter_provider.clone());
+
+            TRACER_PROVIDER.set(tracer_provider).ok();
+            LOGGER_PROVIDER.set(logger_provider.clone()).ok();
+            METER_PROVIDER.set(meter_provider).ok();
+
+            let otel_trace_layer = tracing_opentelemetry::layer().with_tracer(tracer).boxed();
+            let otel_log_layer = OpenTelemetryTracingBridge::new(&logger_provider).boxed();
+
+            let base = tracing_subscriber::registry()
+                .with(env_filter)
+                .with(otel_trace_layer)
+                .with(otel_log_layer);
+
+            match application_configuration.log_format {
+                LogFormat::Json => base.with(tracing_subscriber::fmt::layer().json()).init(),
+                LogFormat::Text => base.with(tracing_subscriber::fmt::layer()).init(),
+            }
+        } else {
+            let base = tracing_subscriber::registry().with(env_filter);
+
+            match application_configuration.log_format {
+                LogFormat::Json => base.with(tracing_subscriber::fmt::layer().json()).init(),
+                LogFormat::Text => base.with(tracing_subscriber::fmt::layer()).init(),
+            }
         }
 
         info!("Configuration loaded successfully");
@@ -66,6 +134,28 @@ pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
 
     RwLock::new(application_configuration)
 });
+
+/// Shuts down OpenTelemetry providers, flushing any pending telemetry data.
+/// Should be called before the application exits when OpenTelemetry is enabled.
+pub fn shutdown_telemetry() {
+    if let Some(tp) = TRACER_PROVIDER.get() {
+        if let Err(e) = tp.shutdown() {
+            eprintln!("Failed to shutdown OpenTelemetry tracer provider: {e}");
+        }
+    }
+
+    if let Some(lp) = LOGGER_PROVIDER.get() {
+        if let Err(e) = lp.shutdown() {
+            eprintln!("Failed to shutdown OpenTelemetry logger provider: {e}");
+        }
+    }
+
+    if let Some(mp) = METER_PROVIDER.get() {
+        if let Err(e) = mp.shutdown() {
+            eprintln!("Failed to shutdown OpenTelemetry meter provider: {e}");
+        }
+    }
+}
 
 fn convert_url(url: Url, with_trailing_slash: bool) -> Url {
     let mut new_url = url.clone();
@@ -101,6 +191,8 @@ pub fn config_mut() -> std::sync::RwLockWriteGuard<'static, ApplicationConfigura
 pub struct ApplicationConfiguration {
     #[config(default)]
     pub log_format: LogFormat,
+    #[config(default)]
+    pub opentelemetry: OpenTelemetryConfig,
     #[config(development_default = "EventStoreConfig {
             type_: EventStoreType::InMemory,
             connection_string: None
@@ -435,6 +527,27 @@ pub enum LogFormat {
     #[default]
     Json,
     Text,
+}
+
+/// Configuration for OpenTelemetry (OTel) support.
+/// When enabled, traces, logs, and metrics are exported to the configured OTLP endpoint.
+#[derive(Debug, Deserialize, Clone, Serialize)]
+#[serde(default)]
+pub struct OpenTelemetryConfig {
+    /// Enable OpenTelemetry export. Can also be set via `UNICORE__OPENTELEMETRY__ENABLED`.
+    pub enabled: bool,
+    /// OTLP gRPC endpoint. Defaults to `http://localhost:4317`.
+    /// Can also be set via `UNICORE__OPENTELEMETRY__ENDPOINT`.
+    pub endpoint: Option<String>,
+}
+
+impl Default for OpenTelemetryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: None,
+        }
+    }
 }
 
 #[skip_serializing_none]
@@ -1061,6 +1174,10 @@ mod tests {
             json!(config),
             json!({
               "log_format": "text",
+              "opentelemetry": {
+                "enabled": false,
+                "endpoint": null
+              },
               "event_store": {
                 "type": "in_memory"
               },

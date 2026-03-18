@@ -16,7 +16,7 @@ use agent_issuance::{
     services::IssuanceServices,
 };
 use agent_secret_manager::{service::Service as _, subject::Subject};
-use agent_shared::config::{config, EventStoreType};
+use agent_shared::config::{config, shutdown_telemetry, EventStoreType};
 use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use probes::liveness::healthz;
@@ -218,6 +218,8 @@ pub async fn run() -> io::Result<()> {
     } else {
         let _ = app_handle.await;
     }
+
+    shutdown_telemetry();
 
     Ok(())
 }
