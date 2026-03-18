@@ -34,7 +34,10 @@ impl Drop for TelemetryGuard {
 /// to ensure proper shutdown of OpenTelemetry providers.
 pub fn init_telemetry(log_format: &LogFormat, opentelemetry_enabled: bool) -> TelemetryGuard {
     let env_filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+            eprintln!("RUST_LOG not set or invalid, defaulting to 'info'");
+            "info".into()
+        });
 
     if opentelemetry_enabled {
         init_with_opentelemetry(log_format, env_filter)
@@ -68,7 +71,7 @@ fn init_with_opentelemetry(log_format: &LogFormat, env_filter: EnvFilter) -> Tel
     let span_exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
         .build()
-        .expect("Failed to build OTLP span exporter");
+        .expect("Failed to build OTLP span exporter. Ensure OTEL_EXPORTER_OTLP_ENDPOINT is set correctly.");
 
     let tracer_provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
         .with_batch_exporter(span_exporter)
@@ -81,7 +84,7 @@ fn init_with_opentelemetry(log_format: &LogFormat, env_filter: EnvFilter) -> Tel
     let log_exporter = opentelemetry_otlp::LogExporter::builder()
         .with_tonic()
         .build()
-        .expect("Failed to build OTLP log exporter");
+        .expect("Failed to build OTLP log exporter. Ensure OTEL_EXPORTER_OTLP_ENDPOINT is set correctly.");
 
     let logger_provider = opentelemetry_sdk::logs::SdkLoggerProvider::builder()
         .with_batch_exporter(log_exporter)
