@@ -41,10 +41,11 @@ pub async fn token_status_list(
 pub mod tests {
     use std::sync::Arc;
 
+    use agent_authorization::services::AuthorizationServices;
     use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
-    use agent_store::{in_memory::InMemory, issuance_state};
+    use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
     use axum::body::{self, Body};
     use http::{Request, StatusCode};
     use jsonwebtoken::{decode_header, Algorithm, DecodingKey};
@@ -54,22 +55,77 @@ pub mod tests {
     };
     use oid4vc_core::authentication::verify::Verify;
 
-    use crate::v0::issuance::router;
-    use tower::Service as _;
+    use crate::v0::{
+        authorization::{self, authorization_server::token::tests::token},
+        issuance::{
+            credential_issuer::credential::tests::TEST_NONCE, credentials::tests::credentials, offers::tests::offers,
+            router,
+        },
+    };
+    use serde_json::json;
+    use tower::ServiceExt;
 
     /// This test calls the token status list endpoint which in turn calls the function above.
     /// The remainder of the test breaks down the Token Status List response in various steps and checks these steps one by one.
     #[tokio::test]
     pub async fn test_token_status_list() {
-        let issuance_state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, vec![]).await);
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let relying_party_state = Subject::test_subject().await;
+        let mut app = router(issuance_state.clone());
 
-        let mut app = router(issuance_state);
+        let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
+            c_nonce: TEST_NONCE.to_string(),
+        };
+        agent_shared::handlers::command_handler(TEST_NONCE, &issuance_state.command.nonce, command)
+            .await
+            .unwrap();
 
+        let credential_configuration_id = "001".to_string();
+
+        credentials(&mut app, &credential_configuration_id).await;
+
+        let grants = offers(&mut app, &credential_configuration_id).await.unwrap();
+
+        let authorization_state =
+            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
+
+        let mut authorization_app = authorization::router((authorization_state, issuance_state));
+
+        let access_token: String = token(&mut authorization_app, true, grants).await;
+        let jwt = "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ";
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/openid4vci/credential")
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "credential_configuration_id": credential_configuration_id,
+                            "proofs": {
+                                "jwt":[jwt]
+                            }
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Fetch the Status List Token to check the updated status
         let token_status_list_response = app
-            .call(
+            .oneshot(
                 Request::builder()
                     .method(http::Method::GET)
                     .uri("/ietf-oauth-token-status-list/0")
@@ -96,6 +152,7 @@ pub mod tests {
         let jwt_header = decode_header(&jwt_status_list_token).unwrap();
 
         let key_id = jwt_header.kid.unwrap();
+        let relying_party_state = Subject::test_subject().await;
         let public_key = relying_party_state.public_key(&key_id).await.unwrap();
         let decoding_key = match jwt_header.alg {
             Algorithm::EdDSA => DecodingKey::from_ed_der(&public_key),

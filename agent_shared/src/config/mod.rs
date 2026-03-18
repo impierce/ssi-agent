@@ -33,6 +33,8 @@ pub const BITS_PER_STATUS: u8 = 2; // Amount of bits per status
 pub const STATUS_LIST_BYTES_AMOUNT: usize = 2048; // Amount of bytes in the status list. Equates to 8192 statuses for BITS_PER_STATUS = 2.
 #[cfg(feature = "test_utils")]
 pub const TESTINDEX: usize = 123;
+#[cfg(feature = "test_utils")]
+pub const TEST_STATUS_LIST_ID: &str = "0";
 
 static STRONGHOLD_PATH: &str = "./stronghold.dat";
 

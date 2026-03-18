@@ -191,20 +191,21 @@ pub async fn patch_credential(
 
         let command = CredentialCommand::UpdateCredentialStatus {
             credential_id: credential_id.clone(),
-            credential_status,
+            credential_status: credential_status.clone(),
         };
 
         command_handler(&credential_id, &state.command.credential, command).await?;
 
         let command = StatusListCommand::UpdateIndex {
-            index: credential.credential_status.index,
+            index: credential_status.index,
             status,
         };
 
-        println!("index: {}, status: {:?}", credential.credential_status.index, status);
+        let status_list_url = credential_status.status_list_id.clone();
+        let status_list_id = status_list_url.split('/').last().ok_or(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?; // TODO is this the correct error message?
 
         command_handler(
-            &credential.credential_status.status_list_id,
+            &status_list_id,
             &state.command.status_list,
             command,
         )
@@ -226,7 +227,6 @@ pub mod tests {
     use crate::API_VERSION;
     use crate::{tests::OFFER_ID, v0::issuance::credential_issuer::credential::tests::TEST_NONCE};
     use agent_authorization::services::AuthorizationServices;
-    use agent_holder::credential::aggregate::get_unverified_jwt_claims;
     use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_secret_manager::service::Service;
     use agent_secret_manager::subject::Subject;
@@ -239,9 +239,8 @@ pub mod tests {
         Router,
     };
     use lazy_static::lazy_static;
-    use oauth_tsl::relying_party::{check_status_in_status_list_token_jwt, decrypt_status_list_token};
+    use oauth_tsl::relying_party::check_status_in_status_list_token_jwt;
     use oauth_tsl::relying_party::{decompress_gzip, StatusListTokenResponseType};
-    use oauth_tsl::status_list::StatusList;
     use serde_json::json;
     use tower::{Service as _, ServiceExt};
 
@@ -377,15 +376,6 @@ pub mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let body: Value = serde_json::from_slice(&body).unwrap();
-        let body = body["credentials"][0]["credential"].clone();
-        let body = get_unverified_jwt_claims(&body).unwrap();
-
-        // println!("Body decoded: {}", body);
-
-        let relying_party_state = Subject::test_subject().await;
-
         let patch_response = app
             .call(
                 Request::builder()
@@ -418,8 +408,6 @@ pub mod tests {
             .await
             .unwrap();
 
-        println!("Token Status List Response: {:?}", token_status_list_response);
-
         let body_bytes = body::to_bytes(token_status_list_response.into_body(), usize::MAX)
             .await
             .unwrap();
@@ -427,6 +415,7 @@ pub mod tests {
         let jwt_header = decode_header(&jwt_status_list_token).unwrap();
 
         let key_id = jwt_header.kid.unwrap();
+        let relying_party_state = Subject::test_subject().await;
         let public_key = relying_party_state.public_key(&key_id).await.unwrap();
         let decoding_key = match jwt_header.alg {
             Algorithm::EdDSA => DecodingKey::from_ed_der(&public_key),
@@ -435,14 +424,6 @@ pub mod tests {
                 panic!("Unsupported algorithm: {:?}", jwt_header.alg);
             }
         };
-
-        let decoded_jwt = decrypt_status_list_token(&jwt_status_list_token, decoding_key.clone()).unwrap();
-        let status_list = StatusList::try_from(decoded_jwt.claims.encoded_status_list).unwrap();
-
-        println!("Status at {}: {:?}", TESTINDEX, status_list.get_status(TESTINDEX));
-        println!("Status at 122: {:?}", status_list.get_status(122));
-        println!("Status at 124: {:?}", status_list.get_status(124));
-        println!("Status at 125: {:?}", status_list.get_status(125));
 
         let status = check_status_in_status_list_token_jwt(&jwt_status_list_token, TESTINDEX, decoding_key).unwrap();
 

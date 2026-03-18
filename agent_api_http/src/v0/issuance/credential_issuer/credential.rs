@@ -16,7 +16,7 @@ use agent_issuance::{
     status_list::command::StatusListCommand,
 };
 use agent_shared::{
-    config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT},
+    config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT, TEST_STATUS_LIST_ID},
     generate_random_string,
 };
 use axum::{
@@ -125,7 +125,7 @@ pub(crate) async fn credential(
             let id = generate_random_string();
 
             #[cfg(feature = "test_utils")]
-            let id = "0".to_string();
+            let id = TEST_STATUS_LIST_ID.to_string();
 
             let command = StatusListCommand::CreateStatusList { id: id.clone() };
             command_handler(&id, &state.command.status_list, command).await?;
@@ -141,16 +141,11 @@ pub(crate) async fn credential(
             status: StatusType::VALID,
         };
 
-        println!("Adding index to status list with id: {}", status_list_id);
-
         command_handler(&status_list_id, &state.command.status_list, command).await?;
 
         let status_list = query_handler(&status_list_id, &state.query.status_list)
             .await?
             .ok_or(PublicError::InternalServerError)?;
-
-        // println!("Status list with id {} has used indices: {:?}", status_list_id, status_list.used_indices);
-        // println!("Status at {}: {:?}", status_list.used_indices.last().cloned().unwrap_or(0), status_list.get_status(status_list.used_indices.last().cloned().unwrap_or(0)));
 
         let command = CredentialCommand::SignCredential {
             credential_id: credential_id.clone(),
