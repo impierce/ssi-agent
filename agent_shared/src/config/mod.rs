@@ -53,15 +53,16 @@ pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
 
     #[cfg(not(feature = "test_utils"))]
     {
-        use opentelemetry::trace::TracerProvider as _;
-        use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
-        use opentelemetry_otlp::WithExportConfig;
-        use tracing::{debug, info};
+        use tracing::{debug, info, warn};
         use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
         let env_filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
 
         if application_configuration.opentelemetry.enabled {
+            use opentelemetry::trace::TracerProvider as _;
+            use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
+            use opentelemetry_otlp::WithExportConfig;
+
             let endpoint = application_configuration
                 .opentelemetry
                 .endpoint
@@ -72,7 +73,7 @@ pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
                 .with_tonic()
                 .with_endpoint(endpoint.clone())
                 .build()
-                .expect("Failed to build OpenTelemetry span exporter");
+                .expect(&format!("Failed to build OpenTelemetry span exporter for endpoint: {endpoint}"));
 
             let tracer_provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
                 .with_batch_exporter(span_exporter)
@@ -84,7 +85,7 @@ pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
                 .with_tonic()
                 .with_endpoint(endpoint.clone())
                 .build()
-                .expect("Failed to build OpenTelemetry log exporter");
+                .expect(&format!("Failed to build OpenTelemetry log exporter for endpoint: {endpoint}"));
 
             let logger_provider = opentelemetry_sdk::logs::SdkLoggerProvider::builder()
                 .with_batch_exporter(log_exporter)
@@ -94,7 +95,7 @@ pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
                 .with_tonic()
                 .with_endpoint(endpoint.clone())
                 .build()
-                .expect("Failed to build OpenTelemetry metric exporter");
+                .expect(&format!("Failed to build OpenTelemetry metric exporter for endpoint: {endpoint}"));
 
             let meter_provider = opentelemetry_sdk::metrics::SdkMeterProvider::builder()
                 .with_periodic_exporter(metric_exporter)
@@ -103,9 +104,15 @@ pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
             opentelemetry::global::set_tracer_provider(tracer_provider.clone());
             opentelemetry::global::set_meter_provider(meter_provider.clone());
 
-            TRACER_PROVIDER.set(tracer_provider).ok();
-            LOGGER_PROVIDER.set(logger_provider.clone()).ok();
-            METER_PROVIDER.set(meter_provider).ok();
+            if TRACER_PROVIDER.set(tracer_provider).is_err() {
+                warn!("OpenTelemetry tracer provider was already initialized");
+            }
+            if LOGGER_PROVIDER.set(logger_provider.clone()).is_err() {
+                warn!("OpenTelemetry logger provider was already initialized");
+            }
+            if METER_PROVIDER.set(meter_provider).is_err() {
+                warn!("OpenTelemetry meter provider was already initialized");
+            }
 
             let otel_trace_layer = tracing_opentelemetry::layer().with_tracer(tracer).boxed();
             let otel_log_layer = OpenTelemetryTracingBridge::new(&logger_provider).boxed();
