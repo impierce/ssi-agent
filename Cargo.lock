@@ -151,13 +151,18 @@ dependencies = [
  "anyhow",
  "axum 0.8.3",
  "chrono",
- "init-tracing-opentelemetry",
+ "opentelemetry",
+ "opentelemetry-appender-tracing",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
  "serde",
  "serde_json",
  "serde_with 3.13.0",
  "tokio",
  "tower-http 0.6.8",
  "tracing",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -5338,22 +5343,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "init-tracing-opentelemetry"
-version = "0.36.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3910c652151948e4fb51a8c86cad13b8e3d36b9c4268060ca8456ddfad058749"
-dependencies = [
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry-semantic-conventions",
- "opentelemetry_sdk",
- "thiserror 2.0.12",
- "tracing",
- "tracing-opentelemetry",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "inline_colorization"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8537,6 +8526,19 @@ dependencies = [
  "js-sys",
  "pin-project-lite",
  "thiserror 2.0.12",
+ "tracing",
+]
+
+[[package]]
+name = "opentelemetry-appender-tracing"
+version = "0.31.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef6a1ac5ca3accf562b8c306fa8483c85f4390f768185ab775f242f7fe8fdcc2"
+dependencies = [
+ "opentelemetry",
+ "tracing",
+ "tracing-core",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -8568,6 +8570,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tonic",
+ "tracing",
 ]
 
 [[package]]

@@ -20,12 +20,15 @@ agent_verification = { path = "../agent_verification" }
 anyhow.workspace = true
 axum.workspace = true
 chrono.workspace = true
-init-tracing-opentelemetry = { version = "0.36", features = [
-    "tracing_subscriber_ext",
-] }
+opentelemetry = "0.31"
+opentelemetry-appender-tracing = "0.31"
+opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic", "logs"] }
+opentelemetry_sdk = { version = "0.31", features = ["rt-tokio", "logs"] }
 serde.workspace = true
 serde_json.workspace = true
 serde_with.workspace = true
 tokio.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
+tracing-opentelemetry = "0.32"
+tracing-subscriber.workspace = true
