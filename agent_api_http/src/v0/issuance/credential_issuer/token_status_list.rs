@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use agent_issuance::{
-    credential::application::token_status_list_service::TokenStatusListService, state::IssuanceState,
+    state::IssuanceState, status_list::application::token_status_list_service::TokenStatusListService,
 };
 use axum::{
     extract::{Path, State},

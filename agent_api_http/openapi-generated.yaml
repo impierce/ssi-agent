@@ -530,7 +530,7 @@ components:
       required:
       - index
       - status
-      - status_list_id
+      - status_list_url
       properties:
         index:
           type: integer
@@ -542,7 +542,7 @@ components:
           - INVALID
           - SUSPENDED
           - UNDEFINED
-        status_list_id:
+        status_list_url:
           type: string
     Data:
       type: object

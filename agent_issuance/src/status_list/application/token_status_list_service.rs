@@ -5,15 +5,13 @@ use agent_shared::{
     handlers::query_handler,
 };
 use oauth_tsl::{
-    error::OAuthTSLError,
     status_list::EncodedStatusList,
     tokens::status_list_token::{compress_gzip, StatusListToken, StatusListTokenClaims},
 };
 use oid4vc_core::jwt::encode;
 use rand::Rng;
-use thiserror::Error;
 
-use crate::state::IssuanceState;
+use crate::{state::IssuanceState, status_list::error::StatusListError};
 
 pub struct TokenStatusListService {}
 
@@ -27,11 +25,11 @@ impl TokenStatusListService {
         self,
         status_list_id: String,
         state: &IssuanceState,
-    ) -> Result<Vec<u8>, TokenStatusListError> {
+    ) -> Result<Vec<u8>, StatusListError> {
         let mut status_list = query_handler(&status_list_id, &state.query.status_list)
             .await
-            .map_err(|_| TokenStatusListError::StatusListQueryError)?
-            .ok_or(TokenStatusListError::StatusListNotFound(status_list_id.clone()))?;
+            .map_err(|_| StatusListError::StatusListQueryError)?
+            .ok_or(StatusListError::StatusListNotFound(status_list_id.clone()))?;
 
         let amount_indices = STATUS_LIST_BYTES_AMOUNT * 8 / BITS_PER_STATUS as usize;
 
@@ -49,14 +47,14 @@ impl TokenStatusListService {
                 status_list
                     .list
                     .set_status(i, rng.random_range(0..2))
-                    .map_err(TokenStatusListError::StatusListEncodingError)?;
+                    .map_err(StatusListError::StatusListEncodingError)?;
             }
         }
 
         let mut sub_url = config().ietf_oauth_token_status_list_uri.clone();
         sub_url
             .path_segments_mut()
-            .map_err(|_| TokenStatusListError::SubUrlParsingError)?
+            .map_err(|_| StatusListError::SubUrlParsingError)?
             .push(&status_list_id.to_string());
 
         let status_list_claims = StatusListTokenClaims {
@@ -65,7 +63,7 @@ impl TokenStatusListService {
             exp: None,
             ttl: None,
             encoded_status_list: EncodedStatusList::try_from(status_list.list)
-                .map_err(TokenStatusListError::StatusListEncodingError)?,
+                .map_err(StatusListError::StatusListEncodingError)?,
         };
 
         let mut status_list_token = StatusListToken {
@@ -83,30 +81,10 @@ impl TokenStatusListService {
             &default_did_method,
         )
         .await
-        .map_err(|_| TokenStatusListError::JwtEncodeError)?;
+        .map_err(|_| StatusListError::JwtEncodeError)?;
 
-        let compressed_jwt_token = compress_gzip(&jwt_token).map_err(|_| TokenStatusListError::GzipCompressionError)?;
+        let compressed_jwt_token = compress_gzip(&jwt_token).map_err(|_| StatusListError::GzipCompressionError)?;
 
         Ok(compressed_jwt_token)
     }
-}
-
-#[derive(Error, Debug)]
-pub enum TokenStatusListError {
-    #[error("Failed to encode and compress the status list claim: {0:?}")]
-    StatusListEncodingError(OAuthTSLError),
-    #[error("Failed to convert/parse status type: {0:?}")]
-    StatusTypeError(OAuthTSLError),
-    #[error("Invalid status size: {0:?}")]
-    InvalidStatusSize(OAuthTSLError),
-    #[error("Failed to parse the `sub` url for the status list")]
-    SubUrlParsingError,
-    #[error("Failed to encode the status list token as JWT.")]
-    JwtEncodeError,
-    #[error("Failed to Gzip compress the JWT token.")]
-    GzipCompressionError,
-    #[error("Error querying the status list")]
-    StatusListQueryError,
-    #[error("Status list not found for the provided id: {0}")]
-    StatusListNotFound(String),
 }
