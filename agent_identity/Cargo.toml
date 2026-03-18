@@ -11,6 +11,7 @@ agent_secret_manager = { path = "../agent_secret_manager" }
 anyhow.workspace = true
 async-trait.workspace = true
 base64.workspace = true
+chrono.workspace = true
 cqrs-es.workspace = true
 derivative.workspace = true
 did-jwk-extern = { version = "0.1.1", package = "did-jwk" }
@@ -25,8 +26,10 @@ iota-sdk.workspace = true
 itertools = "0.14"
 jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
+oid4vci.workspace = true
 product_common.workspace = true
 rand.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ssi-dids = "0.1.1"
@@ -65,6 +68,7 @@ reqwest.workspace = true
 serial_test = "3.0"
 tower.workspace = true
 tracing-test.workspace = true
+wiremock.workspace = true
 
 [features]
 test_utils = ["dep:futures", "dep:rstest"]

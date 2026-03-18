@@ -1,6 +1,6 @@
 use crate::generic_oid4vc::GenericAuthorizationRequest;
 use cqrs_es::DomainEvent;
-use oid4vp::oid4vp::DecodedVpToken;
+use oid4vp::token::vp_token_validator::DecodedVpToken;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, strum::Display)]

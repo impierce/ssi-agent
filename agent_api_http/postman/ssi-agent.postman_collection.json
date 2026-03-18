@@ -1,9 +1,9 @@
 {
   "info": {
-    "_postman_id": "7e7f70a4-fe08-4199-a479-a0fd5884bd71",
+    "_postman_id": "87e6bc30-258e-4ee8-8afa-37605eed2677",
     "name": "ssi-agent",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "_exporter_id": "37402219"
+    "_exporter_id": "41786572"
   },
   "item": [
     {
@@ -1348,7 +1348,7 @@
           "response": []
         },
         {
-          "name": "oid4vp_authorization_requests_with_dcql_query",
+          "name": "Create a Request for a VCDM 1.1 Credential",
           "event": [
             {
               "listen": "test",
@@ -1396,7 +1396,145 @@
             "header": [],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"nonce\": \"this is a nonce\",\n    \"dcql_query\": {\n        \"credentials\": [\n            {\n                \"id\": \"CredentialQuery\",\n                \"format\": \"jwt_vc_json\",\n                \"meta\": {\n                    \"type_values\": [\n                        [\"VerifiableCredential\"],\n                        [\"PersonalInformation\"]\n                    ]\n                },\n                \"claims\": [\n                    {\"path\": [\"credentialSubject\", \"givenName\"]},\n                    {\"path\": [\"credentialSubject\", \"familyName\"]},\n                    {\"path\": [\"credentialSubject\", \"email\"]},\n                    {\"path\": [\"credentialSubject\", \"birthdate\"]}\n                ]\n            }\n        ]\n    }\n}",
+              "raw": "{\n    \"dcql_query\": {\n        \"credentials\": [\n            {\n                \"id\": \"CredentialQuery\",\n                \"format\": \"jwt_vc_json\",\n                \"meta\": {\n                    \"type_values\": [\n                        [\n                            \"VerifiableCredential\"\n                        ]\n                    ]\n                },\n                \"claims\": [\n                    {\n                        \"path\": [\n                            \"credentialSubject\",\n                            \"first_name\"\n                        ]\n                    }\n                ]\n            }\n        ]\n    }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{HOST}}/v0/authorization_requests",
+              "host": [
+                "{{HOST}}"
+              ],
+              "path": [
+                "v0",
+                "authorization_requests"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create a Request for an SD-JWT VC Credential",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const location = pm.response.headers.get(\"LOCATION\");",
+                  "",
+                  "if(location){",
+                  "    pm.collectionVariables.set(\"AUTHORIZATION_REQUEST_LOCATION\",location)",
+                  "}",
+                  "",
+                  "const authorization_request = responseBody;",
+                  "",
+                  "const decodedString = decodeURIComponent(authorization_request);",
+                  "",
+                  "// Regular expression to match the value of request_uri",
+                  "const regex = /request_uri=([^&]+)/;",
+                  "",
+                  "// Executing the regular expression on the input string",
+                  "const match = regex.exec(decodedString);",
+                  "",
+                  "// Extracting the value of request_uri",
+                  "const requestUri = match ? decodeURIComponent(match[1]) : null;",
+                  "",
+                  "pm.collectionVariables.set(\"REQUEST_URI\",requestUri)",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"dcql_query\": {\n        \"credentials\": [\n            {\n                \"id\": \"CredentialQuery\",\n                \"format\": \"dc+sd-jwt\",\n                \"meta\": {\n                    \"vct_values\": [\n                        \"http://localhost:3033/vct/U0QtSldU/0\"\n                    ]\n                },\n                \"claims\": [\n                    {\n                        \"path\": [\n                            \"first_name\"\n                        ]\n                    }\n                ]\n            }\n        ]\n    }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{HOST}}/v0/authorization_requests",
+              "host": [
+                "{{HOST}}"
+              ],
+              "path": [
+                "v0",
+                "authorization_requests"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create a Request for a VCDM 2.0 SD-JWT Credential",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const location = pm.response.headers.get(\"LOCATION\");",
+                  "",
+                  "if(location){",
+                  "    pm.collectionVariables.set(\"AUTHORIZATION_REQUEST_LOCATION\",location)",
+                  "}",
+                  "",
+                  "const authorization_request = responseBody;",
+                  "",
+                  "const decodedString = decodeURIComponent(authorization_request);",
+                  "",
+                  "// Regular expression to match the value of request_uri",
+                  "const regex = /request_uri=([^&]+)/;",
+                  "",
+                  "// Executing the regular expression on the input string",
+                  "const match = regex.exec(decodedString);",
+                  "",
+                  "// Extracting the value of request_uri",
+                  "const requestUri = match ? decodeURIComponent(match[1]) : null;",
+                  "",
+                  "pm.collectionVariables.set(\"REQUEST_URI\",requestUri)",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"dcql_query\": {\n        \"credentials\": [\n            {\n                \"id\": \"CredentialQuery\",\n                \"format\": \"vc+sd-jwt\",\n                \"meta\": {\n                    \"type_values\": [\n                        [\n                            \"VerifiableCredential\"\n                        ]\n                    ]\n                },\n                \"claims\": [\n                    {\n                        \"path\": [\n                            \"credentialSubject\",\n                            \"first_name\"\n                        ]\n                    }\n                ]\n            }\n        ]\n    }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1838,7 +1976,8 @@
                       ""
                     ],
                     "type": "text/javascript",
-                    "packages": {}
+                    "packages": {},
+                    "requests": {}
                   }
                 },
                 {
@@ -1848,7 +1987,8 @@
                       ""
                     ],
                     "type": "text/javascript",
-                    "packages": {}
+                    "packages": {},
+                    "requests": {}
                   }
                 }
               ],
@@ -1857,7 +1997,7 @@
                 "header": [],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"alias\": \"My Connection\",\n    \"domain\": \"http://example.org\",\n    \"dids\": [\"did:example:123\"],\n    \"credentialOfferEndpoint\": \"{{HOST}}/openid4vci/offers\"\n}",
+                  "raw": "{\n    \"url\": \"{{HOST}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -2145,6 +2285,90 @@
                     "v0",
                     "connections",
                     "{{CONNECTION_ID}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Sync Connection by ID",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"id\": \"{{CONNECTION_ID}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/connections/sync-connection",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "connections",
+                    "sync-connection"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Remove Connection",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"id\": \"{{CONNECTION_ID}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/connections/remove-connection",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "connections",
+                    "remove-connection"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Accept Pending Connection Changes",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"id\": \"{{CONNECTION_ID}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{HOST}}/v0/connections/accept-pending-changes",
+                  "host": [
+                    "{{HOST}}"
+                  ],
+                  "path": [
+                    "v0",
+                    "connections",
+                    "accept-pending-changes"
                   ]
                 }
               },

@@ -1,4 +1,4 @@
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::command_handler;
 use agent_verification::{
     authorization_request::command::AuthorizationRequestCommand, generic_oid4vc::GenericAuthorizationResponse,
     state::VerificationState,
@@ -30,19 +30,7 @@ pub(crate) async fn redirect(
         return Err(ApiError::new(StatusCode::BAD_REQUEST));
     };
 
-    // Retrieve the authorization request.
-    let authorization_request = query_handler(
-        &authorization_request_id,
-        &verification_state.query.authorization_request,
-    )
-    .await?
-    .and_then(|authorization_request_view| authorization_request_view.authorization_request)
-    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
-
-    let command = AuthorizationRequestCommand::VerifyAuthorizationResponse {
-        authorization_request,
-        authorization_response,
-    };
+    let command = AuthorizationRequestCommand::VerifyAuthorizationResponse { authorization_response };
 
     // Verify the authorization response.
     command_handler(
