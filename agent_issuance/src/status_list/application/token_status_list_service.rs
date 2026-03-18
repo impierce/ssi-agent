@@ -1,7 +1,5 @@
 use agent_shared::{
-    config::{
-        config, get_preferred_did_method, get_preferred_signing_algorithm, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT,
-    },
+    config::{get_preferred_did_method, get_preferred_signing_algorithm, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT},
     handlers::query_handler,
 };
 use oauth_tsl::{
@@ -11,7 +9,7 @@ use oauth_tsl::{
 use oid4vc_core::jwt::encode;
 use rand::Rng;
 
-use crate::{state::IssuanceState, status_list::error::StatusListError};
+use crate::{credential::aggregate::get_status_list_url, state::IssuanceState, status_list::error::StatusListError};
 
 pub struct TokenStatusListService {}
 
@@ -51,11 +49,7 @@ impl TokenStatusListService {
             }
         }
 
-        let mut sub_url = config().ietf_oauth_token_status_list_uri.clone();
-        sub_url
-            .path_segments_mut()
-            .map_err(|_| StatusListError::SubUrlParsingError)?
-            .push(&status_list_id.to_string());
+        let sub_url = get_status_list_url(status_list_id).map_err(|_| StatusListError::StatusListUrlParsingError)?;
 
         let status_list_claims = StatusListTokenClaims {
             sub: sub_url.to_string(),

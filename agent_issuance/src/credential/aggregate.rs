@@ -936,7 +936,7 @@ fn filter_schema_errors(errors: &mut JsonSchemaError) -> bool {
     }
 }
 
-fn get_status_list_url(id: String) -> Result<identity_core::common::Url, CredentialError> {
+pub fn get_status_list_url(id: String) -> Result<identity_core::common::Url, CredentialError> {
     let mut status_list_url = config().ietf_oauth_token_status_list_uri.clone();
     status_list_url
         .path_segments_mut()
