@@ -577,7 +577,7 @@ fn build_signed_w3c_credential_data(
     status_index: usize,
     status_list_url: String,
 ) -> Result<serde_json::Value, CredentialError> {
-    let credential_types: Vec<String> = credential_data
+    let credential_types = credential_data
         .get("type")
         .and_then(|t| t.as_array())
         .ok_or(InvalidCredentialDataError)?
