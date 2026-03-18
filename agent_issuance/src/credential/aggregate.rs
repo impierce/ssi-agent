@@ -74,7 +74,7 @@ mod never_as_str {
 pub struct CredentialStatus {
     pub index: usize,
     pub status: StatusType,
-    pub status_list_id: String,
+    pub status_list_id: String, // The full status list URL is stored here
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -474,7 +474,7 @@ impl Aggregate for Credential {
                     signed_credential,
                     credential_status: CredentialStatus {
                         index: self.credential_status.index,
-                        status: StatusType::VALID,
+                        status: StatusType::VALID, // TODO: this is actually hardcoded and should ideally also be retrieved from the index in the actual status list.
                         status_list_id: status_list_url.to_string(),
                     },
                     status: Status::Issued,

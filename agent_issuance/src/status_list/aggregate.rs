@@ -1,10 +1,14 @@
+#[cfg(feature = "test_utils")]
+use agent_shared::config::TESTINDEX;
 use agent_shared::config::{BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use oauth_tsl::status_list::{Bits, StatusList};
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+#[cfg(not(feature = "test_utils"))]
+use rand::Rng;
 
 use crate::{
     services::IssuanceServices,
@@ -42,7 +46,7 @@ impl Aggregate for StatusListAggregate {
                 id,
                 status_list: StatusList {
                     status_size: Bits::Two,
-                    status_list: vec![0; STATUS_LIST_BYTES_AMOUNT * 8 / BITS_PER_STATUS as usize], // TODO change this too if we don't do the packing into bytes anymore
+                    status_list: vec![0; STATUS_LIST_BYTES_AMOUNT],
                     aggregation_uri: None,
                 },
                 used_indices: vec![],
@@ -51,12 +55,18 @@ impl Aggregate for StatusListAggregate {
                 let mut status_list = self.list.clone();
                 let mut used_indices = self.used_indices.clone();
 
-                let mut rng = rand::rng(); //. Must be initialized here otherwise errors occur with axum due to thread unsafety and the Send trait
-                let max_amount_indices = STATUS_LIST_BYTES_AMOUNT * 8 / BITS_PER_STATUS as usize;
-                let index = loop {
-                    let candidate = rng.random_range(0..max_amount_indices - 1);
-                    if !self.used_indices.contains(&candidate) {
-                        break candidate;
+                #[cfg(feature = "test_utils")]
+                let index = TESTINDEX;
+
+                #[cfg(not(feature = "test_utils"))]
+                let index = {
+                    let mut rng = rand::rng();
+                    let max_amount_indices = STATUS_LIST_BYTES_AMOUNT * (8 / BITS_PER_STATUS as usize);
+                    loop {
+                        let candidate = rng.random_range(0..max_amount_indices - 1);
+                        if !self.used_indices.contains(&candidate) {
+                            break candidate;
+                        }
                     }
                 };
                 status_list
@@ -73,14 +83,14 @@ impl Aggregate for StatusListAggregate {
                 }])
             }
 
-            UpdateIndex { id, index, status } => {
+            UpdateIndex { index, status } => {
                 let mut status_list = self.list.clone();
                 status_list
                     .set_status(index, status as u8)
                     .map_err(|e| StatusListError::FailedToSetIndex(index, e.to_string()))?;
 
                 Ok(vec![IndexUpdated {
-                    id,
+                    id: self.id.clone(),
                     status_list,
                     index,
                     status,

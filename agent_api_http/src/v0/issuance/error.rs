@@ -140,6 +140,12 @@ impl IntoApiErrorExt for ServerConfigError {
     }
 }
 
+impl IntoApiErrorExt for StatusListError {
+    fn into_api_error(self) -> ApiError {
+        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR) // TODO this is a quickfix
+    }
+}
+
 pub enum PublicError {
     TokenError(OID4VCError<TokenErrorResponse>),
     CredentialError(OID4VCError<CredentialErrorResponse>),

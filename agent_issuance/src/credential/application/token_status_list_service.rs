@@ -6,7 +6,7 @@ use agent_shared::{
 };
 use oauth_tsl::{
     error::OAuthTSLError,
-    status_list::{EncodedStatusList, StatusType},
+    status_list::EncodedStatusList,
     tokens::status_list_token::{compress_gzip, StatusListToken, StatusListTokenClaims},
 };
 use oid4vc_core::jwt::encode;
@@ -40,35 +40,19 @@ impl TokenStatusListService {
         // - or the percentage of random values desired (e.g. 30%). One is from a payload/latency perspective, the other from a privacy/security perspective.
         //
         // This block ensures that the remaining empty 30% or more of a status list is filled with random values.
-        // This block works in tandem with the part of `fn patch_credential` which only fills 70% of a status list.
+        // This block works in tandem with the part of `fn patch_credential` which only fills up to 70% of a status list.
 
         for i in 0..amount_indices {
             if !status_list.used_indices.contains(&i) {
                 // rng must be initialized here otherwise errors occur with axum due to thread unsafe problems and the Send trait
                 let mut rng = rand::rng();
                 // the range is 0..2 because BITS_PER_STATUS is set to 2, meaning 4 options, but we only have 3 options defined (VALID, UNVALID, SUSPENDED)
-                status_list.list.status_list.insert(i, rng.random_range(0..2));
+                status_list
+                    .list
+                    .set_status(i, rng.random_range(0..2))
+                    .map_err(TokenStatusListError::StatusListEncodingError)?;
             }
         }
-
-        // TODO move whats below to a builder function in the library oauth_tsl.
-        // - sensible default bitsize = 2
-        // - sensible default random percentage = 30%
-        // - amount of statuses is derived from the input vector of indices
-
-        let statusses: Vec<StatusType> = status_list
-            .list
-            .status_list
-            .iter()
-            .map(|status| StatusType::try_from(*status))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(TokenStatusListError::StatusTypeError)?;
-
-        // TODO: check if this whole status packing thing makes sense
-        status_list
-            .list
-            .pack_statuses_into_bytes(statusses)
-            .map_err(TokenStatusListError::InvalidStatusSize)?;
 
         let mut sub_url = config().ietf_oauth_token_status_list_uri.clone();
         sub_url
@@ -90,7 +74,6 @@ impl TokenStatusListService {
             ..Default::default()
         };
 
-        // This remaining block stays in ssi-agent
         status_list_token.header.alg = get_preferred_signing_algorithm();
         let default_did_method = get_preferred_did_method().to_string();
 

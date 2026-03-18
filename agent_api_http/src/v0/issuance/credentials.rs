@@ -2,6 +2,7 @@ use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_issuance::credential::aggregate::CredentialStatus;
+use agent_issuance::status_list::command::StatusListCommand;
 use agent_issuance::{
     credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data},
     offer::command::OfferCommand,
@@ -19,9 +20,6 @@ use oid4vci::credential_offer::GrantType;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
-
-#[cfg(feature = "test_utils")]
-pub const TESTINDEX: usize = 123;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
@@ -188,7 +186,7 @@ pub async fn patch_credential(
         let credential_status = CredentialStatus {
             index: credential.credential_status.index,
             status,
-            status_list_id: "".to_string(), // TODO: set a real status_list_id
+            status_list_id: credential.credential_status.status_list_id.clone(),
         };
 
         let command = CredentialCommand::UpdateCredentialStatus {
@@ -197,6 +195,20 @@ pub async fn patch_credential(
         };
 
         command_handler(&credential_id, &state.command.credential, command).await?;
+
+        let command = StatusListCommand::UpdateIndex {
+            index: credential.credential_status.index,
+            status,
+        };
+
+        println!("index: {}, status: {:?}", credential.credential_status.index, status);
+
+        command_handler(
+            &credential.credential_status.status_list_id,
+            &state.command.status_list,
+            command,
+        )
+        .await?;
 
         Ok(StatusCode::NO_CONTENT.into_response())
     } else {
@@ -207,24 +219,31 @@ pub async fn patch_credential(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::tests::OFFER_ID;
+    use crate::v0::authorization;
+    use crate::v0::authorization::authorization_server::token::tests::token;
+    use crate::v0::issuance::offers::tests::offers;
     use crate::v0::issuance::router;
     use crate::API_VERSION;
+    use crate::{tests::OFFER_ID, v0::issuance::credential_issuer::credential::tests::TEST_NONCE};
+    use agent_authorization::services::AuthorizationServices;
+    use agent_holder::credential::aggregate::get_unverified_jwt_claims;
     use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_secret_manager::service::Service;
     use agent_secret_manager::subject::Subject;
+    use agent_shared::config::TESTINDEX;
     use agent_store::in_memory::InMemory;
-    use agent_store::issuance_state;
+    use agent_store::{authorization_state, issuance_state};
     use axum::{
         body::{self, Body},
         http::{self, Request, StatusCode},
         Router,
     };
     use lazy_static::lazy_static;
-    use oauth_tsl::relying_party::check_status_in_status_list_token_jwt;
+    use oauth_tsl::relying_party::{check_status_in_status_list_token_jwt, decrypt_status_list_token};
     use oauth_tsl::relying_party::{decompress_gzip, StatusListTokenResponseType};
+    use oauth_tsl::status_list::StatusList;
     use serde_json::json;
-    use tower::Service as _;
+    use tower::{Service as _, ServiceExt};
 
     use jsonwebtoken::{decode_header, Algorithm, DecodingKey};
     use oid4vc_core::authentication::verify::Verify;
@@ -246,12 +265,6 @@ pub mod tests {
                 "name": "UniCore"
             },
             "credentialSubject": CREDENTIAL_SUBJECT.clone(),
-            "credentialStatus": {
-                "id": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
-                "type": "statuslist+jwt",
-                "idx": TESTINDEX,
-                "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0"
-            }
         });
     }
 
@@ -316,8 +329,60 @@ pub mod tests {
         get_credentials_endpoint
     }
 
-    pub async fn patch_credential(app: &mut Router) {
-        let credential_endpoint = credentials(app, "001").await;
+    pub async fn patch_credential(mut app: &mut Router, issuance_state: Arc<IssuanceState>) {
+        let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
+            c_nonce: TEST_NONCE.to_string(),
+        };
+        agent_shared::handlers::command_handler(TEST_NONCE, &issuance_state.command.nonce, command)
+            .await
+            .unwrap();
+
+        let credential_configuration_id = "001".to_string();
+
+        let credential_endpoint = credentials(&mut app, &credential_configuration_id).await;
+
+        let grants = offers(&mut app, &credential_configuration_id).await.unwrap();
+
+        let authorization_state =
+            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
+
+        let mut authorization_app = authorization::router((authorization_state, issuance_state));
+
+        let access_token: String = token(&mut authorization_app, true, grants).await;
+        let jwt = "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ";
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/openid4vci/credential")
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "credential_configuration_id": credential_configuration_id,
+                            "proofs": {
+                                "jwt":[jwt]
+                            }
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        let body = body["credentials"][0]["credential"].clone();
+        let body = get_unverified_jwt_claims(&body).unwrap();
+
+        // println!("Body decoded: {}", body);
 
         let relying_party_state = Subject::test_subject().await;
 
@@ -353,6 +418,8 @@ pub mod tests {
             .await
             .unwrap();
 
+        println!("Token Status List Response: {:?}", token_status_list_response);
+
         let body_bytes = body::to_bytes(token_status_list_response.into_body(), usize::MAX)
             .await
             .unwrap();
@@ -369,6 +436,14 @@ pub mod tests {
             }
         };
 
+        let decoded_jwt = decrypt_status_list_token(&jwt_status_list_token, decoding_key.clone()).unwrap();
+        let status_list = StatusList::try_from(decoded_jwt.claims.encoded_status_list).unwrap();
+
+        println!("Status at {}: {:?}", TESTINDEX, status_list.get_status(TESTINDEX));
+        println!("Status at 122: {:?}", status_list.get_status(122));
+        println!("Status at 124: {:?}", status_list.get_status(124));
+        println!("Status at 125: {:?}", status_list.get_status(125));
+
         let status = check_status_in_status_list_token_jwt(&jwt_status_list_token, TESTINDEX, decoding_key).unwrap();
 
         assert_eq!(status, StatusType::INVALID as u8);
@@ -380,9 +455,9 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state);
+        let mut app = router(issuance_state.clone());
 
-        patch_credential(&mut app).await;
+        patch_credential(&mut app, issuance_state).await;
     }
 
     #[tokio::test]
@@ -392,7 +467,7 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state);
+        let mut app = router(issuance_state.clone());
         credentials(&mut app, "001").await;
     }
 }
