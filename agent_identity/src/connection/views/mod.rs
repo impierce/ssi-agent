@@ -7,7 +7,7 @@ use cqrs_es::{EventEnvelope, View};
 use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Default, Deserialize, utoipa::ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 #[schema(as = Connection)]
 pub struct ConnectionView {
     #[serde(rename = "id")]
