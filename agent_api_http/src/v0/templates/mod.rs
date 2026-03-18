@@ -2,7 +2,7 @@ use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
-use agent_library::template::aggregate::{CredentialFormat, Display, HolderType, Status, Template, Visibility};
+use agent_library::template::aggregate::{DataModel, Display, HolderType, Status, Template, Visibility};
 use agent_library::template::command::TemplateCommand;
 use axum::{
     extract::{Path, State},
@@ -27,7 +27,7 @@ pub struct TemplateDto {
     pub source_template_id: Option<String>,
     pub title: Option<String>,
     pub display: Option<Display>,
-    pub credential_format: Option<CredentialFormat>,
+    pub data_model: Option<DataModel>,
     pub creator: Option<String>,
     pub holder_type: Option<HolderType>,
     pub modified_at: Option<String>,
@@ -46,7 +46,7 @@ impl From<Template> for TemplateDto {
             source_template_id: value.source_template_id,
             title: value.title,
             display: value.display,
-            credential_format: value.credential_format,
+            data_model: value.data_model,
             creator: value.creator,
             holder_type: value.holder_type,
             modified_at: value.modified_at,
@@ -65,7 +65,7 @@ impl From<Template> for TemplateDto {
 pub struct CreateTemplateEndpointRequest {
     pub title: Option<String>,
     pub display: Option<Display>,
-    pub credential_format: Option<CredentialFormat>,
+    pub data_model: Option<DataModel>,
     pub creator: Option<String>,
     pub holder_type: Option<HolderType>,
     pub tags: Vec<String>,
@@ -88,7 +88,7 @@ pub struct CreateTemplateEndpointRequest {
         examples(
             ("Standard template" = (
                 description = "A simple example that will issue credentials in the W3C Verifiable Credentials Data Model v1.1 format.",
-                value = json!({ "title": "Standard template", "credentialFormat": "w3c_vc_data_model_v1-1", "holderType": "individual" })
+                value = json!({ "title": "Standard template", "dataModel": "w3c_vc_data_model_v1-1", "holderType": "individual" })
             ))
         )
     ),
@@ -102,7 +102,7 @@ pub(crate) async fn create_template(
     Json(CreateTemplateEndpointRequest {
         title,
         display,
-        credential_format,
+        data_model,
         creator,
         holder_type,
         tags,
@@ -120,7 +120,7 @@ pub(crate) async fn create_template(
         source_template_id: None,
         title,
         display,
-        credential_format,
+        data_model,
         creator,
         holder_type,
         tags,
@@ -192,7 +192,7 @@ pub(crate) async fn duplicate_template(
         source_template_id: Some(source_template_id),
         title: original_template.title.map(|t| format!("{} Copy", t)),
         display: original_template.display,
-        credential_format: original_template.credential_format,
+        data_model: original_template.data_model,
         creator: original_template.creator,
         holder_type: original_template.holder_type,
         tags: original_template.tags,
@@ -218,14 +218,14 @@ pub(crate) async fn duplicate_template(
         .into_response())
 }
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
 #[serde(default, rename_all = "camelCase")]
 pub struct UpdateTemplateEndpointRequest {
     #[serde(rename = "id")]
     pub template_id: String,
     pub title: Option<String>,
     pub display: Option<Display>,
-    pub credential_format: Option<CredentialFormat>,
+    pub data_model: Option<DataModel>,
     pub creator: Option<String>,
     pub holder_type: Option<HolderType>,
     pub tags: Vec<String>,
@@ -236,6 +236,18 @@ pub struct UpdateTemplateEndpointRequest {
     pub schema: Option<serde_json::Value>,
 }
 
+/// Update a template
+///
+/// Updates an existing template with the provided content.
+#[utoipa::path(
+    post,
+    path = "/templates/update-template",
+    operation_id = "update_template",
+    tags = ["Library", "Templates"],
+    responses(
+        (status = 204, description = "Template updated successfully")
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn update_template(
     State(state): State<Arc<LibraryState>>,
@@ -243,7 +255,7 @@ pub(crate) async fn update_template(
         template_id,
         title,
         display,
-        credential_format,
+        data_model,
         creator,
         holder_type,
         tags,
@@ -288,10 +300,10 @@ pub(crate) async fn update_template(
         command_handler(&template_id, &state.command.template, command).await?;
     }
 
-    if let Some(credential_format) = credential_format {
-        let command = TemplateCommand::UpdateCredentialFormat {
+    if let Some(data_model) = data_model {
+        let command = TemplateCommand::UpdateDataModel {
             template_id: template_id.clone(),
-            credential_format,
+            data_model,
         };
         command_handler(&template_id, &state.command.template, command).await?;
     }
@@ -427,13 +439,25 @@ pub(crate) async fn get_template(
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteTemplateEndpointRequest {
     #[serde(rename = "id")]
     pub template_id: String,
 }
 
+/// Delete a template
+///
+/// Deletes a template by marking its status as `Deleted`. Deleted templates will no longer appear in any views.
+#[utoipa::path(
+    post,
+    path = "/templates/delete-template",
+    operation_id = "delete_template_by_id",
+    tags = ["Library", "Templates"],
+    responses(
+        (status = 204, description = "Template deleted successfully")
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_template(
     State(state): State<Arc<LibraryState>>,

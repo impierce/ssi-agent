@@ -21,6 +21,7 @@ use agent_holder::presentation::views::all_presentations::AllPresentationsView;
 use agent_holder::services::HolderServices;
 use agent_holder::state::HolderState;
 use agent_identity::connection::views::all_connections::AllConnectionsView;
+use agent_identity::connection::views::ConnectionView;
 use agent_identity::document::views::all_documents::AllDocumentsView;
 use agent_identity::service::views::all_services::AllServicesView;
 use agent_identity::services::IdentityServices;
@@ -186,7 +187,7 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
     } = partition_event_publishers(event_publishers);
 
     let (connection_command_handler, connection, all_connections) = builder
-        .commands_and_queries::<Connection, Connection, AllConnectionsView>(
+        .commands_and_queries::<ConnectionView, Connection, AllConnectionsView>(
             services.clone(),
             connection_event_publishers,
         )
