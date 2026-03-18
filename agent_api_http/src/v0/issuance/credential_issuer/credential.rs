@@ -161,7 +161,7 @@ pub(crate) async fn credential(
                 .used_indices
                 .last()
                 .cloned()
-                .ok_or(PublicError::InternalServerError)?, // TODO: even though the AddIndex command is executed right before this, retrieving the index this way is not the prettiest since something of a "data race" could occur where another index has already been added before this command is executed. Then two credentials would be assigned the same index (since AddIndex is only called during credential issuance when SignCredential is called), as they both retrieve the same last index.
+                .ok_or(PublicError::InternalServerError)?, // TODO: even though the AddIndex command is executed right before this, retrieving the index this way is not the prettiest since something of a "data race" could occur where another index has already been added between the AddIndex command and this command. Then two credentials would be assigned the same index, as they both retrieve the same last index.
         };
 
         command_handler(&credential_id, &state.command.credential, command).await?;
@@ -515,6 +515,4 @@ pub mod tests {
             assert!(external_server.received_requests().await.unwrap().len() == 1);
         }
     }
-
-    // TODO test patch endpoint here since credentials need to be signed before having a credential status
 }
