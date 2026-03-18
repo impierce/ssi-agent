@@ -1,7 +1,7 @@
 use oauth_tsl::status_list::StatusType;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub enum StatusListCommand {
     CreateStatusList { id: String },
     AddIndex { status: StatusType },
