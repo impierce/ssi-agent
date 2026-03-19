@@ -510,6 +510,7 @@ pub trait EventPublisher {
     fn credential(&mut self) -> Option<CredentialEventPublisher>;
     fn offer(&mut self) -> Option<OfferEventPublisher>;
     fn nonce(&mut self) -> Option<NonceEventPublisher>;
+    fn status_list(&mut self) -> Option<StatusListEventPublisher>;
 
     fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher>;
     fn presentation(&mut self) -> Option<PresentationEventPublisher>;
@@ -659,6 +660,10 @@ mod test {
             None
         }
 
+        fn status_list(&mut self) -> Option<StatusListEventPublisher> {
+            None
+        }
+
         fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher> {
             None
         }
@@ -729,6 +734,10 @@ mod test {
             None
         }
 
+        fn status_list(&mut self) -> Option<StatusListEventPublisher> {
+            None
+        }
+
         fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher> {
             None
         }
@@ -763,9 +772,9 @@ mod test {
             access_token_event_publishers: token_event_publishers,
             server_config_event_publishers,
             credential_event_publishers,
-            status_list_event_publishers,
             offer_event_publishers,
             nonce_event_publishers,
+            status_list_event_publishers,
             holder_credential_event_publishers,
             presentation_event_publishers,
             received_offer_event_publishers,
@@ -786,6 +795,7 @@ mod test {
         assert_eq!(status_list_event_publishers.len(), 0);
         assert_eq!(offer_event_publishers.len(), 0);
         assert_eq!(nonce_event_publishers.len(), 0);
+        assert_eq!(status_list_event_publishers.len(), 0);
         assert_eq!(holder_credential_event_publishers.len(), 0);
         assert_eq!(presentation_event_publishers.len(), 0);
         assert_eq!(received_offer_event_publishers.len(), 0);
