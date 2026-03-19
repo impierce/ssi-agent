@@ -481,7 +481,7 @@ impl Aggregate for Credential {
                     signed_credential,
                     credential_status: CredentialStatus {
                         index,
-                        status: StatusType::VALID, // TODO: this is actually hardcode, but currently we don't support signing a credential with anything other than a VALID status.
+                        status: StatusType::VALID,
                         status_list_url: status_list_url.to_string(),
                     },
                     status: Status::Issued,
