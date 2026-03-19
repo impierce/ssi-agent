@@ -3,6 +3,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum StatusListError {
+    #[error("Status list aggregate not found")]
+    AggregateNotFound,
     #[error("Failed to set index `{0}` due to error: {1}")]
     FailedToSetIndex(usize, String),
     #[error("Failed to Gzip compress the JWT token.")]

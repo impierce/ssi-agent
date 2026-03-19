@@ -9,9 +9,6 @@ use oauth_tsl::status_list::{Bits, StatusList};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-#[cfg(not(feature = "test_utils"))]
-use rand::Rng;
-
 use crate::{
     services::IssuanceServices,
     status_list::{command::StatusListCommand, error::StatusListError, event::StatusListEvent},
@@ -53,7 +50,7 @@ impl Aggregate for StatusListAggregate {
                 },
                 used_indices: vec![],
             }]),
-            _ if self.id.is_empty() => return Err(StatusListError::StatusListNotFound("".to_string())),
+            _ if self.id.is_empty() => return Err(StatusListError::AggregateNotFound),
             AddIndex { status } => {
                 let mut status_list = self.list.clone();
                 let mut used_indices = self.used_indices.clone();
@@ -63,6 +60,8 @@ impl Aggregate for StatusListAggregate {
 
                 #[cfg(not(feature = "test_utils"))]
                 let index = {
+                    use rand::Rng;
+
                     let mut rng = rand::rng();
                     let max_amount_indices = STATUS_LIST_BYTES_AMOUNT * (8 / BITS_PER_STATUS as usize);
                     loop {

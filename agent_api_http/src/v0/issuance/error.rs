@@ -137,39 +137,20 @@ impl IntoApiErrorExt for ServerConfigError {
     }
 }
 
-// TODO: Add problem details in the docs for these errors and ref them via type_url
+// TODO: Clearly indicate which errors can occur in the API endpoints (ApiError) and which in the Public endpoints (PublicError).
+// Add problem details in the docs for the ApiErrors and ref them via type_url.
 impl IntoApiErrorExt for StatusListError {
     fn into_api_error(self) -> ApiError {
         use StatusListError::*;
         match self {
-            FailedToSetIndex(_, _) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Failed to Set Status List Index")
-                .source(self)
-                .finish(),
-            GzipCompressionError => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Gzip Compression Error")
-                .source(self)
-                .finish(),
-            JwtEncodeError => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Status List Token JWT Encoding Error")
-                .source(self)
-                .finish(),
-            StatusListEncodingError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Status List Encoding Error")
-                .source(self)
-                .finish(),
-            StatusListNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
-                .title("Status List Not Found")
-                .source(self)
-                .finish(),
-            StatusListQueryError => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Error Querying Status List")
-                .source(self)
-                .finish(),
-            StatusListUrlParsingError => ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Unable to parse ID segment of Status List URL")
-                .source(self)
-                .finish(),
+            AggregateNotFound => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            FailedToSetIndex(_, _) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            GzipCompressionError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            JwtEncodeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            StatusListEncodingError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            StatusListNotFound(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            StatusListQueryError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            StatusListUrlParsingError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
@@ -261,6 +242,7 @@ impl IntoPublicError for StatusListError {
     fn into_public_error(self) -> PublicError {
         use StatusListError::*;
         match self {
+            AggregateNotFound => PublicError::InternalServerError,
             FailedToSetIndex(_, _) => PublicError::InternalServerError,
             GzipCompressionError => PublicError::InternalServerError,
             JwtEncodeError => PublicError::InternalServerError,
