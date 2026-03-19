@@ -1,8 +1,6 @@
-#[cfg(not(feature = "test_utils"))]
-use agent_shared::config::BITS_PER_STATUS;
-use agent_shared::config::STATUS_LIST_BYTES_AMOUNT;
 #[cfg(feature = "test_utils")]
 use agent_shared::config::TESTINDEX;
+use agent_shared::config::{BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use oauth_tsl::status_list::{Bits, StatusList};
@@ -13,8 +11,7 @@ use crate::{
     services::IssuanceServices,
     status_list::{command::StatusListCommand, error::StatusListError, event::StatusListEvent},
 };
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct StatusListAggregate {
     pub id: String,
     pub list: StatusList,
@@ -76,6 +73,8 @@ impl Aggregate for StatusListAggregate {
                     .map_err(|e| StatusListError::FailedToSetIndex(index, e.to_string()))?;
                 used_indices.push(index);
 
+                fill_status_list_with_random_values(&mut status_list, &used_indices)?;
+
                 Ok(vec![IndexAdded {
                     id: self.id.clone(),
                     status_list,
@@ -90,6 +89,8 @@ impl Aggregate for StatusListAggregate {
                 status_list
                     .set_status(index, status as u8)
                     .map_err(|e| StatusListError::FailedToSetIndex(index, e.to_string()))?;
+
+                fill_status_list_with_random_values(&mut status_list, &self.used_indices)?;
 
                 Ok(vec![IndexUpdated {
                     id: self.id.clone(),
@@ -136,4 +137,30 @@ impl Aggregate for StatusListAggregate {
             }
         }
     }
+}
+
+// Helper
+
+/// This function fills the remaining unused indices of a status list with random values to enhance privacy and security.
+/// This block works in tandem with the part of `fn patch_credential` which only fills up to 70% of a status list, ensuring at least 30% randomness.
+fn fill_status_list_with_random_values(
+    status_list: &mut StatusList,
+    used_indices: &[usize],
+) -> Result<(), StatusListError> {
+    use rand::Rng;
+
+    let amount_indices = STATUS_LIST_BYTES_AMOUNT * 8 / BITS_PER_STATUS as usize;
+
+    for i in 0..amount_indices {
+        if !used_indices.contains(&i) {
+            // rng must be initialized here, otherwise errors occur with axum due to thread unsafe problems and the Send trait
+            let mut rng = rand::rng();
+            // the range is 0..2 because BITS_PER_STATUS is set to 2, meaning 4 options, but we only have 3 options defined (VALID, UNVALID, SUSPENDED)
+            status_list
+                .set_status(i, rng.random_range(0..2))
+                .map_err(StatusListError::StatusListEncodingError)?;
+        }
+    }
+
+    Ok(())
 }
