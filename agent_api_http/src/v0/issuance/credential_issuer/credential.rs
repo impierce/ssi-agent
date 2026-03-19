@@ -32,9 +32,6 @@ use tracing::error;
 #[cfg(feature = "test_utils")]
 use agent_shared::config::TEST_STATUS_LIST_ID;
 
-#[cfg(not(feature = "test_utils"))]
-use agent_shared::generate_random_string;
-
 const POLLING_INTERVAL_MS: u64 = 100;
 
 #[axum_macros::debug_handler]
@@ -117,6 +114,7 @@ pub(crate) async fn credential(
         .unwrap_or_default();
 
     // Find a status list which is not full
+    // TODO: this contains quite some domain logic and should actually be moved there.
     let max_amount_indices = STATUS_LIST_BYTES_AMOUNT * 8 / BITS_PER_STATUS as usize;
     let available_status_list = all_status_lists
         .into_iter()
@@ -126,7 +124,7 @@ pub(crate) async fn credential(
         Some(status_list) => status_list.id.clone(),
         None => {
             #[cfg(not(feature = "test_utils"))]
-            let id = generate_random_string();
+            let id = uuid::Uuid::new_v4().to_string();
 
             #[cfg(feature = "test_utils")]
             let id = TEST_STATUS_LIST_ID.to_string();
