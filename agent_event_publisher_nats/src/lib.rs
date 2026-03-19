@@ -5,7 +5,7 @@ use agent_store::{
     ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
     HolderCredentialEventPublisher, NonceEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
     PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
-    ServiceEventPublisher, TemplateEventPublisher,
+    ServiceEventPublisher, StatusListEventPublisher, TemplateEventPublisher,
 };
 use async_nats::Client;
 use async_trait::async_trait;
@@ -100,6 +100,10 @@ impl EventPublisher for EventPublisherNats {
     }
 
     fn nonce(&mut self) -> Option<NonceEventPublisher> {
+        None
+    }
+
+    fn status_list(&mut self) -> Option<StatusListEventPublisher> {
         None
     }
 

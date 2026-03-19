@@ -4,7 +4,7 @@ use crate::{
 };
 use agent_issuance::{
     application::access_token_validation_service::AccessTokenValidationError, credential::error::CredentialError,
-    offer::error::OfferError, server_config::error::ServerConfigError,
+    offer::error::OfferError, server_config::error::ServerConfigError, status_list::error::StatusListError,
 };
 use axum::{response::IntoResponse, response::Response, Json};
 use http_api_problem::ApiError;
@@ -137,6 +137,24 @@ impl IntoApiErrorExt for ServerConfigError {
     }
 }
 
+// TODO: Clearly indicate which errors can occur in the API endpoints (ApiError) and which in the Public endpoints (PublicError).
+// Add problem details in the docs for the ApiErrors and ref them via type_url.
+impl IntoApiErrorExt for StatusListError {
+    fn into_api_error(self) -> ApiError {
+        use StatusListError::*;
+        match self {
+            AggregateNotFound => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            FailedToSetIndex(_, _) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            GzipCompressionError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            JwtEncodeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            StatusListEncodingError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            StatusListNotFound(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            StatusListQueryError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            StatusListUrlParsingError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+        }
+    }
+}
+
 pub enum PublicError {
     TokenError(OID4VCError<TokenErrorResponse>),
     CredentialError(OID4VCError<CredentialErrorResponse>),
@@ -217,6 +235,28 @@ impl IntoPublicError for ServerConfigError {
             RemoveProvisionedCredentialConfigurationError => PublicError::InternalServerError,
             UnsupportedCredentialFormatIdentifierError(_) => PublicError::InternalServerError,
         }
+    }
+}
+
+impl IntoPublicError for StatusListError {
+    fn into_public_error(self) -> PublicError {
+        use StatusListError::*;
+        match self {
+            AggregateNotFound => PublicError::InternalServerError,
+            FailedToSetIndex(_, _) => PublicError::InternalServerError,
+            GzipCompressionError => PublicError::InternalServerError,
+            JwtEncodeError => PublicError::InternalServerError,
+            StatusListEncodingError(_) => PublicError::InternalServerError,
+            StatusListNotFound(_) => PublicError::NotFoundError,
+            StatusListQueryError => PublicError::InternalServerError,
+            StatusListUrlParsingError => PublicError::InternalServerError,
+        }
+    }
+}
+
+impl From<StatusListError> for PublicError {
+    fn from(err: StatusListError) -> Self {
+        err.into_public_error()
     }
 }
 

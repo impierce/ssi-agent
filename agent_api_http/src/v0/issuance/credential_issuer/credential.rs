@@ -6,25 +6,31 @@ use crate::{
     v0::issuance::error::PublicError,
 };
 use agent_issuance::{
-    application::access_token_validation_service::AccessTokenValidationService,
-    application::nonce_validation_service::NonceValidationService,
+    application::{
+        access_token_validation_service::AccessTokenValidationService, nonce_validation_service::NonceValidationService,
+    },
     credential::{command::CredentialCommand, views::CredentialView},
     offer::{command::OfferCommand, views::OfferView},
     server_config::views::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
+    status_list::command::StatusListCommand,
 };
-use agent_shared::config::config;
+use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
+use oauth_tsl::status_list::StatusType;
 use oid4vci::credential_request::CredentialRequest;
 use oid4vci::errors::CredentialErrorResponse;
 use std::sync::Arc;
 use tokio::time::sleep;
 use tracing::error;
+
+#[cfg(feature = "test_utils")]
+use agent_shared::config::TEST_STATUS_LIST_ID;
 
 const POLLING_INTERVAL_MS: u64 = 100;
 
@@ -102,14 +108,58 @@ pub(crate) async fn credential(
         }
     };
 
+    let all_status_lists = query_handler("all_status_lists", &state.query.all_status_lists)
+        .await?
+        .map(|all_status_lists_view| all_status_lists_view.status_lists.into_values().collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    // Find a status list which is not full
+    // TODO: this contains quite some domain logic and should actually be moved there.
+    let max_amount_indices = STATUS_LIST_BYTES_AMOUNT * 8 / BITS_PER_STATUS as usize;
+    let available_status_list = all_status_lists
+        .into_iter()
+        .find(|status_list| status_list.used_indices.len() + credential_ids.len() <= (max_amount_indices * 7) / 10); // The 7/10 factor ensures status lists are at most 70% full, the remainder will always be preserverd for random values protecting Issuer and Holder privacy.
+
+    let status_list_id = match available_status_list {
+        Some(status_list) => status_list.id.clone(),
+        None => {
+            #[cfg(not(feature = "test_utils"))]
+            let id = uuid::Uuid::new_v4().to_string();
+
+            #[cfg(feature = "test_utils")]
+            let id = TEST_STATUS_LIST_ID.to_string();
+
+            let command = StatusListCommand::CreateStatusList { id: id.clone() };
+            command_handler(&id, &state.command.status_list, command).await?;
+
+            id
+        }
+    };
+
     // Use the `credential_ids` and `subject_id` to sign all the credentials.
     let mut signed_credentials = vec![];
     for credential_id in credential_ids {
+        let command = StatusListCommand::AddIndex {
+            status: StatusType::VALID,
+        };
+
+        command_handler(&status_list_id, &state.command.status_list, command).await?;
+
+        let status_list = query_handler(&status_list_id, &state.query.status_list)
+            .await?
+            .ok_or(PublicError::InternalServerError)?;
+
         let command = CredentialCommand::SignCredential {
             credential_id: credential_id.clone(),
             subject_id: subject_id.clone(),
             overwrite: false,
             proofs: proofs.clone(),
+            status_list_id: status_list_id.clone(),
+            index: status_list
+                .used_indices
+                .last()
+                .cloned()
+                .ok_or(PublicError::InternalServerError)?, // TODO: even though the AddIndex command is executed right before this, retrieving the index this way is not the prettiest since something of a "data race" could occur where another index has already been added between the AddIndex command and this command. Then two credentials would be assigned the same index, as they both retrieve the same last index.
         };
 
         command_handler(&credential_id, &state.command.credential, command).await?;
@@ -183,7 +233,7 @@ pub mod tests {
     const CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7ImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwibmFtZSI6IlZlcmlmaWFibGUgQ3JlZGVudGlhbCIsImlzc3VlciI6eyJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwiQGNvbnRleHQiOlsiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiXSwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fX0.Osw5UpYXtsHoomEeeJ9qz6St5b4SmpBGZL8zFmvIsBfWW114BDuQQyVwUpfvZBRuG_oxlyd-uhSRJvmJbmM6DQ";
     const ANONYMOUS_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsIm5iZiI6MTI2MjMwNDAwMCwiaWF0IjoxMjYyMzA0MDAwLCJ2YyI6eyJjcmVkZW50aWFsU3ViamVjdCI6eyJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIn0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwibmFtZSI6IlZlcmlmaWFibGUgQ3JlZGVudGlhbCIsImlzc3VlciI6eyJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwiQGNvbnRleHQiOlsiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiXSwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fX0.WpEgTuLz4ql25ohV4bcUU_qkopcS9PK4x3AieDJR0e_9zVNmjYrts_NFH_6GvoyfgFjvO4_IrOzIxmqRfdn0DA";
     const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
-    const TEST_NONCE: &str = "7e03ad3f76cb3338c3a5642fe7634476aa3ad93fa1d584011ba2150d9da47133";
+    pub const TEST_NONCE: &str = "7e03ad3f76cb3338c3a5642fe7634476aa3ad93fa1d584011ba2150d9da47133";
 
     trait CredentialEventTrigger {
         async fn prepare_credential_event_trigger(

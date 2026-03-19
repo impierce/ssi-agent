@@ -16,7 +16,6 @@ pub enum CredentialCommand {
         data: Data,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
         expires_at: CredentialExpiry,
-        credential_status_index: usize,
     },
     CreateSignedCredential {
         credential_id: String,
@@ -28,6 +27,8 @@ pub enum CredentialCommand {
         // When true, a credential will be re-signed if it already exists.
         overwrite: bool,
         proofs: Option<Proofs>,
+        status_list_id: String,
+        index: usize,
     },
     AddNotification {
         credential_id: String,

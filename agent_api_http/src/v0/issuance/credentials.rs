@@ -1,6 +1,7 @@
 use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
+use agent_issuance::status_list::command::StatusListCommand;
 use agent_issuance::{
     credential::{
         aggregate::{Credential, CredentialExpiry, CredentialStatus},
@@ -22,9 +23,6 @@ use oid4vci::credential_offer::GrantType;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
-
-#[cfg(feature = "test_utils")]
-pub const TESTINDEX: usize = 123;
 
 /// Get credential by ID
 ///
@@ -115,48 +113,11 @@ pub(crate) async fn credentials(
                 .finish());
         }
 
-        // Create the new CredentialStatus index randomly.
-        let random_index;
-        #[cfg(not(feature = "test_utils"))]
-        {
-            use agent_shared::config::{BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
-            use rand::Rng;
-
-            let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
-                .await?
-                .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
-                .unwrap_or_default();
-
-            // Status Lists should only be filled up to 70%, the remaining 30% will be used for decoy/psuedo indices.
-            // This greatly improves the privacy of the issuer.
-            let used_indices: Vec<usize> = all_credentials.iter().map(|c| c.credential_status.index).collect();
-            let statuses_per_byte: usize = 8 / BITS_PER_STATUS as usize;
-            let status_list_number =
-                used_indices.len() / ((STATUS_LIST_BYTES_AMOUNT * statuses_per_byte) as f64 * 0.7) as usize;
-
-            let mut rng = rand::rng();
-            let lower_bound = status_list_number * STATUS_LIST_BYTES_AMOUNT * statuses_per_byte;
-            let upper_bound = (status_list_number + 1) * STATUS_LIST_BYTES_AMOUNT * statuses_per_byte;
-            loop {
-                let candidate = rng.random_range(lower_bound..upper_bound);
-                if !used_indices.contains(&candidate) {
-                    random_index = candidate;
-                    break;
-                }
-            }
-        }
-
-        #[cfg(feature = "test_utils")]
-        {
-            random_index = TESTINDEX;
-        }
-
         CredentialCommand::CreateUnsignedCredential {
             credential_id: credential_id.clone(),
             data: Data { raw: credential },
             credential_configuration: Box::new(credential_configuration.clone()),
             expires_at,
-            credential_status_index: random_index,
         }
     };
 
@@ -252,14 +213,28 @@ pub async fn patch_credential(
         let credential_status = CredentialStatus {
             index: credential.credential_status.index,
             status,
+            status_list_url: credential.credential_status.status_list_url.clone(),
         };
 
         let command = CredentialCommand::UpdateCredentialStatus {
             credential_id: credential_id.clone(),
-            credential_status,
+            credential_status: credential_status.clone(),
         };
 
         command_handler(&credential_id, &state.command.credential, command).await?;
+
+        let command = StatusListCommand::UpdateIndex {
+            index: credential_status.index,
+            status,
+        };
+
+        let status_list_url = credential_status.status_list_url.clone();
+        let status_list_id = status_list_url
+            .split('/')
+            .next_back()
+            .ok_or(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?; // This is an Internal Server Error because if this line fails that means we stored an incorect URL in our own credential.
+
+        command_handler(status_list_id, &state.command.status_list, command).await?;
 
         Ok(StatusCode::NO_CONTENT.into_response())
     } else {
@@ -271,11 +246,13 @@ pub async fn patch_credential(
 pub mod tests {
     use super::*;
     use crate::tests::OFFER_ID;
+    use crate::v0::issuance::credential_issuer::token_status_list::tests::create_test_signed_credential;
     use crate::v0::issuance::router;
     use crate::API_VERSION;
     use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_secret_manager::service::Service;
     use agent_secret_manager::subject::Subject;
+    use agent_shared::config::TESTINDEX;
     use agent_store::in_memory::InMemory;
     use agent_store::issuance_state;
     use axum::{
@@ -373,11 +350,7 @@ pub mod tests {
         get_credentials_endpoint
     }
 
-    pub async fn patch_credential(app: &mut Router) {
-        let credential_endpoint = credentials(app, "001").await;
-
-        let relying_party_state = Subject::test_subject().await;
-
+    pub async fn patch_credential(app: &mut Router, credential_endpoint: String) {
         let patch_response = app
             .call(
                 Request::builder()
@@ -417,6 +390,7 @@ pub mod tests {
         let jwt_header = decode_header(&jwt_status_list_token).unwrap();
 
         let key_id = jwt_header.kid.unwrap();
+        let relying_party_state = Subject::test_subject().await;
         let public_key = relying_party_state.public_key(&key_id).await.unwrap();
         let decoding_key = match jwt_header.alg {
             Algorithm::EdDSA => DecodingKey::from_ed_der(&public_key),
@@ -437,9 +411,10 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state);
+        let mut app = router(issuance_state.clone());
 
-        patch_credential(&mut app).await;
+        let credential_endpoint = create_test_signed_credential(&mut app, &issuance_state).await;
+        patch_credential(&mut app, credential_endpoint).await;
     }
 
     #[tokio::test]
@@ -449,7 +424,7 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state);
+        let mut app = router(issuance_state.clone());
         credentials(&mut app, "001").await;
     }
 }

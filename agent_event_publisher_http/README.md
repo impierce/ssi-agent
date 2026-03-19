@@ -179,3 +179,18 @@ AuthorizationRequestObjectSigned
 SIOPv2AuthorizationResponseVerified
 OID4VPAuthorizationResponseVerified
 ```
+
+#### `nonce`
+
+```
+NonceGenerated
+NonceRedeemed
+```
+
+#### `status_list`
+
+```
+StatusListCreated
+IndexAdded
+IndexUpdated
+```

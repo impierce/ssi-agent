@@ -31,6 +31,10 @@ pub use provisioned::load_provisioned_config;
 
 pub const BITS_PER_STATUS: u8 = 2; // Amount of bits per status
 pub const STATUS_LIST_BYTES_AMOUNT: usize = 2048; // Amount of bytes in the status list. Equates to 8192 statuses for BITS_PER_STATUS = 2.
+#[cfg(feature = "test_utils")]
+pub const TESTINDEX: usize = 123;
+#[cfg(feature = "test_utils")]
+pub const TEST_STATUS_LIST_ID: &str = "0";
 
 static STRONGHOLD_PATH: &str = "./stronghold.dat";
 
@@ -617,6 +621,8 @@ pub struct Events {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub nonce: Vec<NonceEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub status_list: Vec<StatusListEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub holder_credential: Vec<HolderCredentialEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub presentation: Vec<PresentationEvent>,
@@ -720,6 +726,13 @@ pub enum OfferEvent {
     CredentialResponseCreated,
     TxCodeGenerated,
     CredentialOfferEmailSent,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum StatusListEvent {
+    StatusListCreated,
+    IndexAdded,
+    IndexUpdated,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
