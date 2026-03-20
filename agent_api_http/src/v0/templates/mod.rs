@@ -37,6 +37,7 @@ pub struct TemplateDto {
     pub description: Option<String>,
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
+    pub field_config: Option<HashMap<String, FieldConfig>>,
 }
 
 impl From<Template> for TemplateDto {
@@ -56,6 +57,7 @@ impl From<Template> for TemplateDto {
             description: value.description,
             r#type: value.r#type,
             schema: *value.schema,
+            field_config: value.field_config,
         }
     }
 }

@@ -917,6 +917,14 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
+        fieldConfig:
+          type:
+          - object
+          - 'null'
+          additionalProperties:
+            $ref: '#/components/schemas/FieldConfig'
+          propertyNames:
+            type: string
         holderType:
           oneOf:
           - type: 'null'
