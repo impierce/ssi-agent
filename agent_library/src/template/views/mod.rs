@@ -26,6 +26,7 @@ impl View<Template> for Template {
                 description,
                 r#type,
                 schema,
+                field_config,
             } => {
                 self.template_id.clone_from(template_id);
                 self.source_template_id.clone_from(source_template_id);
@@ -41,6 +42,7 @@ impl View<Template> for Template {
                 self.description.clone_from(description);
                 self.r#type.clone_from(r#type);
                 self.schema.clone_from(schema);
+                self.field_config.clone_from(field_config);
             }
             TitleUpdated {
                 template_id: _,
@@ -128,6 +130,14 @@ impl View<Template> for Template {
                 modified_at,
             } => {
                 self.schema.replace(schema.clone());
+                self.modified_at.replace(modified_at.clone());
+            }
+            FieldConfigUpdated {
+                template_id: _,
+                field_config,
+                modified_at,
+            } => {
+                self.field_config.replace(field_config.clone());
                 self.modified_at.replace(modified_at.clone());
             }
             TemplateDeleted { template_id: _ } => {

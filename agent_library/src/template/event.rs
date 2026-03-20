@@ -1,4 +1,6 @@
-pub use super::aggregate::{DataModel, Display, HolderType, Status, Visibility};
+use std::collections::HashMap;
+
+pub use super::aggregate::{DataModel, Display, FieldConfig, HolderType, Status, Visibility};
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 use strum::Display;
@@ -22,6 +24,7 @@ pub enum TemplateEvent {
         description: Option<String>,
         r#type: Vec<String>,
         schema: Box<Option<serde_json::Value>>,
+        field_config: Option<HashMap<String, FieldConfig>>,
     },
     TitleUpdated {
         template_id: String,
@@ -76,6 +79,11 @@ pub enum TemplateEvent {
     SchemaUpdated {
         template_id: String,
         schema: serde_json::Value,
+        modified_at: String,
+    },
+    FieldConfigUpdated {
+        template_id: String,
+        field_config: HashMap<String, FieldConfig>,
         modified_at: String,
     },
     TemplateDeleted {

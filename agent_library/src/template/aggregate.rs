@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use serde::{Deserialize, Serialize};
@@ -62,6 +64,11 @@ pub enum Visibility {
     Public,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
+pub struct FieldConfig {
+    selectively_disclosable: bool,
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Template {
@@ -80,6 +87,7 @@ pub struct Template {
     pub description: Option<String>,
     pub r#type: Vec<String>,
     pub schema: Box<Option<serde_json::Value>>,
+    pub field_config: Option<HashMap<String, FieldConfig>>,
 }
 
 #[async_trait]
@@ -118,6 +126,7 @@ impl Aggregate for Template {
                 description,
                 r#type,
                 schema,
+                field_config,
             } => {
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -139,6 +148,7 @@ impl Aggregate for Template {
                     description,
                     r#type,
                     schema,
+                    field_config,
                 }])
             }
             UpdateTitle { template_id, title } => {
@@ -285,6 +295,21 @@ impl Aggregate for Template {
                     modified_at,
                 }])
             }
+            UpdateFieldConfig {
+                template_id,
+                field_config,
+            } => {
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![FieldConfigUpdated {
+                    template_id,
+                    field_config,
+                    modified_at,
+                }])
+            }
             DeleteTemplate { template_id } => Ok(vec![TemplateDeleted { template_id }]),
         }
     }
@@ -310,6 +335,7 @@ impl Aggregate for Template {
                 description,
                 r#type,
                 schema,
+                field_config,
             } => {
                 self.template_id = template_id;
                 self.source_template_id = source_template_id;
@@ -325,6 +351,7 @@ impl Aggregate for Template {
                 self.description = description;
                 self.r#type = r#type;
                 self.schema = schema;
+                self.field_config = field_config;
             }
             TitleUpdated {
                 template_id: _,
@@ -414,6 +441,14 @@ impl Aggregate for Template {
                 *self.schema = Some(schema);
                 self.modified_at.replace(modified_at);
             }
+            FieldConfigUpdated {
+                template_id: _,
+                field_config,
+                modified_at,
+            } => {
+                self.field_config = Some(field_config);
+                self.modified_at.replace(modified_at);
+            }
             TemplateDeleted { template_id } => {
                 *self = Self::default();
                 self.template_id = template_id;
@@ -449,6 +484,7 @@ pub mod document_tests {
         description: Option<String>,
         r#type: Vec<String>,
         schema: Option<serde_json::Value>,
+        field_config: Option<HashMap<String, FieldConfig>>,
     ) {
         TemplateTestFramework::with(())
             .given_no_previous_events()
@@ -466,6 +502,7 @@ pub mod document_tests {
                 description: description.clone(),
                 r#type: r#type.clone(),
                 schema: Box::new(schema.clone()),
+                field_config: field_config.clone(),
             })
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
                 template_id,
@@ -482,6 +519,7 @@ pub mod document_tests {
                 description,
                 r#type,
                 schema: Box::new(schema),
+                field_config,
             }])
     }
 }
@@ -557,5 +595,17 @@ pub mod test_utils {
     #[fixture]
     pub fn schema() -> Option<serde_json::Value> {
         Some(serde_json::json!({"key": "value"}))
+    }
+
+    #[fixture]
+    pub fn field_config() -> Option<HashMap<String, FieldConfig>> {
+        let mut config = HashMap::new();
+        config.insert(
+            "foo".to_string(),
+            FieldConfig {
+                selectively_disclosable: true,
+            },
+        );
+        Some(config)
     }
 }
