@@ -2,7 +2,7 @@ use super::entity::Data;
 use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError::{self, *};
 use crate::credential::event::CredentialEvent;
-use crate::credential::openapi::{credential_configurations_supported, holder_notifications, status_type};
+use crate::credential::openapi::{credential_configurations_supported, display_schema, holder_notifications, status_type};
 use crate::services::IssuanceServices;
 use agent_library::json_schema_validation::{CredentialType, JsonSchemaError};
 use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm, AlgorithmExt};
@@ -23,7 +23,9 @@ use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json
     CredentialDefinition, JwtVcJson, JwtVcJsonParameters,
 };
 use oid4vci::credential_format_profiles::{CredentialFormats, Parameters};
-use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
+use oid4vci::credential_issuer::credential_configurations_supported::{
+    CredentialConfigurationsSupportedDisplay, CredentialConfigurationsSupportedObject,
+};
 use oid4vci::notification_request::NotificationRequest;
 use oid4vci::VerifiableCredentialJwt;
 use sd_jwt::{RequiredKeyBinding, SdJwtBuilder};
@@ -97,6 +99,8 @@ pub struct Credential {
     pub created_at: Option<DateTime<Utc>>,
     #[schema(value_type = Option<String>)]
     pub expires_at: Option<DateTime<Utc>>,
+    #[schema(schema_with = display_schema)]
+    pub display: Option<CredentialConfigurationsSupportedDisplay>,
 }
 
 #[async_trait]

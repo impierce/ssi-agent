@@ -19,6 +19,12 @@ impl View<Credential> for Credential {
             } => {
                 self.credential_id.clone_from(credential_id);
                 self.data.replace(data.clone());
+                self.display = credential_configuration
+                    .credential_metadata
+                    .as_ref()
+                    .and_then(|m| m.display.as_ref())
+                    .and_then(|d| d.first())
+                    .cloned();
                 self.credential_configuration = *credential_configuration.clone();
                 self.notification_id.clone_from(notification_id);
                 self.created_at.clone_from(created_at);

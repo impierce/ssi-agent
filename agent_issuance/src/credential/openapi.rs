@@ -75,51 +75,57 @@ pub(crate) fn credential_configurations_supported() -> Object {
 // TODO: refactor: move to a more generic place (such as `/v0/openapi.rs`) and make a reusable Schema
 fn display() -> Array {
     ArrayBuilder::new()
-        .items(
+        .items(display_item())
+        .build()
+}
+
+pub(crate) fn display_schema() -> Object {
+    display_item()
+}
+
+fn display_item() -> Object {
+    ObjectBuilder::new()
+        .property(
+            "name",
+            ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).build(),
+        )
+        .property(
+            "locale",
+            ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).build(),
+        )
+        .property(
+            "logo",
             ObjectBuilder::new()
                 .property(
-                    "name",
-                    ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).build(),
-                )
-                .property(
-                    "locale",
-                    ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).build(),
-                )
-                .property(
-                    "logo",
+                    "uri",
                     ObjectBuilder::new()
-                        .property(
-                            "uri",
-                            ObjectBuilder::new()
-                                .schema_type(SchemaType::Type(Type::String))
-                                .format(Some(SchemaFormat::KnownFormat(utoipa::openapi::KnownFormat::Uri)))
-                                .build(),
-                        )
-                        .property(
-                            "alt_text",
-                            ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).build(),
-                        )
-                        .required("uri")
+                        .schema_type(SchemaType::Type(Type::String))
+                        .format(Some(SchemaFormat::KnownFormat(utoipa::openapi::KnownFormat::Uri)))
                         .build(),
                 )
                 .property(
-                    "description",
+                    "alt_text",
                     ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).build(),
                 )
-                .property(
-                    "background_image",
-                    ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).build(),
-                )
-                .property(
-                    "background_color",
-                    ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).build(),
-                )
-                .property(
-                    "text_color",
-                    ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).build(),
-                )
-                .required("name")
+                .required("uri")
                 .build(),
         )
+        .property(
+            "description",
+            ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).build(),
+        )
+        .property(
+            "background_image",
+            ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).build(),
+        )
+        .property(
+            "background_color",
+            ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).build(),
+        )
+        .property(
+            "text_color",
+            ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).build(),
+        )
+        .required("name")
         .build()
 }
