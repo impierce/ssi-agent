@@ -466,6 +466,15 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
           default: null
+        fieldConfig:
+          type:
+          - object
+          - 'null'
+          default: null
+          additionalProperties:
+            $ref: '#/components/schemas/FieldConfig'
+          propertyNames:
+            type: string
         holderType:
           oneOf:
           - type: 'null'
@@ -696,6 +705,22 @@ components:
       - sourceTemplateId
       properties:
         sourceTemplateId:
+          type: string
+    FieldConfig:
+      type: object
+      required:
+      - id
+      - title
+      - selectively_disclosable
+      - required_on_issuance
+      properties:
+        id:
+          type: string
+        required_on_issuance:
+          type: boolean
+        selectively_disclosable:
+          type: boolean
+        title:
           type: string
     GetConnectionsEndpointRequest:
       type: object
@@ -953,6 +978,15 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
           default: null
+        fieldConfig:
+          type:
+          - object
+          - 'null'
+          default: null
+          additionalProperties:
+            $ref: '#/components/schemas/FieldConfig'
+          propertyNames:
+            type: string
         holderType:
           oneOf:
           - type: 'null'
