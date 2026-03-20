@@ -810,6 +810,7 @@ impl Default for Metrics {
     VariantArray,
     utoipa::ToSchema,
 )]
+#[schema(description = "DID methods supported by UniCore")]
 pub enum SupportedDidMethod {
     #[serde(alias = "did_jwk", alias = "did:jwk", rename = "did_jwk")]
     #[strum(serialize = "did:jwk")]

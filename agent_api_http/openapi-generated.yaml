@@ -851,16 +851,7 @@ components:
       - Disabled
     SupportedDidMethod:
       type: string
-      description: |-
-        All DID methods supported by UniCore
-        ```
-        use agent_shared::config::SupportedDidMethod;
-        use serde_json::json;
-
-        let supported_did_method: SupportedDidMethod = serde_json::from_value(json!("did_jwk")).unwrap();
-        assert_eq!(supported_did_method, SupportedDidMethod::Jwk);
-        assert_eq!(supported_did_method.to_string(), "did:jwk");
-        ```
+      description: DID methods supported by UniCore
       enum:
       - did_jwk
       - did_key
