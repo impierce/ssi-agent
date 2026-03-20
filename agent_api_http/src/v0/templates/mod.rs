@@ -2,7 +2,9 @@ use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
-use agent_library::template::aggregate::{DataModel, Display, FieldConfig, HolderType, Status, Template, Visibility};
+use agent_library::template::aggregate::{
+    DataModel, Display, FieldAttributes, HolderType, Status, Template, Visibility,
+};
 use agent_library::template::command::TemplateCommand;
 use axum::{
     extract::{Path, State},
@@ -37,7 +39,7 @@ pub struct TemplateDto {
     pub description: Option<String>,
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
-    pub field_config: Option<HashMap<String, FieldConfig>>,
+    pub field_attributes: Option<HashMap<String, FieldAttributes>>,
 }
 
 impl From<Template> for TemplateDto {
@@ -57,7 +59,7 @@ impl From<Template> for TemplateDto {
             description: value.description,
             r#type: value.r#type,
             schema: *value.schema,
-            field_config: value.field_config,
+            field_attributes: value.field_attributes,
         }
     }
 }
@@ -76,7 +78,7 @@ pub struct CreateTemplateEndpointRequest {
     pub description: Option<String>,
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
-    pub field_config: Option<HashMap<String, FieldConfig>>,
+    pub field_attributes: Option<HashMap<String, FieldAttributes>>,
 }
 
 /// Create a new template
@@ -114,7 +116,7 @@ pub(crate) async fn create_template(
         description,
         r#type,
         schema,
-        field_config,
+        field_attributes,
     }): Json<CreateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let template_id = Uuid::new_v4().to_string();
@@ -133,7 +135,7 @@ pub(crate) async fn create_template(
         description,
         r#type,
         schema: Box::new(schema),
-        field_config,
+        field_attributes,
     };
 
     command_handler(&template_id, &state.command.template, command).await?;
@@ -206,7 +208,7 @@ pub(crate) async fn duplicate_template(
         description: original_template.description,
         r#type: original_template.r#type,
         schema: original_template.schema,
-        field_config: original_template.field_config,
+        field_attributes: original_template.field_attributes,
     };
 
     command_handler(&new_template_id, &state.command.template, command).await?;
@@ -240,7 +242,7 @@ pub struct UpdateTemplateEndpointRequest {
     pub description: Option<String>,
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
-    pub field_config: Option<HashMap<String, FieldConfig>>,
+    pub field_attributes: Option<HashMap<String, FieldAttributes>>,
 }
 
 /// Update a template
@@ -271,7 +273,7 @@ pub(crate) async fn update_template(
         description,
         r#type,
         schema,
-        field_config,
+        field_attributes,
     }): Json<UpdateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     if template_id.is_empty() {
@@ -380,10 +382,10 @@ pub(crate) async fn update_template(
         command_handler(&template_id, &state.command.template, command).await?;
     }
 
-    if let Some(field_config) = field_config {
-        let command = TemplateCommand::UpdateFieldConfig {
+    if let Some(field_attributes) = field_attributes {
+        let command = TemplateCommand::UpdateFieldAttributes {
             template_id: template_id.clone(),
-            field_config,
+            field_attributes,
         };
         command_handler(&template_id, &state.command.template, command).await?;
     }

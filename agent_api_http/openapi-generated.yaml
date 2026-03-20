@@ -466,13 +466,13 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
           default: null
-        fieldConfig:
+        fieldAttributes:
           type:
           - object
           - 'null'
           default: null
           additionalProperties:
-            $ref: '#/components/schemas/FieldConfig'
+            $ref: '#/components/schemas/FieldAttributes'
           propertyNames:
             type: string
         holderType:
@@ -706,7 +706,7 @@ components:
       properties:
         sourceTemplateId:
           type: string
-    FieldConfig:
+    FieldAttributes:
       type: object
       required:
       - id
@@ -917,12 +917,12 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
-        fieldConfig:
+        fieldAttributes:
           type:
           - object
           - 'null'
           additionalProperties:
-            $ref: '#/components/schemas/FieldConfig'
+            $ref: '#/components/schemas/FieldAttributes'
           propertyNames:
             type: string
         holderType:
@@ -986,13 +986,13 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
           default: null
-        fieldConfig:
+        fieldAttributes:
           type:
           - object
           - 'null'
           default: null
           additionalProperties:
-            $ref: '#/components/schemas/FieldConfig'
+            $ref: '#/components/schemas/FieldAttributes'
           propertyNames:
             type: string
         holderType:
