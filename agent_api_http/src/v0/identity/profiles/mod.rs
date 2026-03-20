@@ -86,6 +86,7 @@ pub(crate) async fn patch_profile(
 #[skip_serializing_none]
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(as = Profile)]
 struct GetProfileEndpointResponse {
     display_name: Option<String>,
     logo: Option<Logo>,

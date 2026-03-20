@@ -219,7 +219,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GetProfileEndpointResponse'
+                $ref: '#/components/schemas/Profile'
         '404':
           description: Profile not found
     patch:
@@ -712,25 +712,6 @@ components:
           type:
           - string
           - 'null'
-    GetProfileEndpointResponse:
-      type: object
-      required:
-      - source
-      properties:
-        country:
-          type:
-          - string
-          - 'null'
-        displayName:
-          type:
-          - string
-          - 'null'
-        logo:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/Logo'
-        source:
-          $ref: '#/components/schemas/Source'
     HolderType:
       type: string
       enum:
@@ -830,6 +811,25 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
+    Profile:
+      type: object
+      required:
+      - source
+      properties:
+        country:
+          type:
+          - string
+          - 'null'
+        displayName:
+          type:
+          - string
+          - 'null'
+        logo:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Logo'
+        source:
+          $ref: '#/components/schemas/Source'
     RemoveConnectionRequest:
       type: object
       required:
