@@ -67,10 +67,7 @@ pub enum Visibility {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct FieldAttributes {
-    id: String,
-    title: String,
     selectively_disclosable: bool,
-    required_on_issuance: bool,
 }
 
 #[skip_serializing_none]
@@ -607,10 +604,7 @@ pub mod test_utils {
         config.insert(
             "foo".to_string(),
             FieldAttributes {
-                id: "0".to_string(),
-                title: "Foo".to_string(),
                 selectively_disclosable: true,
-                required_on_issuance: false,
             },
         );
         Some(config)

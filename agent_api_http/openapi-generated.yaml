@@ -709,19 +709,10 @@ components:
     FieldAttributes:
       type: object
       required:
-      - id
-      - title
       - selectivelyDisclosable
-      - requiredOnIssuance
       properties:
-        id:
-          type: string
-        requiredOnIssuance:
-          type: boolean
         selectivelyDisclosable:
           type: boolean
-        title:
-          type: string
     GetConnectionsEndpointRequest:
       type: object
       properties:
