@@ -165,7 +165,7 @@ paths:
       - Identity
       summary: List DID documents
       description: Retrieves the list of DID documents in use by your organisation.
-      operationId: list_all_documents
+      operationId: get_all_documents
       parameters:
       - name: did_method
         in: query

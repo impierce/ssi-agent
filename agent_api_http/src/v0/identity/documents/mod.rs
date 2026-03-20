@@ -24,7 +24,7 @@ pub struct GetDocumentsEndpoint {
 #[utoipa::path(
     get,
     path = "/documents",
-    operation_id = "list_all_documents",
+    operation_id = "get_all_documents",
     tags = ["Identity"],
     params(GetDocumentsEndpoint),
     responses(
