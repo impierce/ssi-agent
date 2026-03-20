@@ -1,8 +1,8 @@
 use crate::handlers::query_handler;
-use agent_identity::state::IdentityState;
+use agent_identity::{document::aggregate::Document, state::IdentityState};
 use agent_shared::config::SupportedDidMethod;
 use axum::{
-    extract::{Form, Path, State},
+    extract::{Path, Query, State},
     response::{IntoResponse, Response},
     Json,
 };
@@ -12,15 +12,29 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::debug;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema, utoipa::IntoParams)]
 pub struct GetDocumentsEndpoint {
     #[serde(default)]
     pub did_method: Option<SupportedDidMethod>,
 }
 
+/// List DID documents
+///
+/// Retrieves the list of DID documents in use by your organisation.
+#[utoipa::path(
+    get,
+    path = "/documents",
+    operation_id = "list_all_documents",
+    tags = ["Identity"],
+    params(GetDocumentsEndpoint),
+    responses(
+        (status = 200, description = "Documents retrieved successfully", body = [Document]),
+    )
+)]
+#[axum_macros::debug_handler]
 pub(crate) async fn get_documents(
     State(state): State<Arc<IdentityState>>,
-    Form(GetDocumentsEndpoint { did_method }): Form<GetDocumentsEndpoint>,
+    Query(GetDocumentsEndpoint { did_method }): Query<GetDocumentsEndpoint>,
 ) -> Result<Response, ApiError> {
     debug!("Request Params - did_method: {did_method:?}");
 
@@ -44,6 +58,19 @@ pub(crate) async fn get_documents(
     Ok((StatusCode::OK, Json(filtered_documents)).into_response())
 }
 
+/// Get DID document by ID
+///
+/// Retrieves a DID document of your organisation by its ID.
+#[utoipa::path(
+    get,
+    path = "/documents/{document_id}",
+    operation_id = "get_document_by_id",
+    tags = ["Identity"],
+    responses(
+        (status = 200, description = "Document retrieved successfully", body = Document),
+        (status = 404, description = "Document not found"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn get_document(
     State(state): State<Arc<IdentityState>>,

@@ -32,6 +32,7 @@ time = { version = "0.3" }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 url.workspace = true
+utoipa.workspace = true
 
 [dev-dependencies]
 agent_shared = { path = ".", features = ["test_utils"] }
