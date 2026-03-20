@@ -65,6 +65,7 @@ pub enum Visibility {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct FieldAttributes {
     id: String,
     title: String,

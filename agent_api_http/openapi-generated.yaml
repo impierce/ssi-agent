@@ -711,14 +711,14 @@ components:
       required:
       - id
       - title
-      - selectively_disclosable
-      - required_on_issuance
+      - selectivelyDisclosable
+      - requiredOnIssuance
       properties:
         id:
           type: string
-        required_on_issuance:
+        requiredOnIssuance:
           type: boolean
-        selectively_disclosable:
+        selectivelyDisclosable:
           type: boolean
         title:
           type: string
