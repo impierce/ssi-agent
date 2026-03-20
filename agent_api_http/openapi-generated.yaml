@@ -159,6 +159,85 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Credential'
+  /v0/documents:
+    get:
+      tags:
+      - Identity
+      summary: List DID documents
+      description: Retrieves the list of DID documents in use by your organisation.
+      operationId: get_all_documents
+      parameters:
+      - name: did_method
+        in: query
+        required: false
+        schema:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/SupportedDidMethod'
+      responses:
+        '200':
+          description: Documents retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Document'
+  /v0/documents/{document_id}:
+    get:
+      tags:
+      - Identity
+      summary: Get DID document by ID
+      description: Retrieves a DID document of your organisation by its ID.
+      operationId: get_document_by_id
+      parameters:
+      - name: document_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Document retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '404':
+          description: Document not found
+  /v0/profile:
+    get:
+      tags:
+      - Identity
+      - Profile
+      summary: Get organisation profile
+      description: Retrieves the profile information of your organisation.
+      operationId: get_profile
+      responses:
+        '200':
+          description: Profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '404':
+          description: Profile not found
+    patch:
+      tags:
+      - Identity
+      - Profile
+      summary: Update organisation profile
+      description: Updates your organisation's profile with the given information.
+      operationId: update_profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchProfileEndpointRequest'
+        required: true
+      responses:
+        '200':
+          description: Profile updated successfully
   /v0/templates/create-template:
     post:
       tags:
@@ -575,6 +654,31 @@ components:
           - $ref: '#/components/schemas/Logo'
         name:
           type: string
+    Document:
+      type: object
+      required:
+      - id
+      - status
+      properties:
+        did_method:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/SupportedDidMethod'
+        document:
+          type: object
+        id:
+          type: string
+        iota_metadata:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/IotaMetadata'
+        status:
+          $ref: '#/components/schemas/Status'
+        with_fixed_algorithm:
+          type: string
+          enum:
+          - ES256
+          - EdDSA
     DomainLinkageValidation:
       type: object
       required:
@@ -613,6 +717,41 @@ components:
       enum:
       - individual
       - organization
+    IotaMetadata:
+      type: object
+      description: Metadata for IOTA-based DID Documents.
+      required:
+      - wallet_address
+      - is_funded
+      - balance
+      - is_published
+      - is_deactivated
+      properties:
+        balance:
+          type: integer
+          format: int64
+          minimum: 0
+        created_at:
+          type:
+          - string
+          - 'null'
+        explorer_url:
+          type:
+          - string
+          - 'null'
+        is_deactivated:
+          type: boolean
+        is_funded:
+          type: boolean
+        is_published:
+          type: boolean
+        updated_at:
+          type:
+          - string
+          - 'null'
+        wallet_address:
+          type: string
+          example: '0x1234567890'
     IssuanceStatus:
       type: string
       enum:
@@ -622,15 +761,16 @@ components:
       type: object
     Logo:
       type: object
-      required:
-      - uri
       properties:
         alt_text:
           type:
           - string
           - 'null'
         uri:
-          type: string
+          type:
+          - string
+          - 'null'
+          format: uri
     LogoProperties:
       type: object
       properties:
@@ -643,6 +783,21 @@ components:
           - string
           - 'null'
           format: uri
+    PatchProfileEndpointRequest:
+      type: object
+      properties:
+        country:
+          type:
+          - string
+          - 'null'
+        displayName:
+          type:
+          - string
+          - 'null'
+        logo:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Logo'
     PendingChanges:
       type: object
       required:
@@ -656,6 +811,25 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
+    Profile:
+      type: object
+      required:
+      - source
+      properties:
+        country:
+          type:
+          - string
+          - 'null'
+        displayName:
+          type:
+          - string
+          - 'null'
+        logo:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Logo'
+        source:
+          $ref: '#/components/schemas/Source'
     RemoveConnectionRequest:
       type: object
       required:
@@ -663,6 +837,28 @@ components:
       properties:
         id:
           type: string
+    Source:
+      type: string
+      enum:
+      - Provisioned
+      - Default
+      - Runtime
+      - None
+    Status:
+      type: string
+      enum:
+      - SignAndValidate
+      - Disabled
+    SupportedDidMethod:
+      type: string
+      description: DID methods supported by UniCore
+      enum:
+      - did_jwk
+      - did_key
+      - did_web
+      - did_iota
+      - did_iota_dev
+      - did_iota_test
     SyncConnectionRequest:
       type: object
       required:
@@ -828,6 +1024,10 @@ components:
 tags:
 - name: Connections
   description: Manage trusted connections.
+- name: Identity
+  description: Manage all aspects of your organisational identity.
+- name: Profile
+  description: Manage your organisational profile.
 - name: Issuance
   description: Issue credentials to individuals and organizations, manage credential offers and track their status.
 - name: Library

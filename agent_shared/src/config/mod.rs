@@ -546,7 +546,7 @@ impl Default for Authorization {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, utoipa::ToSchema)]
 pub struct Logo {
     pub uri: Option<Url>,
     pub alt_text: Option<String>,
@@ -808,7 +808,9 @@ impl Default for Metrics {
     Ord,
     PartialOrd,
     VariantArray,
+    utoipa::ToSchema,
 )]
+#[schema(description = "DID methods supported by UniCore")]
 pub enum SupportedDidMethod {
     #[serde(alias = "did_jwk", alias = "did:jwk", rename = "did_jwk")]
     #[strum(serialize = "did:jwk")]

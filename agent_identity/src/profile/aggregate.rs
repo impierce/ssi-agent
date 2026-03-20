@@ -9,7 +9,7 @@ use crate::services::IdentityServices;
 
 use super::{command::ProfileCommand, error::ProfileError, event::ProfileEvent};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
 pub enum Source {
     Provisioned,
     Default,
