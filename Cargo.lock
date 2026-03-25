@@ -105,7 +105,7 @@ dependencies = [
  "metrics",
  "metrics-exporter-prometheus",
  "mime",
- "oauth_tsl",
+ "oauth_tsl 0.1.0 (git+https://github.com/impierce/oauth-token-status-list?rev=0aa0228)",
  "oid4vc-core",
  "oid4vc-manager",
  "oid4vci",
@@ -359,7 +359,7 @@ dependencies = [
  "identity_credential",
  "jsonwebtoken",
  "lazy_static",
- "oauth_tsl",
+ "oauth_tsl 0.1.0 (git+https://github.com/impierce/oauth-token-status-list?rev=0aa0228)",
  "oid4vc-core",
  "oid4vci",
  "once_cell",
@@ -453,6 +453,7 @@ name = "agent_shared"
 version = "0.1.0"
 dependencies = [
  "agent_macros",
+ "agent_secret_manager",
  "agent_shared",
  "async-trait",
  "base64 0.22.1",
@@ -461,8 +462,10 @@ dependencies = [
  "cqrs-es",
  "dotenvy",
  "http-serde",
+ "identity_core",
  "identity_iota",
  "jsonwebtoken",
+ "oauth_tsl 0.1.0 (git+https://github.com/impierce/oauth-token-status-list?rev=0aa0228)",
  "oid4vc-core",
  "oid4vci",
  "oid4vp",
@@ -477,10 +480,12 @@ dependencies = [
  "temp-env",
  "thiserror 1.0.69",
  "time",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "url",
  "utoipa",
+ "wiremock",
 ]
 
 [[package]]
@@ -8321,6 +8326,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "oauth_tsl"
+version = "0.1.0"
+source = "git+https://github.com/impierce/oauth-token-status-list?rev=df371b9#df371b9530b0b762da3ef9c5519c1c35f62209b8"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "flate2",
+ "jsonwebtoken",
+ "serde",
+ "thiserror 1.0.69",
+ "url",
+]
+
+[[package]]
 name = "object"
 version = "0.36.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8372,7 +8391,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=2f27e41#2f27e41848da083ae8219bc235413b8bf8a83a8c"
+source = "git+https://github.com/impierce/openid4vc?rev=1d855fa#1d855faaa0e43d89c98f202f88863c84d9dfffb5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8404,7 +8423,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=2f27e41#2f27e41848da083ae8219bc235413b8bf8a83a8c"
+source = "git+https://github.com/impierce/openid4vc?rev=1d855fa#1d855faaa0e43d89c98f202f88863c84d9dfffb5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8437,7 +8456,7 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=2f27e41#2f27e41848da083ae8219bc235413b8bf8a83a8c"
+source = "git+https://github.com/impierce/openid4vc?rev=1d855fa#1d855faaa0e43d89c98f202f88863c84d9dfffb5"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8465,12 +8484,13 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=2f27e41#2f27e41848da083ae8219bc235413b8bf8a83a8c"
+source = "git+https://github.com/impierce/openid4vc?rev=1d855fa#1d855faaa0e43d89c98f202f88863c84d9dfffb5"
 dependencies = [
  "anyhow",
  "chrono",
  "futures",
  "getset",
+ "identity_core",
  "identity_credential",
  "identity_did",
  "identity_document",
@@ -8481,6 +8501,7 @@ dependencies = [
  "lazy_static",
  "monostate",
  "nutype",
+ "oauth_tsl 0.1.0 (git+https://github.com/impierce/oauth-token-status-list?rev=df371b9)",
  "oid4vc-core",
  "oid4vci",
  "reqwest 0.11.27",
@@ -11360,7 +11381,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=2f27e41#2f27e41848da083ae8219bc235413b8bf8a83a8c"
+source = "git+https://github.com/impierce/openid4vc?rev=1d855fa#1d855faaa0e43d89c98f202f88863c84d9dfffb5"
 dependencies = [
  "anyhow",
  "async-trait",
