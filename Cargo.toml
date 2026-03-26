@@ -37,8 +37,6 @@ oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "2f27e41" }
 oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "2f27e41" }
 oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "2f27e41" }
 
-shared-kernel = { path = "shared-kernel" }
-
 anyhow = "1.0"
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 async-trait = "0.1"
@@ -104,7 +102,6 @@ url = "2.5"
 utoipa = { version = "5", features = ["axum_extras", "chrono", "url", "yaml"] }
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"
-
 
 # TODO: remove these patches once these changes are merged: https://github.com/iotaledger/identity/compare/v1.9.1-beta.1...impierce:identity.rs:fix/issues?expand=1
 [patch.'https://github.com/iotaledger/identity']
