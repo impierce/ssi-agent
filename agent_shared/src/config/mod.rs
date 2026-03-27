@@ -281,7 +281,7 @@ pub struct ApplicationConfiguration {
             Display {
                 name: "UniCore".to_string(),
                 locale: Some("en".to_string()),
-                description: Some("An eIDAS 2.0-compliant Self Sovereign Identity Agent.".to_string()),
+                description: None,
                 logo: Some(Logo {
                     uri: Some(Url::parse("https://www.impierce.com/external/impierce-icon.png").unwrap()),
                     alt_text: Some("Impierce Icon".to_string()),
