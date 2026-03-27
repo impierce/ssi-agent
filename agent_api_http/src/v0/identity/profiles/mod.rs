@@ -101,7 +101,7 @@ pub(crate) async fn patch_profile(
 #[schema(as = Profile)]
 struct GetProfileEndpointResponse {
     display_name: Option<String>,
-    display_description: Option<String>,
+    description: Option<String>,
     logo: Option<Logo>,
     country: Option<String>,
     source: Source,
@@ -129,7 +129,7 @@ pub(crate) async fn get_profile(State(state): State<Arc<IdentityState>>) -> Resu
                 StatusCode::OK,
                 Json(GetProfileEndpointResponse {
                     display_name: profile_view.display_name,
-                    display_description: profile_view.description,
+                    description: profile_view.description,
                     logo: profile_view.logo,
                     country: profile_view.country,
                     source: profile_view.source,
