@@ -28,6 +28,8 @@ use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, info, info_span, Span};
 
+pub const API_VERSION: &str = "/v0";
+
 pub const DOCUMENTATION_URL: &str = "https://beta.docs.impierce.com/unicore/";
 
 #[derive(Default)]

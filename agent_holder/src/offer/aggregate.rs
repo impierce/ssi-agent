@@ -321,8 +321,7 @@ pub mod tests {
     use agent_issuance::server_config::aggregate::test_utils::credential_configurations_supported;
     use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
-    use agent_shared::config::config_mut;
-    use agent_shared::config::{config, API_VERSION};
+    use agent_shared::config::{config, config_mut};
     use agent_shared::generate_random_string;
     use agent_store::in_memory::InMemory;
     use agent_store::{authorization_state, issuance_state};

@@ -226,11 +226,14 @@ pub async fn public_credential(
 
 #[cfg(test)]
 pub mod tests {
-    use crate::issuance::router;
+    use std::sync::Arc;
+
+    use crate::v0::issuance::router;
     use crate::API_VERSION;
-    use agent_issuance::state::initialize;
+    use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_secret_manager::service::Service;
-    use agent_store::in_memory;
+    use agent_store::in_memory::InMemory;
+    use agent_store::issuance_state;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -240,7 +243,8 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_public_credential_endpoint_invalid_parameter() {
-        let issuance_state = in_memory::issuance_state(Service::default(), Default::default()).await;
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);

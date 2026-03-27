@@ -2,13 +2,11 @@
 pub mod credential_configurations;
 pub mod credential_issuer;
 pub mod credentials;
+pub mod error;
 pub mod ietf_oauth_sd_jwt_vc;
 pub mod nonce;
 pub mod offers;
 pub mod openapi;
-
-pub mod error;
-pub mod offers;
 pub mod public_credential;
 
 use crate::v0::issuance::{

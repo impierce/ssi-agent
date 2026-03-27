@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use agent_holder::credential::aggregate::get_unverified_jwt_claims;
 use agent_secret_manager::subject::get_public_key_from_kid;
 use agent_shared::config::{get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported};
@@ -17,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use url::Url;
 
-use crate::{
+use crate::v0::{
     issuance::credential_issuer::credential,
     verification::{
         validate_domain_linkage::{get_issuer_linked_domains, validate_domain_linkage, ValidationStatus},
@@ -54,7 +56,7 @@ pub struct PublicVerificationResponse {
 /// When any validation fails, only the validation results are returned.
 /// Both the Verifier and the Issuer need to perform all these checks on the Public Credential Token, zero trust is assumed.
 pub async fn public_verification(
-    State(state): State<VerificationState>,
+    State(state): State<Arc<VerificationState>>,
     Query(parameter): Query<PublicVerificationQuery>,
 ) -> Result<Response, ApiError> {
     let jwt = parameter.public_credential_token;
@@ -82,7 +84,7 @@ pub async fn public_verification(
         })?;
 
     // Check and validate domain linkage
-    let resolver = Resolver::new().await;
+    let resolver = Resolver::new();
     let issuer_did_document = resolver
         .resolve(aud)
         .await

@@ -13,13 +13,13 @@ use identity_iota::{
     document::{CoreDocument, Service},
 };
 use identity_jose::{jws::Decoder, jwt::JwtClaims};
-use oid4vc::oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
+use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::{info, warn};
 use url::Url;
 
-use crate::verification::validate_domain_linkage::{ValidationStatus, Verifier};
+use crate::v0::verification::validate_domain_linkage::{ValidationStatus, Verifier};
 
 #[cfg_attr(not(test), derive(PartialEq))]
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]
@@ -250,7 +250,7 @@ async fn get_validated_linked_domains(
         let validation_status: ValidationStatus = {
             #[cfg(not(feature = "test_utils"))]
             {
-                use crate::verification::validate_domain_linkage::validate_domain_linkage;
+                use crate::v0::verification::validate_domain_linkage::validate_domain_linkage;
 
                 validate_domain_linkage(resolver, issuer_linked_domain.clone(), issuer_did)
                     .await
@@ -398,7 +398,14 @@ async fn get_logo_uri(
                         metadata
                             .credential_configurations_supported
                             .get(type_)
-                            .and_then(|credential_configuration| credential_configuration.display.first())
+                            .and_then(|credential_configuration| {
+                                credential_configuration
+                                    .credential_metadata
+                                    .as_ref()?
+                                    .display
+                                    .as_ref()?
+                                    .first()
+                            })
                             .and_then(|display| display.logo.clone())
                             .map(|logo| logo.uri.to_string())
                     });
