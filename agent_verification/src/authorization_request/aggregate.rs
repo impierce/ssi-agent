@@ -210,11 +210,14 @@ impl Aggregate for AuthorizationRequest {
                             let nonce = &authorization_request.body.extension.nonce;
                             let client_id = &authorization_request.body.client_id;
 
-                            let decoded_vp_token =
-                                VpTokenValidator::new(&SignatureVerifier, services.verifier.as_ref())
-                                    .validate_vp_token(dcql_query, vp_token, client_id, Some(nonce))
-                                    .await
-                                    .map_err(|e| InvalidOID4VPAuthorizationResponse(e.into()))?;
+                            let decoded_vp_token = VpTokenValidator::new(
+                                &SignatureVerifier,
+                                services.verifier.as_ref(),
+                                &services.credential_status_checker,
+                            )
+                            .validate_vp_token(dcql_query, vp_token, client_id, Some(nonce))
+                            .await
+                            .map_err(|e| InvalidOID4VPAuthorizationResponse(e.into()))?;
 
                             Ok(vec![OID4VPAuthorizationResponseVerified {
                                 vp_token: decoded_vp_token,

@@ -453,6 +453,7 @@ name = "agent_shared"
 version = "0.1.0"
 dependencies = [
  "agent_macros",
+ "agent_secret_manager",
  "agent_shared",
  "async-trait",
  "base64 0.22.1",
@@ -461,8 +462,10 @@ dependencies = [
  "cqrs-es 0.4.12",
  "dotenvy",
  "http-serde",
+ "identity_core",
  "identity_iota",
  "jsonwebtoken",
+ "oauth_tsl",
  "oid4vc-core",
  "oid4vci",
  "oid4vp",
@@ -477,10 +480,12 @@ dependencies = [
  "temp-env",
  "thiserror 1.0.69",
  "time",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "url",
  "utoipa",
+ "wiremock",
 ]
 
 [[package]]
@@ -8383,7 +8388,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=2f27e41#2f27e41848da083ae8219bc235413b8bf8a83a8c"
+source = "git+https://github.com/impierce/openid4vc?rev=7bb7d52#7bb7d529acb4e9b6919d3e07e4ddbcda71b91a6b"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8415,7 +8420,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=2f27e41#2f27e41848da083ae8219bc235413b8bf8a83a8c"
+source = "git+https://github.com/impierce/openid4vc?rev=7bb7d52#7bb7d529acb4e9b6919d3e07e4ddbcda71b91a6b"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8448,7 +8453,7 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=2f27e41#2f27e41848da083ae8219bc235413b8bf8a83a8c"
+source = "git+https://github.com/impierce/openid4vc?rev=7bb7d52#7bb7d529acb4e9b6919d3e07e4ddbcda71b91a6b"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8476,7 +8481,7 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=2f27e41#2f27e41848da083ae8219bc235413b8bf8a83a8c"
+source = "git+https://github.com/impierce/openid4vc?rev=7bb7d52#7bb7d529acb4e9b6919d3e07e4ddbcda71b91a6b"
 dependencies = [
  "anyhow",
  "chrono",
@@ -11387,7 +11392,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=2f27e41#2f27e41848da083ae8219bc235413b8bf8a83a8c"
+source = "git+https://github.com/impierce/openid4vc?rev=7bb7d52#7bb7d529acb4e9b6919d3e07e4ddbcda71b91a6b"
 dependencies = [
  "anyhow",
  "async-trait",
