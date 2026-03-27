@@ -1,9 +1,9 @@
 use super::aggregate::Status;
+use crate::offer::aggregate::DeliveryOptions;
 use cqrs_es::DomainEvent;
 use oid4vci::{
     credential_offer::{CredentialOffer, GrantType},
     credential_response::CredentialResponse,
-    token_response::TokenResponse,
 };
 use serde::{Deserialize, Serialize};
 use strum::Display;
@@ -17,9 +17,9 @@ pub enum OfferEvent {
         credential_offer: CredentialOffer,
         credential_offer_uri: CredentialOffer,
         pre_authorized_code: String,
-        access_token: String,
         status: Status,
         tx_code: Option<String>,
+        delivery_options: Option<DeliveryOptions>,
     },
     CredentialsAdded {
         offer_id: String,
@@ -36,18 +36,26 @@ pub enum OfferEvent {
         target_url: Url,
         status: Status,
     },
-    TokenResponseCreated {
+    CredentialOfferEmailSent {
         offer_id: String,
-        token_response: TokenResponse,
+        recipient_email: String,
+        form_url_encoded_credential_offer: String,
+        offer_link: Url,
+        status: Status,
     },
     CredentialRequestVerified {
         offer_id: String,
-        subject_id: String,
+        subject_id: Option<String>,
     },
     CredentialResponseCreated {
         offer_id: String,
         credential_response: CredentialResponse,
         status: Status,
+    },
+    TxCodeGenerated {
+        offer_id: String,
+        tx_code: String,
+        delivery_options: Option<DeliveryOptions>,
     },
 }
 

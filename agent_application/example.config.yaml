@@ -38,6 +38,13 @@ event_publishers:
     events:
       server_config: []
       credential: [UnsignedCredentialCreated, CredentialSigned]
+  nats:
+    enabled: true
+    nats_url: "nats://localhost:4222"
+    subjects:
+      - name: "email.commands"
+        events:
+          offer: [TxCodeGenerated, CredentialOfferEmailSent]
 
 # These display parameters are interpreted by identity wallets.
 display:
@@ -52,9 +59,8 @@ display:
 credential_configurations:
   - credential_configuration_id: w3c_vc_credential
     format: jwt_vc_json
-    credential_definition:
-      type:
-        - VerifiableCredential
+    type:
+      - VerifiableCredential
     display:
       - name: Impierce Credential
         locale: en

@@ -1,6 +1,7 @@
 use crate::credential::aggregate::CredentialStatus;
 
 use super::{aggregate::Status, entity::Data};
+use chrono::{DateTime, Utc};
 use cqrs_es::DomainEvent;
 use oid4vci::{
     credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject,
@@ -17,7 +18,8 @@ pub enum CredentialEvent {
         data: Data,
         notification_id: Option<String>,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
-        credential_status: CredentialStatus,
+        created_at: Option<DateTime<Utc>>,
+        expires_at: Option<DateTime<Utc>>,
     },
     SignedCredentialCreated {
         credential_id: String,
@@ -27,6 +29,7 @@ pub enum CredentialEvent {
     CredentialSigned {
         credential_id: String,
         signed_credential: serde_json::Value,
+        credential_status: CredentialStatus,
         status: Status,
     },
     NotificationReceived {

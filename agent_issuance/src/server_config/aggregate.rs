@@ -1,7 +1,13 @@
-use agent_shared::config::Authorization;
+use agent_shared::config::{config, Authorization};
 use async_trait::async_trait;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::Aggregate;
+use identity_core::convert::ToJson;
 use jsonwebtoken::Algorithm;
+use oid4vci::credential_format_profiles::vc_jose_cose::vc_sd_jwt;
+use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json;
+use oid4vci::credential_format_profiles::{CredentialFormats, Parameters};
+use oid4vci::credential_issuer::credential_configurations_supported::AlgIdentifier;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
@@ -9,11 +15,13 @@ use oid4vci::credential_issuer::{
 use oid4vci::proof::{KeyProofMetadata, ProofType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::{debug, info};
 
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::error::ServerConfigError;
 use crate::server_config::event::ServerConfigEvent;
+use crate::services::IssuanceServices;
 
 fn into_credential_configurations_supported(
     credential_configurations: &HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
@@ -28,13 +36,14 @@ fn into_credential_configurations_supported(
         .collect()
 }
 
-fn into_credential_signing_alg_values_supported(signing_algorithms_supported: &[Algorithm]) -> Vec<String> {
+fn into_credential_signing_alg_values_supported(signing_algorithms_supported: &[Algorithm]) -> Vec<AlgIdentifier> {
     signing_algorithms_supported
         .iter()
-        .map(|algorithm| match algorithm {
-            jsonwebtoken::Algorithm::EdDSA => "EdDSA".to_string(),
-            jsonwebtoken::Algorithm::ES256 => "ES256".to_string(),
-            _ => unimplemented!("Unsupported algorithm: {:?}", algorithm),
+        .filter_map(|algorithm| {
+            algorithm
+                .to_json_value()
+                .ok()
+                .and_then(|value| value.as_str().map(|s| AlgIdentifier::String(s.to_string())))
         })
         .collect()
 }
@@ -43,7 +52,9 @@ fn into_proof_types_supported(signing_algorithms_supported: &[Algorithm]) -> Has
     HashMap::from_iter([(
         ProofType::Jwt,
         KeyProofMetadata {
-            proof_signing_alg_values_supported: signing_algorithms_supported.to_vec(),
+            proof_signing_alg_values_supported: into_credential_signing_alg_values_supported(
+                signing_algorithms_supported,
+            ),
         },
     )])
 }
@@ -63,7 +74,7 @@ impl Aggregate for ServerConfig {
     type Command = ServerConfigCommand;
     type Event = ServerConfigEvent;
     type Error = ServerConfigError;
-    type Services = ();
+    type Services = Arc<IssuanceServices>;
 
     fn aggregate_type() -> String {
         "server_config".to_string()
@@ -162,17 +173,50 @@ impl Aggregate for ServerConfig {
                 credential_configuration,
                 provisioned,
             } => {
+                let credential_format = match credential_configuration.format.as_str() {
+                    "jwt_vc_json" => CredentialFormats::JwtVcJson(Parameters {
+                        parameters: (jwt_vc_json::CredentialDefinition {
+                            type_: credential_configuration.type_,
+                        })
+                        .into(),
+                    }),
+                    "dc+sd-jwt" => {
+                        let vct = format!(
+                            "{}vct/{}/{version}",
+                            config().public_url,
+                            URL_SAFE_NO_PAD.encode(&credential_configuration.credential_configuration_id),
+                            // TODO: support versioning of VCTs once we support versioning of Templates
+                            version = 0
+                        );
+
+                        CredentialFormats::DcSdJwt(Parameters {
+                            parameters: (vct).into(),
+                        })
+                    }
+                    "vc+sd-jwt" => CredentialFormats::VcSdJwt(Parameters {
+                        parameters: (vc_sd_jwt::CredentialDefinition {
+                            type_: credential_configuration.type_,
+                        })
+                        .into(),
+                    }),
+                    _ => {
+                        return Err(UnsupportedCredentialFormatIdentifierError(format!(
+                            "{:?}",
+                            credential_configuration.format
+                        )))
+                    }
+                };
+
                 let proof_types_supported = into_proof_types_supported(&self.signing_algorithms_supported);
 
                 let credential_configuration_object = CredentialConfigurationsSupportedObject {
-                    credential_format: credential_configuration.credential_format_with_parameters,
+                    credential_format,
                     cryptographic_binding_methods_supported: self.cryptographic_binding_methods_supported.clone(),
                     credential_signing_alg_values_supported: into_credential_signing_alg_values_supported(
                         &self.signing_algorithms_supported,
                     ),
                     proof_types_supported,
-                    display: credential_configuration.display,
-                    claims: credential_configuration.claims,
+                    credential_metadata: Some(credential_configuration.credential_metadata),
                     ..Default::default()
                 };
 
@@ -311,10 +355,10 @@ pub mod server_config_tests {
     use super::*;
     use crate::server_config::aggregate::ServerConfig;
     use crate::server_config::event::ServerConfigEvent;
+    use agent_secret_manager::service::Service;
     use agent_shared::config::{Authorization, CredentialConfiguration};
     use cqrs_es::test::TestFramework;
-    use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::JwtVcJson;
-    use oid4vci::credential_format_profiles::{w3c_verifiable_credentials, CredentialFormats, Parameters};
+    use oid4vci::credential_issuer::credential_configurations_supported::CredentialMetadata;
     use oid4vci::credential_issuer::credential_configurations_supported::{
         CredentialConfigurationsSupportedDisplay, Logo,
     };
@@ -323,13 +367,13 @@ pub mod server_config_tests {
     type ServerConfigTestFramework = TestFramework<ServerConfig>;
 
     #[rstest]
-    fn test_load_server_metadata(
+    async fn test_load_server_metadata(
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         cryptographic_binding_methods_supported: Vec<String>,
         signing_algorithms_supported: Vec<Algorithm>,
     ) {
-        ServerConfigTestFramework::with(())
+        ServerConfigTestFramework::with(IssuanceServices::default().await)
             .given_no_previous_events()
             .when(ServerConfigCommand::InitializeServerMetadata {
                 authorization_server_metadata: authorization_server_metadata.clone(),
@@ -346,7 +390,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
-    fn test_add_credential_configuration(
+    async fn test_add_credential_configuration(
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         cryptographic_binding_methods_supported: Vec<String>,
@@ -355,7 +399,7 @@ pub mod server_config_tests {
         credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
         credential_issuer_metadata_with_credential_configuration: Box<CredentialIssuerMetadata>,
     ) {
-        ServerConfigTestFramework::with(())
+        ServerConfigTestFramework::with(IssuanceServices::default().await)
             .given(vec![ServerConfigEvent::ServerMetadataInitialized {
                 authorization_server_metadata,
                 credential_issuer_metadata,
@@ -365,27 +409,23 @@ pub mod server_config_tests {
             .when(ServerConfigCommand::UpdateCredentialConfiguration {
                 credential_configuration: CredentialConfiguration {
                     credential_configuration_id: credential_configuration_id.clone(),
-                    credential_format_with_parameters: CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
-                        parameters: w3c_verifiable_credentials::jwt_vc_json::JwtVcJsonParameters {
-                            credential_definition: w3c_verifiable_credentials::jwt_vc_json::CredentialDefinition {
-                                type_: vec!["VerifiableCredential".to_string()],
-                                credential_subject: Default::default(),
-                            },
-                        },
-                    }),
-                    display: vec![CredentialConfigurationsSupportedDisplay {
-                        name: "Verifiable Credential".to_string(),
-                        locale: Some("en".to_string()),
-                        logo: Some(Logo {
-                            uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
-                            alt_text: Some("Impierce Logo".to_string()),
-                        }),
-                        description: None,
-                        background_image: None,
-                        background_color: None,
-                        text_color: None,
-                    }],
-                    claims: vec![],
+                    format: "jwt_vc_json".to_string(),
+                    type_: vec!["VerifiableCredential".to_string()],
+                    credential_metadata: CredentialMetadata {
+                        display: Some(vec![CredentialConfigurationsSupportedDisplay {
+                            name: "Verifiable Credential".to_string(),
+                            locale: Some("en".to_string()),
+                            logo: Some(Logo {
+                                uri: "https://www.impierce.com/external/impierce-logo.png".parse().unwrap(),
+                                alt_text: Some("Impierce Logo".to_string()),
+                            }),
+                            description: None,
+                            background_image: None,
+                            background_color: None,
+                            text_color: None,
+                        }]),
+                        claims: None,
+                    },
                     authorization: Authorization {
                         pre_authorized: true,
                         tx_code_constraints: None,
@@ -404,7 +444,7 @@ pub mod server_config_tests {
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::*;
-    use crate::credential::aggregate::test_utils::W3C_VC_CREDENTIAL_CONFIGURATION;
+    use crate::credential::aggregate::test_utils::JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION;
     use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
     use rstest::*;
     use url::Url;
@@ -437,7 +477,7 @@ pub mod test_utils {
             credential_configuration_id,
             (
                 false,
-                W3C_VC_CREDENTIAL_CONFIGURATION.clone(),
+                JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone(),
                 Authorization {
                     pre_authorized: true,
                     tx_code_constraints: None,

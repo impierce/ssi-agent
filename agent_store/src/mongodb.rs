@@ -1,13 +1,5 @@
-use crate::{partition_event_publishers, AggregateHandler, CqrsComponentBuilder, EventPublisher, Partitions};
-use agent_issuance::{
-    offer::queries::{access_token::AccessTokenQuery, pre_authorized_code::PreAuthorizedCodeQuery},
-    services::IssuanceServices,
-    state::IssuanceState,
-    SimpleLoggingQuery,
-};
-use agent_shared::{
-    application_state::Command, config::config, custom_queries::ListAllQuery, generic_query::generic_query,
-};
+use crate::{AggregateHandler, CqrsComponentBuilder};
+use agent_shared::{application_state::Command, config::config};
 use cqrs_es::{persist::PersistedEventStore, CqrsFramework};
 use cqrs_es::{persist::ViewRepository, Aggregate, Query, View};
 use mongo_es::{default_mongo_client, Client, MongoEventRepository, MongoViewRepository};
@@ -78,84 +70,5 @@ impl CqrsComponentBuilder for MongoDB {
             aggregate,
             all_aggregates,
         )
-    }
-}
-
-// TODO: make a generic function for this and move it to `lib.rs`.
-pub async fn issuance_state(
-    client: Client,
-    issuance_services: Arc<IssuanceServices>,
-    event_publishers: Vec<Box<dyn EventPublisher>>,
-) -> IssuanceState {
-    // Initialize the MongoDB repositories.
-    let server_config = Arc::new(MongoViewRepository::new("server_config", client.clone()));
-    let pre_authorized_code = Arc::new(MongoViewRepository::new("pre_authorized_code", client.clone()));
-    let access_token = Arc::new(MongoViewRepository::new("access_token", client.clone()));
-    let credential = Arc::new(MongoViewRepository::new("credential", client.clone()));
-    let all_credentials = Arc::new(MongoViewRepository::new("all_credentials", client.clone()));
-    let offer = Arc::new(MongoViewRepository::new("offer", client.clone()));
-    let all_offers = Arc::new(MongoViewRepository::new("all_offers", client.clone()));
-
-    // Create custom-queries for the offer aggregate.
-    let pre_authorized_code_query = PreAuthorizedCodeQuery::new(pre_authorized_code.clone());
-    let access_token_query = AccessTokenQuery::new(access_token.clone());
-
-    // Partition the event_publishers into the different aggregates.
-    let Partitions {
-        server_config_event_publishers,
-        credential_event_publishers,
-        offer_event_publishers,
-        ..
-    } = partition_event_publishers(event_publishers);
-
-    // Create custom-queries for the offer aggregate.
-    let all_credentials_query = ListAllQuery::new(all_credentials.clone(), "all_credentials");
-    let all_offers_query = ListAllQuery::new(all_offers.clone(), "all_offers");
-
-    IssuanceState {
-        command: agent_issuance::state::CommandHandlers {
-            server_config: Arc::new(
-                server_config_event_publishers.into_iter().fold(
-                    AggregateHandler::new(client.clone(), ())
-                        .await
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(server_config.clone())),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
-            credential: Arc::new(
-                credential_event_publishers.into_iter().fold(
-                    AggregateHandler::new(client.clone(), issuance_services.clone())
-                        .await
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(credential.clone()))
-                        .append_query(all_credentials_query),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
-            offer: Arc::new(
-                offer_event_publishers.into_iter().fold(
-                    AggregateHandler::new(client.clone(), issuance_services.clone())
-                        .await
-                        .append_query(SimpleLoggingQuery {})
-                        .append_query(generic_query(offer.clone()))
-                        .append_query(all_offers_query)
-                        .append_query(pre_authorized_code_query)
-                        .append_query(access_token_query),
-                    |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
-                ),
-            ),
-        },
-        query: agent_issuance::state::ViewRepositories {
-            server_config,
-            pre_authorized_code,
-            access_token,
-            credential,
-            all_credentials,
-            offer,
-            all_offers,
-        },
-        signer: issuance_services.issuer.clone(),
-        subject: issuance_services.issuer.clone(),
     }
 }

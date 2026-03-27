@@ -1,3 +1,4 @@
+use agent_secret_manager::subject::Subject;
 use agent_shared::application_state::CommandHandler;
 use agent_shared::config::{
     config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, CredentialConfiguration,
@@ -6,7 +7,6 @@ use agent_shared::handlers::{command_handler, query_handler};
 use agent_shared::profile::ApplicationProfile;
 use agent_shared::UrlAppendHelpers;
 use cqrs_es::persist::ViewRepository;
-use oid4vc_core::{Sign, Subject};
 use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use std::sync::Arc;
@@ -15,21 +15,23 @@ use tracing::{debug, info};
 use crate::credential::aggregate::Credential;
 use crate::credential::views::all_credentials::AllCredentialsView;
 use crate::credential::views::CredentialView;
+use crate::nonce::aggregate::Nonce;
+use crate::nonce::views::NonceView;
 use crate::offer::aggregate::Offer;
-use crate::offer::queries::access_token::AccessTokenView;
-use crate::offer::queries::pre_authorized_code::PreAuthorizedCodeView;
 use crate::offer::views::all_offers::AllOffersView;
 use crate::offer::views::OfferView;
 use crate::server_config::aggregate::ServerConfig;
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::views::ServerConfigView;
+use crate::status_list::aggregate::StatusListAggregate;
+use crate::status_list::views::all_status_lists::AllStatusListsView;
+use crate::status_list::views::StatusListView;
 
 #[derive(Clone)]
 pub struct IssuanceState {
     pub command: CommandHandlers,
     pub query: Queries,
-    pub signer: Arc<dyn Sign>,
-    pub subject: Arc<dyn Subject>,
+    pub subject: Arc<Subject>,
 }
 
 /// The command handlers are used to execute commands on the aggregates.
@@ -38,6 +40,8 @@ pub struct CommandHandlers {
     pub server_config: CommandHandler<ServerConfig>,
     pub credential: CommandHandler<Credential>,
     pub offer: CommandHandler<Offer>,
+    pub nonce: CommandHandler<Nonce>,
+    pub status_list: CommandHandler<StatusListAggregate>,
 }
 
 /// This type is used to define the queries that are used to query the view repositories. We make use of `dyn` here, so
@@ -49,27 +53,30 @@ type Queries = ViewRepositories<
     dyn ViewRepository<AllCredentialsView, Credential>,
     dyn ViewRepository<OfferView, Offer>,
     dyn ViewRepository<AllOffersView, Offer>,
-    dyn ViewRepository<PreAuthorizedCodeView, Offer>,
-    dyn ViewRepository<AccessTokenView, Offer>,
+    dyn ViewRepository<NonceView, Nonce>,
+    dyn ViewRepository<StatusListView, StatusListAggregate>,
+    dyn ViewRepository<AllStatusListsView, StatusListAggregate>,
 >;
 
-pub struct ViewRepositories<SC, C, C1, O, O1, O2, O3>
+pub struct ViewRepositories<SC, C, C1, O, O1, N, SL, SL1>
 where
     SC: ViewRepository<ServerConfigView, ServerConfig> + ?Sized,
     C: ViewRepository<CredentialView, Credential> + ?Sized,
     C1: ViewRepository<AllCredentialsView, Credential> + ?Sized,
     O: ViewRepository<OfferView, Offer> + ?Sized,
     O1: ViewRepository<AllOffersView, Offer> + ?Sized,
-    O2: ViewRepository<PreAuthorizedCodeView, Offer> + ?Sized,
-    O3: ViewRepository<AccessTokenView, Offer> + ?Sized,
+    N: ViewRepository<NonceView, Nonce> + ?Sized,
+    SL: ViewRepository<StatusListView, StatusListAggregate> + ?Sized,
+    SL1: ViewRepository<AllStatusListsView, StatusListAggregate> + ?Sized,
 {
     pub server_config: Arc<SC>,
     pub credential: Arc<C>,
     pub all_credentials: Arc<C1>,
     pub offer: Arc<O>,
     pub all_offers: Arc<O1>,
-    pub pre_authorized_code: Arc<O2>,
-    pub access_token: Arc<O3>,
+    pub nonce: Arc<N>,
+    pub status_list: Arc<SL>,
+    pub all_status_lists: Arc<SL1>,
 }
 
 impl Clone for Queries {
@@ -80,8 +87,9 @@ impl Clone for Queries {
             all_credentials: self.all_credentials.clone(),
             offer: self.offer.clone(),
             all_offers: self.all_offers.clone(),
-            pre_authorized_code: self.pre_authorized_code.clone(),
-            access_token: self.access_token.clone(),
+            nonce: self.nonce.clone(),
+            status_list: self.status_list.clone(),
+            all_status_lists: self.all_status_lists.clone(),
         }
     }
 }
@@ -140,14 +148,19 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
             info!("Initializing server metadata ...");
 
             let command = ServerConfigCommand::InitializeServerMetadata {
+                // TODO: Move this to `agent_authorization`.
                 authorization_server_metadata: Box::new(AuthorizationServerMetadata {
                     issuer: public_url.clone(),
+                    authorization_endpoint: Some(public_url.append_path_segment("auth/authorize")),
                     token_endpoint: Some(public_url.append_path_segment("auth/token")),
+                    pushed_authorization_request_endpoint: Some(public_url.append_path_segment("auth/par")),
+                    require_pushed_authorization_requests: Some(true),
                     ..Default::default()
                 }),
                 credential_issuer_metadata: Box::new(CredentialIssuerMetadata {
                     credential_issuer: public_url.clone(),
                     credential_endpoint: public_url.append_path_segment("openid4vci/credential"),
+                    nonce_endpoint: Some(public_url.append_path_segment("openid4vci/nonce")),
                     display,
                     ..Default::default()
                 }),
@@ -220,18 +233,93 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                   {
                     "credential_configuration_id": "001",
                     "format": "jwt_vc_json",
-                    "credential_definition": {
-                      "type": ["VerifiableCredential"]
-                    },
+                    "type": ["VerifiableCredential"],
+                    "credential_metadata": {
+                        "display": [
+                            {
+                                "name": "Verifiable Credential",
+                                "locale": "en",
+                                "logo": {
+                                "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                    "alt_text": "Impierce Logo"
+                                }
+                            }
+                        ],
+                        "claims": [
+                            {
+                                "path": ["credentialSubject", "first_name"],
+                                "display": [{
+                                    "name": "First Name",
+                                    "locale": "en"
+                                }],
+                            },
+                            {
+                                "path": ["credentialSubject", "last_name"],
+                                "display": [{
+                                    "name": "Last Name",
+                                    "locale": "en"
+                                }],
+                            },
+                            {
+                                "path": ["credentialSubject", "dob"],
+                                "display": [{
+                                    "name": "Date of Birth",
+                                    "locale": "en"
+                                }],
+                            }
+                        ]
+                    }
+                  },
+                  {
+                    "credential_configuration_id": "SD-JWT VC",
+                    "format": "dc+sd-jwt",
                     "display": [
-                      {
-                        "name": "Verifiable Credential",
-                        "locale": "en",
-                        "logo": {
-                          "uri": "https://www.impierce.com/external/impierce-logo.png",
-                          "alt_text": "Impierce Logo"
+                        {
+                            "name": "SD-JWT VC Credential",
+                            "locale": "en",
+                            "logo": {
+                            "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                "alt_text": "Impierce Logo"
+                            }
                         }
-                      }
+                    ],
+                    "claims": [
+                        {
+                            "path": ["first_name"],
+                            "display": [{
+                                "name": "First Name",
+                                "locale": "en"
+                            }],
+                        },
+                        {
+                            "path": ["last_name"],
+                            "display": [{
+                                "name": "Last Name",
+                                "locale": "en"
+                            }],
+                        },
+                        {
+                            "path": ["dob"],
+                            "display": [{
+                                "name": "Date of Birth",
+                                "locale": "en"
+                            }],
+                        }
+                    ]
+                  },
+                  {
+                    "credential_configuration_id": "VCDM 2.0 SD-JWT",
+                    "format": "vc+sd-jwt",
+                    "type": ["VerifiableCredential"],
+                    "display": [
+                        {
+                            "name": "VCDM 2.0 SD-JWT Credential",
+                            "locale": "en",
+                            "logo": {
+                            "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                "alt_text": "Impierce Logo"
+                            }
+                        }
                     ],
                     "claims": [
                         {

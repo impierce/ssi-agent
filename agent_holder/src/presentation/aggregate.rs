@@ -7,6 +7,7 @@ use cqrs_es::Aggregate;
 use identity_core::convert::ToJson;
 use identity_credential::{credential::Jwt, presentation::JwtPresentationOptions};
 use jsonwebtoken::Header;
+use oid4vc_core::Subject as _;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -94,14 +95,14 @@ impl Aggregate for Presentation {
                 ]
                 .join(".");
 
-                let proof_value = holder
-                    .sign(
-                        &message,
-                        get_preferred_did_method().to_string().as_ref(),
-                        get_preferred_signing_algorithm(),
-                    )
-                    .await
-                    .map_err(|err| SigningError(err.to_string()))?;
+                let proof_value = oid4vc_core::Sign::sign(
+                    &**holder,
+                    &message,
+                    get_preferred_did_method().to_string().as_ref(),
+                    get_preferred_signing_algorithm(),
+                )
+                .await
+                .map_err(|err| SigningError(err.to_string()))?;
                 let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
                 let message = [message, signature].join(".");
 
@@ -151,7 +152,7 @@ pub mod presentation_tests {
         signed_credentials: Vec<OfferCredential>,
         signed_presentation: Jwt,
     ) {
-        PresentationTestFramework::with(Service::default())
+        PresentationTestFramework::with(HolderServices::default().await)
             .given_no_previous_events()
             .when(PresentationCommand::CreatePresentation {
                 presentation_id: presentation_id.clone(),

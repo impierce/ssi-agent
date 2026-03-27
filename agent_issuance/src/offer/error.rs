@@ -26,4 +26,10 @@ pub enum OfferError {
     UnrequestedTxCodeError,
     #[error("Pre-Authorized Code is invalid.")]
     InvalidPreAuthorizedCodeError,
+    #[error("Credential configuration IDs should not be empty when creating a credential offer.")]
+    MissingCredentialConfigurationIdsError,
+    #[error("Credential configuration not known:{0}")]
+    UnknownCredentialConfiguration(String),
+    #[error("Credential identifier not supported")]
+    UnsupportedCredentialIdentifierError,
 }

@@ -116,9 +116,9 @@ credential_configurations:
         - MyCustomCredential
 ```
 
-## Invalid Credential Subject
+## Invalid Credential Payload
 
-This error occurs when the `credentialSubject` provided during credential creation does not adhere to the expected format or schema. In other words, the data representing the credential's subject is either malformed, missing required properties, or contains values that fail to meet the validation criteria for the specified credential type.
+This error occurs when the credential data inside the payload provided during credential creation does not adhere to the expected format or schema. In other words, the data representing the credential is either malformed, missing required properties, or contains values that fail to meet the validation criteria for the specified credential type.
 
 ### Resolution
 
@@ -211,3 +211,11 @@ This error is returned when there is an attempt to remove a provisioned credenti
 ### Resolution
 
 Provisioned credential configurations cannot be removed at runtime. To remove a configuration, update your server's configuration files and restart the service.
+
+## Unsupported Credential Format Identifier Error
+
+This error occurs when the `format` specified in a credential configuration is not supported by UniCore. This typically happens when the format does not match any of the recognized credential formats.
+
+### Resolution
+
+Ensure that the `format` field in the credential configuration is set to a supported value. Supported values include: `jwt_vc_json` and `dc+sd-jwt`.

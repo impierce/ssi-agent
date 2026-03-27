@@ -3,17 +3,14 @@ mod provisioned;
 use agent_macros::Config;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use identity_iota::{
-    iota_interaction::{IOTA_DEVNET_URL, IOTA_MAINNET_URL},
+    iota_interaction::{IOTA_DEVNET_URL, IOTA_MAINNET_URL, IOTA_TESTNET_URL},
     storage::KeyId,
 };
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
-use oid4vci::credential_issuer::credential_configurations_supported::ClaimDescription;
-use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedDisplay;
-use oid4vci::{
-    credential_format_profiles::{CredentialFormats, WithParameters},
-    credential_offer::TxCodeConstraints,
-};
+use oid4vci::credential_issuer::credential_configurations_supported::CredentialMetadata;
+use oid4vci::credential_offer::TxCodeConstraints;
+use oid4vp::authorization_request::AlgValues;
 use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported};
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -34,6 +31,10 @@ pub use provisioned::load_provisioned_config;
 
 pub const BITS_PER_STATUS: u8 = 2; // Amount of bits per status
 pub const STATUS_LIST_BYTES_AMOUNT: usize = 2048; // Amount of bytes in the status list. Equates to 8192 statuses for BITS_PER_STATUS = 2.
+#[cfg(feature = "test_utils")]
+pub const TESTINDEX: usize = 123;
+#[cfg(feature = "test_utils")]
+pub const TEST_STATUS_LIST_ID: &str = "0";
 
 pub const API_VERSION: &str = "/v0";
 
@@ -299,17 +300,17 @@ pub struct ApplicationConfiguration {
     pub event_publishers: EventPublishers,
     #[config(default = "VpFormatsSupported {
         jwt_vc_json: Some(JwtVcJsonParameters {
-            alg_values: Some(vec![Algorithm::ES256, Algorithm::EdDSA])
+            alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
         }),
         jwt_vp_json: Some(JwtVpJsonParameters {
-            alg_values: Some(vec![Algorithm::ES256, Algorithm::EdDSA])
+            alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
         }),
         dc_sd_jwt: Some(DcSdJwtParameters {
-            sd_jwt_alg_values: Some(vec![Algorithm::ES256]),
-            kb_jwt_alg_values: Some(vec![Algorithm::ES256])
+            sd_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap()),
+            kb_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap())
                 }),
         ldp_vc: None,
-        ldp_vp: None,
+        di_vp: None,
         mso_mdoc: None,
     }")]
     pub vp_formats_supported: VpFormatsSupported,
@@ -321,6 +322,11 @@ pub struct ApplicationConfiguration {
     pub iota_node_username: Option<String>,
     #[config(default)]
     pub iota_node_password: Option<String>,
+    #[config(default)]
+    pub iota_sponsoring_service_url: Option<Url>,
+    #[config(default)]
+    #[serde(serialize_with = "redact")]
+    pub iota_sponsoring_service_auth: Option<String>,
 }
 
 impl ApplicationConfiguration {
@@ -519,12 +525,12 @@ pub fn default_issuer_es256_key_id() -> KeyId {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct CredentialConfiguration {
     pub credential_configuration_id: String,
+    pub format: String,
+    // The `type` field is only used when `format` is `jwt_vc_json`.
+    #[serde(default, rename = "type")]
+    pub type_: Vec<String>,
     #[serde(flatten)]
-    pub credential_format_with_parameters: CredentialFormats<WithParameters>,
-    #[serde(default)]
-    pub display: Vec<CredentialConfigurationsSupportedDisplay>,
-    #[serde(default)]
-    pub claims: Vec<ClaimDescription>,
+    pub credential_metadata: CredentialMetadata,
     #[serde(default)]
     pub authorization: Authorization,
 }
@@ -546,7 +552,7 @@ impl Default for Authorization {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, utoipa::ToSchema)]
 pub struct Logo {
     pub uri: Option<Url>,
     pub alt_text: Option<String>,
@@ -565,6 +571,7 @@ pub struct Display {
 #[derive(Debug, Deserialize, Clone, Serialize, Default)]
 pub struct EventPublishers {
     pub http: Option<EventPublisherHttp>,
+    pub nats: Option<EventPublisherNats>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
@@ -577,13 +584,40 @@ pub struct EventPublisherHttp {
 }
 
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
+pub struct EventPublisherNats {
+    pub enabled: bool,
+    pub nats_url: String,
+    #[serde(default)]
+    pub subjects: Vec<NatsSubject>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NatsSubject {
+    pub name: String,
+    #[serde(default)]
+    pub events: Events,
+}
+
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct Events {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub access_token: Vec<AccessTokenEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub authorization_code: Vec<AuthorizationCodeEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub client: Vec<ClientEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub oauth2_authorization_request: Vec<OAuth2AuthorizationRequestEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub connection: Vec<ConnectionEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub document: Vec<DocumentEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub profile: Vec<ProfileEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub service: Vec<ServiceEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub template: Vec<TemplateEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub server_config: Vec<ServerConfigEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -591,11 +625,41 @@ pub struct Events {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub offer: Vec<OfferEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nonce: Vec<NonceEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub status_list: Vec<StatusListEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub holder_credential: Vec<HolderCredentialEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub presentation: Vec<PresentationEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub received_offer: Vec<ReceivedOfferEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub authorization_request: Vec<AuthorizationRequestEvent>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum AccessTokenEvent {
+    AccessTokenIssued,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum AuthorizationCodeEvent {
+    AuthorizationCodeCreated,
+    AuthorizationCodeRedeemed,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum ClientEvent {
+    ClientRegistered,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum OAuth2AuthorizationRequestEvent {
+    OAuth2AuthorizationRequestCreated,
+    OAuth2AuthorizationRequestExpired,
+    ConsentGranted,
+    ConsentRejected,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -613,10 +677,35 @@ pub enum DocumentEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum ProfileEvent {
+    ProfileCreated,
+    DisplayNameUpdated,
+    LogoUpdated,
+    CountryUpdated,
+    SourceUpdated,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum ServiceEvent {
     DomainLinkageServiceCreated,
     DomainLinkageServiceDeleted,
     LinkedVerifiablePresentationServiceCreated,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum TemplateEvent {
+    TemplateCreated,
+    TitleUpdated,
+    DisplayUpdated,
+    DataModelUpdated,
+    CreatorUpdated,
+    HolderTypeUpdated,
+    TagsUpdated,
+    StatusUpdated,
+    VisibilityUpdated,
+    DescriptionUpdated,
+    TypeUpdated,
+    SchemaUpdated,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -641,11 +730,31 @@ pub enum OfferEvent {
     TokenResponseCreated,
     CredentialRequestVerified,
     CredentialResponseCreated,
+    TxCodeGenerated,
+    CredentialOfferEmailSent,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum StatusListEvent {
+    StatusListCreated,
+    IndexAdded,
+    IndexUpdated,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum NonceEvent {
+    NonceGenerated,
+    NonceRedeemed,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum HolderCredentialEvent {
     CredentialAdded,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum PresentationEvent {
+    PresentationCreated,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -705,7 +814,9 @@ impl Default for Metrics {
     Ord,
     PartialOrd,
     VariantArray,
+    utoipa::ToSchema,
 )]
+#[schema(description = "DID methods supported by UniCore")]
 pub enum SupportedDidMethod {
     #[serde(alias = "did_jwk", alias = "did:jwk", rename = "did_jwk")]
     #[strum(serialize = "did:jwk")]
@@ -722,6 +833,9 @@ pub enum SupportedDidMethod {
     #[serde(alias = "did_iota_dev", alias = "did:iota:dev", rename = "did_iota_dev")]
     #[strum(serialize = "did:iota:dev")]
     IotaDev,
+    #[serde(alias = "did_iota_test", alias = "did:iota:test", rename = "did_iota_test")]
+    #[strum(serialize = "did:iota:test")]
+    IotaTest,
 }
 
 /// (A subset of) DID method traits. The methods follow a naming convention that expresses boolean predicates as verb
@@ -730,7 +844,10 @@ pub enum SupportedDidMethod {
 impl SupportedDidMethod {
     pub fn supports_update(&self) -> bool {
         match self {
-            SupportedDidMethod::Web | SupportedDidMethod::Iota | SupportedDidMethod::IotaDev => true,
+            SupportedDidMethod::Web
+            | SupportedDidMethod::Iota
+            | SupportedDidMethod::IotaDev
+            | SupportedDidMethod::IotaTest => true,
             SupportedDidMethod::Jwk | SupportedDidMethod::Key => false,
         }
     }
@@ -740,7 +857,8 @@ impl SupportedDidMethod {
             SupportedDidMethod::Jwk
             | SupportedDidMethod::Key
             | SupportedDidMethod::Iota
-            | SupportedDidMethod::IotaDev => false,
+            | SupportedDidMethod::IotaDev
+            | SupportedDidMethod::IotaTest => false,
             SupportedDidMethod::Web => true,
         }
     }
@@ -748,13 +866,14 @@ impl SupportedDidMethod {
     pub fn hosted_decentrally(&self) -> bool {
         match self {
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => false,
-            SupportedDidMethod::Iota | SupportedDidMethod::IotaDev => true,
+            SupportedDidMethod::Iota | SupportedDidMethod::IotaDev | SupportedDidMethod::IotaTest => true,
         }
     }
 }
 
 const IOTA_NETWORK: &str = "iota";
 const IOTA_DEV_NETWORK: &str = "dev";
+const IOTA_TEST_NETWORK: &str = "test";
 
 // See specification: "Since did:jwk only contains a single key, the DID URL fragment identifier is always a fixed #0 value."
 const JWK_FRAGMENT: &str = "0";
@@ -764,6 +883,7 @@ impl SupportedDidMethod {
         match self {
             SupportedDidMethod::Iota => Some(IOTA_MAINNET_URL),
             SupportedDidMethod::IotaDev => Some(IOTA_DEVNET_URL),
+            SupportedDidMethod::IotaTest => Some(IOTA_TESTNET_URL),
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
         }
     }
@@ -772,6 +892,7 @@ impl SupportedDidMethod {
         match self {
             SupportedDidMethod::Iota => Some(IOTA_NETWORK),
             SupportedDidMethod::IotaDev => Some(IOTA_DEV_NETWORK),
+            SupportedDidMethod::IotaTest => Some(IOTA_TEST_NETWORK),
             SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
         }
     }
@@ -781,6 +902,7 @@ impl SupportedDidMethod {
             SupportedDidMethod::Jwk => Some(JWK_FRAGMENT),
             SupportedDidMethod::Iota
             | SupportedDidMethod::IotaDev
+            | SupportedDidMethod::IotaTest
             | SupportedDidMethod::Key
             | SupportedDidMethod::Web => None,
         }
@@ -862,6 +984,30 @@ pub fn get_preferred_signing_algorithm() -> jsonwebtoken::Algorithm {
         .first()
         .cloned()
         .expect("Please set a signing algorithm as `preferred` in the configuration")
+}
+
+/// Extension trait for `jsonwebtoken::Algorithm` to provide a method to get the string representation.
+pub trait AlgorithmExt {
+    fn as_str(&self) -> &str;
+}
+
+impl AlgorithmExt for jsonwebtoken::Algorithm {
+    fn as_str(&self) -> &str {
+        match self {
+            jsonwebtoken::Algorithm::HS256 => "HS256",
+            jsonwebtoken::Algorithm::HS384 => "HS384",
+            jsonwebtoken::Algorithm::HS512 => "HS512",
+            jsonwebtoken::Algorithm::RS256 => "RS256",
+            jsonwebtoken::Algorithm::RS384 => "RS384",
+            jsonwebtoken::Algorithm::RS512 => "RS512",
+            jsonwebtoken::Algorithm::ES256 => "ES256",
+            jsonwebtoken::Algorithm::ES384 => "ES384",
+            jsonwebtoken::Algorithm::PS256 => "PS256",
+            jsonwebtoken::Algorithm::PS384 => "PS384",
+            jsonwebtoken::Algorithm::PS512 => "PS512",
+            jsonwebtoken::Algorithm::EdDSA => "EdDSA",
+        }
+    }
 }
 
 /// Serializes the passed `String` into the value `"<REDACTED>"` to prevent leaking secrets.
@@ -1001,7 +1147,7 @@ mod tests {
                   "sd-jwt_alg_values": ["ES256"],
                   "kb-jwt_alg_values": ["ES256"]
                 }
-              }
+              },
             })
         );
 

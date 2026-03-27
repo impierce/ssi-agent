@@ -11,6 +11,7 @@ agent_secret_manager = { path = "../agent_secret_manager" }
 anyhow.workspace = true
 async-trait.workspace = true
 base64.workspace = true
+chrono.workspace = true
 cqrs-es.workspace = true
 derivative.workspace = true
 did-jwk-extern = { version = "0.1.1", package = "did-jwk" }
@@ -25,8 +26,10 @@ iota-sdk.workspace = true
 itertools = "0.14"
 jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
+oid4vci.workspace = true
 product_common.workspace = true
 rand.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ssi-dids = "0.1.1"
@@ -38,6 +41,7 @@ tokio.workspace = true
 tracing.workspace = true
 url.workspace = true
 urlencoding = "2.1"
+utoipa.workspace = true
 uuid.workspace = true
 
 # `test_utils` dependencies
@@ -45,7 +49,7 @@ futures = { workspace = true, optional = true }
 rstest = { workspace = true, optional = true }
 
 [dev-dependencies]
-agent_api_rest = { path = "../agent_api_rest" }
+agent_api_http = { path = "../agent_api_http" }
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_identity = { path = ".", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
@@ -55,6 +59,7 @@ agent_secret_manager = { path = "../agent_secret_manager", features = [
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
 
+async-std.workspace = true
 axum.workspace = true
 lazy_static.workspace = true
 mime.workspace = true
@@ -63,7 +68,7 @@ reqwest.workspace = true
 serial_test = "3.0"
 tower.workspace = true
 tracing-test.workspace = true
-async-std = { version = "1.5", features = ["attributes", "tokio1"] }
+wiremock.workspace = true
 
 [features]
 test_utils = ["dep:futures", "dep:rstest"]
