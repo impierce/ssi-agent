@@ -74,6 +74,7 @@ impl Aggregate for AuthorizationRequest {
                     if let ClientMetadataResource::ClientMetadata {
                         ref mut client_name,
                         ref mut logo_uri,
+                        ref mut other,
                         ..
                     } = oid4vp_client_metadata
                     {
@@ -84,6 +85,10 @@ impl Aggregate for AuthorizationRequest {
                             .display
                             .first()
                             .and_then(|d| d.logo.as_ref().and_then(|l| l.uri.clone()));
+                        other.insert(
+                            "description".to_string(),
+                            config().display.first().and_then(|d| d.description.clone()).into(),
+                        );
                     }
 
                     client_id = format!("decentralized_identifier:{}", verifier_did);
@@ -106,6 +111,7 @@ impl Aggregate for AuthorizationRequest {
                     if let ClientMetadataResource::ClientMetadata {
                         ref mut client_name,
                         ref mut logo_uri,
+                        ref mut other,
                         ..
                     } = siopv2_client_metadata
                     {
@@ -116,6 +122,10 @@ impl Aggregate for AuthorizationRequest {
                             .display
                             .first()
                             .and_then(|d| d.logo.as_ref().and_then(|l| l.uri.clone()));
+                        other.insert(
+                            "description".to_string(),
+                            config().display.first().and_then(|d| d.description.clone()).into(),
+                        );
                     }
 
                     client_id = verifier_did;
