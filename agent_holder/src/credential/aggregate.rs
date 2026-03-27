@@ -53,7 +53,6 @@ impl Aggregate for Credential {
                 let raw = get_unverified_jwt_claims(&serde_json::json!(credential))?;
 
                 if let Some(status_claim) = raw.get("status") {
-                    // todo: add credential status check here
                     let credential_status_checker = CredentialStatusChecker {
                         verification_material_resolver: services.holder.clone(),
                     };
