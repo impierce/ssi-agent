@@ -316,7 +316,7 @@ pub async fn get_public_key_from_kid(did_url: &str) -> anyhow::Result<Vec<u8>> {
     let did_url =
         identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
 
-    let resolver = Resolver::new().await;
+    let resolver = Resolver::new();
 
     let document = resolver
         .resolve(did_url.did().as_str())
