@@ -501,7 +501,7 @@ dependencies = [
  "agent_verification",
  "async-trait",
  "cqrs-es 0.4.12",
- "mongo-es",
+ "mongo-es 0.3.0",
  "postgres-es",
  "serde_json",
  "sqlx",
@@ -7467,10 +7467,34 @@ dependencies = [
  "cqrs-es 0.4.12",
  "futures",
  "log",
- "mongodb",
+ "mongodb 3.2.4",
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "mongo-es"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fdf1bf9c46e9766dcae6daf77d8b7d8308cf96a62d8bb3b63530498f05c8316"
+dependencies = [
+ "cqrs-es 0.5.0",
+ "futures",
+ "log",
+ "mongodb 3.2.4",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "mongodb"
+version = "0.1.0"
+dependencies = [
+ "mongo-es 0.4.0",
+ "shared-kernel",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
