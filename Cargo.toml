@@ -18,7 +18,7 @@ members = [
 
     "shared-kernel",
 
-    "infrastructure/stores/store-mongodb",
+    "infrastructure/stores/mongodb",
 ]
 
 [workspace.package]

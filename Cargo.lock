@@ -7467,7 +7467,7 @@ dependencies = [
  "cqrs-es 0.4.12",
  "futures",
  "log",
- "mongodb",
+ "mongodb 3.2.4",
  "serde",
  "serde_json",
  "tokio",
@@ -7482,10 +7482,19 @@ dependencies = [
  "cqrs-es 0.5.0",
  "futures",
  "log",
- "mongodb",
+ "mongodb 3.2.4",
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "mongodb"
+version = "0.1.0"
+dependencies = [
+ "mongo-es 0.4.0",
+ "shared-kernel",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -12078,15 +12087,6 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
-name = "store-mongodb"
-version = "0.1.0"
-dependencies = [
- "mongo-es 0.4.0",
- "shared-kernel",
- "thiserror 1.0.69",
-]
 
 [[package]]
 name = "stringprep"

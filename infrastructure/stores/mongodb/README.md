@@ -6,7 +6,7 @@ MongoDB-backed implementation of the shared-kernel persistence factories.
 
 Provides `CommandHandlerFactory` and `ViewRepositoryFactory` implementations using:
 
-- **mongo-es** — MongoDB event store and view repository
+- [**mongo-es**](https://crates.io/crates/mongo-es) — MongoDB event store and view repository
 - **CqrsFramework** — Event sourcing and command handling
 
 ## Usage
