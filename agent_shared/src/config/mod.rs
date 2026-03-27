@@ -281,6 +281,7 @@ pub struct ApplicationConfiguration {
             Display {
                 name: "UniCore".to_string(),
                 locale: Some("en".to_string()),
+                description: None,
                 logo: Some(Logo {
                     uri: Some(Url::parse("https://www.impierce.com/external/impierce-icon.png").unwrap()),
                     alt_text: Some("Impierce Icon".to_string()),
@@ -556,6 +557,7 @@ pub struct Logo {
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Display {
     pub name: String,
+    pub description: Option<String>,
     pub locale: Option<String>,
     pub logo: Option<Logo>,
     pub country: Option<String>,
@@ -674,6 +676,7 @@ pub enum DocumentEvent {
 pub enum ProfileEvent {
     ProfileCreated,
     DisplayNameUpdated,
+    DescriptionUpdated,
     LogoUpdated,
     CountryUpdated,
     SourceUpdated,
