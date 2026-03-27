@@ -676,6 +676,7 @@ pub enum DocumentEvent {
 pub enum ProfileEvent {
     ProfileCreated,
     DisplayNameUpdated,
+    DescriptionUpdated,
     LogoUpdated,
     CountryUpdated,
     SourceUpdated,

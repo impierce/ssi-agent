@@ -91,6 +91,7 @@ DocumentPublished
 ```
 ProfileCreated,
 DisplayNameUpdated,
+DescriptionUpdated,
 LogoUpdated,
 CountryUpdated,
 SourceUpdated,
