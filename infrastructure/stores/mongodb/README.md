@@ -26,4 +26,4 @@ let repo = store.create_view_repository::<MyView, MyAggregate>("my-view-collecti
 
 ## Configuration
 
-Configure MongoDB connection string via environment variable or configuration file.
+Configure MongoDB connection string via environment variable or configuration file. For detailed configuration options, refer to the [### Event store](../../../docs/configuration/CONFIGURATION.md#event-store) section in the main CONFIGURATION.md documentation.
