@@ -2,8 +2,6 @@
 pub mod authorization_requests;
 pub mod data_access_consent_token;
 pub mod relying_party;
-pub mod validate_domain_linkage;
-pub mod validate_linked_verifiable_presentation;
 
 pub mod error;
 

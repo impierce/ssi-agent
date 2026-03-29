@@ -19,7 +19,7 @@ use serde_json::Value;
 use tracing::{info, warn};
 use url::Url;
 
-use crate::v0::verification::validate_domain_linkage::{ValidationStatus, Verifier};
+use crate::data_access_consent_token::application::validate_domain_linkage::{ValidationStatus, Verifier};
 
 #[cfg_attr(not(test), derive(PartialEq))]
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]

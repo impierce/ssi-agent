@@ -10,9 +10,13 @@ agent_shared = { path = "../agent_shared" }
 
 anyhow.workspace = true
 async-trait.workspace = true
+base64.workspace = true
 chrono.workspace = true
 cqrs-es.workspace = true
+did_manager = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.8" }
 futures.workspace = true
+identity_credential.workspace = true
+identity_iota.workspace = true
 jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
 oid4vc-manager.workspace = true
@@ -20,6 +24,7 @@ oid4vp.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_with.workspace = true
 siopv2.workspace = true
 strum.workspace = true
 strum_macros.workspace = true
@@ -38,7 +43,6 @@ agent_verification = { path = ".", features = ["test_utils"] }
 async-std.workspace = true
 did-key = "0.2"
 identity_core.workspace = true
-identity_credential.workspace = true
 lazy_static.workspace = true
 oid4vci.workspace = true
 rstest.workspace = true

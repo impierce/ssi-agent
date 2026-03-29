@@ -9,6 +9,8 @@ pub enum DataAccessConsentTokenError {
     DidResolutionError(String),
     #[error("JWT decoding error: {0}")]
     JwtDecodingError(String),
+    #[error("No Data Access Endpoint found: {0}")]
+    NoDataAccessEndpointFound(String),
     #[error("Query error: {0}")]
     QueryError(String),
 }

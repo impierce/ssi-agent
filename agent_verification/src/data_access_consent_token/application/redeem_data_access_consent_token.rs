@@ -1,42 +1,81 @@
-use agent_shared::handlers::query_handler;
+use crate::{
+    data_access_consent_token::{
+        application::{
+            validate_domain_linkage::{get_issuer_linked_domains, validate_domain_linkage, ValidationStatus},
+            validate_linked_verifiable_presentation::validate_linked_verifiable_presentations,
+        },
+        error::DataAccessConsentTokenError,
+    },
+    state::VerificationState,
+};
 
-use crate::{data_access_consent_token::error::DataAccessConsentTokenError, state::VerificationState};
-use agent_shared::get_unverified_jwt_claims;
+use agent_shared::{
+    config::{get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported},
+    get_unverified_jwt_claims,
+    handlers::query_handler,
+};
+use oid4vc_core::Subject;
+use serde_json::Value;
+use std::sync::Arc;
+use tracing::info;
 
+use axum::{
+    extract::{Query, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
+use base64::{engine::general_purpose, Engine as _};
+use identity_iota::{document::{ServiceEndpoint, verifiable}, iota_interaction::types::object::Data};
+use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use serde::{Deserialize, Serialize};
+use url::Url;
+
+pub const DATA_ACCESS_ENDPOINT: &str = "DataAccessConsentTokenEndpoint";
 pub struct RedeemDataAccessConsentTokenService {}
 
 impl RedeemDataAccessConsentTokenService {
-    pub async fn redeem_data_access_consent_token(
+    pub async fn validate_data_access_consent_token(
         self,
         token_id: String,
         state: &VerificationState,
-    ) -> Result<(), DataAccessConsentTokenError> {
+    ) -> Result<(Url, String), DataAccessConsentTokenError> {
         // 1. query token (domain layer)
         // 2. validate token (domain layer)
         // 3. send token to issuer (http layer)
         // 4. validate response (classic vp logic)
-        // 5. return credential 
+        // 5. return credential
         // Data Access Consent Token will hereafter be referred to as DACT for brevity
         let data_access_consent_token = query_handler(&token_id, &state.query.data_access_consent_token)
             .await
             .map_err(|e| DataAccessConsentTokenError::QueryError(e.to_string()))?
-            .ok_or(DataAccessConsentTokenError::DataAccessConsentTokenNotFound(token_id.clone()))?;
+            .ok_or(DataAccessConsentTokenError::DataAccessConsentTokenNotFound(
+                token_id.clone(),
+            ))?;
 
         // Initialize response to "invalid" default, if a check passes the response is updated accordingly
         let mut public_verification_response = PublicVerificationResponse::default();
 
         // Get unverified claims
         let token_value = serde_json::Value::String(data_access_consent_token.token.clone());
-        let dact_claims = get_unverified_jwt_claims(&token_value).ok_or(DataAccessConsentTokenError::JwtDecodingError("Failed to get the unverified JWT claims".to_string()))?;
+        let dact_claims = get_unverified_jwt_claims(&token_value).ok_or(
+            DataAccessConsentTokenError::JwtDecodingError("Failed to get the unverified JWT claims".to_string()),
+        )?;
 
         // Extract the `aud` claim, it equals the issuer DID of the credential which is given access to.
-        let aud = dact_claims
-            .get("aud")
-            .and_then(|v| v.as_str())
-            .ok_or(DataAccessConsentTokenError::JwtDecodingError("Failed to get `aud` claim from DACT".to_string()))?;
+        let aud =
+            dact_claims
+                .get("aud")
+                .and_then(|v| v.as_str())
+                .ok_or(DataAccessConsentTokenError::JwtDecodingError(
+                    "Failed to get `aud` claim from DACT".to_string(),
+                ))?;
 
-        let resolver = state.subject.resolver;
-        let issuer_did_document = resolver.resolve(aud).await.map_err(|e| DataAccessConsentTokenError::DidResolutionError(e.to_string()))?;
+        let resolver = &state.subject.resolver;
+        let issuer_did_document = resolver
+            .resolve(aud)
+            .await
+            .map_err(|e| DataAccessConsentTokenError::DidResolutionError(e.to_string()))?;
 
         // Check and validate domain linkage
 
@@ -46,180 +85,148 @@ impl RedeemDataAccessConsentTokenService {
         for url in linked_domains.clone() {
             let validation_result = validate_domain_linkage(&resolver, url.clone(), aud).await;
             if validation_result.status == ValidationStatus::Success {
-                public_verification_response.domain_linkage = ValidationResult {
+                public_verification_response.domain_linkage.push(ValidationResult {
                     status: ValidationStatus::Success,
                     payload: Some(url.to_string()),
                     data: None,
-                };
-                break;
+                });
+            } else {
+                linked_domains.retain(|u| u != &url);
             }
         }
 
-    // Fallback for did:webs if no domain linkage is found
-    if linked_domains.is_empty() || aud.starts_with("did:web") {
-        let did_web_domain = extract_url_from_did_web(aud).ok_or(
-            ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Invalid Token")
-                .message("Failed to resolve issuer DID")
-                .finish(),
-        )?;
-        info!("Extracted URL from did:web: {:#?}", did_web_domain);
-        public_verification_response.domain_linkage = ValidationResult {
-            status: ValidationStatus::Success,
-            payload: Some(did_web_domain.to_string()),
-            data: None,
-        };
-        linked_domains.push(did_web_domain);
-    }
+        // Fallback for did:webs if no domain linkage is found
+        if linked_domains.is_empty() {
+            match aud.starts_with("did:web") {
+                true => {
+                    let did_web_domain =
+                        extract_url_from_did_web(aud).ok_or(DataAccessConsentTokenError::DidResolutionError(
+                            "Failed to extract URL from Issuer did:web".to_string(),
+                        ))?;
 
-    info!("Linked Domains: {:#?}", linked_domains);
-
-    // Validate the issuers linked verifiable presentations and then check if any of them were issued to this verifier to establish a trust relation.
-
-    // Get this instance's DID's
-    // TODO: this is ugly but for now the easiest way for me to get all did_methods for the hackathon
-    let supported_signing_algorithms = get_all_enabled_signing_algorithms_supported();
-    let enabled_did_methods = get_all_enabled_did_methods();
-
-    let mut dids = Vec::new();
-
-    // TODO: In fact i don't need the full identifier (kid), just the DID.
-    for did_method in &enabled_did_methods {
-        for alg in &supported_signing_algorithms {
-            let did = state
-                .subject
-                .identifier(did_method.to_string().as_ref(), *alg)
-                .await
-                .map_err(|_| ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR).finish())?;
-
-            dids.push(
-                did.split('#')
-                    .next()
-                    .ok_or(ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR))?
-                    .to_string(),
-            );
+                    info!("Extracted URL from did:web: {:#?}", did_web_domain);
+                    public_verification_response.domain_linkage.push(ValidationResult {
+                        status: ValidationStatus::Success,
+                        payload: Some(did_web_domain.to_string()),
+                        data: None,
+                    });
+                    linked_domains.push(did_web_domain);
+                }
+                false => {
+                    public_verification_response.domain_linkage.push(ValidationResult {
+                        status: ValidationStatus::Failure,
+                        payload: Some("No linked domains found for issuer, and issuer is not a did:web".to_string()),
+                        data: None,
+                    });
+                }
+            }
         }
-    }
 
-    info!("DIDs to match against: {:#?}", dids);
-    let linked_verifiable_credentials: Vec<_> =
-        validate_linked_verifiable_presentations(&resolver, &issuer_did_document)
-            .await
-            .into_iter()
-            .flatten()
-            .filter(|linked_verifiable_credential| {
-                info!(
-                    "Validating linked verifiable credential: {:#?}",
-                    linked_verifiable_credential
-                );
-                // Check if the issuer of the linked verifiable credential matches the DID of this verifier to establish a trust relation
-                let claims = match get_unverified_jwt_claims(&linked_verifiable_credential.data) {
-                    Ok(claims) => claims,
-                    Err(_) => return false,
-                };
+        info!("Linked Domains: {:#?}", linked_domains);
 
-                info!("Linked VC claims: {:#?}", claims);
-                info!("DIDs to match against: {:#?}", dids);
+        // Get and validate the issuers linked verifiable presentations.
+        let linked_verifiable_credentials: Vec<_> =
+            validate_linked_verifiable_presentations(&resolver, &issuer_did_document)
+                .await
+                .into_iter()
+                .flatten()
+                .collect();
 
-                claims
-                    .get("iss")
-                    .and_then(|iss| iss.as_str())
-                    .and_then(|iss| match dids.contains(&iss.to_string()) {
-                        true => Some(true),
-                        false => None,
-                    })
-                    .unwrap_or(false)
+        match linked_verifiable_credentials.is_empty() {
+            true => {
+                public_verification_response.linked_vp.push(ValidationResult {
+                    status: ValidationStatus::Failure,
+                    // TODO: this is a hackathon specific message
+                    payload: Some("No valid certifications found for the issuer".to_string()),
+                    data: None,
+                });
+            }
+            false => {
+                for linked_vp in &linked_verifiable_credentials {
+                    public_verification_response.linked_vp.push(ValidationResult {
+                        status: ValidationStatus::Success,
+                        // TODO: this is a hackathon specific message
+                        payload: Some("Valid certifications found for the issuer".to_string()),
+                        data: Some(serde_json::to_value(linked_vp).map_err(|_e| {
+                            DataAccessConsentTokenError::DidResolutionError(
+                                "TODO: this is an incorrect error message".to_string(),
+                            )
+                        })?), // TODO
+                    });
+                }
+            }
+        }
+
+        info!("Linked Verifiable Credentials: {:#?}", linked_verifiable_credentials);
+
+        // TODO: validate status of Public Credential Token
+        // TODO: validate the trust relation.
+
+        // TODO: All primary checks have passed for the Public Credential Token at this point, to perform the remaining checks we need to fetch the Public Credential from the Issuer.
+
+        // Discover public credential endpoint through DID resolution
+        let data_access_endpoint = issuer_did_document
+            .service()
+            .iter()
+            .find(|service| service.type_().contains(DATA_ACCESS_ENDPOINT))
+            .and_then(|service| match service.service_endpoint() {
+                ServiceEndpoint::One(url) => Some(url.clone()),
+                // TODO: handle multiple endpoints?
+                ServiceEndpoint::Set(urls) => urls.first().cloned(),
+                ServiceEndpoint::Map(map) => map.values().next().and_then(|urls| urls.first().cloned()),
             })
-            .collect();
+            .ok_or(DataAccessConsentTokenError::NoDataAccessEndpointFound(
+                "No Data Access Endpoint found in the Issuer DID Document services".to_string(),
+            ))?;
 
-    if !linked_verifiable_credentials.is_empty() {
-        // TODO: this is hardcoded logic for the hackathon demo
-        let data = get_unverified_jwt_claims(&linked_verifiable_credentials[0].data).map_err(|_| {
-            ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Invalid Linked Verifiable Presentation")
-                .message("Failed to get the credential data from the linked verifiable presentation")
-                .finish()
-        })?["vc"]
-            .clone();
+        let data_access_endpoint_url = Url::parse(&data_access_endpoint.to_string())
+            .map_err(|_| DataAccessConsentTokenError::NoDataAccessEndpointFound(
+                "Failed to parse Data Access Endpoint into URL".to_string(),
+            ))?;
 
-        public_verification_response.linked_vp.status = ValidationStatus::Success;
-        public_verification_response.linked_vp.data = Some(data);
-        public_verification_response.trust_relation.status = ValidationStatus::Success;
-    } else {
-        public_verification_response.linked_vp = ValidationResult {
-            status: ValidationStatus::Failure,
-            // TODO: this is a hackathon specific message
-            payload: Some("No valid certifications found for the issuer".to_string()),
-            data: None,
-        };
-        public_verification_response.trust_relation = ValidationResult {
-            status: ValidationStatus::Failure,
-            // TODO: this is a hackathon specific message
-            payload: Some("Trust relation between this verifier and the issuer could not be established".to_string()),
-            data: None,
-        };
+        Ok((data_access_endpoint_url, data_access_consent_token.token))
     }
 
-    // TODO: validate status of Public Credential Token
-    // Invalid = BAD_REQUEST
+    pub async fn validate_data_access_endpoint_response(
+        self,
+        data_access_consent_token: String,
+        response: DataAccessEndpointResponse,
+    ) -> Result<(), DataAccessConsentTokenError> {
+        let verifiable_credential_claims = get_unverified_jwt_claims(&serde_json::Value::String(response.verifiable_credential)).ok_or(DataAccessConsentTokenError::JwtDecodingError("Failed to get JWT claims".to_string()))?;
 
-    // All primary checks have passed for the Public Credential Token at this point, to perform the remaining checks we need to fetch the Public Credential from the Issuer.
+        // The subject of the Public Credential Token is the JTI (credential ID) of the issued credential which the Verifier is trying to access
+        let sub = verifiable_credential_claims
+            .get("sub")
+            .and_then(|v| v.as_str())
+            .ok_or(DataAccessConsentTokenError::JwtDecodingError("Failed to get `sub` claim from Public Credential Token".to_string()))?;
 
-    // Discover public credential endpoint through DID resolution
-    let public_credential_endpoint = issuer_did_document
-        .service()
-        .iter()
-        .find(|service| service.type_().contains("PublicCredentialEndpoint"))
-        .and_then(|service| match service.service_endpoint() {
-            ServiceEndpoint::One(url) => Some(url.clone()),
-            // TODO: handle multiple endpoints?
-            ServiceEndpoint::Set(urls) => urls.first().cloned(),
-            ServiceEndpoint::Map(map) => map.values().next().and_then(|urls| urls.first().cloned()),
-        })
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Public Credential Endpoint Not Found")
-                .message("Issuer DID Document is missing PublicCredentialEndpoint service")
-                .finish()
-        })?;
+        let jti = verifiable_credential_claims
+            .get("jti")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                ApiError::builder(StatusCode::BAD_REQUEST)
+                    .title("Invalid Credential")
+                    .message("Failed to get `jti` claim from Public Credential")
+                    .finish()
+            })?;
+
+        if sub != jti {
+            return Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Invalid Token")
+                .message("Public Credential Token `sub` claim does not match Public Credential `jti` claim")
+                .finish());
+        }
         
-        let public_credential_endpoint_url_with_parameter =
-            format!("{}?public-credential-token={}", public_credential_endpoint, jwt);
-    
         Ok(())
     }
 }
 
-// TODO:  separate fetching (axum) and validation logic
+// TODO: should we enable access tokens for multiple credentials? then this should be a vec
+pub struct DataAccessEndpointResponse {
+    pub verifiable_credential: String,
+}
 
-use std::sync::Arc;
-
-use agent_holder::credential::aggregate::get_unverified_jwt_claims;
-use agent_secret_manager::subject::get_public_key_from_kid;
-use agent_shared::config::{get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported};
-use crate::state::VerificationState;
-use axum::{
-    extract::{Query, State},
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
-};
-use base64::{engine::general_purpose, Engine as _};
-use did_manager::Resolver;
-use identity_iota::document::{verifiable, ServiceEndpoint};
-use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
-use serde::{Deserialize, Serialize};
-use tracing::info;
-use url::Url;
-
-use crate::v0::{
-    issuance::credential_issuer::credential,
-    verification::{
-        validate_domain_linkage::{get_issuer_linked_domains, validate_domain_linkage, ValidationStatus},
-        validate_linked_verifiable_presentation::validate_linked_verifiable_presentations,
-    },
-};
-
+// TODO: review if we still want these response structs or not
 #[derive(Serialize, Default)]
 pub struct ValidationResult {
     status: ValidationStatus,
@@ -234,8 +241,8 @@ pub struct PublicVerificationResponse {
     pub proof: ValidationResult,
     pub status: ValidationResult,
     pub trust_relation: ValidationResult,
-    pub linked_vp: ValidationResult,
-    pub domain_linkage: ValidationResult,
+    pub linked_vp: Vec<ValidationResult>,
+    pub domain_linkage: Vec<ValidationResult>,
 }
 
 /// This endpoint receives a Public Credential Token as a query parameter and then performs several validation steps on the token.
@@ -247,63 +254,6 @@ pub async fn public_verification(
     Query(parameter): Query<PublicVerificationQuery>,
 ) -> Result<Response, ApiError> {
 
-
-    // Fetch Public Credential from issuer endpoint
-    let response = reqwest::get(public_credential_endpoint_url_with_parameter)
-        .await
-        .map_err(|e| {
-            ApiError::builder(StatusCode::BAD_GATEWAY)
-                .title("Failed to Fetch Public Credential")
-                .message(format!(
-                    "Failed to get response from Issuer Public Credential endpoint: {e}"
-                ))
-                .finish()
-        })?;
-
-    let verifiable_credential = response.json::<serde_json::Value>().await.map_err(|e| {
-        ApiError::builder(StatusCode::BAD_GATEWAY)
-            .title("Invalid Public Credential Response")
-            .message(format!("Failed to parse Issuer Public Credential response: {e}"))
-            .finish()
-    })?;
-
-    // Validate all remaining checks
-
-    // Get unverified claims
-    let verifiable_credential_claims = get_unverified_jwt_claims(&verifiable_credential).map_err(|_| {
-        ApiError::builder(StatusCode::BAD_REQUEST)
-            .title("Invalid JWT")
-            .message("Failed to decode Public Credential")
-            .finish()
-    })?;
-
-    // The subject of the Public Credential Token is the JTI (credential ID) of the issued credential which a Verifier is trying to access
-    let sub = public_credential_token_claims
-        .get("sub")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Invalid Token")
-                .message("Failed to get `sub` claim from Public Credential Token")
-                .finish()
-        })?;
-
-    let jti = verifiable_credential_claims
-        .get("jti")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Invalid Credential")
-                .message("Failed to get `jti` claim from Public Credential")
-                .finish()
-        })?;
-
-    if sub != jti {
-        return Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-            .title("Invalid Token")
-            .message("Public Credential Token `sub` claim does not match Public Credential `jti` claim")
-            .finish());
-    }
 
     // TODO: none of this works with sd-jwt yet
 
