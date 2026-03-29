@@ -17,9 +17,11 @@ did_manager = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-b
 futures.workspace = true
 identity_credential.workspace = true
 identity_iota.workspace = true
+identity_jose.workspace = true
 jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
 oid4vc-manager.workspace = true
+oid4vci.workspace = true
 oid4vp.workspace = true
 reqwest.workspace = true
 serde.workspace = true
@@ -44,7 +46,6 @@ async-std.workspace = true
 did-key = "0.2"
 identity_core.workspace = true
 lazy_static.workspace = true
-oid4vci.workspace = true
 rstest.workspace = true
 serial_test = "3.0"
 

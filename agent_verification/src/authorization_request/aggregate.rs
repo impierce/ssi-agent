@@ -6,7 +6,10 @@ use crate::{
     },
     services::VerificationServices,
 };
-use agent_shared::config::{config, get_preferred_signing_algorithm};
+use agent_shared::{
+    config::{config, get_preferred_signing_algorithm},
+    credential_status_checker::CredentialStatusChecker,
+};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use oid4vc_core::{authorization_request::ByReference, scope::Scope, verifier::SignatureVerifier};
@@ -210,11 +213,16 @@ impl Aggregate for AuthorizationRequest {
                             let nonce = &authorization_request.body.extension.nonce;
                             let client_id = &authorization_request.body.client_id;
 
-                            let decoded_vp_token =
-                                VpTokenValidator::new(&SignatureVerifier, services.verifier.as_ref())
-                                    .validate_vp_token(dcql_query, vp_token, client_id, Some(nonce))
-                                    .await
-                                    .map_err(|e| InvalidOID4VPAuthorizationResponse(e.into()))?;
+                            let decoded_vp_token = VpTokenValidator::new(
+                                &SignatureVerifier,
+                                services.verifier.as_ref(),
+                                &CredentialStatusChecker {
+                                    verification_material_resolver: services.verifier.clone(),
+                                },
+                            )
+                            .validate_vp_token(dcql_query, vp_token, client_id, Some(nonce))
+                            .await
+                            .map_err(|e| InvalidOID4VPAuthorizationResponse(e.into()))?;
 
                             Ok(vec![OID4VPAuthorizationResponseVerified {
                                 vp_token: decoded_vp_token,

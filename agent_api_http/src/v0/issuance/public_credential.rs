@@ -1,8 +1,8 @@
 use crate::handlers::query_handler;
-use agent_holder::credential::aggregate::get_unverified_jwt_claims;
 use agent_issuance::state::IssuanceState;
 use agent_secret_manager::subject::get_public_key_from_kid;
 use agent_shared::config::{get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported};
+use agent_shared::get_unverified_jwt_claims;
 use axum::{
     extract::{Query, State},
     http::StatusCode,

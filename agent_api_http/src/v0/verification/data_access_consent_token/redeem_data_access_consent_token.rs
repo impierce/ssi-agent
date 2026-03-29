@@ -1,10 +1,7 @@
-use crate::handlers::command_handler;
+use crate::error::IntoApiErrorExt;
 use agent_verification::{
-    data_access_consent_token::{
-        application::redeem_data_access_consent_token::{
-            DataAccessEndpointResponse, RedeemDataAccessConsentTokenService,
-        },
-        command::DataAccessConsentTokenCommand,
+    data_access_consent_token::application::redeem_data_access_consent_token::{
+        DataAccessEndpointResponse, RedeemDataAccessConsentTokenService,
     },
     state::VerificationState,
 };
@@ -27,11 +24,12 @@ pub(crate) async fn redeem_data_access_consent_token(
     State(state): State<Arc<VerificationState>>,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
-    let data_access_consent_token_service = RedeemDataAccessConsentTokenService::default();
+    let mut data_access_consent_token_service = RedeemDataAccessConsentTokenService::default();
 
     let (data_access_endpoint, data_access_consent_token) = data_access_consent_token_service
         .validate_data_access_consent_token(id, &state)
-        .await?;
+        .await
+        .map_err(|e| e.into_api_error())?;
 
     let request_body = serde_json::json!({
         "data_access_consent_token": data_access_consent_token
@@ -70,9 +68,10 @@ pub(crate) async fn redeem_data_access_consent_token(
                 .finish()
         })?;
 
-    let redeemed_credential = data_access_consent_token_service
+    let public_verification_response = data_access_consent_token_service
         .validate_data_access_endpoint_response(data_access_consent_token, typed_response, &state)
-        .await?;
+        .await
+        .map_err(|e| e.into_api_error())?;
 
-    Ok((StatusCode::OK, redeemed_credential).into_response())
+    Ok((StatusCode::OK, axum::Json(public_verification_response)).into_response())
 }

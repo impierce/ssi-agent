@@ -250,7 +250,7 @@ async fn get_validated_linked_domains(
         let validation_status: ValidationStatus = {
             #[cfg(not(feature = "test_utils"))]
             {
-                use crate::v0::verification::validate_domain_linkage::validate_domain_linkage;
+                use crate::data_access_consent_token::application::validate_domain_linkage::validate_domain_linkage;
 
                 validate_domain_linkage(resolver, issuer_linked_domain.clone(), issuer_did)
                     .await

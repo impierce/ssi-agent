@@ -59,10 +59,7 @@ impl Aggregate for Service {
                 let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
-                let endpoint_url =
-                    // TODO: the backend route is  + API_VERSION + "/public-verification", but the public page is at "/verify".
-                    // In the future it would be better if we can make this into 1 route.
-                    origin.to_string().trim_end_matches('/').to_string() + "/verify";
+                let endpoint_url = origin.to_string().trim_end_matches('/').to_string() + "/verify";
                 let endpoint_url = endpoint_url
                     .parse::<identity_core::common::Url>()
                     .map_err(|err| InvalidUrlError(err.to_string()))?;

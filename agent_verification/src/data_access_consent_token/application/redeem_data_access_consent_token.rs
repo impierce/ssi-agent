@@ -30,7 +30,7 @@ pub struct RedeemDataAccessConsentTokenService {
 impl RedeemDataAccessConsentTokenService {
     /// TODO
     pub async fn validate_data_access_consent_token(
-        mut self,
+        &mut self,
         token_id: String,
         state: &VerificationState,
     ) -> Result<(Url, String), DataAccessConsentTokenError> {
@@ -217,11 +217,11 @@ impl RedeemDataAccessConsentTokenService {
 
     /// TODO
     pub async fn validate_data_access_endpoint_response(
-        mut self,
+        &mut self,
         data_access_consent_token: String,
         response: DataAccessEndpointResponse,
         state: &VerificationState,
-    ) -> Result<(), DataAccessConsentTokenError> {
+    ) -> Result<PublicVerificationResponse, DataAccessConsentTokenError> {
         let verifiable_credential_claims =
             get_unverified_jwt_claims(&serde_json::Value::String(response.verifiable_credential.clone())).ok_or(
                 DataAccessConsentTokenError::InvalidResponse("Failed to get response JWT claims".to_string()),
@@ -317,7 +317,7 @@ impl RedeemDataAccessConsentTokenService {
             "JWT header is missing `kid` field".to_string(),
         ))?;
 
-        // Validate the kid belongs to the same DID as credential subject
+        // Validate the kid belongs to the same DID as credential subject TODO this is problematic since the id in one place could be did:key and the other did:jwk
         let kid_did = kid.split('#').next().unwrap_or(&kid);
         if kid_did != credential_subject_id {
             return Err(DataAccessConsentTokenError::InvalidResponse(
@@ -368,11 +368,12 @@ impl RedeemDataAccessConsentTokenService {
             self.public_verification_response.credential = Some(credential_data);
         }
 
-        Ok(())
+        Ok(self.public_verification_response.clone())
     }
 }
 
 // TODO: should we enable access tokens for multiple credentials? then this should be a vec
+#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 pub struct DataAccessEndpointResponse {
     pub verifiable_credential: String,
 }
