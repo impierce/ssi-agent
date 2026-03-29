@@ -9,6 +9,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
+    Json,
 };
 use http_api_problem::ApiError;
 use std::sync::Arc;
@@ -73,5 +74,5 @@ pub(crate) async fn redeem_data_access_consent_token(
         .await
         .map_err(|e| e.into_api_error())?;
 
-    Ok((StatusCode::OK, axum::Json(public_verification_response)).into_response())
+    Ok((StatusCode::OK, Json(public_verification_response)).into_response())
 }

@@ -68,7 +68,7 @@ impl RedeemDataAccessConsentTokenService {
 
         let mut linked_domains = get_issuer_linked_domains(&issuer_did_document).await;
         for url in linked_domains.clone() {
-            let validation_result = validate_domain_linkage(&resolver, url.clone(), aud).await;
+            let validation_result = validate_domain_linkage(resolver, url.clone(), aud).await;
             if validation_result.status == ValidationStatus::Success {
                 self.public_verification_response.domain_linkage.push(ValidationResult {
                     status: ValidationStatus::Success,
@@ -111,7 +111,7 @@ impl RedeemDataAccessConsentTokenService {
 
         // Get and validate the issuers linked verifiable presentations.
         let linked_verifiable_credentials: Vec<_> =
-            validate_linked_verifiable_presentations(&resolver, &issuer_did_document)
+            validate_linked_verifiable_presentations(resolver, &issuer_did_document)
                 .await
                 .into_iter()
                 .flatten()
@@ -206,7 +206,7 @@ impl RedeemDataAccessConsentTokenService {
                 "No Data Access Endpoint found in the Issuer DID Document services".to_string(),
             ))?;
 
-        let data_access_endpoint_url = Url::parse(&data_access_endpoint.to_string()).map_err(|_| {
+        let data_access_endpoint_url = Url::parse(data_access_endpoint.as_ref()).map_err(|_| {
             DataAccessConsentTokenError::NoDataAccessEndpointFound(
                 "Failed to parse Data Access Endpoint into URL".to_string(),
             )
@@ -301,7 +301,7 @@ impl RedeemDataAccessConsentTokenService {
                 Err(_) => {
                     self.public_verification_response.credential_status.status = ValidationStatus::Failure;
                     self.public_verification_response.credential_status.payload =
-                        Some(format!("The credential status is invalid"));
+                        Some("The credential status is invalid".to_string());
                 }
             }
         }

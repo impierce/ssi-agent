@@ -64,11 +64,9 @@ pub fn get_unverified_jwt_claims(jwt: &serde_json::Value) -> Option<serde_json::
 
 /// Convert the `IotaIdentityJwk` first into a `JsonWebTokenJwk` and then into a `DecodingKey`.
 pub fn convert_iota_jwk_to_decoding_key(public_key: &identity_jose::jwk::Jwk) -> Option<DecodingKey> {
-    let decoding_key = public_key
+    public_key
         .to_json()
         .ok()
         .and_then(|public_key| JsonWebTokenJwk::from_json(&public_key).ok())
-        .and_then(|jwk| DecodingKey::from_jwk(&jwk).ok());
-
-    decoding_key
+        .and_then(|jwk| DecodingKey::from_jwk(&jwk).ok())
 }
