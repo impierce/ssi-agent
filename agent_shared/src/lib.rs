@@ -8,6 +8,7 @@ pub mod profile;
 pub mod serde_json_value_ext;
 pub mod url_utils;
 
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 pub use ::config::ConfigError;
 use identity_iota::verification::jws::JwsAlgorithm;
 use rand::Rng;
@@ -44,4 +45,17 @@ pub fn from_jsonwebtoken_algorithm_to_jwsalgorithm(algorithm: &jsonwebtoken::Alg
         jsonwebtoken::Algorithm::PS512 => JwsAlgorithm::PS512,
         jsonwebtoken::Algorithm::EdDSA => JwsAlgorithm::EdDSA,
     }
+}
+
+// TODO: actually validate the JWT!
+/// Get the claims from a JWT without performing validation.
+pub fn get_unverified_jwt_claims(jwt: &serde_json::Value) -> Option<serde_json::Value> {
+    jwt.as_str()
+        .and_then(|string| string.splitn(3, '.').collect::<Vec<&str>>().get(1).cloned())
+        .and_then(|payload| {
+            URL_SAFE_NO_PAD
+                .decode(payload)
+                .ok()
+                .and_then(|payload_bytes| serde_json::from_slice::<serde_json::Value>(&payload_bytes).ok())
+        })
 }

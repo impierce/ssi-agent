@@ -15,12 +15,16 @@ use agent_library::template::aggregate::Template;
 use agent_shared::config::config;
 use agent_store::{
     AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
-    ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
-    HolderCredentialEventPublisher, NonceEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
-    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
-    ServiceEventPublisher, StatusListEventPublisher, TemplateEventPublisher,
+    ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DataAccessConsentTokenEventPublisher,
+    DocumentEventPublisher, EventPublisher, HolderCredentialEventPublisher, NonceEventPublisher,
+    OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher, PresentationEventPublisher, ProfileEventPublisher,
+    ReceivedOfferEventPublisher, ServerConfigEventPublisher, ServiceEventPublisher, StatusListEventPublisher,
+    TemplateEventPublisher,
 };
-use agent_verification::authorization_request::aggregate::AuthorizationRequest;
+use agent_verification::{
+    authorization_request::aggregate::AuthorizationRequest,
+    data_access_consent_token::aggregate::DataAccessConsentToken,
+};
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, DomainEvent, EventEnvelope, Query};
 use serde::Deserialize;
@@ -60,6 +64,7 @@ pub struct EventPublisherHttp {
 
     // Verification
     pub authorization_request: Option<AggregateEventPublisherHttp<AuthorizationRequest>>,
+    pub data_access_consent_token: Option<AggregateEventPublisherHttp<DataAccessConsentToken>>,
 }
 
 impl EventPublisherHttp {
@@ -306,6 +311,20 @@ impl EventPublisherHttp {
             )
         });
 
+        let data_access_consent_token =
+            (!event_publisher_http.events.data_access_consent_token.is_empty()).then(|| {
+                AggregateEventPublisherHttp::<DataAccessConsentToken>::new(
+                    event_publisher_http.target_url.clone(),
+                    event_publisher_http.headers.clone(),
+                    event_publisher_http
+                        .events
+                        .data_access_consent_token
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                )
+            });
+
         let event_publisher: EventPublisherHttp = EventPublisherHttp {
             access_token,
             authorization_code,
@@ -325,6 +344,7 @@ impl EventPublisherHttp {
             presentation,
             received_offer,
             authorization_request,
+            data_access_consent_token,
         };
 
         info!("Loaded HTTP event publisher: {:?}", event_publisher);
@@ -437,6 +457,12 @@ impl EventPublisher for EventPublisherHttp {
         self.authorization_request
             .take()
             .map(|publisher| Box::new(publisher) as AuthorizationRequestEventPublisher)
+    }
+
+    fn data_access_consent_token(&mut self) -> Option<DataAccessConsentTokenEventPublisher> {
+        self.data_access_consent_token
+            .take()
+            .map(|publisher| Box::new(publisher) as DataAccessConsentTokenEventPublisher)
     }
 }
 

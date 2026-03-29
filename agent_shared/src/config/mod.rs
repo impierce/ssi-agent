@@ -636,6 +636,8 @@ pub struct Events {
     pub received_offer: Vec<ReceivedOfferEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub authorization_request: Vec<AuthorizationRequestEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub data_access_consent_token: Vec<DataAccessConsentTokenEvent>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -773,6 +775,11 @@ pub enum AuthorizationRequestEvent {
     AuthorizationRequestObjectSigned,
     SIOPv2AuthorizationResponseVerified,
     OID4VPAuthorizationResponseVerified,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum DataAccessConsentTokenEvent {
+    DataAccessConsentTokenStored,
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]

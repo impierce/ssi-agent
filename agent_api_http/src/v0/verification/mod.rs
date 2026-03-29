@@ -1,6 +1,6 @@
 // Endpoint handlers
 pub mod authorization_requests;
-pub mod public_verification;
+pub mod data_access_consent_token;
 pub mod relying_party;
 pub mod validate_domain_linkage;
 pub mod validate_linked_verifiable_presentation;
@@ -13,6 +13,7 @@ use axum::routing::get;
 use axum::{routing::post, Router};
 use std::sync::Arc;
 
+use crate::v0::verification::data_access_consent_token::store_data_access_consent_token::store_data_access_consent_token;
 use crate::v0::verification::{
     authorization_requests::authorization_request, authorization_requests::authorization_requests,
     public_verification::public_verification, relying_party::redirect::redirect, relying_party::request::request,
@@ -32,7 +33,11 @@ pub fn router(verification_state: Arc<VerificationState>) -> Router {
                     "/authorization_requests/{authorization_request_id}",
                     get(authorization_request),
                 )
-                .route("/public-verification", get(public_verification)),
+                .route(
+                    "/store-data-access-consent-token",
+                    post(store_data_access_consent_token),
+                ) // TODO: change name
+                .route("/public-verification", get(public_verification)), // TODO: update
         )
         .route("/request/{request_id}", get(request))
         .route("/redirect", post(redirect))

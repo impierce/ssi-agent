@@ -1,6 +1,7 @@
 use crate::error::IntoApiErrorExt;
 use crate::DOCUMENTATION_URL;
 use agent_verification::authorization_request::error::AuthorizationRequestError;
+use agent_verification::data_access_consent_token::error::DataAccessConsentTokenError;
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 
@@ -41,6 +42,18 @@ impl IntoApiErrorExt for AuthorizationRequestError {
     }
 }
 
+// DataAccessConsentTokenError is currently empty, so no need to match on the enum.
+impl IntoApiErrorExt for DataAccessConsentTokenError {
+    fn into_api_error(self) -> ApiError {
+        ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            .title("Unexpected Error")
+            .type_url(format!(
+                "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
+            ))
+            .source(self)
+            .finish()
+    }
+}
 #[cfg(test)]
 pub mod tests {
     use super::*;

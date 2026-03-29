@@ -16,7 +16,7 @@ use crate::v0::issuance::error::PublicError;
 pub async fn token_status_list(
     State(state): State<Arc<IssuanceState>>,
     Path(status_list_id): Path<String>,
-) -> Result<Response, PublicError> {
+) -> Result<Response, PublicError> { // TODO: this should be ApiError no?
     let token_status_list_service = TokenStatusListService {};
 
     let compressed_jwt_token = token_status_list_service

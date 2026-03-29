@@ -1,115 +1,59 @@
-use std::sync::Arc;
+use agent_shared::handlers::query_handler;
 
-use agent_holder::credential::aggregate::get_unverified_jwt_claims;
-use agent_secret_manager::subject::get_public_key_from_kid;
-use agent_shared::config::{get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported};
-use agent_verification::state::VerificationState;
-use axum::{
-    extract::{Query, State},
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
-};
-use base64::{engine::general_purpose, Engine as _};
-use did_manager::Resolver;
-use http_api_problem::ApiError;
-use identity_iota::document::{verifiable, ServiceEndpoint};
-use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
-use serde::{Deserialize, Serialize};
-use tracing::info;
-use url::Url;
+use crate::{data_access_consent_token::error::DataAccessConsentTokenError, state::VerificationState};
+use agent_shared::get_unverified_jwt_claims;
 
-use crate::v0::{
-    issuance::credential_issuer::credential,
-    verification::{
-        validate_domain_linkage::{get_issuer_linked_domains, validate_domain_linkage, ValidationStatus},
-        validate_linked_verifiable_presentation::validate_linked_verifiable_presentations,
-    },
-};
+pub struct RedeemDataAccessConsentTokenService {}
 
-#[derive(Deserialize)]
-pub struct PublicVerificationQuery {
-    #[serde(rename = "public-credential-token")]
-    public_credential_token: String,
-}
+impl RedeemDataAccessConsentTokenService {
+    pub async fn redeem_data_access_consent_token(
+        self,
+        token_id: String,
+        state: &VerificationState,
+    ) -> Result<(), DataAccessConsentTokenError> {
+        // 1. query token (domain layer)
+        // 2. validate token (domain layer)
+        // 3. send token to issuer (http layer)
+        // 4. validate response (classic vp logic)
+        // 5. return credential 
+        // Data Access Consent Token will hereafter be referred to as DACT for brevity
+        let data_access_consent_token = query_handler(&token_id, &state.query.data_access_consent_token)
+            .await
+            .map_err(|e| DataAccessConsentTokenError::QueryError(e.to_string()))?
+            .ok_or(DataAccessConsentTokenError::DataAccessConsentTokenNotFound(token_id.clone()))?;
 
-#[derive(Serialize, Default)]
-pub struct ValidationResult {
-    status: ValidationStatus,
-    payload: Option<String>,
-    data: Option<serde_json::Value>,
-}
+        // Initialize response to "invalid" default, if a check passes the response is updated accordingly
+        let mut public_verification_response = PublicVerificationResponse::default();
 
-// TODO: make stronger typing then strings
-#[derive(Serialize, Default)]
-pub struct PublicVerificationResponse {
-    pub credential: Option<serde_json::Value>,
-    pub proof: ValidationResult,
-    pub status: ValidationResult,
-    pub trust_relation: ValidationResult,
-    pub linked_vp: ValidationResult,
-    pub domain_linkage: ValidationResult,
-}
+        // Get unverified claims
+        let token_value = serde_json::Value::String(data_access_consent_token.token.clone());
+        let dact_claims = get_unverified_jwt_claims(&token_value).ok_or(DataAccessConsentTokenError::JwtDecodingError("Failed to get the unverified JWT claims".to_string()))?;
 
-/// This endpoint receives a Public Credential Token as a query parameter and then performs several validation steps on the token.
-/// When all validations pass, the requested credential is returned in the response along with the validation results.
-/// When any validation fails, only the validation results are returned.
-/// Both the Verifier and the Issuer need to perform all these checks on the Public Credential Token, zero trust is assumed.
-pub async fn public_verification(
-    State(state): State<Arc<VerificationState>>,
-    Query(parameter): Query<PublicVerificationQuery>,
-) -> Result<Response, ApiError> {
-    let jwt = parameter.public_credential_token;
-    // Initialize response to "invalid" default, if a check passes the response is updated accordingly
-    let mut public_verification_response = PublicVerificationResponse::default();
+        // Extract the `aud` claim, it equals the issuer DID of the credential which is given access to.
+        let aud = dact_claims
+            .get("aud")
+            .and_then(|v| v.as_str())
+            .ok_or(DataAccessConsentTokenError::JwtDecodingError("Failed to get `aud` claim from DACT".to_string()))?;
 
-    // Get unverified claims
-    let jwt_value = serde_json::Value::String(jwt.clone());
-    let public_credential_token_claims = get_unverified_jwt_claims(&jwt_value).map_err(|_| {
-        ApiError::builder(StatusCode::BAD_REQUEST)
-            .title("Invalid JWT")
-            .message("Failed to decode Public Credential Token")
-            .finish()
-    })?;
+        let resolver = state.subject.resolver;
+        let issuer_did_document = resolver.resolve(aud).await.map_err(|e| DataAccessConsentTokenError::DidResolutionError(e.to_string()))?;
 
-    // Extract the `aud` claim
-    let aud = public_credential_token_claims
-        .get("aud")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Invalid Token")
-                .message("Failed to get `aud` claim from Public Credential Token")
-                .finish()
-        })?;
+        // Check and validate domain linkage
 
-    // Check and validate domain linkage
-    let resolver = Resolver::new();
-    let issuer_did_document = resolver
-        .resolve(aud)
-        .await
-        .inspect_err(|err| println!("Failed to resolve issuer DID.: {err:#?}"))
-        .map_err(|_| {
-            ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Invalid Token")
-                .message("Failed to resolve issuer DID")
-                .finish()
-        })?;
+        info!("Issuer DID Document: {:#?}", issuer_did_document);
 
-    info!("Issuer DID Document: {:#?}", issuer_did_document);
-
-    let mut linked_domains = get_issuer_linked_domains(&issuer_did_document).await;
-    for url in linked_domains.clone() {
-        let validation_result = validate_domain_linkage(&resolver, url.clone(), aud).await;
-        if validation_result.status == ValidationStatus::Success {
-            public_verification_response.domain_linkage = ValidationResult {
-                status: ValidationStatus::Success,
-                payload: Some(url.to_string()),
-                data: None,
-            };
-            break;
+        let mut linked_domains = get_issuer_linked_domains(&issuer_did_document).await;
+        for url in linked_domains.clone() {
+            let validation_result = validate_domain_linkage(&resolver, url.clone(), aud).await;
+            if validation_result.status == ValidationStatus::Success {
+                public_verification_response.domain_linkage = ValidationResult {
+                    status: ValidationStatus::Success,
+                    payload: Some(url.to_string()),
+                    data: None,
+                };
+                break;
+            }
         }
-    }
 
     // Fallback for did:webs if no domain linkage is found
     if linked_domains.is_empty() || aud.starts_with("did:web") {
@@ -238,10 +182,73 @@ pub async fn public_verification(
                 .message("Issuer DID Document is missing PublicCredentialEndpoint service")
                 .finish()
         })?;
+        
+        let public_credential_endpoint_url_with_parameter =
+            format!("{}?public-credential-token={}", public_credential_endpoint, jwt);
+    
+        Ok(())
+    }
+}
+
+// TODO:  separate fetching (axum) and validation logic
+
+use std::sync::Arc;
+
+use agent_holder::credential::aggregate::get_unverified_jwt_claims;
+use agent_secret_manager::subject::get_public_key_from_kid;
+use agent_shared::config::{get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported};
+use crate::state::VerificationState;
+use axum::{
+    extract::{Query, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
+use base64::{engine::general_purpose, Engine as _};
+use did_manager::Resolver;
+use identity_iota::document::{verifiable, ServiceEndpoint};
+use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use serde::{Deserialize, Serialize};
+use tracing::info;
+use url::Url;
+
+use crate::v0::{
+    issuance::credential_issuer::credential,
+    verification::{
+        validate_domain_linkage::{get_issuer_linked_domains, validate_domain_linkage, ValidationStatus},
+        validate_linked_verifiable_presentation::validate_linked_verifiable_presentations,
+    },
+};
+
+#[derive(Serialize, Default)]
+pub struct ValidationResult {
+    status: ValidationStatus,
+    payload: Option<String>,
+    data: Option<serde_json::Value>,
+}
+
+// TODO: make stronger typing then strings
+#[derive(Serialize, Default)]
+pub struct PublicVerificationResponse {
+    pub credential: Option<serde_json::Value>,
+    pub proof: ValidationResult,
+    pub status: ValidationResult,
+    pub trust_relation: ValidationResult,
+    pub linked_vp: ValidationResult,
+    pub domain_linkage: ValidationResult,
+}
+
+/// This endpoint receives a Public Credential Token as a query parameter and then performs several validation steps on the token.
+/// When all validations pass, the requested credential is returned in the response along with the validation results.
+/// When any validation fails, only the validation results are returned.
+/// Both the Verifier and the Issuer need to perform all these checks on the Public Credential Token, zero trust is assumed.
+pub async fn public_verification(
+    State(state): State<Arc<VerificationState>>,
+    Query(parameter): Query<PublicVerificationQuery>,
+) -> Result<Response, ApiError> {
+
 
     // Fetch Public Credential from issuer endpoint
-    let public_credential_endpoint_url_with_parameter =
-        format!("{}?public-credential-token={}", public_credential_endpoint, jwt);
     let response = reqwest::get(public_credential_endpoint_url_with_parameter)
         .await
         .map_err(|e| {

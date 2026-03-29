@@ -2,10 +2,11 @@ use agent_issuance::offer::aggregate::Offer;
 use agent_shared::config::config;
 use agent_store::{
     AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
-    ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
-    HolderCredentialEventPublisher, NonceEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
-    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
-    ServiceEventPublisher, StatusListEventPublisher, TemplateEventPublisher,
+    ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DataAccessConsentTokenEventPublisher,
+    DocumentEventPublisher, EventPublisher, HolderCredentialEventPublisher, NonceEventPublisher,
+    OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher, PresentationEventPublisher, ProfileEventPublisher,
+    ReceivedOfferEventPublisher, ServerConfigEventPublisher, ServiceEventPublisher, StatusListEventPublisher,
+    TemplateEventPublisher,
 };
 use async_nats::Client;
 use async_trait::async_trait;
@@ -164,6 +165,10 @@ impl EventPublisher for EventPublisherNats {
     }
 
     fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher> {
+        None
+    }
+
+    fn data_access_consent_token(&mut self) -> Option<DataAccessConsentTokenEventPublisher> {
         None
     }
 }

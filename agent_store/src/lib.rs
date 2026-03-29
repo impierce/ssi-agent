@@ -52,6 +52,9 @@ use agent_shared::custom_queries::ListAllQuery;
 use agent_shared::generic_query::generic_query;
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use agent_verification::authorization_request::views::all_authorization_requests::AllAuthorizationRequestsView;
+use agent_verification::data_access_consent_token::aggregate::DataAccessConsentToken;
+use agent_verification::data_access_consent_token::views::all_data_access_consent_tokens::AllDataAccessConsentTokensView;
+use agent_verification::data_access_consent_token::views::DataAccessConsentTokenView;
 use agent_verification::services::VerificationServices;
 use agent_verification::state::VerificationState;
 use async_trait::async_trait;
@@ -375,6 +378,7 @@ pub async fn verification_state<CCB: CqrsComponentBuilder>(
     // Partition the event_publishers into the different aggregates.
     let Partitions {
         authorization_request_event_publishers,
+        data_access_consent_token_event_publishers,
         ..
     } = partition_event_publishers(event_publishers);
 
@@ -384,14 +388,24 @@ pub async fn verification_state<CCB: CqrsComponentBuilder>(
             authorization_request_event_publishers,
         )
         .await;
+    let (data_access_consent_token_command_handler, data_access_consent_token, all_data_access_consent_tokens) =
+        builder
+            .commands_and_queries::<DataAccessConsentToken, DataAccessConsentTokenView, AllDataAccessConsentTokensView>(
+                services.clone(),
+                data_access_consent_token_event_publishers,
+            )
+            .await;
 
     VerificationState {
         command: agent_verification::state::CommandHandlers {
             authorization_request: authorization_request_command_handler,
+            data_access_consent_token: data_access_consent_token_command_handler,
         },
         query: agent_verification::state::ViewRepositories {
             authorization_request,
             all_authorization_requests,
+            data_access_consent_token,
+            all_data_access_consent_tokens,
         },
         subject: services.verifier.clone(),
     }
@@ -466,6 +480,7 @@ pub type HolderCredentialEventPublisher = Box<dyn Query<agent_holder::credential
 pub type PresentationEventPublisher = Box<dyn Query<agent_holder::presentation::aggregate::Presentation>>;
 pub type ReceivedOfferEventPublisher = Box<dyn Query<agent_holder::offer::aggregate::Offer>>;
 pub type AuthorizationRequestEventPublisher = Box<dyn Query<AuthorizationRequest>>;
+pub type DataAccessConsentTokenEventPublisher = Box<dyn Query<DataAccessConsentToken>>;
 
 /// Contains all the event_publishers for each aggregate.
 #[derive(Default)]
@@ -488,6 +503,7 @@ pub struct Partitions {
     pub presentation_event_publishers: Vec<PresentationEventPublisher>,
     pub received_offer_event_publishers: Vec<ReceivedOfferEventPublisher>,
     pub authorization_request_event_publishers: Vec<AuthorizationRequestEventPublisher>,
+    pub data_access_consent_token_event_publishers: Vec<DataAccessConsentTokenEventPublisher>,
 }
 
 /// An outbound event_publisher is a component that listens to events and dispatches them to the appropriate service. For each
@@ -518,6 +534,7 @@ pub trait EventPublisher {
     fn received_offer(&mut self) -> Option<ReceivedOfferEventPublisher>;
 
     fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher>;
+    fn data_access_consent_token(&mut self) -> Option<DataAccessConsentTokenEventPublisher>;
 }
 
 pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPublisher>>) -> Partitions {
@@ -578,6 +595,11 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
                 partitions
                     .authorization_request_event_publishers
                     .push(authorization_request);
+            }
+            if let Some(data_access_consent_token) = event_publisher.data_access_consent_token() {
+                partitions
+                    .data_access_consent_token_event_publishers
+                    .push(data_access_consent_token);
             }
             partitions
         })
@@ -680,6 +702,10 @@ mod test {
         fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher> {
             None
         }
+
+        fn data_access_consent_token(&mut self) -> Option<DataAccessConsentTokenEventPublisher> {
+            None
+        }
     }
 
     struct BarEventPublisher;
@@ -754,6 +780,10 @@ mod test {
         fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher> {
             None
         }
+
+        fn data_access_consent_token(&mut self) -> Option<DataAccessConsentTokenEventPublisher> {
+            None
+        }
     }
 
     #[test]
@@ -780,6 +810,7 @@ mod test {
             presentation_event_publishers,
             received_offer_event_publishers,
             authorization_request_event_publishers,
+            data_access_consent_token_event_publishers,
         } = partition_event_publishers(event_publishers);
 
         assert_eq!(connection_event_publishers.len(), 2);
@@ -801,5 +832,6 @@ mod test {
         assert_eq!(presentation_event_publishers.len(), 0);
         assert_eq!(received_offer_event_publishers.len(), 0);
         assert_eq!(authorization_request_event_publishers.len(), 0);
+        assert_eq!(data_access_consent_token_event_publishers.len(), 0);
     }
 }
