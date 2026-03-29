@@ -15,7 +15,6 @@ pub(crate) async fn store_data_access_consent_token(
     State(state): State<Arc<VerificationState>>,
     Json(StoreDataAccessConsentTokenEndpointRequest { id, jwt }): Json<StoreDataAccessConsentTokenEndpointRequest>,
 ) -> Result<Response, ApiError> {
-
     // TODO: first go through full redeem flow to verify the token, to avoid storing malicious stuff.
 
     let command = DataAccessConsentTokenCommand::StoreDataAccessConsentToken {

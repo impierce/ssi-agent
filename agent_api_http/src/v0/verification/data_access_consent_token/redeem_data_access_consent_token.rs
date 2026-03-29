@@ -1,7 +1,9 @@
 use crate::handlers::command_handler;
 use agent_verification::{
     data_access_consent_token::{
-        application::redeem_data_access_consent_token::{RedeemDataAccessConsentTokenService, DataAccessEndpointResponse},
+        application::redeem_data_access_consent_token::{
+            DataAccessEndpointResponse, RedeemDataAccessConsentTokenService,
+        },
         command::DataAccessConsentTokenCommand,
     },
     state::VerificationState,
@@ -14,12 +16,18 @@ use axum::{
 use http_api_problem::ApiError;
 use std::sync::Arc;
 
+/// This endpoint receives a Data Access Consent Token (DACT) ID as a path parameter.
+/// It then gets the DACT from the storage and then performs several validation steps on the token.
+/// When all validations pass, the credential is requested from the Issuer's Data Access endpoint.
+/// The response is then validated and returned in the response along with the validation results.
+/// When any validation fails, only the validation results are returned.
+/// Both the Verifier and the Issuer need to perform all these checks on the Data Access Consent Token and the requested credential, zero trust is assumed.
 #[axum_macros::debug_handler]
 pub(crate) async fn redeem_data_access_consent_token(
     State(state): State<Arc<VerificationState>>,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
-    let data_access_consent_token_service = RedeemDataAccessConsentTokenService {};
+    let data_access_consent_token_service = RedeemDataAccessConsentTokenService::default();
 
     let (data_access_endpoint, data_access_consent_token) = data_access_consent_token_service
         .validate_data_access_consent_token(id, &state)
@@ -52,18 +60,18 @@ pub(crate) async fn redeem_data_access_consent_token(
             .finish());
     }
 
-    let typed_response: DataAccessEndpointResponse = response
-        .json::<DataAccessEndpointResponse>()
-        .await
-        .map_err(|e| {
+    let typed_response: DataAccessEndpointResponse =
+        response.json::<DataAccessEndpointResponse>().await.map_err(|e| {
             ApiError::builder(StatusCode::BAD_GATEWAY)
                 .title("Invalid Response from Issuer Data Access Endpoint")
-                .message(format!("Failed to parse response from Issuer Data Access endpoint: {e}"))
+                .message(format!(
+                    "Failed to parse response from Issuer Data Access endpoint: {e}"
+                ))
                 .finish()
         })?;
 
     let redeemed_credential = data_access_consent_token_service
-        .validate_data_access_endpoint_response(data_access_consent_token, typed_response)
+        .validate_data_access_endpoint_response(data_access_consent_token, typed_response, &state)
         .await?;
 
     Ok((StatusCode::OK, redeemed_credential).into_response())

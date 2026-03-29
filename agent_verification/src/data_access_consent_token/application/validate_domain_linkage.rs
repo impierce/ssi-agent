@@ -1,3 +1,4 @@
+use agent_shared::convert_iota_jwk_to_decoding_key;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use did_manager::Resolver;
 use identity_credential::domain_linkage::{DomainLinkageConfiguration, JwtDomainLinkageValidator};
@@ -10,7 +11,7 @@ use identity_iota::{
         jws::{JwsVerifier, SignatureVerificationError, SignatureVerificationErrorKind, VerificationInput},
     },
 };
-use jsonwebtoken::{crypto::verify, jwk::Jwk as JsonWebTokenJwk, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{crypto::verify, Algorithm, Validation};
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use std::str::FromStr;
@@ -43,13 +44,8 @@ impl JwsVerifier for Verifier {
         let algorithm =
             Algorithm::from_str(&input.alg.to_string()).map_err(|_| SignatureVerificationError::new(UnsupportedAlg))?;
 
-        // Convert the `IotaIdentityJwk` first into a `JsonWebTokenJwk` and then into a `DecodingKey`.
-        let decoding_key = public_key
-            .to_json()
-            .ok()
-            .and_then(|public_key| JsonWebTokenJwk::from_json(&public_key).ok())
-            .and_then(|jwk| DecodingKey::from_jwk(&jwk).ok())
-            .ok_or(SignatureVerificationError::new(KeyDecodingFailure))?;
+        let decoding_key =
+            convert_iota_jwk_to_decoding_key(public_key).ok_or(SignatureVerificationError::new(KeyDecodingFailure))?;
 
         let mut validation = Validation::new(algorithm);
         validation.validate_aud = false;

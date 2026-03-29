@@ -14,8 +14,11 @@ cqrs-es.workspace = true
 dotenvy = { version = "0.15" }
 http-serde = "2.1"
 # TODO: replace all identity_* with identity_iota?
+identity_core.workspace = true
 identity_iota.workspace = true
+identity_jose.workspace = true
 jsonwebtoken.workspace = true
+oauth_tsl.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true
@@ -35,8 +38,11 @@ url.workspace = true
 utoipa.workspace = true
 
 [dev-dependencies]
+agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }
 agent_shared = { path = ".", features = ["test_utils"] }
 serial_test = "3.0"
+tokio.workspace = true
+wiremock.workspace = true
 
 [features]
 local_development = []

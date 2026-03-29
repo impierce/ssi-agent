@@ -10,41 +10,30 @@ use crate::{
 };
 
 use agent_shared::{
-    config::{get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported},
-    get_unverified_jwt_claims,
+    convert_iota_jwk_to_decoding_key, credential_status_checker::CredentialStatusChecker, get_unverified_jwt_claims,
     handlers::query_handler,
 };
-use oid4vc_core::Subject;
-use serde_json::Value;
-use std::sync::Arc;
-use tracing::info;
-
-use axum::{
-    extract::{Query, State},
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
-};
-use base64::{engine::general_purpose, Engine as _};
-use identity_iota::{document::{ServiceEndpoint, verifiable}, iota_interaction::types::object::Data};
-use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use identity_iota::document::ServiceEndpoint;
+use jsonwebtoken::{decode, decode_header, Validation};
+use oid4vc_core::credential_status_verifier::CredentialStatusVerifier;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 use url::Url;
 
 pub const DATA_ACCESS_ENDPOINT: &str = "DataAccessConsentTokenEndpoint";
-pub struct RedeemDataAccessConsentTokenService {}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
+pub struct RedeemDataAccessConsentTokenService {
+    public_verification_response: PublicVerificationResponse, // this is used to build the response step by step as we perform the different validation steps
+}
 
 impl RedeemDataAccessConsentTokenService {
+    /// TODO
     pub async fn validate_data_access_consent_token(
-        self,
+        mut self,
         token_id: String,
         state: &VerificationState,
     ) -> Result<(Url, String), DataAccessConsentTokenError> {
-        // 1. query token (domain layer)
-        // 2. validate token (domain layer)
-        // 3. send token to issuer (http layer)
-        // 4. validate response (classic vp logic)
-        // 5. return credential
         // Data Access Consent Token will hereafter be referred to as DACT for brevity
         let data_access_consent_token = query_handler(&token_id, &state.query.data_access_consent_token)
             .await
@@ -53,23 +42,19 @@ impl RedeemDataAccessConsentTokenService {
                 token_id.clone(),
             ))?;
 
-        // Initialize response to "invalid" default, if a check passes the response is updated accordingly
-        let mut public_verification_response = PublicVerificationResponse::default();
-
         // Get unverified claims
         let token_value = serde_json::Value::String(data_access_consent_token.token.clone());
-        let dact_claims = get_unverified_jwt_claims(&token_value).ok_or(
-            DataAccessConsentTokenError::JwtDecodingError("Failed to get the unverified JWT claims".to_string()),
-        )?;
+        let dact_claims = get_unverified_jwt_claims(&token_value).ok_or(DataAccessConsentTokenError::DACTError(
+            "Failed to get the unverified JWT claims".to_string(),
+        ))?;
 
         // Extract the `aud` claim, it equals the issuer DID of the credential which is given access to.
-        let aud =
-            dact_claims
-                .get("aud")
-                .and_then(|v| v.as_str())
-                .ok_or(DataAccessConsentTokenError::JwtDecodingError(
-                    "Failed to get `aud` claim from DACT".to_string(),
-                ))?;
+        let aud = dact_claims
+            .get("aud")
+            .and_then(|v| v.as_str())
+            .ok_or(DataAccessConsentTokenError::DACTError(
+                "Failed to get `aud` claim from DACT".to_string(),
+            ))?;
 
         let resolver = &state.subject.resolver;
         let issuer_did_document = resolver
@@ -85,7 +70,7 @@ impl RedeemDataAccessConsentTokenService {
         for url in linked_domains.clone() {
             let validation_result = validate_domain_linkage(&resolver, url.clone(), aud).await;
             if validation_result.status == ValidationStatus::Success {
-                public_verification_response.domain_linkage.push(ValidationResult {
+                self.public_verification_response.domain_linkage.push(ValidationResult {
                     status: ValidationStatus::Success,
                     payload: Some(url.to_string()),
                     data: None,
@@ -105,7 +90,7 @@ impl RedeemDataAccessConsentTokenService {
                         ))?;
 
                     info!("Extracted URL from did:web: {:#?}", did_web_domain);
-                    public_verification_response.domain_linkage.push(ValidationResult {
+                    self.public_verification_response.domain_linkage.push(ValidationResult {
                         status: ValidationStatus::Success,
                         payload: Some(did_web_domain.to_string()),
                         data: None,
@@ -113,7 +98,7 @@ impl RedeemDataAccessConsentTokenService {
                     linked_domains.push(did_web_domain);
                 }
                 false => {
-                    public_verification_response.domain_linkage.push(ValidationResult {
+                    self.public_verification_response.domain_linkage.push(ValidationResult {
                         status: ValidationStatus::Failure,
                         payload: Some("No linked domains found for issuer, and issuer is not a did:web".to_string()),
                         data: None,
@@ -134,7 +119,7 @@ impl RedeemDataAccessConsentTokenService {
 
         match linked_verifiable_credentials.is_empty() {
             true => {
-                public_verification_response.linked_vp.push(ValidationResult {
+                self.public_verification_response.linked_vp.push(ValidationResult {
                     status: ValidationStatus::Failure,
                     // TODO: this is a hackathon specific message
                     payload: Some("No valid certifications found for the issuer".to_string()),
@@ -143,7 +128,7 @@ impl RedeemDataAccessConsentTokenService {
             }
             false => {
                 for linked_vp in &linked_verifiable_credentials {
-                    public_verification_response.linked_vp.push(ValidationResult {
+                    self.public_verification_response.linked_vp.push(ValidationResult {
                         status: ValidationStatus::Success,
                         // TODO: this is a hackathon specific message
                         payload: Some("Valid certifications found for the issuer".to_string()),
@@ -159,7 +144,49 @@ impl RedeemDataAccessConsentTokenService {
 
         info!("Linked Verifiable Credentials: {:#?}", linked_verifiable_credentials);
 
-        // TODO: validate status of Public Credential Token
+        // Validate status of Data Access Consent Token
+        if let Some(status_claim) = dact_claims.get("status") {
+            let credential_status_checker = CredentialStatusChecker {
+                verification_material_resolver: state.subject.clone(),
+            };
+
+            credential_status_checker
+                .check_credential_status(status_claim.to_owned())
+                .await
+                .map_err(|e| DataAccessConsentTokenError::DACTError(e.to_string()))?;
+        }
+
+        // Validate the signature of the Data Access Consent Token
+        let jwt_header = decode_header(&data_access_consent_token.token).map_err(|e| {
+            DataAccessConsentTokenError::DACTError(format!(
+                "Failed to decode JWT header of the Data Access Consent Token: {e}"
+            ))
+        })?;
+
+        let kid = jwt_header.kid.ok_or(DataAccessConsentTokenError::DACTError(
+            "JWT header is missing `kid` field".to_string(),
+        ))?;
+
+        // Fetch the public key using the kid
+        let public_key = state.subject.resolve_public_key(&kid).await.map_err(|_| {
+            DataAccessConsentTokenError::DACTError("Failed to fetch public key for JWT verification".to_string())
+        })?;
+
+        let decoding_key =
+            convert_iota_jwk_to_decoding_key(&public_key).ok_or(DataAccessConsentTokenError::DACTError(
+                "Failed to convert public key into decoding key for JWT verification".to_string(),
+            ))?;
+
+        // TODO: should more validation parameters be set??
+        let validation = Validation::new(jwt_header.alg);
+
+        // Decode and verify the JWT signature
+        decode::<serde_json::Value>(&data_access_consent_token.token, &decoding_key, &validation).map_err(|e| {
+            DataAccessConsentTokenError::DACTError(format!(
+                "JWT signature verification failed for the Data Access Consent Token: {e}"
+            ))
+        })?;
+
         // TODO: validate the trust relation.
 
         // TODO: All primary checks have passed for the Public Credential Token at this point, to perform the remaining checks we need to fetch the Public Credential from the Issuer.
@@ -179,44 +206,168 @@ impl RedeemDataAccessConsentTokenService {
                 "No Data Access Endpoint found in the Issuer DID Document services".to_string(),
             ))?;
 
-        let data_access_endpoint_url = Url::parse(&data_access_endpoint.to_string())
-            .map_err(|_| DataAccessConsentTokenError::NoDataAccessEndpointFound(
+        let data_access_endpoint_url = Url::parse(&data_access_endpoint.to_string()).map_err(|_| {
+            DataAccessConsentTokenError::NoDataAccessEndpointFound(
                 "Failed to parse Data Access Endpoint into URL".to_string(),
-            ))?;
+            )
+        })?;
 
         Ok((data_access_endpoint_url, data_access_consent_token.token))
     }
 
+    /// TODO
     pub async fn validate_data_access_endpoint_response(
-        self,
+        mut self,
         data_access_consent_token: String,
         response: DataAccessEndpointResponse,
+        state: &VerificationState,
     ) -> Result<(), DataAccessConsentTokenError> {
-        let verifiable_credential_claims = get_unverified_jwt_claims(&serde_json::Value::String(response.verifiable_credential)).ok_or(DataAccessConsentTokenError::JwtDecodingError("Failed to get JWT claims".to_string()))?;
+        let verifiable_credential_claims =
+            get_unverified_jwt_claims(&serde_json::Value::String(response.verifiable_credential.clone())).ok_or(
+                DataAccessConsentTokenError::InvalidResponse("Failed to get response JWT claims".to_string()),
+            )?;
+        let data_access_consent_token_claims =
+            get_unverified_jwt_claims(&serde_json::Value::String(data_access_consent_token.clone())).ok_or(
+                DataAccessConsentTokenError::DACTError("Failed to get token JWT claims".to_string()),
+            )?;
 
         // The subject of the Public Credential Token is the JTI (credential ID) of the issued credential which the Verifier is trying to access
-        let sub = verifiable_credential_claims
+        let sub = data_access_consent_token_claims
             .get("sub")
             .and_then(|v| v.as_str())
-            .ok_or(DataAccessConsentTokenError::JwtDecodingError("Failed to get `sub` claim from Public Credential Token".to_string()))?;
+            .ok_or(DataAccessConsentTokenError::DACTError(
+                "Failed to get `sub` claim from Public Credential Token".to_string(),
+            ))?;
 
-        let jti = verifiable_credential_claims
-            .get("jti")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                ApiError::builder(StatusCode::BAD_REQUEST)
-                    .title("Invalid Credential")
-                    .message("Failed to get `jti` claim from Public Credential")
-                    .finish()
-            })?;
+        let jti = verifiable_credential_claims.get("jti").and_then(|v| v.as_str()).ok_or(
+            DataAccessConsentTokenError::InvalidResponse(
+                "Failed to get `jti` claim from Public Credential".to_string(),
+            ),
+        )?;
 
         if sub != jti {
-            return Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-                .title("Invalid Token")
-                .message("Public Credential Token `sub` claim does not match Public Credential `jti` claim")
-                .finish());
+            // This would equal StatusCode::UNPROCESSABLE_ENTITY 422.
+            return Err(DataAccessConsentTokenError::InvalidResponse(
+                "The `sub` claim of the Data Access Consent Token does not match the `jti` claim of the issued credential".to_string(),
+            ));
         }
-        
+
+        // TODO: how to combine the basic Err flow of this function with the public_verification_response building in the best way??
+        // TODO: none of this works with sd-jwt yet
+
+        // TODO checking the iss and the kid both against the credentialSubject.id seems a bit duplicate, it should be the kid since anyone can enter a random iss value but the kid will also be checked for the signature.
+        // Extract credential subject ID from response VC
+        let credential_subject_id = verifiable_credential_claims.get("vc")
+            .and_then(|data| data.get("credentialSubject"))
+            .and_then(|cred_subject| cred_subject.get("id"))
+            .and_then(|id| id.as_str())
+            .ok_or(
+                DataAccessConsentTokenError::InvalidResponse(
+                    "Requested credential is missing the credentialSubject.id field. Publicly sharing anonymous credentials is not supported.".to_string(),
+                )
+            )?;
+
+        // Extract the `iss` claim from the Data Access Consent Token
+        let iss = data_access_consent_token_claims
+            .get("iss")
+            .and_then(|v| v.as_str())
+            .ok_or(DataAccessConsentTokenError::DACTError(
+                "Failed to get `iss` claim from Data Access Consent Token".to_string(),
+            ))?;
+
+        // Check whether the issuer of the Data Access Consent Token matches the subject of the received credential
+        // This check means we currently don't allow to publicly share anonymous credentials
+        if iss != credential_subject_id {
+            // This would equal StatusCode::UNPROCESSABLE_ENTITY 422.
+            return Err(DataAccessConsentTokenError::InvalidResponse(
+                "The `iss` claim of the Data Access Consent Token does not match the `id` claim of the Credential Subject".to_string(),
+            ));
+        }
+
+        // Validate credential status claim
+        if let Some(status_claim) = verifiable_credential_claims.get("status") {
+            let credential_status_checker = CredentialStatusChecker {
+                verification_material_resolver: state.subject.clone(),
+            };
+
+            let status = credential_status_checker
+                .check_credential_status(status_claim.to_owned())
+                .await;
+
+            match status {
+                Ok(_) => {
+                    self.public_verification_response.credential_status.status = ValidationStatus::Success;
+                }
+                Err(_) => {
+                    self.public_verification_response.credential_status.status = ValidationStatus::Failure;
+                    self.public_verification_response.credential_status.payload =
+                        Some(format!("The credential status is invalid"));
+                }
+            }
+        }
+
+        // Decode header to get kid
+        let jwt_header = decode_header(&data_access_consent_token).map_err(|e| {
+            DataAccessConsentTokenError::InvalidResponse(format!(
+                "Failed to decode JWT header of the received credential: {e}"
+            ))
+        })?;
+
+        let kid = jwt_header.kid.ok_or(DataAccessConsentTokenError::InvalidResponse(
+            "JWT header is missing `kid` field".to_string(),
+        ))?;
+
+        // Validate the kid belongs to the same DID as credential subject
+        let kid_did = kid.split('#').next().unwrap_or(&kid);
+        if kid_did != credential_subject_id {
+            return Err(DataAccessConsentTokenError::InvalidResponse(
+                "Data Access Consent Token kid does not match requested credential subject DID".to_string(),
+            ));
+        }
+
+        // TODO this seems like Data Access Consent Token validation and it should go there
+        // Fetch the public key using the kid
+        let public_key = state.subject.resolve_public_key(&kid).await.map_err(|_| {
+            DataAccessConsentTokenError::InvalidResponse("Failed to fetch public key for JWT verification".to_string())
+        })?;
+
+        let decoding_key =
+            convert_iota_jwk_to_decoding_key(&public_key).ok_or(DataAccessConsentTokenError::InvalidResponse(
+                "Failed to convert public key into decoding key for JWT verification".to_string(),
+            ))?;
+
+        // TODO: more validation parameters should be set
+        let mut validation = Validation::new(jwt_header.alg);
+        validation.set_issuer(&[credential_subject_id]);
+        validation.sub = Some(sub.to_string());
+        // validation.set_audience(&[aud]);
+
+        // Decode and verify the JWT signature
+        decode::<serde_json::Value>(&response.verifiable_credential, &decoding_key, &validation).map_err(|e| {
+            DataAccessConsentTokenError::InvalidResponse(format!(
+                "JWT signature verification failed for the received credential: {e}"
+            ))
+        })?;
+        self.public_verification_response.proof.status = ValidationStatus::Success;
+
+        // If all validations have passed, set the credential in the response
+        if self.public_verification_response.proof.status == ValidationStatus::Success
+            && self.public_verification_response.credential_status.status == ValidationStatus::Success
+            && self.public_verification_response.trust_relation.status == ValidationStatus::Success
+            && self.public_verification_response.linked_vp[0].status == ValidationStatus::Success // TODO: Fix this hard indexing
+            && self.public_verification_response.domain_linkage[0].status == ValidationStatus::Success
+        // TODO: Fix this hard indexing
+        {
+            let credential_data =
+                verifiable_credential_claims
+                    .get("vc")
+                    .cloned()
+                    .ok_or(DataAccessConsentTokenError::InvalidResponse(
+                        "Failed to extract credential data from the response".to_string(),
+                    ))?;
+            self.public_verification_response.credential = Some(credential_data);
+        }
+
         Ok(())
     }
 }
@@ -227,7 +378,7 @@ pub struct DataAccessEndpointResponse {
 }
 
 // TODO: review if we still want these response structs or not
-#[derive(Serialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 pub struct ValidationResult {
     status: ValidationStatus,
     payload: Option<String>,
@@ -235,138 +386,14 @@ pub struct ValidationResult {
 }
 
 // TODO: make stronger typing then strings
-#[derive(Serialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 pub struct PublicVerificationResponse {
     pub credential: Option<serde_json::Value>,
     pub proof: ValidationResult,
-    pub status: ValidationResult,
+    pub credential_status: ValidationResult,
     pub trust_relation: ValidationResult,
     pub linked_vp: Vec<ValidationResult>,
     pub domain_linkage: Vec<ValidationResult>,
-}
-
-/// This endpoint receives a Public Credential Token as a query parameter and then performs several validation steps on the token.
-/// When all validations pass, the requested credential is returned in the response along with the validation results.
-/// When any validation fails, only the validation results are returned.
-/// Both the Verifier and the Issuer need to perform all these checks on the Public Credential Token, zero trust is assumed.
-pub async fn public_verification(
-    State(state): State<Arc<VerificationState>>,
-    Query(parameter): Query<PublicVerificationQuery>,
-) -> Result<Response, ApiError> {
-
-
-    // TODO: none of this works with sd-jwt yet
-
-    // Extract credential subject ID
-    // let credential_subject_id = verifiable_credential_claims.get("vc")
-    //     .and_then(|data| data.get("credentialSubject"))
-    //     .and_then(|cred_subject| cred_subject.get("id"))
-    //     .and_then(|id| id.as_str())
-    //     .ok_or_else(|| {
-    //         ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-    //             .title("Invalid Credential")
-    //             .message("Requested credential is missing the credentialSubject.id field. Publicly sharing anonymous credentials is not supported.")
-    //             .finish()
-    //     })?;
-
-    // Extract iss from claims and validate
-    // let iss = public_credential_token_claims
-    //     .get("iss")
-    //     .and_then(|v| v.as_str())
-    //     .ok_or_else(|| {
-    //         ApiError::builder(StatusCode::BAD_REQUEST)
-    //             .title("Invalid Token")
-    //             .message("Failed to get `iss` claim from Public Credential Token")
-    //             .finish()
-    //     })?;
-
-    // Check whether the issuer of the Public Credential Token matches the subject of the requested credential
-    // This check means we currently don't allow to publicly share anonymous credentials
-    // if iss != credential_subject_id {
-    //     return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
-    //         .title("Invalid Token")
-    //         .message("Public Credential Token issuer does not match requested credential subject")
-    //         .finish());
-    // }
-
-    // TODO: validate status
-    public_verification_response.status.status = ValidationStatus::Success;
-
-    // let verifiable_credential_str = verifiable_credential
-    //     .as_str()
-    //     .ok_or_else(|| {
-    //         ApiError::builder(StatusCode::BAD_REQUEST)
-    //             .title("Invalid Credential")
-    //             .message("Public Credential is not a valid JWT")
-    //             .finish()
-    //     })?;
-
-    // // Decode header to get kid
-    // let jwt_header = decode_header(&verifiable_credential_str).map_err(|e| {
-    //     ApiError::builder(StatusCode::BAD_REQUEST)
-    //         .title("Invalid Token")
-    //         .message(format!("Failed to decode Public Credential Token header: {e}"))
-    //         .finish()
-    // })?;
-
-    // let kid = jwt_header.kid.ok_or_else(|| {
-    //     ApiError::builder(StatusCode::BAD_REQUEST)
-    //         .title("Invalid Token")
-    //         .message("Failed to get `kid` from Public Credential Token header")
-    //         .finish()
-    // })?;
-
-    // Validate the kid belongs to the same DID as credential subject
-    // let kid_did = kid.split('#').next().unwrap_or(&kid);
-    // if kid_did != credential_subject_id {
-    //     return Err(ApiError::builder(StatusCode::UNAUTHORIZED)
-    //         .title("Invalid Token")
-    //         .message("Public Credential Token kid does not match requested credential subject DID")
-    //         .finish());
-    // }
-
-    // // Fetch the public key using the kid
-    // let public_key = get_public_key_from_kid(&kid).await.map_err(|_| {
-    //     ApiError::builder(StatusCode::BAD_REQUEST)
-    //         .title("Invalid Token")
-    //         .message("Failed to retrieve public key for kid")
-    //         .finish()
-    // })?;
-
-    // // TODO: more validation parameters should be set
-    // let validation = Validation::new(jwt_header.alg);
-    // validation.set_issuer(&[credential_subject_id]);
-    // validation.set_audience(&[aud]);
-    // validation.sub = Some(sub.to_string());
-
-    // Decode and verify the JWT signature
-    // let _token_data = decode::<serde_json::Value>(&jwt, &decoding_key, &validation).map_err(|e| {
-    //     ApiError::builder(StatusCode::BAD_REQUEST)
-    //         .title("Invalid Token")
-    //         .message(format!("JWT verification failed: {}", e))
-    //         .finish()
-    // })?;
-
-    public_verification_response.proof.status = ValidationStatus::Success;
-
-    // If all validations have passed, set the credential in the response
-    if public_verification_response.proof.status == ValidationStatus::Success
-        && public_verification_response.status.status == ValidationStatus::Success
-        && public_verification_response.trust_relation.status == ValidationStatus::Success
-        && public_verification_response.linked_vp.status == ValidationStatus::Success
-        && public_verification_response.domain_linkage.status == ValidationStatus::Success
-    {
-        let credential_data = verifiable_credential_claims.get("vc").cloned().ok_or_else(|| {
-            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Invalid Public Credential received")
-                .message("Public Credential data could not be extracted from the received response")
-                .finish()
-        })?;
-        public_verification_response.credential = Some(credential_data);
-    }
-
-    // Return the credential if all validations pass
-    Ok((StatusCode::OK, Json(public_verification_response)).into_response())
 }
 
 // Helpers

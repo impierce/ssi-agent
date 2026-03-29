@@ -1,5 +1,6 @@
 pub mod application_state;
 pub mod config;
+pub mod credential_status_checker;
 pub mod custom_queries;
 pub mod error;
 pub mod generic_query;
@@ -8,9 +9,11 @@ pub mod profile;
 pub mod serde_json_value_ext;
 pub mod url_utils;
 
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 pub use ::config::ConfigError;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use identity_core::convert::{FromJson as _, ToJson as _};
 use identity_iota::verification::jws::JwsAlgorithm;
+use jsonwebtoken::{jwk::Jwk as JsonWebTokenJwk, DecodingKey};
 use rand::Rng;
 pub use url_utils::UrlAppendHelpers;
 
@@ -47,7 +50,6 @@ pub fn from_jsonwebtoken_algorithm_to_jwsalgorithm(algorithm: &jsonwebtoken::Alg
     }
 }
 
-// TODO: actually validate the JWT!
 /// Get the claims from a JWT without performing validation.
 pub fn get_unverified_jwt_claims(jwt: &serde_json::Value) -> Option<serde_json::Value> {
     jwt.as_str()
@@ -58,4 +60,15 @@ pub fn get_unverified_jwt_claims(jwt: &serde_json::Value) -> Option<serde_json::
                 .ok()
                 .and_then(|payload_bytes| serde_json::from_slice::<serde_json::Value>(&payload_bytes).ok())
         })
+}
+
+/// Convert the `IotaIdentityJwk` first into a `JsonWebTokenJwk` and then into a `DecodingKey`.
+pub fn convert_iota_jwk_to_decoding_key(public_key: &identity_jose::jwk::Jwk) -> Option<DecodingKey> {
+    let decoding_key = public_key
+        .to_json()
+        .ok()
+        .and_then(|public_key| JsonWebTokenJwk::from_json(&public_key).ok())
+        .and_then(|jwk| DecodingKey::from_jwk(&jwk).ok());
+
+    decoding_key
 }
