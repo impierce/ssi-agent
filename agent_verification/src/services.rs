@@ -1,6 +1,9 @@
 use agent_secret_manager::{service::Service, subject::Subject};
-use agent_shared::config::{
-    config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, get_preferred_did_method,
+use agent_shared::{
+    config::{
+        config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, get_preferred_did_method,
+    },
+    credential_status_checker::CredentialStatusChecker,
 };
 use oid4vc_core::client_metadata::ClientMetadataResource;
 use oid4vc_manager::RelyingPartyManager;
@@ -11,6 +14,7 @@ use std::{collections::HashMap, str::FromStr, sync::Arc};
 pub struct VerificationServices {
     pub verifier: Arc<Subject>,
     pub relying_party: RelyingPartyManager,
+    pub credential_status_checker: CredentialStatusChecker,
     pub siopv2_client_metadata: ClientMetadataResource<siopv2::authorization_request::ClientMetadataParameters>,
     pub oid4vp_client_metadata: ClientMetadataResource<oid4vp::authorization_request::ClientMetadataParameters>,
 }
@@ -61,13 +65,16 @@ impl Service for VerificationServices {
         Self {
             verifier: verifier.clone(),
             relying_party: RelyingPartyManager::new(
-                verifier,
+                verifier.clone(),
                 default_subject_syntax_type.to_string(),
                 signing_algorithms_supported,
             )
             .unwrap(),
             siopv2_client_metadata,
             oid4vp_client_metadata,
+            credential_status_checker: CredentialStatusChecker {
+                verification_material_resolver: verifier.clone(),
+            },
         }
     }
 }

@@ -790,6 +790,10 @@ components:
           type:
           - string
           - 'null'
+        description:
+          type:
+          - string
+          - 'null'
         displayName:
           type:
           - string
@@ -817,6 +821,10 @@ components:
       - source
       properties:
         country:
+          type:
+          - string
+          - 'null'
+        description:
           type:
           - string
           - 'null'

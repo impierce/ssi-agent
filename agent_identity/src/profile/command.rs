@@ -9,12 +9,17 @@ pub enum ProfileCommand {
     CreateProfile {
         profile_id: String,
         display_name: Option<String>,
+        description: Option<String>,
         logo: Option<Logo>,
         country: Option<String>,
         source: Source,
     },
     UpdateDisplayName {
         display_name: String,
+        source: Source,
+    },
+    UpdateDescription {
+        description: Option<String>,
         source: Source,
     },
     UpdateLogo {

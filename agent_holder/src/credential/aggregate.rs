@@ -2,10 +2,11 @@ use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError::{self};
 use crate::credential::event::CredentialEvent;
 use crate::services::HolderServices;
-use agent_shared::get_unverified_jwt_claims;
+use agent_shared::{get_unverified_jwt_claims, credential_status_checker::CredentialStatusChecker};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_credential::credential::Jwt;
+use oid4vc_core::credential_status_verifier::CredentialStatusVerifier;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -35,11 +36,7 @@ impl Aggregate for Credential {
         "holder_credential".to_string()
     }
 
-    async fn handle(
-        &self,
-        command: Self::Command,
-        _services: &Self::Services,
-    ) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
         use CredentialCommand::*;
         use CredentialError::*;
         use CredentialEvent::*;
@@ -52,15 +49,26 @@ impl Aggregate for Credential {
                 received_offer_id,
                 credential,
             } => {
-                let raw = get_unverified_jwt_claims(&serde_json::json!(credential))
-                    .and_then(|claims| claims.get("vc").cloned())
-                    .ok_or(CredentialDecodingError)?;
+                let raw = get_unverified_jwt_claims(&serde_json::json!(credential)).ok_or(CredentialError::CredentialDecodingError)?;
+
+                if let Some(status_claim) = raw.get("status") {
+                    let credential_status_checker = CredentialStatusChecker {
+                        verification_material_resolver: services.holder.clone(),
+                    };
+
+                    credential_status_checker
+                        .check_credential_status(status_claim.to_owned())
+                        .await
+                        .map_err(|_| CredentialError::InvalidCredentialStatus)?;
+                }
+
+                let raw_credential = raw.get("vc").cloned().ok_or(CredentialDecodingError)?;
 
                 Ok(vec![CredentialAdded {
                     holder_credential_id,
                     received_offer_id,
                     credential,
-                    data: Data { raw },
+                    data: Data { raw: raw_credential },
                 }])
             }
         }

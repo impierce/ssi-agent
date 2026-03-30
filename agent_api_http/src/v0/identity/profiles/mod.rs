@@ -23,6 +23,8 @@ pub struct PatchProfileEndpointRequest {
     #[serde(default, with = "serde_explicit_null")]
     pub display_name: Option<Option<String>>,
     #[serde(default, with = "serde_explicit_null")]
+    pub description: Option<Option<String>>,
+    #[serde(default, with = "serde_explicit_null")]
     pub logo: Option<Option<Logo>>,
     #[serde(default, with = "serde_explicit_null")]
     pub country: Option<Option<String>>,
@@ -45,6 +47,7 @@ pub(crate) async fn patch_profile(
     State(state): State<Arc<IdentityState>>,
     Json(PatchProfileEndpointRequest {
         display_name,
+        description,
         logo,
         country,
     }): Json<PatchProfileEndpointRequest>,
@@ -54,6 +57,15 @@ pub(crate) async fn patch_profile(
     if let Some(display_name) = display_name {
         let command = ProfileCommand::UpdateDisplayName {
             display_name: display_name.unwrap_or_default(),
+            source: Source::Runtime,
+        };
+
+        command_handler(&profile_id, &state.command.profile, command).await?;
+    }
+
+    if let Some(description) = description {
+        let command = ProfileCommand::UpdateDescription {
+            description,
             source: Source::Runtime,
         };
 
@@ -89,6 +101,7 @@ pub(crate) async fn patch_profile(
 #[schema(as = Profile)]
 struct GetProfileEndpointResponse {
     display_name: Option<String>,
+    description: Option<String>,
     logo: Option<Logo>,
     country: Option<String>,
     source: Source,
@@ -116,6 +129,7 @@ pub(crate) async fn get_profile(State(state): State<Arc<IdentityState>>) -> Resu
                 StatusCode::OK,
                 Json(GetProfileEndpointResponse {
                     display_name: profile_view.display_name,
+                    description: profile_view.description,
                     logo: profile_view.logo,
                     country: profile_view.country,
                     source: profile_view.source,
