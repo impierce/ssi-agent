@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use agent_issuance::application::public_credential_service::PublicCredentialService;
+use agent_issuance::application::public_credential_service::DataAccessService;
 use agent_issuance::state::IssuanceState;
 use axum::{
     extract::State,
@@ -14,7 +14,7 @@ use serde::Deserialize;
 use crate::error::IntoApiErrorExt;
 
 #[derive(Deserialize)]
-pub struct PublicLinkQuery {
+pub struct DataAccessRequest {
     #[serde(rename = "data-access-consent-token")]
     data_access_consent_token: String,
 }
@@ -25,9 +25,9 @@ pub struct PublicLinkQuery {
 /// Both the verifier and the Issuer need to perform all these checks on the Data Access Consent Token, zero trust is assumed.
 pub async fn data_access_endpoint(
     State(state): State<Arc<IssuanceState>>,
-    Json(payload): Json<PublicLinkQuery>,
+    Json(payload): Json<DataAccessRequest>,
 ) -> Result<Response, ApiError> {
-    let public_credential_service = PublicCredentialService {};
+    let public_credential_service = DataAccessService {};
 
     let requested_credential = public_credential_service
         .get_public_credential(payload.data_access_consent_token, &state)

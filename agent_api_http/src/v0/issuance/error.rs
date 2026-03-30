@@ -4,8 +4,7 @@ use crate::{
 };
 use agent_issuance::{
     application::{
-        access_token_validation_service::AccessTokenValidationError,
-        public_credential_service::PublicCredentialServiceError,
+        access_token_validation_service::AccessTokenValidationError, public_credential_service::DataAccessServiceError,
     },
     credential::error::CredentialError,
     offer::error::OfferError,
@@ -163,9 +162,9 @@ impl IntoApiErrorExt for StatusListError {
 
 // TODO: Clearly indicate which errors can occur in the API endpoints (ApiError) and which in the Public endpoints (PublicError).
 // Add problem details in the docs for the ApiErrors and ref them via type_url.
-impl IntoApiErrorExt for PublicCredentialServiceError {
+impl IntoApiErrorExt for DataAccessServiceError {
     fn into_api_error(self) -> ApiError {
-        use PublicCredentialServiceError::*;
+        use DataAccessServiceError::*;
         match self {
             InvalidJwtError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             DACTError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
