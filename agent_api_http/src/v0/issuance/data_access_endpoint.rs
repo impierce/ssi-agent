@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use agent_issuance::application::public_credential_service::DataAccessService;
+use agent_issuance::application::data_access_service::DataAccessService;
 use agent_issuance::state::IssuanceState;
 use axum::{
     extract::State,
@@ -30,7 +30,7 @@ pub async fn data_access_endpoint(
     let public_credential_service = DataAccessService {};
 
     let requested_credential = public_credential_service
-        .get_public_credential(payload.data_access_consent_token, &state)
+        .resolve_data_access_consent_token(payload.data_access_consent_token, &state)
         .await
         .map_err(|e| e.into_api_error())?;
 

@@ -30,6 +30,7 @@ pub struct ResolveDataAccessConsentTokenService {
     // empty strings will fail at any and every step in the flow, so no need to wrap them in an Option
     data_access_endpoint: String,
     dact: String,
+    dact_did: String,
     consented_credential: String,
 }
 
@@ -42,6 +43,7 @@ impl ResolveDataAccessConsentTokenService {
         }
     }
 
+    /// This function performs all the necessary steps to resolve and validate both the Data Access Consent Token and the response from the Issuer's Data Access Endpoint, and returns a PublicVerificationResponse which contains the results of all the performed checks and validations along with the requested credential when all checks have passed.
     pub async fn resolve_data_access_consent_token(
         &mut self,
         state: &VerificationState,
@@ -65,7 +67,11 @@ impl ResolveDataAccessConsentTokenService {
         Ok(self.public_verification_response.clone())
     }
 
-    /// TODO
+    /// This function validates the Data Access Consent Token by performing the following steps:
+    /// 1. Validate the domain linkage for the issuer of the DACT
+    /// 2. Validate the linked verifiable credentials for the issuer of the DACT
+    /// 3. Validate the status of the DACT if it has a status claim
+    /// 4. Validate the signature of the DACT
     async fn validate_data_access_consent_token(
         &mut self,
         state: &VerificationState,
@@ -161,10 +167,10 @@ impl ResolveDataAccessConsentTokenService {
                         // TODO: this is a hackathon specific message
                         payload: Some("Valid certifications found for the issuer".to_string()),
                         data: Some(serde_json::to_value(linked_vp).map_err(|_e| {
-                            DataAccessConsentTokenError::DidResolutionError(
-                                "TODO: this is an incorrect error message".to_string(),
+                            DataAccessConsentTokenError::DACTError(
+                                "Failed to serialize linked verifiable credential".to_string(),
                             )
-                        })?), // TODO
+                        })?), // TODO: should this really be an error or just a None?
                     });
                 }
             }
@@ -194,6 +200,10 @@ impl ResolveDataAccessConsentTokenService {
         let kid = jwt_header.kid.ok_or(DataAccessConsentTokenError::DACTError(
             "JWT header is missing `kid` field".to_string(),
         ))?;
+
+        // Save dact_did for later validation.
+        let dact_did = kid.split('#').next().unwrap_or(&kid);
+        self.dact_did = dact_did.to_string();
 
         // Fetch the public key using the kid
         let public_key = state.subject.resolve_public_key(&kid).await.map_err(|_| {
@@ -239,7 +249,7 @@ impl ResolveDataAccessConsentTokenService {
         Ok(())
     }
 
-    /// TODO
+    /// This function sends the Data Access Consent Token to the Issuer's Data Access Endpoint and expects to receive the requested credential in the response.
     async fn fetch_consented_credential(&mut self) -> Result<(), DataAccessConsentTokenError> {
         let request_body = serde_json::json!({
             "data_access_consent_token": self.dact
@@ -272,7 +282,15 @@ impl ResolveDataAccessConsentTokenService {
         Ok(())
     }
 
-    /// TODO
+    /// This function validates the response from the Issuer's Data Access Endpoint by performing the following steps:
+    /// 1. Validate that the `sub` claim of the DACT matches the `jti` claim of the received credential
+    /// 2. Validate that the did in the `kid` claim of the DACT matches the `id` claim of the Credential Subject in the received credential
+    /// 3. Validate the credential status of the received credential if it has a status claim
+    /// 4. Validate that the DID in the `kid` of the received credential matches the `aud` claim of the DACT
+    /// 5. Validate the signature of the received credential using the `kid` in the DACT header to fetch the correct public key for verification
+    ///
+    /// If all validations pass, the received credential is set in the `credential` field of the `PublicVerificationResponse`.
+    /// If any validation fails, the `PublicVerificationResponse` will still contain the results of all performed checks and validations along with the reasons for any failures, but the `credential` field will be None.
     async fn validate_data_access_endpoint_response(
         &mut self,
         state: &VerificationState,
@@ -281,13 +299,12 @@ impl ResolveDataAccessConsentTokenService {
             get_unverified_jwt_claims(&serde_json::Value::String(self.consented_credential.clone())).ok_or(
                 DataAccessConsentTokenError::InvalidResponse("Failed to get response JWT claims".to_string()),
             )?;
-        let data_access_consent_token_claims = get_unverified_jwt_claims(&serde_json::Value::String(self.dact.clone()))
-            .ok_or(DataAccessConsentTokenError::DACTError(
-                "Failed to get token JWT claims".to_string(),
-            ))?;
+        let dact_claims = get_unverified_jwt_claims(&serde_json::Value::String(self.dact.clone())).ok_or(
+            DataAccessConsentTokenError::DACTError("Failed to get token JWT claims".to_string()),
+        )?;
 
         // The subject of the Public Credential Token is the JTI (credential ID) of the issued credential which the Verifier is trying to access
-        let sub = data_access_consent_token_claims
+        let sub = dact_claims
             .get("sub")
             .and_then(|v| v.as_str())
             .ok_or(DataAccessConsentTokenError::DACTError(
@@ -304,38 +321,6 @@ impl ResolveDataAccessConsentTokenService {
             // This would equal StatusCode::UNPROCESSABLE_ENTITY 422.
             return Err(DataAccessConsentTokenError::InvalidResponse(
                 "The `sub` claim of the Data Access Consent Token does not match the `jti` claim of the issued credential".to_string(),
-            ));
-        }
-
-        // TODO: how to combine the basic Err flow of this function with the public_verification_response building in the best way??
-        // TODO: none of this works with sd-jwt yet
-
-        // TODO checking the iss and the kid both against the credentialSubject.id seems a bit duplicate, it should be the kid since anyone can enter a random iss value but the kid will also be checked for the signature.
-        // Extract credential subject ID from response VC
-        let credential_subject_id = verifiable_credential_claims.get("vc")
-            .and_then(|data| data.get("credentialSubject"))
-            .and_then(|cred_subject| cred_subject.get("id"))
-            .and_then(|id| id.as_str())
-            .ok_or(
-                DataAccessConsentTokenError::InvalidResponse(
-                    "Requested credential is missing the credentialSubject.id field. Publicly sharing anonymous credentials is not supported.".to_string(),
-                )
-            )?;
-
-        // Extract the `iss` claim from the Data Access Consent Token
-        let iss = data_access_consent_token_claims
-            .get("iss")
-            .and_then(|v| v.as_str())
-            .ok_or(DataAccessConsentTokenError::DACTError(
-                "Failed to get `iss` claim from Data Access Consent Token".to_string(),
-            ))?;
-
-        // Check whether the issuer of the Data Access Consent Token matches the subject of the received credential
-        // This check means we currently don't allow to publicly share anonymous credentials
-        if iss != credential_subject_id {
-            // This would equal StatusCode::UNPROCESSABLE_ENTITY 422.
-            return Err(DataAccessConsentTokenError::InvalidResponse(
-                "The `iss` claim of the Data Access Consent Token does not match the `id` claim of the Credential Subject".to_string(),
             ));
         }
 
@@ -361,28 +346,52 @@ impl ResolveDataAccessConsentTokenService {
             }
         }
 
-        // Decode header to get kid
-        let jwt_header = decode_header(&self.dact).map_err(|e| {
+        // TODO: how to combine the basic Err flow of this function with the public_verification_response building in the best way??
+        // TODO: none of this works with sd-jwt yet
+
+        // Extract credential subject ID from response VC
+        let credential_subject_id = verifiable_credential_claims.get("vc")
+            .and_then(|data| data.get("credentialSubject"))
+            .and_then(|cred_subject| cred_subject.get("id"))
+            .and_then(|id| id.as_str())
+            .ok_or(
+                DataAccessConsentTokenError::InvalidResponse(
+                    "Requested credential is missing the credentialSubject.id field. Publicly sharing anonymous credentials is not supported.".to_string(),
+                )
+            )?;
+
+        // Validate the DACT did belongs to the same DID as credential subject
+        if self.dact_did != credential_subject_id {
+            return Err(DataAccessConsentTokenError::InvalidResponse(
+                "Data Access Consent Token DID does not match requested credential subject DID".to_string(),
+            ));
+        }
+        // Decode Consented Credential header to get kid
+        let vc_jwt_header = decode_header(&self.consented_credential).map_err(|e| {
             DataAccessConsentTokenError::InvalidResponse(format!(
                 "Failed to decode JWT header of the received credential: {e}"
             ))
         })?;
 
-        let kid = jwt_header.kid.ok_or(DataAccessConsentTokenError::InvalidResponse(
+        let vc_kid = vc_jwt_header.kid.ok_or(DataAccessConsentTokenError::InvalidResponse(
             "JWT header is missing `kid` field".to_string(),
         ))?;
 
-        // Validate the kid belongs to the same DID as credential subject TODO this is problematic since the id in one place could be did:key and the other did:jwk
-        let kid_did = kid.split('#').next().unwrap_or(&kid);
-        if kid_did != credential_subject_id {
-            return Err(DataAccessConsentTokenError::InvalidResponse(
-                "Data Access Consent Token kid does not match requested credential subject DID".to_string(),
-            ));
+        // Validate the Consented Credential DID belongs to the same DID as in the DACT `aud` claim.
+        let vc_did = vc_kid.split('#').next().unwrap_or(&vc_kid);
+        if vc_did
+            != dact_claims
+                .get("aud")
+                .and_then(|v| v.as_str())
+                .ok_or(DataAccessConsentTokenError::DACTError(
+                    "Failed to get `aud` claim from DACT".to_string(),
+                ))?
+        {
+            return Err(DataAccessConsentTokenError::InvalidResponse("The DID in the `kid` in the received credential does not match the `aud` claim of the Data Access Consent Token".to_string()));
         }
 
-        // TODO this seems like Data Access Consent Token validation and it should go there
         // Fetch the public key using the kid
-        let public_key = state.subject.resolve_public_key(&kid).await.map_err(|_| {
+        let public_key = state.subject.resolve_public_key(&vc_kid).await.map_err(|_| {
             DataAccessConsentTokenError::InvalidResponse("Failed to fetch public key for JWT verification".to_string())
         })?;
 
@@ -392,7 +401,7 @@ impl ResolveDataAccessConsentTokenService {
             ))?;
 
         // TODO: more validation parameters should be set
-        let mut validation = Validation::new(jwt_header.alg);
+        let mut validation = Validation::new(vc_jwt_header.alg);
         validation.set_issuer(&[credential_subject_id]);
         validation.sub = Some(sub.to_string());
         // validation.set_audience(&[aud]);
@@ -427,13 +436,12 @@ impl ResolveDataAccessConsentTokenService {
     }
 }
 
-// TODO: should we enable access tokens for multiple credentials? then this should be a vec
+// TODO: Enable access tokens for multiple VC's
 #[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 pub struct DataAccessEndpointResponse {
     pub verifiable_credential: String,
 }
 
-// TODO: review if we still want these response structs or not
 #[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 pub struct ValidationResult {
     status: ValidationStatus,
@@ -441,7 +449,6 @@ pub struct ValidationResult {
     data: Option<serde_json::Value>,
 }
 
-// TODO: make stronger typing then strings
 #[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 pub struct PublicVerificationResponse {
     pub credential: Option<serde_json::Value>,

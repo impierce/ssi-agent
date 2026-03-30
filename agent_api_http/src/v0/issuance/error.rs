@@ -4,7 +4,7 @@ use crate::{
 };
 use agent_issuance::{
     application::{
-        access_token_validation_service::AccessTokenValidationError, public_credential_service::DataAccessServiceError,
+        access_token_validation_service::AccessTokenValidationError, data_access_service::DataAccessServiceError,
     },
     credential::error::CredentialError,
     offer::error::OfferError,
@@ -166,7 +166,7 @@ impl IntoApiErrorExt for DataAccessServiceError {
     fn into_api_error(self) -> ApiError {
         use DataAccessServiceError::*;
         match self {
-            InvalidJwtError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            InvalidRequestedCredentialError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             DACTError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             QueryError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             CredentialNotFound(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
