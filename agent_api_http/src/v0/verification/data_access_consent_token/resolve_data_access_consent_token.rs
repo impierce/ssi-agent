@@ -23,7 +23,7 @@ pub(crate) async fn resolve_data_access_consent_token(
     State(state): State<Arc<VerificationState>>,
     Path(token_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    let mut data_access_consent_token_service = ResolveDataAccessConsentTokenService::new(token_id);
+    let mut data_access_consent_token_service = ResolveDataAccessConsentTokenService::new(token_id, None);
 
     let public_verification_response = data_access_consent_token_service
         .resolve_data_access_consent_token(&state)

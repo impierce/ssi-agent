@@ -2,12 +2,12 @@
 pub mod credential_configurations;
 pub mod credential_issuer;
 pub mod credentials;
+pub mod data_access_endpoint;
 pub mod error;
 pub mod ietf_oauth_sd_jwt_vc;
 pub mod nonce;
 pub mod offers;
 pub mod openapi;
-pub mod public_credential;
 
 use crate::v0::issuance::{
     credential_configurations::credential_configurations,
@@ -21,6 +21,7 @@ use crate::v0::issuance::{
         },
     },
     credentials::{all_credentials, credentials, patch_credential},
+    data_access_endpoint::data_access_endpoint,
     nonce::nonce,
     offers::{
         all_offers, offer, offers,
@@ -47,7 +48,8 @@ pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send-offer-to-individual", post(individual_offer))
-                .route("/offers/send-offer-to-organization", post(organization_offer)),
+                .route("/offers/send-offer-to-organization", post(organization_offer))
+                .route("/data-access-endpoint", post(data_access_endpoint)), // This is a POST endpoint since the DACT is send to the endpoint in the request body, at the same time its a GET however since it expects the VC in the response (if all validations pass).
         )
         .route(
             "/.well-known/oauth-authorization-server",

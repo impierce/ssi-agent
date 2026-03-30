@@ -27,15 +27,17 @@ pub const DATA_ACCESS_ENDPOINT: &str = "DataAccessEndpoint";
 pub struct ResolveDataAccessConsentTokenService {
     pub token_id: String,
     public_verification_response: PublicVerificationResponse,
+    // empty strings will fail at any and every step in the flow, so no need to wrap them in an Option
     data_access_endpoint: String,
     dact: String,
     consented_credential: String,
 }
 
 impl ResolveDataAccessConsentTokenService {
-    pub fn new(token_id: String) -> Self {
+    pub fn new(token_id: String, dact: Option<String>) -> Self {
         Self {
             token_id,
+            dact: dact.unwrap_or_default(), // Will default to an empty string.
             ..Default::default()
         }
     }
@@ -44,6 +46,18 @@ impl ResolveDataAccessConsentTokenService {
         &mut self,
         state: &VerificationState,
     ) -> Result<PublicVerificationResponse, DataAccessConsentTokenError> {
+        // Data Access Consent Token will hereafter be referred to as DACT for brevity
+        if self.dact.is_empty() {
+            let data_access_consent_token = query_handler(&self.token_id, &state.query.data_access_consent_token)
+                .await
+                .map_err(|e| DataAccessConsentTokenError::QueryError(e.to_string()))?
+                .ok_or(DataAccessConsentTokenError::DataAccessConsentTokenNotFound(
+                    self.token_id.clone(),
+                ))?;
+
+            self.dact = data_access_consent_token.token;
+        }
+
         self.validate_data_access_consent_token(state).await?;
         self.fetch_consented_credential().await?;
         self.validate_data_access_endpoint_response(state).await?;
@@ -56,16 +70,8 @@ impl ResolveDataAccessConsentTokenService {
         &mut self,
         state: &VerificationState,
     ) -> Result<(), DataAccessConsentTokenError> {
-        // Data Access Consent Token will hereafter be referred to as DACT for brevity
-        let data_access_consent_token = query_handler(&self.token_id, &state.query.data_access_consent_token)
-            .await
-            .map_err(|e| DataAccessConsentTokenError::QueryError(e.to_string()))?
-            .ok_or(DataAccessConsentTokenError::DataAccessConsentTokenNotFound(
-                self.token_id.clone(),
-            ))?;
-
         // Get unverified claims
-        let token_value = serde_json::Value::String(data_access_consent_token.token.clone());
+        let token_value = serde_json::Value::String(self.dact.clone());
         let dact_claims = get_unverified_jwt_claims(&token_value).ok_or(DataAccessConsentTokenError::DACTError(
             "Failed to get the unverified JWT claims".to_string(),
         ))?;
@@ -179,7 +185,7 @@ impl ResolveDataAccessConsentTokenService {
         }
 
         // Validate the signature of the Data Access Consent Token
-        let jwt_header = decode_header(&data_access_consent_token.token).map_err(|e| {
+        let jwt_header = decode_header(&self.dact).map_err(|e| {
             DataAccessConsentTokenError::DACTError(format!(
                 "Failed to decode JWT header of the Data Access Consent Token: {e}"
             ))
@@ -203,7 +209,7 @@ impl ResolveDataAccessConsentTokenService {
         let validation = Validation::new(jwt_header.alg);
 
         // Decode and verify the JWT signature
-        decode::<serde_json::Value>(&data_access_consent_token.token, &decoding_key, &validation).map_err(|e| {
+        decode::<serde_json::Value>(&self.dact, &decoding_key, &validation).map_err(|e| {
             DataAccessConsentTokenError::DACTError(format!(
                 "JWT signature verification failed for the Data Access Consent Token: {e}"
             ))
@@ -229,7 +235,6 @@ impl ResolveDataAccessConsentTokenService {
             ))?;
 
         self.data_access_endpoint = data_access_endpoint.to_string();
-        self.dact = data_access_consent_token.token.clone();
 
         Ok(())
     }

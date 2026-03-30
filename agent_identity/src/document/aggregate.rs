@@ -346,12 +346,13 @@ impl Aggregate for Document {
                         .await
                         .map_err(|err| MissingKeyError(err.to_string()))?;
 
+                    // TODO: some interop problem with UniMe where key fragment is hardcoded to `key-0`.
                     let verification_method = VerificationMethod::new_from_jwk(
                         did.clone(),
                         public_key_jwk,
-                        Some("key-0"), // TODO: (did_method == SupportedDidMethod::Key)
-                                       //     .then_some(did.method_id())
-                                       //     .or(did_method.fragment()),
+                        (did_method == SupportedDidMethod::Key)
+                            .then_some(did.method_id())
+                            .or(did_method.fragment()),
                     )
                     .map_err(|err| VerificationMethodBuilderError(err.to_string()))?;
 
