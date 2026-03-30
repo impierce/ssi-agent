@@ -1,3 +1,3 @@
-pub mod redeem_data_access_consent_token;
+pub mod resolve_data_access_consent_token;
 pub mod validate_domain_linkage;
 pub mod validate_linked_verifiable_presentation;

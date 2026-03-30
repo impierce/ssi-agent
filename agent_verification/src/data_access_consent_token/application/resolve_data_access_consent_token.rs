@@ -16,30 +16,52 @@ use agent_shared::{
 use identity_iota::document::ServiceEndpoint;
 use jsonwebtoken::{decode, decode_header, Validation};
 use oid4vc_core::credential_status_verifier::CredentialStatusVerifier;
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use url::Url;
 
-pub const DATA_ACCESS_ENDPOINT: &str = "DataAccessConsentTokenEndpoint";
+pub const DATA_ACCESS_ENDPOINT: &str = "DataAccessEndpoint";
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
-pub struct RedeemDataAccessConsentTokenService {
-    public_verification_response: PublicVerificationResponse, // this is used to build the response step by step as we perform the different validation steps
+pub struct ResolveDataAccessConsentTokenService {
+    pub token_id: String,
+    public_verification_response: PublicVerificationResponse,
+    data_access_endpoint: String,
+    dact: String,
+    consented_credential: String,
 }
 
-impl RedeemDataAccessConsentTokenService {
-    /// TODO
-    pub async fn validate_data_access_consent_token(
+impl ResolveDataAccessConsentTokenService {
+    pub fn new(token_id: String) -> Self {
+        Self {
+            token_id,
+            ..Default::default()
+        }
+    }
+
+    pub async fn resolve_data_access_consent_token(
         &mut self,
-        token_id: String,
         state: &VerificationState,
-    ) -> Result<(Url, String), DataAccessConsentTokenError> {
+    ) -> Result<PublicVerificationResponse, DataAccessConsentTokenError> {
+        self.validate_data_access_consent_token(state).await?;
+        self.fetch_consented_credential().await?;
+        self.validate_data_access_endpoint_response(state).await?;
+
+        Ok(self.public_verification_response.clone())
+    }
+
+    /// TODO
+    async fn validate_data_access_consent_token(
+        &mut self,
+        state: &VerificationState,
+    ) -> Result<(), DataAccessConsentTokenError> {
         // Data Access Consent Token will hereafter be referred to as DACT for brevity
-        let data_access_consent_token = query_handler(&token_id, &state.query.data_access_consent_token)
+        let data_access_consent_token = query_handler(&self.token_id, &state.query.data_access_consent_token)
             .await
             .map_err(|e| DataAccessConsentTokenError::QueryError(e.to_string()))?
             .ok_or(DataAccessConsentTokenError::DataAccessConsentTokenNotFound(
-                token_id.clone(),
+                self.token_id.clone(),
             ))?;
 
         // Get unverified claims
@@ -189,9 +211,9 @@ impl RedeemDataAccessConsentTokenService {
 
         // TODO: validate the trust relation.
 
-        // TODO: All primary checks have passed for the Public Credential Token at this point, to perform the remaining checks we need to fetch the Public Credential from the Issuer.
+        // TODO: All primary checks have passed for the Data Access Consent Token at this point, to perform the remaining checks we need to fetch the Public Credential from the Issuer.
 
-        // Discover public credential endpoint through DID resolution
+        // Discover Data Access endpoint through DID resolution
         let data_access_endpoint = issuer_did_document
             .service()
             .iter()
@@ -206,30 +228,58 @@ impl RedeemDataAccessConsentTokenService {
                 "No Data Access Endpoint found in the Issuer DID Document services".to_string(),
             ))?;
 
-        let data_access_endpoint_url = Url::parse(data_access_endpoint.as_ref()).map_err(|_| {
-            DataAccessConsentTokenError::NoDataAccessEndpointFound(
-                "Failed to parse Data Access Endpoint into URL".to_string(),
-            )
-        })?;
+        self.data_access_endpoint = data_access_endpoint.to_string();
+        self.dact = data_access_consent_token.token.clone();
 
-        Ok((data_access_endpoint_url, data_access_consent_token.token))
+        Ok(())
     }
 
     /// TODO
-    pub async fn validate_data_access_endpoint_response(
+    async fn fetch_consented_credential(&mut self) -> Result<(), DataAccessConsentTokenError> {
+        let request_body = serde_json::json!({
+            "data_access_consent_token": self.dact
+        });
+
+        let response = reqwest::Client::new()
+            .post(&self.data_access_endpoint)
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| DataAccessConsentTokenError::DataAccessEndpointFetchError(e.to_string()))?;
+
+        let status = response.status();
+        if status != StatusCode::OK {
+            return Err(DataAccessConsentTokenError::DataAccessEndpointFetchError(
+                status.to_string(),
+            ));
+        }
+
+        let typed_response: DataAccessEndpointResponse =
+            response.json::<DataAccessEndpointResponse>().await.map_err(|e| {
+                DataAccessConsentTokenError::InvalidResponse(format!(
+                    "Failed to parse response from Issuer Data Access endpoint: {e}"
+                ))
+            })?;
+
+        self.consented_credential = typed_response.verifiable_credential.clone();
+
+        Ok(())
+    }
+
+    /// TODO
+    async fn validate_data_access_endpoint_response(
         &mut self,
-        data_access_consent_token: String,
-        response: DataAccessEndpointResponse,
         state: &VerificationState,
     ) -> Result<PublicVerificationResponse, DataAccessConsentTokenError> {
         let verifiable_credential_claims =
-            get_unverified_jwt_claims(&serde_json::Value::String(response.verifiable_credential.clone())).ok_or(
+            get_unverified_jwt_claims(&serde_json::Value::String(self.consented_credential.clone())).ok_or(
                 DataAccessConsentTokenError::InvalidResponse("Failed to get response JWT claims".to_string()),
             )?;
-        let data_access_consent_token_claims =
-            get_unverified_jwt_claims(&serde_json::Value::String(data_access_consent_token.clone())).ok_or(
-                DataAccessConsentTokenError::DACTError("Failed to get token JWT claims".to_string()),
-            )?;
+        let data_access_consent_token_claims = get_unverified_jwt_claims(&serde_json::Value::String(self.dact.clone()))
+            .ok_or(DataAccessConsentTokenError::DACTError(
+                "Failed to get token JWT claims".to_string(),
+            ))?;
 
         // The subject of the Public Credential Token is the JTI (credential ID) of the issued credential which the Verifier is trying to access
         let sub = data_access_consent_token_claims
@@ -307,7 +357,7 @@ impl RedeemDataAccessConsentTokenService {
         }
 
         // Decode header to get kid
-        let jwt_header = decode_header(&data_access_consent_token).map_err(|e| {
+        let jwt_header = decode_header(&self.dact).map_err(|e| {
             DataAccessConsentTokenError::InvalidResponse(format!(
                 "Failed to decode JWT header of the received credential: {e}"
             ))
@@ -343,7 +393,7 @@ impl RedeemDataAccessConsentTokenService {
         // validation.set_audience(&[aud]);
 
         // Decode and verify the JWT signature
-        decode::<serde_json::Value>(&response.verifiable_credential, &decoding_key, &validation).map_err(|e| {
+        decode::<serde_json::Value>(&self.consented_credential, &decoding_key, &validation).map_err(|e| {
             DataAccessConsentTokenError::InvalidResponse(format!(
                 "JWT signature verification failed for the received credential: {e}"
             ))

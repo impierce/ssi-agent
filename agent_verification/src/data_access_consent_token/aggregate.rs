@@ -39,6 +39,9 @@ impl Aggregate for DataAccessConsentToken {
 
         match command {
             StoreDataAccessConsentToken { id, token } => Ok(vec![DataAccessConsentTokenStored { id, token }]),
+            ResolveDataAccessConsentToken { id, called_endpoint } => {
+                Ok(vec![DataAccessConsentTokenResolved { id, called_endpoint }])
+            }
         }
     }
 
@@ -51,6 +54,9 @@ impl Aggregate for DataAccessConsentToken {
             DataAccessConsentTokenStored { id, token } => {
                 self.id = id;
                 self.token = token;
+            }
+            DataAccessConsentTokenResolved { .. } => {
+                // This event is only for the purpose of storing the event, no new or updated data needs to be stored.
             }
         }
     }

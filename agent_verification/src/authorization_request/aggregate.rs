@@ -6,10 +6,7 @@ use crate::{
     },
     services::VerificationServices,
 };
-use agent_shared::{
-    config::{config, get_preferred_signing_algorithm},
-    credential_status_checker::CredentialStatusChecker,
-};
+use agent_shared::config::{config, get_preferred_signing_algorithm};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use oid4vc_core::{authorization_request::ByReference, scope::Scope, verifier::SignatureVerifier};

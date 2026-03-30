@@ -2,7 +2,7 @@ use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError::{self};
 use crate::credential::event::CredentialEvent;
 use crate::services::HolderServices;
-use agent_shared::{get_unverified_jwt_claims, credential_status_checker::CredentialStatusChecker};
+use agent_shared::{credential_status_checker::CredentialStatusChecker, get_unverified_jwt_claims};
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_credential::credential::Jwt;
@@ -49,7 +49,8 @@ impl Aggregate for Credential {
                 received_offer_id,
                 credential,
             } => {
-                let raw = get_unverified_jwt_claims(&serde_json::json!(credential)).ok_or(CredentialError::CredentialDecodingError)?;
+                let raw = get_unverified_jwt_claims(&serde_json::json!(credential))
+                    .ok_or(CredentialError::CredentialDecodingError)?;
 
                 if let Some(status_claim) = raw.get("status") {
                     let credential_status_checker = CredentialStatusChecker {

@@ -14,6 +14,9 @@ impl View<DataAccessConsentToken> for DataAccessConsentToken {
                 self.id = id.clone();
                 self.token = token.clone();
             }
+            DataAccessConsentTokenResolved { .. } => {
+                // This event is only for the purpose of storing the event, no new or updated data needs to be stored.
+            }
         }
     }
 }

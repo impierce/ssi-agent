@@ -11,7 +11,7 @@ use axum::routing::get;
 use axum::{routing::post, Router};
 use std::sync::Arc;
 
-use crate::v0::verification::data_access_consent_token::redeem_data_access_consent_token::redeem_data_access_consent_token;
+use crate::v0::verification::data_access_consent_token::resolve_data_access_consent_token::resolve_data_access_consent_token;
 use crate::v0::verification::data_access_consent_token::store_data_access_consent_token::store_data_access_consent_token;
 use crate::v0::verification::{
     authorization_requests::authorization_request, authorization_requests::authorization_requests,
@@ -36,7 +36,7 @@ pub fn router(verification_state: Arc<VerificationState>) -> Router {
                     "/store-data-access-consent-token",
                     post(store_data_access_consent_token),
                 ) // TODO: change name
-                .route("/verify", get(redeem_data_access_consent_token)),
+                .route("/verify", get(resolve_data_access_consent_token)),
         )
         .route("/request/{request_id}", get(request))
         .route("/redirect", post(redirect))

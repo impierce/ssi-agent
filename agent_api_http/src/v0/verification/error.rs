@@ -49,6 +49,7 @@ impl IntoApiErrorExt for DataAccessConsentTokenError {
 
         match self {
             DataAccessConsentTokenNotFound(_)
+            | DataAccessEndpointFetchError(_)
             | DidResolutionError(_)
             | InvalidResponse(_)
             | DACTError(_)

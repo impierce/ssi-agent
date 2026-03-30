@@ -6,6 +6,8 @@ pub enum DataAccessConsentTokenError {
     DataAccessConsentTokenNotFound(String),
     #[error("Error resolving DID: {0}")]
     DidResolutionError(String),
+    #[error("Error fetching a response from the Data Access Endpoint: {0}")]
+    DataAccessEndpointFetchError(String),
     #[error("Invalid Data Access Endpoint response: {0}")]
     InvalidResponse(String),
     #[error("Data Access Consent Token error: {0}")]
