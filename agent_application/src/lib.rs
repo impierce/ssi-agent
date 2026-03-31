@@ -26,6 +26,12 @@ use tower_http::cors::CorsLayer;
 use tracing::info;
 
 pub async fn run() -> io::Result<()> {
+    let state = state().await?;
+
+    serve(app(state)).await
+}
+
+pub async fn state() -> io::Result<ApplicationState> {
     let subject = Arc::new(Subject::new().await);
 
     let identity_services = Arc::new(IdentityServices::new(subject.clone()));
@@ -178,36 +184,43 @@ pub async fn run() -> io::Result<()> {
     agent_identity::state::initialize(&identity_state).await.unwrap();
     agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-    let app = app(ApplicationState {
+    Ok(ApplicationState {
         identity_state: Some(identity_state),
         library_state: Some(library_state),
         authorization_state: Some(authorization_state),
         issuance_state: Some(issuance_state),
         holder_state: Some(holder_state),
         verification_state: Some(verification_state),
-    });
+    })
+}
+
+/// Builds the full core SSI agent Router (app + metadata + probes).
+pub fn router(application_state: ApplicationState) -> axum::Router {
+    let app = app(application_state);
 
     let metadata_state = metadata::MetadataState {
         startup_instant: std::time::Instant::now(),
     };
 
-    // Add metadata routes
     let metadata_router = axum::Router::new()
         .route("/version", axum::routing::get(metadata::version::version))
         .route("/info", axum::routing::get(metadata::info::info))
         .route("/v0/configuration", axum::routing::get(metadata::config::configuration))
         .with_state(metadata_state);
 
-    let app = metadata_router.merge(app);
-
-    // Add probes routes
     let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
+
+    let app = metadata_router.merge(app);
     let mut app = probes_router.merge(app);
 
     if config().metrics.enabled {
         app = app.route_layer(axum::middleware::from_fn(track_metrics));
     }
 
+    app
+}
+
+async fn serve(app: axum::Router) -> io::Result<()> {
     let port = config().application_url.port().unwrap_or(3033);
 
     let app_handle = tokio::spawn(start_server("HTTP API".to_string(), app, port));
