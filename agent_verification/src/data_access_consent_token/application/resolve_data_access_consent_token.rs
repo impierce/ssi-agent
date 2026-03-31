@@ -216,7 +216,8 @@ impl ResolveDataAccessConsentTokenService {
             ))?;
 
         // TODO: should more validation parameters be set??
-        let validation = Validation::new(jwt_header.alg);
+        let mut validation = Validation::new(jwt_header.alg);
+        validation.validate_aud = false;
 
         // Decode and verify the JWT signature
         decode::<serde_json::Value>(&self.dact, &decoding_key, &validation).map_err(|e| {

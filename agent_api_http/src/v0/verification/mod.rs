@@ -35,7 +35,7 @@ pub fn router(verification_state: Arc<VerificationState>) -> Router {
                 .route(
                     "/store-data-access-consent-token",
                     post(store_data_access_consent_token),
-                ) // TODO: change name
+                )
                 .route("/verify", get(resolve_data_access_consent_token)),
         )
         .route("/request/{request_id}", get(request))

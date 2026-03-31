@@ -57,7 +57,8 @@ impl DataAccessService {
         ))?;
 
         // TODO: should more validation parameters be set??
-        let validation = Validation::new(dact_jwt_header.alg);
+        let mut validation = Validation::new(dact_jwt_header.alg);
+        validation.validate_aud = false;
 
         // Decode and verify the JWT signature
         decode::<serde_json::Value>(&data_access_consent_token, &decoding_key, &validation).map_err(|e| {
