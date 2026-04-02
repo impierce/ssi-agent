@@ -8,4 +8,4 @@ use utoipa::OpenApi;
         (name = "Issuance", description = "Issue credentials to individuals and organizations, manage credential offers and track their status."),
     )
 )]
-pub(crate) struct IssuanceApi;
+pub struct IssuanceApi;
