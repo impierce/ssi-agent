@@ -2,6 +2,9 @@ use std::sync::Arc;
 
 use agent_issuance::application::data_access_service::DataAccessService;
 use agent_issuance::state::IssuanceState;
+use agent_verification::data_access_consent_token::application::resolve_data_access_consent_token::{
+    DataAccessEndpointResponse, DataAccessRequest,
+};
 use axum::{
     extract::State,
     http::StatusCode,
@@ -9,15 +12,9 @@ use axum::{
     Json,
 };
 use http_api_problem::ApiError;
-use serde::Deserialize;
+use tracing::info;
 
 use crate::error::IntoApiErrorExt;
-
-#[derive(Deserialize)]
-pub struct DataAccessRequest {
-    #[serde(rename = "data-access-consent-token")]
-    data_access_consent_token: String,
-}
 
 /// This endpoint receives a Data Access Consent Token as a query parameter and then perform several validation steps on the token.
 /// When all validations pass, the requested credential is returned in the response.
@@ -27,14 +24,22 @@ pub async fn data_access_endpoint(
     State(state): State<Arc<IssuanceState>>,
     Json(payload): Json<DataAccessRequest>,
 ) -> Result<Response, ApiError> {
-    let public_credential_service = DataAccessService {};
+    let data_access_service = DataAccessService {};
 
-    let requested_credential = public_credential_service
+    info!("Received request at Data Access Endpoint with payload");
+
+    let requested_credential = data_access_service
         .resolve_data_access_consent_token(payload.data_access_consent_token, &state)
         .await
         .map_err(|e| e.into_api_error())?;
 
-    Ok((StatusCode::OK, Json(requested_credential)).into_response())
+    info!("Successfully resolved Data Access Consent Token, returning requested credential");
+
+    let response = DataAccessEndpointResponse {
+        verifiable_credential: requested_credential,
+    };
+
+    Ok((StatusCode::OK, Json(response)).into_response())
 }
 
 #[cfg(test)]

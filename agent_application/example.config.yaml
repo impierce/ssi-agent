@@ -15,7 +15,7 @@ did_methods:
     enabled: false
 
 domain_linkage_enabled: false
-public_credential_endpoint_enabled: true
+data_access_endpoint_enabled: true
 public_verification_endpoint_enabled: true
 
 signing_algorithms_supported:

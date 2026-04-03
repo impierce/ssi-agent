@@ -160,18 +160,36 @@ impl IntoApiErrorExt for StatusListError {
     }
 }
 
-// TODO: Clearly indicate which errors can occur in the API endpoints (ApiError) and which in the Public endpoints (PublicError).
-// Add problem details in the docs for the ApiErrors and ref them via type_url.
+// TODO: add problem details in the docs for the ApiErrors and ref them via type_url.
 impl IntoApiErrorExt for DataAccessServiceError {
     fn into_api_error(self) -> ApiError {
         use DataAccessServiceError::*;
         match self {
-            InvalidRequestedCredentialError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-            DACTError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-            QueryError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-            CredentialNotFound(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-            ValidationError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-            DidResolutionError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            InvalidRequestedCredentialError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Invalid Requested Credential Error")
+                .type_url(type_url("unexpected#unexpected-error"))
+                .source(self)
+                .finish(),
+            InvalidDACTError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Invalid Data Access Consent Token Error")
+                .type_url(type_url("unexpected#unexpected-error"))
+                .source(self)
+                .finish(),
+            QueryError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Query Error")
+                .type_url(type_url("unexpected#unexpected-error"))
+                .source(self)
+                .finish(),
+            CredentialNotFound(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Requested Credential Not Found")
+                .type_url(type_url("unexpected#unexpected-error"))
+                .source(self)
+                .finish(),
+            DidResolutionError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("DID Resolution Error")
+                .type_url(type_url("unexpected#unexpected-error"))
+                .source(self)
+                .finish(),
         }
     }
 }

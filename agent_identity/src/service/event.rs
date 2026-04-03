@@ -28,12 +28,12 @@ pub enum ServiceEvent {
         presentation_ids: Vec<String>,
         service: DocumentService,
     },
-    PublicCredentialServiceCreated {
+    DataAccessServiceCreated {
         service_id: String,
         service: DocumentService,
         is_deleted: bool,
     },
-    PublicCredentialServiceDeleted {
+    DataAccessServiceDeleted {
         service_id: String,
         service: Option<DocumentService>,
         is_deleted: bool,

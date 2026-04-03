@@ -10,8 +10,8 @@ use crate::{
 };
 
 use agent_shared::{
-    convert_iota_jwk_to_decoding_key, credential_status_checker::CredentialStatusChecker, get_unverified_jwt_claims,
-    handlers::query_handler,
+    config::config, convert_iota_jwk_to_decoding_key, credential_status_checker::CredentialStatusChecker,
+    get_unverified_jwt_claims, handlers::query_handler,
 };
 use identity_iota::document::ServiceEndpoint;
 use jsonwebtoken::{decode, decode_header, Validation};
@@ -21,11 +21,9 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use url::Url;
 
-pub const DATA_ACCESS_ENDPOINT: &str = "DataAccessEndpoint";
-
 #[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 pub struct ResolveDataAccessConsentTokenService {
-    pub token_id: String,
+    pub dact_id: String,
     public_verification_response: PublicVerificationResponse,
     // empty strings will fail at any and every step in the flow, so no need to wrap them in an Option
     data_access_endpoint: String,
@@ -35,12 +33,37 @@ pub struct ResolveDataAccessConsentTokenService {
 }
 
 impl ResolveDataAccessConsentTokenService {
-    pub fn new(token_id: String, dact: Option<String>) -> Self {
+    // When receiving a request to store a new Data Access Consent Token, the token will be in the payload and therefore set in the `dact` field. When retrieving one from the event store, only the ID is needed.
+    pub fn new(dact_id: String, dact: Option<String>) -> Self {
         Self {
-            token_id,
+            dact_id,
             dact: dact.unwrap_or_default(), // Will default to an empty string.
             ..Default::default()
         }
+    }
+
+    pub async fn validate_before_storage(
+        &mut self,
+        state: &VerificationState,
+    ) -> Result<(), DataAccessConsentTokenError> {
+        // This means we currently only accept DACTs for Verifiable Link purposes.
+        if config().public_verification_endpoint_enabled {
+            // TODO: write without else blocks
+            // Check if the DACT already exists before going through the full resolve flow to avoid unnecessary workload.
+            if query_handler(&self.dact_id, &state.query.data_access_consent_token)
+                .await
+                .map_err(|e| DataAccessConsentTokenError::QueryError(e.to_string()))?
+                .is_some()
+            {
+                return Err(DataAccessConsentTokenError::DACTAlreadyExists(self.dact_id.clone()));
+            } else {
+                self.resolve_data_access_consent_token(state).await?;
+            }
+        } else {
+            return Err(DataAccessConsentTokenError::EndpointNotEnabled);
+        }
+
+        Ok(())
     }
 
     /// This function performs all the necessary steps to resolve and validate both the Data Access Consent Token and the response from the Issuer's Data Access Endpoint, and returns a PublicVerificationResponse which contains the results of all the performed checks and validations along with the requested credential when all checks have passed.
@@ -50,11 +73,11 @@ impl ResolveDataAccessConsentTokenService {
     ) -> Result<PublicVerificationResponse, DataAccessConsentTokenError> {
         // Data Access Consent Token will hereafter be referred to as DACT for brevity
         if self.dact.is_empty() {
-            let data_access_consent_token = query_handler(&self.token_id, &state.query.data_access_consent_token)
+            let data_access_consent_token = query_handler(&self.dact_id, &state.query.data_access_consent_token)
                 .await
                 .map_err(|e| DataAccessConsentTokenError::QueryError(e.to_string()))?
                 .ok_or(DataAccessConsentTokenError::DataAccessConsentTokenNotFound(
-                    self.token_id.clone(),
+                    self.dact_id.clone(),
                 ))?;
 
             self.dact = data_access_consent_token.token;
@@ -91,16 +114,16 @@ impl ResolveDataAccessConsentTokenService {
             ))?;
 
         let resolver = &state.subject.resolver;
-        let issuer_did_document = resolver
+        let aud_did_document = resolver
             .resolve(aud)
             .await
             .map_err(|e| DataAccessConsentTokenError::DidResolutionError(e.to_string()))?;
 
         // Check and validate domain linkage
 
-        info!("Issuer DID Document: {:#?}", issuer_did_document);
+        info!("Issuer DID Document: {:#?}", aud_did_document);
 
-        let mut linked_domains = get_issuer_linked_domains(&issuer_did_document).await;
+        let mut linked_domains = get_issuer_linked_domains(&aud_did_document).await;
         for url in linked_domains.clone() {
             let validation_result = validate_domain_linkage(resolver, url.clone(), aud).await;
             if validation_result.status == ValidationStatus::Success {
@@ -145,7 +168,7 @@ impl ResolveDataAccessConsentTokenService {
 
         // Get and validate the issuers linked verifiable presentations.
         let linked_verifiable_credentials: Vec<_> =
-            validate_linked_verifiable_presentations(resolver, &issuer_did_document)
+            validate_linked_verifiable_presentations(resolver, &aud_did_document)
                 .await
                 .into_iter()
                 .flatten()
@@ -231,10 +254,10 @@ impl ResolveDataAccessConsentTokenService {
         // TODO: All primary checks have passed for the Data Access Consent Token at this point, to perform the remaining checks we need to fetch the Public Credential from the Issuer.
 
         // Discover Data Access endpoint through DID resolution
-        let data_access_endpoint = issuer_did_document
+        let data_access_endpoint = aud_did_document
             .service()
             .iter()
-            .find(|service| service.type_().contains(DATA_ACCESS_ENDPOINT))
+            .find(|service| service.type_().contains("data-access-service")) // This str equals const DATA_ACCESS_SERVICE_ID in `agent_identity/src/state.rs`
             .and_then(|service| match service.service_endpoint() {
                 ServiceEndpoint::One(url) => Some(url.clone()),
                 // TODO: handle multiple endpoints?
@@ -252,9 +275,14 @@ impl ResolveDataAccessConsentTokenService {
 
     /// This function sends the Data Access Consent Token to the Issuer's Data Access Endpoint and expects to receive the requested credential in the response.
     async fn fetch_consented_credential(&mut self) -> Result<(), DataAccessConsentTokenError> {
-        let request_body = serde_json::json!({
-            "data_access_consent_token": self.dact
-        });
+        let request_body = DataAccessRequest {
+            data_access_consent_token: self.dact.clone(),
+        };
+
+        info!(
+            "Posting Data Access Consent Token to Data Access EndPoint: {}",
+            self.data_access_endpoint
+        );
 
         let response = reqwest::Client::new()
             .post(&self.data_access_endpoint)
@@ -263,6 +291,8 @@ impl ResolveDataAccessConsentTokenService {
             .send()
             .await
             .map_err(|e| DataAccessConsentTokenError::DataAccessEndpointFetchError(e.to_string()))?;
+
+        info!("Response: {response:?}");
 
         let status = response.status();
         if status != StatusCode::OK {
@@ -403,8 +433,9 @@ impl ResolveDataAccessConsentTokenService {
 
         // TODO: more validation parameters should be set
         let mut validation = Validation::new(vc_jwt_header.alg);
-        validation.set_issuer(&[credential_subject_id]);
-        validation.sub = Some(sub.to_string());
+        // validation.set_issuer(&[credential_subject_id]);
+
+        // validation.sub = Some(sub.to_string());
         // validation.set_audience(&[aud]);
 
         // Decode and verify the JWT signature
@@ -458,6 +489,12 @@ pub struct PublicVerificationResponse {
     pub trust_relation: ValidationResult,
     pub linked_vp: Vec<ValidationResult>,
     pub domain_linkage: Vec<ValidationResult>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct DataAccessRequest {
+    #[serde(rename = "data-access-consent-token")]
+    pub data_access_consent_token: String,
 }
 
 // Helpers

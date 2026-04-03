@@ -29,6 +29,7 @@ use crate::v0::issuance::{
     },
 };
 use crate::API_VERSION;
+use agent_identity::state::DATA_ACCESS_SERVICE_ID;
 use agent_issuance::state::IssuanceState;
 use axum::routing::get;
 use axum::{routing::post, Router};
@@ -49,7 +50,7 @@ pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send-offer-to-individual", post(individual_offer))
                 .route("/offers/send-offer-to-organization", post(organization_offer))
-                .route("/data-access-endpoint", post(data_access_endpoint)), // This is a POST endpoint since the DACT is send to the endpoint in the request body, at the same time its a GET however since it expects the VC in the response (if all validations pass).
+                .route(&format!("/{}", DATA_ACCESS_SERVICE_ID), post(data_access_endpoint)), // This is a POST endpoint since the DACT is send to the endpoint in the request body, at the same time its a GET however since it expects the VC in the response (if all validations pass).
         )
         .route(
             "/.well-known/oauth-authorization-server",

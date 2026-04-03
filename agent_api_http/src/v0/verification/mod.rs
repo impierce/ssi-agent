@@ -35,10 +35,10 @@ pub fn router(verification_state: Arc<VerificationState>) -> Router {
                 .route(
                     "/store-data-access-consent-token",
                     post(store_data_access_consent_token),
-                )
-                .route("/verify", get(resolve_data_access_consent_token)),
+                ),
         )
         .route("/request/{request_id}", get(request))
         .route("/redirect", post(redirect))
+        .route("/verify/{dact_id}", get(resolve_data_access_consent_token))
         .with_state(verification_state)
 }

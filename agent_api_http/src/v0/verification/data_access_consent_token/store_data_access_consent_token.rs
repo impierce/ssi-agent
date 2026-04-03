@@ -20,31 +20,29 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn store_data_access_consent_token(
     State(state): State<Arc<VerificationState>>,
-    Json(StoreDataAccessConsentTokenEndpointRequest { token_id, jwt }): Json<
-        StoreDataAccessConsentTokenEndpointRequest,
-    >,
+    Json(StoreDataAccessConsentTokenEndpointRequest { dact_id, jwt }): Json<StoreDataAccessConsentTokenEndpointRequest>,
 ) -> Result<Response, ApiError> {
     // First go through the full resolve DACT flow to validate the full flow and avoid storing malicious data.
     let mut data_access_consent_token_service =
-        ResolveDataAccessConsentTokenService::new(token_id.clone(), Some(jwt.clone()));
+        ResolveDataAccessConsentTokenService::new(dact_id.clone(), Some(jwt.clone()));
 
     data_access_consent_token_service
-        .resolve_data_access_consent_token(&state)
+        .validate_before_storage(&state)
         .await
         .map_err(|e| e.into_api_error())?;
 
     let command = DataAccessConsentTokenCommand::StoreDataAccessConsentToken {
-        id: token_id.clone(),
+        id: dact_id.clone(),
         token: jwt,
     };
 
-    command_handler(&token_id, &state.command.data_access_consent_token, command).await?;
+    command_handler(&dact_id, &state.command.data_access_consent_token, command).await?;
 
     Ok((StatusCode::OK).into_response())
 }
 
 #[derive(Deserialize, Serialize)]
 pub struct StoreDataAccessConsentTokenEndpointRequest {
-    pub token_id: String,
+    pub dact_id: String,
     pub jwt: String,
 }

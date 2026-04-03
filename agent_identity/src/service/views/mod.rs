@@ -40,7 +40,7 @@ impl View<Service> for Service {
                 self.presentation_ids.clone_from(presentation_ids);
                 self.service.replace(service.clone());
             }
-            PublicCredentialServiceCreated {
+            DataAccessServiceCreated {
                 service_id,
                 service,
                 is_deleted,
@@ -49,7 +49,7 @@ impl View<Service> for Service {
                 self.service.replace(service.clone());
                 self.is_deleted.clone_from(is_deleted);
             }
-            PublicCredentialServiceDeleted {
+            DataAccessServiceDeleted {
                 service_id,
                 service,
                 is_deleted,

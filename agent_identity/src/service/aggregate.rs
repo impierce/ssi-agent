@@ -1,5 +1,8 @@
 use super::{command::ServiceCommand, error::ServiceError, event::ServiceEvent};
-use crate::services::IdentityServices;
+use crate::{
+    services::IdentityServices,
+    state::{DATA_ACCESS_SERVICE_ID, PUBLIC_VERIFICATION_SERVICE_ID},
+};
 use agent_shared::config::{config, API_VERSION};
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
@@ -59,7 +62,7 @@ impl Aggregate for Service {
                 let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
-                let endpoint_url = origin.to_string().trim_end_matches('/').to_string() + "/verify";
+                let endpoint_url = origin.to_string().trim_end_matches('/').to_string() + "/verify"; // This is the name we chose to expose the endpoint with externally to be non technical, internally we use the more distinct name Public Verification
                 let endpoint_url = endpoint_url
                     .parse::<identity_core::common::Url>()
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
@@ -72,7 +75,7 @@ impl Aggregate for Service {
                     .id(format!("did:place:holder#{service_id}")
                         .parse::<DIDUrl>()
                         .map_err(|err| InvalidDidError(err.to_string()))?)
-                    .type_("PublicVerificationEndpoint")
+                    .type_(PUBLIC_VERIFICATION_SERVICE_ID)
                     .service_endpoint(service_endpoint)
                     .build()
                     .map_err(|err| ServiceBuilderError(err.to_string()))?;
@@ -88,12 +91,12 @@ impl Aggregate for Service {
                 service: None,
                 is_deleted: true,
             }]),
-            CreatePublicCredentialEndpointService { service_id } => {
+            CreateDataAccessEndpointService { service_id } => {
                 let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
                 let endpoint_url =
-                    origin.to_string().trim_end_matches('/').to_string() + API_VERSION + "/public-credential";
+                    origin.to_string().trim_end_matches('/').to_string() + API_VERSION + "/" + DATA_ACCESS_SERVICE_ID;
                 let endpoint_url = endpoint_url
                     .parse::<identity_core::common::Url>()
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
@@ -106,18 +109,18 @@ impl Aggregate for Service {
                     .id(format!("did:place:holder#{service_id}")
                         .parse::<DIDUrl>()
                         .map_err(|err| InvalidDidError(err.to_string()))?)
-                    .type_("PublicCredentialEndpoint")
+                    .type_(DATA_ACCESS_SERVICE_ID)
                     .service_endpoint(service_endpoint)
                     .build()
                     .map_err(|err| ServiceBuilderError(err.to_string()))?;
 
-                Ok(vec![PublicCredentialServiceCreated {
+                Ok(vec![DataAccessServiceCreated {
                     service_id,
                     service,
                     is_deleted: false,
                 }])
             }
-            DeletePublicCredentialEndpointService { service_id } => Ok(vec![PublicCredentialServiceDeleted {
+            DeleteDataAccessEndpointService { service_id } => Ok(vec![DataAccessServiceDeleted {
                 service_id,
                 service: None,
                 is_deleted: true,
@@ -338,7 +341,7 @@ impl Aggregate for Service {
                 self.service = service;
                 self.is_deleted = is_deleted;
             }
-            PublicCredentialServiceCreated {
+            DataAccessServiceCreated {
                 service_id,
                 service,
                 is_deleted,
@@ -347,7 +350,7 @@ impl Aggregate for Service {
                 self.service.replace(service);
                 self.is_deleted = is_deleted;
             }
-            PublicCredentialServiceDeleted {
+            DataAccessServiceDeleted {
                 service_id,
                 service,
                 is_deleted,

@@ -69,7 +69,8 @@ pub(crate) async fn credentials(
         expires_at,
     }): Json<CredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    let credential_id = uuid::Uuid::new_v4().to_string();
+    // Create as urn since this credential ID will be used as credential root ID and as JTI as well, where URI or even URL is required.
+    let credential_id = uuid::Uuid::new_v4().urn().to_string();
 
     let (_, credential_configuration, authorization) = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
         .await?

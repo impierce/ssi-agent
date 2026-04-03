@@ -252,9 +252,9 @@ pub struct ApplicationConfiguration {
     #[config(default, production_default = "true")]
     pub domain_linkage_enabled: bool,
     #[config(default = "true", production_default = "true")]
-    pub public_credential_endpoint_enabled: bool,
+    pub data_access_endpoint_enabled: bool,
     #[config(default = "true", production_default = "true")]
-    pub public_verification_endpoint_enabled: bool,
+    pub public_verification_endpoint_enabled: bool, // both /verify and /store-data-access-consent-token endpoints listen to this flag.
     #[config(default)]
     pub credential_offer_by_value_enabled: bool,
     #[config(development_default = "SecretManagerConfig::development_default()")]

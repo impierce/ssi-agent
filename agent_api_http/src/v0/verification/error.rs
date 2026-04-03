@@ -42,20 +42,68 @@ impl IntoApiErrorExt for AuthorizationRequestError {
     }
 }
 
-// TODO DataAccessConsentTokenError is currently empty, so no need to match on the enum.
 impl IntoApiErrorExt for DataAccessConsentTokenError {
     fn into_api_error(self) -> ApiError {
         use DataAccessConsentTokenError::*;
 
         match self {
-            DataAccessConsentTokenNotFound(_)
-            | DataAccessEndpointFetchError(_)
-            | DidResolutionError(_)
-            | InvalidResponse(_)
-            | DACTError(_)
-            | NoDataAccessEndpointFound(_)
-            | QueryError(_)
-            | ValidationError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            DACTAlreadyExists(_) => ApiError::builder(StatusCode::CONFLICT)
+                .title("Data Access Consent Token Already Exists")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
+                ))
+                .source(self)
+                .finish(),
+            DACTError(_) => ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Invalid Data Access Consent Token")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
+                ))
+                .source(self)
+                .finish(),
+            DataAccessConsentTokenNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Data Access Consent Token Not Found")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
+                ))
+                .source(self)
+                .finish(),
+            DataAccessEndpointFetchError(_) => ApiError::builder(StatusCode::BAD_GATEWAY)
+                .title("Data Access Endpoint Unreachable")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
+                ))
+                .source(self)
+                .finish(),
+            DidResolutionError(_) => ApiError::builder(StatusCode::BAD_GATEWAY)
+                .title("DID Resolution Failed")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
+                ))
+                .source(self)
+                .finish(),
+            EndpointNotEnabled => ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Endpoint Not Enabled")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
+                ))
+                .source(self)
+                .finish(),
+            InvalidResponse(_) => ApiError::builder(StatusCode::BAD_GATEWAY)
+                .title("Invalid Response from Data Access Endpoint")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
+                ))
+                .source(self)
+                .finish(),
+            NoDataAccessEndpointFound(_) => ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("No Data Access Endpoint Found")
+                .type_url(format!(
+                    "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"
+                ))
+                .source(self)
+                .finish(),
+            QueryError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Unexpected Error")
                 .type_url(format!(
                     "{DOCUMENTATION_URL}problem-details/unexpected#unexpected-error"

@@ -318,8 +318,8 @@ impl Aggregate for Credential {
                             vc_jwt_builder
                         };
 
-                        let vc_jwt_builder = if let Some(id) = jti {
-                            vc_jwt_builder.jti(id.to_string())
+                        let vc_jwt_builder = if let Some(_id) = jti {
+                            vc_jwt_builder.jti(credential_id.clone()) // TODO
                         } else {
                             vc_jwt_builder
                         };
@@ -692,6 +692,15 @@ fn build_unsigned_w3c_credential_data(
     credential_id: &str,
     expires_at: Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<serde_json::Value, CredentialError> {
+    // If no root id is provided, take the aggregate credential_id as sensible default and convert it to an urn because the ID needs to be a valid URL: https://www.w3.org/TR/vc-data-model-2.0/#identifiers
+    let root_id = uuid::Uuid::parse_str(credential_id)
+        .map_err(|e| BuildCredentialError(format!("Failed to parse credential_id as UUID: {}", e)))?;
+    credential_data
+        .insert_if_none(&["id"], json!(root_id.urn()))
+        .ok_or(BuildCredentialError(
+            "Failed to enter the id into the credential".to_string(),
+        ))?;
+
     let credential_name = credential_configuration
         .credential_metadata
         .as_ref()
@@ -783,19 +792,6 @@ fn build_unsigned_w3c_credential_data(
                         "Failed to enter the @context into the credential".to_string(),
                     ))?;
 
-                // If no root id is provided, convert the aggregate credential_id to an urn as sensible default.
-                let root_id = uuid::Uuid::parse_str(credential_id).map_err(|e| {
-                    BuildCredentialError(format!(
-                        "Failed to parse credential_id `{credential_id}` as UUID: {}",
-                        e
-                    ))
-                })?;
-                credential_data
-                    .insert_if_none(&["id"], json!(root_id.urn()))
-                    .ok_or(BuildCredentialError(
-                        "Failed to enter the id into the credential".to_string(),
-                    ))?;
-
                 credential_data
                     .insert_at_path(&["issuer", "type"], json!("Profile"))
                     .ok_or(BuildCredentialError(
@@ -836,15 +832,6 @@ fn build_unsigned_w3c_credential_data(
                     )
                     .ok_or(BuildCredentialError(
                         "Failed to enter the @context into the credential".to_string(),
-                    ))?;
-
-                // If no root id is provided, convert the aggregate credential_id to an urn as sensible default.
-                let root_id = uuid::Uuid::parse_str(credential_id)
-                    .map_err(|e| BuildCredentialError(format!("Failed to parse credential_id as UUID: {}", e)))?;
-                credential_data
-                    .insert_if_none(&["id"], json!(root_id.urn()))
-                    .ok_or(BuildCredentialError(
-                        "Failed to enter the id into the credential".to_string(),
                     ))?;
 
                 // No fields in credentialProfiles are actually required by the ELM schema.

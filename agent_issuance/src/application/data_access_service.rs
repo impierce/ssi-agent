@@ -20,7 +20,7 @@ impl DataAccessService {
     ) -> Result<String, DataAccessServiceError> {
         // Get unverified claims
         let dact_value = serde_json::Value::String(data_access_consent_token.clone());
-        let dact_claims = get_unverified_jwt_claims(&dact_value).ok_or(DataAccessServiceError::DACTError(
+        let dact_claims = get_unverified_jwt_claims(&dact_value).ok_or(DataAccessServiceError::InvalidDACTError(
             "Failed to get JWT claims from Data Access Consent Token".to_string(),
         ))?;
 
@@ -33,28 +33,29 @@ impl DataAccessService {
             credential_status_checker
                 .check_credential_status(status_claim.to_owned())
                 .await
-                .map_err(|e| DataAccessServiceError::DACTError(e.to_string()))?;
+                .map_err(|e| DataAccessServiceError::InvalidDACTError(e.to_string()))?;
         }
 
         // Validate the signature of the Data Access Consent Token
         let dact_jwt_header = decode_header(&data_access_consent_token).map_err(|e| {
-            DataAccessServiceError::DACTError(format!(
+            DataAccessServiceError::InvalidDACTError(format!(
                 "Failed to decode JWT header of the Data Access Consent Token: {e}"
             ))
         })?;
 
-        let dact_kid = dact_jwt_header.kid.ok_or(DataAccessServiceError::DACTError(
+        let dact_kid = dact_jwt_header.kid.ok_or(DataAccessServiceError::InvalidDACTError(
             "JWT header is missing `kid` field".to_string(),
         ))?;
 
         // Fetch the public key using the kid
         let public_key = state.subject.resolve_public_key(&dact_kid).await.map_err(|_| {
-            DataAccessServiceError::DACTError("Failed to fetch public key for JWT verification".to_string())
+            DataAccessServiceError::InvalidDACTError("Failed to fetch public key for JWT verification".to_string())
         })?;
 
-        let decoding_key = convert_iota_jwk_to_decoding_key(&public_key).ok_or(DataAccessServiceError::DACTError(
-            "Failed to convert public key into decoding key for JWT verification".to_string(),
-        ))?;
+        let decoding_key =
+            convert_iota_jwk_to_decoding_key(&public_key).ok_or(DataAccessServiceError::InvalidDACTError(
+                "Failed to convert public key into decoding key for JWT verification".to_string(),
+            ))?;
 
         // TODO: should more validation parameters be set??
         let mut validation = Validation::new(dact_jwt_header.alg);
@@ -62,7 +63,7 @@ impl DataAccessService {
 
         // Decode and verify the JWT signature
         decode::<serde_json::Value>(&data_access_consent_token, &decoding_key, &validation).map_err(|e| {
-            DataAccessServiceError::DACTError(format!(
+            DataAccessServiceError::InvalidDACTError(format!(
                 "JWT signature verification failed for the Data Access Consent Token: {e}"
             ))
         })?;
@@ -113,32 +114,23 @@ impl DataAccessService {
         let sub = dact_claims
             .get("sub")
             .and_then(|v| v.as_str())
-            .ok_or(DataAccessServiceError::DACTError(
+            .ok_or(DataAccessServiceError::InvalidDACTError(
                 "Failed to get `sub` claim from Data Access Consent Token".to_string(),
             ))?;
 
-        // Because the JTI needs to be a valid URL, we appended the credential ID to the issuer URL of the Data Access Consent Token.
-        // This means only the last segment of the `sub` claim is the actual credential ID.
-        let credential_id = sub.rsplit('/').next().ok_or(DataAccessServiceError::DACTError(
-            "Failed to parse credential ID from `sub` claim in Data Access Consent Token".to_string(),
-        ))?;
-        // TODO: this is actually incorrect: https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.7
-        // An issue should be opened at IOTA to report this.
-        // so actually the sub should equal to the jti
-
         // Get the credential, if there is one for the given `sub`
-        let credential = query_handler(credential_id, &state.query.credential)
+        let credential = query_handler(sub, &state.query.credential)
             .await
             .map_err(|e| {
                 DataAccessServiceError::QueryError(format!("Failed to get requested credential from storage: {e}"))
             })?
-            .ok_or(DataAccessServiceError::CredentialNotFound(credential_id.to_string()))?;
+            .ok_or(DataAccessServiceError::CredentialNotFound(sub.to_string()))?;
 
         info!("Requested credential data: {:#?}", credential.signed);
 
         let signed_credential = credential
             .signed
-            .ok_or(DataAccessServiceError::CredentialNotFound(credential_id.to_string()))?;
+            .ok_or(DataAccessServiceError::CredentialNotFound(sub.to_string()))?;
         // TODO: perhaps use the credential.data.raw field here instead of get_unverified_jwt_claims as this only works with jwt, not sd-jwt I believe. But I'm not sure if the jwt claims are added to data.raw
         let credential_claims = get_unverified_jwt_claims(&signed_credential).ok_or(
             DataAccessServiceError::InvalidRequestedCredentialError("Failed to get credential JWT claims".to_string()),
@@ -159,7 +151,7 @@ impl DataAccessService {
         let dact_did = dact_kid.split('#').next().unwrap_or(&dact_kid);
 
         if dact_did != credential_subject_id {
-            return Err(DataAccessServiceError::DACTError(
+            return Err(DataAccessServiceError::InvalidDACTError(
                 "Invalid Data Access Consent Token: issuer does not match requested credential subject".to_string(),
             ));
         }
@@ -167,7 +159,7 @@ impl DataAccessService {
         // Validate the status of the requested credential
         if credential.credential_status.status != StatusType::VALID {
             return Err(DataAccessServiceError::InvalidRequestedCredentialError(format!(
-                "Credential with id {credential_id} is not valid according to its credential status"
+                "Credential with id {sub} is not valid according to its credential status"
             )));
         }
 
@@ -181,6 +173,8 @@ impl DataAccessService {
                     "Failed to convert signed credential to string".to_string(),
                 ))?;
 
+        info!("Successfully resolved Data Access Consent Token, returning requested credential");
+
         Ok(signed_credential_str)
     }
 }
@@ -193,11 +187,8 @@ pub enum DataAccessServiceError {
     DidResolutionError(String),
     #[error("Invalid internal Requested Credential: {0}")]
     InvalidRequestedCredentialError(String),
-    #[error("Data Access Consent Token error: {0}")]
-    DACTError(String),
+    #[error("Invalid Data Access Consent Token: {0}")]
+    InvalidDACTError(String),
     #[error("Query error: {0}")]
     QueryError(String),
-    // TODO: This error probably is obsolete since validation errors are now handled by the `public_verification_response`.
-    #[error("Validation error: {0}")]
-    ValidationError(String),
 }
