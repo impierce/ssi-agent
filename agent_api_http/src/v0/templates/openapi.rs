@@ -12,4 +12,4 @@ use utoipa::OpenApi;
         (name = "Templates", description = "Create and manage templates which provide the structure for credentials to be issued.")
     )
 )]
-pub(crate) struct TemplatesApi;
+pub struct TemplatesApi;

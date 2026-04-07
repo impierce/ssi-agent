@@ -11,4 +11,4 @@ use utoipa::OpenApi;
         (name = "Connections", description = "Manage trusted connections."),
     )
 )]
-pub(crate) struct ConnectionsApi;
+pub struct ConnectionsApi;

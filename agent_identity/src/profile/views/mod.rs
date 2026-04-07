@@ -12,18 +12,24 @@ impl View<Profile> for Profile {
             ProfileCreated {
                 profile_id,
                 display_name,
+                description,
                 logo,
                 country,
                 source,
             } => {
                 self.profile_id.clone_from(profile_id);
                 self.display_name.clone_from(display_name);
+                self.description.clone_from(description);
                 self.logo.clone_from(logo);
                 self.country.clone_from(country);
                 self.source.clone_from(source);
             }
             DisplayNameUpdated { display_name, source } => {
                 self.display_name.replace(display_name.clone());
+                self.source.clone_from(source);
+            }
+            DescriptionUpdated { description, source } => {
+                self.description.clone_from(description);
                 self.source.clone_from(source);
             }
             LogoUpdated { logo, source } => {

@@ -1,5 +1,6 @@
 pub mod application_state;
 pub mod config;
+pub mod credential_status_checker;
 pub mod custom_queries;
 pub mod error;
 pub mod generic_query;

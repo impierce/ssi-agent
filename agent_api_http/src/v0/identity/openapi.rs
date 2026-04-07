@@ -10,4 +10,4 @@ use utoipa::OpenApi;
         (name = "Profile", description = "Manage your organisational profile."),
     )
 )]
-pub(crate) struct IdentityApi;
+pub struct IdentityApi;
