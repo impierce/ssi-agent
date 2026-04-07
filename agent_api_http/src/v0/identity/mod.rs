@@ -6,6 +6,7 @@ pub mod services;
 pub mod well_known;
 
 pub mod error;
+pub mod openapi;
 
 use agent_identity::state::IdentityState;
 use axum::{

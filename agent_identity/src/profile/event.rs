@@ -10,12 +10,17 @@ pub enum ProfileEvent {
     ProfileCreated {
         profile_id: String,
         display_name: Option<String>,
+        description: Option<String>,
         logo: Option<Logo>,
         country: Option<String>,
         source: Source,
     },
     DisplayNameUpdated {
         display_name: String,
+        source: Source,
+    },
+    DescriptionUpdated {
+        description: Option<String>,
         source: Source,
     },
     LogoUpdated {

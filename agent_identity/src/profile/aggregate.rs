@@ -9,7 +9,7 @@ use crate::services::IdentityServices;
 
 use super::{command::ProfileCommand, error::ProfileError, event::ProfileEvent};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
 pub enum Source {
     Provisioned,
     Default,
@@ -23,6 +23,7 @@ pub struct Profile {
     #[serde(rename = "id")]
     pub profile_id: String,
     pub display_name: Option<String>,
+    pub description: Option<String>,
     pub logo: Option<Logo>,
     pub country: Option<String>,
     pub source: Source,
@@ -53,6 +54,7 @@ impl Aggregate for Profile {
             CreateProfile {
                 profile_id,
                 display_name,
+                description,
                 logo,
                 country,
                 source,
@@ -66,6 +68,7 @@ impl Aggregate for Profile {
                 Ok(vec![ProfileCreated {
                     profile_id,
                     display_name,
+                    description,
                     logo,
                     country,
                     source,
@@ -79,6 +82,15 @@ impl Aggregate for Profile {
                 }
 
                 Ok(vec![ProfileEvent::DisplayNameUpdated { display_name, source }])
+            }
+            UpdateDescription { description, source } => {
+                debug!("Updating description: {:?}", description);
+
+                if source == Source::Runtime && self.source == Source::Provisioned {
+                    return Err(ProfileError::ConfigurationConflict);
+                }
+
+                Ok(vec![ProfileEvent::DescriptionUpdated { description, source }])
             }
             UpdateLogo { logo, source } => {
                 debug!("Updating logo: {:?}", logo);
@@ -115,18 +127,24 @@ impl Aggregate for Profile {
             ProfileCreated {
                 profile_id,
                 display_name,
+                description,
                 logo,
                 country,
                 source,
             } => {
                 self.profile_id = profile_id;
                 self.display_name = display_name;
+                self.description = description;
                 self.logo = logo;
                 self.country = country;
                 self.source = source;
             }
             DisplayNameUpdated { display_name, source } => {
                 self.display_name.replace(display_name);
+                self.source = source;
+            }
+            DescriptionUpdated { description, source } => {
+                self.description = description;
                 self.source = source;
             }
             LogoUpdated { logo, source } => {

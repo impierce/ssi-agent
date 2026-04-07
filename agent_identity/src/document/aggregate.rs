@@ -1,4 +1,5 @@
 use super::{command::DocumentCommand, error::DocumentError, event::DocumentEvent};
+use crate::document::openapi::{algorithm, core_document};
 use crate::services::IdentityServices;
 use agent_secret_manager::subject::StorageKey;
 use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported};
@@ -37,8 +38,9 @@ use url::Url;
 const MIN_GAS_BUDGET: u64 = 50_000_000;
 
 /// Metadata for IOTA-based DID Documents.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
 pub struct IotaMetadata {
+    #[schema(value_type = String, example = "0x1234567890")]
     pub wallet_address: IotaAddress,
     pub is_funded: bool,
     pub balance: u64,
@@ -49,7 +51,7 @@ pub struct IotaMetadata {
     pub updated_at: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
 pub enum Status {
     SignAndValidate,
     // TODO: Make a distinction between enabling both signing AND validation and just validation.
@@ -58,14 +60,16 @@ pub enum Status {
     Disabled,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 pub struct Document {
     #[serde(rename = "id")]
     pub document_id: String,
+    #[schema(schema_with = core_document)]
     pub document: Option<CoreDocument>,
     pub did_method: Option<SupportedDidMethod>,
     // Applicable only for DID documents whose methods mandate a fixed verification algorithm,
     // such as `did:key` and `did:jwk`.
+    #[schema(schema_with = algorithm)]
     pub with_fixed_algorithm: Option<Algorithm>,
     // Applicable only for DID methods that are based on the IOTA ledger.
     pub iota_metadata: Option<IotaMetadata>,

@@ -6,7 +6,7 @@ MongoDB-backed implementation of the shared-kernel persistence factories.
 
 Provides `CommandHandlerFactory` and `ViewRepositoryFactory` implementations using:
 
-- **mongo-es** — MongoDB event store and view repository
+- [**mongo-es**](https://crates.io/crates/mongo-es) — MongoDB event store and view repository
 - **CqrsFramework** — Event sourcing and command handling
 
 ## Usage
@@ -26,4 +26,4 @@ let repo = store.create_view_repository::<MyView, MyAggregate>("my-view-collecti
 
 ## Configuration
 
-Configure MongoDB connection string via environment variable or configuration file.
+Configure MongoDB connection string via environment variable or configuration file. For detailed configuration options, refer to the [### Event store](../../../docs/configuration/CONFIGURATION.md#event-store) section in the main CONFIGURATION.md documentation.

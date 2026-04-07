@@ -31,6 +31,10 @@ pub use provisioned::load_provisioned_config;
 
 pub const BITS_PER_STATUS: u8 = 2; // Amount of bits per status
 pub const STATUS_LIST_BYTES_AMOUNT: usize = 2048; // Amount of bytes in the status list. Equates to 8192 statuses for BITS_PER_STATUS = 2.
+#[cfg(feature = "test_utils")]
+pub const TESTINDEX: usize = 123;
+#[cfg(feature = "test_utils")]
+pub const TEST_STATUS_LIST_ID: &str = "0";
 
 static STRONGHOLD_PATH: &str = "./stronghold.dat";
 
@@ -277,6 +281,7 @@ pub struct ApplicationConfiguration {
             Display {
                 name: "UniCore".to_string(),
                 locale: Some("en".to_string()),
+                description: None,
                 logo: Some(Logo {
                     uri: Some(Url::parse("https://www.impierce.com/external/impierce-icon.png").unwrap()),
                     alt_text: Some("Impierce Icon".to_string()),
@@ -542,7 +547,7 @@ impl Default for Authorization {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, utoipa::ToSchema)]
 pub struct Logo {
     pub uri: Option<Url>,
     pub alt_text: Option<String>,
@@ -552,6 +557,7 @@ pub struct Logo {
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Display {
     pub name: String,
+    pub description: Option<String>,
     pub locale: Option<String>,
     pub logo: Option<Logo>,
     pub country: Option<String>,
@@ -617,6 +623,8 @@ pub struct Events {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub nonce: Vec<NonceEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub status_list: Vec<StatusListEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub holder_credential: Vec<HolderCredentialEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub presentation: Vec<PresentationEvent>,
@@ -668,6 +676,7 @@ pub enum DocumentEvent {
 pub enum ProfileEvent {
     ProfileCreated,
     DisplayNameUpdated,
+    DescriptionUpdated,
     LogoUpdated,
     CountryUpdated,
     SourceUpdated,
@@ -720,6 +729,13 @@ pub enum OfferEvent {
     CredentialResponseCreated,
     TxCodeGenerated,
     CredentialOfferEmailSent,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum StatusListEvent {
+    StatusListCreated,
+    IndexAdded,
+    IndexUpdated,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -795,7 +811,9 @@ impl Default for Metrics {
     Ord,
     PartialOrd,
     VariantArray,
+    utoipa::ToSchema,
 )]
+#[schema(description = "DID methods supported by UniCore")]
 pub enum SupportedDidMethod {
     #[serde(alias = "did_jwk", alias = "did:jwk", rename = "did_jwk")]
     #[strum(serialize = "did:jwk")]

@@ -18,7 +18,6 @@ pub enum CredentialEvent {
         data: Data,
         notification_id: Option<String>,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
-        credential_status: CredentialStatus,
         created_at: Option<DateTime<Utc>>,
         expires_at: Option<DateTime<Utc>>,
     },
@@ -30,6 +29,7 @@ pub enum CredentialEvent {
     CredentialSigned {
         credential_id: String,
         signed_credential: serde_json::Value,
+        credential_status: CredentialStatus,
         status: Status,
     },
     NotificationReceived {
