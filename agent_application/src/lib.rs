@@ -202,15 +202,17 @@ pub fn router(application_state: ApplicationState) -> axum::Router {
         startup_instant: std::time::Instant::now(),
     };
 
+    // Add metadata routes
     let metadata_router = axum::Router::new()
         .route("/version", axum::routing::get(metadata::version::version))
         .route("/info", axum::routing::get(metadata::info::info))
         .route("/v0/configuration", axum::routing::get(metadata::config::configuration))
         .with_state(metadata_state);
 
-    let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
-
     let app = metadata_router.merge(app);
+
+    // Add probes routes
+    let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
     let mut app = probes_router.merge(app);
 
     if config().metrics.enabled {
