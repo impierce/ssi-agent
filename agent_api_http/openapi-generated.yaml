@@ -262,6 +262,67 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/OfferView'
+  /v0/holder/offers/{offer_id}/accept:
+    post:
+      tags:
+      - Identity
+      - Holder
+      summary: Accept a credential offer
+      description: Accepts a credential offered to your organization by its ID.
+      operationId: accept_credential_offer
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '201':
+          description: Credential offer accepted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferView'
+  /v0/holder/offers/{offer_id}/reject:
+    post:
+      tags:
+      - Identity
+      - Holder
+      summary: Rejects a credential offer
+      description: Rejects a credential offered to your organization by its ID.
+      operationId: reject_credential_offer
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Credential offer rejected successfully
+  /v0/holder/offers/{received_offer_id}:
+    get:
+      tags:
+      - Identity
+      - Holder
+      summary: Get offer by ID
+      description: Retrieves an offer received by your organisation by its ID.
+      operationId: get_holder_offer_by_id
+      parameters:
+      - name: received_offer_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Offer retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferView'
+        '404':
+          description: Offer not found
   /v0/profile:
     get:
       tags:
@@ -1150,12 +1211,12 @@ components:
       - private
       - public
 tags:
-- name: Connections
-  description: Manage trusted connections.
 - name: Identity
   description: Manage all aspects of your organisational identity.
 - name: Holder
   description: Manage the credentials your organisation holds itself.
+- name: Connections
+  description: Manage trusted connections.
 - name: Profile
   description: Manage your organisational profile.
 - name: Issuance

@@ -39,6 +39,19 @@ pub(crate) async fn offers(State(state): State<Arc<HolderState>>) -> Result<Resp
     Ok((StatusCode::OK, Json(all_received_offers)).into_response())
 }
 
+/// Get offer by ID
+///
+/// Retrieves an offer received by your organisation by its ID.
+#[utoipa::path(
+    get,
+    path = "/holder/offers/{received_offer_id}",
+    operation_id = "get_holder_offer_by_id",
+    tags = ["Identity", "Holder"],
+    responses(
+        (status = 200, description = "Offer retrieved successfully", body = Offer),
+        (status = 404, description = "Offer not found"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn offer(
     State(state): State<Arc<HolderState>>,
