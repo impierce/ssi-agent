@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 
@@ -55,12 +56,12 @@ pub struct QueryEnvelope<AC: ApplicationContext> {
     pub reply: oneshot::Sender<Result<AC::View, AC::QueryError>>,
 }
 
-/// An actor-style application service that serialises access to an [`ApplicationContext`].
+/// An actor-style application service that drives an [`ApplicationContext`].
 ///
-/// The service owns the context and processes commands and queries sequentially via
-/// two `mpsc` channels. This guarantees single-threaded access to the context without
-/// requiring interior mutability, while still allowing the presentation layer to send
-/// messages concurrently through cloneable channel senders.
+/// The service wraps the context in an `Arc` and processes commands and queries by
+/// spawning each into its own Tokio task. This allows long-running operations
+/// (e.g. outbound HTTP calls in domain services) to proceed without blocking the
+/// service from accepting new messages.
 ///
 /// # Lifecycle
 ///
@@ -86,7 +87,7 @@ pub struct QueryEnvelope<AC: ApplicationContext> {
 /// let result = reply_rx.await?;
 /// ```
 pub struct ApplicationService<AC: ApplicationContext> {
-    context: AC,
+    context: Arc<AC>,
     command_rx: mpsc::Receiver<CommandEnvelope<AC>>,
     query_rx: mpsc::Receiver<QueryEnvelope<AC>>,
 }
@@ -98,7 +99,7 @@ impl<AC: ApplicationContext> ApplicationService<AC> {
         query_rx: mpsc::Receiver<QueryEnvelope<AC>>,
     ) -> Self {
         Self {
-            context,
+            context: Arc::new(context),
             command_rx,
             query_rx,
         }
@@ -106,18 +107,25 @@ impl<AC: ApplicationContext> ApplicationService<AC> {
 
     /// Run the message loop, processing commands and queries until all senders are dropped.
     ///
-    /// Uses `tokio::select!` to multiplex both channels on a single task, ensuring the
-    /// context is never accessed concurrently.
+    /// Uses `tokio::select!` to receive from both channels. Each message is spawned into
+    /// its own task so that long-running commands (e.g. those making outbound HTTP calls)
+    /// do not block the service from processing other messages.
     pub async fn start(mut self) {
         info!("ApplicationService started, listening for commands and queries");
 
         loop {
             tokio::select! {
                 Some(msg) = self.command_rx.recv() => {
-                    self.process_command(msg).await;
+                    let context = Arc::clone(&self.context);
+                    tokio::spawn(async move {
+                        process_command(context.as_ref(), msg).await;
+                    });
                 }
                 Some(msg) = self.query_rx.recv() => {
-                    self.process_query(msg).await;
+                    let context = Arc::clone(&self.context);
+                    tokio::spawn(async move {
+                        process_query(context.as_ref(), msg).await;
+                    });
                 }
                 // Both channels are closed — all senders have been dropped.
                 else => {
@@ -127,35 +135,35 @@ impl<AC: ApplicationContext> ApplicationService<AC> {
             }
         }
     }
+}
 
-    async fn process_command(&mut self, msg: CommandEnvelope<AC>) {
-        debug!(aggregate_id = %msg.aggregate_id, "Processing command");
+async fn process_command<AC: ApplicationContext>(context: &AC, msg: CommandEnvelope<AC>) {
+    debug!(aggregate_id = %msg.aggregate_id, "Processing command");
 
-        let result = self.context.handle_command(&msg.aggregate_id, msg.command).await;
+    let result = context.handle_command(&msg.aggregate_id, msg.command).await;
 
-        match &result {
-            Ok(id) => info!(aggregate_id = %id, "Command executed successfully"),
-            Err(e) => error!(aggregate_id = %msg.aggregate_id, error = %e, "Command execution failed"),
-        }
-
-        if msg.reply.send(result).is_err() {
-            warn!(aggregate_id = %msg.aggregate_id, "Reply channel dropped before command result could be sent");
-        }
+    match &result {
+        Ok(id) => info!(aggregate_id = %id, "Command executed successfully"),
+        Err(e) => error!(aggregate_id = %msg.aggregate_id, error = %e, "Command execution failed"),
     }
 
-    async fn process_query(&mut self, msg: QueryEnvelope<AC>) {
-        debug!("Processing query");
+    if msg.reply.send(result).is_err() {
+        warn!(aggregate_id = %msg.aggregate_id, "Reply channel dropped before command result could be sent");
+    }
+}
 
-        let result = self.context.handle_query(msg.query).await;
+async fn process_query<AC: ApplicationContext>(context: &AC, msg: QueryEnvelope<AC>) {
+    debug!("Processing query");
 
-        match &result {
-            Ok(_) => debug!("Query executed successfully"),
-            Err(e) => error!(error = %e, "Query execution failed"),
-        }
+    let result = context.handle_query(msg.query).await;
 
-        if msg.reply.send(result).is_err() {
-            warn!("Reply channel dropped before query result could be sent");
-        }
+    match &result {
+        Ok(_) => debug!("Query executed successfully"),
+        Err(e) => error!(error = %e, "Query execution failed"),
+    }
+
+    if msg.reply.send(result).is_err() {
+        warn!("Reply channel dropped before query result could be sent");
     }
 }
 
