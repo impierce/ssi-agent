@@ -1,5 +1,8 @@
 use crate::handlers::{command_handler, query_handler};
-use agent_holder::{credential::command::CredentialCommand, state::HolderState};
+use agent_holder::{
+    credential::{aggregate::Credential, command::CredentialCommand},
+    state::HolderState,
+};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
@@ -11,6 +14,18 @@ use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+/// List all credentials
+///
+/// Retrieves all credentials held by your organisation.
+#[utoipa::path(
+    get,
+    path = "/holder/credentials",
+    operation_id = "get_all_holder_credentials",
+    tags = ["Identity", "Holder"],
+    responses(
+        (status = 200, description = "All credentials retrieved successfully", body = [Credential]),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(State(state): State<Arc<HolderState>>) -> Result<Response, ApiError> {
     let all_credentials = query_handler("all_holder_credentials", &state.query.all_holder_credentials)
@@ -49,6 +64,19 @@ pub(crate) async fn post_credentials(
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
+/// Get credential by ID
+///
+/// Retrieves a credential held by your organisation by its ID.
+#[utoipa::path(
+    get,
+    path = "/holder/credentials/{holder_credential_id}",
+    operation_id = "get_holder_credential_by_id",
+    tags = ["Identity", "Holder"],
+    responses(
+        (status = 200, description = "Credential retrieved successfully", body = Credential),
+        (status = 404, description = "Credential not found"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<HolderState>>,

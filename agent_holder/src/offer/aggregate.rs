@@ -15,7 +15,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
+#[schema(as = OfferStatus)]
 pub enum Status {
     #[default]
     Pending,
@@ -24,19 +25,24 @@ pub enum Status {
     Rejected,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct OfferCredential {
     pub holder_credential_id: String,
+    #[schema(value_type = String)]
     pub credential: Jwt,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
+#[schema(as = OfferView)]
 pub struct Offer {
     #[serde(rename = "id")]
     pub received_offer_id: String,
+    #[schema(value_type = Option<Object>)]
     pub credential_offer: Option<CredentialOfferParameters>,
     pub status: Status,
+    #[schema(value_type = Option<Object>)]
     pub credential_configurations: Option<HashMap<String, CredentialConfigurationsSupportedObject>>,
+    #[schema(value_type = Option<Object>)]
     pub token_response: Option<TokenResponse>,
     // TODO: These should not be part of this Aggregate. Instead, an Event Subscriber should be listening to the
     // `CredentialResponseReceived` event and then trigger the `CredentialCommand::AddCredential` command. We can do

@@ -2,7 +2,7 @@ pub mod accept;
 pub mod reject;
 
 use crate::handlers::query_handler;
-use agent_holder::state::HolderState;
+use agent_holder::{offer::aggregate::Offer, state::HolderState};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
@@ -12,6 +12,18 @@ use http_api_problem::ApiError;
 use hyper::StatusCode;
 use std::sync::Arc;
 
+/// List all offers
+///
+/// Retrieves all offers received by your organisation.
+#[utoipa::path(
+    get,
+    path = "/holder/offers",
+    operation_id = "get_all_holder_credential_offers",
+    tags = ["Identity", "Holder"],
+    responses(
+        (status = 200, description = "All offers retrieved successfully", body = [Offer]),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(State(state): State<Arc<HolderState>>) -> Result<Response, ApiError> {
     let all_received_offers = query_handler("all_received_offers", &state.query.all_received_offers)
