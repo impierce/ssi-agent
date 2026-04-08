@@ -1,11 +1,8 @@
 mod metadata;
 mod probes;
 
-use agent_api_http::{
-    app,
-    metrics::{metrics, track_metrics},
-    ApplicationState,
-};
+pub use agent_api_http::metrics::metrics;
+use agent_api_http::{app, metrics::track_metrics, ApplicationState};
 use agent_authorization::services::AuthorizationServices;
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_event_publisher_nats::EventPublisherNats;
@@ -238,7 +235,7 @@ async fn serve(app: axum::Router) -> io::Result<()> {
 }
 
 /// Start a server for a given `Router` on a given port.
-async fn start_server(alias: String, router: axum::Router, port: u16) {
+pub async fn start_server(alias: String, router: axum::Router, port: u16) {
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await.unwrap();
     // Log the URL defined in the config for the HTTP API
     if alias == "HTTP API" {
