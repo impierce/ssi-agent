@@ -74,7 +74,7 @@ lazy_static = "1.4"
 mime = { version = "0.3" }
 oauth_tsl = { git = "https://github.com/impierce/oauth-token-status-list", rev = "0aa0228" }
 once_cell = { version = "1.19" }
-product_common = { git = "https://github.com/iotaledger/product-core", tag = "v0.8.11", package = "product_common", features = [
+product_common = { git = "https://github.com/iotaledger/product-core", tag = "v0.8.14", package = "product_common", features = [
     "gas-station",
     "default-http-client",
 ] }
