@@ -52,6 +52,7 @@ pub struct IotaMetadata {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
+#[schema(as = DocumentStatus)]
 pub enum Status {
     SignAndValidate,
     // TODO: Make a distinction between enabling both signing AND validation and just validation.

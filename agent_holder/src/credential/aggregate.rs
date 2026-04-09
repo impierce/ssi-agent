@@ -12,16 +12,18 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
 pub struct Data {
     pub raw: serde_json::Value,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
+#[schema(as = CredentialView)]
 pub struct Credential {
     #[serde(rename = "id")]
     pub holder_credential_id: String,
     pub received_offer_id: Option<String>,
+    #[schema(value_type = Option<String>)]
     pub signed: Option<Jwt>,
     pub data: Option<Data>,
 }

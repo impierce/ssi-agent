@@ -11,6 +11,7 @@ use utoipa::OpenApi;
         (url = "http://localhost:3033", description = "Local development")
     ),
     nest(
+        (path = "/v0", api = crate::v0::holder::openapi::HolderApi),
         (path = "/v0", api = crate::v0::identity::connections::openapi::ConnectionsApi),
         (path = "/v0", api = crate::v0::identity::openapi::IdentityApi),
         (path = "/v0", api = crate::v0::issuance::openapi::IssuanceApi),
