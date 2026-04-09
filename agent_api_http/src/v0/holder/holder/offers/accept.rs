@@ -26,7 +26,8 @@ use std::sync::Arc;
     operation_id = "accept_credential_offer",
     tags = ["Identity", "Holder"],
     responses(
-        (status = 201, description = "Credential offer accepted successfully", body = Offer)
+        (status = 201, description = "Credential offer accepted successfully", body = Offer),
+        (status = 404, description = "Credential offer not found"),
     )
 )]
 #[axum_macros::debug_handler]

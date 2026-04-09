@@ -283,6 +283,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OfferView'
+        '404':
+          description: Credential offer not found
   /v0/holder/offers/{offer_id}/reject:
     post:
       tags:
