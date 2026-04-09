@@ -37,11 +37,14 @@ pub struct OfferCredential {
 pub struct Offer {
     #[serde(rename = "id")]
     pub received_offer_id: String,
+    // TODO: provide full type
     #[schema(value_type = Option<Object>)]
     pub credential_offer: Option<CredentialOfferParameters>,
     pub status: Status,
+    // TODO: provide full type
     #[schema(value_type = Option<Object>)]
     pub credential_configurations: Option<HashMap<String, CredentialConfigurationsSupportedObject>>,
+    // TODO: provide full type
     #[schema(value_type = Option<Object>)]
     pub token_response: Option<TokenResponse>,
     // TODO: These should not be part of this Aggregate. Instead, an Event Subscriber should be listening to the
