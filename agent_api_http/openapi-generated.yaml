@@ -205,6 +205,126 @@ paths:
                 $ref: '#/components/schemas/Document'
         '404':
           description: Document not found
+  /v0/holder/credentials:
+    get:
+      tags:
+      - Identity
+      - Holder
+      summary: List all credentials
+      description: Retrieves all credentials held by your organisation.
+      operationId: get_all_holder_credentials
+      responses:
+        '200':
+          description: All credentials retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CredentialView'
+  /v0/holder/credentials/{holder_credential_id}:
+    get:
+      tags:
+      - Identity
+      - Holder
+      summary: Get credential by ID
+      description: Retrieves a credential held by your organisation by its ID.
+      operationId: get_holder_credential_by_id
+      parameters:
+      - name: holder_credential_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Credential retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialView'
+        '404':
+          description: Credential not found
+  /v0/holder/offers:
+    get:
+      tags:
+      - Identity
+      - Holder
+      summary: List all offers
+      description: Retrieves all offers received by your organisation.
+      operationId: get_all_holder_credential_offers
+      responses:
+        '200':
+          description: All offers retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfferView'
+  /v0/holder/offers/{offer_id}/accept:
+    post:
+      tags:
+      - Identity
+      - Holder
+      summary: Accept a credential offer
+      description: Accepts a credential offered to your organization by its ID.
+      operationId: accept_credential_offer
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '201':
+          description: Credential offer accepted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferView'
+        '404':
+          description: Credential offer not found
+  /v0/holder/offers/{offer_id}/reject:
+    post:
+      tags:
+      - Identity
+      - Holder
+      summary: Rejects a credential offer
+      description: Rejects a credential offered to your organization by its ID.
+      operationId: reject_credential_offer
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Credential offer rejected successfully
+  /v0/holder/offers/{received_offer_id}:
+    get:
+      tags:
+      - Identity
+      - Holder
+      summary: Get offer by ID
+      description: Retrieves an offer received by your organisation by its ID.
+      operationId: get_holder_offer_by_id
+      parameters:
+      - name: received_offer_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Offer retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferView'
+        '404':
+          description: Offer not found
   /v0/profile:
     get:
       tags:
@@ -623,6 +743,25 @@ components:
           - UNDEFINED
         status_list_url:
           type: string
+    CredentialView:
+      type: object
+      required:
+      - id
+      properties:
+        data:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Data'
+        id:
+          type: string
+        received_offer_id:
+          type:
+          - string
+          - 'null'
+        signed:
+          type:
+          - string
+          - 'null'
     Data:
       type: object
       required:
@@ -673,12 +812,17 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/IotaMetadata'
         status:
-          $ref: '#/components/schemas/Status'
+          $ref: '#/components/schemas/DocumentStatus'
         with_fixed_algorithm:
           type: string
           enum:
           - ES256
           - EdDSA
+    DocumentStatus:
+      type: string
+      enum:
+      - SignAndValidate
+      - Disabled
     DomainLinkageValidation:
       type: object
       required:
@@ -783,6 +927,50 @@ components:
           - string
           - 'null'
           format: uri
+    OfferCredential:
+      type: object
+      required:
+      - holder_credential_id
+      - credential
+      properties:
+        credential:
+          type: string
+        holder_credential_id:
+          type: string
+    OfferStatus:
+      type: string
+      enum:
+      - Pending
+      - Accepted
+      - CredentialsReceived
+      - Rejected
+    OfferView:
+      type: object
+      required:
+      - id
+      - status
+      - credentials
+      properties:
+        credential_configurations:
+          type:
+          - object
+          - 'null'
+        credential_offer:
+          type:
+          - object
+          - 'null'
+        credentials:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfferCredential'
+        id:
+          type: string
+        status:
+          $ref: '#/components/schemas/OfferStatus'
+        token_response:
+          type:
+          - object
+          - 'null'
     PatchProfileEndpointRequest:
       type: object
       properties:
@@ -852,11 +1040,6 @@ components:
       - Default
       - Runtime
       - None
-    Status:
-      type: string
-      enum:
-      - SignAndValidate
-      - Disabled
     SupportedDidMethod:
       type: string
       description: DID methods supported by UniCore
@@ -1030,10 +1213,12 @@ components:
       - private
       - public
 tags:
-- name: Connections
-  description: Manage trusted connections.
 - name: Identity
   description: Manage all aspects of your organisational identity.
+- name: Holder
+  description: Manage the credentials your organisation holds itself.
+- name: Connections
+  description: Manage trusted connections.
 - name: Profile
   description: Manage your organisational profile.
 - name: Issuance

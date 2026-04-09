@@ -1,7 +1,11 @@
 use crate::handlers::{command_handler, query_handler};
 use agent_holder::{
     credential::command::CredentialCommand,
-    offer::{aggregate::OfferCredential, command::OfferCommand, queries::ReceivedOfferView},
+    offer::{
+        aggregate::{Offer, OfferCredential},
+        command::OfferCommand,
+        queries::ReceivedOfferView,
+    },
     state::HolderState,
 };
 use axum::{
@@ -13,6 +17,19 @@ use http_api_problem::ApiError;
 use hyper::StatusCode;
 use std::sync::Arc;
 
+/// Accept a credential offer
+///
+/// Accepts a credential offered to your organization by its ID.
+#[utoipa::path(
+    post,
+    path = "/holder/offers/{offer_id}/accept",
+    operation_id = "accept_credential_offer",
+    tags = ["Identity", "Holder"],
+    responses(
+        (status = 201, description = "Credential offer accepted successfully", body = Offer),
+        (status = 404, description = "Credential offer not found"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn accept(
     State(state): State<Arc<HolderState>>,
