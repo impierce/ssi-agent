@@ -15,13 +15,13 @@ use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParam
 use jsonwebtoken::Algorithm;
 use oid4vc_core::verification_material_resolver::VerificationMaterialResolver;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
-use sd_jwt::{JsonObject, JwsSigner};
+pub use sd_jwt::{JsonObject, JwsSigner};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-/// Reponsible for signing and verifying data.
+/// Responsible for signing and verifying data.
 #[derive(Debug)]
 pub struct Subject {
     pub stronghold_storage: StrongholdExtStorage,
@@ -58,7 +58,7 @@ impl Subject {
         match algorithm {
             Algorithm::EdDSA => self.stronghold_storage.get_ed25519_public_key(&key_id).await,
             Algorithm::ES256 => self.stronghold_storage.get_es256_public_key(&key_id).await,
-            _ => anyhow::bail!("Unsuported algorithm"),
+            _ => anyhow::bail!("Unsupported algorithm"),
         }
         .map_err(Into::into)
     }

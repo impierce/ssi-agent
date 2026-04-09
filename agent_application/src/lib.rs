@@ -1,11 +1,8 @@
 mod metadata;
 mod probes;
 
-use agent_api_http::{
-    app,
-    metrics::{metrics, track_metrics},
-    ApplicationState,
-};
+pub use agent_api_http::metrics::metrics;
+use agent_api_http::{app, metrics::track_metrics, ApplicationState};
 use agent_authorization::services::AuthorizationServices;
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_event_publisher_nats::EventPublisherNats;
@@ -26,6 +23,12 @@ use tower_http::cors::CorsLayer;
 use tracing::info;
 
 pub async fn run() -> io::Result<()> {
+    let state = state().await?;
+
+    serve(app(state)).await
+}
+
+pub async fn state() -> io::Result<ApplicationState> {
     let subject = Arc::new(Subject::new().await);
 
     let identity_services = Arc::new(IdentityServices::new(subject.clone()));
@@ -178,14 +181,19 @@ pub async fn run() -> io::Result<()> {
     agent_identity::state::initialize(&identity_state).await.unwrap();
     agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-    let app = app(ApplicationState {
+    Ok(ApplicationState {
         identity_state: Some(identity_state),
         library_state: Some(library_state),
         authorization_state: Some(authorization_state),
         issuance_state: Some(issuance_state),
         holder_state: Some(holder_state),
         verification_state: Some(verification_state),
-    });
+    })
+}
+
+/// Builds the full core SSI agent Router (app + metadata + probes).
+pub fn router(application_state: ApplicationState) -> axum::Router {
+    let app = app(application_state);
 
     let metadata_state = metadata::MetadataState {
         startup_instant: std::time::Instant::now(),
@@ -208,6 +216,10 @@ pub async fn run() -> io::Result<()> {
         app = app.route_layer(axum::middleware::from_fn(track_metrics));
     }
 
+    app
+}
+
+async fn serve(app: axum::Router) -> io::Result<()> {
     let port = config().application_url.port().unwrap_or(3033);
 
     let app_handle = tokio::spawn(start_server("HTTP API".to_string(), app, port));
@@ -223,7 +235,7 @@ pub async fn run() -> io::Result<()> {
 }
 
 /// Start a server for a given `Router` on a given port.
-async fn start_server(alias: String, router: axum::Router, port: u16) {
+pub async fn start_server(alias: String, router: axum::Router, port: u16) {
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await.unwrap();
     // Log the URL defined in the config for the HTTP API
     if alias == "HTTP API" {

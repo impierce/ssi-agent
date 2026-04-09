@@ -3087,6 +3087,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "deunicode"
+version = "1.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "abd57806937c9cc163efc8ea3910e00a62e2aeb0b8119f1793a978088f8f6b04"
+
+[[package]]
 name = "did-jwk"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11396,6 +11402,7 @@ dependencies = [
  "convert_case 0.11.0",
  "cqrs-es 0.5.0",
  "serde",
+ "slug",
  "strum 0.28.0",
  "thiserror 1.0.69",
  "tokio",
@@ -11555,6 +11562,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4be0ff28bf14f9610a342169084e87a4f435ad798ec528dc7579a3678fa9dc9a"
 dependencies = [
  "hmac-sha512",
+]
+
+[[package]]
+name = "slug"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "882a80f72ee45de3cc9a5afeb2da0331d58df69e4e7d8eeb5d3c7784ae67e724"
+dependencies = [
+ "deunicode",
+ "wasm-bindgen",
 ]
 
 [[package]]
