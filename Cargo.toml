@@ -69,6 +69,7 @@ iota-sdk-legacy = { version = "1.0", package = "iota-sdk", default-features = fa
     "client",
     "stronghold",
 ] }
+jsonschema = "0.45"
 jsonwebtoken = "9.3"
 lazy_static = "1.4"
 mime = { version = "0.3" }

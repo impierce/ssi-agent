@@ -100,7 +100,7 @@ dependencies = [
  "identity_core",
  "identity_credential",
  "identity_did",
- "jsonschema 0.43.0",
+ "jsonschema 0.45.1",
  "jsonwebtoken",
  "lazy_static",
  "metrics",
@@ -393,7 +393,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "cqrs-es 0.4.12",
- "jsonschema 0.43.0",
+ "jsonschema 0.45.1",
  "lazy_static",
  "rstest",
  "serde",
@@ -6851,9 +6851,9 @@ dependencies = [
 
 [[package]]
 name = "jsonschema"
-version = "0.43.0"
+version = "0.45.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dcfbe6df48e0121219eefc8d6a30b872ac2769c7896454bda06f7b64129fa22"
+checksum = "257eb0e588b76827bbddc9e73945a9743693dd2adeaee9da26420f93cfedb798"
 dependencies = [
  "ahash 0.8.12",
  "bytecount",
@@ -10001,9 +10001,9 @@ dependencies = [
 
 [[package]]
 name = "referencing"
-version = "0.43.0"
+version = "0.45.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37add1aa1d619a975521d262d09f100f1f767791c9386c03679450f30acd78c1"
+checksum = "e2f38748ceca8d0b0013e60f534d94a6e23dfd89fd2a88318fc5a2d04fda1010"
 dependencies = [
  "ahash 0.8.12",
  "fluent-uri",
