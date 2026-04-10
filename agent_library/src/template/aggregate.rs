@@ -316,7 +316,7 @@ impl Aggregate for Template {
                         .collect();
 
                     if pruned.len() != existing_attrs.len() {
-                        events.push(FieldAttributesUpdated {
+                        events.push(SchemaPropertiesAttributesUpdated {
                             template_id,
                             schema_properties_attributes: pruned,
                             modified_at,
@@ -326,7 +326,7 @@ impl Aggregate for Template {
 
                 Ok(events)
             }
-            UpdateFieldAttributes {
+            UpdateSchemaPropertiesAttributes {
                 template_id,
                 schema_properties_attributes,
             } => {
@@ -337,7 +337,7 @@ impl Aggregate for Template {
                 #[cfg(test)]
                 let modified_at = test_utils::modified_at();
 
-                Ok(vec![FieldAttributesUpdated {
+                Ok(vec![SchemaPropertiesAttributesUpdated {
                     template_id,
                     schema_properties_attributes,
                     modified_at,
@@ -474,7 +474,7 @@ impl Aggregate for Template {
                 *self.schema = Some(schema);
                 self.modified_at.replace(modified_at);
             }
-            FieldAttributesUpdated {
+            SchemaPropertiesAttributesUpdated {
                 template_id: _,
                 schema_properties_attributes,
                 modified_at,
@@ -755,7 +755,7 @@ pub mod document_tests {
                 template_id,
                 source_template_id: None,
                 title: None,
-                display: None,
+                display: Box::new(None),
                 data_model: None,
                 creator: None,
                 holder_type: None,
@@ -787,7 +787,7 @@ pub mod document_tests {
                 template_id,
                 source_template_id: None,
                 title: None,
-                display: None,
+                display: Box::new(None),
                 data_model: None,
                 creator: None,
                 holder_type: None,
@@ -825,7 +825,7 @@ pub mod document_tests {
                 template_id: template_id.clone(),
                 source_template_id: None,
                 title: None,
-                display: None,
+                display: Box::new(None),
                 data_model: None,
                 creator: None,
                 holder_type: None,
@@ -838,7 +838,7 @@ pub mod document_tests {
                 schema: Box::new(Some(schema)),
                 schema_properties_attributes: None,
             }])
-            .when(TemplateCommand::UpdateFieldAttributes {
+            .when(TemplateCommand::UpdateSchemaPropertiesAttributes {
                 template_id,
                 schema_properties_attributes: attrs,
             })
@@ -861,7 +861,7 @@ pub mod document_tests {
                 template_id: template_id.clone(),
                 source_template_id: None,
                 title: None,
-                display: None,
+                display: Box::new(None),
                 data_model: None,
                 creator: None,
                 holder_type: None,
@@ -874,7 +874,7 @@ pub mod document_tests {
                 schema: Box::new(None),
                 schema_properties_attributes: None,
             }])
-            .when(TemplateCommand::UpdateFieldAttributes {
+            .when(TemplateCommand::UpdateSchemaPropertiesAttributes {
                 template_id,
                 schema_properties_attributes: attrs,
             })
@@ -922,25 +922,23 @@ pub mod document_tests {
         );
 
         TemplateTestFramework::with(())
-            .given(vec![
-                TemplateEvent::TemplateCreated {
-                    template_id: template_id.clone(),
-                    source_template_id: None,
-                    title: None,
-                    display: None,
-                    data_model: None,
-                    creator: None,
-                    holder_type: None,
-                    modified_at: test_utils::modified_at(),
-                    tags: vec![],
-                    status: Status::Draft,
-                    visibility: Visibility::Private,
-                    description: None,
-                    r#type: vec![],
-                    schema: Box::new(Some(original_schema)),
-                    schema_properties_attributes: Some(attrs),
-                },
-            ])
+            .given(vec![TemplateEvent::TemplateCreated {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: None,
+                display: Box::new(None),
+                data_model: None,
+                creator: None,
+                holder_type: None,
+                modified_at: test_utils::modified_at(),
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(Some(original_schema)),
+                schema_properties_attributes: Some(attrs),
+            }])
             .when(TemplateCommand::UpdateSchema {
                 template_id: template_id.clone(),
                 schema: new_schema.clone(),
@@ -951,7 +949,7 @@ pub mod document_tests {
                     schema: new_schema,
                     modified_at: test_utils::modified_at(),
                 },
-                TemplateEvent::FieldAttributesUpdated {
+                TemplateEvent::SchemaPropertiesAttributesUpdated {
                     template_id,
                     schema_properties_attributes: expected_attrs,
                     modified_at: test_utils::modified_at(),
@@ -990,7 +988,7 @@ pub mod document_tests {
                 template_id: template_id.clone(),
                 source_template_id: None,
                 title: None,
-                display: None,
+                display: Box::new(None),
                 data_model: None,
                 creator: None,
                 holder_type: None,

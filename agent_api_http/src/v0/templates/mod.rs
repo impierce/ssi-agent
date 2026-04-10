@@ -383,7 +383,7 @@ pub(crate) async fn update_template(
     }
 
     if let Some(schema_properties_attributes) = schema_properties_attributes {
-        let command = TemplateCommand::UpdateFieldAttributes {
+        let command = TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id: template_id.clone(),
             schema_properties_attributes,
         };

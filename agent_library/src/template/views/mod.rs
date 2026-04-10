@@ -133,7 +133,7 @@ impl View<Template> for Template {
                 self.schema.replace(schema.clone());
                 self.modified_at.replace(modified_at.clone());
             }
-            FieldAttributesUpdated {
+            SchemaPropertiesAttributesUpdated {
                 template_id: _,
                 schema_properties_attributes,
                 modified_at,

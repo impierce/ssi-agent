@@ -66,7 +66,7 @@ pub enum TemplateCommand {
         template_id: String,
         schema: serde_json::Value,
     },
-    UpdateFieldAttributes {
+    UpdateSchemaPropertiesAttributes {
         template_id: String,
         schema_properties_attributes: HashMap<String, PropertyAttribute>,
     },

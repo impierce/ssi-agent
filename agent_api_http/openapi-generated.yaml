@@ -586,21 +586,21 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
           default: null
-        fieldAttributes:
-          type:
-          - object
-          - 'null'
-          default: null
-          additionalProperties:
-            $ref: '#/components/schemas/FieldAttributes'
-          propertyNames:
-            type: string
         holderType:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/HolderType'
           default: null
         schema: {}
+        schemaPropertiesAttributes:
+          type:
+          - object
+          - 'null'
+          default: null
+          additionalProperties:
+            $ref: '#/components/schemas/PropertyAttribute'
+          propertyNames:
+            type: string
         status:
           oneOf:
           - $ref: '#/components/schemas/TemplateStatus'
@@ -850,13 +850,6 @@ components:
       properties:
         sourceTemplateId:
           type: string
-    FieldAttributes:
-      type: object
-      required:
-      - selectivelyDisclosable
-      properties:
-        selectivelyDisclosable:
-          type: boolean
     GetConnectionsEndpointRequest:
       type: object
       properties:
@@ -1042,6 +1035,13 @@ components:
           - $ref: '#/components/schemas/Logo'
         source:
           $ref: '#/components/schemas/Source'
+    PropertyAttribute:
+      type: object
+      required:
+      - selectivelyDisclosable
+      properties:
+        selectivelyDisclosable:
+          type: boolean
     RemoveConnectionRequest:
       type: object
       required:
@@ -1099,14 +1099,6 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
-        fieldAttributes:
-          type:
-          - object
-          - 'null'
-          additionalProperties:
-            $ref: '#/components/schemas/FieldAttributes'
-          propertyNames:
-            type: string
         holderType:
           oneOf:
           - type: 'null'
@@ -1118,6 +1110,14 @@ components:
           - string
           - 'null'
         schema: {}
+        schemaPropertiesAttributes:
+          type:
+          - object
+          - 'null'
+          additionalProperties:
+            $ref: '#/components/schemas/PropertyAttribute'
+          propertyNames:
+            type: string
         sourceTemplateId:
           type:
           - string
@@ -1168,15 +1168,6 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
           default: null
-        fieldAttributes:
-          type:
-          - object
-          - 'null'
-          default: null
-          additionalProperties:
-            $ref: '#/components/schemas/FieldAttributes'
-          propertyNames:
-            type: string
         holderType:
           oneOf:
           - type: 'null'
@@ -1186,6 +1177,15 @@ components:
           type: string
           default: ''
         schema: {}
+        schemaPropertiesAttributes:
+          type:
+          - object
+          - 'null'
+          default: null
+          additionalProperties:
+            $ref: '#/components/schemas/PropertyAttribute'
+          propertyNames:
+            type: string
         status:
           oneOf:
           - type: 'null'

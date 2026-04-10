@@ -81,7 +81,7 @@ pub enum TemplateEvent {
         schema: serde_json::Value,
         modified_at: String,
     },
-    FieldAttributesUpdated {
+    SchemaPropertiesAttributesUpdated {
         template_id: String,
         schema_properties_attributes: HashMap<String, PropertyAttribute>,
         modified_at: String,
