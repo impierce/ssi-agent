@@ -1,3 +1,4 @@
+mod openapi;
 mod provisioned;
 
 use agent_macros::Config;
@@ -25,7 +26,11 @@ use std::{
 use strum::VariantArray;
 use url::Url;
 
-use crate::{error::SharedError, profile::ApplicationProfile};
+use crate::{
+    config::openapi::{authorization, credential_metadata},
+    error::SharedError,
+    profile::ApplicationProfile,
+};
 // Re-export
 pub use provisioned::load_provisioned_config;
 
@@ -517,15 +522,17 @@ pub fn default_issuer_es256_key_id() -> KeyId {
     KeyId::new(ES256_KEY_ID)
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, utoipa::ToSchema)]
 pub struct CredentialConfiguration {
     pub credential_configuration_id: String,
     pub format: String,
     // The `type` field is only used when `format` is `jwt_vc_json`.
     #[serde(default, rename = "type")]
     pub type_: Vec<String>,
+    #[schema(schema_with = credential_metadata)]
     #[serde(flatten)]
     pub credential_metadata: CredentialMetadata,
+    #[schema(schema_with = authorization)]
     #[serde(default)]
     pub authorization: Authorization,
 }

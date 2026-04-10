@@ -139,6 +139,27 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Credential'
+    post:
+      tags:
+      - Credentials
+      - Issuance
+      summary: Create a credential
+      description: Creates a verifiable credential based on the provided template and data. An offer is created for the provided offer ID.
+      operationId: create_credential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialsEndpointRequest'
+        required: true
+      responses:
+        '201':
+          description: Credential created successfully
+          headers:
+            Location:
+              schema:
+                type: string
+              description: URI of the newly created credential
   /v0/credentials/{credential_id}:
     get:
       tags:
@@ -323,6 +344,76 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OfferView'
+        '404':
+          description: Offer not found
+  /v0/offers:
+    get:
+      tags:
+      - Issuance
+      summary: Get all offers
+      description: List all credential offers.
+      operationId: get_all_offers
+      responses:
+        '200':
+          description: All offers retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Offer'
+  /v0/offers/send-offer-to-individual:
+    post:
+      tags:
+      - Issuance
+      summary: Send offer to individual
+      description: Sends a credential offer to an individual's email.
+      operationId: send_offer_to_individual
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailOfferEndpointRequest'
+        required: true
+      responses:
+        '200':
+          description: Offer sent successfully
+  /v0/offers/send-offer-to-organization:
+    post:
+      tags:
+      - Issuance
+      summary: Send offer to organization
+      description: Sends a credential offer to an organization's URL.
+      operationId: send_offer_to_organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TargetUrlOfferEndpointRequest'
+        required: true
+      responses:
+        '200':
+          description: Offer sent successfully
+  /v0/offers/{offer_id}:
+    get:
+      tags:
+      - Issuance
+      summary: Get offer by ID
+      description: Retrieves a credential offer by its ID.
+      operationId: get_offer_by_id
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Offer retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
         '404':
           description: Offer not found
   /v0/profile:
@@ -733,6 +824,18 @@ components:
         signed: {}
         status:
           $ref: '#/components/schemas/IssuanceStatus'
+    CredentialExpiry:
+      oneOf:
+      - type: string
+        format: date-time
+      - type: 'null'
+        default: null
+    CredentialOfferStatus:
+      type: string
+      enum:
+      - Created
+      - Pending
+      - Issued
     CredentialStatus:
       type: object
       required:
@@ -771,6 +874,23 @@ components:
           type:
           - string
           - 'null'
+    CredentialsEndpointRequest:
+      type: object
+      required:
+      - offerId
+      - credential
+      - credentialConfigurationId
+      - expiresAt
+      properties:
+        credential: {}
+        credentialConfigurationId:
+          type: string
+        expiresAt:
+          $ref: '#/components/schemas/CredentialExpiry'
+        isSigned:
+          type: boolean
+        offerId:
+          type: string
     Data:
       type: object
       required:
@@ -791,6 +911,13 @@ components:
       properties:
         id:
           type: string
+    DeliveryOptions:
+      type: object
+      properties:
+        recipient_email:
+          type:
+          - string
+          - 'null'
     Display:
       type: object
       required:
@@ -850,6 +977,16 @@ components:
       properties:
         sourceTemplateId:
           type: string
+    EmailOfferEndpointRequest:
+      type: object
+      required:
+      - offerId
+      - recipientEmail
+      properties:
+        offerId:
+          type: string
+        recipientEmail:
+          type: string
     GetConnectionsEndpointRequest:
       type: object
       properties:
@@ -865,6 +1002,13 @@ components:
           type:
           - string
           - 'null'
+    HolderOfferStatus:
+      type: string
+      enum:
+      - Pending
+      - Accepted
+      - CredentialsReceived
+      - Rejected
     HolderType:
       type: string
       enum:
@@ -936,6 +1080,62 @@ components:
           - string
           - 'null'
           format: uri
+    Offer:
+      type: object
+      required:
+      - id
+      - grant_types
+      - credential_ids
+      - pre_authorized_code
+      - status
+      properties:
+        credential_ids:
+          type: array
+          items:
+            type: string
+        credential_offer:
+          type:
+          - object
+          - 'null'
+        credential_offer_uri:
+          type:
+          - object
+          - 'null'
+        credential_response:
+          type:
+          - object
+          - 'null'
+        delivery_options:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/DeliveryOptions'
+        form_url_encoded_credential_offer:
+          type:
+          - string
+          - 'null'
+        grant_types:
+          type: array
+          items:
+            type: string
+        id:
+          type: string
+        offer_link:
+          type:
+          - string
+          - 'null'
+          format: uri
+        pre_authorized_code:
+          type: string
+        status:
+          $ref: '#/components/schemas/CredentialOfferStatus'
+        subject_id:
+          type:
+          - string
+          - 'null'
+        tx_code:
+          type:
+          - string
+          - 'null'
     OfferCredential:
       type: object
       required:
@@ -946,13 +1146,6 @@ components:
           type: string
         holder_credential_id:
           type: string
-    OfferStatus:
-      type: string
-      enum:
-      - Pending
-      - Accepted
-      - CredentialsReceived
-      - Rejected
     OfferView:
       type: object
       required:
@@ -975,7 +1168,7 @@ components:
         id:
           type: string
         status:
-          $ref: '#/components/schemas/OfferStatus'
+          $ref: '#/components/schemas/HolderOfferStatus'
         token_response:
           type:
           - object
@@ -1073,6 +1266,17 @@ components:
       properties:
         id:
           type: string
+    TargetUrlOfferEndpointRequest:
+      type: object
+      required:
+      - offerId
+      - targetUrl
+      properties:
+        offerId:
+          type: string
+        targetUrl:
+          type: string
+          format: uri
     Template:
       type: object
       description: Data transfer object for Templates.
