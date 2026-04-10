@@ -38,10 +38,7 @@ pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
     router_with_library(issuance_state, None)
 }
 
-pub fn router_with_library(
-    issuance_state: Arc<IssuanceState>,
-    library_state: Option<Arc<LibraryState>>,
-) -> Router {
+pub fn router_with_library(issuance_state: Arc<IssuanceState>, library_state: Option<Arc<LibraryState>>) -> Router {
     Router::new()
         .nest(
             API_VERSION,

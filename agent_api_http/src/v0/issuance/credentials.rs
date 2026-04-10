@@ -57,7 +57,6 @@ pub(crate) async fn credential(
 pub struct CredentialsEndpointRequest {
     pub template_id: String,
     pub offer_id: String,
-    pub template_id: String,
     pub credential: Value,
     #[serde(default)]
     pub is_signed: bool,
@@ -71,7 +70,6 @@ pub(crate) async fn credentials(
     Json(CredentialsEndpointRequest {
         template_id,
         offer_id,
-        template_id,
         credential,
         is_signed,
         credential_configuration_id,
@@ -94,7 +92,9 @@ pub(crate) async fn credentials(
         ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
             .title("Library Module Unavailable")
             .type_url(type_url("issuance#library-module-unavailable"))
-            .message("The library module is not available. Template validation requires the library module to be enabled.")
+            .message(
+                "The library module is not available. Template validation requires the library module to be enabled.",
+            )
             .finish()
     })?;
 
@@ -124,7 +124,7 @@ pub(crate) async fn credentials(
     // and cannot be validated against a template schema.
     if !is_signed {
         if let Some(schema) = template.schema.as_ref() {
-            validate_credential_against_schema(&credential, schema)?;
+            validate_credential_against_schema(&credential, schema).map_err(|e| *e)?;
         }
     }
 
@@ -243,7 +243,9 @@ pub(crate) async fn credentials(
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn all_credentials(State((state, _library_state)): State<CredentialsState>) -> Result<Response, ApiError> {
+pub(crate) async fn all_credentials(
+    State((state, _library_state)): State<CredentialsState>,
+) -> Result<Response, ApiError> {
     let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
         .await?
         .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
@@ -302,45 +304,40 @@ pub async fn patch_credential(
 /// Validates the credential data against the template's JSON Schema.
 ///
 /// Returns a detailed error response if validation fails, listing all schema violations.
-fn validate_credential_against_schema(credential: &Value, schema: &Value) -> Result<(), ApiError> {
+fn validate_credential_against_schema(credential: &Value, schema: &Value) -> Result<(), Box<ApiError>> {
     let validator = jsonschema::validator_for(schema).map_err(|e| {
-        ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-            .title("Invalid Template Schema")
-            .type_url(type_url("issuance#invalid-template-schema"))
-            .message(format!(
-                "The template's schema is not a valid JSON Schema: {e}"
-            ))
-            .finish()
+        Box::new(
+            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Invalid Template Schema")
+                .type_url(type_url("issuance#invalid-template-schema"))
+                .message(format!("The template's schema is not a valid JSON Schema: {e}"))
+                .finish(),
+        )
     })?;
 
     let errors: Vec<String> = validator
         .iter_errors(credential)
-        .map(|e| {
-            format!(
-                "Path `{}`: {} (schema path: {})",
-                e.instance_path(),
-                e,
-                e.schema_path()
-            )
-        })
+        .map(|e| format!("Path `{}`: {} (schema path: {})", e.instance_path(), e, e.schema_path()))
         .collect();
 
     if errors.is_empty() {
         Ok(())
     } else {
-        Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-            .title("Credential Schema Validation Failed")
-            .type_url(type_url("issuance#credential-schema-validation-failed"))
-            .message(format!(
-                "The credential does not match the template schema. Violations:\n{}",
-                errors
-                    .iter()
-                    .enumerate()
-                    .map(|(i, e)| format!("  [{}] {}", i + 1, e))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            ))
-            .finish())
+        Err(Box::new(
+            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Credential Schema Validation Failed")
+                .type_url(type_url("issuance#credential-schema-validation-failed"))
+                .message(format!(
+                    "The credential does not match the template schema. Violations:\n{}",
+                    errors
+                        .iter()
+                        .enumerate()
+                        .map(|(i, e)| format!("  [{}] {}", i + 1, e))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                ))
+                .finish(),
+        ))
     }
 }
 
