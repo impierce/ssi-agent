@@ -65,7 +65,7 @@ pub mod tests {
         authorization::{self, authorization_server::token::tests::token},
         issuance::{
             credential_issuer::credential::tests::TEST_NONCE, credentials::tests::credentials, offers::tests::offers,
-            router,
+            router_with_library,
         },
     };
     use serde_json::json;
@@ -75,15 +75,14 @@ pub mod tests {
     /// The remainder of the test breaks down the Token Status List response in various steps and checks these steps one by one.
     #[tokio::test]
     pub async fn test_token_status_list() {
-        let lib_state = library_state(&InMemory, Default::default(), Default::default()).await;
-        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
-
-        let mut state = agent_store::issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await;
-        state.template_query = Some(lib_state.query.template.clone());
-        let issuance_state = Arc::new(state);
+        let issuance_state =
+            Arc::new(agent_store::issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state.clone());
+        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
+
+        let mut app = router_with_library(issuance_state.clone(), Some(lib_state));
 
         // We must create a signed credential first to initiate the status list creation. There is no other way we expose Status List creation through the endpoints.
         create_test_signed_credential(&mut app, &issuance_state).await;

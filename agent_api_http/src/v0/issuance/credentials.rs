@@ -11,6 +11,7 @@ use agent_issuance::{
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
+use agent_library::state::LibraryState;
 use agent_library::template::aggregate::Status as TemplateStatus;
 use axum::{
     extract::{Json, Path, State},
@@ -24,6 +25,9 @@ use oid4vci::credential_offer::GrantType;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
+
+/// Combined state type for credentials endpoints that need access to both issuance and library state.
+type CredentialsState = (Arc<IssuanceState>, Option<Arc<LibraryState>>);
 
 /// Get credential by ID
 ///
@@ -39,7 +43,7 @@ use std::sync::Arc;
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
-    State(state): State<Arc<IssuanceState>>,
+    State((state, _library_state)): State<CredentialsState>,
     Path(credential_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&credential_id, &state.query.credential)
@@ -62,7 +66,7 @@ pub struct CredentialsEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
-    State(state): State<Arc<IssuanceState>>,
+    State((state, library_state)): State<CredentialsState>,
     Json(CredentialsEndpointRequest {
         offer_id,
         template_id,
@@ -83,8 +87,8 @@ pub(crate) async fn credentials(
             .finish());
     }
 
-    // Ensure the template query is available.
-    let template_query = state.template_query.as_ref().ok_or_else(|| {
+    // Ensure the library module is available.
+    let library_state = library_state.ok_or_else(|| {
         ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
             .title("Library Module Unavailable")
             .type_url(type_url("issuance#library-module-unavailable"))
@@ -93,7 +97,7 @@ pub(crate) async fn credentials(
     })?;
 
     // Look up the template by ID.
-    let template = query_handler(&template_id, template_query)
+    let template = query_handler(&template_id, &library_state.query.template)
         .await
         .map_err(|_| {
             ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
@@ -237,7 +241,7 @@ pub(crate) async fn credentials(
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn all_credentials(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
+pub(crate) async fn all_credentials(State((state, _library_state)): State<CredentialsState>) -> Result<Response, ApiError> {
     let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
         .await?
         .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
@@ -254,7 +258,7 @@ pub struct PatchCredentialEndpointRequest {
 
 /// Currently, this endpoint only supports patching the CredentialStatus of a credential according to the IETF OAuth Token Status List spec.
 pub async fn patch_credential(
-    State(state): State<Arc<IssuanceState>>,
+    State((state, _library_state)): State<CredentialsState>,
     Path(credential_id): Path<String>,
     Json(PatchCredentialEndpointRequest {
         credential_status: status,
@@ -343,10 +347,9 @@ pub mod tests {
     use super::*;
     use crate::tests::OFFER_ID;
     use crate::v0::issuance::credential_issuer::token_status_list::tests::create_test_signed_credential;
-    use crate::v0::issuance::router;
+    use crate::v0::issuance::router_with_library;
     use crate::API_VERSION;
     use agent_issuance::{services::IssuanceServices, state::initialize};
-    use agent_library::state::LibraryState;
     use agent_library::template::command::TemplateCommand;
     use agent_secret_manager::service::Service;
     use agent_secret_manager::subject::Subject;
@@ -428,17 +431,6 @@ pub mod tests {
             .unwrap();
 
         template_id
-    }
-
-    /// Creates an `IssuanceState` with the template query injected from a `LibraryState`.
-    pub async fn issuance_state_with_template(
-        lib_state: &agent_library::state::LibraryState,
-    ) -> Arc<IssuanceState> {
-        let mut state = issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await;
-        state.template_query = Some(lib_state.query.template.clone());
-        let state = Arc::new(state);
-        initialize(&state).await.unwrap();
-        state
     }
 
     /// This function creates and tests a credential and returns the endpoint where this credential can be accessed.
@@ -569,11 +561,14 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_patch_credential() {
-        let lib_state = library_state(&InMemory, Default::default(), Default::default()).await;
-        create_test_template(&lib_state).await;
-        let issuance_state = issuance_state_with_template(&lib_state).await;
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state.clone());
+        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_test_template(&lib_state).await;
+
+        let mut app = router_with_library(issuance_state.clone(), Some(lib_state));
 
         let credential_endpoint = create_test_signed_credential(&mut app, &issuance_state).await;
         patch_credential(&mut app, credential_endpoint).await;
@@ -582,11 +577,14 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_credentials_endpoint() {
-        let lib_state = library_state(&InMemory, Default::default(), Default::default()).await;
-        create_test_template(&lib_state).await;
-        let issuance_state = issuance_state_with_template(&lib_state).await;
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state.clone());
+        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_test_template(&lib_state).await;
+
+        let mut app = router_with_library(issuance_state.clone(), Some(lib_state));
         credentials(&mut app, "001").await;
     }
 }

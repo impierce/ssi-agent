@@ -134,11 +134,14 @@ pub mod tests {
     use crate::API_VERSION;
     use crate::{
         tests::OFFER_ID,
-        v0::issuance::{credentials::tests::credentials, router},
+        v0::issuance::{credentials::tests::credentials, router_with_library},
     };
+    use agent_issuance::services::IssuanceServices;
+    use agent_issuance::state::initialize;
+    use agent_secret_manager::service::Service;
     use agent_shared::config::set_config;
     use agent_store::in_memory::InMemory;
-    use agent_store::library_state;
+    use agent_store::{issuance_state, library_state};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -221,11 +224,14 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_offers_endpoint() {
-        let lib_state = library_state(&InMemory, Default::default(), Default::default()).await;
-        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
-        let issuance_state = crate::v0::issuance::credentials::tests::issuance_state_with_template(&lib_state).await;
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state);
+        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
+
+        let mut app = router_with_library(issuance_state, Some(lib_state));
 
         credentials(&mut app, "001").await;
         let (_authorization_code, _pre_authorized_code) = offers(&mut app, "001").await.unwrap();
@@ -236,11 +242,14 @@ pub mod tests {
     #[tracing_test::traced_test]
     async fn test_offers_endpoint_by_reference() {
         set_config().credential_offer_by_value_enabled = false;
-        let lib_state = library_state(&InMemory, Default::default(), Default::default()).await;
-        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
-        let issuance_state = crate::v0::issuance::credentials::tests::issuance_state_with_template(&lib_state).await;
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state);
+        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
+
+        let mut app = router_with_library(issuance_state, Some(lib_state));
 
         credentials(&mut app, "001").await;
         let none = offers(&mut app, "001").await;
