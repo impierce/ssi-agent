@@ -8,13 +8,6 @@ use tracing::{debug, info};
 
 use super::{command::TemplateCommand, error::TemplateError, event::TemplateEvent};
 
-/// Validates that the given value is a valid JSON Schema by attempting to compile it.
-fn validate_json_schema(schema: &serde_json::Value) -> Result<(), TemplateError> {
-    jsonschema::validator_for(schema)
-        .map(|_| ())
-        .map_err(|e| TemplateError::InvalidSchema(e.to_string()))
-}
-
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
 pub struct Logo {
@@ -134,7 +127,7 @@ impl Aggregate for Template {
                 description,
                 r#type,
                 schema,
-                schema_properties_attributes: schema_properties_attributes,
+                schema_properties_attributes,
             } => {
                 if let Some(ref s) = *schema {
                     validate_json_schema(s)?;
@@ -472,6 +465,12 @@ impl Aggregate for Template {
     }
 }
 
+fn validate_json_schema(schema: &serde_json::Value) -> Result<(), TemplateError> {
+    jsonschema::validator_for(schema)
+        .map(|_| ())
+        .map_err(|e| TemplateError::InvalidSchema(e.to_string()))
+}
+
 #[cfg(test)]
 pub mod document_tests {
     use super::test_utils::*;
@@ -560,7 +559,7 @@ pub mod document_tests {
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some(invalid_schema)),
-                field_attributes: None,
+                schema_properties_attributes: None,
             })
             .then_expect_error_message("Invalid JSON Schema: \"not_a_valid_type\" is not valid under any of the schemas listed in the 'anyOf' keyword")
     }
@@ -584,7 +583,7 @@ pub mod document_tests {
                 description: None,
                 r#type: vec![],
                 schema: Box::new(None),
-                field_attributes: None,
+                schema_properties_attributes: None,
             })
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
                 template_id,
@@ -601,7 +600,7 @@ pub mod document_tests {
                 description: None,
                 r#type: vec![],
                 schema: Box::new(None),
-                field_attributes: None,
+                schema_properties_attributes: None,
             }])
     }
 
@@ -628,7 +627,7 @@ pub mod document_tests {
                 description: None,
                 r#type: vec![],
                 schema: Box::new(None),
-                field_attributes: None,
+                schema_properties_attributes: None,
             }])
             .when(TemplateCommand::UpdateSchema {
                 template_id,
@@ -663,7 +662,7 @@ pub mod document_tests {
                 description: None,
                 r#type: vec![],
                 schema: Box::new(None),
-                field_attributes: None,
+                schema_properties_attributes: None,
             }])
             .when(TemplateCommand::UpdateSchema {
                 template_id: template_id.clone(),

@@ -1,4 +1,4 @@
-use crate::error::{type_url, IntoApiErrorExt};
+use crate::error::IntoApiErrorExt;
 use agent_library::template::error::TemplateError;
 use http_api_problem::ApiError;
 use hyper::StatusCode;
@@ -8,7 +8,6 @@ impl IntoApiErrorExt for TemplateError {
         match self {
             TemplateError::InvalidSchema(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid JSON Schema")
-                .type_url(type_url("library#invalid-json-schema"))
                 .source(self)
                 .finish(),
         }
