@@ -11,6 +11,8 @@ use agent_issuance::{
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
+use agent_library::state::LibraryState;
+use agent_library::template::aggregate::{Status as TemplateStatus, Template};
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -50,6 +52,7 @@ pub(crate) async fn credential(
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialsEndpointRequest {
+    pub template_id: String,
     pub offer_id: String,
     pub credential: Value,
     #[serde(default)]
@@ -60,8 +63,9 @@ pub struct CredentialsEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
-    State(state): State<Arc<IssuanceState>>,
+    State((issuance_state, library_state)): State<(Arc<IssuanceState>, Arc<LibraryState>)>,
     Json(CredentialsEndpointRequest {
+        template_id,
         offer_id,
         credential,
         is_signed,
@@ -71,23 +75,61 @@ pub(crate) async fn credentials(
 ) -> Result<Response, ApiError> {
     let credential_id = uuid::Uuid::new_v4().to_string();
 
-    let (_, credential_configuration, authorization) = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
-        .await?
-        .and_then(|server_config_view| {
-            server_config_view
-                .credential_configurations
-                .get(&credential_configuration_id)
-                .cloned()
-        })
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::NOT_FOUND)
-                .title("No Credential Configuration Found")
-                .type_url(type_url("issuance#no-credential-configuration-found"))
+    if template_id.is_empty() {
+        return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+            .title("Missing Template ID")
+            .type_url(type_url("issuance#missing-template-id"))
+            .message("The `templateId` field is required and must not be empty.")
+            .finish());
+    }
+
+    let template: Template = query_handler(&template_id, &library_state.query.template)
+        .await
+        .map_err(|_| {
+            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Template Query Error")
+                .type_url(type_url("issuance#template-query-error"))
                 .message(format!(
-                    "No Credential Configuration found with id: `{credential_configuration_id}`"
+                    "An error occurred while looking up the template with id: `{template_id}`"
                 ))
                 .finish()
+        })?
+        .filter(|t| t.status != TemplateStatus::Deleted)
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Template Not Found")
+                .type_url(type_url("issuance#template-not-found"))
+                .message(format!("No template found with id: `{template_id}`"))
+                .finish()
         })?;
+
+    // If the template has a schema, validate the credential against it.
+    // Only validate unsigned credentials (objects) - signed credentials are
+    // currently not validated against a template schema.
+    if !is_signed {
+        if let Some(schema) = template.schema.as_ref() {
+            validate_credential_against_schema(&credential, schema).map_err(|e| *e)?;
+        }
+    }
+
+    let (_, credential_configuration, authorization) =
+        query_handler(SERVER_CONFIG_ID, &issuance_state.query.server_config)
+            .await?
+            .and_then(|server_config_view| {
+                server_config_view
+                    .credential_configurations
+                    .get(&credential_configuration_id)
+                    .cloned()
+            })
+            .ok_or_else(|| {
+                ApiError::builder(StatusCode::NOT_FOUND)
+                    .title("No Credential Configuration Found")
+                    .type_url(type_url("issuance#no-credential-configuration-found"))
+                    .message(format!(
+                        "No Credential Configuration found with id: `{credential_configuration_id}`"
+                    ))
+                    .finish()
+            })?;
 
     let command = if is_signed {
         // For a signed credential, ensure that the credential is a string.
@@ -122,10 +164,10 @@ pub(crate) async fn credentials(
     };
 
     // Create an unsigned/signed credential.
-    command_handler(&credential_id, &state.command.credential, command).await?;
+    command_handler(&credential_id, &issuance_state.command.credential, command).await?;
 
     // Create an offer if it does not exist yet.
-    if query_handler(&offer_id, &state.query.offer).await?.is_none() {
+    if query_handler(&offer_id, &issuance_state.query.offer).await?.is_none() {
         // Extract the tx_code_constraints from the credential configuration if available.
         let tx_code_constraints = authorization
             .pre_authorized
@@ -146,7 +188,7 @@ pub(crate) async fn credentials(
             delivery_options: None,
         };
 
-        command_handler(&offer_id, &state.command.offer, command).await?
+        command_handler(&offer_id, &issuance_state.command.offer, command).await?
     };
 
     let command = OfferCommand::AddCredentials {
@@ -156,10 +198,10 @@ pub(crate) async fn credentials(
     };
 
     // Add the credential to the offer.
-    command_handler(&offer_id, &state.command.offer, command).await?;
+    command_handler(&offer_id, &issuance_state.command.offer, command).await?;
 
     // Return the credential.
-    query_handler(&credential_id, &state.query.credential)
+    query_handler(&credential_id, &issuance_state.query.credential)
         .await?
         .and_then(|credential_view| credential_view.data)
         .map(|data| {
@@ -239,6 +281,46 @@ pub async fn patch_credential(
         Ok(StatusCode::NO_CONTENT.into_response())
     } else {
         Err(ApiError::new(StatusCode::NOT_FOUND))
+    }
+}
+
+/// Validates the credential data against the template's JSON Schema.
+///
+/// Returns a detailed error response if validation fails, listing all schema violations.
+fn validate_credential_against_schema(credential: &Value, schema: &Value) -> Result<(), Box<ApiError>> {
+    let validator = jsonschema::validator_for(schema).map_err(|e| {
+        Box::new(
+            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Invalid Template Schema")
+                .type_url(type_url("issuance#invalid-template-schema"))
+                .message(format!("The template's schema is not a valid JSON Schema: {e}"))
+                .finish(),
+        )
+    })?;
+
+    let errors: Vec<String> = validator
+        .iter_errors(credential)
+        .map(|e| format!("Path `{}`: {} (schema path: {})", e.instance_path(), e, e.schema_path()))
+        .collect();
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(Box::new(
+            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Credential Schema Validation Failed")
+                .type_url(type_url("issuance#credential-schema-validation-failed"))
+                .message(format!(
+                    "The credential does not match the template schema. Violations:\n{}",
+                    errors
+                        .iter()
+                        .enumerate()
+                        .map(|(i, e)| format!("  [{}] {}", i + 1, e))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                ))
+                .finish(),
+        ))
     }
 }
 
