@@ -198,7 +198,7 @@ pub mod tests {
     use crate::v0::authorization;
     use crate::v0::authorization::authorization_server::token::tests::token;
     use crate::v0::issuance::credentials::tests::credentials;
-    use crate::v0::issuance::router;
+    use crate::v0::issuance::router_with_library;
     use crate::API_VERSION;
     use crate::{
         tests::OFFER_ID,
@@ -214,7 +214,7 @@ pub mod tests {
     use agent_secret_manager::service::Service;
     use agent_shared::config::{set_config, Events};
     use agent_store::authorization_state;
-    use agent_store::{in_memory::InMemory, issuance_state, EventPublisher};
+    use agent_store::{in_memory::InMemory, issuance_state, library_state, EventPublisher};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -273,6 +273,7 @@ pub mod tests {
                                 let credentials_endpoint_request = if is_self_signed {
                                     CredentialsEndpointRequest {
                                         offer_id: offer_id.clone(),
+                                        template_id: crate::v0::issuance::credentials::tests::TEST_TEMPLATE_ID.to_string(),
                                         credential: json!(CREDENTIAL_JWT),
                                         is_signed: true,
                                         credential_configuration_id: "001".to_string(),
@@ -282,6 +283,7 @@ pub mod tests {
                                     // ...or else, submitting the data that will be signed inside `UniCore`.
                                     CredentialsEndpointRequest {
                                         offer_id: offer_id.clone(),
+                                        template_id: crate::v0::issuance::credentials::tests::TEST_TEMPLATE_ID.to_string(),
                                         credential: json!({
                                             "credentialSubject": {
                                                 "first_name": "Ferris",
@@ -424,6 +426,9 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, issuance_event_publishers).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
+        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
+
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),
         };
@@ -431,7 +436,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let mut issuance_app = router(issuance_state.clone());
+        let mut issuance_app = router_with_library(issuance_state.clone(), Some(lib_state));
 
         if let Some(external_server) = &external_server {
             external_server

@@ -29,11 +29,19 @@ use crate::v0::issuance::{
 };
 use crate::API_VERSION;
 use agent_issuance::state::IssuanceState;
+use agent_library::state::LibraryState;
 use axum::routing::get;
 use axum::{routing::post, Router};
 use std::sync::Arc;
 
 pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
+    router_with_library(issuance_state, None)
+}
+
+pub fn router_with_library(
+    issuance_state: Arc<IssuanceState>,
+    library_state: Option<Arc<LibraryState>>,
+) -> Router {
     Router::new()
         .nest(
             API_VERSION,
@@ -43,11 +51,13 @@ pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
                     "/credentials/{credential_id}",
                     get(credentials::credential).patch(patch_credential),
                 )
+                .with_state((issuance_state.clone(), library_state))
                 .route("/credential-configurations", post(credential_configurations))
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send-offer-to-individual", post(individual_offer))
-                .route("/offers/send-offer-to-organization", post(organization_offer)),
+                .route("/offers/send-offer-to-organization", post(organization_offer))
+                .with_state(issuance_state.clone()),
         )
         .route(
             "/.well-known/oauth-authorization-server",

@@ -54,7 +54,7 @@ pub fn app(
 ) -> Router {
     let app = Router::new()
         .merge(identity_state.map(v0::identity::router).unwrap_or_default())
-        .merge(library_state.map(v0::library::router).unwrap_or_default())
+        .merge(library_state.clone().map(v0::library::router).unwrap_or_default())
         .merge(
             authorization_state
                 // The `IssuanceState` is cloned here to ensure that the authorization router can access it. This is
@@ -64,7 +64,11 @@ pub fn app(
                 .map(v0::authorization::router)
                 .unwrap_or_default(),
         )
-        .merge(issuance_state.map(v0::issuance::router).unwrap_or_default())
+        .merge(
+            issuance_state
+                .map(|is| v0::issuance::router_with_library(is, library_state))
+                .unwrap_or_default(),
+        )
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())
         .merge(verification_state.map(v0::verification::router).unwrap_or_default())
         .merge(public::router())
