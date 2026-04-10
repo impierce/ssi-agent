@@ -133,6 +133,10 @@ impl Aggregate for Template {
                     validate_json_schema(s)?;
                 }
 
+                if let Some(ref attrs) = schema_properties_attributes {
+                    validate_schema_properties_attributes(&schema, attrs)?;
+                }
+
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
                 #[cfg(test)]
@@ -296,16 +300,38 @@ impl Aggregate for Template {
                 #[cfg(test)]
                 let modified_at = test_utils::modified_at();
 
-                Ok(vec![SchemaUpdated {
-                    template_id,
-                    schema,
-                    modified_at,
-                }])
+                let mut events = vec![SchemaUpdated {
+                    template_id: template_id.clone(),
+                    schema: schema.clone(),
+                    modified_at: modified_at.clone(),
+                }];
+
+                // Prune schema_properties_attributes whose keys no longer exist in the new schema.
+                if let Some(ref existing_attrs) = self.schema_properties_attributes {
+                    let new_property_keys = get_schema_property_keys(&schema);
+                    let pruned: HashMap<String, PropertyAttribute> = existing_attrs
+                        .iter()
+                        .filter(|(k, _)| new_property_keys.contains(*k))
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect();
+
+                    if pruned.len() != existing_attrs.len() {
+                        events.push(FieldAttributesUpdated {
+                            template_id,
+                            schema_properties_attributes: pruned,
+                            modified_at,
+                        });
+                    }
+                }
+
+                Ok(events)
             }
             UpdateFieldAttributes {
                 template_id,
                 schema_properties_attributes,
             } => {
+                validate_schema_properties_attributes(&self.schema, &schema_properties_attributes)?;
+
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
                 #[cfg(test)]
@@ -469,6 +495,36 @@ fn validate_json_schema(schema: &serde_json::Value) -> Result<(), TemplateError>
     jsonschema::validator_for(schema)
         .map(|_| ())
         .map_err(|e| TemplateError::InvalidSchema(e.to_string()))
+}
+
+fn get_schema_property_keys(schema: &serde_json::Value) -> std::collections::HashSet<String> {
+    schema
+        .get("properties")
+        .and_then(|p| p.as_object())
+        .map(|obj| obj.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
+fn validate_schema_properties_attributes(
+    schema: &Option<serde_json::Value>,
+    attributes: &HashMap<String, PropertyAttribute>,
+) -> Result<(), TemplateError> {
+    let property_keys = match schema {
+        Some(s) => get_schema_property_keys(s),
+        None => std::collections::HashSet::new(),
+    };
+
+    let invalid_keys: Vec<&String> = attributes.keys().filter(|k| !property_keys.contains(*k)).collect();
+
+    if !invalid_keys.is_empty() {
+        let keys_str: Vec<&str> = invalid_keys.iter().map(|k| k.as_str()).collect();
+        return Err(TemplateError::InvalidSchemaPropertiesAttributes(format!(
+            "The following keys do not match any field in schema.properties: [{}]",
+            keys_str.join(", ")
+        )));
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -674,6 +730,289 @@ pub mod document_tests {
                 modified_at: test_utils::modified_at(),
             }])
     }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_template_with_invalid_schema_properties_attributes(template_id: String) {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            "nonexistent".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: true,
+            },
+        );
+
+        TemplateTestFramework::with(())
+            .given_no_previous_events()
+            .when(TemplateCommand::CreateTemplate {
+                template_id,
+                source_template_id: None,
+                title: None,
+                display: None,
+                data_model: None,
+                creator: None,
+                holder_type: None,
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(Some(schema)),
+                schema_properties_attributes: Some(attrs),
+            })
+            .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [nonexistent]")
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_template_with_attributes_but_no_schema(template_id: String) {
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            "name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: true,
+            },
+        );
+
+        TemplateTestFramework::with(())
+            .given_no_previous_events()
+            .when(TemplateCommand::CreateTemplate {
+                template_id,
+                source_template_id: None,
+                title: None,
+                display: None,
+                data_model: None,
+                creator: None,
+                holder_type: None,
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(None),
+                schema_properties_attributes: Some(attrs),
+            })
+            .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [name]")
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_field_attributes_with_invalid_keys(template_id: String) {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            "nonexistent".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: true,
+            },
+        );
+
+        TemplateTestFramework::with(())
+            .given(vec![TemplateEvent::TemplateCreated {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: None,
+                display: None,
+                data_model: None,
+                creator: None,
+                holder_type: None,
+                modified_at: test_utils::modified_at(),
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(Some(schema)),
+                schema_properties_attributes: None,
+            }])
+            .when(TemplateCommand::UpdateFieldAttributes {
+                template_id,
+                schema_properties_attributes: attrs,
+            })
+            .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [nonexistent]")
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_field_attributes_with_no_schema(template_id: String) {
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            "name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: true,
+            },
+        );
+
+        TemplateTestFramework::with(())
+            .given(vec![TemplateEvent::TemplateCreated {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: None,
+                display: None,
+                data_model: None,
+                creator: None,
+                holder_type: None,
+                modified_at: test_utils::modified_at(),
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(None),
+                schema_properties_attributes: None,
+            }])
+            .when(TemplateCommand::UpdateFieldAttributes {
+                template_id,
+                schema_properties_attributes: attrs,
+            })
+            .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [name]")
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_schema_prunes_attributes(template_id: String) {
+        let original_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "age": { "type": "integer" }
+            }
+        });
+
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            "name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: true,
+            },
+        );
+        attrs.insert(
+            "age".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+            },
+        );
+
+        let new_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        let mut expected_attrs = HashMap::new();
+        expected_attrs.insert(
+            "name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: true,
+            },
+        );
+
+        TemplateTestFramework::with(())
+            .given(vec![
+                TemplateEvent::TemplateCreated {
+                    template_id: template_id.clone(),
+                    source_template_id: None,
+                    title: None,
+                    display: None,
+                    data_model: None,
+                    creator: None,
+                    holder_type: None,
+                    modified_at: test_utils::modified_at(),
+                    tags: vec![],
+                    status: Status::Draft,
+                    visibility: Visibility::Private,
+                    description: None,
+                    r#type: vec![],
+                    schema: Box::new(Some(original_schema)),
+                    schema_properties_attributes: Some(attrs),
+                },
+            ])
+            .when(TemplateCommand::UpdateSchema {
+                template_id: template_id.clone(),
+                schema: new_schema.clone(),
+            })
+            .then_expect_events(vec![
+                TemplateEvent::SchemaUpdated {
+                    template_id: template_id.clone(),
+                    schema: new_schema,
+                    modified_at: test_utils::modified_at(),
+                },
+                TemplateEvent::FieldAttributesUpdated {
+                    template_id,
+                    schema_properties_attributes: expected_attrs,
+                    modified_at: test_utils::modified_at(),
+                },
+            ])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_schema_no_prune_needed(template_id: String) {
+        let original_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            "name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: true,
+            },
+        );
+
+        let new_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "age": { "type": "integer" }
+            }
+        });
+
+        TemplateTestFramework::with(())
+            .given(vec![TemplateEvent::TemplateCreated {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: None,
+                display: None,
+                data_model: None,
+                creator: None,
+                holder_type: None,
+                modified_at: test_utils::modified_at(),
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(Some(original_schema)),
+                schema_properties_attributes: Some(attrs),
+            }])
+            .when(TemplateCommand::UpdateSchema {
+                template_id: template_id.clone(),
+                schema: new_schema.clone(),
+            })
+            .then_expect_events(vec![TemplateEvent::SchemaUpdated {
+                template_id,
+                schema: new_schema,
+                modified_at: test_utils::modified_at(),
+            }])
+    }
 }
 
 #[cfg(feature = "test_utils")]
@@ -758,7 +1097,7 @@ pub mod test_utils {
     pub fn schema_properties_attributes() -> Option<HashMap<String, PropertyAttribute>> {
         let mut config = HashMap::new();
         config.insert(
-            "foo".to_string(),
+            "name".to_string(),
             PropertyAttribute {
                 selectively_disclosable: true,
             },
