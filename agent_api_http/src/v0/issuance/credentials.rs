@@ -118,8 +118,12 @@ pub(crate) async fn credentials(
         })?;
 
     // If the template has a schema, validate the credential against it.
-    if let Some(ref schema) = *template.schema {
-        validate_credential_against_schema(&credential, schema)?;
+    // Only validate unsigned credentials (objects) - signed credentials are pre-built JWTs
+    // and cannot be validated against a template schema.
+    if !is_signed {
+        if let Some(ref schema) = *template.schema {
+            validate_credential_against_schema(&credential, schema)?;
+        }
     }
 
     let (_, credential_configuration, authorization) = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
