@@ -22,6 +22,14 @@ use tokio::io;
 use tower_http::cors::CorsLayer;
 use tracing::info;
 
+// Re-export states
+pub use agent_authorization::state::AuthorizationState;
+pub use agent_holder::state::HolderState;
+pub use agent_identity::state::IdentityState;
+pub use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
+pub use agent_library::state::LibraryState;
+pub use agent_verification::state::VerificationState;
+
 pub async fn run() -> io::Result<()> {
     let state = state().await?;
 
