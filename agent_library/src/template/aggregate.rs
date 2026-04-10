@@ -8,6 +8,13 @@ use tracing::{debug, info};
 
 use super::{command::TemplateCommand, error::TemplateError, event::TemplateEvent};
 
+/// Validates that the given value is a valid JSON Schema by attempting to compile it.
+fn validate_json_schema(schema: &serde_json::Value) -> Result<(), TemplateError> {
+    jsonschema::validator_for(schema)
+        .map(|_| ())
+        .map_err(|e| TemplateError::InvalidSchema(e.to_string()))
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
 pub struct Logo {
@@ -129,6 +136,10 @@ impl Aggregate for Template {
                 schema,
                 schema_properties_attributes: schema_properties_attributes,
             } => {
+                if let Some(ref s) = *schema {
+                    validate_json_schema(s)?;
+                }
+
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
                 #[cfg(test)]
@@ -285,6 +296,8 @@ impl Aggregate for Template {
                 }])
             }
             UpdateSchema { template_id, schema } => {
+                validate_json_schema(&schema)?;
+
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
                 #[cfg(test)]
@@ -523,6 +536,145 @@ pub mod document_tests {
                 schema_properties_attributes,
             }])
     }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_template_with_invalid_schema(template_id: String) {
+        let invalid_schema = serde_json::json!({
+            "type": "not_a_valid_type"
+        });
+
+        TemplateTestFramework::with(())
+            .given_no_previous_events()
+            .when(TemplateCommand::CreateTemplate {
+                template_id,
+                source_template_id: None,
+                title: None,
+                display: None,
+                data_model: None,
+                creator: None,
+                holder_type: None,
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(Some(invalid_schema)),
+                field_attributes: None,
+            })
+            .then_expect_error_message("Invalid JSON Schema: \"not_a_valid_type\" is not valid under any of the schemas listed in the 'anyOf' keyword")
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_template_with_no_schema(template_id: String) {
+        TemplateTestFramework::with(())
+            .given_no_previous_events()
+            .when(TemplateCommand::CreateTemplate {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: None,
+                display: None,
+                data_model: None,
+                creator: None,
+                holder_type: None,
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(None),
+                field_attributes: None,
+            })
+            .then_expect_events(vec![TemplateEvent::TemplateCreated {
+                template_id,
+                source_template_id: None,
+                title: None,
+                display: None,
+                data_model: None,
+                creator: None,
+                holder_type: None,
+                modified_at: test_utils::modified_at(),
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(None),
+                field_attributes: None,
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_schema_with_invalid_schema(template_id: String) {
+        let invalid_schema = serde_json::json!({
+            "type": "not_a_valid_type"
+        });
+
+        TemplateTestFramework::with(())
+            .given(vec![TemplateEvent::TemplateCreated {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: None,
+                display: None,
+                data_model: None,
+                creator: None,
+                holder_type: None,
+                modified_at: test_utils::modified_at(),
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(None),
+                field_attributes: None,
+            }])
+            .when(TemplateCommand::UpdateSchema {
+                template_id,
+                schema: invalid_schema,
+            })
+            .then_expect_error_message("Invalid JSON Schema: \"not_a_valid_type\" is not valid under any of the schemas listed in the 'anyOf' keyword")
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_schema_with_valid_schema(template_id: String) {
+        let valid_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        TemplateTestFramework::with(())
+            .given(vec![TemplateEvent::TemplateCreated {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: None,
+                display: None,
+                data_model: None,
+                creator: None,
+                holder_type: None,
+                modified_at: test_utils::modified_at(),
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(None),
+                field_attributes: None,
+            }])
+            .when(TemplateCommand::UpdateSchema {
+                template_id: template_id.clone(),
+                schema: valid_schema.clone(),
+            })
+            .then_expect_events(vec![TemplateEvent::SchemaUpdated {
+                template_id,
+                schema: valid_schema,
+                modified_at: test_utils::modified_at(),
+            }])
+    }
 }
 
 #[cfg(feature = "test_utils")]
@@ -595,7 +747,12 @@ pub mod test_utils {
 
     #[fixture]
     pub fn schema() -> Option<serde_json::Value> {
-        Some(serde_json::json!({"key": "value"}))
+        Some(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        }))
     }
 
     #[fixture]
