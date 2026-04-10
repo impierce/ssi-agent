@@ -72,7 +72,7 @@ mod tests {
     use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
-    use agent_store::{authorization_state, issuance_state};
+    use agent_store::{authorization_state, issuance_state, library_state};
     use axum::{body::Body, http::Request};
     use oid4vci::errors::ErrorStatusCode;
     use oid4vci::notification_request::NotificationEvent;
@@ -85,7 +85,11 @@ mod tests {
         let issuance_state =
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
-        let mut issuance_app = issuance::router(issuance_state.clone());
+
+        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
+
+        let mut issuance_app = issuance::router_with_library(issuance_state.clone(), Some(lib_state));
 
         credentials(&mut issuance_app, "001").await;
         let grants = offers(&mut issuance_app, "001").await.unwrap();
@@ -125,7 +129,11 @@ mod tests {
         let issuance_state =
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
-        let mut issuance_app = issuance::router(issuance_state.clone());
+
+        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
+
+        let mut issuance_app = issuance::router_with_library(issuance_state.clone(), Some(lib_state));
 
         credentials(&mut issuance_app, "001").await;
         let grants = offers(&mut issuance_app, "001").await.unwrap();

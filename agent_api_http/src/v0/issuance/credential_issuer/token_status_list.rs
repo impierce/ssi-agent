@@ -48,7 +48,7 @@ pub mod tests {
     };
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
-    use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
+    use agent_store::{authorization_state, in_memory::InMemory, issuance_state, library_state};
     use axum::{
         body::{self, Body},
         Router,
@@ -65,7 +65,7 @@ pub mod tests {
         authorization::{self, authorization_server::token::tests::token},
         issuance::{
             credential_issuer::credential::tests::TEST_NONCE, credentials::tests::credentials, offers::tests::offers,
-            router,
+            router_with_library,
         },
     };
     use serde_json::json;
@@ -79,7 +79,10 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state.clone());
+        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
+
+        let mut app = router_with_library(issuance_state.clone(), Some(lib_state));
 
         // We must create a signed credential first to initiate the status list creation. There is no other way we expose Status List creation through the endpoints.
         create_test_signed_credential(&mut app, &issuance_state).await;

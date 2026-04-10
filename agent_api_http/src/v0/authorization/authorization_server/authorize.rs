@@ -44,7 +44,7 @@ pub mod tests {
     use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
-    use agent_store::{authorization_state, issuance_state};
+    use agent_store::{authorization_state, issuance_state, library_state};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -117,7 +117,10 @@ pub mod tests {
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let mut app = issuance::router(issuance_state.clone());
+        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
+
+        let mut app = issuance::router_with_library(issuance_state.clone(), Some(lib_state));
 
         credentials(&mut app, "002").await;
         let (authorization_code, _pre_authorized_code) = offers(&mut app, "002").await.unwrap();

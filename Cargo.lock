@@ -100,6 +100,7 @@ dependencies = [
  "identity_core",
  "identity_credential",
  "identity_did",
+ "jsonschema 0.43.0",
  "jsonwebtoken",
  "lazy_static",
  "metrics",
