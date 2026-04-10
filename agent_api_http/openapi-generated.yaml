@@ -1458,6 +1458,8 @@ tags:
   description: Manage trusted connections.
 - name: Profile
   description: Manage your organisational profile.
+- name: Credentials
+  description: Create and revoke verifiable credentials.
 - name: Issuance
   description: Issue credentials to individuals and organizations, manage credential offers and track their status.
 - name: Library
