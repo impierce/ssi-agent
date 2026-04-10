@@ -364,6 +364,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
             all_status_lists,
         },
         subject: services.issuer.clone(),
+        template_query: None,
     }
 }
 

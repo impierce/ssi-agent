@@ -66,7 +66,15 @@ pub fn app(
         )
         .merge(
             issuance_state
-                .map(|is| v0::issuance::router_with_library(is, library_state))
+                .map(|is| {
+                    // Inject the template query from the library module into the issuance state
+                    // so the credentials endpoint can validate template_id without coupling routers.
+                    let mut state = (*is).clone();
+                    if let Some(ls) = &library_state {
+                        state.template_query = Some(ls.query.template.clone());
+                    }
+                    v0::issuance::router(Arc::new(state))
+                })
                 .unwrap_or_default(),
         )
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())

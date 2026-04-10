@@ -1,3 +1,5 @@
+use agent_library::template::aggregate::Template;
+use agent_library::template::views::TemplateView;
 use agent_secret_manager::subject::Subject;
 use agent_shared::application_state::CommandHandler;
 use agent_shared::config::{
@@ -32,6 +34,9 @@ pub struct IssuanceState {
     pub command: CommandHandlers,
     pub query: Queries,
     pub subject: Arc<Subject>,
+    /// Optional handle for querying templates from the library module.
+    /// When set, the credentials endpoint validates the provided `template_id`.
+    pub template_query: Option<Arc<dyn ViewRepository<TemplateView, Template>>>,
 }
 
 /// The command handlers are used to execute commands on the aggregates.
