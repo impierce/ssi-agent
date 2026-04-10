@@ -1,4 +1,4 @@
-use crate::error::IntoApiErrorExt;
+use crate::error::{type_url, IntoApiErrorExt};
 use agent_library::template::error::TemplateError;
 use http_api_problem::ApiError;
 use hyper::StatusCode;
@@ -12,6 +12,7 @@ impl IntoApiErrorExt for TemplateError {
                 .finish(),
             TemplateError::InvalidSchemaPropertiesAttributes(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Schema Properties Attributes")
+                .type_url(type_url("templates#invalid-schema-properties-attributes"))
                 .source(self)
                 .finish(),
         }
