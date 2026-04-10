@@ -347,7 +347,7 @@ impl Aggregate for Template {
                 self.template_id = template_id;
                 self.source_template_id = source_template_id;
                 self.title = title;
-                self.display = display;
+                self.display = *display;
                 self.data_model = data_model;
                 self.creator = creator;
                 self.holder_type = holder_type;
@@ -505,7 +505,7 @@ pub mod document_tests {
                 template_id: template_id.clone(),
                 source_template_id: None,
                 title: title.clone(),
-                display: display.clone(),
+                display: Box::new(display.clone()),
                 data_model: data_model.clone(),
                 creator: creator.clone(),
                 holder_type: holder_type.clone(),
@@ -521,7 +521,7 @@ pub mod document_tests {
                 template_id,
                 source_template_id: None,
                 title,
-                display,
+                display: Box::new(display),
                 data_model,
                 creator,
                 holder_type,
@@ -549,7 +549,7 @@ pub mod document_tests {
                 template_id,
                 source_template_id: None,
                 title: None,
-                display: None,
+                display: Box::new(None),
                 data_model: None,
                 creator: None,
                 holder_type: None,
@@ -573,7 +573,7 @@ pub mod document_tests {
                 template_id: template_id.clone(),
                 source_template_id: None,
                 title: None,
-                display: None,
+                display: Box::new(None),
                 data_model: None,
                 creator: None,
                 holder_type: None,
@@ -589,7 +589,7 @@ pub mod document_tests {
                 template_id,
                 source_template_id: None,
                 title: None,
-                display: None,
+                display: Box::new(None),
                 data_model: None,
                 creator: None,
                 holder_type: None,
@@ -616,7 +616,7 @@ pub mod document_tests {
                 template_id: template_id.clone(),
                 source_template_id: None,
                 title: None,
-                display: None,
+                display: Box::new(None),
                 data_model: None,
                 creator: None,
                 holder_type: None,
@@ -651,7 +651,7 @@ pub mod document_tests {
                 template_id: template_id.clone(),
                 source_template_id: None,
                 title: None,
-                display: None,
+                display: Box::new(None),
                 data_model: None,
                 creator: None,
                 holder_type: None,

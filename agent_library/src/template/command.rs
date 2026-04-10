@@ -10,7 +10,7 @@ pub enum TemplateCommand {
         template_id: String,
         source_template_id: Option<String>,
         title: Option<String>,
-        display: Option<Display>,
+        display: Box<Option<Display>>,
         data_model: Option<DataModel>,
         creator: Option<String>,
         holder_type: Option<HolderType>,

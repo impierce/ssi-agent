@@ -13,7 +13,7 @@ pub enum TemplateEvent {
         source_template_id: Option<String>,
         // TODO: Make this a required field.
         title: Option<String>,
-        display: Option<Display>,
+        display: Box<Option<Display>>,
         data_model: Option<DataModel>,
         creator: Option<String>,
         holder_type: Option<HolderType>,
