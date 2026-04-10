@@ -10,6 +10,10 @@ impl IntoApiErrorExt for TemplateError {
                 .title("Invalid JSON Schema")
                 .source(self)
                 .finish(),
+            TemplateError::InvalidSchemaPropertiesAttributes(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Schema Properties Attributes")
+                .source(self)
+                .finish(),
         }
     }
 }
