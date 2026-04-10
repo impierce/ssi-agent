@@ -592,6 +592,15 @@ components:
           - $ref: '#/components/schemas/HolderType'
           default: null
         schema: {}
+        schemaPropertiesAttributes:
+          type:
+          - object
+          - 'null'
+          default: null
+          additionalProperties:
+            $ref: '#/components/schemas/PropertyAttribute'
+          propertyNames:
+            type: string
         status:
           oneOf:
           - $ref: '#/components/schemas/TemplateStatus'
@@ -1026,6 +1035,13 @@ components:
           - $ref: '#/components/schemas/Logo'
         source:
           $ref: '#/components/schemas/Source'
+    PropertyAttribute:
+      type: object
+      required:
+      - selectivelyDisclosable
+      properties:
+        selectivelyDisclosable:
+          type: boolean
     RemoveConnectionRequest:
       type: object
       required:
@@ -1094,6 +1110,14 @@ components:
           - string
           - 'null'
         schema: {}
+        schemaPropertiesAttributes:
+          type:
+          - object
+          - 'null'
+          additionalProperties:
+            $ref: '#/components/schemas/PropertyAttribute'
+          propertyNames:
+            type: string
         sourceTemplateId:
           type:
           - string
@@ -1153,6 +1177,15 @@ components:
           type: string
           default: ''
         schema: {}
+        schemaPropertiesAttributes:
+          type:
+          - object
+          - 'null'
+          default: null
+          additionalProperties:
+            $ref: '#/components/schemas/PropertyAttribute'
+          propertyNames:
+            type: string
         status:
           oneOf:
           - type: 'null'
