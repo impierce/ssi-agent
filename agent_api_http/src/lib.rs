@@ -66,7 +66,8 @@ pub fn app(
         )
         .merge(
             issuance_state
-                .map(|is| v0::issuance::router_with_library(is, library_state))
+                .zip(library_state.clone())
+                .map(v0::issuance::router)
                 .unwrap_or_default(),
         )
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())

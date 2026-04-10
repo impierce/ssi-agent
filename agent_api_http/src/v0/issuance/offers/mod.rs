@@ -132,10 +132,7 @@ pub(crate) async fn offer(
 pub mod tests {
     use super::*;
     use crate::API_VERSION;
-    use crate::{
-        tests::OFFER_ID,
-        v0::issuance::{credentials::tests::credentials, router_with_library},
-    };
+    use crate::{tests::OFFER_ID, v0::issuance::credentials::tests::credentials};
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
