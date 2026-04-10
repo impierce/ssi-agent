@@ -50,6 +50,7 @@ pub(crate) async fn credential(
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialsEndpointRequest {
+    pub template_id: String,
     pub offer_id: String,
     pub credential: Value,
     #[serde(default)]
@@ -62,6 +63,7 @@ pub struct CredentialsEndpointRequest {
 pub(crate) async fn credentials(
     State(state): State<Arc<IssuanceState>>,
     Json(CredentialsEndpointRequest {
+        template_id,
         offer_id,
         credential,
         is_signed,
