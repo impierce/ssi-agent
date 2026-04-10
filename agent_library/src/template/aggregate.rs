@@ -66,7 +66,7 @@ pub enum Visibility {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct FieldAttributes {
+pub struct PropertyAttribute {
     selectively_disclosable: bool,
 }
 
@@ -88,7 +88,7 @@ pub struct Template {
     pub description: Option<String>,
     pub r#type: Vec<String>,
     pub schema: Box<Option<serde_json::Value>>,
-    pub field_attributes: Option<HashMap<String, FieldAttributes>>,
+    pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
 }
 
 #[async_trait]
@@ -127,7 +127,7 @@ impl Aggregate for Template {
                 description,
                 r#type,
                 schema,
-                field_attributes,
+                schema_properties_attributes: schema_properties_attributes,
             } => {
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -149,7 +149,7 @@ impl Aggregate for Template {
                     description,
                     r#type,
                     schema,
-                    field_attributes,
+                    schema_properties_attributes,
                 }])
             }
             UpdateTitle { template_id, title } => {
@@ -298,7 +298,7 @@ impl Aggregate for Template {
             }
             UpdateFieldAttributes {
                 template_id,
-                field_attributes,
+                schema_properties_attributes,
             } => {
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -307,7 +307,7 @@ impl Aggregate for Template {
 
                 Ok(vec![FieldAttributesUpdated {
                     template_id,
-                    field_attributes,
+                    schema_properties_attributes,
                     modified_at,
                 }])
             }
@@ -336,7 +336,7 @@ impl Aggregate for Template {
                 description,
                 r#type,
                 schema,
-                field_attributes,
+                schema_properties_attributes,
             } => {
                 self.template_id = template_id;
                 self.source_template_id = source_template_id;
@@ -352,7 +352,7 @@ impl Aggregate for Template {
                 self.description = description;
                 self.r#type = r#type;
                 self.schema = schema;
-                self.field_attributes = field_attributes;
+                self.schema_properties_attributes = schema_properties_attributes;
             }
             TitleUpdated {
                 template_id: _,
@@ -444,10 +444,10 @@ impl Aggregate for Template {
             }
             FieldAttributesUpdated {
                 template_id: _,
-                field_attributes,
+                schema_properties_attributes,
                 modified_at,
             } => {
-                self.field_attributes = Some(field_attributes);
+                self.schema_properties_attributes = Some(schema_properties_attributes);
                 self.modified_at.replace(modified_at);
             }
             TemplateDeleted { template_id } => {
@@ -485,7 +485,7 @@ pub mod document_tests {
         description: Option<String>,
         r#type: Vec<String>,
         schema: Option<serde_json::Value>,
-        field_attributes: Option<HashMap<String, FieldAttributes>>,
+        schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
     ) {
         TemplateTestFramework::with(())
             .given_no_previous_events()
@@ -503,7 +503,7 @@ pub mod document_tests {
                 description: description.clone(),
                 r#type: r#type.clone(),
                 schema: Box::new(schema.clone()),
-                field_attributes: field_attributes.clone(),
+                schema_properties_attributes: schema_properties_attributes.clone(),
             })
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
                 template_id,
@@ -520,7 +520,7 @@ pub mod document_tests {
                 description,
                 r#type,
                 schema: Box::new(schema),
-                field_attributes,
+                schema_properties_attributes,
             }])
     }
 }
@@ -599,11 +599,11 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn field_attributes() -> Option<HashMap<String, FieldAttributes>> {
+    pub fn schema_properties_attributes() -> Option<HashMap<String, PropertyAttribute>> {
         let mut config = HashMap::new();
         config.insert(
             "foo".to_string(),
-            FieldAttributes {
+            PropertyAttribute {
                 selectively_disclosable: true,
             },
         );

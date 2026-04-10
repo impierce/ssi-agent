@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-pub use super::aggregate::{DataModel, Display, FieldAttributes, HolderType, Status, Visibility};
+pub use super::aggregate::{DataModel, Display, HolderType, PropertyAttribute, Status, Visibility};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -20,7 +20,7 @@ pub enum TemplateCommand {
         description: Option<String>,
         r#type: Vec<String>,
         schema: Box<Option<serde_json::Value>>,
-        field_attributes: Option<HashMap<String, FieldAttributes>>,
+        schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
     },
     UpdateTitle {
         template_id: String,
@@ -68,7 +68,7 @@ pub enum TemplateCommand {
     },
     UpdateFieldAttributes {
         template_id: String,
-        field_attributes: HashMap<String, FieldAttributes>,
+        schema_properties_attributes: HashMap<String, PropertyAttribute>,
     },
     DeleteTemplate {
         template_id: String,
