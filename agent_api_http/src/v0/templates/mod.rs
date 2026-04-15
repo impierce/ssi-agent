@@ -2,7 +2,9 @@ use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
-use agent_library::template::aggregate::{DataModel, Display, HolderType, Status, Template, Visibility};
+use agent_library::template::aggregate::{
+    DataModel, Display, HolderType, PropertyAttribute, Status, Template, Visibility,
+};
 use agent_library::template::command::TemplateCommand;
 use axum::{
     extract::{Path, State},
@@ -12,7 +14,7 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
 pub mod openapi;
@@ -37,6 +39,7 @@ pub struct TemplateDto {
     pub description: Option<String>,
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
+    pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
 }
 
 impl From<Template> for TemplateDto {
@@ -56,6 +59,7 @@ impl From<Template> for TemplateDto {
             description: value.description,
             r#type: value.r#type,
             schema: *value.schema,
+            schema_properties_attributes: value.schema_properties_attributes,
         }
     }
 }
@@ -74,6 +78,7 @@ pub struct CreateTemplateEndpointRequest {
     pub description: Option<String>,
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
+    pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
 }
 
 /// Create a new template
@@ -111,6 +116,7 @@ pub(crate) async fn create_template(
         description,
         r#type,
         schema,
+        schema_properties_attributes,
     }): Json<CreateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let template_id = Uuid::new_v4().to_string();
@@ -119,7 +125,7 @@ pub(crate) async fn create_template(
         template_id: template_id.clone(),
         source_template_id: None,
         title,
-        display,
+        display: Box::new(display),
         data_model,
         creator,
         holder_type,
@@ -129,6 +135,7 @@ pub(crate) async fn create_template(
         description,
         r#type,
         schema: Box::new(schema),
+        schema_properties_attributes,
     };
 
     command_handler(&template_id, &state.command.template, command).await?;
@@ -191,7 +198,7 @@ pub(crate) async fn duplicate_template(
         template_id: new_template_id.clone(),
         source_template_id: Some(source_template_id),
         title: original_template.title.map(|t| format!("{} Copy", t)),
-        display: original_template.display,
+        display: Box::new(original_template.display),
         data_model: original_template.data_model,
         creator: original_template.creator,
         holder_type: original_template.holder_type,
@@ -201,6 +208,7 @@ pub(crate) async fn duplicate_template(
         description: original_template.description,
         r#type: original_template.r#type,
         schema: original_template.schema,
+        schema_properties_attributes: original_template.schema_properties_attributes,
     };
 
     command_handler(&new_template_id, &state.command.template, command).await?;
@@ -234,6 +242,7 @@ pub struct UpdateTemplateEndpointRequest {
     pub description: Option<String>,
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
+    pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
 }
 
 /// Update a template
@@ -264,6 +273,7 @@ pub(crate) async fn update_template(
         description,
         r#type,
         schema,
+        schema_properties_attributes,
     }): Json<UpdateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     if template_id.is_empty() {
@@ -368,6 +378,14 @@ pub(crate) async fn update_template(
         let command = TemplateCommand::UpdateSchema {
             template_id: template_id.clone(),
             schema,
+        };
+        command_handler(&template_id, &state.command.template, command).await?;
+    }
+
+    if let Some(schema_properties_attributes) = schema_properties_attributes {
+        let command = TemplateCommand::UpdateSchemaPropertiesAttributes {
+            template_id: template_id.clone(),
+            schema_properties_attributes,
         };
         command_handler(&template_id, &state.command.template, command).await?;
     }
