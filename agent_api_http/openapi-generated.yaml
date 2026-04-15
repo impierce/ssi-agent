@@ -129,7 +129,7 @@ paths:
       - Issuance
       summary: Update credential configuration
       description: Publishes the provided credential configuration.
-      operationId: update_credential_configuration
+      operationId: set_credential_configuration
       requestBody:
         content:
           application/json:

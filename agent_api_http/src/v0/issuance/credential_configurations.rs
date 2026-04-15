@@ -16,7 +16,7 @@ use std::sync::Arc;
 #[utoipa::path(
     post,
     path = "/credential-configurations",
-    operation_id = "update_credential_configuration",
+    operation_id = "set_credential_configuration",
     tags = ["Issuance"],
     responses(
         (status = 200, description = "Credential configuration updated successfully")
