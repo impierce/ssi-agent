@@ -19,7 +19,7 @@ use std::sync::Arc;
     operation_id = "set_credential_configuration",
     tags = ["Issuance"],
     responses(
-        (status = 200, description = "Credential configuration updated successfully")
+        (status = 201, description = "Credential configuration updated successfully")
     )
 )]
 #[axum_macros::debug_handler]

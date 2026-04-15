@@ -137,7 +137,7 @@ paths:
               $ref: '#/components/schemas/CredentialConfiguration'
         required: true
       responses:
-        '200':
+        '201':
           description: Credential configuration updated successfully
   /v0/credentials:
     get:
