@@ -123,6 +123,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Connection'
+  /v0/credential-configurations:
+    post:
+      tags:
+      - Issuance
+      summary: Update credential configuration
+      description: Publishes the provided credential configuration.
+      operationId: update_credential_configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialConfiguration'
+        required: true
+      responses:
+        '200':
+          description: Credential configuration updated successfully
   /v0/credentials:
     get:
       tags:
@@ -824,6 +840,36 @@ components:
         signed: {}
         status:
           $ref: '#/components/schemas/IssuanceStatus'
+    CredentialConfiguration:
+      allOf:
+      - type: object
+        properties:
+          claims:
+            type: object
+          display:
+            type: object
+      - type: object
+        required:
+        - credential_configuration_id
+        - format
+        properties:
+          authorization:
+            type: object
+            required:
+            - pre_authorized
+            properties:
+              pre_authorized:
+                type: boolean
+              tx_code_constraints:
+                type: object
+          credential_configuration_id:
+            type: string
+          format:
+            type: string
+          type:
+            type: array
+            items:
+              type: string
     CredentialExpiry:
       oneOf:
       - type: string
