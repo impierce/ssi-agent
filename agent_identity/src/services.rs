@@ -1,11 +1,14 @@
 use crate::connection::error::ConnectionError;
 use agent_secret_manager::subject::Subject;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use agent_shared::get_unverified_jwt_claims;
 use chrono::{DateTime, Utc};
 use identity_credential::domain_linkage::{DomainLinkageConfiguration, JwtDomainLinkageValidator};
 use identity_did::DIDUrl;
 use identity_did::DID;
-use identity_iota::{core::FromJson, credential::JwtCredentialValidationOptions};
+use identity_iota::{
+    core::{FromJson, ToJson},
+    credential::JwtCredentialValidationOptions,
+};
 use oid4vc_core::verifier::SignatureVerifier;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use reqwest::Client;
@@ -70,7 +73,8 @@ impl IdentityServices {
             .linked_dids()
             .iter()
             .filter_map(|jwt| {
-                let claims = get_unverified_jwt_claims(jwt.as_str()).ok()?;
+                let jwt_value = jwt.to_json_value().ok()?;
+                let claims = get_unverified_jwt_claims(&jwt_value)?;
                 let did_str = claims
                     .get("sub")
                     .or_else(|| claims.get("iss"))
@@ -149,23 +153,6 @@ impl IdentityServices {
     }
 }
 
-/// Get the claims from a jwt string without performing validation.
-fn get_unverified_jwt_claims(jwt: &str) -> Result<serde_json::Value, ConnectionError> {
-    jwt.splitn(3, '.')
-        .collect::<Vec<&str>>()
-        .get(1)
-        .cloned()
-        .and_then(|payload| {
-            URL_SAFE_NO_PAD
-                .decode(payload)
-                .ok()
-                .and_then(|payload_bytes| serde_json::from_slice::<serde_json::Value>(&payload_bytes).ok())
-        })
-        .ok_or(ConnectionError::DIDResolutionFailed(
-            "Failed to decode JWT claims".to_string(),
-        ))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,7 +167,7 @@ mod tests {
     #[test]
     fn test_decode_linked_did_jwt() {
         let jwt = serde_json::json!(LINKED_DID_JWT);
-        let claims = get_unverified_jwt_claims(&jwt.to_string()).unwrap();
+        let claims = get_unverified_jwt_claims(&jwt).unwrap();
         assert_eq!(
             claims["sub"],
             "did:key:z6MkoTHsgNNrby8JzCNQ1iRLyW5QQ6R8Xuu6AA8igGrMVPUM"
