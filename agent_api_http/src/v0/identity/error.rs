@@ -12,7 +12,7 @@ impl IntoApiErrorExt for ConnectionError {
         match self {
             ConnectionNotFound => ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Connection Not Found")
-                .type_url(type_url("identityd#connection-not-found"))
+                .type_url(type_url("identity#connection-not-found"))
                 .message("No connection found.".to_string())
                 .finish(),
             CredentialIssuerMetadataFetchFailed(url) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
