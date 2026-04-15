@@ -144,7 +144,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_token_endpoint(#[case] is_pre_authorized: bool) {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await.into(), Default::default()).await);
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
@@ -160,7 +160,7 @@ pub mod tests {
         let grants = offers(&mut app, &credential_configuration_id).await.unwrap();
 
         let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await.into(), Default::default()).await);
 
         agent_authorization::state::initialize(&authorization_state)
             .await

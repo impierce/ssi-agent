@@ -76,7 +76,7 @@ pub mod tests {
     #[tokio::test]
     pub async fn test_token_status_list() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await.into(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state.clone());
@@ -157,8 +157,14 @@ pub mod tests {
 
         let grants = offers(app, &credential_configuration_id).await.unwrap();
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await.into(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

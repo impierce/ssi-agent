@@ -436,7 +436,7 @@ pub mod tests {
         #[future(awt)] credential_offer_uri: CredentialOffer,
         #[future(awt)] form_url_encoded_credential_offer: String,
     ) {
-        OfferTestFramework::with(IssuanceServices::default().await)
+        OfferTestFramework::with(IssuanceServices::default().await.into())
             .given_no_previous_events()
             .when(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
@@ -476,7 +476,7 @@ pub mod tests {
         #[future(awt)] form_url_encoded_credential_offer: String,
         delivery_options: DeliveryOptions,
     ) {
-        OfferTestFramework::with(IssuanceServices::default().await)
+        OfferTestFramework::with(IssuanceServices::default().await.into())
             .given_no_previous_events()
             .when(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
@@ -515,7 +515,7 @@ pub mod tests {
         #[future(awt)] credential_offer_uri: CredentialOffer,
         #[future(awt)] form_url_encoded_credential_offer: String,
     ) {
-        OfferTestFramework::with(IssuanceServices::default().await)
+        OfferTestFramework::with(IssuanceServices::default().await.into())
             .given(vec![OfferEvent::CredentialOfferCreated {
                 offer_id: offer_id.clone(),
                 grant_types,
@@ -560,7 +560,7 @@ pub mod tests {
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
     ) {
-        OfferTestFramework::with(IssuanceServices::default().await)
+        OfferTestFramework::with(IssuanceServices::default().await.into())
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
                     offer_id: offer_id.clone(),
@@ -609,7 +609,7 @@ pub mod tests {
         credential_response: CredentialResponse,
         notification_id: String,
     ) {
-        OfferTestFramework::with(IssuanceServices::default().await)
+        OfferTestFramework::with(IssuanceServices::default().await.into())
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
                     offer_id: offer_id.clone(),
@@ -661,7 +661,7 @@ pub mod tests {
         credential_response: CredentialResponse,
         notification_id: String,
     ) {
-        OfferTestFramework::with(IssuanceServices::default().await)
+        OfferTestFramework::with(IssuanceServices::default().await.into())
             .given(vec![
                 OfferEvent::CredentialOfferCreated {
                     offer_id: offer_id.clone(),

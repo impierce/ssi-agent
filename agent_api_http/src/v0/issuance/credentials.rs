@@ -408,7 +408,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_patch_credential() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await.into(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state.clone());
@@ -421,7 +421,7 @@ pub mod tests {
     #[tracing_test::traced_test]
     async fn test_credentials_endpoint() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await.into(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state.clone());

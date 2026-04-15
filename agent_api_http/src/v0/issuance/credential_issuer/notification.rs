@@ -83,7 +83,7 @@ mod tests {
     #[tokio::test]
     async fn test_valid_notification_request() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await.into(), Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let mut issuance_app = issuance::router(issuance_state.clone());
 
@@ -91,7 +91,7 @@ mod tests {
         let grants = offers(&mut issuance_app, "001").await.unwrap();
 
         let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await.into(), Default::default()).await);
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
@@ -123,7 +123,7 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_notification_request() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await.into(), Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let mut issuance_app = issuance::router(issuance_state.clone());
 
@@ -131,7 +131,7 @@ mod tests {
         let grants = offers(&mut issuance_app, "001").await.unwrap();
 
         let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await.into(), Default::default()).await);
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

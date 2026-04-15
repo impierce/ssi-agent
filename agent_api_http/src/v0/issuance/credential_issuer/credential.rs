@@ -420,8 +420,14 @@ pub mod tests {
             (None, Default::default())
         };
 
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, issuance_event_publishers).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await.into(),
+                issuance_event_publishers,
+            )
+            .await,
+        );
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
@@ -458,8 +464,14 @@ pub mod tests {
 
         let grants = offers(&mut issuance_app, &credential_configuration_id).await.unwrap();
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await.into(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

@@ -292,7 +292,7 @@ impl Aggregate for Credential {
                 // Set the jwt claims through the specific builder and build the JWT which will be signed at the bottom of each match arm
                 let signed_credential = match &self.credential_configuration.credential_format {
                     CredentialFormats::JwtVcJson(_) => {
-                        let credential_data = build_signed_w3c_credential_data(
+                        let mut credential_data = build_signed_w3c_credential_data(
                             credential_data,
                             created_at,
                             iss.to_string(),
@@ -300,6 +300,16 @@ impl Aggregate for Credential {
                             index,
                             status_list_url.to_string(),
                         )?;
+
+                        if let Some(additional_claims_provider) = &services.additional_claims_provider {
+                            additional_claims_provider
+                                .add_credential_claims(
+                                    &self.credential_configuration.credential_format.format(),
+                                    &mut credential_data,
+                                )
+                                .await
+                                .map_err(|e| CredentialError::BuildCredentialError(e.to_string()))?;
+                        }
 
                         // TODO: Would it be more straightforward to add the JWT claims similarly to all our jwt formats?
 
@@ -361,6 +371,18 @@ impl Aggregate for Credential {
                             .await
                             .ok_or(KeyIdError)?;
 
+                        let mut credential_data = credential_data;
+
+                        if let Some(additional_claims_provider) = &services.additional_claims_provider {
+                            additional_claims_provider
+                                .add_credential_claims(
+                                    &self.credential_configuration.credential_format.format(),
+                                    &mut credential_data,
+                                )
+                                .await
+                                .map_err(|e| CredentialError::BuildCredentialError(e.to_string()))?;
+                        }
+
                         let mut builder = SdJwtVcBuilder::new(&credential_data)
                             .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?
                             .header("typ", "dc+sd-jwt")
@@ -406,7 +428,7 @@ impl Aggregate for Credential {
                         serde_json::json!(sd_jwt_credential.to_string())
                     }
                     CredentialFormats::VcSdJwt(_) => {
-                        let credential_data = build_signed_w3c_credential_data(
+                        let mut credential_data = build_signed_w3c_credential_data(
                             credential_data,
                             created_at,
                             iss.to_string(),
@@ -414,6 +436,16 @@ impl Aggregate for Credential {
                             index,
                             status_list_url.to_string(),
                         )?;
+
+                        if let Some(additional_claims_provider) = &services.additional_claims_provider {
+                            additional_claims_provider
+                                .add_credential_claims(
+                                    &self.credential_configuration.credential_format.format(),
+                                    &mut credential_data,
+                                )
+                                .await
+                                .map_err(|e| CredentialError::BuildCredentialError(e.to_string()))?;
+                        }
 
                         // Get the kid for the header of the VcSdJwt
                         let issuer = &services.issuer;
@@ -665,7 +697,7 @@ fn build_signed_w3c_credential_data(
         }
     }
 
-    Ok(credential_data.clone())
+    Ok(credential_data)
 }
 
 /// This builds the credential according to the last given type in the provided type array which matches with our supported credential types.
@@ -951,7 +983,7 @@ pub mod credential_tests {
     use super::test_utils::*;
     use super::*;
 
-    use agent_shared::config::TESTINDEX;
+    use agent_shared::config::{TESTINDEX, TEST_STATUS_LIST_ID};
     use jsonwebtoken::Algorithm;
 
     use rstest::rstest;
@@ -962,6 +994,7 @@ pub mod credential_tests {
     use crate::credential::aggregate::Credential;
     use crate::credential::event::CredentialEvent;
     use crate::offer::aggregate::test_utils::holder;
+    use crate::services::MockAdditionalClaimsProvider;
     use agent_secret_manager::service::Service;
     use oid4vc_core::Subject;
 
@@ -1013,7 +1046,7 @@ pub mod credential_tests {
         notification_id: String,
         created_at: DateTime<Utc>,
     ) {
-        CredentialTestFramework::with(IssuanceServices::default().await)
+        CredentialTestFramework::with(IssuanceServices::default().await.into())
             .given_no_previous_events()
             .when(CredentialCommand::CreateUnsignedCredential {
                 credential_id: credential_id.clone(),
@@ -1082,18 +1115,70 @@ pub mod credential_tests {
         #[case] verifiable_credential_jwt: String,
         credential_id: String,
         created_at: DateTime<Utc>,
+        credential_status: CredentialStatus,
     ) {
-        use agent_shared::config::TEST_STATUS_LIST_ID;
+        CredentialTestFramework::with(IssuanceServices::default().await.into())
+            .given(vec![CredentialEvent::UnsignedCredentialCreated {
+                credential_id: credential_id.clone(),
+                data: Data {
+                    raw: unsigned_credential,
+                },
+                credential_configuration: Box::new(credential_configuration),
+                notification_id: None,
+                created_at: Some(created_at),
+                expires_at: None,
+            }])
+            .when(CredentialCommand::SignCredential {
+                credential_id: credential_id.clone(),
+                subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
+                overwrite: false,
+                proofs: None,
+                status_list_id: TEST_STATUS_LIST_ID.to_string(),
+                index: TESTINDEX,
+            })
+            .then_expect_events(vec![CredentialEvent::CredentialSigned {
+                credential_id,
+                signed_credential: json!(verifiable_credential_jwt),
+                credential_status,
+                status: Status::Issued,
+            }])
+    }
 
-        let credential_status = CredentialStatus {
-            index: TESTINDEX,
-            status_list_url: get_status_list_url(TEST_STATUS_LIST_ID.to_string())
-                .unwrap()
-                .to_string(),
-            status: StatusType::VALID,
-        };
+    // TODO: enable sd-jwt testing, since the salts change everytime we need to come up with an alternative to `assert_eq!`,
+    // (see `test_sign_credential` test)
+    #[rstest]
+    #[case::jwt_vc_json_vc1_1(
+        UNSIGNED_VC1_1_CREDENTIAL.clone(),
+        JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone(),
+        JWT_VC_JSON_VC1_1_JWT_WITH_ADDITIONAL_CLAIMS.to_string(),
+    )]
+    #[serial_test::serial]
+    async fn test_sign_credential_with_additional_claims(
+        #[future(awt)] holder: Arc<dyn Subject>,
+        #[case] unsigned_credential: serde_json::Value,
+        #[case] credential_configuration: CredentialConfigurationsSupportedObject,
+        #[case] verifiable_credential_jwt: String,
+        credential_id: String,
+        created_at: DateTime<Utc>,
+        credential_status: CredentialStatus,
+    ) {
+        let mut additional_claims_provider = MockAdditionalClaimsProvider::new();
+        additional_claims_provider
+            .expect_add_credential_claims()
+            .returning(|_credential_format, credential_data| {
+                credential_data
+                    .as_object_mut()
+                    .expect("Expected credential data to be an object")
+                    .insert("additionalClaim".to_string(), json!("additionalValue"));
 
-        CredentialTestFramework::with(IssuanceServices::default().await)
+                Ok(())
+            });
+
+        let issuance_services = IssuanceServices::default()
+            .await
+            .with_additional_claims_provider(Box::new(additional_claims_provider));
+
+        CredentialTestFramework::with(issuance_services.into())
             .given(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id: credential_id.clone(),
                 data: Data {
@@ -1137,6 +1222,7 @@ pub mod credential_tests {
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::*;
+    use agent_shared::config::{TESTINDEX, TEST_STATUS_LIST_ID};
     use lazy_static::lazy_static;
     use oid4vci::credential_issuer::credential_configurations_supported::CredentialMetadata;
     use oid4vci::{
@@ -1168,7 +1254,19 @@ pub mod test_utils {
         "123e4567-e89b-12d3-a456-426614174000".to_string()
     }
 
+    #[fixture]
+    pub fn credential_status() -> CredentialStatus {
+        CredentialStatus {
+            index: TESTINDEX,
+            status_list_url: get_status_list_url(TEST_STATUS_LIST_ID.to_string())
+                .unwrap()
+                .to_string(),
+            status: StatusType::VALID,
+        }
+    }
+
     pub const JWT_VC_JSON_VC1_1_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsiZmlyc3RfbmFtZSI6IkZlcnJpcyIsImxhc3RfbmFtZSI6IlJ1c3RhY2VhbiIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwiaXNzdWVyIjp7Im5hbWUiOiJVbmlDb3JlIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJuYW1lIjoiVmVyaWZpYWJsZSBDcmVkZW50aWFsIiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fX0.BJ9w-_EUtWzeNwAZO3_LIWK21aBP1AjYk8KM7owxARrX27M299-T8oCkUYBm6P6V6_t-ek5LtLcAkbhOysucAg";
+    pub const JWT_VC_JSON_VC1_1_JWT_WITH_ADDITIONAL_CLAIMS: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsiZmlyc3RfbmFtZSI6IkZlcnJpcyIsImxhc3RfbmFtZSI6IlJ1c3RhY2VhbiIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwiaXNzdWVyIjp7Im5hbWUiOiJVbmlDb3JlIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJuYW1lIjoiVmVyaWZpYWJsZSBDcmVkZW50aWFsIiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM30sImFkZGl0aW9uYWxDbGFpbSI6ImFkZGl0aW9uYWxWYWx1ZSJ9LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fX0.v9MTvu_vWDJhpdQ6zMcDfgJYPNJYz4zHmPzpQDDRVRzqUhcrgACs9suGmWNR1vyZ-7D2loeC672RI1ofO1h0Bw";
     pub const JWT_VC_JSON_OBV3_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vY3JlZGVudGlhbHMvMzUyNyIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy9ucy9jcmVkZW50aWFscy92MiIsImh0dHBzOi8vcHVybC5pbXNnbG9iYWwub3JnL3NwZWMvb2IvdjNwMC9jb250ZXh0LTMuMC4zLmpzb24iXSwiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2NyZWRlbnRpYWxzLzM1MjciLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiT3BlbkJhZGdlQ3JlZGVudGlhbCJdLCJpc3N1ZXIiOnsidHlwZSI6IlByb2ZpbGUiLCJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwibmFtZSI6IlRlYW13b3JrIEJhZGdlIiwiY3JlZGVudGlhbFN1YmplY3QiOnsidHlwZSI6WyJBY2hpZXZlbWVudFN1YmplY3QiXSwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEiOnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY29nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNvZ25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbnQuIiwibmFtZSI6IlRlYW13b3JrIn0sImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fX0.hFbTGNUCIn_qDd4N3ZlREyLXIvWr8DJyMD998sayz0DbacGmAQ5XUl0ub07U96lOzfk5yDQS5qj3Xer_HI8YAw";
     pub const JWT_VC_JSON_ELM_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly93d3cudzMub3JnL25zL2NyZWRlbnRpYWxzL3YyIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJFdXJvcGVhbkRpZ2l0YWxDcmVkZW50aWFsIl0sImlkIjoidXJuOnV1aWQ6MTIzZTQ1NjctZTg5Yi0xMmQzLWE0NTYtNDI2NjE0MTc0MDAwIiwiY3JlZGVudGlhbFN1YmplY3QiOnsiZmlyc3RfbmFtZSI6IkZlcnJpcyIsImxhc3RfbmFtZSI6IlJ1c3RhY2VhbiIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwiaXNzdWVyIjp7Im5hbWUiOiJVbmlDb3JlIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJuYW1lIjoiRXVyb3BlYW4gRGlnaXRhbCBDcmVkZW50aWFsIiwiY3JlZGVudGlhbFByb2ZpbGVzIjp7fSwiZGlzcGxheVBhcmFtZXRlciI6eyJ0aXRsZSI6eyJlbiI6IkV1cm9wZWFuIERpZ2l0YWwgQ3JlZGVudGlhbCJ9LCJwcmltYXJ5TGFuZ3VhZ2UiOnt9LCJsYW5ndWFnZSI6e30sImluZGl2aWR1YWxEaXNwbGF5Ijp7Imxhbmd1YWdlIjp7fSwiZGlzcGxheURldGFpbCI6eyJwYWdlIjoxLCJpbWFnZSI6eyJjb250ZW50IjoiW1BMQUNFSE9MREVSXSIsImNvbnRlbnRFbmNvZGluZyI6e30sImNvbnRlbnRUeXBlIjp7fX19fX0sImNyZWRlbnRpYWxTY2hlbWEiOnsiaWQiOiJodHRwczovL2V1ZGl3Lm9yZy9jcmVkZW50aWFscy9zY2hlbWFzL0V1cm9wZWFuRGlnaXRhbENyZWRlbnRpYWxWM18zLmpzb24iLCJ0eXBlIjoiSnNvblNjaGVtYSJ9LCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsInZhbGlkRnJvbSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwiY3JlZGVudGlhbFN0YXR1cyI6eyJ0eXBlIjoiQ3JlZGVudGlhbFN0YXR1cyIsImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9LCJpc3N1ZWQiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiJ9LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fX0.vc3rJjPdCIDGuLfBN0ZCXqLUl45LIjS1MC1HpGHa4ohjGxc2GPe5pMBLKWpksc_C-xf199vGFuWKYDZPncl2CQ";
 

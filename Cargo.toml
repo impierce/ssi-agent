@@ -50,6 +50,7 @@ chrono = { version = "0.4", features = ["serde"] }
 cqrs-es = "0.4.12"
 derivative = "2.2"
 futures = "0.3"
+mockall = "0.14"
 identity_core = { git = "https://github.com/iotaledger/identity", tag = "v1.9.4-beta.1" }
 identity_credential = { git = "https://github.com/iotaledger/identity", tag = "v1.9.4-beta.1", default-features = false, features = [
     "domain-linkage",

@@ -8,10 +8,10 @@ pub trait Service {
     fn new(subject: Arc<Subject>) -> Self;
 
     #[cfg(feature = "test_utils")]
-    async fn default() -> Arc<Self>
+    async fn default() -> Self
     where
         Self: Sized,
     {
-        Arc::new(Self::new(Arc::new(crate::subject::Subject::test_subject().await)))
+        Self::new(Arc::new(crate::subject::Subject::test_subject().await))
     }
 }

@@ -335,7 +335,7 @@ pub mod tests {
         let verification_services = VerificationServices::default().await;
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
 
-        AuthorizationRequestTestFramework::with(verification_services)
+        AuthorizationRequestTestFramework::with(verification_services.into())
             .given_no_previous_events()
             .when(AuthorizationRequestCommand::CreateAuthorizationRequest {
                 state: "state".to_string(),
@@ -367,7 +367,7 @@ pub mod tests {
         let verification_services = VerificationServices::default().await;
         let siopv2_client_metadata = verification_services.siopv2_client_metadata.clone();
 
-        AuthorizationRequestTestFramework::with(verification_services)
+        AuthorizationRequestTestFramework::with(verification_services.into())
             .given(vec![
                 AuthorizationRequestEvent::AuthorizationRequestCreated {
                     authorization_request: Box::new(GenericAuthorizationRequest::SIOPv2(Box::new(
@@ -413,7 +413,7 @@ pub mod tests {
             _ => panic!("Expected SIOPv2 authorization response."),
         };
 
-        AuthorizationRequestTestFramework::with(verification_services)
+        AuthorizationRequestTestFramework::with(verification_services.into())
             .given(vec![
                 AuthorizationRequestEvent::AuthorizationRequestCreated {
                     authorization_request: Box::new(GenericAuthorizationRequest::SIOPv2(Box::new(
@@ -479,7 +479,7 @@ pub mod tests {
             .unwrap()
             .build();
 
-        AuthorizationRequestTestFramework::with(verification_services)
+        AuthorizationRequestTestFramework::with(verification_services.into())
             .given(vec![
                 AuthorizationRequestEvent::AuthorizationRequestCreated {
                     authorization_request: Box::new(GenericAuthorizationRequest::OID4VP(Box::new(
@@ -523,7 +523,7 @@ pub mod tests {
         )
         .await;
 
-        AuthorizationRequestTestFramework::with(verification_services)
+        AuthorizationRequestTestFramework::with(verification_services.into())
             .given(vec![
                 AuthorizationRequestEvent::AuthorizationRequestCreated {
                     authorization_request: Box::new(GenericAuthorizationRequest::OID4VP(Box::new(

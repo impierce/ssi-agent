@@ -225,7 +225,7 @@ pub mod tests {
     #[tracing_test::traced_test]
     async fn test_offers_endpoint() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await.into(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);
@@ -240,7 +240,7 @@ pub mod tests {
     async fn test_offers_endpoint_by_reference() {
         set_config().credential_offer_by_value_enabled = false;
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await.into(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state);

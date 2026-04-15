@@ -85,7 +85,7 @@ pub mod tests {
         let issuance_services = IssuanceServices::default().await;
         let nonce_value = "123-nonce-123".to_string();
 
-        NonceTestFramework::with(issuance_services)
+        NonceTestFramework::with(issuance_services.into())
             .given_no_previous_events()
             .when(NonceCommand::GenerateNonce {
                 c_nonce: nonce_value.clone(),
@@ -102,7 +102,7 @@ pub mod tests {
         let issuance_services = IssuanceServices::default().await;
         let nonce_value = "123-nonce-123".to_string();
 
-        NonceTestFramework::with(issuance_services)
+        NonceTestFramework::with(issuance_services.into())
             .given(vec![NonceEvent::NonceGenerated {
                 c_nonce: nonce_value.clone(),
                 is_redeemed: false,

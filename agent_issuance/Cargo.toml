@@ -49,6 +49,7 @@ agent_secret_manager = { path = "../agent_secret_manager", features = [
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
 async-std.workspace = true
+mockall.workspace = true
 serial_test = "3.0"
 tracing-test.workspace = true
 

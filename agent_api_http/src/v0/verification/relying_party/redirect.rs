@@ -152,7 +152,7 @@ pub mod tests {
         let event_publishers = vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>];
 
         let verification_state =
-            Arc::new(verification_state(&InMemory, VerificationServices::default().await, event_publishers).await);
+            Arc::new(verification_state(&InMemory, VerificationServices::default().await.into(), event_publishers).await);
 
         let mut app = router(verification_state);
 

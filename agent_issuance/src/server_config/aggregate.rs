@@ -373,7 +373,7 @@ pub mod server_config_tests {
         cryptographic_binding_methods_supported: Vec<String>,
         signing_algorithms_supported: Vec<Algorithm>,
     ) {
-        ServerConfigTestFramework::with(IssuanceServices::default().await)
+        ServerConfigTestFramework::with(IssuanceServices::default().await.into())
             .given_no_previous_events()
             .when(ServerConfigCommand::InitializeServerMetadata {
                 authorization_server_metadata: authorization_server_metadata.clone(),
@@ -399,7 +399,7 @@ pub mod server_config_tests {
         credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
         credential_issuer_metadata_with_credential_configuration: Box<CredentialIssuerMetadata>,
     ) {
-        ServerConfigTestFramework::with(IssuanceServices::default().await)
+        ServerConfigTestFramework::with(IssuanceServices::default().await.into())
             .given(vec![ServerConfigEvent::ServerMetadataInitialized {
                 authorization_server_metadata,
                 credential_issuer_metadata,

@@ -44,7 +44,7 @@ pub mod tests {
         use agent_store::issuance_state;
 
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await.into(), Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let issuance_app = issuance::router(issuance_state.clone());
 
