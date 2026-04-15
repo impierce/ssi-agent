@@ -11,13 +11,25 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use url::Url;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailOfferEndpointRequest {
     pub offer_id: String,
     pub recipient_email: String,
 }
 
+/// Send offer to individual
+///
+/// Sends a credential offer to an individual's email.
+#[utoipa::path(
+    post,
+    path = "/offers/send-offer-to-individual",
+    operation_id = "send_offer_to_individual",
+    tags = ["Issuance"],
+    responses(
+        (status = 200, description = "Offer sent successfully")
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn individual_offer(
     State(state): State<Arc<IssuanceState>>,
@@ -37,13 +49,25 @@ pub(crate) async fn individual_offer(
     Ok(StatusCode::OK.into_response())
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TargetUrlOfferEndpointRequest {
     pub offer_id: String,
     pub target_url: Url,
 }
 
+/// Send offer to organization
+///
+/// Sends a credential offer to an organization's URL.
+#[utoipa::path(
+    post,
+    path = "/offers/send-offer-to-organization",
+    operation_id = "send_offer_to_organization",
+    tags = ["Issuance"],
+    responses(
+        (status = 200, description = "Offer sent successfully")
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn organization_offer(
     State(state): State<Arc<IssuanceState>>,
