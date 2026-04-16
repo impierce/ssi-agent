@@ -16,7 +16,7 @@ use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
-#[schema(as = OfferStatus)]
+#[schema(as = HolderOfferStatus)]
 pub enum Status {
     #[default]
     Pending,
