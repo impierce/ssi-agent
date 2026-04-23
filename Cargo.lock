@@ -8475,7 +8475,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=0c3e60a#0c3e60a8ac7d8bfff2913a41c61ab39938f1e021"
+source = "git+https://github.com/impierce/openid4vc?rev=88f4571#88f45715f6747b8616fe1578a832e72b562441c8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8486,6 +8486,8 @@ dependencies = [
  "did_url",
  "ed25519-dalek 2.1.1",
  "getset",
+ "identity_core",
+ "identity_credential",
  "identity_did",
  "identity_document",
  "identity_ecdsa_verifier",
@@ -8507,7 +8509,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=0c3e60a#0c3e60a8ac7d8bfff2913a41c61ab39938f1e021"
+source = "git+https://github.com/impierce/openid4vc?rev=88f4571#88f45715f6747b8616fe1578a832e72b562441c8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8540,7 +8542,7 @@ dependencies = [
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=0c3e60a#0c3e60a8ac7d8bfff2913a41c61ab39938f1e021"
+source = "git+https://github.com/impierce/openid4vc?rev=88f4571#88f45715f6747b8616fe1578a832e72b562441c8"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8568,7 +8570,7 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=0c3e60a#0c3e60a8ac7d8bfff2913a41c61ab39938f1e021"
+source = "git+https://github.com/impierce/openid4vc?rev=88f4571#88f45715f6747b8616fe1578a832e72b562441c8"
 dependencies = [
  "anyhow",
  "chrono",
@@ -11503,7 +11505,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=0c3e60a#0c3e60a8ac7d8bfff2913a41c61ab39938f1e021"
+source = "git+https://github.com/impierce/openid4vc?rev=88f4571#88f45715f6747b8616fe1578a832e72b562441c8"
 dependencies = [
  "anyhow",
  "async-trait",
