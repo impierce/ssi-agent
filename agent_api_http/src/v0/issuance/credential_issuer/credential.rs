@@ -209,12 +209,11 @@ pub mod tests {
     use agent_event_publisher_http::EventPublisherHttp;
     use agent_issuance::credential::aggregate::CredentialExpiry;
     use agent_issuance::offer::event::OfferEvent;
-    use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::IssuanceState;
     use agent_secret_manager::service::Service;
     use agent_shared::config::{set_config, Events};
     use agent_store::authorization_state;
-    use agent_store::{in_memory::InMemory, issuance_state, EventPublisher};
+    use agent_store::{in_memory::InMemory, EventPublisher};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -274,6 +273,7 @@ pub mod tests {
                                     CredentialsEndpointRequest {
                                         template_id: TEMPLATE_ID.to_string(),
                                         offer_id: offer_id.clone(),
+                                        template_id: crate::v0::issuance::credentials::tests::TEST_TEMPLATE_ID.to_string(),
                                         credential: json!(CREDENTIAL_JWT),
                                         is_signed: true,
                                         credential_configuration_id: "001".to_string(),
@@ -284,6 +284,7 @@ pub mod tests {
                                     CredentialsEndpointRequest {
                                         template_id: TEMPLATE_ID.to_string(),
                                         offer_id: offer_id.clone(),
+                                        template_id: crate::v0::issuance::credentials::tests::TEST_TEMPLATE_ID.to_string(),
                                         credential: json!({
                                             "credentialSubject": {
                                                 "first_name": "Ferris",
@@ -422,9 +423,10 @@ pub mod tests {
             (None, Default::default())
         };
 
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, issuance_event_publishers).await);
-        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+        let issuance_state = crate::v0::issuance::credentials::tests::issuance_state_with_library_and_publishers(
+            issuance_event_publishers,
+        )
+        .await;
 
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),

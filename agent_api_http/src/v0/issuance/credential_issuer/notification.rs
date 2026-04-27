@@ -69,10 +69,9 @@ mod tests {
     use crate::v0::issuance::offers::tests::offers;
     use crate::v0::{authorization, issuance};
     use agent_authorization::services::AuthorizationServices;
-    use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
-    use agent_store::{authorization_state, issuance_state};
+    use agent_store::authorization_state;
     use axum::{body::Body, http::Request};
     use oid4vci::errors::ErrorStatusCode;
     use oid4vci::notification_request::NotificationEvent;
@@ -82,9 +81,8 @@ mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_valid_notification_request() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
-        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+        let issuance_state = crate::v0::issuance::credentials::tests::issuance_state_with_library().await;
+
         let mut issuance_app = issuance::router(issuance_state.clone());
 
         credentials(&mut issuance_app, "001").await;
@@ -122,9 +120,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_notification_request() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
-        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+        let issuance_state = crate::v0::issuance::credentials::tests::issuance_state_with_library().await;
+
         let mut issuance_app = issuance::router(issuance_state.clone());
 
         credentials(&mut issuance_app, "001").await;

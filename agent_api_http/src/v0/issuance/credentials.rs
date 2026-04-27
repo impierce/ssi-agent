@@ -11,8 +11,7 @@ use agent_issuance::{
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
-use agent_library::state::LibraryState;
-use agent_library::template::aggregate::{Status as TemplateStatus, Template};
+use agent_library::template::aggregate::Status as TemplateStatus;
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -54,6 +53,7 @@ pub(crate) async fn credential(
 pub struct CredentialsEndpointRequest {
     pub template_id: String,
     pub offer_id: String,
+    pub template_id: String,
     pub credential: Value,
     #[serde(default)]
     pub is_signed: bool,
@@ -67,6 +67,7 @@ pub(crate) async fn credentials(
     Json(CredentialsEndpointRequest {
         template_id,
         offer_id,
+        template_id,
         credential,
         is_signed,
         credential_configuration_id,
@@ -75,6 +76,7 @@ pub(crate) async fn credentials(
 ) -> Result<Response, ApiError> {
     let credential_id = uuid::Uuid::new_v4().to_string();
 
+    // Validate that template_id is not empty.
     if template_id.is_empty() {
         return Err(ApiError::builder(StatusCode::BAD_REQUEST)
             .title("Missing Template ID")
@@ -83,12 +85,59 @@ pub(crate) async fn credentials(
             .finish());
     }
 
-    let template: Template = query_handler(&template_id, &library_state.query.template)
+    // Ensure the library module is available.
+    let library_state = state.library_state.as_ref().ok_or_else(|| {
+        ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            .title("Library Module Unavailable")
+            .type_url(type_url("issuance#library-module-unavailable"))
+            .message(
+                "The library module is not available. Template validation requires the library module to be enabled.",
+            )
+            .finish()
+    })?;
+
+    // Look up the template by ID.
+    let template = query_handler(&template_id, &library_state.query.template)
         .await
         .map_err(|_| {
             ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Template Query Error")
                 .type_url(type_url("issuance#template-query-error"))
+                .message(format!(
+                    "An error occurred while looking up the template with id: `{template_id}`"
+                ))
+                .finish()
+        })?
+        .filter(|t| t.status != TemplateStatus::Deleted)
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Template Not Found")
+                .type_url(type_url("issuance#template-not-found"))
+                .message(format!("No template found with id: `{template_id}`"))
+                .finish()
+        })?;
+
+    // If the template has a schema, validate the credential against it.
+    // Only validate unsigned credentials (objects) - signed credentials are pre-built JWTs
+    // and cannot be validated against a template schema.
+    if !is_signed {
+        if let Some(schema) = template.schema.as_ref() {
+            validate_credential_against_schema(&credential, schema)?;
+        }
+    }
+
+    let (_, credential_configuration, authorization) = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+        .await?
+        .and_then(|server_config_view| {
+            server_config_view
+                .credential_configurations
+                .get(&credential_configuration_id)
+                .cloned()
+        })
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::NOT_FOUND)
+                .title("No Credential Configuration Found")
+                .type_url(type_url("issuance#no-credential-configuration-found"))
                 .message(format!(
                     "An error occurred while looking up the template with id: `{template_id}`"
                 ))
@@ -287,15 +336,13 @@ pub async fn patch_credential(
 /// Validates the credential data against the template's JSON Schema.
 ///
 /// Returns a detailed error response if validation fails, listing all schema violations.
-fn validate_credential_against_schema(credential: &Value, schema: &Value) -> Result<(), Box<ApiError>> {
+fn validate_credential_against_schema(credential: &Value, schema: &Value) -> Result<(), ApiError> {
     let validator = jsonschema::validator_for(schema).map_err(|e| {
-        Box::new(
-            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Invalid Template Schema")
-                .type_url(type_url("issuance#invalid-template-schema"))
-                .message(format!("The template's schema is not a valid JSON Schema: {e}"))
-                .finish(),
-        )
+        ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            .title("Invalid Template Schema")
+            .type_url(type_url("issuance#invalid-template-schema"))
+            .message(format!("The template's schema is not a valid JSON Schema: {e}"))
+            .finish()
     })?;
 
     let errors: Vec<String> = validator
@@ -306,21 +353,19 @@ fn validate_credential_against_schema(credential: &Value, schema: &Value) -> Res
     if errors.is_empty() {
         Ok(())
     } else {
-        Err(Box::new(
-            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-                .title("Credential Schema Validation Failed")
-                .type_url(type_url("issuance#credential-schema-validation-failed"))
-                .message(format!(
-                    "The credential does not match the template schema. Violations:\n{}",
-                    errors
-                        .iter()
-                        .enumerate()
-                        .map(|(i, e)| format!("  [{}] {}", i + 1, e))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                ))
-                .finish(),
-        ))
+        Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+            .title("Credential Schema Validation Failed")
+            .type_url(type_url("issuance#credential-schema-validation-failed"))
+            .message(format!(
+                "The credential does not match the template schema. Violations:\n{}",
+                errors
+                    .iter()
+                    .enumerate()
+                    .map(|(i, e)| format!("  [{}] {}", i + 1, e))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ))
+            .finish())
     }
 }
 
@@ -332,11 +377,13 @@ pub mod tests {
     use crate::v0::issuance::router;
     use crate::API_VERSION;
     use agent_issuance::{services::IssuanceServices, state::initialize};
+    use agent_library::state::LibraryState;
+    use agent_library::template::command::TemplateCommand;
     use agent_secret_manager::service::Service;
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::TESTINDEX;
     use agent_store::in_memory::InMemory;
-    use agent_store::issuance_state;
+    use agent_store::{issuance_state, library_state};
     use axum::{
         body::{self, Body},
         http::{self, Request, StatusCode},
@@ -350,6 +397,8 @@ pub mod tests {
 
     use jsonwebtoken::{decode_header, Algorithm, DecodingKey};
     use oid4vc_core::authentication::verify::Verify;
+
+    pub const TEST_TEMPLATE_ID: &str = "test-template-001";
 
     lazy_static! {
         pub static ref CREDENTIAL_SUBJECT: serde_json::Value = json!({
@@ -371,8 +420,84 @@ pub mod tests {
         });
     }
 
+    /// Creates a test template in the library state and returns the template ID.
+    pub async fn create_test_template(library_state: &LibraryState) -> String {
+        let template_id = TEST_TEMPLATE_ID.to_string();
+
+        let command = TemplateCommand::CreateTemplate {
+            template_id: template_id.clone(),
+            source_template_id: None,
+            title: Some("Test Template".to_string()),
+            display: Box::new(None),
+            data_model: None,
+            creator: None,
+            holder_type: None,
+            tags: vec![],
+            status: agent_library::template::aggregate::Status::Published,
+            visibility: agent_library::template::aggregate::Visibility::Private,
+            description: None,
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(Some(json!({
+                "type": "object",
+                "properties": {
+                    "credentialSubject": {
+                        "type": "object",
+                        "properties": {
+                            "first_name": { "type": "string" },
+                            "last_name": { "type": "string" }
+                        },
+                        "required": ["first_name", "last_name"]
+                    }
+                },
+                "required": ["credentialSubject"]
+            }))),
+            schema_properties_attributes: None,
+        };
+
+        agent_shared::handlers::command_handler(&template_id, &library_state.command.template, command)
+            .await
+            .unwrap();
+
+        template_id
+    }
+
+    /// Creates an `IssuanceState` with the library state wired in and a test template created.
+    pub async fn issuance_state_with_library() -> Arc<IssuanceState> {
+        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_test_template(&lib_state).await;
+
+        let mut state = issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await;
+        state.library_state = Some(lib_state);
+        let state = Arc::new(state);
+        initialize(&state).await.unwrap();
+        state
+    }
+
+    /// Creates an `IssuanceState` with custom event publishers and the library state wired in.
+    pub async fn issuance_state_with_library_and_publishers(
+        issuance_event_publishers: Vec<Box<dyn agent_store::EventPublisher>>,
+    ) -> Arc<IssuanceState> {
+        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_test_template(&lib_state).await;
+
+        let mut state = issuance_state(&InMemory, IssuanceServices::default().await, issuance_event_publishers).await;
+        state.library_state = Some(lib_state);
+        let state = Arc::new(state);
+        initialize(&state).await.unwrap();
+        state
+    }
+
     /// This function creates and tests a credential and returns the endpoint where this credential can be accessed.
     pub async fn credentials(app: &mut Router, credential_configuration_id: &str) -> String {
+        credentials_with_template(app, credential_configuration_id, TEST_TEMPLATE_ID).await
+    }
+
+    /// This function creates and tests a credential with a specific template ID and returns the endpoint where this credential can be accessed.
+    pub async fn credentials_with_template(
+        app: &mut Router,
+        credential_configuration_id: &str,
+        template_id: &str,
+    ) -> String {
         let response = app
             .call(
                 Request::builder()
@@ -382,6 +507,7 @@ pub mod tests {
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "offerId": OFFER_ID,
+                            "templateId": template_id,
                             "credential": {
                                 "credentialSubject": CREDENTIAL_SUBJECT.clone(),
                             },
@@ -489,9 +615,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_patch_credential() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
-        initialize(&issuance_state).await.unwrap();
+        let issuance_state = issuance_state_with_library().await;
 
         let mut app = router(issuance_state.clone());
 
@@ -502,9 +626,7 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_credentials_endpoint() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
-        initialize(&issuance_state).await.unwrap();
+        let issuance_state = issuance_state_with_library().await;
 
         let mut app = router(issuance_state.clone());
         credentials(&mut app, "001").await;

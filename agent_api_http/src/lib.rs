@@ -66,8 +66,12 @@ pub fn app(
         )
         .merge(
             issuance_state
-                .zip(library_state)
-                .map(v0::issuance::router)
+                .map(|is| {
+                    // Inject library_state into issuance_state so credential endpoints can access templates.
+                    let mut state = (*is).clone();
+                    state.library_state = library_state;
+                    v0::issuance::router(Arc::new(state))
+                })
                 .unwrap_or_default(),
         )
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())
