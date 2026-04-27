@@ -1,3 +1,4 @@
+use agent_library::state::LibraryState;
 use agent_secret_manager::subject::Subject;
 use agent_shared::application_state::CommandHandler;
 use agent_shared::config::{
@@ -32,6 +33,7 @@ pub struct IssuanceState {
     pub command: CommandHandlers,
     pub query: Queries,
     pub subject: Arc<Subject>,
+    pub library_state: Option<Arc<LibraryState>>,
 }
 
 /// The command handlers are used to execute commands on the aggregates.

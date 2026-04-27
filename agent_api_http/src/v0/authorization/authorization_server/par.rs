@@ -34,9 +34,8 @@ pub mod tests {
         domain::oauth2_authorization_request::aggregate::test_utils::code_challenge, state::UNIME_REDIRECT_URI,
     };
     use agent_authorization::{services::AuthorizationServices, state::UNIME_CLIENT_ID};
-    use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
-    use agent_store::{authorization_state, in_memory::InMemory, issuance_state, library_state};
+    use agent_store::{authorization_state, in_memory::InMemory};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -100,14 +99,9 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_pushed_authorization_request_endpoint() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
-        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+        let issuance_state = crate::v0::issuance::credentials::tests::issuance_state_with_library().await;
 
-        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
-
-        let mut app = issuance::router_with_library(issuance_state.clone(), Some(lib_state));
+        let mut app = issuance::router(issuance_state.clone());
 
         credentials(&mut app, "002").await;
         let (authorization_code, _pre_authorized_code) = offers(&mut app, "002").await.unwrap();

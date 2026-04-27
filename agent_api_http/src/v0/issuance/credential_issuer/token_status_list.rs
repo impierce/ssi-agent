@@ -42,13 +42,10 @@ pub mod tests {
     use std::sync::Arc;
 
     use agent_authorization::services::AuthorizationServices;
-    use agent_issuance::{
-        services::IssuanceServices,
-        state::{initialize, IssuanceState},
-    };
+    use agent_issuance::state::IssuanceState;
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
-    use agent_store::{authorization_state, in_memory::InMemory, library_state};
+    use agent_store::{authorization_state, in_memory::InMemory};
     use axum::{
         body::{self, Body},
         Router,
@@ -65,7 +62,7 @@ pub mod tests {
         authorization::{self, authorization_server::token::tests::token},
         issuance::{
             credential_issuer::credential::tests::TEST_NONCE, credentials::tests::credentials, offers::tests::offers,
-            router_with_library,
+            router,
         },
     };
     use serde_json::json;
@@ -75,14 +72,9 @@ pub mod tests {
     /// The remainder of the test breaks down the Token Status List response in various steps and checks these steps one by one.
     #[tokio::test]
     pub async fn test_token_status_list() {
-        let issuance_state =
-            Arc::new(agent_store::issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
-        initialize(&issuance_state).await.unwrap();
+        let issuance_state = crate::v0::issuance::credentials::tests::issuance_state_with_library().await;
 
-        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
-
-        let mut app = router_with_library(issuance_state.clone(), Some(lib_state));
+        let mut app = router(issuance_state.clone());
 
         // We must create a signed credential first to initiate the status list creation. There is no other way we expose Status List creation through the endpoints.
         create_test_signed_credential(&mut app, &issuance_state).await;
