@@ -11,7 +11,6 @@ use agent_issuance::{
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
-use agent_library::state::LibraryState;
 use agent_library::template::aggregate::Status as TemplateStatus;
 use axum::{
     extract::{Json, Path, State},
@@ -63,7 +62,7 @@ pub struct CredentialsEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
-    State((issuance_state, library_state)): State<(Arc<IssuanceState>, Arc<LibraryState>)>,
+    State(issuance_state): State<Arc<IssuanceState>>,
     Json(CredentialsEndpointRequest {
         template_id,
         offer_id,
@@ -85,7 +84,7 @@ pub(crate) async fn credentials(
     }
 
     // Ensure the library module is available.
-    let library_state = library_state.as_ref().ok_or_else(|| {
+    let library_state = issuance_state.library_state.as_ref().ok_or_else(|| {
         ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
             .title("Library Module Unavailable")
             .type_url(type_url("issuance#library-module-unavailable"))
@@ -122,41 +121,6 @@ pub(crate) async fn credentials(
     if !is_signed {
         if let Some(schema) = template.schema.as_ref() {
             validate_credential_against_schema(&credential, schema)?;
-        }
-    }
-
-    let (_, credential_configuration, authorization) = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
-        .await?
-        .and_then(|server_config_view| {
-            server_config_view
-                .credential_configurations
-                .get(&credential_configuration_id)
-                .cloned()
-        })
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::NOT_FOUND)
-                .title("No Credential Configuration Found")
-                .type_url(type_url("issuance#no-credential-configuration-found"))
-                .message(format!(
-                    "An error occurred while looking up the template with id: `{template_id}`"
-                ))
-                .finish()
-        })?
-        .filter(|t| t.status != TemplateStatus::Deleted)
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::NOT_FOUND)
-                .title("Template Not Found")
-                .type_url(type_url("issuance#template-not-found"))
-                .message(format!("No template found with id: `{template_id}`"))
-                .finish()
-        })?;
-
-    // If the template has a schema, validate the credential against it.
-    // Only validate unsigned credentials (objects) - signed credentials are
-    // currently not validated against a template schema.
-    if !is_signed {
-        if let Some(schema) = template.schema.as_ref() {
-            validate_credential_against_schema(&credential, schema).map_err(|e| *e)?;
         }
     }
 

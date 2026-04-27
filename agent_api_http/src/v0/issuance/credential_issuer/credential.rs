@@ -201,7 +201,7 @@ pub mod tests {
     use crate::v0::issuance::router;
     use crate::API_VERSION;
     use crate::{
-        tests::{OFFER_ID, TEMPLATE_ID},
+        tests::OFFER_ID,
         v0::issuance::{credentials::CredentialsEndpointRequest, offers::tests::offers},
     };
 
@@ -271,7 +271,6 @@ pub mod tests {
                                 // The 'backend' server can either opt for an already signed credential...
                                 let credentials_endpoint_request = if is_self_signed {
                                     CredentialsEndpointRequest {
-                                        template_id: TEMPLATE_ID.to_string(),
                                         offer_id: offer_id.clone(),
                                         template_id: crate::v0::issuance::credentials::tests::TEST_TEMPLATE_ID.to_string(),
                                         credential: json!(CREDENTIAL_JWT),
@@ -282,7 +281,6 @@ pub mod tests {
                                 } else {
                                     // ...or else, submitting the data that will be signed inside `UniCore`.
                                     CredentialsEndpointRequest {
-                                        template_id: TEMPLATE_ID.to_string(),
                                         offer_id: offer_id.clone(),
                                         template_id: crate::v0::issuance::credentials::tests::TEST_TEMPLATE_ID.to_string(),
                                         credential: json!({

@@ -29,17 +29,16 @@ use crate::v0::issuance::{
 };
 use crate::API_VERSION;
 use agent_issuance::state::IssuanceState;
-use agent_library::state::LibraryState;
 use axum::routing::get;
 use axum::{routing::post, Router};
 use std::sync::Arc;
 
-pub fn router((issuance_state, library_state): (Arc<IssuanceState>, Arc<LibraryState>)) -> Router {
+pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
     Router::new()
         .nest(
             API_VERSION,
             Router::new()
-                .route("/credentials", get(all_credentials))
+                .route("/credentials", get(all_credentials).post(credentials))
                 .route(
                     "/credentials/{credential_id}",
                     get(credentials::credential).patch(patch_credential),
@@ -65,11 +64,5 @@ pub fn router((issuance_state, library_state): (Arc<IssuanceState>, Arc<LibraryS
             "/vct/{credential_configuration_id}/{version}",
             get(ietf_oauth_sd_jwt_vc::type_metadata),
         )
-        .with_state(issuance_state.clone())
-        .nest(
-            API_VERSION,
-            Router::new()
-                .route("/credentials", post(credentials))
-                .with_state((issuance_state, library_state)),
-        )
+        .with_state(issuance_state)
 }
