@@ -436,32 +436,6 @@ pub mod tests {
         template_id
     }
 
-    /// Creates an `IssuanceState` with the library state wired in and a test template created.
-    pub async fn issuance_state_with_library() -> Arc<IssuanceState> {
-        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&lib_state).await;
-
-        let mut state = issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await;
-        state.library_state = Some(lib_state);
-        let state = Arc::new(state);
-        initialize(&state).await.unwrap();
-        state
-    }
-
-    /// Creates an `IssuanceState` with custom event publishers and the library state wired in.
-    pub async fn issuance_state_with_library_and_publishers(
-        issuance_event_publishers: Vec<Box<dyn agent_store::EventPublisher>>,
-    ) -> Arc<IssuanceState> {
-        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&lib_state).await;
-
-        let mut state = issuance_state(&InMemory, IssuanceServices::default().await, issuance_event_publishers).await;
-        state.library_state = Some(lib_state);
-        let state = Arc::new(state);
-        initialize(&state).await.unwrap();
-        state
-    }
-
     /// This function creates and tests a credential and returns the endpoint where this credential can be accessed.
     pub async fn credentials(app: &mut Router, credential_configuration_id: &str) -> String {
         credentials_with_template(app, credential_configuration_id, TEMPLATE_ID).await
@@ -481,8 +455,8 @@ pub mod tests {
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "offerId": OFFER_ID,
                             "templateId": template_id,
+                            "offerId": OFFER_ID,
                             "credential": {
                                 "credentialSubject": CREDENTIAL_SUBJECT.clone(),
                             },
@@ -590,7 +564,9 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_patch_credential() {
-        let issuance_state = issuance_state_with_library().await;
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state.clone());
 
@@ -601,7 +577,9 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_credentials_endpoint() {
-        let issuance_state = issuance_state_with_library().await;
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
 
         let mut app = router(issuance_state.clone());
         credentials(&mut app, "001").await;
