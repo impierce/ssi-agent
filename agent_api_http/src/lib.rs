@@ -153,7 +153,7 @@ mod tests {
     use std::collections::HashMap;
 
     pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
-    pub const TEMPLATE_ID: &str = "q2vi536sxrccpkfqirbs59n6";
+    pub const TEMPLATE_ID: &str = "11111111-1111-1111-1111-111111111111";
 
     lazy_static::lazy_static! {
         static ref CREDENTIAL_CONFIGURATIONS_SUPPORTED: HashMap<String, CredentialConfigurationsSupportedObject> =
