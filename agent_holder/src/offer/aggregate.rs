@@ -334,7 +334,7 @@ pub mod tests {
     use agent_shared::config::config_mut;
     use agent_shared::generate_random_string;
     use agent_store::in_memory::InMemory;
-    use agent_store::{authorization_state, issuance_state};
+    use agent_store::{authorization_state, issuance_state, library_state};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -364,7 +364,10 @@ pub mod tests {
         let issuance_state =
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
-        let mut credential_isser = issuance::router(issuance_state.clone());
+
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+
+        let mut issuance_router = issuance::router((issuance_state.clone(), library_state));
 
         let authorization_state =
             Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
@@ -375,7 +378,7 @@ pub mod tests {
 
         let received_offer_id = generate_random_string();
 
-        let _ = credential_isser
+        let _ = issuance_router
             .call(
                 Request::builder()
                     .method(http::Method::POST)
@@ -402,7 +405,7 @@ pub mod tests {
             )
             .await;
 
-        let response = credential_isser
+        let response = issuance_router
             .call(
                 Request::builder()
                     .method(http::Method::POST)
@@ -425,7 +428,7 @@ pub mod tests {
         let credential_offer: CredentialOffer = String::from_utf8(body.to_vec()).unwrap().parse().unwrap();
 
         tokio::spawn(async move {
-            axum::serve(listener, credential_isser.merge(authorization_server))
+            axum::serve(listener, issuance_router.merge(authorization_server))
                 .await
                 .unwrap();
         });

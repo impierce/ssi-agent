@@ -84,17 +84,6 @@ pub(crate) async fn credentials(
             .finish());
     }
 
-    // Ensure the library module is available.
-    // let library_state = library_state.ok_or_else(|| {
-    //     ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-    //         .title("Library Module Unavailable")
-    //         .type_url(type_url("issuance#library-module-unavailable"))
-    //         .message(
-    //             "The library module is not available. Template validation requires the library module to be enabled.",
-    //         )
-    //         .finish()
-    // })?;
-
     // Look up the template by ID.
     let template: Template = query_handler(&template_id, &library_state.query.template)
         .await
@@ -241,8 +230,10 @@ pub(crate) async fn credentials(
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn all_credentials(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
-    let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
+pub(crate) async fn all_credentials(
+    State((issuance_state, _library_state)): State<(Arc<IssuanceState>, Arc<LibraryState>)>,
+) -> Result<Response, ApiError> {
+    let all_credentials = query_handler("all_credentials", &issuance_state.query.all_credentials)
         .await?
         .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
         .unwrap_or_default();
@@ -447,8 +438,8 @@ pub mod tests {
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "offerId": OFFER_ID,
                             "templateId": template_id,
+                            "offerId": OFFER_ID,
                             "credential": {
                                 "credentialSubject": CREDENTIAL_SUBJECT.clone(),
                             },
@@ -461,6 +452,8 @@ pub mod tests {
             )
             .await
             .unwrap();
+
+        println!("Response: {:?}", response);
 
         assert_eq!(response.status(), StatusCode::CREATED);
         assert_eq!(response.headers().get("Content-Type").unwrap(), "application/json");
