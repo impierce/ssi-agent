@@ -195,6 +195,7 @@ pub(crate) async fn credential(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::tests::TEMPLATE_ID;
     use crate::v0::authorization;
     use crate::v0::authorization::authorization_server::token::tests::token;
     use crate::v0::issuance::credentials::tests::credentials;
@@ -271,8 +272,7 @@ pub mod tests {
                                 // The 'backend' server can either opt for an already signed credential...
                                 let credentials_endpoint_request = if is_self_signed {
                                     CredentialsEndpointRequest {
-                                        template_id: crate::v0::issuance::credentials::tests::TEST_TEMPLATE_ID
-                                            .to_string(),
+                                        template_id: TEMPLATE_ID.to_string(),
                                         offer_id: offer_id.clone(),
                                         credential: json!(CREDENTIAL_JWT),
                                         is_signed: true,
@@ -282,8 +282,7 @@ pub mod tests {
                                 } else {
                                     // ...or else, submitting the data that will be signed inside `UniCore`.
                                     CredentialsEndpointRequest {
-                                        template_id: crate::v0::issuance::credentials::tests::TEST_TEMPLATE_ID
-                                            .to_string(),
+                                        template_id: TEMPLATE_ID.to_string(),
                                         offer_id: offer_id.clone(),
                                         credential: json!({
                                             "credentialSubject": {

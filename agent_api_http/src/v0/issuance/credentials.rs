@@ -331,7 +331,7 @@ fn validate_credential_against_schema(credential: &Value, schema: &Value) -> Res
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::tests::OFFER_ID;
+    use crate::tests::{OFFER_ID, TEMPLATE_ID};
     use crate::v0::issuance;
     use crate::v0::issuance::credential_issuer::token_status_list::tests::create_test_signed_credential;
     use crate::API_VERSION;
@@ -356,8 +356,6 @@ pub mod tests {
     use jsonwebtoken::{decode_header, Algorithm, DecodingKey};
     use oid4vc_core::authentication::verify::Verify;
 
-    pub const TEST_TEMPLATE_ID: &str = "test-template-001";
-
     lazy_static! {
         pub static ref CREDENTIAL_SUBJECT: serde_json::Value = json!({
             "first_name": "Ferris",
@@ -380,7 +378,7 @@ pub mod tests {
 
     /// Creates a test template in the library state and returns the template ID.
     pub async fn create_test_template(library_state: &LibraryState) -> String {
-        let template_id = TEST_TEMPLATE_ID.to_string();
+        let template_id = TEMPLATE_ID.to_string();
 
         let command = TemplateCommand::CreateTemplate {
             template_id: template_id.clone(),
@@ -421,7 +419,7 @@ pub mod tests {
 
     /// This function creates and tests a credential and returns the endpoint where this credential can be accessed.
     pub async fn credentials(app: &mut Router, credential_configuration_id: &str) -> String {
-        credentials_with_template(app, credential_configuration_id, TEST_TEMPLATE_ID).await
+        credentials_with_template(app, credential_configuration_id, TEMPLATE_ID).await
     }
 
     /// This function creates and tests a credential with a specific template ID and returns the endpoint where this credential can be accessed.
