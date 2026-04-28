@@ -923,6 +923,7 @@ components:
     CredentialsEndpointRequest:
       type: object
       required:
+      - templateId
       - offerId
       - credential
       - credentialConfigurationId
@@ -936,6 +937,8 @@ components:
         isSigned:
           type: boolean
         offerId:
+          type: string
+        templateId:
           type: string
     Data:
       type: object
