@@ -31,6 +31,8 @@ pub(crate) async fn nonce(State(state): State<Arc<IssuanceState>>) -> Result<Res
 
 #[cfg(test)]
 pub mod tests {
+    use crate::v0::issuance::credentials::tests::create_test_template;
+
     use super::*;
     use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
@@ -48,7 +50,7 @@ pub mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        crate::v0::issuance::credentials::tests::create_test_template(&library_state).await;
+        create_test_template(&library_state).await;
 
         let issuance_app = issuance::router((issuance_state.clone(), library_state));
 

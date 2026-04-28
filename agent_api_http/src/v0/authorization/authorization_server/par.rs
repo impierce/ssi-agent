@@ -28,7 +28,11 @@ pub mod tests {
     use super::*;
     use crate::v0::{
         authorization,
-        issuance::{self, credentials::tests::credentials, offers::tests::offers},
+        issuance::{
+            self,
+            credentials::tests::{create_test_template, credentials},
+            offers::tests::offers,
+        },
     };
     use agent_authorization::{
         domain::oauth2_authorization_request::aggregate::test_utils::code_challenge, state::UNIME_REDIRECT_URI,
@@ -106,7 +110,7 @@ pub mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        crate::v0::issuance::credentials::tests::create_test_template(&library_state).await;
+        create_test_template(&library_state).await;
 
         let mut app = issuance::router((issuance_state.clone(), library_state));
 

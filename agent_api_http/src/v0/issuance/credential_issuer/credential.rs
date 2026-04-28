@@ -198,7 +198,7 @@ pub mod tests {
     use crate::tests::TEMPLATE_ID;
     use crate::v0::authorization;
     use crate::v0::authorization::authorization_server::token::tests::token;
-    use crate::v0::issuance::credentials::tests::credentials;
+    use crate::v0::issuance::credentials::tests::{create_test_template, credentials};
     use crate::API_VERSION;
     use crate::{
         tests::OFFER_ID,
@@ -429,7 +429,7 @@ pub mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        crate::v0::issuance::credentials::tests::create_test_template(&library_state).await;
+        create_test_template(&library_state).await;
 
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),

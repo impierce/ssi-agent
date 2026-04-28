@@ -36,7 +36,7 @@ pub mod tests {
     use super::*;
     use crate::v0::authorization::authorization_server::consent::tests::{get_consent, post_consent};
     use crate::v0::authorization::authorization_server::par::tests::par;
-    use crate::v0::issuance::credentials::tests::credentials;
+    use crate::v0::issuance::credentials::tests::{create_test_template, credentials};
     use crate::v0::issuance::offers::tests::offers;
     use crate::v0::{authorization, issuance};
     use agent_authorization::services::AuthorizationServices;
@@ -118,7 +118,7 @@ pub mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        crate::v0::issuance::credentials::tests::create_test_template(&library_state).await;
+        create_test_template(&library_state).await;
 
         let mut app = issuance::router((issuance_state.clone(), library_state));
 
