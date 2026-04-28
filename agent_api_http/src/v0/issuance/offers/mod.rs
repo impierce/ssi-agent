@@ -156,8 +156,8 @@ pub(crate) async fn offer(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::v0::issuance;
     use crate::v0::issuance::credentials::tests::create_test_template;
+    use crate::v0::issuance::router;
     use crate::API_VERSION;
     use crate::{tests::OFFER_ID, v0::issuance::credentials::tests::credentials};
     use agent_issuance::services::IssuanceServices;
@@ -255,7 +255,7 @@ pub mod tests {
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
         create_test_template(&library_state).await;
 
-        let mut app = issuance::router((issuance_state.clone(), library_state));
+        let mut app = router((issuance_state.clone(), library_state));
 
         credentials(&mut app, "001").await;
         let (_authorization_code, _pre_authorized_code) = offers(&mut app, "001").await.unwrap();
@@ -273,7 +273,7 @@ pub mod tests {
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
         create_test_template(&library_state).await;
 
-        let mut app = issuance::router((issuance_state.clone(), library_state));
+        let mut app = router((issuance_state.clone(), library_state));
 
         credentials(&mut app, "001").await;
         let none = offers(&mut app, "001").await;

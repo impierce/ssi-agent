@@ -346,8 +346,7 @@ fn validate_credential_against_schema(credential: &Value, schema: &Value) -> Res
 pub mod tests {
     use super::*;
     use crate::tests::{OFFER_ID, TEMPLATE_ID};
-    use crate::v0::issuance;
-    use crate::v0::issuance::credential_issuer::token_status_list::tests::create_test_signed_credential;
+    use crate::v0::issuance::{credential_issuer::token_status_list::tests::create_test_signed_credential, router};
     use crate::API_VERSION;
     use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_library::template::command::TemplateCommand;
@@ -568,7 +567,7 @@ pub mod tests {
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
         create_test_template(&library_state).await;
 
-        let mut app = issuance::router((issuance_state.clone(), library_state));
+        let mut app = router((issuance_state.clone(), library_state));
 
         let credential_endpoint = create_test_signed_credential(&mut app, &issuance_state).await;
         patch_credential(&mut app, credential_endpoint).await;
@@ -584,7 +583,7 @@ pub mod tests {
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
         create_test_template(&library_state).await;
 
-        let mut app = issuance::router((issuance_state.clone(), library_state));
+        let mut app = router((issuance_state.clone(), library_state));
 
         credentials(&mut app, "001").await;
     }

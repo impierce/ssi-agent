@@ -31,7 +31,7 @@ pub(crate) async fn nonce(State(state): State<Arc<IssuanceState>>) -> Result<Res
 
 #[cfg(test)]
 pub mod tests {
-    use crate::v0::issuance::credentials::tests::create_test_template;
+    use crate::v0::issuance::{credentials::tests::create_test_template, router};
 
     use super::*;
     use agent_issuance::services::IssuanceServices;
@@ -41,7 +41,6 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_nonce_endpoint() {
-        use crate::v0::issuance;
         use agent_store::in_memory::InMemory;
         use agent_store::{issuance_state, library_state};
 
@@ -52,7 +51,7 @@ pub mod tests {
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
         create_test_template(&library_state).await;
 
-        let issuance_app = issuance::router((issuance_state.clone(), library_state));
+        let issuance_app = router((issuance_state.clone(), library_state));
 
         let request = Request::builder()
             .uri("/openid4vci/nonce")

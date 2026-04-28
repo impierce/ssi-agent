@@ -198,7 +198,10 @@ pub mod tests {
     use crate::tests::TEMPLATE_ID;
     use crate::v0::authorization;
     use crate::v0::authorization::authorization_server::token::tests::token;
-    use crate::v0::issuance::credentials::tests::{create_test_template, credentials};
+    use crate::v0::issuance::{
+        credentials::tests::{create_test_template, credentials},
+        router,
+    };
     use crate::API_VERSION;
     use crate::{
         tests::OFFER_ID,
@@ -402,8 +405,6 @@ pub mod tests {
         #[case] is_self_signed: bool,
         #[case] delay: u64,
     ) {
-        use crate::v0::issuance;
-
         let (external_server, issuance_event_publishers) = if with_external_server {
             let external_server = MockServer::start().await;
 
@@ -438,7 +439,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let mut issuance_app = issuance::router((issuance_state.clone(), library_state));
+        let mut issuance_app = router((issuance_state.clone(), library_state));
 
         if let Some(external_server) = &external_server {
             external_server
