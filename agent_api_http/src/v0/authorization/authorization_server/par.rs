@@ -105,10 +105,10 @@ pub mod tests {
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        crate::v0::issuance::credentials::tests::create_test_template(&library_state).await;
 
-        let mut app = issuance::router_with_library(issuance_state.clone(), Some(lib_state));
+        let mut app = issuance::router((issuance_state.clone(), library_state));
 
         credentials(&mut app, "002").await;
         let (authorization_code, _pre_authorized_code) = offers(&mut app, "002").await.unwrap();

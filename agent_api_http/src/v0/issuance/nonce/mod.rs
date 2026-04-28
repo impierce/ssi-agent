@@ -41,12 +41,16 @@ pub mod tests {
     async fn test_nonce_endpoint() {
         use crate::v0::issuance;
         use agent_store::in_memory::InMemory;
-        use agent_store::issuance_state;
+        use agent_store::{issuance_state, library_state};
 
         let issuance_state =
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
-        let issuance_app = issuance::router(issuance_state.clone());
+
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        crate::v0::issuance::credentials::tests::create_test_template(&library_state).await;
+
+        let issuance_app = issuance::router((issuance_state.clone(), library_state));
 
         let request = Request::builder()
             .uri("/openid4vci/nonce")

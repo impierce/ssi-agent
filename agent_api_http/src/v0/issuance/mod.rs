@@ -34,28 +34,21 @@ use axum::routing::get;
 use axum::{routing::post, Router};
 use std::sync::Arc;
 
-pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
-    router_with_library(issuance_state, None)
-}
-
-pub fn router_with_library(issuance_state: Arc<IssuanceState>, library_state: Option<Arc<LibraryState>>) -> Router {
+pub fn router((issuance_state, library_state): (Arc<IssuanceState>, Arc<LibraryState>)) -> Router {
     Router::new()
-        .nest(
-            API_VERSION,
-            Router::new()
-                .route("/credentials", post(credentials).get(all_credentials))
-                .route(
-                    "/credentials/{credential_id}",
-                    get(credentials::credential).patch(patch_credential),
-                )
-                .with_state((issuance_state.clone(), library_state))
-                .route("/credential-configurations", post(credential_configurations))
-                .route("/offers", post(offers).get(all_offers))
-                .route("/offers/{offer_id}", get(offer))
-                .route("/offers/send-offer-to-individual", post(individual_offer))
-                .route("/offers/send-offer-to-organization", post(organization_offer))
-                .with_state(issuance_state.clone()),
+        .nest(API_VERSION, Router::new().route("/credentials", get(all_credentials)))
+        .route(
+            "/credentials/{credential_id}",
+            get(credentials::credential).patch(patch_credential),
         )
+        .route("/credential-configurations", post(credential_configurations))
+        .route("/offers", post(offers).get(all_offers))
+        .route("/offers/{offer_id}", get(offer))
+        .route("/offers/send-offer-to-individual", post(individual_offer))
+        .route("/offers/send-offer-to-organization", post(organization_offer))
+        .with_state(issuance_state.clone())
+        .route("/credentials", post(credentials))
+        .with_state((issuance_state.clone(), library_state.clone()))
         .route(
             "/.well-known/oauth-authorization-server",
             get(oauth_authorization_server),

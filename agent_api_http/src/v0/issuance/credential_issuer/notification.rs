@@ -86,10 +86,10 @@ mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        crate::v0::issuance::credentials::tests::create_test_template(&library_state).await;
 
-        let mut issuance_app = issuance::router_with_library(issuance_state.clone(), Some(lib_state));
+        let mut issuance_app = issuance::router((issuance_state.clone(), library_state));
 
         credentials(&mut issuance_app, "001").await;
         let grants = offers(&mut issuance_app, "001").await.unwrap();
@@ -130,10 +130,10 @@ mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        crate::v0::issuance::credentials::tests::create_test_template(&library_state).await;
 
-        let mut issuance_app = issuance::router_with_library(issuance_state.clone(), Some(lib_state));
+        let mut issuance_app = issuance::router((issuance_state.clone(), library_state));
 
         credentials(&mut issuance_app, "001").await;
         let grants = offers(&mut issuance_app, "001").await.unwrap();

@@ -198,7 +198,6 @@ pub mod tests {
     use crate::v0::authorization;
     use crate::v0::authorization::authorization_server::token::tests::token;
     use crate::v0::issuance::credentials::tests::credentials;
-    use crate::v0::issuance::router_with_library;
     use crate::API_VERSION;
     use crate::{
         tests::OFFER_ID,
@@ -404,6 +403,8 @@ pub mod tests {
         #[case] is_self_signed: bool,
         #[case] delay: u64,
     ) {
+        use crate::v0::issuance;
+
         let (external_server, issuance_event_publishers) = if with_external_server {
             let external_server = MockServer::start().await;
 
@@ -428,8 +429,8 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, issuance_event_publishers).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        crate::v0::issuance::credentials::tests::create_test_template(&lib_state).await;
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        crate::v0::issuance::credentials::tests::create_test_template(&library_state).await;
 
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),
@@ -438,7 +439,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let mut issuance_app = router_with_library(issuance_state.clone(), Some(lib_state));
+        let mut issuance_app = issuance::router((issuance_state.clone(), library_state));
 
         if let Some(external_server) = &external_server {
             external_server

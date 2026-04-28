@@ -26,9 +26,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 
-/// Combined state type for credentials endpoints that need access to both issuance and library state.
-type CredentialsState = (Arc<IssuanceState>, Option<Arc<LibraryState>>);
-
 /// Get credential by ID
 ///
 /// Retrieves a credential by its ID.
@@ -43,7 +40,7 @@ type CredentialsState = (Arc<IssuanceState>, Option<Arc<LibraryState>>);
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
-    State((state, _library_state)): State<CredentialsState>,
+    State(state): State<Arc<IssuanceState>>,
     Path(credential_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&credential_id, &state.query.credential)
@@ -66,7 +63,7 @@ pub struct CredentialsEndpointRequest {
 
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
-    State((state, library_state)): State<CredentialsState>,
+    State((issuance_state, library_state)): State<(Arc<IssuanceState>, Arc<LibraryState>)>,
     Json(CredentialsEndpointRequest {
         template_id,
         offer_id,
@@ -88,15 +85,15 @@ pub(crate) async fn credentials(
     }
 
     // Ensure the library module is available.
-    let library_state = library_state.ok_or_else(|| {
-        ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-            .title("Library Module Unavailable")
-            .type_url(type_url("issuance#library-module-unavailable"))
-            .message(
-                "The library module is not available. Template validation requires the library module to be enabled.",
-            )
-            .finish()
-    })?;
+    // let library_state = library_state.ok_or_else(|| {
+    //     ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+    //         .title("Library Module Unavailable")
+    //         .type_url(type_url("issuance#library-module-unavailable"))
+    //         .message(
+    //             "The library module is not available. Template validation requires the library module to be enabled.",
+    //         )
+    //         .finish()
+    // })?;
 
     // Look up the template by ID.
     let template: Template = query_handler(&template_id, &library_state.query.template)
@@ -128,23 +125,24 @@ pub(crate) async fn credentials(
         }
     }
 
-    let (_, credential_configuration, authorization) = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
-        .await?
-        .and_then(|server_config_view| {
-            server_config_view
-                .credential_configurations
-                .get(&credential_configuration_id)
-                .cloned()
-        })
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::NOT_FOUND)
-                .title("No Credential Configuration Found")
-                .type_url(type_url("issuance#no-credential-configuration-found"))
-                .message(format!(
-                    "No Credential Configuration found with id: `{credential_configuration_id}`"
-                ))
-                .finish()
-        })?;
+    let (_, credential_configuration, authorization) =
+        query_handler(SERVER_CONFIG_ID, &issuance_state.query.server_config)
+            .await?
+            .and_then(|server_config_view| {
+                server_config_view
+                    .credential_configurations
+                    .get(&credential_configuration_id)
+                    .cloned()
+            })
+            .ok_or_else(|| {
+                ApiError::builder(StatusCode::NOT_FOUND)
+                    .title("No Credential Configuration Found")
+                    .type_url(type_url("issuance#no-credential-configuration-found"))
+                    .message(format!(
+                        "No Credential Configuration found with id: `{credential_configuration_id}`"
+                    ))
+                    .finish()
+            })?;
 
     let command = if is_signed {
         // For a signed credential, ensure that the credential is a string.
@@ -179,10 +177,10 @@ pub(crate) async fn credentials(
     };
 
     // Create an unsigned/signed credential.
-    command_handler(&credential_id, &state.command.credential, command).await?;
+    command_handler(&credential_id, &issuance_state.command.credential, command).await?;
 
     // Create an offer if it does not exist yet.
-    if query_handler(&offer_id, &state.query.offer).await?.is_none() {
+    if query_handler(&offer_id, &issuance_state.query.offer).await?.is_none() {
         // Extract the tx_code_constraints from the credential configuration if available.
         let tx_code_constraints = authorization
             .pre_authorized
@@ -203,7 +201,7 @@ pub(crate) async fn credentials(
             delivery_options: None,
         };
 
-        command_handler(&offer_id, &state.command.offer, command).await?
+        command_handler(&offer_id, &issuance_state.command.offer, command).await?
     };
 
     let command = OfferCommand::AddCredentials {
@@ -213,10 +211,10 @@ pub(crate) async fn credentials(
     };
 
     // Add the credential to the offer.
-    command_handler(&offer_id, &state.command.offer, command).await?;
+    command_handler(&offer_id, &issuance_state.command.offer, command).await?;
 
     // Return the credential.
-    query_handler(&credential_id, &state.query.credential)
+    query_handler(&credential_id, &issuance_state.query.credential)
         .await?
         .and_then(|credential_view| credential_view.data)
         .map(|data| {
@@ -243,9 +241,7 @@ pub(crate) async fn credentials(
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn all_credentials(
-    State((state, _library_state)): State<CredentialsState>,
-) -> Result<Response, ApiError> {
+pub(crate) async fn all_credentials(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
     let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
         .await?
         .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
@@ -262,7 +258,7 @@ pub struct PatchCredentialEndpointRequest {
 
 /// Currently, this endpoint only supports patching the CredentialStatus of a credential according to the IETF OAuth Token Status List spec.
 pub async fn patch_credential(
-    State((state, _library_state)): State<CredentialsState>,
+    State(state): State<Arc<IssuanceState>>,
     Path(credential_id): Path<String>,
     Json(PatchCredentialEndpointRequest {
         credential_status: status,
@@ -345,8 +341,8 @@ fn validate_credential_against_schema(credential: &Value, schema: &Value) -> Res
 pub mod tests {
     use super::*;
     use crate::tests::OFFER_ID;
+    use crate::v0::issuance;
     use crate::v0::issuance::credential_issuer::token_status_list::tests::create_test_signed_credential;
-    use crate::v0::issuance::router_with_library;
     use crate::API_VERSION;
     use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_library::template::command::TemplateCommand;
@@ -564,10 +560,10 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&lib_state).await;
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_test_template(&library_state).await;
 
-        let mut app = router_with_library(issuance_state.clone(), Some(lib_state));
+        let mut app = issuance::router((issuance_state.clone(), library_state));
 
         let credential_endpoint = create_test_signed_credential(&mut app, &issuance_state).await;
         patch_credential(&mut app, credential_endpoint).await;
@@ -580,10 +576,11 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let lib_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&lib_state).await;
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_test_template(&library_state).await;
 
-        let mut app = router_with_library(issuance_state.clone(), Some(lib_state));
+        let mut app = issuance::router((issuance_state.clone(), library_state));
+
         credentials(&mut app, "001").await;
     }
 }
