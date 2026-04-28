@@ -10,6 +10,18 @@ use axum::{
 use http_api_problem::ApiError;
 use std::sync::Arc;
 
+/// Update credential configuration
+///
+/// Publishes the provided credential configuration.
+#[utoipa::path(
+    post,
+    path = "/credential-configurations",
+    operation_id = "set_credential_configuration",
+    tags = ["Issuance"],
+    responses(
+        (status = 201, description = "Credential configuration updated successfully")
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn credential_configurations(
     State(state): State<Arc<IssuanceState>>,

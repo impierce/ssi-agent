@@ -21,7 +21,8 @@ use crate::utils::generate_tx_code::generate_tx_code;
 use oid4vci::credential_offer::CredentialConfigurationIds;
 use oid4vci::credential_request::CredentialIdentifierOrCredentialConfigurationId;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
+#[schema(as = CredentialOfferStatus)]
 pub enum Status {
     #[default]
     Created,
@@ -29,17 +30,25 @@ pub enum Status {
     Issued,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 pub struct Offer {
     #[serde(rename = "id")]
     pub offer_id: String,
+    // TODO: provide full type
+    #[schema(value_type = Vec<String>)]
     pub grant_types: Vec<GrantType>,
+    // TODO: provide full type
+    #[schema(value_type = Option<Object>)]
     pub credential_offer_uri: Option<CredentialOffer>,
+    // TODO: provide full type
+    #[schema(value_type = Option<Object>)]
     pub credential_offer: Option<CredentialOffer>,
     pub subject_id: Option<String>,
     pub credential_ids: Vec<String>,
     pub form_url_encoded_credential_offer: Option<String>,
     pub pre_authorized_code: String,
+    // TODO: provide full type
+    #[schema(value_type = Option<Object>)]
     pub credential_response: Option<CredentialResponse>,
     pub status: Status,
     pub tx_code: Option<String>,
@@ -47,7 +56,7 @@ pub struct Offer {
     pub offer_link: Option<Url>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
 pub struct DeliveryOptions {
     pub recipient_email: Option<String>,
 }

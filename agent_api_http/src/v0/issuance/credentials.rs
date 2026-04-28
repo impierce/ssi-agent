@@ -49,7 +49,7 @@ pub(crate) async fn credential(
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialsEndpointRequest {
     pub template_id: String,
@@ -61,6 +61,20 @@ pub struct CredentialsEndpointRequest {
     pub expires_at: CredentialExpiry,
 }
 
+/// Create a credential
+///
+/// Creates a verifiable credential based on the provided template and data. An offer is created for the provided offer ID.
+#[utoipa::path(
+    post,
+    path = "/credentials",
+    operation_id = "create_credential",
+    tags = ["Credentials", "Issuance"],
+    responses(
+        (status = 201, description = "Credential created successfully",
+            headers(("Location" = String, description = "URI of the newly created credential"))
+        )
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
     State((issuance_state, library_state)): State<(Arc<IssuanceState>, Arc<LibraryState>)>,

@@ -41,7 +41,7 @@ pub enum Status {
     Issued,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, utoipa::ToSchema)]
 #[serde(untagged)]
 pub enum CredentialExpiry {
     Fixed(chrono::DateTime<chrono::Utc>),
