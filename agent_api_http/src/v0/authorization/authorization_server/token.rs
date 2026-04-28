@@ -41,8 +41,9 @@ pub mod tests {
     use agent_authorization::{
         domain::oauth2_authorization_request::aggregate::test_utils::code_verifier, state::UNIME_REDIRECT_URI,
     };
+    use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
-    use agent_store::{authorization_state, in_memory::InMemory};
+    use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -142,7 +143,10 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_token_endpoint(#[case] is_pre_authorized: bool) {
-        let issuance_state = crate::v0::issuance::credentials::tests::issuance_state_with_library().await;
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let mut app = issuance::router(issuance_state.clone());
 
