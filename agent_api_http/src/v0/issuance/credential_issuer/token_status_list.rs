@@ -64,7 +64,9 @@ pub mod tests {
     use crate::v0::{
         authorization::{self, authorization_server::token::tests::token},
         issuance::{
-            self, credential_issuer::credential::tests::TEST_NONCE, credentials::tests::credentials,
+            self,
+            credential_issuer::credential::tests::TEST_NONCE,
+            credentials::tests::{create_test_template, credentials},
             offers::tests::offers,
         },
     };

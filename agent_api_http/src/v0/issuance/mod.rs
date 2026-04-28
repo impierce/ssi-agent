@@ -35,36 +35,37 @@ use axum::{routing::post, Router};
 use std::sync::Arc;
 
 pub fn router((issuance_state, library_state): (Arc<IssuanceState>, Arc<LibraryState>)) -> Router {
-    Router::new().nest(
-        API_VERSION,
-        Router::new()
-            .route(
-                "/credentials/{credential_id}",
-                get(credentials::credential).patch(patch_credential),
-            )
-            .route("/credential-configurations", post(credential_configurations))
-            .route("/offers", post(offers).get(all_offers))
-            .route("/offers/{offer_id}", get(offer))
-            .route("/offers/send-offer-to-individual", post(individual_offer))
-            .route("/offers/send-offer-to-organization", post(organization_offer))
-            .with_state(issuance_state.clone())
-            .route("/credentials", get(all_credentials).post(credentials))
-            .with_state((issuance_state.clone(), library_state.clone()))
-            .route(
-                "/.well-known/oauth-authorization-server",
-                get(oauth_authorization_server),
-            )
-            .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
-            .route("/openid4vci/credential", post(credential))
-            .route("/openid4vci/nonce", post(nonce))
-            .route("/openid4vci/notification", post(notification))
-            .route("/openid4vci/credential-offer/{offer_id}", get(credential_offer_uri))
-            .route("/ietf-oauth-token-status-list/{path}", get(token_status_list))
-            // TODO: Move this route to `../library` once `agent_library` is properly implemented.
-            .route(
-                "/vct/{credential_configuration_id}/{version}",
-                get(ietf_oauth_sd_jwt_vc::type_metadata),
-            )
-            .with_state(issuance_state),
-    )
+    Router::new()
+        .nest(
+            API_VERSION,
+            Router::new()
+                .route(
+                    "/credentials/{credential_id}",
+                    get(credentials::credential).patch(patch_credential),
+                )
+                .route("/credential-configurations", post(credential_configurations))
+                .route("/offers", post(offers).get(all_offers))
+                .route("/offers/{offer_id}", get(offer))
+                .route("/offers/send-offer-to-individual", post(individual_offer))
+                .route("/offers/send-offer-to-organization", post(organization_offer))
+                .with_state(issuance_state.clone())
+                .route("/credentials", get(all_credentials).post(credentials))
+                .with_state((issuance_state.clone(), library_state.clone())),
+        )
+        .route(
+            "/.well-known/oauth-authorization-server",
+            get(oauth_authorization_server),
+        )
+        .route("/.well-known/openid-credential-issuer", get(openid_credential_issuer))
+        .route("/openid4vci/credential", post(credential))
+        .route("/openid4vci/nonce", post(nonce))
+        .route("/openid4vci/notification", post(notification))
+        .route("/openid4vci/credential-offer/{offer_id}", get(credential_offer_uri))
+        .route("/ietf-oauth-token-status-list/{path}", get(token_status_list))
+        // TODO: Move this route to `../library` once `agent_library` is properly implemented.
+        .route(
+            "/vct/{credential_configuration_id}/{version}",
+            get(ietf_oauth_sd_jwt_vc::type_metadata),
+        )
+        .with_state(issuance_state)
 }
