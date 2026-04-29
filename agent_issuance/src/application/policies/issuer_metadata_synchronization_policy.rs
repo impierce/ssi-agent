@@ -40,14 +40,62 @@ impl IssuerMetadataSynchronizationPolicy {
         };
         (policy, template_view)
     }
+
+    /// Re-queries the current template state from the view repository and, if the template is not
+    /// in Draft status, updates (or creates) the corresponding credential configuration.
+    async fn sync_from_view(&self, template_id: &str) {
+        use agent_library::template::aggregate::Status;
+
+        let Some(view) = self.template_view.get() else {
+            warn!("Template view not yet initialized; skipping credential configuration sync for `{template_id}`");
+            return;
+        };
+        match query_handler(template_id, view).await {
+            Ok(Some(template)) => {
+                if template.status == Status::Draft {
+                    return;
+                }
+                let credential_configuration = credential_configuration_from_template(&template);
+                let command = ServerConfigCommand::UpdateCredentialConfiguration {
+                    credential_configuration,
+                    provisioned: false,
+                };
+                if let Err(e) =
+                    command_handler(SERVER_CONFIG_ID, &self.issuance_state.command.server_config, command).await
+                {
+                    warn!("Failed to update credential configuration for template `{template_id}`: {e}");
+                }
+            }
+            Ok(None) => {
+                warn!("Template `{template_id}` not found when trying to sync credential configuration");
+            }
+            Err(e) => {
+                warn!("Failed to query template `{template_id}` for credential configuration sync: {e}");
+            }
+        }
+    }
+
+    /// Removes the credential configuration associated with the given template ID.
+    async fn remove_credential_configuration(&self, template_id: &str) {
+        let command = ServerConfigCommand::RemoveCredentialConfiguration {
+            credential_configuration_id: template_id.to_string(),
+            provisioned: false,
+        };
+        if let Err(e) = command_handler(SERVER_CONFIG_ID, &self.issuance_state.command.server_config, command).await {
+            warn!("Failed to remove credential configuration for template `{template_id}`: {e}");
+        }
+    }
 }
 
 /// Derives a `CredentialConfiguration` from a `Template`.
 ///
 /// The display name is taken from `template.display.name` if present, falling back to `template.title`.
 fn credential_configuration_from_template(template: &Template) -> CredentialConfiguration {
-    // TODO: determine the format based on the template's schema content.
-    let format = "jwt_vc_json".to_string();
+    let format = match template.data_model {
+        Some(DataModel::W3CVcDataModelV2_0) => "vc+sd-jwt",
+        _ => "jwt_vc_json",
+    }
+    .to_string();
 
     let display = template
         .display
@@ -94,7 +142,8 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
 
 #[async_trait]
 impl Query<Template> for IssuerMetadataSynchronizationPolicy {
-    async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<Template>]) {
+    async fn dispatch(&self, _aggregate_id: &str, events: &[EventEnvelope<Template>]) {
+        use agent_library::template::aggregate::Status;
         use agent_library::template::event::TemplateEvent::*;
 
         for event in events {
@@ -109,8 +158,6 @@ impl Query<Template> for IssuerMetadataSynchronizationPolicy {
                     status,
                     ..
                 } => {
-                    use agent_library::template::aggregate::Status;
-
                     // Only register a credential configuration once the template has left the draft stage.
                     if *status == Status::Draft || *status == Status::Deleted {
                         continue;
@@ -138,110 +185,30 @@ impl Query<Template> for IssuerMetadataSynchronizationPolicy {
                     }
                 }
 
-                // When the status transitions to Deleted, remove the credential configuration.
+                // When the status changes to Deleted, remove the credential configuration;
+                // for any other transition (e.g. Draft → Published) re-query and sync.
                 StatusUpdated {
                     template_id, status, ..
                 } => {
-                    use agent_library::template::aggregate::Status;
-
                     if *status == Status::Deleted {
-                        let command = ServerConfigCommand::RemoveCredentialConfiguration {
-                            credential_configuration_id: template_id.clone(),
-                            provisioned: false,
-                        };
-                        if let Err(e) =
-                            command_handler(SERVER_CONFIG_ID, &self.issuance_state.command.server_config, command).await
-                        {
-                            warn!(
-                                "Failed to remove credential configuration for deleted template `{template_id}`: {e}"
-                            );
-                        }
+                        self.remove_credential_configuration(template_id).await;
                         continue;
                     }
-
-                    // For any other status transition (e.g. Draft → Published), fall through to the
-                    // re-query path below so the credential configuration is created/updated.
-                    let Some(view) = self.template_view.get() else {
-                        warn!("Template view not yet initialized; skipping credential configuration sync for `{template_id}`");
-                        continue;
-                    };
-                    match query_handler(aggregate_id, view).await {
-                        Ok(Some(template)) => {
-                            if template.status == Status::Draft {
-                                continue;
-                            }
-
-                            let credential_configuration = credential_configuration_from_template(&template);
-                            let command = ServerConfigCommand::UpdateCredentialConfiguration {
-                                credential_configuration,
-                                provisioned: false,
-                            };
-                            if let Err(e) =
-                                command_handler(SERVER_CONFIG_ID, &self.issuance_state.command.server_config, command)
-                                    .await
-                            {
-                                warn!("Failed to update credential configuration for template `{template_id}`: {e}");
-                            }
-                        }
-                        Ok(None) => {
-                            warn!("Template `{template_id}` not found when trying to sync credential configuration");
-                        }
-                        Err(e) => {
-                            warn!("Failed to query template `{template_id}` for credential configuration sync: {e}");
-                        }
-                    }
+                    self.sync_from_view(template_id).await;
                 }
 
-                // For partial updates, re-query the current template state to build the full credential configuration.
+                // For partial updates re-query the current template state to rebuild the full
+                // credential configuration.
                 TitleUpdated { template_id, .. }
                 | DisplayUpdated { template_id, .. }
                 | DataModelUpdated { template_id, .. }
                 | TypeUpdated { template_id, .. } => {
-                    let Some(view) = self.template_view.get() else {
-                        warn!("Template view not yet initialized; skipping credential configuration sync for `{template_id}`");
-                        continue;
-                    };
-                    match query_handler(aggregate_id, view).await {
-                        Ok(Some(template)) => {
-                            use agent_library::template::aggregate::Status;
-
-                            // Skip sync if the template is still in draft stage.
-                            if template.status == Status::Draft {
-                                continue;
-                            }
-
-                            let credential_configuration = credential_configuration_from_template(&template);
-                            let command = ServerConfigCommand::UpdateCredentialConfiguration {
-                                credential_configuration,
-                                provisioned: false,
-                            };
-                            if let Err(e) =
-                                command_handler(SERVER_CONFIG_ID, &self.issuance_state.command.server_config, command)
-                                    .await
-                            {
-                                warn!("Failed to update credential configuration for template `{template_id}`: {e}");
-                            }
-                        }
-                        Ok(None) => {
-                            warn!("Template `{template_id}` not found when trying to sync credential configuration");
-                        }
-                        Err(e) => {
-                            warn!("Failed to query template `{template_id}` for credential configuration sync: {e}");
-                        }
-                    }
+                    self.sync_from_view(template_id).await;
                 }
 
                 // When a template is deleted, remove the corresponding credential configuration.
                 TemplateDeleted { template_id } => {
-                    let command = ServerConfigCommand::RemoveCredentialConfiguration {
-                        credential_configuration_id: template_id.clone(),
-                        provisioned: false,
-                    };
-                    if let Err(e) =
-                        command_handler(SERVER_CONFIG_ID, &self.issuance_state.command.server_config, command).await
-                    {
-                        warn!("Failed to remove credential configuration for deleted template `{template_id}`: {e}");
-                    }
+                    self.remove_credential_configuration(template_id).await;
                 }
 
                 _ => {}
