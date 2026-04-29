@@ -1,38 +1,350 @@
-use crate::state::IssuanceState;
-use agent_library::template::aggregate::Template;
+use crate::server_config::command::ServerConfigCommand;
+use crate::state::{IssuanceState, SERVER_CONFIG_ID};
+use agent_library::template::aggregate::{DataModel, Template};
+use agent_library::template::views::TemplateView;
+use agent_shared::config::{Authorization, CredentialConfiguration};
+use agent_shared::handlers::{command_handler, query_handler};
 use async_trait::async_trait;
+use cqrs_es::persist::ViewRepository;
 use cqrs_es::{EventEnvelope, Query};
-use std::sync::Arc;
+use oid4vci::credential_issuer::credential_configurations_supported::{
+    CredentialConfigurationsSupportedDisplay, CredentialMetadata, Logo as OidcLogo,
+};
+use std::sync::{Arc, OnceLock};
+use tracing::warn;
 
 pub struct IssuerMetadataSynchronizationPolicy {
-    // TODO: Actually use this.
-    _issuance_state: Arc<IssuanceState>,
+    issuance_state: Arc<IssuanceState>,
+    /// The template view repository used to re-query the current template state on partial updates.
+    ///
+    /// This is a `OnceLock` so that the real library state's view repository can be injected AFTER
+    /// the library state (and hence the CQRS framework) is constructed, avoiding the circular
+    /// dependency: policy → library state → policy. By the time any template events arrive the
+    /// application is already started and the lock is set.
+    template_view: Arc<OnceLock<Arc<dyn ViewRepository<TemplateView, Template>>>>,
 }
 
 impl IssuerMetadataSynchronizationPolicy {
-    pub fn new(issuance_state: Arc<IssuanceState>) -> Self {
-        Self {
-            _issuance_state: issuance_state,
-        }
+    /// Creates a new policy.
+    ///
+    /// Returns both the policy and the `OnceLock` handle.  After building the library state that
+    /// owns this policy, call `handle.set(library_state.query.template.clone()).unwrap()` to wire
+    /// the real (shared) view repository into the policy.
+    pub fn new(
+        issuance_state: Arc<IssuanceState>,
+    ) -> (Self, Arc<OnceLock<Arc<dyn ViewRepository<TemplateView, Template>>>>) {
+        let template_view = Arc::new(OnceLock::new());
+        let policy = Self {
+            issuance_state,
+            template_view: template_view.clone(),
+        };
+        (policy, template_view)
+    }
+}
+
+/// Derives a `CredentialConfiguration` from a `Template`.
+///
+/// The display name is taken from `template.display.name` if present, falling back to `template.title`.
+fn credential_configuration_from_template(template: &Template) -> CredentialConfiguration {
+    // TODO: determine the format based on the template's schema content.
+    let format = "jwt_vc_json".to_string();
+
+    let display = template
+        .display
+        .as_ref()
+        .map(|d| {
+            let logo = d.logo.as_ref().and_then(|logo| {
+                logo.uri.parse().ok().map(|uri| OidcLogo {
+                    uri,
+                    alt_text: logo.alt_text.clone(),
+                })
+            });
+            vec![CredentialConfigurationsSupportedDisplay {
+                name: d.name.clone(),
+                locale: None,
+                logo,
+                description: None,
+                background_image: None,
+                background_color: None,
+                text_color: None,
+            }]
+        })
+        .or_else(|| {
+            template.title.as_ref().map(|title| {
+                vec![CredentialConfigurationsSupportedDisplay {
+                    name: title.clone(),
+                    locale: None,
+                    logo: None,
+                    description: None,
+                    background_image: None,
+                    background_color: None,
+                    text_color: None,
+                }]
+            })
+        });
+
+    CredentialConfiguration {
+        credential_configuration_id: template.template_id.clone(),
+        format,
+        type_: template.r#type.clone(),
+        credential_metadata: CredentialMetadata { display, claims: None },
+        authorization: Authorization::default(),
     }
 }
 
 #[async_trait]
 impl Query<Template> for IssuerMetadataSynchronizationPolicy {
-    async fn dispatch(&self, _aggregate_id: &str, events: &[EventEnvelope<Template>]) {
+    async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<Template>]) {
         use agent_library::template::event::TemplateEvent::*;
 
         for event in events {
-            // TODO: Remove this when we implement the actual issuer metadata synchronization policy.
-            #[allow(clippy::single_match)]
             match &event.payload {
+                // On creation we have the full template state in the event itself.
                 TemplateCreated {
-                    title: Some(_title), ..
+                    template_id,
+                    title,
+                    display,
+                    data_model,
+                    r#type,
+                    status,
+                    ..
                 } => {
-                    // TODO: Update issuer metadata.
+                    use agent_library::template::aggregate::Status;
+
+                    // Only register a credential configuration once the template has left the draft stage.
+                    if *status == Status::Draft || *status == Status::Deleted {
+                        continue;
+                    }
+
+                    let template = Template {
+                        template_id: template_id.clone(),
+                        title: title.clone(),
+                        display: *display.clone(),
+                        data_model: data_model.clone(),
+                        r#type: r#type.clone(),
+                        status: status.clone(),
+                        ..Default::default()
+                    };
+
+                    let credential_configuration = credential_configuration_from_template(&template);
+                    let command = ServerConfigCommand::UpdateCredentialConfiguration {
+                        credential_configuration,
+                        provisioned: false,
+                    };
+                    if let Err(e) =
+                        command_handler(SERVER_CONFIG_ID, &self.issuance_state.command.server_config, command).await
+                    {
+                        warn!("Failed to update credential configuration for template `{template_id}`: {e}");
+                    }
                 }
+
+                // When the status transitions to Deleted, remove the credential configuration.
+                StatusUpdated {
+                    template_id, status, ..
+                } => {
+                    use agent_library::template::aggregate::Status;
+
+                    if *status == Status::Deleted {
+                        let command = ServerConfigCommand::RemoveCredentialConfiguration {
+                            credential_configuration_id: template_id.clone(),
+                            provisioned: false,
+                        };
+                        if let Err(e) =
+                            command_handler(SERVER_CONFIG_ID, &self.issuance_state.command.server_config, command).await
+                        {
+                            warn!(
+                                "Failed to remove credential configuration for deleted template `{template_id}`: {e}"
+                            );
+                        }
+                        continue;
+                    }
+
+                    // For any other status transition (e.g. Draft → Published), fall through to the
+                    // re-query path below so the credential configuration is created/updated.
+                    let Some(view) = self.template_view.get() else {
+                        warn!("Template view not yet initialized; skipping credential configuration sync for `{template_id}`");
+                        continue;
+                    };
+                    match query_handler(aggregate_id, view).await {
+                        Ok(Some(template)) => {
+                            if template.status == Status::Draft {
+                                continue;
+                            }
+
+                            let credential_configuration = credential_configuration_from_template(&template);
+                            let command = ServerConfigCommand::UpdateCredentialConfiguration {
+                                credential_configuration,
+                                provisioned: false,
+                            };
+                            if let Err(e) =
+                                command_handler(SERVER_CONFIG_ID, &self.issuance_state.command.server_config, command)
+                                    .await
+                            {
+                                warn!("Failed to update credential configuration for template `{template_id}`: {e}");
+                            }
+                        }
+                        Ok(None) => {
+                            warn!("Template `{template_id}` not found when trying to sync credential configuration");
+                        }
+                        Err(e) => {
+                            warn!("Failed to query template `{template_id}` for credential configuration sync: {e}");
+                        }
+                    }
+                }
+
+                // For partial updates, re-query the current template state to build the full credential configuration.
+                TitleUpdated { template_id, .. }
+                | DisplayUpdated { template_id, .. }
+                | DataModelUpdated { template_id, .. }
+                | TypeUpdated { template_id, .. } => {
+                    let Some(view) = self.template_view.get() else {
+                        warn!("Template view not yet initialized; skipping credential configuration sync for `{template_id}`");
+                        continue;
+                    };
+                    match query_handler(aggregate_id, view).await {
+                        Ok(Some(template)) => {
+                            use agent_library::template::aggregate::Status;
+
+                            // Skip sync if the template is still in draft stage.
+                            if template.status == Status::Draft {
+                                continue;
+                            }
+
+                            let credential_configuration = credential_configuration_from_template(&template);
+                            let command = ServerConfigCommand::UpdateCredentialConfiguration {
+                                credential_configuration,
+                                provisioned: false,
+                            };
+                            if let Err(e) =
+                                command_handler(SERVER_CONFIG_ID, &self.issuance_state.command.server_config, command)
+                                    .await
+                            {
+                                warn!("Failed to update credential configuration for template `{template_id}`: {e}");
+                            }
+                        }
+                        Ok(None) => {
+                            warn!("Template `{template_id}` not found when trying to sync credential configuration");
+                        }
+                        Err(e) => {
+                            warn!("Failed to query template `{template_id}` for credential configuration sync: {e}");
+                        }
+                    }
+                }
+
+                // When a template is deleted, remove the corresponding credential configuration.
+                TemplateDeleted { template_id } => {
+                    let command = ServerConfigCommand::RemoveCredentialConfiguration {
+                        credential_configuration_id: template_id.clone(),
+                        provisioned: false,
+                    };
+                    if let Err(e) =
+                        command_handler(SERVER_CONFIG_ID, &self.issuance_state.command.server_config, command).await
+                    {
+                        warn!("Failed to remove credential configuration for deleted template `{template_id}`: {e}");
+                    }
+                }
+
                 _ => {}
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_library::template::aggregate::{DataModel, Display};
+
+    #[test]
+    fn test_v1_data_model_produces_jwt_vc_json_format() {
+        let template = Template {
+            template_id: "t1".to_string(),
+            data_model: Some(DataModel::W3CVcDataModelV1_1),
+            r#type: vec!["VerifiableCredential".to_string()],
+            ..Default::default()
+        };
+        let config = credential_configuration_from_template(&template);
+        assert_eq!(config.format, "jwt_vc_json");
+    }
+
+    #[test]
+    fn test_v2_data_model_produces_vc_sd_jwt_format() {
+        let template = Template {
+            template_id: "t2".to_string(),
+            data_model: Some(DataModel::W3CVcDataModelV2_0),
+            r#type: vec!["VerifiableCredential".to_string()],
+            ..Default::default()
+        };
+        let config = credential_configuration_from_template(&template);
+        assert_eq!(config.format, "vc+sd-jwt");
+    }
+
+    #[test]
+    fn test_absent_data_model_produces_jwt_vc_json_format() {
+        let template = Template {
+            template_id: "t3".to_string(),
+            data_model: None,
+            r#type: vec!["VerifiableCredential".to_string()],
+            ..Default::default()
+        };
+        let config = credential_configuration_from_template(&template);
+        assert_eq!(config.format, "jwt_vc_json");
+    }
+
+    #[test]
+    fn test_display_name_takes_precedence_over_title() {
+        let template = Template {
+            template_id: "t4".to_string(),
+            display: Some(Display {
+                name: "Display Name".to_string(),
+                logo: None,
+            }),
+            title: Some("Fallback Title".to_string()),
+            ..Default::default()
+        };
+        let config = credential_configuration_from_template(&template);
+        let name = config
+            .credential_metadata
+            .display
+            .as_ref()
+            .unwrap()
+            .first()
+            .unwrap()
+            .name
+            .clone();
+        assert_eq!(name, "Display Name");
+    }
+
+    #[test]
+    fn test_title_used_as_fallback_display_name() {
+        let template = Template {
+            template_id: "t5".to_string(),
+            display: None,
+            title: Some("My Title".to_string()),
+            ..Default::default()
+        };
+        let config = credential_configuration_from_template(&template);
+        let name = config
+            .credential_metadata
+            .display
+            .as_ref()
+            .unwrap()
+            .first()
+            .unwrap()
+            .name
+            .clone();
+        assert_eq!(name, "My Title");
+    }
+
+    #[test]
+    fn test_no_display_no_title_yields_no_credential_display() {
+        let template = Template {
+            template_id: "t6".to_string(),
+            display: None,
+            title: None,
+            ..Default::default()
+        };
+        let config = credential_configuration_from_template(&template);
+        assert!(config.credential_metadata.display.is_none());
     }
 }

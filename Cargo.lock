@@ -376,6 +376,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "thiserror 1.0.69",
+ "tokio",
  "tracing",
  "tracing-test",
  "url",

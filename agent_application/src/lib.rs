@@ -63,19 +63,25 @@ pub async fn state() -> io::Result<ApplicationState> {
                 let issuance_state =
                     Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);
 
-                let issuer_metadata_synchronization_policy =
+                let (issuer_metadata_synchronization_policy, template_view_handle) =
                     IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
+
+                let library_state = Arc::new(
+                    agent_store::library_state(
+                        &builder,
+                        library_event_publishers,
+                        vec![Box::new(issuer_metadata_synchronization_policy)],
+                    )
+                    .await,
+                );
+                assert!(
+                    template_view_handle.set(library_state.query.template.clone()).is_ok(),
+                    "template view already initialized"
+                );
 
                 (
                     Arc::new(agent_store::identity_state(&builder, identity_services, identity_event_publishers).await),
-                    Arc::new(
-                        agent_store::library_state(
-                            &builder,
-                            library_event_publishers,
-                            vec![Box::new(issuer_metadata_synchronization_policy)],
-                        )
-                        .await,
-                    ),
+                    library_state,
                     Arc::new(
                         agent_store::authorization_state(
                             &builder,
@@ -98,19 +104,25 @@ pub async fn state() -> io::Result<ApplicationState> {
                 let issuance_state =
                     Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);
 
-                let issuer_metadata_synchronization_policy =
+                let (issuer_metadata_synchronization_policy, template_view_handle) =
                     IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
+
+                let library_state = Arc::new(
+                    agent_store::library_state(
+                        &builder,
+                        library_event_publishers,
+                        vec![Box::new(issuer_metadata_synchronization_policy)],
+                    )
+                    .await,
+                );
+                assert!(
+                    template_view_handle.set(library_state.query.template.clone()).is_ok(),
+                    "template view already initialized"
+                );
 
                 (
                     Arc::new(agent_store::identity_state(&builder, identity_services, identity_event_publishers).await),
-                    Arc::new(
-                        agent_store::library_state(
-                            &builder,
-                            library_event_publishers,
-                            vec![Box::new(issuer_metadata_synchronization_policy)],
-                        )
-                        .await,
-                    ),
+                    library_state,
                     Arc::new(
                         agent_store::authorization_state(
                             &builder,
@@ -132,21 +144,27 @@ pub async fn state() -> io::Result<ApplicationState> {
                     agent_store::issuance_state(&InMemory, issuance_services, issuance_event_publishers).await,
                 );
 
-                let issuer_metadata_synchronization_policy =
+                let (issuer_metadata_synchronization_policy, template_view_handle) =
                     IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
+
+                let library_state = Arc::new(
+                    agent_store::library_state(
+                        &InMemory,
+                        library_event_publishers,
+                        vec![Box::new(issuer_metadata_synchronization_policy)],
+                    )
+                    .await,
+                );
+                assert!(
+                    template_view_handle.set(library_state.query.template.clone()).is_ok(),
+                    "template view already initialized"
+                );
 
                 (
                     Arc::new(
                         agent_store::identity_state(&InMemory, identity_services, identity_event_publishers).await,
                     ),
-                    Arc::new(
-                        agent_store::library_state(
-                            &InMemory,
-                            library_event_publishers,
-                            vec![Box::new(issuer_metadata_synchronization_policy)],
-                        )
-                        .await,
-                    ),
+                    library_state,
                     Arc::new(
                         agent_store::authorization_state(
                             &InMemory,

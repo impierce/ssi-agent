@@ -1,5 +1,4 @@
 // Endpoint handlers
-pub mod credential_configurations;
 pub mod credential_issuer;
 pub mod credentials;
 pub mod ietf_oauth_sd_jwt_vc;
@@ -10,7 +9,6 @@ pub mod openapi;
 pub mod error;
 
 use crate::v0::issuance::{
-    credential_configurations::credential_configurations,
     credential_issuer::{
         credential::credential,
         credential_offer::credential_offer_uri,
@@ -43,7 +41,6 @@ pub fn router((issuance_state, library_state): (Arc<IssuanceState>, Arc<LibraryS
                     "/credentials/{credential_id}",
                     get(credentials::credential).patch(patch_credential),
                 )
-                .route("/credential-configurations", post(credential_configurations))
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send-offer-to-individual", post(individual_offer))
