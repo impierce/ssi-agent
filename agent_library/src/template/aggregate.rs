@@ -138,7 +138,7 @@ impl Aggregate for Template {
                 // For OpenBadges 3.0 templates, merge in default required schema properties
                 // (achievement.name, achievement.criteria.narrative) before validation.
                 let schema = if data_model == Some(DataModel::OpenBadges3_0) {
-                    let mut s = (*schema).unwrap_or_else(|| serde_json::json!({"type": "object"}));
+                    let mut s = (*schema).unwrap_or(serde_json::json!({"type": "object"}));
                     merge_open_badges_defaults(&mut s);
                     Box::new(Some(s))
                 } else {
@@ -161,10 +161,11 @@ impl Aggregate for Template {
                         let property_keys = get_schema_property_keys(s);
                         let mut attrs = schema_properties_attributes.unwrap_or_default();
                         for key in property_keys {
-                            // Insert or override: all OpenBadges schema properties are immutable.
+                            // Set immutable=true for all OpenBadges schema properties,
+                            // overriding any user-provided value.
                             let attr = attrs.entry(key).or_insert(PropertyAttribute {
                                 selectively_disclosable: false,
-                                immutable: true,
+                                immutable: false,
                             });
                             attr.immutable = true;
                         }
@@ -623,23 +624,22 @@ pub fn open_badges_default_required_keys() -> Vec<String> {
 
 /// Merges OpenBadges 3.0 default required properties into a user-provided schema.
 /// Ensures that the standard-mandated fields are always present and required.
+///
+/// # Panics
+/// Panics if `schema` is not a JSON object. Callers must ensure the schema is an object
+/// (or default to `{"type": "object"}`) before calling this function.
 fn merge_open_badges_defaults(schema: &mut serde_json::Value) {
     let default_props = open_badges_default_schema_properties();
     let default_required = open_badges_default_required_keys();
 
     // Ensure schema has "type": "object"
-    schema
+    let schema_obj = schema
         .as_object_mut()
-        .unwrap()
-        .entry("type")
-        .or_insert(serde_json::json!("object"));
+        .expect("merge_open_badges_defaults: schema must be a JSON object");
+    schema_obj.entry("type").or_insert(serde_json::json!("object"));
 
     // Merge default properties into schema.properties
-    let properties = schema
-        .as_object_mut()
-        .unwrap()
-        .entry("properties")
-        .or_insert(serde_json::json!({}));
+    let properties = schema_obj.entry("properties").or_insert(serde_json::json!({}));
 
     if let (Some(props_obj), Some(default_obj)) = (properties.as_object_mut(), default_props.as_object()) {
         for (key, value) in default_obj {
@@ -650,7 +650,7 @@ fn merge_open_badges_defaults(schema: &mut serde_json::Value) {
     // Merge default required keys into schema.required
     let required = schema
         .as_object_mut()
-        .unwrap()
+        .expect("merge_open_badges_defaults: schema must be a JSON object")
         .entry("required")
         .or_insert(serde_json::json!([]));
 
