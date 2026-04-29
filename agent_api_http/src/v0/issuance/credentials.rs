@@ -12,7 +12,9 @@ use agent_issuance::{
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
 use agent_library::state::LibraryState;
-use agent_library::template::aggregate::{Status as TemplateStatus, Template};
+use agent_library::template::aggregate::{
+    map_open_badges_input_to_credential, DataModel, Status as TemplateStatus, Template,
+};
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -127,6 +129,14 @@ pub(crate) async fn credentials(
             validate_credential_against_schema(&credential, schema).map_err(|e| *e)?;
         }
     }
+
+    // For OpenBadges 3.0 templates, map the flat input (conforming to the template schema)
+    // to the nested OBv3 credential structure expected by the issuance pipeline.
+    let credential = if !is_signed && template.data_model == Some(DataModel::OpenBadges3_0) {
+        map_open_badges_input_to_credential(&credential)
+    } else {
+        credential
+    };
 
     let (_, credential_configuration, authorization) =
         query_handler(SERVER_CONFIG_ID, &issuance_state.query.server_config)

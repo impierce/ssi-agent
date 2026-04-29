@@ -135,6 +135,16 @@ impl Aggregate for Template {
                 schema,
                 schema_properties_attributes,
             } => {
+                // For OpenBadges 3.0 templates, merge in default required schema properties
+                // (achievement.name, achievement.criteria.narrative) before validation.
+                let schema = if data_model == Some(DataModel::OpenBadges3_0) {
+                    let mut s = (*schema).unwrap_or_else(|| serde_json::json!({"type": "object"}));
+                    merge_open_badges_defaults(&mut s);
+                    Box::new(Some(s))
+                } else {
+                    schema
+                };
+
                 if let Some(ref s) = *schema {
                     validate_json_schema(s)?;
                 }
@@ -580,6 +590,133 @@ fn validate_schema_properties_attributes(
     }
 
     Ok(())
+}
+
+/// Returns the default required schema properties for OpenBadges 3.0 templates.
+/// These represent the standard-mandated fields that must always be present:
+/// - `achievement.name`: The name of the achievement (user-provided)
+/// - `achievement.type`: Always "Achievement" (fixed value, included as const in schema)
+/// - `achievement.criteria.narrative`: Description of how the achievement is earned (user-provided)
+///
+/// The returned JSON value is a schema `properties` object suitable for merging into
+/// a user-provided schema.
+pub fn open_badges_default_schema_properties() -> serde_json::Value {
+    serde_json::json!({
+        "achievement.name": {
+            "type": "string",
+            "description": "The name of the achievement"
+        },
+        "achievement.criteria.narrative": {
+            "type": "string",
+            "description": "Description of how the achievement is earned"
+        }
+    })
+}
+
+/// Returns the list of property keys that are required by the OpenBadges 3.0 standard.
+pub fn open_badges_default_required_keys() -> Vec<String> {
+    vec![
+        "achievement.name".to_string(),
+        "achievement.criteria.narrative".to_string(),
+    ]
+}
+
+/// Merges OpenBadges 3.0 default required properties into a user-provided schema.
+/// Ensures that the standard-mandated fields are always present and required.
+fn merge_open_badges_defaults(schema: &mut serde_json::Value) {
+    let default_props = open_badges_default_schema_properties();
+    let default_required = open_badges_default_required_keys();
+
+    // Ensure schema has "type": "object"
+    schema
+        .as_object_mut()
+        .unwrap()
+        .entry("type")
+        .or_insert(serde_json::json!("object"));
+
+    // Merge default properties into schema.properties
+    let properties = schema
+        .as_object_mut()
+        .unwrap()
+        .entry("properties")
+        .or_insert(serde_json::json!({}));
+
+    if let (Some(props_obj), Some(default_obj)) = (properties.as_object_mut(), default_props.as_object()) {
+        for (key, value) in default_obj {
+            props_obj.entry(key.clone()).or_insert(value.clone());
+        }
+    }
+
+    // Merge default required keys into schema.required
+    let required = schema
+        .as_object_mut()
+        .unwrap()
+        .entry("required")
+        .or_insert(serde_json::json!([]));
+
+    if let Some(required_arr) = required.as_array_mut() {
+        for key in &default_required {
+            let key_val = serde_json::Value::String(key.clone());
+            if !required_arr.contains(&key_val) {
+                required_arr.push(key_val);
+            }
+        }
+    }
+}
+
+/// Maps a flat credential input (conforming to an OpenBadges 3.0 template schema)
+/// to the nested OBv3 credential structure expected by the issuance pipeline.
+///
+/// Dot-notation keys in the flat input are expanded into nested objects. For example:
+/// `{"achievement.name": "Teamwork", "achievement.criteria.narrative": "..."}` becomes:
+/// `{"credentialSubject": {"achievement": {"name": "Teamwork", "type": "Achievement", "criteria": {"narrative": "..."}}}}`
+///
+/// Additionally, the fixed value `achievement.type = "Achievement"` is injected.
+pub fn map_open_badges_input_to_credential(flat_input: &serde_json::Value) -> serde_json::Value {
+    let mut achievement = serde_json::Map::new();
+    let mut criteria = serde_json::Map::new();
+    let mut other_fields = serde_json::Map::new();
+
+    if let Some(obj) = flat_input.as_object() {
+        for (key, value) in obj {
+            if let Some(suffix) = key.strip_prefix("achievement.criteria.") {
+                criteria.insert(suffix.to_string(), value.clone());
+            } else if let Some(suffix) = key.strip_prefix("achievement.") {
+                achievement.insert(suffix.to_string(), value.clone());
+            } else {
+                other_fields.insert(key.clone(), value.clone());
+            }
+        }
+    }
+
+    // Insert criteria into achievement if any criteria fields exist
+    if !criteria.is_empty() {
+        achievement.insert("criteria".to_string(), serde_json::Value::Object(criteria));
+    }
+
+    // Inject fixed value: achievement.type = "Achievement"
+    achievement
+        .entry("type".to_string())
+        .or_insert(serde_json::json!("Achievement"));
+
+    // Build the credentialSubject
+    let mut credential_subject = serde_json::Map::new();
+    credential_subject.insert("type".to_string(), serde_json::json!(["AchievementSubject"]));
+    credential_subject.insert("achievement".to_string(), serde_json::Value::Object(achievement));
+
+    // Build the final credential object
+    let mut credential = serde_json::Map::new();
+    credential.insert(
+        "credentialSubject".to_string(),
+        serde_json::Value::Object(credential_subject),
+    );
+
+    // Include any other non-achievement fields at the top level
+    for (key, value) in other_fields {
+        credential.insert(key, value);
+    }
+
+    serde_json::Value::Object(credential)
 }
 
 /// Ensures the `immutable` flag on each property attribute preserves the existing
@@ -1250,6 +1387,18 @@ pub mod document_tests {
             }
         });
 
+        // Expected schema includes the user-provided properties PLUS the merged defaults
+        let expected_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "achievementName": { "type": "string" },
+                "description": { "type": "string" },
+                "achievement.name": { "type": "string", "description": "The name of the achievement" },
+                "achievement.criteria.narrative": { "type": "string", "description": "Description of how the achievement is earned" }
+            },
+            "required": ["achievement.name", "achievement.criteria.narrative"]
+        });
+
         let mut expected_attrs = HashMap::new();
         expected_attrs.insert(
             "achievementName".to_string(),
@@ -1260,6 +1409,20 @@ pub mod document_tests {
         );
         expected_attrs.insert(
             "description".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+        expected_attrs.insert(
+            "achievement.name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+        expected_attrs.insert(
+            "achievement.criteria.narrative".to_string(),
             PropertyAttribute {
                 selectively_disclosable: false,
                 immutable: true,
@@ -1281,7 +1444,7 @@ pub mod document_tests {
                 visibility: Visibility::Private,
                 description: None,
                 r#type: vec![],
-                schema: Box::new(Some(schema.clone())),
+                schema: Box::new(Some(schema)),
                 schema_properties_attributes: None,
             })
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
@@ -1298,7 +1461,7 @@ pub mod document_tests {
                 visibility: Visibility::Private,
                 description: None,
                 r#type: vec![],
-                schema: Box::new(Some(schema)),
+                schema: Box::new(Some(expected_schema)),
                 schema_properties_attributes: Some(expected_attrs),
             }])
     }
@@ -1368,6 +1531,82 @@ pub mod document_tests {
                 schema_properties_attributes: expected_attrs,
                 modified_at: test_utils::modified_at(),
             }])
+    }
+
+    #[test]
+    fn test_map_open_badges_input_to_credential() {
+        let flat_input = serde_json::json!({
+            "achievement.name": "Teamwork",
+            "achievement.criteria.narrative": "Team members are nominated for this badge by their peers."
+        });
+
+        let result = map_open_badges_input_to_credential(&flat_input);
+
+        let expected = serde_json::json!({
+            "credentialSubject": {
+                "type": ["AchievementSubject"],
+                "achievement": {
+                    "name": "Teamwork",
+                    "type": "Achievement",
+                    "criteria": {
+                        "narrative": "Team members are nominated for this badge by their peers."
+                    }
+                }
+            }
+        });
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_map_open_badges_input_with_extra_fields() {
+        let flat_input = serde_json::json!({
+            "achievement.name": "Teamwork",
+            "achievement.criteria.narrative": "Nominated by peers.",
+            "achievement.description": "Collaboration badge",
+            "id": "https://example.com/credentials/3527"
+        });
+
+        let result = map_open_badges_input_to_credential(&flat_input);
+
+        assert_eq!(
+            result["credentialSubject"]["achievement"]["name"],
+            "Teamwork"
+        );
+        assert_eq!(
+            result["credentialSubject"]["achievement"]["type"],
+            "Achievement"
+        );
+        assert_eq!(
+            result["credentialSubject"]["achievement"]["criteria"]["narrative"],
+            "Nominated by peers."
+        );
+        assert_eq!(
+            result["credentialSubject"]["achievement"]["description"],
+            "Collaboration badge"
+        );
+        assert_eq!(result["id"], "https://example.com/credentials/3527");
+    }
+
+    #[test]
+    fn test_open_badges_default_schema_properties() {
+        let props = open_badges_default_schema_properties();
+        assert!(props.get("achievement.name").is_some());
+        assert!(props.get("achievement.criteria.narrative").is_some());
+    }
+
+    #[test]
+    fn test_merge_open_badges_defaults_into_empty_schema() {
+        let mut schema = serde_json::json!({});
+        merge_open_badges_defaults(&mut schema);
+
+        let props = schema.get("properties").unwrap().as_object().unwrap();
+        assert!(props.contains_key("achievement.name"));
+        assert!(props.contains_key("achievement.criteria.narrative"));
+
+        let required = schema.get("required").unwrap().as_array().unwrap();
+        assert!(required.contains(&serde_json::json!("achievement.name")));
+        assert!(required.contains(&serde_json::json!("achievement.criteria.narrative")));
     }
 }
 
