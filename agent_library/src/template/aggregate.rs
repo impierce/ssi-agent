@@ -151,17 +151,12 @@ impl Aggregate for Template {
                         let property_keys = get_schema_property_keys(s);
                         let mut attrs = schema_properties_attributes.unwrap_or_default();
                         for key in property_keys {
-                            attrs.entry(key).or_insert(PropertyAttribute {
+                            // Insert or override: all OpenBadges schema properties are immutable.
+                            let attr = attrs.entry(key).or_insert(PropertyAttribute {
                                 selectively_disclosable: false,
                                 immutable: true,
                             });
-                        }
-                        // Ensure immutable is always true for OpenBadges properties,
-                        // even if user-provided attributes tried to set it differently.
-                        for key in get_schema_property_keys(s) {
-                            if let Some(attr) = attrs.get_mut(&key) {
-                                attr.immutable = true;
-                            }
+                            attr.immutable = true;
                         }
                         Some(attrs)
                     } else {
@@ -333,18 +328,17 @@ impl Aggregate for Template {
                 // is missing from the new schema.
                 if let Some(ref existing_attrs) = self.schema_properties_attributes {
                     let new_property_keys = get_schema_property_keys(&schema);
-                    let immutable_missing: Vec<&String> = existing_attrs
+                    let immutable_missing: Vec<&str> = existing_attrs
                         .iter()
                         .filter(|(_, attr)| attr.immutable)
                         .filter(|(k, _)| !new_property_keys.contains(*k))
-                        .map(|(k, _)| k)
+                        .map(|(k, _)| k.as_str())
                         .collect();
 
                     if !immutable_missing.is_empty() {
-                        let keys_str: Vec<&str> = immutable_missing.iter().map(|k| k.as_str()).collect();
                         return Err(TemplateError::NonRemovablePropertyViolation(format!(
                             "The following immutable properties cannot be removed from the schema: [{}]",
-                            keys_str.join(", ")
+                            immutable_missing.join(", ")
                         )));
                     }
                 }
