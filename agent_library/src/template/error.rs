@@ -6,4 +6,6 @@ pub enum TemplateError {
     InvalidSchema(String),
     #[error("Invalid schema_properties_attributes key(s): {0}")]
     InvalidSchemaPropertiesAttributes(String),
+    #[error("Cannot remove immutable schema properties: {0}")]
+    NonRemovablePropertyViolation(String),
 }

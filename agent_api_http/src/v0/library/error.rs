@@ -15,6 +15,11 @@ impl IntoApiErrorExt for TemplateError {
                 .type_url(type_url("templates#invalid-schema-properties-attributes"))
                 .source(self)
                 .finish(),
+            TemplateError::NonRemovablePropertyViolation(_) => ApiError::builder(StatusCode::CONFLICT)
+                .title("Immutable Property Violation")
+                .type_url(type_url("templates#immutable-property-violation"))
+                .source(self)
+                .finish(),
         }
     }
 }

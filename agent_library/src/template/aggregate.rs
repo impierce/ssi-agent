@@ -68,6 +68,12 @@ pub enum Visibility {
 #[serde(rename_all = "camelCase")]
 pub struct PropertyAttribute {
     selectively_disclosable: bool,
+    /// Whether this property is immutable (cannot be removed or renamed from the schema).
+    /// Determined by the data model and cannot be altered through any command.
+    /// For OpenBadges 3.0 templates, all standard-mandated properties are immutable.
+    /// Defaults to `false`.
+    #[serde(default)]
+    immutable: bool,
 }
 
 #[skip_serializing_none]
@@ -136,6 +142,34 @@ impl Aggregate for Template {
                 if let Some(ref attrs) = schema_properties_attributes {
                     validate_schema_properties_attributes(&schema, attrs)?;
                 }
+
+                // For OpenBadges 3.0 templates, auto-populate immutable attributes
+                // for all schema properties. The `immutable` flag is system-determined
+                // by the data model and cannot be altered through any command.
+                let schema_properties_attributes = if data_model == Some(DataModel::OpenBadges3_0) {
+                    if let Some(ref s) = *schema {
+                        let property_keys = get_schema_property_keys(s);
+                        let mut attrs = schema_properties_attributes.unwrap_or_default();
+                        for key in property_keys {
+                            attrs.entry(key).or_insert(PropertyAttribute {
+                                selectively_disclosable: false,
+                                immutable: true,
+                            });
+                        }
+                        // Ensure immutable is always true for OpenBadges properties,
+                        // even if user-provided attributes tried to set it differently.
+                        for key in get_schema_property_keys(s) {
+                            if let Some(attr) = attrs.get_mut(&key) {
+                                attr.immutable = true;
+                            }
+                        }
+                        Some(attrs)
+                    } else {
+                        schema_properties_attributes
+                    }
+                } else {
+                    schema_properties_attributes
+                };
 
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -295,6 +329,26 @@ impl Aggregate for Template {
             UpdateSchema { template_id, schema } => {
                 validate_json_schema(&schema)?;
 
+                // Enforce immutable properties: reject if any property with immutable=true
+                // is missing from the new schema.
+                if let Some(ref existing_attrs) = self.schema_properties_attributes {
+                    let new_property_keys = get_schema_property_keys(&schema);
+                    let immutable_missing: Vec<&String> = existing_attrs
+                        .iter()
+                        .filter(|(_, attr)| attr.immutable)
+                        .filter(|(k, _)| !new_property_keys.contains(*k))
+                        .map(|(k, _)| k)
+                        .collect();
+
+                    if !immutable_missing.is_empty() {
+                        let keys_str: Vec<&str> = immutable_missing.iter().map(|k| k.as_str()).collect();
+                        return Err(TemplateError::NonRemovablePropertyViolation(format!(
+                            "The following immutable properties cannot be removed from the schema: [{}]",
+                            keys_str.join(", ")
+                        )));
+                    }
+                }
+
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
                 #[cfg(test)]
@@ -331,6 +385,13 @@ impl Aggregate for Template {
                 schema_properties_attributes,
             } => {
                 validate_schema_properties_attributes(&self.schema, &schema_properties_attributes)?;
+
+                // The `immutable` field is system-determined by the data model and cannot
+                // be altered through any command. Override it with the existing values.
+                let schema_properties_attributes = enforce_immutable_flag(
+                    schema_properties_attributes,
+                    &self.schema_properties_attributes,
+                );
 
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -525,6 +586,30 @@ fn validate_schema_properties_attributes(
     }
 
     Ok(())
+}
+
+/// Ensures the `immutable` flag on each property attribute preserves the existing
+/// system-determined value. Users cannot alter `immutable` through commands.
+fn enforce_immutable_flag(
+    mut new_attrs: HashMap<String, PropertyAttribute>,
+    existing_attrs: &Option<HashMap<String, PropertyAttribute>>,
+) -> HashMap<String, PropertyAttribute> {
+    if let Some(existing) = existing_attrs {
+        for (key, new_attr) in new_attrs.iter_mut() {
+            if let Some(existing_attr) = existing.get(key) {
+                new_attr.immutable = existing_attr.immutable;
+            } else {
+                // New properties not previously tracked default to non-immutable.
+                new_attr.immutable = false;
+            }
+        }
+    } else {
+        // No existing attributes means no immutable flags to preserve.
+        for attr in new_attrs.values_mut() {
+            attr.immutable = false;
+        }
+    }
+    new_attrs
 }
 
 #[cfg(test)]
@@ -746,6 +831,7 @@ pub mod document_tests {
             "nonexistent".to_string(),
             PropertyAttribute {
                 selectively_disclosable: true,
+                immutable: false,
             },
         );
 
@@ -778,6 +864,7 @@ pub mod document_tests {
             "name".to_string(),
             PropertyAttribute {
                 selectively_disclosable: true,
+                immutable: false,
             },
         );
 
@@ -817,6 +904,7 @@ pub mod document_tests {
             "nonexistent".to_string(),
             PropertyAttribute {
                 selectively_disclosable: true,
+                immutable: false,
             },
         );
 
@@ -853,6 +941,7 @@ pub mod document_tests {
             "name".to_string(),
             PropertyAttribute {
                 selectively_disclosable: true,
+                immutable: false,
             },
         );
 
@@ -897,12 +986,14 @@ pub mod document_tests {
             "name".to_string(),
             PropertyAttribute {
                 selectively_disclosable: true,
+                immutable: false,
             },
         );
         attrs.insert(
             "age".to_string(),
             PropertyAttribute {
                 selectively_disclosable: false,
+                immutable: false,
             },
         );
 
@@ -918,6 +1009,7 @@ pub mod document_tests {
             "name".to_string(),
             PropertyAttribute {
                 selectively_disclosable: true,
+                immutable: false,
             },
         );
 
@@ -972,6 +1064,7 @@ pub mod document_tests {
             "name".to_string(),
             PropertyAttribute {
                 selectively_disclosable: true,
+                immutable: false,
             },
         );
 
@@ -1008,6 +1101,277 @@ pub mod document_tests {
             .then_expect_events(vec![TemplateEvent::SchemaUpdated {
                 template_id,
                 schema: new_schema,
+                modified_at: test_utils::modified_at(),
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_schema_rejects_removal_of_immutable_property(template_id: String) {
+        let original_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "age": { "type": "integer" }
+            }
+        });
+
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            "name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+        attrs.insert(
+            "age".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: false,
+            },
+        );
+
+        // Try to remove the immutable "name" property
+        let new_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "age": { "type": "integer" }
+            }
+        });
+
+        TemplateTestFramework::with(())
+            .given(vec![TemplateEvent::TemplateCreated {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: None,
+                display: Box::new(None),
+                data_model: Some(DataModel::OpenBadges3_0),
+                creator: None,
+                holder_type: None,
+                modified_at: test_utils::modified_at(),
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(Some(original_schema)),
+                schema_properties_attributes: Some(attrs),
+            }])
+            .when(TemplateCommand::UpdateSchema {
+                template_id,
+                schema: new_schema,
+            })
+            .then_expect_error_message("Cannot remove immutable schema properties: The following immutable properties cannot be removed from the schema: [name]")
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_schema_allows_removal_of_non_immutable_property(template_id: String) {
+        let original_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "age": { "type": "integer" }
+            }
+        });
+
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            "name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+        attrs.insert(
+            "age".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: false,
+            },
+        );
+
+        // Remove non-immutable "age" property - should succeed
+        let new_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        let mut expected_attrs = HashMap::new();
+        expected_attrs.insert(
+            "name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+
+        TemplateTestFramework::with(())
+            .given(vec![TemplateEvent::TemplateCreated {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: None,
+                display: Box::new(None),
+                data_model: Some(DataModel::OpenBadges3_0),
+                creator: None,
+                holder_type: None,
+                modified_at: test_utils::modified_at(),
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(Some(original_schema)),
+                schema_properties_attributes: Some(attrs),
+            }])
+            .when(TemplateCommand::UpdateSchema {
+                template_id: template_id.clone(),
+                schema: new_schema.clone(),
+            })
+            .then_expect_events(vec![
+                TemplateEvent::SchemaUpdated {
+                    template_id: template_id.clone(),
+                    schema: new_schema,
+                    modified_at: test_utils::modified_at(),
+                },
+                TemplateEvent::SchemaPropertiesAttributesUpdated {
+                    template_id,
+                    schema_properties_attributes: expected_attrs,
+                    modified_at: test_utils::modified_at(),
+                },
+            ])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_open_badges_template_auto_populates_immutable(template_id: String) {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "achievementName": { "type": "string" },
+                "description": { "type": "string" }
+            }
+        });
+
+        let mut expected_attrs = HashMap::new();
+        expected_attrs.insert(
+            "achievementName".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+        expected_attrs.insert(
+            "description".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+
+        TemplateTestFramework::with(())
+            .given_no_previous_events()
+            .when(TemplateCommand::CreateTemplate {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: None,
+                display: Box::new(None),
+                data_model: Some(DataModel::OpenBadges3_0),
+                creator: None,
+                holder_type: None,
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(Some(schema.clone())),
+                schema_properties_attributes: None,
+            })
+            .then_expect_events(vec![TemplateEvent::TemplateCreated {
+                template_id,
+                source_template_id: None,
+                title: None,
+                display: Box::new(None),
+                data_model: Some(DataModel::OpenBadges3_0),
+                creator: None,
+                holder_type: None,
+                modified_at: test_utils::modified_at(),
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(Some(schema)),
+                schema_properties_attributes: Some(expected_attrs),
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_attributes_cannot_change_immutable_flag(template_id: String) {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        let mut existing_attrs = HashMap::new();
+        existing_attrs.insert(
+            "name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+
+        // User tries to set immutable to false - it should be preserved as true
+        let mut user_attrs = HashMap::new();
+        user_attrs.insert(
+            "name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: true,
+                immutable: false, // User tries to change this
+            },
+        );
+
+        let mut expected_attrs = HashMap::new();
+        expected_attrs.insert(
+            "name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: true,
+                immutable: true, // System preserves immutable
+            },
+        );
+
+        TemplateTestFramework::with(())
+            .given(vec![TemplateEvent::TemplateCreated {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: None,
+                display: Box::new(None),
+                data_model: Some(DataModel::OpenBadges3_0),
+                creator: None,
+                holder_type: None,
+                modified_at: test_utils::modified_at(),
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(Some(schema)),
+                schema_properties_attributes: Some(existing_attrs),
+            }])
+            .when(TemplateCommand::UpdateSchemaPropertiesAttributes {
+                template_id: template_id.clone(),
+                schema_properties_attributes: user_attrs,
+            })
+            .then_expect_events(vec![TemplateEvent::SchemaPropertiesAttributesUpdated {
+                template_id,
+                schema_properties_attributes: expected_attrs,
                 modified_at: test_utils::modified_at(),
             }])
     }
@@ -1098,6 +1462,7 @@ pub mod test_utils {
             "name".to_string(),
             PropertyAttribute {
                 selectively_disclosable: true,
+                immutable: false,
             },
         );
         Some(config)
