@@ -30,6 +30,11 @@ impl IntoApiErrorExt for TemplateError {
                 .type_url(type_url("templates#missing-required-open-badges-properties"))
                 .source(self)
                 .finish(),
+            TemplateError::InvalidRequiredPropertyType(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Required Property Type")
+                .type_url(type_url("templates#invalid-required-property-type"))
+                .source(self)
+                .finish(),
         }
     }
 }

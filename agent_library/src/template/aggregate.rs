@@ -68,9 +68,10 @@ pub enum Visibility {
 #[serde(rename_all = "camelCase")]
 pub struct PropertyAttribute {
     selectively_disclosable: bool,
-    /// Whether this property is immutable (cannot be removed or renamed from the schema).
+    /// Whether this property is immutable (cannot be removed from the schema).
     /// Determined by the data model and cannot be altered through any command.
-    /// For OpenBadges 3.0 templates, all standard-mandated properties are immutable.
+    /// For OpenBadges 3.0 templates, only the required properties
+    /// (`achievement.name`, `achievement.criteria.narrative`) are immutable.
     /// Defaults to `false`.
     #[serde(default)]
     immutable: bool,
@@ -165,20 +166,20 @@ impl Aggregate for Template {
                 }
 
                 // For OpenBadges 3.0 templates, auto-populate immutable attributes
-                // for all schema properties. The `immutable` flag is system-determined
-                // by the data model and cannot be altered through any command.
+                // for schema properties. Only required fields (achievement.name,
+                // achievement.criteria.narrative) are immutable; optional fields are not.
                 let schema_properties_attributes = if data_model == Some(DataModel::OpenBadges3_0) {
                     if let Some(ref s) = *schema {
                         let property_keys = get_schema_property_keys(s);
+                        let required_keys = open_badges_default_required_keys();
                         let mut attrs = schema_properties_attributes.unwrap_or_default();
                         for key in property_keys {
-                            // Set immutable=true for all OpenBadges schema properties,
-                            // overriding any user-provided value.
+                            let is_required = required_keys.contains(&key);
                             let attr = attrs.entry(key).or_insert(PropertyAttribute {
                                 selectively_disclosable: false,
                                 immutable: false,
                             });
-                            attr.immutable = true;
+                            attr.immutable = is_required;
                         }
                         Some(attrs)
                     } else {
@@ -347,9 +348,10 @@ impl Aggregate for Template {
                 validate_json_schema(&schema)?;
 
                 // For OpenBadges 3.0 templates, validate that all schema properties
-                // are within the allowed set.
+                // are within the allowed set and required properties have correct type.
                 if self.data_model == Some(DataModel::OpenBadges3_0) {
                     validate_open_badges_schema_properties(&schema)?;
+                    validate_open_badges_required_properties(&schema)?;
                 }
 
                 // Enforce immutable properties: reject if any property with immutable=true
@@ -642,7 +644,7 @@ pub fn open_badges_default_required_keys() -> Vec<String> {
 /// Returns the complete set of allowed schema property keys for OpenBadges 3.0 templates.
 /// Only these keys may appear in the template's `schema.properties`.
 ///
-/// This includes both required (immutable) and optional properties that conform
+/// This includes both required (immutable) and optional (removable) properties that conform
 /// to the OpenBadges 3.0 standard for Achievement credentials.
 pub fn open_badges_allowed_schema_property_keys() -> std::collections::HashSet<String> {
     [
@@ -686,8 +688,9 @@ fn validate_open_badges_schema_properties(schema: &serde_json::Value) -> Result<
     Ok(())
 }
 
-/// Validates that the required OpenBadges 3.0 properties are present in the schema.
-/// Returns an error if any required property is missing from `schema.properties`.
+/// Validates that the required OpenBadges 3.0 properties are present in the schema
+/// and that their type is fixed to "string".
+/// Returns an error if any required property is missing or has an incorrect type.
 fn validate_open_badges_required_properties(schema: &serde_json::Value) -> Result<(), TemplateError> {
     let property_keys = get_schema_property_keys(schema);
     let required_keys = open_badges_default_required_keys();
@@ -703,6 +706,28 @@ fn validate_open_badges_required_properties(schema: &serde_json::Value) -> Resul
             "The following required properties must be included in the schema for OpenBadges 3.0 templates: [{}]",
             missing.join(", ")
         )));
+    }
+
+    // Enforce that required properties have type "string"
+    if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
+        let wrong_type: Vec<&str> = required_keys
+            .iter()
+            .filter(|k| {
+                properties
+                    .get(k.as_str())
+                    .and_then(|prop| prop.get("type"))
+                    .and_then(|t| t.as_str())
+                    != Some("string")
+            })
+            .map(|k| k.as_str())
+            .collect();
+
+        if !wrong_type.is_empty() {
+            return Err(TemplateError::InvalidRequiredPropertyType(format!(
+                "The following required properties must have type \"string\": [{}]",
+                wrong_type.join(", ")
+            )));
+        }
     }
 
     Ok(())
@@ -1330,6 +1355,7 @@ pub mod document_tests {
             "type": "object",
             "properties": {
                 "achievement.name": { "type": "string" },
+                "achievement.criteria.narrative": { "type": "string" },
                 "achievement.description": { "type": "string" }
             }
         });
@@ -1337,6 +1363,13 @@ pub mod document_tests {
         let mut attrs = HashMap::new();
         attrs.insert(
             "achievement.name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+        attrs.insert(
+            "achievement.criteria.narrative".to_string(),
             PropertyAttribute {
                 selectively_disclosable: false,
                 immutable: true,
@@ -1354,6 +1387,7 @@ pub mod document_tests {
         let new_schema = serde_json::json!({
             "type": "object",
             "properties": {
+                "achievement.criteria.narrative": { "type": "string" },
                 "achievement.description": { "type": "string" }
             }
         });
@@ -1380,7 +1414,7 @@ pub mod document_tests {
                 template_id,
                 schema: new_schema,
             })
-            .then_expect_error_message("Cannot remove immutable schema properties: The following immutable properties cannot be removed from the schema: [achievement.name]")
+            .then_expect_error_message("Missing required OpenBadges 3.0 schema properties: The following required properties must be included in the schema for OpenBadges 3.0 templates: [achievement.name]")
     }
 
     #[rstest]
@@ -1390,6 +1424,7 @@ pub mod document_tests {
             "type": "object",
             "properties": {
                 "achievement.name": { "type": "string" },
+                "achievement.criteria.narrative": { "type": "string" },
                 "achievement.description": { "type": "string" }
             }
         });
@@ -1397,6 +1432,13 @@ pub mod document_tests {
         let mut attrs = HashMap::new();
         attrs.insert(
             "achievement.name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+        attrs.insert(
+            "achievement.criteria.narrative".to_string(),
             PropertyAttribute {
                 selectively_disclosable: false,
                 immutable: true,
@@ -1414,13 +1456,21 @@ pub mod document_tests {
         let new_schema = serde_json::json!({
             "type": "object",
             "properties": {
-                "achievement.name": { "type": "string" }
+                "achievement.name": { "type": "string" },
+                "achievement.criteria.narrative": { "type": "string" }
             }
         });
 
         let mut expected_attrs = HashMap::new();
         expected_attrs.insert(
             "achievement.name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+        expected_attrs.insert(
+            "achievement.criteria.narrative".to_string(),
             PropertyAttribute {
                 selectively_disclosable: false,
                 immutable: true,
@@ -1527,7 +1577,7 @@ pub mod document_tests {
             "achievement.description".to_string(),
             PropertyAttribute {
                 selectively_disclosable: false,
-                immutable: true,
+                immutable: false,
             },
         );
 
@@ -1857,6 +1907,7 @@ pub mod document_tests {
                 schema: Box::new(Some(schema)),
                 schema_properties_attributes: Some({
                     let mut attrs = HashMap::new();
+                    let required_keys = open_badges_default_required_keys();
                     for key in [
                         "achievement.name",
                         "achievement.criteria.narrative",
@@ -1870,7 +1921,7 @@ pub mod document_tests {
                             key.to_string(),
                             PropertyAttribute {
                                 selectively_disclosable: false,
-                                immutable: true,
+                                immutable: required_keys.contains(&key.to_string()),
                             },
                         );
                     }
