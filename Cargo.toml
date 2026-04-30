@@ -33,12 +33,11 @@ rust-version = "1.76.0"
 pedantic = "warn"
 
 [workspace.dependencies]
-# DO NOT MERGE: update rev once https://github.com/impierce/openid4vc/pull/125 is merged.
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "e0d7f48" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "e0d7f48" }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "e0d7f48" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "e0d7f48" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "e0d7f48" }
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "a9dd71a" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "a9dd71a" }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "a9dd71a" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "a9dd71a" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "a9dd71a" }
 
 shared-kernel = { path = "shared-kernel" }
 
