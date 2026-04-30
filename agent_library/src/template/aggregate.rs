@@ -723,23 +723,25 @@ fn validate_open_badges_required_properties(schema: &serde_json::Value) -> Resul
         )));
     }
 
-    // Enforce that required properties have type "string"
+    // Enforce that required properties have type "string" or a "const" value
     if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
         let wrong_type: Vec<&str> = required_keys
             .iter()
             .filter(|k| {
-                properties
-                    .get(k.as_str())
-                    .and_then(|prop| prop.get("type"))
+                let prop = properties.get(k.as_str());
+                let has_type_string = prop
+                    .and_then(|p| p.get("type"))
                     .and_then(|t| t.as_str())
-                    != Some("string")
+                    == Some("string");
+                let has_const = prop.and_then(|p| p.get("const")).is_some();
+                !has_type_string && !has_const
             })
             .map(|k| k.as_str())
             .collect();
 
         if !wrong_type.is_empty() {
             return Err(TemplateError::InvalidRequiredPropertyType(format!(
-                "The following required properties must have type \"string\": [{}]",
+                "The following required properties must have type \"string\" or a \"const\" value: [{}]",
                 wrong_type.join(", ")
             )));
         }
@@ -1593,6 +1595,70 @@ pub mod document_tests {
             PropertyAttribute {
                 selectively_disclosable: false,
                 immutable: false,
+            },
+        );
+
+        TemplateTestFramework::with(())
+            .given_no_previous_events()
+            .when(TemplateCommand::CreateTemplate {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: None,
+                display: Box::new(None),
+                data_model: Some(DataModel::OpenBadges3_0),
+                creator: None,
+                holder_type: None,
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(Some(schema.clone())),
+                schema_properties_attributes: None,
+            })
+            .then_expect_events(vec![TemplateEvent::TemplateCreated {
+                template_id,
+                source_template_id: None,
+                title: None,
+                display: Box::new(None),
+                data_model: Some(DataModel::OpenBadges3_0),
+                creator: None,
+                holder_type: None,
+                modified_at: test_utils::modified_at(),
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(Some(schema)),
+                schema_properties_attributes: Some(expected_attrs),
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_open_badges_template_succeeds_with_const_required_properties(template_id: String) {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "achievement.name": { "const": "Fixed Achievement Name" },
+                "achievement.criteria.narrative": { "type": "string" }
+            }
+        });
+
+        let mut expected_attrs = HashMap::new();
+        expected_attrs.insert(
+            "achievement.name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+        expected_attrs.insert(
+            "achievement.criteria.narrative".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
             },
         );
 
