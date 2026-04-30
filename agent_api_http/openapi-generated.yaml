@@ -1236,6 +1236,13 @@ components:
       required:
       - selectivelyDisclosable
       properties:
+        immutable:
+          type: boolean
+          description: |-
+            Whether this property is immutable (cannot be removed or renamed from the schema).
+            Determined by the data model and cannot be altered through any command.
+            For OpenBadges 3.0 templates, all standard-mandated properties are immutable.
+            Defaults to `false`.
         selectivelyDisclosable:
           type: boolean
     RemoveConnectionRequest:
