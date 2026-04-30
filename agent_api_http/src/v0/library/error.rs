@@ -20,6 +20,11 @@ impl IntoApiErrorExt for TemplateError {
                 .type_url(type_url("templates#immutable-property-violation"))
                 .source(self)
                 .finish(),
+            TemplateError::DisallowedOpenBadgesProperties(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Disallowed OpenBadges Schema Properties")
+                .type_url(type_url("templates#disallowed-open-badges-properties"))
+                .source(self)
+                .finish(),
         }
     }
 }

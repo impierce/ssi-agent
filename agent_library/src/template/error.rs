@@ -8,4 +8,6 @@ pub enum TemplateError {
     InvalidSchemaPropertiesAttributes(String),
     #[error("Cannot remove immutable schema properties: {0}")]
     NonRemovablePropertyViolation(String),
+    #[error("Disallowed OpenBadges 3.0 schema properties: {0}")]
+    DisallowedOpenBadgesProperties(String),
 }
