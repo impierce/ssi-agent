@@ -11,8 +11,7 @@ use std::sync::Arc;
 
 use crate::{
     v0::templates::{
-        create_template, delete_template, duplicate_template, get_default_schema, get_template, get_templates,
-        update_template,
+        create_template, delete_template, duplicate_template, get_template, get_templates, update_template,
     },
     API_VERSION,
 };
@@ -27,11 +26,7 @@ pub fn router(library_state: Arc<LibraryState>) -> Router {
                 .route("/templates/create-template", post(create_template))
                 .route("/templates/delete-template", post(delete_template))
                 .route("/templates/update-template", post(update_template))
-                .route("/templates/duplicate-template", post(duplicate_template))
-                .route(
-                    "/templates/get-template-default-schema-for-data-model/{data_model}",
-                    get(get_default_schema),
-                ),
+                .route("/templates/duplicate-template", post(duplicate_template)),
         )
         .with_state(library_state)
 }

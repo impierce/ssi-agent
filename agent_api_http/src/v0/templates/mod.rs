@@ -3,8 +3,7 @@ use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{
-    open_badges_default_required_keys, open_badges_default_schema_properties, DataModel, Display, HolderType,
-    PropertyAttribute, Status, Template, Visibility,
+    DataModel, Display, HolderType, PropertyAttribute, Status, Template, Visibility,
 };
 use agent_library::template::command::TemplateCommand;
 use axum::{
@@ -82,22 +81,113 @@ pub struct CreateTemplateEndpointRequest {
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
 }
 
+/// Schema variant for creating a generic template (e.g. W3C VC Data Model v1.1 or v2.0).
+/// No additional schema properties are auto-merged.
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(
+    title = "CreateTemplateGenericRequest",
+    example = json!({
+        "title": "Standard template",
+        "dataModel": "w3c_vc_data_model_v1-1",
+        "holderType": "individual"
+    })
+)]
+pub struct CreateTemplateGenericRequest {
+    pub title: Option<String>,
+    pub display: Option<Display>,
+    /// Must be one of: `w3c_vc_data_model_v1-1`, `w3c_vc_data_model_v2-0`, or `european_learning_model_v3-3`.
+    pub data_model: Option<DataModel>,
+    pub creator: Option<String>,
+    pub holder_type: Option<HolderType>,
+    pub tags: Option<Vec<String>>,
+    pub status: Option<Status>,
+    pub visibility: Option<Visibility>,
+    pub description: Option<String>,
+    pub r#type: Option<Vec<String>>,
+    pub schema: Option<serde_json::Value>,
+    pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
+}
+
+/// Schema variant for creating an OpenBadges 3.0 template.
+/// The server automatically merges default required schema properties:
+/// - `achievement.name` (string): The name of the achievement
+/// - `achievement.criteria.narrative` (string): Description of how the achievement is earned
+///
+/// These fields will be added to `schema.properties` and `schema.required` if not already present.
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(
+    title = "CreateTemplateOpenBadgesRequest",
+    example = json!({
+        "title": "OpenBadges template",
+        "dataModel": "open_badges_3-0",
+        "holderType": "individual",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "achievement.name": { "type": "string", "description": "The name of the achievement" },
+                "achievement.criteria.narrative": { "type": "string", "description": "Description of how the achievement is earned" }
+            },
+            "required": ["achievement.name", "achievement.criteria.narrative"]
+        }
+    })
+)]
+pub struct CreateTemplateOpenBadgesRequest {
+    pub title: Option<String>,
+    pub display: Option<Display>,
+    /// Must be `open_badges_3-0`.
+    pub data_model: Option<DataModel>,
+    pub creator: Option<String>,
+    pub holder_type: Option<HolderType>,
+    pub tags: Option<Vec<String>>,
+    pub status: Option<Status>,
+    pub visibility: Option<Visibility>,
+    pub description: Option<String>,
+    pub r#type: Option<Vec<String>>,
+    /// JSON Schema for the template. The properties `achievement.name` and
+    /// `achievement.criteria.narrative` are automatically required by the server
+    /// for OpenBadges 3.0 templates and will be merged if not provided.
+    pub schema: Option<serde_json::Value>,
+    pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
+}
+
+/// Discriminated union for the create-template request body.
+/// The `dataModel` field determines which variant applies.
+///
+/// - For `open_badges_3-0`: the server auto-merges required schema properties
+///   (`achievement.name`, `achievement.criteria.narrative`).
+/// - For all other data models: no default schema is merged.
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(untagged)]
+#[schema(discriminator(property_name = "dataModel"))]
+pub enum CreateTemplateRequestBody {
+    /// Generic template (W3C VC v1.1, v2.0, ELM, etc.)
+    Generic(CreateTemplateGenericRequest),
+    /// OpenBadges 3.0 template with auto-merged schema defaults
+    OpenBadges(CreateTemplateOpenBadgesRequest),
+}
+
 /// Create a new template
 ///
 /// Creates a new template which can be used to issue credentials.
+/// The request body uses a discriminated union based on `dataModel`:
+/// - For `open_badges_3-0`: the server auto-merges required schema properties
+///   (`achievement.name`, `achievement.criteria.narrative`).
+/// - For all other data models: no default schema is merged.
 #[utoipa::path(
     post,
     path = "/templates/create-template",
     tags = ["Library", "Templates"],
     request_body(
-        content = CreateTemplateEndpointRequest,
+        content = CreateTemplateRequestBody,
         examples(
             ("Standard template" = (
                 description = "A simple example that will issue credentials in the W3C Verifiable Credentials Data Model v1.1 format.",
                 value = json!({ "title": "Standard template", "dataModel": "w3c_vc_data_model_v1-1", "holderType": "individual" })
             )),
             ("OpenBadges template" = (
-                description = "An OpenBadges 3.0 template. The fields `achievement.name` and `achievement.criteria.narrative` are automatically required. Use GET /templates/get-template-default-schema-for-data-model/open_badges_3-0 to discover the default schema.",
+                description = "An OpenBadges 3.0 template. The fields `achievement.name` and `achievement.criteria.narrative` are automatically required and will be merged into the schema by the server.",
                 value = json!({ "title": "OpenBadges template", "dataModel": "open_badges_3-0", "holderType": "individual" })
             ))
         )
@@ -467,67 +557,6 @@ pub(crate) async fn get_template(
 pub struct DeleteTemplateEndpointRequest {
     #[serde(rename = "id")]
     pub template_id: String,
-}
-
-/// Get default schema for a data model
-///
-/// Returns the default JSON Schema that will be auto-merged for a given data model.
-/// This allows API callers to discover which fields are required before creating a template.
-/// Currently only `open_badges_3-0` is supported.
-#[utoipa::path(
-    get,
-    path = "/templates/get-template-default-schema-for-data-model/{data_model}",
-    operation_id = "get_default_schema",
-    tags = ["Library", "Templates"],
-    params(
-        ("data_model" = String, Path, description = "The data model identifier (e.g. `open_badges_3-0`)")
-    ),
-    responses(
-        (status = 200, description = "Default schema retrieved successfully", body = serde_json::Value,
-            example = json!({
-                "type": "object",
-                "properties": {
-                    "achievement.name": { "type": "string", "description": "The name of the achievement" },
-                    "achievement.criteria.narrative": { "type": "string", "description": "Description of how the achievement is earned" }
-                },
-                "required": ["achievement.name", "achievement.criteria.narrative"]
-            })
-        ),
-        (status = 404, description = "Unknown or unsupported data model")
-    )
-)]
-#[axum_macros::debug_handler]
-pub(crate) async fn get_default_schema(Path(data_model): Path<String>) -> Result<Response, ApiError> {
-    // Attempt to deserialize the path parameter into a DataModel variant.
-    let parsed: DataModel = serde_json::from_value(serde_json::Value::String(data_model.clone()))
-        .map_err(|_| {
-            ApiError::builder(StatusCode::NOT_FOUND)
-                .title("Unknown Data Model")
-                .type_url(type_url("library#unknown-data-model"))
-                .message(format!("Unknown or unsupported data model: `{data_model}`"))
-                .finish()
-        })?;
-
-    let schema = match parsed {
-        DataModel::OpenBadges3_0 => {
-            let properties = open_badges_default_schema_properties();
-            let required = open_badges_default_required_keys();
-            serde_json::json!({
-                "type": "object",
-                "properties": properties,
-                "required": required
-            })
-        }
-        _ => {
-            return Err(ApiError::builder(StatusCode::NOT_FOUND)
-                .title("Unsupported Data Model")
-                .type_url(type_url("library#unsupported-data-model"))
-                .message(format!("No default schema available for data model: `{data_model}`"))
-                .finish());
-        }
-    };
-
-    Ok((StatusCode::OK, Json(schema)).into_response())
 }
 
 /// Delete a template
