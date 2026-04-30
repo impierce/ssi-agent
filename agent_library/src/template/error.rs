@@ -14,4 +14,6 @@ pub enum TemplateError {
     MissingRequiredOpenBadgesProperties(String),
     #[error("Invalid type for required OpenBadges 3.0 schema properties: {0}")]
     InvalidRequiredPropertyType(String),
+    #[error("A title is required when creating or updating a template")]
+    MissingTitle,
 }

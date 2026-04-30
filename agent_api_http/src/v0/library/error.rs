@@ -35,6 +35,11 @@ impl IntoApiErrorExt for TemplateError {
                 .type_url(type_url("templates#invalid-required-property-type"))
                 .source(self)
                 .finish(),
+            TemplateError::MissingTitle => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Missing Title")
+                .type_url(type_url("templates#missing-title"))
+                .source(self)
+                .finish(),
         }
     }
 }

@@ -67,7 +67,7 @@ impl From<Template> for TemplateDto {
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
 #[serde(default, rename_all = "camelCase")]
 pub struct CreateTemplateEndpointRequest {
-    pub title: Option<String>,
+    pub title: String,
     pub display: Option<Display>,
     pub data_model: Option<DataModel>,
     pub creator: Option<String>,
@@ -94,7 +94,7 @@ pub struct CreateTemplateEndpointRequest {
     })
 )]
 pub struct CreateTemplateGenericRequest {
-    pub title: Option<String>,
+    pub title: String,
     pub display: Option<Display>,
     /// Must be one of: `w3c_vc_data_model_v1-1`, `w3c_vc_data_model_v2-0`, or `european_learning_model_v3-3`.
     pub data_model: Option<DataModel>,
@@ -134,7 +134,7 @@ pub struct CreateTemplateGenericRequest {
     })
 )]
 pub struct CreateTemplateOpenBadgesRequest {
-    pub title: Option<String>,
+    pub title: String,
     pub display: Option<Display>,
     /// Must be `open_badges_3-0`.
     pub data_model: Option<DataModel>,
@@ -221,7 +221,7 @@ pub(crate) async fn create_template(
     let command = TemplateCommand::CreateTemplate {
         template_id: template_id.clone(),
         source_template_id: None,
-        title,
+        title: Some(title),
         display: Box::new(display),
         data_model,
         creator,
@@ -294,7 +294,7 @@ pub(crate) async fn duplicate_template(
     let command = TemplateCommand::CreateTemplate {
         template_id: new_template_id.clone(),
         source_template_id: Some(source_template_id),
-        title: original_template.title.map(|t| format!("{} Copy", t)),
+        title: Some(original_template.title.map(|t| format!("{} Copy", t)).unwrap_or_else(|| "Untitled Copy".to_string())),
         display: Box::new(original_template.display),
         data_model: original_template.data_model,
         creator: original_template.creator,

@@ -151,6 +151,13 @@ impl Aggregate for Template {
                 schema,
                 schema_properties_attributes,
             } => {
+                // Validate that a title is provided
+                match title {
+                    None => return Err(TemplateError::MissingTitle),
+                    Some(ref t) if t.trim().is_empty() => return Err(TemplateError::MissingTitle),
+                    _ => {}
+                }
+
                 // For OpenBadges 3.0 templates, validate that the required properties are present
                 // in the user-supplied schema. They are NOT auto-added.
                 let schema = if data_model == Some(DataModel::OpenBadges3_0) {
@@ -228,6 +235,10 @@ impl Aggregate for Template {
                 }])
             }
             UpdateTitle { template_id, title } => {
+                if title.trim().is_empty() {
+                    return Err(TemplateError::MissingTitle);
+                }
+
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
                 #[cfg(test)]
@@ -939,6 +950,82 @@ pub mod document_tests {
 
     #[rstest]
     #[serial_test::serial]
+    async fn test_create_template_without_title(template_id: String) {
+        TemplateTestFramework::with(())
+            .given_no_previous_events()
+            .when(TemplateCommand::CreateTemplate {
+                template_id,
+                source_template_id: None,
+                title: None,
+                display: Box::new(None),
+                data_model: None,
+                creator: None,
+                holder_type: None,
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(None),
+                schema_properties_attributes: None,
+            })
+            .then_expect_error_message("A title is required when creating or updating a template")
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_template_with_empty_title(template_id: String) {
+        TemplateTestFramework::with(())
+            .given_no_previous_events()
+            .when(TemplateCommand::CreateTemplate {
+                template_id,
+                source_template_id: None,
+                title: Some("".to_string()),
+                display: Box::new(None),
+                data_model: None,
+                creator: None,
+                holder_type: None,
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(None),
+                schema_properties_attributes: None,
+            })
+            .then_expect_error_message("A title is required when creating or updating a template")
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_title_with_empty_string(template_id: String) {
+        TemplateTestFramework::with(())
+            .given(vec![TemplateEvent::TemplateCreated {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: Some("Original".to_string()),
+                display: Box::new(None),
+                data_model: None,
+                creator: None,
+                holder_type: None,
+                modified_at: test_utils::modified_at(),
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(None),
+                schema_properties_attributes: None,
+            }])
+            .when(TemplateCommand::UpdateTitle {
+                template_id,
+                title: "   ".to_string(),
+            })
+            .then_expect_error_message("A title is required when creating or updating a template")
+    }
+
+    #[rstest]
+    #[serial_test::serial]
     async fn test_create_template_with_invalid_schema(template_id: String) {
         let invalid_schema = serde_json::json!({
             "type": "not_a_valid_type"
@@ -949,7 +1036,7 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id,
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: None,
                 creator: None,
@@ -973,7 +1060,7 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: None,
                 creator: None,
@@ -989,7 +1076,7 @@ pub mod document_tests {
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
                 template_id,
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: None,
                 creator: None,
@@ -1016,7 +1103,7 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: None,
                 creator: None,
@@ -1051,7 +1138,7 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: None,
                 creator: None,
@@ -1100,7 +1187,7 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id,
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: None,
                 creator: None,
@@ -1133,7 +1220,7 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id,
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: None,
                 creator: None,
@@ -1172,7 +1259,7 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: None,
                 creator: None,
@@ -1209,7 +1296,7 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: None,
                 creator: None,
@@ -1277,7 +1364,7 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: None,
                 creator: None,
@@ -1340,7 +1427,7 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: None,
                 creator: None,
@@ -1413,7 +1500,7 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: Some(DataModel::OpenBadges3_0),
                 creator: None,
@@ -1498,7 +1585,7 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: Some(DataModel::OpenBadges3_0),
                 creator: None,
@@ -1547,7 +1634,7 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id,
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: Some(DataModel::OpenBadges3_0),
                 creator: None,
@@ -1603,7 +1690,7 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: Some(DataModel::OpenBadges3_0),
                 creator: None,
@@ -1619,7 +1706,7 @@ pub mod document_tests {
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
                 template_id,
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: Some(DataModel::OpenBadges3_0),
                 creator: None,
@@ -1667,7 +1754,7 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: Some(DataModel::OpenBadges3_0),
                 creator: None,
@@ -1683,7 +1770,7 @@ pub mod document_tests {
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
                 template_id,
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: Some(DataModel::OpenBadges3_0),
                 creator: None,
@@ -1741,7 +1828,7 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: Some(DataModel::OpenBadges3_0),
                 creator: None,
@@ -1859,7 +1946,7 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id,
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: Some(DataModel::OpenBadges3_0),
                 creator: None,
@@ -1915,7 +2002,7 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: Some(DataModel::OpenBadges3_0),
                 creator: None,
@@ -1958,7 +2045,7 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: Some(DataModel::OpenBadges3_0),
                 creator: None,
@@ -1974,7 +2061,7 @@ pub mod document_tests {
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
                 template_id,
                 source_template_id: None,
-                title: None,
+                title: Some("Test".to_string()),
                 display: Box::new(None),
                 data_model: Some(DataModel::OpenBadges3_0),
                 creator: None,
