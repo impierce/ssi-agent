@@ -455,14 +455,35 @@ paths:
       - Library
       - Templates
       summary: Create a new template
-      description: Creates a new template which can be used to issue credentials.
+      description: |-
+        Creates a new template which can be used to issue credentials.
+        The request body uses a discriminated union based on `dataModel`:
+        - For `open_badges_3-0`: the schema must include the required properties
+          (`achievement.name`, `achievement.description`, `achievement.criteria.narrative`). A validation error is
+          returned if they are missing.
+        - For all other data models: no default schema requirements are enforced.
       operationId: create_template
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateTemplateEndpointRequest'
+              $ref: '#/components/schemas/CreateTemplateRequestBody'
             examples:
+              OpenBadges template:
+                description: An OpenBadges 3.0 template. The fields `achievement.name`, `achievement.description`, and `achievement.criteria.narrative` must be explicitly included in the schema.
+                value:
+                  title: OpenBadges template
+                  dataModel: open_badges_3-0
+                  holderType: individual
+                  schema:
+                    type: object
+                    properties:
+                      achievement.name:
+                        type: string
+                      achievement.description:
+                        type: string
+                      achievement.criteria.narrative:
+                        type: string
               Standard template:
                 description: A simple example that will issue credentials in the W3C Verifiable Credentials Data Model v1.1 format.
                 value:
@@ -654,67 +675,177 @@ components:
           type:
           - string
           - 'null'
-    CreateTemplateEndpointRequest:
+    CreateTemplateGenericRequest:
       type: object
+      title: CreateTemplateGenericRequest
+      description: |-
+        Schema variant for creating a generic template (e.g. W3C VC Data Model v1.1 or v2.0).
+        No additional schema properties are auto-merged.
+      required:
+      - title
       properties:
         creator:
           type:
           - string
           - 'null'
-          default: null
         dataModel:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/DataModel'
-          default: null
+            description: 'Must be one of: `w3c_vc_data_model_v1-1`, `w3c_vc_data_model_v2-0`, or `european_learning_model_v3-3`.'
         description:
           type:
           - string
           - 'null'
-          default: null
         display:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
-          default: null
         holderType:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/HolderType'
-          default: null
         schema: {}
         schemaPropertiesAttributes:
           type:
           - object
           - 'null'
-          default: null
           additionalProperties:
             $ref: '#/components/schemas/PropertyAttribute'
           propertyNames:
             type: string
         status:
           oneOf:
+          - type: 'null'
           - $ref: '#/components/schemas/TemplateStatus'
-          default: draft
         tags:
-          type: array
+          type:
+          - array
+          - 'null'
           items:
             type: string
-          default: []
         title:
+          type: string
+        type:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        visibility:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Visibility'
+      example:
+        title: Standard template
+        dataModel: w3c_vc_data_model_v1-1
+        holderType: individual
+    CreateTemplateOpenBadgesRequest:
+      type: object
+      title: CreateTemplateOpenBadgesRequest
+      description: |-
+        Schema variant for creating an OpenBadges 3.0 template.
+        The following required schema properties must be explicitly provided by the user:
+        - `achievement.name` (string): The name of the achievement
+        - `achievement.description` (string): A description of the achievement
+        - `achievement.criteria.narrative` (string): Description of how the achievement is earned
+
+        If these fields are not present in `schema.properties`, the server will return a validation error.
+      required:
+      - title
+      properties:
+        creator:
           type:
           - string
           - 'null'
-          default: null
-        type:
-          type: array
+        dataModel:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/DataModel'
+            description: Must be `open_badges_3-0`.
+        description:
+          type:
+          - string
+          - 'null'
+        display:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Display'
+        holderType:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/HolderType'
+        schema:
+          description: |-
+            JSON Schema for the template. The properties `achievement.name`, `achievement.description`,
+            and `achievement.criteria.narrative` are required for OpenBadges 3.0 templates
+            and must be explicitly included. A validation error is returned if they are missing.
+        schemaPropertiesAttributes:
+          type:
+          - object
+          - 'null'
+          additionalProperties:
+            $ref: '#/components/schemas/PropertyAttribute'
+          propertyNames:
+            type: string
+        status:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/TemplateStatus'
+        tags:
+          type:
+          - array
+          - 'null'
           items:
             type: string
-          default: []
+        title:
+          type: string
+        type:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
         visibility:
           oneOf:
+          - type: 'null'
           - $ref: '#/components/schemas/Visibility'
-          default: private
+      example:
+        title: OpenBadges template
+        dataModel: open_badges_3-0
+        holderType: individual
+        schema:
+          type: object
+          properties:
+            achievement.name:
+              type: string
+              description: The name of the achievement
+            achievement.description:
+              type: string
+              description: A description of the achievement
+            achievement.criteria.narrative:
+              type: string
+              description: Description of how the achievement is earned
+          required:
+          - achievement.name
+          - achievement.description
+          - achievement.criteria.narrative
+    CreateTemplateRequestBody:
+      oneOf:
+      - $ref: '#/components/schemas/CreateTemplateGenericRequest'
+        description: Generic template (W3C VC v1.1, v2.0, ELM, etc.)
+      - $ref: '#/components/schemas/CreateTemplateOpenBadgesRequest'
+        description: OpenBadges 3.0 template with required schema properties enforced
+      description: |-
+        Discriminated union for the create-template request body.
+        The `dataModel` field determines which variant applies.
+
+        - For `open_badges_3-0`: the schema must include the required properties
+          (`achievement.name`, `achievement.description`, `achievement.criteria.narrative`). A validation error is
+          returned if they are missing.
+        - For all other data models: no default schema requirements are enforced.
+      discriminator:
+        propertyName: dataModel
     Credential:
       type: object
       required:
@@ -880,12 +1011,9 @@ components:
       - templateId
       - offerId
       - credential
-      - credentialConfigurationId
       - expiresAt
       properties:
         credential: {}
-        credentialConfigurationId:
-          type: string
         expiresAt:
           $ref: '#/components/schemas/CredentialExpiry'
         isSigned:
@@ -1239,9 +1367,10 @@ components:
         immutable:
           type: boolean
           description: |-
-            Whether this property is immutable (cannot be removed or renamed from the schema).
+            Whether this property is immutable (cannot be removed from the schema).
             Determined by the data model and cannot be altered through any command.
-            For OpenBadges 3.0 templates, all standard-mandated properties are immutable.
+            For OpenBadges 3.0 templates, only the required properties
+            (`achievement.name`, `achievement.description`, `achievement.criteria.narrative`) are immutable.
             Defaults to `false`.
         selectivelyDisclosable:
           type: boolean

@@ -199,7 +199,7 @@ pub mod tests {
     use crate::v0::authorization;
     use crate::v0::authorization::authorization_server::token::tests::token;
     use crate::v0::issuance::{
-        credentials::tests::{create_test_template, credentials},
+        credentials::tests::{create_test_template_with_auth, credentials},
         router,
     };
     use crate::API_VERSION;
@@ -279,7 +279,6 @@ pub mod tests {
                                         offer_id: offer_id.clone(),
                                         credential: json!(CREDENTIAL_JWT),
                                         is_signed: true,
-                                        credential_configuration_id: "001".to_string(),
                                         expires_at: CredentialExpiry::Never,
                                     }
                                 } else {
@@ -295,7 +294,6 @@ pub mod tests {
                                             }
                                         }),
                                         is_signed: false,
-                                        credential_configuration_id: "001".to_string(),
                                         expires_at: CredentialExpiry::Never,
                                     }
                                 };
@@ -351,7 +349,7 @@ pub mod tests {
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_configuration_id": "001",
+                            "credential_configuration_id": TEMPLATE_ID,
                             "proofs": { "jwt": ["eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lk\
                                         IjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4\
                                         a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lG\
@@ -430,7 +428,7 @@ pub mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state).await;
+        create_test_template_with_auth(&library_state, &issuance_state, is_pre_authorized).await;
 
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),
@@ -451,20 +449,14 @@ pub mod tests {
                 .await;
         }
 
-        let credential_configuration_id = if is_pre_authorized {
-            "001".to_string()
-        } else {
-            "002".to_string()
-        };
-
         // When `with_external_server` is false, then the credentials endpoint does not need to be called before the
         // start of the flow, since the `external_server` will do this once it is triggered by the
         // `CredentialRequestVerified` event.
         if !with_external_server {
-            credentials(&mut issuance_app, &credential_configuration_id).await;
+            credentials(&mut issuance_app).await;
         }
 
-        let grants = offers(&mut issuance_app, &credential_configuration_id).await.unwrap();
+        let grants = offers(&mut issuance_app, TEMPLATE_ID).await.unwrap();
 
         let authorization_state =
             Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
@@ -492,7 +484,7 @@ pub mod tests {
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_configuration_id": credential_configuration_id,
+                            "credential_configuration_id": TEMPLATE_ID,
                             "proofs": {
                                 "jwt":[jwt]
                             }

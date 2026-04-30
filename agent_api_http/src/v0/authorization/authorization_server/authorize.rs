@@ -34,9 +34,10 @@ pub(crate) async fn authorize(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::tests::TEMPLATE_ID;
     use crate::v0::authorization::authorization_server::consent::tests::{get_consent, post_consent};
     use crate::v0::authorization::authorization_server::par::tests::par;
-    use crate::v0::issuance::credentials::tests::{create_test_template, credentials};
+    use crate::v0::issuance::credentials::tests::{create_test_template_with_auth, credentials};
     use crate::v0::issuance::offers::tests::offers;
     use crate::v0::{authorization, issuance};
     use agent_authorization::services::AuthorizationServices;
@@ -118,12 +119,12 @@ pub mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state).await;
+        create_test_template_with_auth(&library_state, &issuance_state, false).await;
 
         let mut app = issuance::router((issuance_state.clone(), library_state));
 
-        credentials(&mut app, "002").await;
-        let (authorization_code, _pre_authorized_code) = offers(&mut app, "002").await.unwrap();
+        credentials(&mut app).await;
+        let (authorization_code, _pre_authorized_code) = offers(&mut app, TEMPLATE_ID).await.unwrap();
         let AuthorizationCode { issuer_state, .. } = authorization_code.unwrap();
         let issuer_state = issuer_state.unwrap();
 

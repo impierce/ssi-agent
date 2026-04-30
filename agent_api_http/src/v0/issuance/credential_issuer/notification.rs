@@ -63,6 +63,7 @@ pub async fn notification(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tests::TEMPLATE_ID;
     use crate::v0::authorization::authorization_server::token::tests::token;
     use crate::v0::issuance::credential_issuer::credential::tests::credential;
     use crate::v0::issuance::credentials::tests::{create_test_template, credentials};
@@ -87,12 +88,12 @@ mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state).await;
+        create_test_template(&library_state, &issuance_state).await;
 
         let mut issuance_app = issuance::router((issuance_state.clone(), library_state));
 
-        credentials(&mut issuance_app, "001").await;
-        let grants = offers(&mut issuance_app, "001").await.unwrap();
+        credentials(&mut issuance_app).await;
+        let grants = offers(&mut issuance_app, TEMPLATE_ID).await.unwrap();
 
         let authorization_state =
             Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
@@ -131,12 +132,12 @@ mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state).await;
+        create_test_template(&library_state, &issuance_state).await;
 
         let mut issuance_app = issuance::router((issuance_state.clone(), library_state));
 
-        credentials(&mut issuance_app, "001").await;
-        let grants = offers(&mut issuance_app, "001").await.unwrap();
+        credentials(&mut issuance_app).await;
+        let grants = offers(&mut issuance_app, TEMPLATE_ID).await.unwrap();
 
         let authorization_state =
             Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);

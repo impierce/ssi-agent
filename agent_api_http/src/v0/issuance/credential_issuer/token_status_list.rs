@@ -61,6 +61,7 @@ pub mod tests {
     };
     use oid4vc_core::authentication::verify::Verify;
 
+    use crate::tests::TEMPLATE_ID;
     use crate::v0::{
         authorization::{self, authorization_server::token::tests::token},
         issuance::{
@@ -82,7 +83,7 @@ pub mod tests {
         initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state).await;
+        create_test_template(&library_state, &issuance_state).await;
 
         let mut app = issuance::router((issuance_state.clone(), library_state));
 
@@ -156,11 +157,9 @@ pub mod tests {
             .await
             .unwrap();
 
-        let credential_configuration_id = "001".to_string();
+        let credential_endpoint = credentials(app).await;
 
-        let credential_endpoint = credentials(app, &credential_configuration_id).await;
-
-        let grants = offers(app, &credential_configuration_id).await.unwrap();
+        let grants = offers(app, TEMPLATE_ID).await.unwrap();
 
         let authorization_state =
             Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
@@ -183,7 +182,7 @@ pub mod tests {
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_configuration_id": credential_configuration_id,
+                            "credential_configuration_id": TEMPLATE_ID,
                             "proofs": {
                                 "jwt":[jwt]
                             }

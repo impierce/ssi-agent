@@ -49,7 +49,7 @@ pub mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state).await;
+        create_test_template(&library_state, &issuance_state).await;
 
         let issuance_app = router((issuance_state.clone(), library_state));
 

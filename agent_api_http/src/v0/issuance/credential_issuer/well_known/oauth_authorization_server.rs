@@ -79,7 +79,7 @@ mod tests {
         initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state).await;
+        create_test_template(&library_state, &issuance_state).await;
 
         let mut app = issuance::router((issuance_state.clone(), library_state));
 

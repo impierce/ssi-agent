@@ -59,7 +59,6 @@ pub struct CredentialsEndpointRequest {
     pub credential: Value,
     #[serde(default)]
     pub is_signed: bool,
-    pub credential_configuration_id: String,
     pub expires_at: CredentialExpiry,
 }
 
@@ -85,11 +84,13 @@ pub(crate) async fn credentials(
         offer_id,
         credential,
         is_signed,
-        credential_configuration_id,
         expires_at,
     }): Json<CredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let credential_id = uuid::Uuid::new_v4().to_string();
+
+    // The credential configuration ID is derived from the template ID.
+    let credential_configuration_id = template_id.clone();
 
     // Validate that template_id is not empty.
     if template_id.is_empty() {
@@ -126,14 +127,27 @@ pub(crate) async fn credentials(
     // and cannot be validated against a template schema.
     if !is_signed {
         if let Some(schema) = template.schema.as_ref() {
-            validate_credential_against_schema(&credential, schema).map_err(|e| *e)?;
+            // For OpenBadges 3.0 templates, the schema uses flat dot-notation keys (e.g. "achievement.name").
+            // The API consumer sends data wrapped in "credentialSubject", so we unwrap it before validation.
+            let data_to_validate = if template.data_model == Some(DataModel::OpenBadges3_0) {
+                credential
+                    .get("credentialSubject")
+                    .unwrap_or(&credential)
+            } else {
+                &credential
+            };
+            validate_credential_against_schema(data_to_validate, schema).map_err(|e| *e)?;
         }
     }
 
     // For OpenBadges 3.0 templates, map the flat input (conforming to the template schema)
     // to the nested OBv3 credential structure expected by the issuance pipeline.
     let credential = if !is_signed && template.data_model == Some(DataModel::OpenBadges3_0) {
-        map_open_badges_input_to_credential(&credential)
+        // Extract the credentialSubject content (flat dot-notation keys) for mapping.
+        let flat_input = credential
+            .get("credentialSubject")
+            .unwrap_or(&credential);
+        map_open_badges_input_to_credential(flat_input)
     } else {
         credential
     };
@@ -358,11 +372,11 @@ pub mod tests {
     use crate::tests::{OFFER_ID, TEMPLATE_ID};
     use crate::v0::issuance::{credential_issuer::token_status_list::tests::create_test_signed_credential, router};
     use crate::API_VERSION;
-    use agent_issuance::{services::IssuanceServices, state::initialize};
+    use agent_issuance::{server_config::command::ServerConfigCommand, services::IssuanceServices, state::initialize, state::SERVER_CONFIG_ID};
     use agent_library::template::command::TemplateCommand;
     use agent_secret_manager::service::Service;
     use agent_secret_manager::subject::Subject;
-    use agent_shared::config::TESTINDEX;
+    use agent_shared::config::{CredentialConfiguration, TESTINDEX};
     use agent_store::in_memory::InMemory;
     use agent_store::{issuance_state, library_state};
     use axum::{
@@ -399,8 +413,14 @@ pub mod tests {
         });
     }
 
-    /// Creates a test template in the library state and returns the template ID.
-    pub async fn create_test_template(library_state: &LibraryState) -> String {
+    /// Creates a test template in the library state and registers a matching credential
+    /// configuration in the issuance state. Returns the template ID.
+    /// The `pre_authorized` parameter controls the authorization flow type for the credential configuration.
+    pub async fn create_test_template_with_auth(
+        library_state: &LibraryState,
+        issuance_state: &IssuanceState,
+        pre_authorized: bool,
+    ) -> String {
         let template_id = TEMPLATE_ID.to_string();
 
         let command = TemplateCommand::CreateTemplate {
@@ -437,18 +457,42 @@ pub mod tests {
             .await
             .unwrap();
 
+        // Register a credential configuration matching the template_id.
+        // This simulates what the issuer_metadata_synchronization_policy does in production.
+        let credential_configuration: CredentialConfiguration = serde_json::from_value(json!({
+            "credential_configuration_id": template_id,
+            "format": "jwt_vc_json",
+            "type": ["VerifiableCredential"],
+            "display": [{ "name": "Verifiable Credential", "locale": "en" }],
+            "authorization": { "pre_authorized": pre_authorized }
+        }))
+        .unwrap();
+
+        let command = ServerConfigCommand::UpdateCredentialConfiguration {
+            credential_configuration,
+            provisioned: false,
+        };
+
+        agent_shared::handlers::command_handler(SERVER_CONFIG_ID, &issuance_state.command.server_config, command)
+            .await
+            .unwrap();
+
         template_id
     }
 
+    /// Creates a test template with pre-authorized credential configuration (default).
+    pub async fn create_test_template(library_state: &LibraryState, issuance_state: &IssuanceState) -> String {
+        create_test_template_with_auth(library_state, issuance_state, true).await
+    }
+
     /// This function creates and tests a credential and returns the endpoint where this credential can be accessed.
-    pub async fn credentials(app: &mut Router, credential_configuration_id: &str) -> String {
-        credentials_with_template(app, credential_configuration_id, TEMPLATE_ID).await
+    pub async fn credentials(app: &mut Router) -> String {
+        credentials_with_template(app, TEMPLATE_ID).await
     }
 
     /// This function creates and tests a credential with a specific template ID and returns the endpoint where this credential can be accessed.
     pub async fn credentials_with_template(
         app: &mut Router,
-        credential_configuration_id: &str,
         template_id: &str,
     ) -> String {
         let response = app
@@ -464,7 +508,6 @@ pub mod tests {
                             "credential": {
                                 "credentialSubject": CREDENTIAL_SUBJECT.clone(),
                             },
-                            "credentialConfigurationId": credential_configuration_id,
                             "expiresAt": "never"
                         }))
                         .unwrap(),
@@ -575,7 +618,7 @@ pub mod tests {
         initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state).await;
+        create_test_template(&library_state, &issuance_state).await;
 
         let mut app = router((issuance_state.clone(), library_state));
 
@@ -591,10 +634,10 @@ pub mod tests {
         initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state).await;
+        create_test_template(&library_state, &issuance_state).await;
 
         let mut app = router((issuance_state.clone(), library_state));
 
-        credentials(&mut app, "001").await;
+        credentials(&mut app).await;
     }
 }

@@ -159,7 +159,8 @@ pub mod tests {
     use crate::v0::issuance::credentials::tests::create_test_template;
     use crate::v0::issuance::router;
     use crate::API_VERSION;
-    use crate::{tests::OFFER_ID, v0::issuance::credentials::tests::credentials};
+    use crate::tests::{OFFER_ID, TEMPLATE_ID};
+    use crate::v0::issuance::credentials::tests::credentials;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
@@ -253,12 +254,12 @@ pub mod tests {
         initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state).await;
+        create_test_template(&library_state, &issuance_state).await;
 
         let mut app = router((issuance_state.clone(), library_state));
 
-        credentials(&mut app, "001").await;
-        let (_authorization_code, _pre_authorized_code) = offers(&mut app, "001").await.unwrap();
+        credentials(&mut app).await;
+        let (_authorization_code, _pre_authorized_code) = offers(&mut app, TEMPLATE_ID).await.unwrap();
     }
 
     #[serial_test::serial]
@@ -271,12 +272,12 @@ pub mod tests {
         initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state).await;
+        create_test_template(&library_state, &issuance_state).await;
 
         let mut app = router((issuance_state.clone(), library_state));
 
-        credentials(&mut app, "001").await;
-        let none = offers(&mut app, "001").await;
+        credentials(&mut app).await;
+        let none = offers(&mut app, TEMPLATE_ID).await;
 
         // When `credential_offer_by_value_enabled` is false, we expect no grants to be returned from the `offers` test function.
         assert!(none.is_none());

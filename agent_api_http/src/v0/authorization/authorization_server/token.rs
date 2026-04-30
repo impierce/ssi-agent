@@ -25,6 +25,7 @@ pub(crate) async fn token(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::tests::TEMPLATE_ID;
     use crate::v0::{
         authorization::{
             self,
@@ -36,7 +37,7 @@ pub mod tests {
         },
         issuance::{
             self,
-            credentials::tests::{create_test_template, credentials},
+            credentials::tests::{create_test_template_with_auth, credentials},
             offers::tests::offers,
         },
     };
@@ -153,18 +154,12 @@ pub mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state).await;
+        create_test_template_with_auth(&library_state, &issuance_state, is_pre_authorized).await;
 
         let mut app = issuance::router((issuance_state.clone(), library_state));
 
-        let credential_configuration_id = if is_pre_authorized {
-            "001".to_string()
-        } else {
-            "002".to_string()
-        };
-
-        credentials(&mut app, &credential_configuration_id).await;
-        let grants = offers(&mut app, &credential_configuration_id).await.unwrap();
+        credentials(&mut app).await;
+        let grants = offers(&mut app, TEMPLATE_ID).await.unwrap();
 
         let authorization_state =
             Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
