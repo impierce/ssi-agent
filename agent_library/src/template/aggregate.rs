@@ -135,11 +135,16 @@ impl Aggregate for Template {
                 schema,
                 schema_properties_attributes,
             } => {
-                // For OpenBadges 3.0 templates, merge in default required schema properties
-                // (achievement.name, achievement.criteria.narrative) before validation.
+                // For OpenBadges 3.0 templates, validate that the required properties are present
+                // in the user-supplied schema. They are NOT auto-added.
                 let schema = if data_model == Some(DataModel::OpenBadges3_0) {
                     let mut s = (*schema).unwrap_or(serde_json::json!({"type": "object"}));
-                    merge_open_badges_defaults(&mut s);
+                    // Ensure schema has "type": "object" and "properties"
+                    if let Some(obj) = s.as_object_mut() {
+                        obj.entry("type").or_insert(serde_json::json!("object"));
+                        obj.entry("properties").or_insert(serde_json::json!({}));
+                    }
+                    validate_open_badges_required_properties(&s)?;
                     Box::new(Some(s))
                 } else {
                     schema
@@ -681,12 +686,35 @@ fn validate_open_badges_schema_properties(schema: &serde_json::Value) -> Result<
     Ok(())
 }
 
+/// Validates that the required OpenBadges 3.0 properties are present in the schema.
+/// Returns an error if any required property is missing from `schema.properties`.
+fn validate_open_badges_required_properties(schema: &serde_json::Value) -> Result<(), TemplateError> {
+    let property_keys = get_schema_property_keys(schema);
+    let required_keys = open_badges_default_required_keys();
+
+    let missing: Vec<&str> = required_keys
+        .iter()
+        .filter(|k| !property_keys.contains(*k))
+        .map(|k| k.as_str())
+        .collect();
+
+    if !missing.is_empty() {
+        return Err(TemplateError::MissingRequiredOpenBadgesProperties(format!(
+            "The following required properties must be included in the schema for OpenBadges 3.0 templates: [{}]",
+            missing.join(", ")
+        )));
+    }
+
+    Ok(())
+}
+
 /// Merges OpenBadges 3.0 default required properties into a user-provided schema.
 /// Ensures that the standard-mandated fields are always present and required.
 ///
 /// # Panics
 /// Panics if `schema` is not a JSON object. Callers must ensure the schema is an object
 /// (or default to `{"type": "object"}`) before calling this function.
+#[cfg(test)]
 fn merge_open_badges_defaults(schema: &mut serde_json::Value) {
     let default_props = open_badges_default_schema_properties();
     let default_required = open_badges_default_required_keys();
@@ -1437,7 +1465,8 @@ pub mod document_tests {
 
     #[rstest]
     #[serial_test::serial]
-    async fn test_create_open_badges_template_auto_populates_immutable(template_id: String) {
+    async fn test_create_open_badges_template_errors_when_required_properties_missing(template_id: String) {
+        // Schema only has optional fields, missing required ones
         let schema = serde_json::json!({
             "type": "object",
             "properties": {
@@ -1446,33 +1475,40 @@ pub mod document_tests {
             }
         });
 
-        // Expected schema includes the user-provided properties PLUS the merged defaults
-        let expected_schema = serde_json::json!({
+        TemplateTestFramework::with(())
+            .given_no_previous_events()
+            .when(TemplateCommand::CreateTemplate {
+                template_id,
+                source_template_id: None,
+                title: None,
+                display: Box::new(None),
+                data_model: Some(DataModel::OpenBadges3_0),
+                creator: None,
+                holder_type: None,
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(Some(schema)),
+                schema_properties_attributes: None,
+            })
+            .then_expect_error_message("Missing required OpenBadges 3.0 schema properties: The following required properties must be included in the schema for OpenBadges 3.0 templates: [achievement.name, achievement.criteria.narrative]")
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_open_badges_template_succeeds_with_required_properties(template_id: String) {
+        let schema = serde_json::json!({
             "type": "object",
             "properties": {
-                "achievement.description": { "type": "string" },
-                "achievement.tag": { "type": "string" },
-                "achievement.name": { "type": "string", "description": "The name of the achievement" },
-                "achievement.criteria.narrative": { "type": "string", "description": "Description of how the achievement is earned" }
-            },
-            "required": ["achievement.name", "achievement.criteria.narrative"]
+                "achievement.name": { "type": "string" },
+                "achievement.criteria.narrative": { "type": "string" },
+                "achievement.description": { "type": "string" }
+            }
         });
 
         let mut expected_attrs = HashMap::new();
-        expected_attrs.insert(
-            "achievement.description".to_string(),
-            PropertyAttribute {
-                selectively_disclosable: false,
-                immutable: true,
-            },
-        );
-        expected_attrs.insert(
-            "achievement.tag".to_string(),
-            PropertyAttribute {
-                selectively_disclosable: false,
-                immutable: true,
-            },
-        );
         expected_attrs.insert(
             "achievement.name".to_string(),
             PropertyAttribute {
@@ -1482,6 +1518,13 @@ pub mod document_tests {
         );
         expected_attrs.insert(
             "achievement.criteria.narrative".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+        expected_attrs.insert(
+            "achievement.description".to_string(),
             PropertyAttribute {
                 selectively_disclosable: false,
                 immutable: true,
@@ -1503,7 +1546,7 @@ pub mod document_tests {
                 visibility: Visibility::Private,
                 description: None,
                 r#type: vec![],
-                schema: Box::new(Some(schema)),
+                schema: Box::new(Some(schema.clone())),
                 schema_properties_attributes: None,
             })
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
@@ -1520,7 +1563,7 @@ pub mod document_tests {
                 visibility: Visibility::Private,
                 description: None,
                 r#type: vec![],
-                schema: Box::new(Some(expected_schema)),
+                schema: Box::new(Some(schema)),
                 schema_properties_attributes: Some(expected_attrs),
             }])
     }
@@ -1765,10 +1808,12 @@ pub mod document_tests {
     #[rstest]
     #[serial_test::serial]
     async fn test_create_open_badges_template_allows_valid_optional_properties(template_id: String) {
-        // All allowed optional properties should pass validation
+        // All allowed optional properties plus the required ones should pass validation
         let schema = serde_json::json!({
             "type": "object",
             "properties": {
+                "achievement.name": { "type": "string" },
+                "achievement.criteria.narrative": { "type": "string" },
                 "achievement.description": { "type": "string" },
                 "achievement.criteria.id": { "type": "string" },
                 "achievement.image": { "type": "string" },
@@ -1792,7 +1837,7 @@ pub mod document_tests {
                 visibility: Visibility::Private,
                 description: None,
                 r#type: vec![],
-                schema: Box::new(Some(schema)),
+                schema: Box::new(Some(schema.clone())),
                 schema_properties_attributes: None,
             })
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
@@ -1809,29 +1854,17 @@ pub mod document_tests {
                 visibility: Visibility::Private,
                 description: None,
                 r#type: vec![],
-                schema: Box::new(Some(serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "achievement.description": { "type": "string" },
-                        "achievement.criteria.id": { "type": "string" },
-                        "achievement.image": { "type": "string" },
-                        "achievement.achievementType": { "type": "string" },
-                        "achievement.tag": { "type": "string" },
-                        "achievement.name": { "type": "string", "description": "The name of the achievement" },
-                        "achievement.criteria.narrative": { "type": "string", "description": "Description of how the achievement is earned" }
-                    },
-                    "required": ["achievement.name", "achievement.criteria.narrative"]
-                }))),
+                schema: Box::new(Some(schema)),
                 schema_properties_attributes: Some({
                     let mut attrs = HashMap::new();
                     for key in [
+                        "achievement.name",
+                        "achievement.criteria.narrative",
                         "achievement.description",
                         "achievement.criteria.id",
                         "achievement.image",
                         "achievement.achievementType",
                         "achievement.tag",
-                        "achievement.name",
-                        "achievement.criteria.narrative",
                     ] {
                         attrs.insert(
                             key.to_string(),

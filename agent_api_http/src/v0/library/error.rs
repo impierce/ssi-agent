@@ -25,6 +25,11 @@ impl IntoApiErrorExt for TemplateError {
                 .type_url(type_url("templates#disallowed-open-badges-properties"))
                 .source(self)
                 .finish(),
+            TemplateError::MissingRequiredOpenBadgesProperties(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Missing Required OpenBadges Schema Properties")
+                .type_url(type_url("templates#missing-required-open-badges-properties"))
+                .source(self)
+                .finish(),
         }
     }
 }

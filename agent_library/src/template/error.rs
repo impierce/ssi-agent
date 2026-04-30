@@ -10,4 +10,6 @@ pub enum TemplateError {
     NonRemovablePropertyViolation(String),
     #[error("Disallowed OpenBadges 3.0 schema properties: {0}")]
     DisallowedOpenBadgesProperties(String),
+    #[error("Missing required OpenBadges 3.0 schema properties: {0}")]
+    MissingRequiredOpenBadgesProperties(String),
 }
