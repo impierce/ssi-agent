@@ -92,8 +92,8 @@ impl IssuerMetadataSynchronizationPolicy {
 /// The display name is taken from `template.display.name` if present, falling back to `template.title`.
 fn credential_configuration_from_template(template: &Template) -> CredentialConfiguration {
     let format = match template.data_model {
-        Some(DataModel::W3CVcDataModelV2_0) => "vc+sd-jwt",
-        _ => "jwt_vc_json",
+        Some(DataModel::W3CVcDataModelV1_1) => "jwt_vc_json",
+        _ => "vc+sd-jwt",
     }
     .to_string();
 
