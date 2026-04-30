@@ -77,6 +77,21 @@ pub struct PropertyAttribute {
     immutable: bool,
 }
 
+impl PropertyAttribute {
+    /// Creates a new `PropertyAttribute`.
+    pub fn new(selectively_disclosable: bool, immutable: bool) -> Self {
+        Self {
+            selectively_disclosable,
+            immutable,
+        }
+    }
+
+    /// Returns whether this property is selectively disclosable.
+    pub fn is_selectively_disclosable(&self) -> bool {
+        self.selectively_disclosable
+    }
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Template {

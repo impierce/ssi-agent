@@ -7,8 +7,9 @@ use agent_shared::handlers::{command_handler, query_handler};
 use async_trait::async_trait;
 use cqrs_es::persist::ViewRepository;
 use cqrs_es::{EventEnvelope, Query};
+use oid4vc_core::claim_path_pointer::{ClaimPathElement, ClaimPathPointer};
 use oid4vci::credential_issuer::credential_configurations_supported::{
-    CredentialConfigurationsSupportedDisplay, CredentialMetadata, Logo as OidcLogo,
+    ClaimDescription, CredentialConfigurationsSupportedDisplay, CredentialMetadata, Logo as OidcLogo,
 };
 use std::sync::{Arc, OnceLock};
 use tracing::warn;
@@ -90,6 +91,8 @@ impl IssuerMetadataSynchronizationPolicy {
 /// Derives a `CredentialConfiguration` from a `Template`.
 ///
 /// The display name is taken from `template.display.name` if present, falling back to `template.title`.
+/// When the format is "vc+sd-jwt", claims are derived from `schema.properties` merged with
+/// `schema_properties_attributes.selectivelyDisclosable`.
 fn credential_configuration_from_template(template: &Template) -> CredentialConfiguration {
     let format = match template.data_model {
         Some(DataModel::W3CVcDataModelV1_1) => "jwt_vc_json",
@@ -131,12 +134,64 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
             })
         });
 
+    let claims = if format == "vc+sd-jwt" {
+        build_claims_from_schema(template)
+    } else {
+        None
+    };
+
     CredentialConfiguration {
         credential_configuration_id: template.template_id.clone(),
         format,
         type_: template.r#type.clone(),
-        credential_metadata: CredentialMetadata { display, claims: None },
+        credential_metadata: CredentialMetadata { display, claims },
         authorization: Authorization::default(),
+    }
+}
+
+/// Builds claim descriptions from the template's `schema.properties`, enriched with
+/// the `selectively_disclosable` flag from `schema_properties_attributes`.
+///
+/// Each property key (which may be dot-separated, e.g. "achievement.name") is converted
+/// into a `ClaimPathPointer` (e.g. `["achievement", "name"]`).
+/// A claim is marked as mandatory when it is NOT selectively disclosable.
+fn build_claims_from_schema(template: &Template) -> Option<Vec<ClaimDescription>> {
+    let schema = template.schema.as_ref().as_ref()?;
+    let properties = schema.get("properties")?.as_object()?;
+
+    if properties.is_empty() {
+        return None;
+    }
+
+    let attributes = template.schema_properties_attributes.as_ref();
+
+    let claims: Vec<ClaimDescription> = properties
+        .keys()
+        .filter_map(|key| {
+            let path_elements: Vec<ClaimPathElement> = key
+                .split('.')
+                .map(|segment| ClaimPathElement::String(segment.to_string()))
+                .collect();
+
+            let path = ClaimPathPointer::try_new(path_elements).ok()?;
+
+            let mandatory = attributes
+                .and_then(|attrs| attrs.get(key))
+                .map(|attr| !attr.is_selectively_disclosable())
+                .unwrap_or(false);
+
+            Some(ClaimDescription {
+                path,
+                mandatory,
+                display: vec![],
+            })
+        })
+        .collect();
+
+    if claims.is_empty() {
+        None
+    } else {
+        Some(claims)
     }
 }
 
@@ -247,7 +302,7 @@ mod tests {
     }
 
     #[test]
-    fn test_absent_data_model_produces_jwt_vc_json_format() {
+    fn test_absent_data_model_produces_vc_sd_jwt_format() {
         let template = Template {
             template_id: "t3".to_string(),
             data_model: None,
@@ -255,7 +310,7 @@ mod tests {
             ..Default::default()
         };
         let config = credential_configuration_from_template(&template);
-        assert_eq!(config.format, "jwt_vc_json");
+        assert_eq!(config.format, "vc+sd-jwt");
     }
 
     #[test]
@@ -313,5 +368,118 @@ mod tests {
         };
         let config = credential_configuration_from_template(&template);
         assert!(config.credential_metadata.display.is_none());
+    }
+
+    #[test]
+    fn test_vc_sd_jwt_includes_claims_from_schema_properties() {
+        use std::collections::HashMap;
+        use agent_library::template::aggregate::PropertyAttribute;
+
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "age": { "type": "integer" }
+            }
+        });
+
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            "name".to_string(),
+            PropertyAttribute::new(true, false),
+        );
+        attrs.insert(
+            "age".to_string(),
+            PropertyAttribute::new(false, false),
+        );
+
+        let template = Template {
+            template_id: "t7".to_string(),
+            data_model: Some(DataModel::W3CVcDataModelV2_0),
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: Some(attrs),
+            ..Default::default()
+        };
+
+        let config = credential_configuration_from_template(&template);
+        assert_eq!(config.format, "vc+sd-jwt");
+
+        let claims = config.credential_metadata.claims.expect("claims should be present");
+        assert_eq!(claims.len(), 2);
+
+        // Find claim for "name" - selectively disclosable, so mandatory = false
+        let name_claim = claims.iter().find(|c| {
+            c.path.as_ref() == &[ClaimPathElement::String("name".to_string())]
+        }).expect("name claim should exist");
+        assert!(!name_claim.mandatory);
+
+        // Find claim for "age" - not selectively disclosable, so mandatory = true
+        let age_claim = claims.iter().find(|c| {
+            c.path.as_ref() == &[ClaimPathElement::String("age".to_string())]
+        }).expect("age claim should exist");
+        assert!(age_claim.mandatory);
+    }
+
+    #[test]
+    fn test_vc_sd_jwt_dotted_keys_become_path_elements() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "achievement.name": { "type": "string" }
+            }
+        });
+
+        let template = Template {
+            template_id: "t8".to_string(),
+            data_model: Some(DataModel::OpenBadges3_0),
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: None,
+            ..Default::default()
+        };
+
+        let config = credential_configuration_from_template(&template);
+        let claims = config.credential_metadata.claims.expect("claims should be present");
+        assert_eq!(claims.len(), 1);
+        assert_eq!(
+            claims[0].path.as_ref(),
+            &[
+                ClaimPathElement::String("achievement".to_string()),
+                ClaimPathElement::String("name".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_jwt_vc_json_format_does_not_include_claims() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        let template = Template {
+            template_id: "t9".to_string(),
+            data_model: Some(DataModel::W3CVcDataModelV1_1),
+            schema: Box::new(Some(schema)),
+            ..Default::default()
+        };
+
+        let config = credential_configuration_from_template(&template);
+        assert_eq!(config.format, "jwt_vc_json");
+        assert!(config.credential_metadata.claims.is_none());
+    }
+
+    #[test]
+    fn test_vc_sd_jwt_no_schema_yields_no_claims() {
+        let template = Template {
+            template_id: "t10".to_string(),
+            data_model: Some(DataModel::W3CVcDataModelV2_0),
+            schema: Box::new(None),
+            ..Default::default()
+        };
+
+        let config = credential_configuration_from_template(&template);
+        assert!(config.credential_metadata.claims.is_none());
     }
 }
