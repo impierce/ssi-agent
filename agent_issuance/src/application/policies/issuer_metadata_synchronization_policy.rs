@@ -93,12 +93,30 @@ impl IssuerMetadataSynchronizationPolicy {
 /// The display name is taken from `template.display.name` if present, falling back to `template.title`.
 /// When the format is "vc+sd-jwt", claims are derived from `schema.properties` merged with
 /// `schema_properties_attributes.selectivelyDisclosable`.
+///
+/// The `credential_definition.type` array is determined by the template's data model:
+/// - For `w3c_vc_data_model_v1-1` and `w3c_vc_data_model_v2-0`: includes "VerifiableCredential"
+/// - For `open_badges_3-0`: uses ["OpenBadgeCredential", "AchievementCredential"]
+/// - Otherwise: uses the template's `type` field as-is
 fn credential_configuration_from_template(template: &Template) -> CredentialConfiguration {
     let format = match template.data_model {
         Some(DataModel::W3CVcDataModelV1_1) => "jwt_vc_json",
         _ => "vc+sd-jwt",
     }
     .to_string();
+
+    let type_ = match template.data_model {
+        Some(DataModel::W3CVcDataModelV1_1) | Some(DataModel::W3CVcDataModelV2_0) => {
+            vec!["VerifiableCredential".to_string()]
+        }
+        Some(DataModel::OpenBadges3_0) => {
+            vec![
+                "OpenBadgeCredential".to_string(),
+                "AchievementCredential".to_string(),
+            ]
+        }
+        _ => template.r#type.clone(),
+    };
 
     let display = template
         .display
@@ -143,7 +161,7 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
     CredentialConfiguration {
         credential_configuration_id: template.template_id.clone(),
         format,
-        type_: template.r#type.clone(),
+        type_,
         credential_metadata: CredentialMetadata { display, claims },
         authorization: Authorization::default(),
     }
@@ -481,5 +499,56 @@ mod tests {
 
         let config = credential_configuration_from_template(&template);
         assert!(config.credential_metadata.claims.is_none());
+    }
+
+    #[test]
+    fn test_w3c_v1_data_model_type_includes_verifiable_credential() {
+        let template = Template {
+            template_id: "t11".to_string(),
+            data_model: Some(DataModel::W3CVcDataModelV1_1),
+            ..Default::default()
+        };
+        let config = credential_configuration_from_template(&template);
+        assert_eq!(config.type_, vec!["VerifiableCredential".to_string()]);
+    }
+
+    #[test]
+    fn test_w3c_v2_data_model_type_includes_verifiable_credential() {
+        let template = Template {
+            template_id: "t12".to_string(),
+            data_model: Some(DataModel::W3CVcDataModelV2_0),
+            ..Default::default()
+        };
+        let config = credential_configuration_from_template(&template);
+        assert_eq!(config.type_, vec!["VerifiableCredential".to_string()]);
+    }
+
+    #[test]
+    fn test_open_badges_data_model_type_uses_ob_types() {
+        let template = Template {
+            template_id: "t13".to_string(),
+            data_model: Some(DataModel::OpenBadges3_0),
+            ..Default::default()
+        };
+        let config = credential_configuration_from_template(&template);
+        assert_eq!(
+            config.type_,
+            vec![
+                "OpenBadgeCredential".to_string(),
+                "AchievementCredential".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_absent_data_model_uses_template_type_field() {
+        let template = Template {
+            template_id: "t14".to_string(),
+            data_model: None,
+            r#type: vec!["CustomType".to_string()],
+            ..Default::default()
+        };
+        let config = credential_configuration_from_template(&template);
+        assert_eq!(config.type_, vec!["CustomType".to_string()]);
     }
 }

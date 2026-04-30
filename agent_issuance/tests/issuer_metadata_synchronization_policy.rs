@@ -179,7 +179,7 @@ async fn test_display_updated_reflects_in_credential_configuration() {
         TemplateCommand::CreateTemplate {
             template_id: template_id.to_string(),
             source_template_id: None,
-            title: None,
+            title: Some("Display Update Test".to_string()),
             display: Box::new(Some(Display {
                 name: "Original Display".to_string(),
                 logo: None,

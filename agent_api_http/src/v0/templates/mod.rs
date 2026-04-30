@@ -112,6 +112,7 @@ pub struct CreateTemplateGenericRequest {
 /// Schema variant for creating an OpenBadges 3.0 template.
 /// The following required schema properties must be explicitly provided by the user:
 /// - `achievement.name` (string): The name of the achievement
+/// - `achievement.description` (string): A description of the achievement
 /// - `achievement.criteria.narrative` (string): Description of how the achievement is earned
 ///
 /// If these fields are not present in `schema.properties`, the server will return a validation error.
@@ -127,9 +128,10 @@ pub struct CreateTemplateGenericRequest {
             "type": "object",
             "properties": {
                 "achievement.name": { "type": "string", "description": "The name of the achievement" },
+                "achievement.description": { "type": "string", "description": "A description of the achievement" },
                 "achievement.criteria.narrative": { "type": "string", "description": "Description of how the achievement is earned" }
             },
-            "required": ["achievement.name", "achievement.criteria.narrative"]
+            "required": ["achievement.name", "achievement.description", "achievement.criteria.narrative"]
         }
     })
 )]
@@ -145,8 +147,8 @@ pub struct CreateTemplateOpenBadgesRequest {
     pub visibility: Option<Visibility>,
     pub description: Option<String>,
     pub r#type: Option<Vec<String>>,
-    /// JSON Schema for the template. The properties `achievement.name` and
-    /// `achievement.criteria.narrative` are required for OpenBadges 3.0 templates
+    /// JSON Schema for the template. The properties `achievement.name`, `achievement.description`,
+    /// and `achievement.criteria.narrative` are required for OpenBadges 3.0 templates
     /// and must be explicitly included. A validation error is returned if they are missing.
     pub schema: Option<serde_json::Value>,
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
@@ -156,7 +158,7 @@ pub struct CreateTemplateOpenBadgesRequest {
 /// The `dataModel` field determines which variant applies.
 ///
 /// - For `open_badges_3-0`: the schema must include the required properties
-///   (`achievement.name`, `achievement.criteria.narrative`). A validation error is
+///   (`achievement.name`, `achievement.description`, `achievement.criteria.narrative`). A validation error is
 ///   returned if they are missing.
 /// - For all other data models: no default schema requirements are enforced.
 #[derive(Serialize, Deserialize, utoipa::ToSchema)]
@@ -174,7 +176,7 @@ pub enum CreateTemplateRequestBody {
 /// Creates a new template which can be used to issue credentials.
 /// The request body uses a discriminated union based on `dataModel`:
 /// - For `open_badges_3-0`: the schema must include the required properties
-///   (`achievement.name`, `achievement.criteria.narrative`). A validation error is
+///   (`achievement.name`, `achievement.description`, `achievement.criteria.narrative`). A validation error is
 ///   returned if they are missing.
 /// - For all other data models: no default schema requirements are enforced.
 #[utoipa::path(
@@ -189,8 +191,8 @@ pub enum CreateTemplateRequestBody {
                 value = json!({ "title": "Standard template", "dataModel": "w3c_vc_data_model_v1-1", "holderType": "individual" })
             )),
             ("OpenBadges template" = (
-                description = "An OpenBadges 3.0 template. The fields `achievement.name` and `achievement.criteria.narrative` must be explicitly included in the schema.",
-                value = json!({ "title": "OpenBadges template", "dataModel": "open_badges_3-0", "holderType": "individual", "schema": { "type": "object", "properties": { "achievement.name": { "type": "string" }, "achievement.criteria.narrative": { "type": "string" } } } })
+                description = "An OpenBadges 3.0 template. The fields `achievement.name`, `achievement.description`, and `achievement.criteria.narrative` must be explicitly included in the schema.",
+                value = json!({ "title": "OpenBadges template", "dataModel": "open_badges_3-0", "holderType": "individual", "schema": { "type": "object", "properties": { "achievement.name": { "type": "string" }, "achievement.description": { "type": "string" }, "achievement.criteria.narrative": { "type": "string" } } } })
             ))
         )
     ),

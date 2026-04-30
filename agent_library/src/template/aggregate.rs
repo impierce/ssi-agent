@@ -71,7 +71,7 @@ pub struct PropertyAttribute {
     /// Whether this property is immutable (cannot be removed from the schema).
     /// Determined by the data model and cannot be altered through any command.
     /// For OpenBadges 3.0 templates, only the required properties
-    /// (`achievement.name`, `achievement.criteria.narrative`) are immutable.
+    /// (`achievement.name`, `achievement.description`, `achievement.criteria.narrative`) are immutable.
     /// Defaults to `false`.
     #[serde(default)]
     immutable: bool,
@@ -641,7 +641,7 @@ fn validate_schema_properties_attributes(
 /// Returns the default required schema properties for OpenBadges 3.0 templates.
 /// These represent the standard-mandated fields that must always be present:
 /// - `achievement.name`: The name of the achievement (user-provided)
-/// - `achievement.type`: Always "Achievement" (fixed value, included as const in schema)
+/// - `achievement.description`: A description of the achievement (user-provided)
 /// - `achievement.criteria.narrative`: Description of how the achievement is earned (user-provided)
 ///
 /// The returned JSON value is a schema `properties` object suitable for merging into
@@ -651,6 +651,10 @@ pub fn open_badges_default_schema_properties() -> serde_json::Value {
         "achievement.name": {
             "type": "string",
             "description": "The name of the achievement"
+        },
+        "achievement.description": {
+            "type": "string",
+            "description": "A description of the achievement"
         },
         "achievement.criteria.narrative": {
             "type": "string",
@@ -663,6 +667,7 @@ pub fn open_badges_default_schema_properties() -> serde_json::Value {
 pub fn open_badges_default_required_keys() -> Vec<String> {
     vec![
         "achievement.name".to_string(),
+        "achievement.description".to_string(),
         "achievement.criteria.narrative".to_string(),
     ]
 }
@@ -676,9 +681,9 @@ pub fn open_badges_allowed_schema_property_keys() -> std::collections::HashSet<S
     [
         // Required/immutable fields
         "achievement.name",
+        "achievement.description",
         "achievement.criteria.narrative",
         // Optional fields according to the OBv3 standard
-        "achievement.description",
         "achievement.criteria.id",
         "achievement.image",
         "achievement.achievementType",
@@ -1459,8 +1464,8 @@ pub mod document_tests {
             "type": "object",
             "properties": {
                 "achievement.name": { "type": "string" },
-                "achievement.criteria.narrative": { "type": "string" },
-                "achievement.description": { "type": "string" }
+                "achievement.description": { "type": "string" },
+                "achievement.criteria.narrative": { "type": "string" }
             }
         });
 
@@ -1473,17 +1478,17 @@ pub mod document_tests {
             },
         );
         attrs.insert(
-            "achievement.criteria.narrative".to_string(),
+            "achievement.description".to_string(),
             PropertyAttribute {
                 selectively_disclosable: false,
                 immutable: true,
             },
         );
         attrs.insert(
-            "achievement.description".to_string(),
+            "achievement.criteria.narrative".to_string(),
             PropertyAttribute {
                 selectively_disclosable: false,
-                immutable: false,
+                immutable: true,
             },
         );
 
@@ -1491,8 +1496,8 @@ pub mod document_tests {
         let new_schema = serde_json::json!({
             "type": "object",
             "properties": {
-                "achievement.criteria.narrative": { "type": "string" },
-                "achievement.description": { "type": "string" }
+                "achievement.description": { "type": "string" },
+                "achievement.criteria.narrative": { "type": "string" }
             }
         });
 
@@ -1528,14 +1533,22 @@ pub mod document_tests {
             "type": "object",
             "properties": {
                 "achievement.name": { "type": "string" },
+                "achievement.description": { "type": "string" },
                 "achievement.criteria.narrative": { "type": "string" },
-                "achievement.description": { "type": "string" }
+                "achievement.tag": { "type": "string" }
             }
         });
 
         let mut attrs = HashMap::new();
         attrs.insert(
             "achievement.name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+        attrs.insert(
+            "achievement.description".to_string(),
             PropertyAttribute {
                 selectively_disclosable: false,
                 immutable: true,
@@ -1549,18 +1562,19 @@ pub mod document_tests {
             },
         );
         attrs.insert(
-            "achievement.description".to_string(),
+            "achievement.tag".to_string(),
             PropertyAttribute {
                 selectively_disclosable: false,
                 immutable: false,
             },
         );
 
-        // Remove non-immutable "achievement.description" property - should succeed
+        // Remove non-immutable "achievement.tag" property - should succeed
         let new_schema = serde_json::json!({
             "type": "object",
             "properties": {
                 "achievement.name": { "type": "string" },
+                "achievement.description": { "type": "string" },
                 "achievement.criteria.narrative": { "type": "string" }
             }
         });
@@ -1568,6 +1582,13 @@ pub mod document_tests {
         let mut expected_attrs = HashMap::new();
         expected_attrs.insert(
             "achievement.name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+        expected_attrs.insert(
+            "achievement.description".to_string(),
             PropertyAttribute {
                 selectively_disclosable: false,
                 immutable: true,
@@ -1681,7 +1702,7 @@ pub mod document_tests {
             "achievement.description".to_string(),
             PropertyAttribute {
                 selectively_disclosable: false,
-                immutable: false,
+                immutable: true,
             },
         );
 
@@ -1729,6 +1750,7 @@ pub mod document_tests {
             "type": "object",
             "properties": {
                 "achievement.name": { "const": "Fixed Achievement Name" },
+                "achievement.description": { "type": "string" },
                 "achievement.criteria.narrative": { "type": "string" }
             }
         });
@@ -1736,6 +1758,13 @@ pub mod document_tests {
         let mut expected_attrs = HashMap::new();
         expected_attrs.insert(
             "achievement.name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+        expected_attrs.insert(
+            "achievement.description".to_string(),
             PropertyAttribute {
                 selectively_disclosable: false,
                 immutable: true,
@@ -1936,6 +1965,7 @@ pub mod document_tests {
             "type": "object",
             "properties": {
                 "achievement.name": { "type": "string" },
+                "achievement.description": { "type": "string" },
                 "achievement.criteria.narrative": { "type": "string" },
                 "not_allowed_field": { "type": "string" }
             }
@@ -1969,6 +1999,7 @@ pub mod document_tests {
             "type": "object",
             "properties": {
                 "achievement.name": { "type": "string" },
+                "achievement.description": { "type": "string" },
                 "achievement.criteria.narrative": { "type": "string" }
             }
         });
@@ -1976,6 +2007,13 @@ pub mod document_tests {
         let mut attrs = HashMap::new();
         attrs.insert(
             "achievement.name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                immutable: true,
+            },
+        );
+        attrs.insert(
+            "achievement.description".to_string(),
             PropertyAttribute {
                 selectively_disclosable: false,
                 immutable: true,
@@ -1993,6 +2031,7 @@ pub mod document_tests {
             "type": "object",
             "properties": {
                 "achievement.name": { "type": "string" },
+                "achievement.description": { "type": "string" },
                 "achievement.criteria.narrative": { "type": "string" },
                 "invalid_field": { "type": "string" }
             }
