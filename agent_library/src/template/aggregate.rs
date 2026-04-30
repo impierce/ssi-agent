@@ -876,6 +876,11 @@ pub fn map_open_badges_input_to_credential(flat_input: &serde_json::Value) -> se
         .entry("type".to_string())
         .or_insert(serde_json::json!("Achievement"));
 
+    // Inject achievement.id if not already provided
+    achievement
+        .entry("id".to_string())
+        .or_insert_with(|| serde_json::json!(format!("urn:uuid:{}", uuid::Uuid::new_v4())));
+
     // Build the credentialSubject
     let mut credential_subject = serde_json::Map::new();
     credential_subject.insert("type".to_string(), serde_json::json!(["AchievementSubject"]));
@@ -1944,20 +1949,30 @@ pub mod document_tests {
 
         let result = map_open_badges_input_to_credential(&flat_input);
 
-        let expected = serde_json::json!({
-            "credentialSubject": {
-                "type": ["AchievementSubject"],
-                "achievement": {
-                    "name": "Teamwork",
-                    "type": "Achievement",
-                    "criteria": {
-                        "narrative": "Team members are nominated for this badge by their peers."
-                    }
-                }
-            }
-        });
-
-        assert_eq!(result, expected);
+        assert_eq!(
+            result["credentialSubject"]["achievement"]["name"],
+            "Teamwork"
+        );
+        assert_eq!(
+            result["credentialSubject"]["achievement"]["type"],
+            "Achievement"
+        );
+        assert_eq!(
+            result["credentialSubject"]["achievement"]["criteria"]["narrative"],
+            "Team members are nominated for this badge by their peers."
+        );
+        assert_eq!(
+            result["credentialSubject"]["type"],
+            serde_json::json!(["AchievementSubject"])
+        );
+        // achievement.id is auto-generated as a urn:uuid
+        let id = result["credentialSubject"]["achievement"]["id"]
+            .as_str()
+            .expect("achievement.id should be a string");
+        assert!(
+            id.starts_with("urn:uuid:"),
+            "achievement.id should start with 'urn:uuid:', got: {id}"
+        );
     }
 
     #[test]
@@ -1988,6 +2003,14 @@ pub mod document_tests {
             "Collaboration badge"
         );
         assert_eq!(result["id"], "https://example.com/credentials/3527");
+        // achievement.id is auto-generated as a urn:uuid
+        let id = result["credentialSubject"]["achievement"]["id"]
+            .as_str()
+            .expect("achievement.id should be a string");
+        assert!(
+            id.starts_with("urn:uuid:"),
+            "achievement.id should start with 'urn:uuid:', got: {id}"
+        );
     }
 
     #[test]

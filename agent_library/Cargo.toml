@@ -20,6 +20,7 @@ strum_macros.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 utoipa.workspace = true
+uuid.workspace = true
 
 # `test_utils` dependencies
 rstest = { workspace = true, optional = true }
