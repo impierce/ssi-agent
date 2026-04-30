@@ -97,7 +97,7 @@ pub struct CreateTemplateEndpointRequest {
                 value = json!({ "title": "Standard template", "dataModel": "w3c_vc_data_model_v1-1", "holderType": "individual" })
             )),
             ("OpenBadges template" = (
-                description = "An OpenBadges 3.0 template. The fields `achievement.name` and `achievement.criteria.narrative` are automatically required. Use GET /templates/data-models/open_badges_3-0/default-schema to discover the default schema.",
+                description = "An OpenBadges 3.0 template. The fields `achievement.name` and `achievement.criteria.narrative` are automatically required. Use GET /templates/get-template-default-schema-for-data-model/open_badges_3-0 to discover the default schema.",
                 value = json!({ "title": "OpenBadges template", "dataModel": "open_badges_3-0", "holderType": "individual" })
             ))
         )
@@ -499,7 +499,7 @@ pub struct DeleteTemplateEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn get_default_schema(Path(data_model): Path<String>) -> Result<Response, ApiError> {
     // Attempt to deserialize the path parameter into a DataModel variant.
-    let data_model: DataModel = serde_json::from_value(serde_json::Value::String(data_model.clone()))
+    let parsed: DataModel = serde_json::from_value(serde_json::Value::String(data_model.clone()))
         .map_err(|_| {
             ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Unknown Data Model")
@@ -508,7 +508,7 @@ pub(crate) async fn get_default_schema(Path(data_model): Path<String>) -> Result
                 .finish()
         })?;
 
-    let schema = match data_model {
+    let schema = match parsed {
         DataModel::OpenBadges3_0 => {
             let properties = open_badges_default_schema_properties();
             let required = open_badges_default_required_keys();
@@ -522,10 +522,7 @@ pub(crate) async fn get_default_schema(Path(data_model): Path<String>) -> Result
             return Err(ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Unsupported Data Model")
                 .type_url(type_url("library#unsupported-data-model"))
-                .message(format!(
-                    "No default schema available for data model: `{}`",
-                    serde_json::to_value(&data_model).unwrap_or_default().as_str().unwrap_or("unknown")
-                ))
+                .message(format!("No default schema available for data model: `{data_model}`"))
                 .finish());
         }
     };
