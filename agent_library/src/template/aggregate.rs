@@ -168,6 +168,8 @@ impl Aggregate for Template {
                         obj.entry("properties").or_insert(serde_json::json!({}));
                     }
                     validate_open_badges_required_properties(&s)?;
+                    // Ensure required keys are included in schema.required
+                    ensure_schema_required_keys(&mut s);
                     Box::new(Some(s))
                 } else {
                     schema
@@ -378,6 +380,12 @@ impl Aggregate for Template {
                 if self.data_model == Some(DataModel::OpenBadges3_0) {
                     validate_open_badges_schema_properties(&schema)?;
                     validate_open_badges_required_properties(&schema)?;
+                }
+
+                // Ensure required keys are included in schema.required for OpenBadges 3.0
+                let mut schema = schema;
+                if self.data_model == Some(DataModel::OpenBadges3_0) {
+                    ensure_schema_required_keys(&mut schema);
                 }
 
                 // Enforce immutable properties: reject if any property with immutable=true
@@ -764,6 +772,30 @@ fn validate_open_badges_required_properties(schema: &serde_json::Value) -> Resul
     }
 
     Ok(())
+}
+
+/// Ensures that the OpenBadges 3.0 required property keys are included in the schema's
+/// `required` array. Only adds keys that are present in `schema.properties`.
+fn ensure_schema_required_keys(schema: &mut serde_json::Value) {
+    let required_keys = open_badges_default_required_keys();
+    let property_keys = get_schema_property_keys(schema);
+
+    let schema_obj = match schema.as_object_mut() {
+        Some(obj) => obj,
+        None => return,
+    };
+
+    let required = schema_obj.entry("required").or_insert(serde_json::json!([]));
+    if let Some(required_arr) = required.as_array_mut() {
+        for key in &required_keys {
+            if property_keys.contains(key) {
+                let key_val = serde_json::Value::String(key.clone());
+                if !required_arr.contains(&key_val) {
+                    required_arr.push(key_val);
+                }
+            }
+        }
+    }
 }
 
 /// Merges OpenBadges 3.0 default required properties into a user-provided schema.
@@ -1627,7 +1659,14 @@ pub mod document_tests {
             .then_expect_events(vec![
                 TemplateEvent::SchemaUpdated {
                     template_id: template_id.clone(),
-                    schema: new_schema,
+                    schema: {
+                        let mut expected_schema = new_schema;
+                        expected_schema.as_object_mut().unwrap().insert(
+                            "required".to_string(),
+                            serde_json::json!(["achievement.name", "achievement.description", "achievement.criteria.narrative"]),
+                        );
+                        expected_schema
+                    },
                     modified_at: test_utils::modified_at(),
                 },
                 TemplateEvent::SchemaPropertiesAttributesUpdated {
@@ -1738,7 +1777,14 @@ pub mod document_tests {
                 visibility: Visibility::Private,
                 description: None,
                 r#type: vec![],
-                schema: Box::new(Some(schema)),
+                schema: Box::new(Some({
+                    let mut expected_schema = schema;
+                    expected_schema.as_object_mut().unwrap().insert(
+                        "required".to_string(),
+                        serde_json::json!(["achievement.name", "achievement.description", "achievement.criteria.narrative"]),
+                    );
+                    expected_schema
+                })),
                 schema_properties_attributes: Some(expected_attrs),
             }])
     }
@@ -1810,7 +1856,14 @@ pub mod document_tests {
                 visibility: Visibility::Private,
                 description: None,
                 r#type: vec![],
-                schema: Box::new(Some(schema)),
+                schema: Box::new(Some({
+                    let mut expected_schema = schema;
+                    expected_schema.as_object_mut().unwrap().insert(
+                        "required".to_string(),
+                        serde_json::json!(["achievement.name", "achievement.description", "achievement.criteria.narrative"]),
+                    );
+                    expected_schema
+                })),
                 schema_properties_attributes: Some(expected_attrs),
             }])
     }
@@ -2111,7 +2164,14 @@ pub mod document_tests {
                 visibility: Visibility::Private,
                 description: None,
                 r#type: vec![],
-                schema: Box::new(Some(schema)),
+                schema: Box::new(Some({
+                    let mut expected_schema = schema;
+                    expected_schema.as_object_mut().unwrap().insert(
+                        "required".to_string(),
+                        serde_json::json!(["achievement.name", "achievement.description", "achievement.criteria.narrative"]),
+                    );
+                    expected_schema
+                })),
                 schema_properties_attributes: Some({
                     let mut attrs = HashMap::new();
                     let required_keys = open_badges_default_required_keys();
