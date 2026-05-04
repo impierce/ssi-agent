@@ -1540,10 +1540,8 @@ components:
             type: string
           default: []
         title:
-          type:
-          - string
-          - 'null'
-          default: null
+          type: string
+          default: ''
         type:
           type: array
           items:
