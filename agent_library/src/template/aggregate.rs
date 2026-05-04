@@ -281,10 +281,8 @@ impl Aggregate for Template {
                 // data_model is immutable after creation
                 if let Some(ref current) = self.data_model {
                     if *current != data_model {
-                        let current_serialized =
-                            serde_json::to_value(current).unwrap_or_default();
-                        let new_serialized =
-                            serde_json::to_value(&data_model).unwrap_or_default();
+                        let current_serialized = serde_json::to_value(current).unwrap_or_default();
+                        let new_serialized = serde_json::to_value(&data_model).unwrap_or_default();
                         return Err(TemplateError::ImmutableDataModel(format!(
                             "The template uses the data_model `{}`, which is immutable after creation. If you wish to use the data_model `{}`, you must create a new template.",
                             current_serialized.as_str().unwrap_or("unknown"),
@@ -323,10 +321,8 @@ impl Aggregate for Template {
                 // holder_type is immutable after creation
                 if let Some(ref current) = self.holder_type {
                     if *current != holder_type {
-                        let current_serialized =
-                            serde_json::to_value(current).unwrap_or_default();
-                        let new_serialized =
-                            serde_json::to_value(&holder_type).unwrap_or_default();
+                        let current_serialized = serde_json::to_value(current).unwrap_or_default();
+                        let new_serialized = serde_json::to_value(&holder_type).unwrap_or_default();
                         return Err(TemplateError::ImmutableHolderType(format!(
                             "The template uses the holder_type `{}`, which is immutable after creation. If you wish to use the holder_type `{}`, you must create a new template.",
                             current_serialized.as_str().unwrap_or("unknown"),
