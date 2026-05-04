@@ -35,7 +35,7 @@ mod tests {
     use super::*;
     use crate::{
         tests::CREDENTIAL_ISSUER_METADATA,
-        v0::issuance::{self, credentials::tests::create_test_template},
+        v0::issuance::{self},
     };
     use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_secret_manager::service::Service;
