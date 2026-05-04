@@ -158,19 +158,9 @@ impl Aggregate for Template {
                     _ => {}
                 }
 
-                // Validate that data_model is provided
-                if data_model.is_none() {
-                    return Err(TemplateError::MissingDataModel);
-                }
-
-                // Validate that holder_type is provided
-                if holder_type.is_none() {
-                    return Err(TemplateError::MissingHolderType);
-                }
-
                 // For OpenBadges 3.0 templates, validate that the required properties are present
                 // in the user-supplied schema. They are NOT auto-added.
-                let schema = if data_model == Some(DataModel::OpenBadges3_0) {
+                let schema = if data_model == DataModel::OpenBadges3_0 {
                     let mut s = (*schema).unwrap_or(serde_json::json!({"type": "object"}));
                     // Ensure schema has "type": "object" and "properties"
                     if let Some(obj) = s.as_object_mut() {
@@ -190,7 +180,7 @@ impl Aggregate for Template {
 
                     // For OpenBadges 3.0 templates, validate that all schema properties
                     // are within the allowed set.
-                    if data_model == Some(DataModel::OpenBadges3_0) {
+                    if data_model == DataModel::OpenBadges3_0 {
                         validate_open_badges_schema_properties(s)?;
                     }
                 }
@@ -202,7 +192,7 @@ impl Aggregate for Template {
                 // For OpenBadges 3.0 templates, auto-populate immutable attributes
                 // for schema properties. Only required fields (achievement.name,
                 // achievement.criteria.narrative) are immutable; optional fields are not.
-                let schema_properties_attributes = if data_model == Some(DataModel::OpenBadges3_0) {
+                let schema_properties_attributes = if data_model == DataModel::OpenBadges3_0 {
                     if let Some(ref s) = *schema {
                         let property_keys = get_schema_property_keys(s);
                         let required_keys = open_badges_default_required_keys();
@@ -527,9 +517,9 @@ impl Aggregate for Template {
                 self.source_template_id = source_template_id;
                 self.title = title;
                 self.display = *display;
-                self.data_model = data_model;
+                self.data_model = Some(data_model);
                 self.creator = creator;
-                self.holder_type = holder_type;
+                self.holder_type = Some(holder_type);
                 self.modified_at.replace(modified_at);
                 self.tags = tags;
                 self.status = status;
@@ -972,9 +962,9 @@ pub mod document_tests {
         template_id: String,
         title: Option<String>,
         display: Option<Display>,
-        data_model: Option<DataModel>,
+        data_model: DataModel,
         creator: Option<String>,
-        holder_type: Option<HolderType>,
+        holder_type: HolderType,
         modified_at: String,
         tags: Vec<String>,
         status: Status,
@@ -1031,9 +1021,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: None,
                 display: Box::new(None),
-                data_model: Some(DataModel::W3CVcDataModelV1_1),
+                data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 tags: vec![],
                 status: Status::Draft,
                 visibility: Visibility::Private,
@@ -1055,9 +1045,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::W3CVcDataModelV1_1),
+                data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 tags: vec![],
                 status: Status::Draft,
                 visibility: Visibility::Private,
@@ -1078,9 +1068,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Original".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::W3CVcDataModelV1_1),
+                data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
                 tags: vec![],
                 status: Status::Draft,
@@ -1111,9 +1101,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::W3CVcDataModelV1_1),
+                data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 tags: vec![],
                 status: Status::Draft,
                 visibility: Visibility::Private,
@@ -1135,9 +1125,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::W3CVcDataModelV1_1),
+                data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 tags: vec![],
                 status: Status::Draft,
                 visibility: Visibility::Private,
@@ -1151,9 +1141,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::W3CVcDataModelV1_1),
+                data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
                 tags: vec![],
                 status: Status::Draft,
@@ -1178,9 +1168,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::W3CVcDataModelV1_1),
+                data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
                 tags: vec![],
                 status: Status::Draft,
@@ -1213,9 +1203,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::W3CVcDataModelV1_1),
+                data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
                 tags: vec![],
                 status: Status::Draft,
@@ -1262,9 +1252,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::W3CVcDataModelV1_1),
+                data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 tags: vec![],
                 status: Status::Draft,
                 visibility: Visibility::Private,
@@ -1295,9 +1285,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::W3CVcDataModelV1_1),
+                data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 tags: vec![],
                 status: Status::Draft,
                 visibility: Visibility::Private,
@@ -1334,9 +1324,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::W3CVcDataModelV1_1),
+                data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
                 tags: vec![],
                 status: Status::Draft,
@@ -1371,9 +1361,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::W3CVcDataModelV1_1),
+                data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
                 tags: vec![],
                 status: Status::Draft,
@@ -1439,9 +1429,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::W3CVcDataModelV1_1),
+                data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
                 tags: vec![],
                 status: Status::Draft,
@@ -1502,9 +1492,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::W3CVcDataModelV1_1),
+                data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
                 tags: vec![],
                 status: Status::Draft,
@@ -1575,9 +1565,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::OpenBadges3_0),
+                data_model: DataModel::OpenBadges3_0,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
                 tags: vec![],
                 status: Status::Draft,
@@ -1676,9 +1666,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::OpenBadges3_0),
+                data_model: DataModel::OpenBadges3_0,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
                 tags: vec![],
                 status: Status::Draft,
@@ -1736,9 +1726,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::OpenBadges3_0),
+                data_model: DataModel::OpenBadges3_0,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 tags: vec![],
                 status: Status::Draft,
                 visibility: Visibility::Private,
@@ -1792,9 +1782,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::OpenBadges3_0),
+                data_model: DataModel::OpenBadges3_0,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 tags: vec![],
                 status: Status::Draft,
                 visibility: Visibility::Private,
@@ -1808,9 +1798,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::OpenBadges3_0),
+                data_model: DataModel::OpenBadges3_0,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
                 tags: vec![],
                 status: Status::Draft,
@@ -1875,9 +1865,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::OpenBadges3_0),
+                data_model: DataModel::OpenBadges3_0,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 tags: vec![],
                 status: Status::Draft,
                 visibility: Visibility::Private,
@@ -1891,9 +1881,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::OpenBadges3_0),
+                data_model: DataModel::OpenBadges3_0,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
                 tags: vec![],
                 status: Status::Draft,
@@ -1960,9 +1950,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::OpenBadges3_0),
+                data_model: DataModel::OpenBadges3_0,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
                 tags: vec![],
                 status: Status::Draft,
@@ -2085,9 +2075,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::OpenBadges3_0),
+                data_model: DataModel::OpenBadges3_0,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 tags: vec![],
                 status: Status::Draft,
                 visibility: Visibility::Private,
@@ -2150,9 +2140,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::OpenBadges3_0),
+                data_model: DataModel::OpenBadges3_0,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
                 tags: vec![],
                 status: Status::Draft,
@@ -2193,9 +2183,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::OpenBadges3_0),
+                data_model: DataModel::OpenBadges3_0,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 tags: vec![],
                 status: Status::Draft,
                 visibility: Visibility::Private,
@@ -2209,9 +2199,9 @@ pub mod document_tests {
                 source_template_id: None,
                 title: Some("Test".to_string()),
                 display: Box::new(None),
-                data_model: Some(DataModel::OpenBadges3_0),
+                data_model: DataModel::OpenBadges3_0,
                 creator: None,
-                holder_type: Some(HolderType::Individual),
+                holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
                 tags: vec![],
                 status: Status::Draft,
@@ -2280,8 +2270,8 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn data_model() -> Option<DataModel> {
-        Some(DataModel::W3CVcDataModelV1_1)
+    pub fn data_model() -> DataModel {
+        DataModel::W3CVcDataModelV1_1
     }
 
     #[fixture]
@@ -2290,8 +2280,8 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn holder_type() -> Option<HolderType> {
-        Some(HolderType::Individual)
+    pub fn holder_type() -> HolderType {
+        HolderType::Individual
     }
 
     #[fixture]

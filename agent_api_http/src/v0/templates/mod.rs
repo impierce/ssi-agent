@@ -64,14 +64,14 @@ impl From<Template> for TemplateDto {
     }
 }
 
-#[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
-#[serde(default, rename_all = "camelCase")]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateTemplateEndpointRequest {
     pub title: String,
     pub display: Option<Display>,
-    pub data_model: Option<DataModel>,
+    pub data_model: DataModel,
     pub creator: Option<String>,
-    pub holder_type: Option<HolderType>,
+    pub holder_type: HolderType,
     pub tags: Vec<String>,
     pub status: Status,
     pub visibility: Visibility,
@@ -97,9 +97,9 @@ pub struct CreateTemplateGenericRequest {
     pub title: String,
     pub display: Option<Display>,
     /// Must be one of: `w3c_vc_data_model_v1-1`, `w3c_vc_data_model_v2-0`, or `european_learning_model_v3-3`.
-    pub data_model: Option<DataModel>,
+    pub data_model: DataModel,
     pub creator: Option<String>,
-    pub holder_type: Option<HolderType>,
+    pub holder_type: HolderType,
     pub tags: Option<Vec<String>>,
     pub status: Option<Status>,
     pub visibility: Option<Visibility>,
@@ -139,9 +139,9 @@ pub struct CreateTemplateOpenBadgesRequest {
     pub title: String,
     pub display: Option<Display>,
     /// Must be `open_badges_3-0`.
-    pub data_model: Option<DataModel>,
+    pub data_model: DataModel,
     pub creator: Option<String>,
-    pub holder_type: Option<HolderType>,
+    pub holder_type: HolderType,
     pub tags: Option<Vec<String>>,
     pub status: Option<Status>,
     pub visibility: Option<Visibility>,
@@ -303,9 +303,19 @@ pub(crate) async fn duplicate_template(
                 .unwrap_or_else(|| "Untitled Copy".to_string()),
         ),
         display: Box::new(original_template.display),
-        data_model: original_template.data_model,
+        data_model: original_template.data_model.ok_or_else(|| {
+            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Source Template Invalid")
+                .message("Source template is missing a data_model.")
+                .finish()
+        })?,
         creator: original_template.creator,
-        holder_type: original_template.holder_type,
+        holder_type: original_template.holder_type.ok_or_else(|| {
+            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Source Template Invalid")
+                .message("Source template is missing a holder_type.")
+                .finish()
+        })?,
         tags: original_template.tags,
         status: Status::Draft,
         visibility: original_template.visibility,
@@ -337,9 +347,7 @@ pub struct UpdateTemplateEndpointRequest {
     pub template_id: String,
     pub title: String,
     pub display: Option<Display>,
-    pub data_model: Option<DataModel>,
     pub creator: Option<String>,
-    pub holder_type: Option<HolderType>,
     pub tags: Vec<String>,
     pub status: Option<Status>,
     pub visibility: Option<Visibility>,
@@ -368,9 +376,7 @@ pub(crate) async fn update_template(
         template_id,
         title,
         display,
-        data_model,
         creator,
-        holder_type,
         tags,
         status,
         visibility,
@@ -398,13 +404,11 @@ pub(crate) async fn update_template(
                 .finish()
         })?;
 
-    {
-        let command = TemplateCommand::UpdateTitle {
-            template_id: template_id.clone(),
-            title,
-        };
-        command_handler(&template_id, &state.command.template, command).await?;
-    }
+    let command = TemplateCommand::UpdateTitle {
+        template_id: template_id.clone(),
+        title,
+    };
+    command_handler(&template_id, &state.command.template, command).await?;
 
     if let Some(display) = display {
         let command = TemplateCommand::UpdateDisplay {
@@ -414,26 +418,10 @@ pub(crate) async fn update_template(
         command_handler(&template_id, &state.command.template, command).await?;
     }
 
-    if let Some(data_model) = data_model {
-        let command = TemplateCommand::UpdateDataModel {
-            template_id: template_id.clone(),
-            data_model,
-        };
-        command_handler(&template_id, &state.command.template, command).await?;
-    }
-
     if let Some(creator) = creator {
         let command = TemplateCommand::UpdateCreator {
             template_id: template_id.clone(),
             creator,
-        };
-        command_handler(&template_id, &state.command.template, command).await?;
-    }
-
-    if let Some(holder_type) = holder_type {
-        let command = TemplateCommand::UpdateHolderType {
-            template_id: template_id.clone(),
-            holder_type,
         };
         command_handler(&template_id, &state.command.template, command).await?;
     }

@@ -32,9 +32,9 @@ impl View<Template> for Template {
                 self.source_template_id.clone_from(source_template_id);
                 self.title.clone_from(title);
                 self.display.clone_from(display);
-                self.data_model.clone_from(data_model);
+                self.data_model = Some(data_model.clone());
                 self.creator.clone_from(creator);
-                self.holder_type.clone_from(holder_type);
+                self.holder_type = Some(holder_type.clone());
                 self.modified_at.replace(modified_at.clone());
                 self.tags.clone_from(tags);
                 self.status.clone_from(status);

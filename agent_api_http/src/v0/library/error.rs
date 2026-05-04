@@ -40,16 +40,6 @@ impl IntoApiErrorExt for TemplateError {
                 .type_url(type_url("templates#missing-title"))
                 .source(self)
                 .finish(),
-            TemplateError::MissingDataModel => ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Missing Data Model")
-                .type_url(type_url("templates#missing-data-model"))
-                .source(self)
-                .finish(),
-            TemplateError::MissingHolderType => ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Missing Holder Type")
-                .type_url(type_url("templates#missing-holder-type"))
-                .source(self)
-                .finish(),
             TemplateError::ImmutableDataModel(_) => ApiError::builder(StatusCode::CONFLICT)
                 .title("Immutable Data Model")
                 .type_url(type_url("templates#immutable-data-model"))
