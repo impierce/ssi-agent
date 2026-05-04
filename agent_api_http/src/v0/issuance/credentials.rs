@@ -130,9 +130,7 @@ pub(crate) async fn credentials(
             // For OpenBadges 3.0 templates, the schema uses flat dot-notation keys (e.g. "achievement.name").
             // The API consumer sends data wrapped in "credentialSubject", so we unwrap it before validation.
             let data_to_validate = if template.data_model == Some(DataModel::OpenBadges3_0) {
-                credential
-                    .get("credentialSubject")
-                    .unwrap_or(&credential)
+                credential.get("credentialSubject").unwrap_or(&credential)
             } else {
                 &credential
             };
@@ -144,9 +142,7 @@ pub(crate) async fn credentials(
     // to the nested OBv3 credential structure expected by the issuance pipeline.
     let credential = if !is_signed && template.data_model == Some(DataModel::OpenBadges3_0) {
         // Extract the credentialSubject content (flat dot-notation keys) for mapping.
-        let flat_input = credential
-            .get("credentialSubject")
-            .unwrap_or(&credential);
+        let flat_input = credential.get("credentialSubject").unwrap_or(&credential);
         map_open_badges_input_to_credential(flat_input)
     } else {
         credential
@@ -372,8 +368,13 @@ pub mod tests {
     use crate::tests::{OFFER_ID, TEMPLATE_ID};
     use crate::v0::issuance::{credential_issuer::token_status_list::tests::create_test_signed_credential, router};
     use crate::API_VERSION;
-    use agent_issuance::{server_config::command::ServerConfigCommand, services::IssuanceServices, state::initialize, state::SERVER_CONFIG_ID};
+    use agent_issuance::{
+        server_config::command::ServerConfigCommand, services::IssuanceServices, state::initialize,
+        state::SERVER_CONFIG_ID,
+    };
+    use agent_library::template::aggregate::Status;
     use agent_library::template::command::TemplateCommand;
+    use agent_library::template::event::Visibility;
     use agent_secret_manager::service::Service;
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::{CredentialConfiguration, TESTINDEX};
@@ -432,8 +433,8 @@ pub mod tests {
             creator: None,
             holder_type: None,
             tags: vec![],
-            status: agent_library::template::aggregate::Status::Published,
-            visibility: agent_library::template::aggregate::Visibility::Private,
+            status: Status::Published,
+            visibility: Visibility::Private,
             description: None,
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(Some(json!({
@@ -491,10 +492,7 @@ pub mod tests {
     }
 
     /// This function creates and tests a credential with a specific template ID and returns the endpoint where this credential can be accessed.
-    pub async fn credentials_with_template(
-        app: &mut Router,
-        template_id: &str,
-    ) -> String {
+    pub async fn credentials_with_template(app: &mut Router, template_id: &str) -> String {
         let response = app
             .call(
                 Request::builder()

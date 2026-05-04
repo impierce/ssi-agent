@@ -1,7 +1,7 @@
 use crate::v0::templates::{
-    __path_create_template, __path_delete_template, __path_duplicate_template, __path_get_template,
-    __path_get_templates, __path_update_template, CreateTemplateGenericRequest, CreateTemplateOpenBadgesRequest,
-    CreateTemplateRequestBody,
+    CreateTemplateGenericRequest, CreateTemplateOpenBadgesRequest, CreateTemplateRequestBody, __path_create_template,
+    __path_delete_template, __path_duplicate_template, __path_get_template, __path_get_templates,
+    __path_update_template,
 };
 use utoipa::OpenApi;
 

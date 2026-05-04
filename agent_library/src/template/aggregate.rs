@@ -446,10 +446,8 @@ impl Aggregate for Template {
 
                 // The `immutable` field is system-determined by the data model and cannot
                 // be altered through any command. Override it with the existing values.
-                let schema_properties_attributes = enforce_immutable_flag(
-                    schema_properties_attributes,
-                    &self.schema_properties_attributes,
-                );
+                let schema_properties_attributes =
+                    enforce_immutable_flag(schema_properties_attributes, &self.schema_properties_attributes);
 
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -753,10 +751,7 @@ fn validate_open_badges_required_properties(schema: &serde_json::Value) -> Resul
             .iter()
             .filter(|k| {
                 let prop = properties.get(k.as_str());
-                let has_type_string = prop
-                    .and_then(|p| p.get("type"))
-                    .and_then(|t| t.as_str())
-                    == Some("string");
+                let has_type_string = prop.and_then(|p| p.get("type")).and_then(|t| t.as_str()) == Some("string");
                 let has_const = prop.and_then(|p| p.get("const")).is_some();
                 !has_type_string && !has_const
             })
@@ -1668,7 +1663,11 @@ pub mod document_tests {
                         let mut expected_schema = new_schema;
                         expected_schema.as_object_mut().unwrap().insert(
                             "required".to_string(),
-                            serde_json::json!(["achievement.name", "achievement.description", "achievement.criteria.narrative"]),
+                            serde_json::json!([
+                                "achievement.name",
+                                "achievement.description",
+                                "achievement.criteria.narrative"
+                            ]),
                         );
                         expected_schema
                     },
@@ -1786,7 +1785,11 @@ pub mod document_tests {
                     let mut expected_schema = schema;
                     expected_schema.as_object_mut().unwrap().insert(
                         "required".to_string(),
-                        serde_json::json!(["achievement.name", "achievement.description", "achievement.criteria.narrative"]),
+                        serde_json::json!([
+                            "achievement.name",
+                            "achievement.description",
+                            "achievement.criteria.narrative"
+                        ]),
                     );
                     expected_schema
                 })),
@@ -1865,7 +1868,11 @@ pub mod document_tests {
                     let mut expected_schema = schema;
                     expected_schema.as_object_mut().unwrap().insert(
                         "required".to_string(),
-                        serde_json::json!(["achievement.name", "achievement.description", "achievement.criteria.narrative"]),
+                        serde_json::json!([
+                            "achievement.name",
+                            "achievement.description",
+                            "achievement.criteria.narrative"
+                        ]),
                     );
                     expected_schema
                 })),
@@ -1949,14 +1956,8 @@ pub mod document_tests {
 
         let result = map_open_badges_input_to_credential(&flat_input);
 
-        assert_eq!(
-            result["credentialSubject"]["achievement"]["name"],
-            "Teamwork"
-        );
-        assert_eq!(
-            result["credentialSubject"]["achievement"]["type"],
-            "Achievement"
-        );
+        assert_eq!(result["credentialSubject"]["achievement"]["name"], "Teamwork");
+        assert_eq!(result["credentialSubject"]["achievement"]["type"], "Achievement");
         assert_eq!(
             result["credentialSubject"]["achievement"]["criteria"]["narrative"],
             "Team members are nominated for this badge by their peers."
@@ -1986,14 +1987,8 @@ pub mod document_tests {
 
         let result = map_open_badges_input_to_credential(&flat_input);
 
-        assert_eq!(
-            result["credentialSubject"]["achievement"]["name"],
-            "Teamwork"
-        );
-        assert_eq!(
-            result["credentialSubject"]["achievement"]["type"],
-            "Achievement"
-        );
+        assert_eq!(result["credentialSubject"]["achievement"]["name"], "Teamwork");
+        assert_eq!(result["credentialSubject"]["achievement"]["type"], "Achievement");
         assert_eq!(
             result["credentialSubject"]["achievement"]["criteria"]["narrative"],
             "Nominated by peers."
@@ -2191,7 +2186,11 @@ pub mod document_tests {
                     let mut expected_schema = schema;
                     expected_schema.as_object_mut().unwrap().insert(
                         "required".to_string(),
-                        serde_json::json!(["achievement.name", "achievement.description", "achievement.criteria.narrative"]),
+                        serde_json::json!([
+                            "achievement.name",
+                            "achievement.description",
+                            "achievement.criteria.narrative"
+                        ]),
                     );
                     expected_schema
                 })),

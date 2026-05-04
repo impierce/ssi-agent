@@ -156,11 +156,11 @@ pub(crate) async fn offer(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::tests::{OFFER_ID, TEMPLATE_ID};
     use crate::v0::issuance::credentials::tests::create_test_template;
+    use crate::v0::issuance::credentials::tests::credentials;
     use crate::v0::issuance::router;
     use crate::API_VERSION;
-    use crate::tests::{OFFER_ID, TEMPLATE_ID};
-    use crate::v0::issuance::credentials::tests::credentials;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;

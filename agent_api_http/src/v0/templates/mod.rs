@@ -296,7 +296,12 @@ pub(crate) async fn duplicate_template(
     let command = TemplateCommand::CreateTemplate {
         template_id: new_template_id.clone(),
         source_template_id: Some(source_template_id),
-        title: Some(original_template.title.map(|t| format!("{} Copy", t)).unwrap_or_else(|| "Untitled Copy".to_string())),
+        title: Some(
+            original_template
+                .title
+                .map(|t| format!("{} Copy", t))
+                .unwrap_or_else(|| "Untitled Copy".to_string()),
+        ),
         display: Box::new(original_template.display),
         data_model: original_template.data_model,
         creator: original_template.creator,

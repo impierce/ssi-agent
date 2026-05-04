@@ -110,10 +110,7 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
             vec!["VerifiableCredential".to_string()]
         }
         Some(DataModel::OpenBadges3_0) => {
-            vec![
-                "OpenBadgeCredential".to_string(),
-                "AchievementCredential".to_string(),
-            ]
+            vec!["OpenBadgeCredential".to_string(), "AchievementCredential".to_string()]
         }
         _ => template.r#type.clone(),
     };
@@ -390,8 +387,8 @@ mod tests {
 
     #[test]
     fn test_vc_sd_jwt_includes_claims_from_schema_properties() {
-        use std::collections::HashMap;
         use agent_library::template::aggregate::PropertyAttribute;
+        use std::collections::HashMap;
 
         let schema = serde_json::json!({
             "type": "object",
@@ -402,14 +399,8 @@ mod tests {
         });
 
         let mut attrs = HashMap::new();
-        attrs.insert(
-            "name".to_string(),
-            PropertyAttribute::new(true, false),
-        );
-        attrs.insert(
-            "age".to_string(),
-            PropertyAttribute::new(false, false),
-        );
+        attrs.insert("name".to_string(), PropertyAttribute::new(true, false));
+        attrs.insert("age".to_string(), PropertyAttribute::new(false, false));
 
         let template = Template {
             template_id: "t7".to_string(),
@@ -426,15 +417,17 @@ mod tests {
         assert_eq!(claims.len(), 2);
 
         // Find claim for "name" - selectively disclosable, so mandatory = false
-        let name_claim = claims.iter().find(|c| {
-            c.path.as_ref() == &[ClaimPathElement::String("name".to_string())]
-        }).expect("name claim should exist");
+        let name_claim = claims
+            .iter()
+            .find(|c| c.path.as_ref() == &[ClaimPathElement::String("name".to_string())])
+            .expect("name claim should exist");
         assert!(!name_claim.mandatory);
 
         // Find claim for "age" - not selectively disclosable, so mandatory = true
-        let age_claim = claims.iter().find(|c| {
-            c.path.as_ref() == &[ClaimPathElement::String("age".to_string())]
-        }).expect("age claim should exist");
+        let age_claim = claims
+            .iter()
+            .find(|c| c.path.as_ref() == &[ClaimPathElement::String("age".to_string())])
+            .expect("age claim should exist");
         assert!(age_claim.mandatory);
     }
 
@@ -533,10 +526,7 @@ mod tests {
         let config = credential_configuration_from_template(&template);
         assert_eq!(
             config.type_,
-            vec![
-                "OpenBadgeCredential".to_string(),
-                "AchievementCredential".to_string(),
-            ]
+            vec!["OpenBadgeCredential".to_string(), "AchievementCredential".to_string(),]
         );
     }
 
