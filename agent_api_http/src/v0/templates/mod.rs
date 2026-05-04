@@ -64,9 +64,9 @@ impl From<Template> for TemplateDto {
     }
 }
 
-#[derive(Deserialize, Serialize, utoipa::ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct CreateTemplateEndpointRequest {
+#[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CreateTemplateRequestBody {
     pub title: String,
     pub display: Option<Display>,
     pub data_model: DataModel,
@@ -79,96 +79,6 @@ pub struct CreateTemplateEndpointRequest {
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
-}
-
-/// Schema variant for creating a generic template (e.g. W3C VC Data Model v1.1 or v2.0).
-/// No additional schema properties are auto-merged.
-#[derive(Serialize, Deserialize, utoipa::ToSchema)]
-#[serde(rename_all = "camelCase")]
-#[schema(
-    title = "CreateTemplateGenericRequest",
-    example = json!({
-        "title": "Standard template",
-        "dataModel": "w3c_vc_data_model_v1-1",
-        "holderType": "individual"
-    })
-)]
-pub struct CreateTemplateGenericRequest {
-    pub title: String,
-    pub display: Option<Display>,
-    /// Must be one of: `w3c_vc_data_model_v1-1`, `w3c_vc_data_model_v2-0`, or `european_learning_model_v3-3`.
-    pub data_model: DataModel,
-    pub creator: Option<String>,
-    pub holder_type: HolderType,
-    pub tags: Option<Vec<String>>,
-    pub status: Option<Status>,
-    pub visibility: Option<Visibility>,
-    pub description: Option<String>,
-    pub r#type: Option<Vec<String>>,
-    pub schema: Option<serde_json::Value>,
-    pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
-}
-
-/// Schema variant for creating an OpenBadges 3.0 template.
-/// The following required schema properties must be explicitly provided by the user:
-/// - `achievement.name` (string): The name of the achievement
-/// - `achievement.description` (string): A description of the achievement
-/// - `achievement.criteria.narrative` (string): Description of how the achievement is earned
-///
-/// If these fields are not present in `schema.properties`, the server will return a validation error.
-#[derive(Serialize, Deserialize, utoipa::ToSchema)]
-#[serde(rename_all = "camelCase")]
-#[schema(
-    title = "CreateTemplateOpenBadgesRequest",
-    example = json!({
-        "title": "OpenBadges template",
-        "dataModel": "open_badges_3-0",
-        "holderType": "individual",
-        "schema": {
-            "type": "object",
-            "properties": {
-                "achievement.name": { "type": "string", "description": "The name of the achievement" },
-                "achievement.description": { "type": "string", "description": "A description of the achievement" },
-                "achievement.criteria.narrative": { "type": "string", "description": "Description of how the achievement is earned" }
-            },
-            "required": ["achievement.name", "achievement.description", "achievement.criteria.narrative"]
-        }
-    })
-)]
-pub struct CreateTemplateOpenBadgesRequest {
-    pub title: String,
-    pub display: Option<Display>,
-    /// Must be `open_badges_3-0`.
-    pub data_model: DataModel,
-    pub creator: Option<String>,
-    pub holder_type: HolderType,
-    pub tags: Option<Vec<String>>,
-    pub status: Option<Status>,
-    pub visibility: Option<Visibility>,
-    pub description: Option<String>,
-    pub r#type: Option<Vec<String>>,
-    /// JSON Schema for the template. The properties `achievement.name`, `achievement.description`,
-    /// and `achievement.criteria.narrative` are required for OpenBadges 3.0 templates
-    /// and must be explicitly included. A validation error is returned if they are missing.
-    pub schema: Option<serde_json::Value>,
-    pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
-}
-
-/// Discriminated union for the create-template request body.
-/// The `dataModel` field determines which variant applies.
-///
-/// - For `open_badges_3-0`: the schema must include the required properties
-///   (`achievement.name`, `achievement.description`, `achievement.criteria.narrative`). A validation error is
-///   returned if they are missing.
-/// - For all other data models: no default schema requirements are enforced.
-#[derive(Serialize, Deserialize, utoipa::ToSchema)]
-#[serde(untagged)]
-#[schema(discriminator(property_name = "dataModel"))]
-pub enum CreateTemplateRequestBody {
-    /// Generic template (W3C VC v1.1, v2.0, ELM, etc.)
-    Generic(CreateTemplateGenericRequest),
-    /// OpenBadges 3.0 template with required schema properties enforced
-    OpenBadges(CreateTemplateOpenBadgesRequest),
 }
 
 /// Create a new template
@@ -203,7 +113,7 @@ pub enum CreateTemplateRequestBody {
 #[axum_macros::debug_handler]
 pub(crate) async fn create_template(
     State(state): State<Arc<LibraryState>>,
-    Json(CreateTemplateEndpointRequest {
+    Json(CreateTemplateRequestBody {
         title,
         display,
         data_model,
@@ -216,7 +126,7 @@ pub(crate) async fn create_template(
         r#type,
         schema,
         schema_properties_attributes,
-    }): Json<CreateTemplateEndpointRequest>,
+    }): Json<CreateTemplateRequestBody>,
 ) -> Result<Response, ApiError> {
     let template_id = Uuid::new_v4().to_string();
 

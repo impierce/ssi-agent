@@ -4,7 +4,7 @@ use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{DataModel, Display, Status, Visibility};
 use agent_library::template::command::TemplateCommand;
-use agent_library::template::event::TemplateEvent;
+use agent_library::template::event::{HolderType, TemplateEvent};
 use agent_secret_manager::service::Service;
 use agent_shared::handlers::{command_handler, query_handler};
 use agent_store::in_memory::InMemory;
@@ -18,7 +18,7 @@ use std::sync::Arc;
 fn make_template_created_event(
     template_id: &str,
     types: Vec<String>,
-    data_model: Option<DataModel>,
+    data_model: DataModel,
     title: Option<String>,
     display: Option<Display>,
     status: Status,
@@ -33,7 +33,7 @@ fn make_template_created_event(
             display: Box::new(display),
             data_model,
             creator: None,
-            holder_type: None,
+            holder_type: HolderType::Individual,
             modified_at: "2024-01-01T00:00:00Z".to_string(),
             tags: vec![],
             status,
@@ -75,7 +75,7 @@ async fn test_template_created_registers_credential_configuration() {
     let event = make_template_created_event(
         template_id,
         vec!["VerifiableCredential".to_string()],
-        None,
+        DataModel::W3CVcDataModelV2_0,
         Some("My Credential".to_string()),
         None,
         Status::Published,
@@ -98,7 +98,7 @@ async fn test_template_created_with_v2_data_model_uses_vc_sd_jwt_format() {
     let event = make_template_created_event(
         template_id,
         vec!["VerifiableCredential".to_string()],
-        Some(DataModel::W3CVcDataModelV2_0),
+        DataModel::W3CVcDataModelV2_0,
         None,
         None,
         Status::Published,
@@ -125,7 +125,7 @@ async fn test_template_created_with_draft_status_skips_registration() {
     let event = make_template_created_event(
         template_id,
         vec!["VerifiableCredential".to_string()],
-        None,
+        DataModel::W3CVcDataModelV2_0,
         Some("Draft Credential".to_string()),
         None,
         Status::Draft,
@@ -149,7 +149,7 @@ async fn test_template_created_with_deleted_status_skips_registration() {
     let event = make_template_created_event(
         template_id,
         vec!["VerifiableCredential".to_string()],
-        None,
+        DataModel::W3CVcDataModelV2_0,
         None,
         None,
         Status::Deleted,
@@ -184,9 +184,9 @@ async fn test_display_updated_reflects_in_credential_configuration() {
                 name: "Original Display".to_string(),
                 logo: None,
             })),
-            data_model: None,
+            data_model: DataModel::W3CVcDataModelV2_0,
             creator: None,
-            holder_type: None,
+            holder_type: HolderType::Individual,
             tags: vec![],
             status: Status::Published,
             visibility: Visibility::Private,
@@ -203,7 +203,7 @@ async fn test_display_updated_reflects_in_credential_configuration() {
     let create_event = make_template_created_event(
         template_id,
         vec!["VerifiableCredential".to_string()],
-        None,
+        DataModel::W3CVcDataModelV2_0,
         None,
         Some(Display {
             name: "Original Display".to_string(),
@@ -278,9 +278,9 @@ async fn test_title_updated_while_in_draft_skips_sync() {
             source_template_id: None,
             title: Some("Draft Title".to_string()),
             display: Box::new(None),
-            data_model: None,
+            data_model: DataModel::W3CVcDataModelV2_0,
             creator: None,
-            holder_type: None,
+            holder_type: HolderType::Individual,
             tags: vec![],
             status: Status::Draft,
             visibility: Visibility::Private,
@@ -329,9 +329,9 @@ async fn test_title_updated_refreshes_credential_configuration() {
             source_template_id: None,
             title: Some("Original Title".to_string()),
             display: Box::new(None),
-            data_model: None,
+            data_model: DataModel::W3CVcDataModelV2_0,
             creator: None,
-            holder_type: None,
+            holder_type: HolderType::Individual,
             tags: vec![],
             status: Status::Published,
             visibility: Visibility::Private,
@@ -348,7 +348,7 @@ async fn test_title_updated_refreshes_credential_configuration() {
     let create_event = make_template_created_event(
         template_id,
         vec!["VerifiableCredential".to_string()],
-        None,
+        DataModel::W3CVcDataModelV2_0,
         Some("Original Title".to_string()),
         None,
         Status::Published,
@@ -409,7 +409,7 @@ async fn test_template_deleted_removes_credential_configuration() {
     let create_event = make_template_created_event(
         template_id,
         vec!["VerifiableCredential".to_string()],
-        None,
+        DataModel::W3CVcDataModelV2_0,
         Some("Temp".to_string()),
         None,
         Status::Published,
@@ -455,9 +455,9 @@ async fn test_status_updated_to_published_creates_credential_configuration() {
             source_template_id: None,
             title: Some("My Credential".to_string()),
             display: Box::new(None),
-            data_model: None,
+            data_model: DataModel::W3CVcDataModelV2_0,
             creator: None,
-            holder_type: None,
+            holder_type: HolderType::Individual,
             tags: vec![],
             status: Status::Draft,
             visibility: Visibility::Private,
@@ -473,7 +473,7 @@ async fn test_status_updated_to_published_creates_credential_configuration() {
     let create_event = make_template_created_event(
         template_id,
         vec!["VerifiableCredential".to_string()],
-        None,
+        DataModel::W3CVcDataModelV2_0,
         Some("My Credential".to_string()),
         None,
         Status::Draft,
@@ -540,9 +540,9 @@ async fn test_status_updated_to_deleted_removes_credential_configuration() {
             source_template_id: None,
             title: Some("Temp".to_string()),
             display: Box::new(None),
-            data_model: None,
+            data_model: DataModel::W3CVcDataModelV2_0,
             creator: None,
-            holder_type: None,
+            holder_type: HolderType::Individual,
             tags: vec![],
             status: Status::Published,
             visibility: Visibility::Private,
@@ -558,7 +558,7 @@ async fn test_status_updated_to_deleted_removes_credential_configuration() {
     let create_event = make_template_created_event(
         template_id,
         vec!["VerifiableCredential".to_string()],
-        None,
+        DataModel::W3CVcDataModelV2_0,
         Some("Temp".to_string()),
         None,
         Status::Published,

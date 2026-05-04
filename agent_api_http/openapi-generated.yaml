@@ -675,173 +675,63 @@ components:
           type:
           - string
           - 'null'
-    CreateTemplateGenericRequest:
+    CreateTemplateRequestBody:
       type: object
-      title: CreateTemplateGenericRequest
-      description: |-
-        Schema variant for creating a generic template (e.g. W3C VC Data Model v1.1 or v2.0).
-        No additional schema properties are auto-merged.
-      required:
-      - title
-      - dataModel
-      - holderType
       properties:
         creator:
           type:
           - string
           - 'null'
+          default: null
         dataModel:
-          $ref: '#/components/schemas/DataModel'
-          description: 'Must be one of: `w3c_vc_data_model_v1-1`, `w3c_vc_data_model_v2-0`, or `european_learning_model_v3-3`.'
+          oneOf:
+          - $ref: '#/components/schemas/DataModel'
+          default: w3c_vc_data_model_v2-0
         description:
           type:
           - string
           - 'null'
+          default: null
         display:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
+          default: null
         holderType:
-          $ref: '#/components/schemas/HolderType'
+          oneOf:
+          - $ref: '#/components/schemas/HolderType'
+          default: individual
         schema: {}
         schemaPropertiesAttributes:
           type:
           - object
           - 'null'
+          default: null
           additionalProperties:
             $ref: '#/components/schemas/PropertyAttribute'
           propertyNames:
             type: string
         status:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/TemplateStatus'
+          default: draft
         tags:
-          type:
-          - array
-          - 'null'
+          type: array
           items:
             type: string
+          default: []
         title:
           type: string
+          default: ''
         type:
-          type:
-          - array
-          - 'null'
+          type: array
           items:
             type: string
+          default: []
         visibility:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Visibility'
-      example:
-        title: Standard template
-        dataModel: w3c_vc_data_model_v1-1
-        holderType: individual
-    CreateTemplateOpenBadgesRequest:
-      type: object
-      title: CreateTemplateOpenBadgesRequest
-      description: |-
-        Schema variant for creating an OpenBadges 3.0 template.
-        The following required schema properties must be explicitly provided by the user:
-        - `achievement.name` (string): The name of the achievement
-        - `achievement.description` (string): A description of the achievement
-        - `achievement.criteria.narrative` (string): Description of how the achievement is earned
-
-        If these fields are not present in `schema.properties`, the server will return a validation error.
-      required:
-      - title
-      - dataModel
-      - holderType
-      properties:
-        creator:
-          type:
-          - string
-          - 'null'
-        dataModel:
-          $ref: '#/components/schemas/DataModel'
-          description: Must be `open_badges_3-0`.
-        description:
-          type:
-          - string
-          - 'null'
-        display:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/Display'
-        holderType:
-          $ref: '#/components/schemas/HolderType'
-        schema:
-          description: |-
-            JSON Schema for the template. The properties `achievement.name`, `achievement.description`,
-            and `achievement.criteria.narrative` are required for OpenBadges 3.0 templates
-            and must be explicitly included. A validation error is returned if they are missing.
-        schemaPropertiesAttributes:
-          type:
-          - object
-          - 'null'
-          additionalProperties:
-            $ref: '#/components/schemas/PropertyAttribute'
-          propertyNames:
-            type: string
-        status:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/TemplateStatus'
-        tags:
-          type:
-          - array
-          - 'null'
-          items:
-            type: string
-        title:
-          type: string
-        type:
-          type:
-          - array
-          - 'null'
-          items:
-            type: string
-        visibility:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/Visibility'
-      example:
-        title: OpenBadges template
-        dataModel: open_badges_3-0
-        holderType: individual
-        schema:
-          type: object
-          properties:
-            achievement.name:
-              type: string
-              description: The name of the achievement
-            achievement.description:
-              type: string
-              description: A description of the achievement
-            achievement.criteria.narrative:
-              type: string
-              description: Description of how the achievement is earned
-          required:
-          - achievement.name
-          - achievement.description
-          - achievement.criteria.narrative
-    CreateTemplateRequestBody:
-      oneOf:
-      - $ref: '#/components/schemas/CreateTemplateGenericRequest'
-        description: Generic template (W3C VC v1.1, v2.0, ELM, etc.)
-      - $ref: '#/components/schemas/CreateTemplateOpenBadgesRequest'
-        description: OpenBadges 3.0 template with required schema properties enforced
-      description: |-
-        Discriminated union for the create-template request body.
-        The `dataModel` field determines which variant applies.
-
-        - For `open_badges_3-0`: the schema must include the required properties
-          (`achievement.name`, `achievement.description`, `achievement.criteria.narrative`). A validation error is
-          returned if they are missing.
-        - For all other data models: no default schema requirements are enforced.
-      discriminator:
-        propertyName: dataModel
+          default: private
     Credential:
       type: object
       required:

@@ -22,13 +22,14 @@ pub struct Display {
     pub logo: Option<Logo>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Eq, PartialEq, utoipa::ToSchema)]
 pub enum DataModel {
     // See https://www.w3.org/TR/vc-data-model-1.1/
     #[serde(rename = "w3c_vc_data_model_v1-1")]
     W3CVcDataModelV1_1,
     // See https://www.w3.org/TR/vc-data-model-2.0/
     #[serde(rename = "w3c_vc_data_model_v2-0")]
+    #[default]
     W3CVcDataModelV2_0,
     // See https://www.imsglobal.org/spec/ob/v3p0/
     #[serde(rename = "open_badges_3-0")]
@@ -38,9 +39,10 @@ pub enum DataModel {
     EuropeanLearningModelV3_3,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Eq, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum HolderType {
+    #[default]
     Individual,
     Organization,
 }
