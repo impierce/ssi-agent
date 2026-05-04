@@ -296,7 +296,12 @@ pub(crate) async fn duplicate_template(
     let command = TemplateCommand::CreateTemplate {
         template_id: new_template_id.clone(),
         source_template_id: Some(source_template_id),
-        title: Some(original_template.title.map(|t| format!("{} Copy", t)).unwrap_or_else(|| "Untitled Copy".to_string())),
+        title: Some(
+            original_template
+                .title
+                .map(|t| format!("{} Copy", t))
+                .unwrap_or_else(|| "Untitled Copy".to_string()),
+        ),
         display: Box::new(original_template.display),
         data_model: original_template.data_model.ok_or_else(|| {
             ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
@@ -399,13 +404,11 @@ pub(crate) async fn update_template(
                 .finish()
         })?;
 
-    {
-        let command = TemplateCommand::UpdateTitle {
-            template_id: template_id.clone(),
-            title,
-        };
-        command_handler(&template_id, &state.command.template, command).await?;
-    }
+    let command = TemplateCommand::UpdateTitle {
+        template_id: template_id.clone(),
+        title,
+    };
+    command_handler(&template_id, &state.command.template, command).await?;
 
     if let Some(display) = display {
         let command = TemplateCommand::UpdateDisplay {
