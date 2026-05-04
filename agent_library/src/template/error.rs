@@ -16,4 +16,12 @@ pub enum TemplateError {
     InvalidRequiredPropertyType(String),
     #[error("A title is required when creating or updating a template")]
     MissingTitle,
+    #[error("A data_model is required when creating a template")]
+    MissingDataModel,
+    #[error("A holder_type is required when creating a template")]
+    MissingHolderType,
+    #[error("{0}")]
+    ImmutableDataModel(String),
+    #[error("{0}")]
+    ImmutableHolderType(String),
 }
