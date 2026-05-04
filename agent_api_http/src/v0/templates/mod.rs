@@ -330,7 +330,7 @@ pub(crate) async fn duplicate_template(
 pub struct UpdateTemplateEndpointRequest {
     #[serde(rename = "id")]
     pub template_id: String,
-    pub title: Option<String>,
+    pub title: String,
     pub display: Option<Display>,
     pub data_model: Option<DataModel>,
     pub creator: Option<String>,
@@ -393,7 +393,7 @@ pub(crate) async fn update_template(
                 .finish()
         })?;
 
-    if let Some(title) = title {
+    {
         let command = TemplateCommand::UpdateTitle {
             template_id: template_id.clone(),
             title,
