@@ -683,16 +683,16 @@ components:
         No additional schema properties are auto-merged.
       required:
       - title
+      - dataModel
+      - holderType
       properties:
         creator:
           type:
           - string
           - 'null'
         dataModel:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/DataModel'
-            description: 'Must be one of: `w3c_vc_data_model_v1-1`, `w3c_vc_data_model_v2-0`, or `european_learning_model_v3-3`.'
+          $ref: '#/components/schemas/DataModel'
+          description: 'Must be one of: `w3c_vc_data_model_v1-1`, `w3c_vc_data_model_v2-0`, or `european_learning_model_v3-3`.'
         description:
           type:
           - string
@@ -702,9 +702,7 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
         holderType:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/HolderType'
+          $ref: '#/components/schemas/HolderType'
         schema: {}
         schemaPropertiesAttributes:
           type:
@@ -753,16 +751,16 @@ components:
         If these fields are not present in `schema.properties`, the server will return a validation error.
       required:
       - title
+      - dataModel
+      - holderType
       properties:
         creator:
           type:
           - string
           - 'null'
         dataModel:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/DataModel'
-            description: Must be `open_badges_3-0`.
+          $ref: '#/components/schemas/DataModel'
+          description: Must be `open_badges_3-0`.
         description:
           type:
           - string
@@ -772,9 +770,7 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
         holderType:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/HolderType'
+          $ref: '#/components/schemas/HolderType'
         schema:
           description: |-
             JSON Schema for the template. The properties `achievement.name`, `achievement.description`,
@@ -1496,11 +1492,6 @@ components:
           - string
           - 'null'
           default: null
-        dataModel:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/DataModel'
-          default: null
         description:
           type:
           - string
@@ -1510,11 +1501,6 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
-          default: null
-        holderType:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/HolderType'
           default: null
         id:
           type: string

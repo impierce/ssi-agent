@@ -240,7 +240,7 @@ impl Query<Template> for IssuerMetadataSynchronizationPolicy {
                         template_id: template_id.clone(),
                         title: title.clone(),
                         display: *display.clone(),
-                        data_model: data_model.clone(),
+                        data_model: Some(data_model.clone()),
                         r#type: r#type.clone(),
                         status: status.clone(),
                         ..Default::default()
