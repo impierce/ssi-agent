@@ -12,10 +12,8 @@ use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialMetadata;
 use oid4vci::credential_offer::TxCodeConstraints;
 use oid4vp::authorization_request::AlgValues;
-use oid4vp::authorization_request::{
-    DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported,
-};
 use oid4vp::authorization_request::VcSdJwtParameters;
+use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported};
 use once_cell::sync::Lazy;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
