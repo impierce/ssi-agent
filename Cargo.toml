@@ -33,11 +33,11 @@ rust-version = "1.76.0"
 pedantic = "warn"
 
 [workspace.dependencies]
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "0c3e60a" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "0c3e60a" }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "0c3e60a" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "0c3e60a" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "0c3e60a" }
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "a9dd71a" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "a9dd71a" }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "a9dd71a" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "a9dd71a" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "a9dd71a" }
 
 shared-kernel = { path = "shared-kernel" }
 
@@ -50,19 +50,19 @@ chrono = { version = "0.4", features = ["serde"] }
 cqrs-es = "0.4.12"
 derivative = "2.2"
 futures = "0.3"
-identity_core = { git = "https://github.com/iotaledger/identity", tag = "v1.9.4-beta.1" }
-identity_credential = { git = "https://github.com/iotaledger/identity", tag = "v1.9.4-beta.1", default-features = false, features = [
+identity_core = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
+identity_credential = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1", default-features = false, features = [
     "domain-linkage",
     "presentation",
     "sd-jwt-vc",
 ] }
-identity_did = { git = "https://github.com/iotaledger/identity", tag = "v1.9.4-beta.1" }
-identity_document = { git = "https://github.com/iotaledger/identity", tag = "v1.9.4-beta.1" }
-identity_iota = { git = "https://github.com/iotaledger/identity", tag = "v1.9.4-beta.1" }
-identity_jose = { git = "https://github.com/iotaledger/identity", tag = "v1.9.4-beta.1" }
-identity_storage = { git = "https://github.com/iotaledger/identity", tag = "v1.9.4-beta.1" }
-identity_verification = { git = "https://github.com/iotaledger/identity", tag = "v1.9.4-beta.1", default-features = false }
-iota-sdk = { git = "https://github.com/iotaledger/iota", package = "iota-sdk", tag = "v1.19.1" }
+identity_did = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
+identity_document = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
+identity_iota = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
+identity_jose = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
+identity_storage = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
+identity_verification = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1", default-features = false }
+iota-sdk = { git = "https://github.com/iotaledger/iota", package = "iota-sdk", rev = "96196f0da231883ec69cda04892c600ef6afa982" }
 # TODO: Check if this is still needed.
 iota-sdk-legacy = { version = "1.0", package = "iota-sdk", default-features = false, features = [
     "tls",
@@ -75,7 +75,7 @@ lazy_static = "1.4"
 mime = { version = "0.3" }
 oauth_tsl = { git = "https://github.com/impierce/oauth-token-status-list", rev = "0aa0228" }
 once_cell = { version = "1.19" }
-product_common = { git = "https://github.com/iotaledger/product-core", tag = "v0.8.14", package = "product_common", features = [
+product_common = { git = "https://github.com/iotaledger/product-core", tag = "v0.8.16", package = "product_common", features = [
     "gas-station",
     "default-http-client",
 ] }
