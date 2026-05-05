@@ -70,11 +70,7 @@ pub enum Visibility {
 #[serde(rename_all = "camelCase")]
 pub struct PropertyAttribute {
     selectively_disclosable: bool,
-    /// Whether this property is immutable (cannot be removed from the schema).
-    /// Determined by the data model and cannot be altered through any command.
-    /// For OpenBadges 3.0 templates, only the required properties
-    /// (`achievement.name`, `achievement.description`, `achievement.criteria.narrative`) are immutable.
-    /// Defaults to `false`.
+    /// System-determined; cannot be altered through commands.
     #[serde(default)]
     immutable: bool,
 }
@@ -153,15 +149,13 @@ impl Aggregate for Template {
                 schema,
                 schema_properties_attributes,
             } => {
-                // Validate that a title is provided
                 match title {
                     None => return Err(TemplateError::MissingTitle),
                     Some(ref t) if t.trim().is_empty() => return Err(TemplateError::MissingTitle),
                     _ => {}
                 }
 
-                // For OpenBadges 3.0 templates, validate that the required properties are present
-                // in the user-supplied schema. They are NOT auto-added.
+                // For OpenBadges 3.0, validate required properties and ensure schema structure.
                 let schema = if data_model == DataModel::OpenBadges3_0 {
                     let mut s = (*schema).unwrap_or(serde_json::json!({"type": "object"}));
                     // Ensure schema has "type": "object" and "properties"
@@ -170,7 +164,6 @@ impl Aggregate for Template {
                         obj.entry("properties").or_insert(serde_json::json!({}));
                     }
                     validate_open_badges_required_properties(&s)?;
-                    // Ensure required keys are included in schema.required
                     ensure_schema_required_keys(&mut s);
                     Box::new(Some(s))
                 } else {
@@ -180,8 +173,6 @@ impl Aggregate for Template {
                 if let Some(ref s) = *schema {
                     validate_json_schema(s)?;
 
-                    // For OpenBadges 3.0 templates, validate that all schema properties
-                    // are within the allowed set.
                     if data_model == DataModel::OpenBadges3_0 {
                         validate_open_badges_schema_properties(s)?;
                     }
@@ -191,9 +182,7 @@ impl Aggregate for Template {
                     validate_schema_properties_attributes(&schema, attrs)?;
                 }
 
-                // For OpenBadges 3.0 templates, auto-populate immutable attributes
-                // for schema properties. Only required fields (achievement.name, achievement.description,
-                // achievement.criteria.narrative) are immutable; optional fields are not.
+                // For OpenBadges 3.0, auto-populate immutable attributes for required fields.
                 let schema_properties_attributes = if data_model == DataModel::OpenBadges3_0 {
                     if let Some(ref s) = *schema {
                         let property_keys = get_schema_property_keys(s);
@@ -270,7 +259,6 @@ impl Aggregate for Template {
                 template_id,
                 data_model,
             } => {
-                // data_model is immutable after creation
                 if let Some(ref current) = self.data_model {
                     if *current != data_model {
                         let current_serialized = serde_json::to_value(current).unwrap_or_default();
@@ -310,7 +298,6 @@ impl Aggregate for Template {
                 template_id,
                 holder_type,
             } => {
-                // holder_type is immutable after creation
                 if let Some(ref current) = self.holder_type {
                     if *current != holder_type {
                         let current_serialized = serde_json::to_value(current).unwrap_or_default();
@@ -403,21 +390,17 @@ impl Aggregate for Template {
             UpdateSchema { template_id, schema } => {
                 validate_json_schema(&schema)?;
 
-                // For OpenBadges 3.0 templates, validate that all schema properties
-                // are within the allowed set and required properties have correct type.
                 if self.data_model == Some(DataModel::OpenBadges3_0) {
                     validate_open_badges_schema_properties(&schema)?;
                     validate_open_badges_required_properties(&schema)?;
                 }
 
-                // Ensure required keys are included in schema.required for OpenBadges 3.0
                 let mut schema = schema;
                 if self.data_model == Some(DataModel::OpenBadges3_0) {
                     ensure_schema_required_keys(&mut schema);
                 }
 
-                // Enforce immutable properties: reject if any property with immutable=true
-                // is missing from the new schema.
+                // Reject removal of immutable properties.
                 if let Some(ref existing_attrs) = self.schema_properties_attributes {
                     let new_property_keys = get_schema_property_keys(&schema);
                     let immutable_missing: Vec<&str> = existing_attrs
@@ -446,7 +429,7 @@ impl Aggregate for Template {
                     modified_at: modified_at.clone(),
                 }];
 
-                // Prune schema_properties_attributes whose keys no longer exist in the new schema.
+                // Prune attributes whose keys no longer exist in the new schema.
                 if let Some(ref existing_attrs) = self.schema_properties_attributes {
                     let new_property_keys = get_schema_property_keys(&schema);
                     let pruned: HashMap<String, PropertyAttribute> = existing_attrs
@@ -472,8 +455,7 @@ impl Aggregate for Template {
             } => {
                 validate_schema_properties_attributes(&self.schema, &schema_properties_attributes)?;
 
-                // The `immutable` field is system-determined by the data model and cannot
-                // be altered through any command. Override it with the existing values.
+                // Preserve system-determined immutable flags.
                 let schema_properties_attributes =
                     enforce_immutable_flag(schema_properties_attributes, &self.schema_properties_attributes);
 
@@ -673,13 +655,6 @@ fn validate_schema_properties_attributes(
 }
 
 /// Returns the default required schema properties for OpenBadges 3.0 templates.
-/// These represent the standard-mandated fields that must always be present:
-/// - `achievement.name`: The name of the achievement (user-provided)
-/// - `achievement.description`: A description of the achievement (user-provided)
-/// - `achievement.criteria.narrative`: Description of how the achievement is earned (user-provided)
-///
-/// The returned JSON value is a schema `properties` object suitable for merging into
-/// a user-provided schema.
 pub fn open_badges_default_schema_properties() -> serde_json::Value {
     serde_json::json!({
         "achievement.name": {
@@ -707,10 +682,6 @@ pub fn open_badges_default_required_keys() -> Vec<String> {
 }
 
 /// Returns the complete set of allowed schema property keys for OpenBadges 3.0 templates.
-/// Only these keys may appear in the template's `schema.properties`.
-///
-/// This includes both required (immutable) and optional (removable) properties that conform
-/// to the OpenBadges 3.0 standard for Achievement credentials.
 pub fn open_badges_allowed_schema_property_keys() -> std::collections::HashSet<String> {
     [
         // Required/immutable fields
@@ -728,8 +699,7 @@ pub fn open_badges_allowed_schema_property_keys() -> std::collections::HashSet<S
     .collect()
 }
 
-/// Validates that all schema property keys for an OpenBadges 3.0 template are within
-/// the allowed set of OBv3-conformant property keys.
+/// Validates that all schema property keys are within the allowed OBv3 set.
 fn validate_open_badges_schema_properties(schema: &serde_json::Value) -> Result<(), TemplateError> {
     let property_keys = get_schema_property_keys(schema);
     let allowed = open_badges_allowed_schema_property_keys();
@@ -753,9 +723,7 @@ fn validate_open_badges_schema_properties(schema: &serde_json::Value) -> Result<
     Ok(())
 }
 
-/// Validates that the required OpenBadges 3.0 properties are present in the schema
-/// and that their type is fixed to "string".
-/// Returns an error if any required property is missing or has an incorrect type.
+/// Validates that required OpenBadges 3.0 properties are present with type "string" or "const".
 fn validate_open_badges_required_properties(schema: &serde_json::Value) -> Result<(), TemplateError> {
     let property_keys = get_schema_property_keys(schema);
     let required_keys = open_badges_default_required_keys();
@@ -797,8 +765,7 @@ fn validate_open_badges_required_properties(schema: &serde_json::Value) -> Resul
     Ok(())
 }
 
-/// Ensures that the OpenBadges 3.0 required property keys are included in the schema's
-/// `required` array. Only adds keys that are present in `schema.properties`.
+/// Ensures that required OBv3 property keys are in the schema's `required` array.
 fn ensure_schema_required_keys(schema: &mut serde_json::Value) {
     let required_keys = open_badges_default_required_keys();
     let property_keys = get_schema_property_keys(schema);
@@ -864,14 +831,10 @@ fn merge_open_badges_defaults(schema: &mut serde_json::Value) {
     }
 }
 
-/// Maps a flat credential input (conforming to an OpenBadges 3.0 template schema)
-/// to the nested OBv3 credential structure expected by the issuance pipeline.
+/// Maps flat dot-notation input to the nested OBv3 credential structure.
 ///
-/// Dot-notation keys in the flat input are expanded into nested objects. For example:
-/// `{"achievement.name": "Teamwork", "achievement.criteria.narrative": "..."}` becomes:
-/// `{"credentialSubject": {"achievement": {"name": "Teamwork", "type": "Achievement", "criteria": {"narrative": "..."}}}}`
-///
-/// Additionally, the fixed value `achievement.type = "Achievement"` is injected.
+/// Example: `{"achievement.name": "Teamwork"}` becomes:
+/// `{"credentialSubject": {"achievement": {"name": "Teamwork", "type": "Achievement", ...}}}`
 pub fn map_open_badges_input_to_credential(flat_input: &serde_json::Value) -> serde_json::Value {
     let mut achievement = serde_json::Map::new();
     let mut criteria = serde_json::Map::new();
@@ -889,34 +852,28 @@ pub fn map_open_badges_input_to_credential(flat_input: &serde_json::Value) -> se
         }
     }
 
-    // Insert criteria into achievement if any criteria fields exist
     if !criteria.is_empty() {
         achievement.insert("criteria".to_string(), serde_json::Value::Object(criteria));
     }
 
-    // Inject fixed value: achievement.type = "Achievement"
     achievement
         .entry("type".to_string())
         .or_insert(serde_json::json!("Achievement"));
 
-    // Inject achievement.id if not already provided
     achievement
         .entry("id".to_string())
         .or_insert_with(|| serde_json::json!(format!("urn:uuid:{}", uuid::Uuid::new_v4())));
 
-    // Build the credentialSubject
     let mut credential_subject = serde_json::Map::new();
     credential_subject.insert("type".to_string(), serde_json::json!(["AchievementSubject"]));
     credential_subject.insert("achievement".to_string(), serde_json::Value::Object(achievement));
 
-    // Build the final credential object
     let mut credential = serde_json::Map::new();
     credential.insert(
         "credentialSubject".to_string(),
         serde_json::Value::Object(credential_subject),
     );
 
-    // Include any other non-achievement fields at the top level
     for (key, value) in other_fields {
         credential.insert(key, value);
     }
@@ -924,8 +881,7 @@ pub fn map_open_badges_input_to_credential(flat_input: &serde_json::Value) -> se
     serde_json::Value::Object(credential)
 }
 
-/// Ensures the `immutable` flag on each property attribute preserves the existing
-/// system-determined value. Users cannot alter `immutable` through commands.
+/// Preserves existing `immutable` flag values; users cannot alter them through commands.
 fn enforce_immutable_flag(
     mut new_attrs: HashMap<String, PropertyAttribute>,
     existing_attrs: &Option<HashMap<String, PropertyAttribute>>,
@@ -935,12 +891,10 @@ fn enforce_immutable_flag(
             if let Some(existing_attr) = existing.get(key) {
                 new_attr.immutable = existing_attr.immutable;
             } else {
-                // New properties not previously tracked default to non-immutable.
                 new_attr.immutable = false;
             }
         }
     } else {
-        // No existing attributes means no immutable flags to preserve.
         for attr in new_attrs.values_mut() {
             attr.immutable = false;
         }

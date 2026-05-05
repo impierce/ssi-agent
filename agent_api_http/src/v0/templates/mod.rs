@@ -160,7 +160,6 @@ pub(crate) async fn create_template(
             )
                 .into_response()
         })
-        // TODO: this *should* be an impossible error, what should we return here?
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
@@ -237,7 +236,6 @@ pub(crate) async fn duplicate_template(
 
     command_handler(&new_template_id, &state.command.template, command).await?;
 
-    // Return the duplicated template.
     let new_template = query_handler(&new_template_id, &state.query.template)
         .await?
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;

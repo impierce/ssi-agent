@@ -90,11 +90,8 @@ pub(crate) async fn credentials(
     }): Json<CredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let credential_id = uuid::Uuid::new_v4().to_string();
-
-    // The credential configuration ID is derived from the template ID.
     let credential_configuration_id = template_id.clone();
 
-    // Validate that template_id is not empty.
     if template_id.is_empty() {
         return Err(ApiError::builder(StatusCode::BAD_REQUEST)
             .title("Missing Template ID")
@@ -103,7 +100,6 @@ pub(crate) async fn credentials(
             .finish());
     }
 
-    // Look up the template by ID.
     let template: Template = query_handler(&template_id, &library_state.query.template)
         .await
         .map_err(|_| {
@@ -124,13 +120,11 @@ pub(crate) async fn credentials(
                 .finish()
         })?;
 
-    // If the template has a schema, validate the credential against it.
-    // Only validate unsigned credentials (objects) - signed credentials are pre-built JWTs
-    // and cannot be validated against a template schema.
+    // Validate unsigned credentials against the template schema.
     if !is_signed {
         if let Some(schema) = template.schema.as_ref() {
-            // For OpenBadges 3.0 templates, the schema uses flat dot-notation keys (e.g. "achievement.name").
-            // The API consumer sends data wrapped in "credentialSubject", so we unwrap it before validation.
+            // For OpenBadges 3.0, unwrap credentialSubject before validation since
+            // the schema uses flat dot-notation keys.
             let data_to_validate = if template.data_model == Some(DataModel::OpenBadges3_0) {
                 credential.get("credentialSubject").unwrap_or(&credential)
             } else {
@@ -140,10 +134,8 @@ pub(crate) async fn credentials(
         }
     }
 
-    // For OpenBadges 3.0 templates, map the flat input (conforming to the template schema)
-    // to the nested OBv3 credential structure expected by the issuance pipeline.
+    // For OpenBadges 3.0, map flat input to the nested OBv3 credential structure.
     let credential = if !is_signed && template.data_model == Some(DataModel::OpenBadges3_0) {
-        // Extract the credentialSubject content (flat dot-notation keys) for mapping.
         let flat_input = credential.get("credentialSubject").unwrap_or(&credential);
         map_open_badges_input_to_credential(flat_input)
     } else {
@@ -170,7 +162,6 @@ pub(crate) async fn credentials(
             })?;
 
     let command = if is_signed {
-        // For a signed credential, ensure that the credential is a string.
         if !credential.is_string() {
             return Err(ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Credential Type")
@@ -184,7 +175,6 @@ pub(crate) async fn credentials(
             signed_credential: credential,
         }
     } else {
-        // For an unsigned credential, ensure that the credential is an object.
         if !credential.is_object() {
             return Err(ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Credential Type")
@@ -201,12 +191,9 @@ pub(crate) async fn credentials(
         }
     };
 
-    // Create an unsigned/signed credential.
     command_handler(&credential_id, &issuance_state.command.credential, command).await?;
 
-    // Create an offer if it does not exist yet.
     if query_handler(&offer_id, &issuance_state.query.offer).await?.is_none() {
-        // Extract the tx_code_constraints from the credential configuration if available.
         let tx_code_constraints = authorization
             .pre_authorized
             .then_some(authorization.tx_code_constraints)
@@ -235,10 +222,8 @@ pub(crate) async fn credentials(
         credential_configuration_ids: vec![credential_configuration_id],
     };
 
-    // Add the credential to the offer.
     command_handler(&offer_id, &issuance_state.command.offer, command).await?;
 
-    // Return the credential.
     query_handler(&credential_id, &issuance_state.query.credential)
         .await?
         .and_then(|credential_view| credential_view.data)

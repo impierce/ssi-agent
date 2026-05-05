@@ -18,21 +18,13 @@ type TemplateViewHandle = Arc<OnceLock<Arc<dyn ViewRepository<TemplateView, Temp
 
 pub struct CredentialConfigurationProjection {
     issuance_state: Arc<IssuanceState>,
-    /// The template view repository used to re-query the current template state on partial updates.
-    ///
-    /// This is a `OnceLock` so that the real library state's view repository can be injected AFTER
-    /// the library state (and hence the CQRS framework) is constructed, avoiding the circular
-    /// dependency: projection → library state → projection. By the time any template events arrive the
-    /// application is already started and the lock is set.
+    /// Lazily initialized after library state construction to avoid circular dependencies.
     template_view: TemplateViewHandle,
 }
 
 impl CredentialConfigurationProjection {
-    /// Creates a new projection.
-    ///
-    /// Returns both the projection and the `OnceLock` handle.  After building the library state that
-    /// owns this projection, call `handle.set(library_state.query.template.clone()).unwrap()` to wire
-    /// the real (shared) view repository into the projection.
+    /// Creates a new projection. Call `handle.set(...)` after building the library state
+    /// to wire the template view repository.
     pub fn new(issuance_state: Arc<IssuanceState>) -> (Self, TemplateViewHandle) {
         let template_view = Arc::new(OnceLock::new());
         let projection = Self {
@@ -42,8 +34,8 @@ impl CredentialConfigurationProjection {
         (projection, template_view)
     }
 
-    /// Re-queries the current template state from the view repository and, if the template is not
-    /// in Draft status, updates (or creates) the corresponding credential configuration.
+    /// Re-queries the template and updates the corresponding credential configuration
+    /// (skipped for Draft templates).
     async fn sync_from_view(&self, template_id: &str) {
         use agent_library::template::aggregate::Status;
 
@@ -89,15 +81,6 @@ impl CredentialConfigurationProjection {
 }
 
 /// Derives a `CredentialConfiguration` from a `Template`.
-///
-/// The display name is taken from `template.display.name` if present, falling back to `template.title`.
-/// When the format is "vc+sd-jwt", claims are derived from `schema.properties` merged with
-/// `schema_properties_attributes.selectivelyDisclosable`.
-///
-/// The `credential_definition.type` array is determined by the template's data model:
-/// - For `w3c_vc_data_model_v1-1` and `w3c_vc_data_model_v2-0`: includes "VerifiableCredential"
-/// - For `open_badges_3-0`: uses ["OpenBadgeCredential", "AchievementCredential"]
-/// - Otherwise: uses the template's `type` field as-is
 fn credential_configuration_from_template(template: &Template) -> CredentialConfiguration {
     let format = match template.data_model {
         Some(DataModel::W3CVcDataModelV1_1) => "jwt_vc_json",
@@ -166,10 +149,6 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
 
 /// Builds claim descriptions from the template's `schema.properties`, enriched with
 /// the `selectively_disclosable` flag from `schema_properties_attributes`.
-///
-/// Each property key (which may be dot-separated, e.g. "achievement.name") is converted
-/// into a `ClaimPathPointer` (e.g. `["achievement", "name"]`).
-/// A claim is marked as mandatory when it is NOT selectively disclosable.
 fn build_claims_from_schema(template: &Template) -> Option<Vec<ClaimDescription>> {
     let schema = template.schema.as_ref().as_ref()?;
     let properties = schema.get("properties")?.as_object()?;

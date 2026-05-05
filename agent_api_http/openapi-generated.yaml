@@ -1252,12 +1252,7 @@ components:
       properties:
         immutable:
           type: boolean
-          description: |-
-            Whether this property is immutable (cannot be removed from the schema).
-            Determined by the data model and cannot be altered through any command.
-            For OpenBadges 3.0 templates, only the required properties
-            (`achievement.name`, `achievement.description`, `achievement.criteria.narrative`) are immutable.
-            Defaults to `false`.
+          description: System-determined; cannot be altered through commands.
         selectivelyDisclosable:
           type: boolean
     RemoveConnectionRequest:
