@@ -84,11 +84,6 @@ pub struct CreateTemplateRequestBody {
 /// Create a new template
 ///
 /// Creates a new template which can be used to issue credentials.
-/// The request body uses a discriminated union based on `dataModel`:
-/// - For `open_badges_3-0`: the schema must include the required properties
-///   (`achievement.name`, `achievement.description`, `achievement.criteria.narrative`). A validation error is
-///   returned if they are missing.
-/// - For all other data models: no default schema requirements are enforced.
 #[utoipa::path(
     post,
     path = "/templates/create-template",
