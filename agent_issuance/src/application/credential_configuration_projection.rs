@@ -100,16 +100,16 @@ impl CredentialConfigurationProjection {
 /// - Otherwise: uses the template's `type` field as-is
 fn credential_configuration_from_template(template: &Template) -> CredentialConfiguration {
     let format = match template.data_model {
-        Some(DataModel::W3CVcDataModelV1_1) => "jwt_vc_json",
+        DataModel::W3CVcDataModelV1_1 => "jwt_vc_json",
         _ => "vc+sd-jwt",
     }
     .to_string();
 
     let type_ = match template.data_model {
-        Some(DataModel::W3CVcDataModelV1_1) | Some(DataModel::W3CVcDataModelV2_0) => {
+        DataModel::W3CVcDataModelV1_1 | DataModel::W3CVcDataModelV2_0 => {
             vec!["VerifiableCredential".to_string()]
         }
-        Some(DataModel::OpenBadges3_0) => {
+        DataModel::OpenBadges3_0 => {
             vec!["OpenBadgeCredential".to_string(), "AchievementCredential".to_string()]
         }
         _ => template.r#type.clone(),
@@ -136,17 +136,15 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
             }]
         })
         .or_else(|| {
-            template.title.as_ref().map(|title| {
-                vec![CredentialConfigurationsSupportedDisplay {
-                    name: title.clone(),
-                    locale: None,
-                    logo: None,
-                    description: None,
-                    background_image: None,
-                    background_color: None,
-                    text_color: None,
-                }]
-            })
+            Some(vec![CredentialConfigurationsSupportedDisplay {
+                name: template.title.clone(),
+                locale: None,
+                logo: None,
+                description: None,
+                background_image: None,
+                background_color: None,
+                text_color: None,
+            }])
         });
 
     let claims = if format == "vc+sd-jwt" {
@@ -235,9 +233,9 @@ impl Query<Template> for CredentialConfigurationProjection {
 
                     let template = Template {
                         template_id: template_id.clone(),
-                        title: Some(title.clone()),
+                        title: title.clone(),
                         display: *display.clone(),
-                        data_model: Some(data_model.clone()),
+                        data_model: data_model.clone(),
                         r#type: r#type.clone(),
                         status: status.clone(),
                         ..Default::default()
@@ -295,7 +293,7 @@ mod tests {
     fn test_v1_data_model_produces_jwt_vc_json_format() {
         let template = Template {
             template_id: "t1".to_string(),
-            data_model: Some(DataModel::W3CVcDataModelV1_1),
+            data_model: DataModel::W3CVcDataModelV1_1,
             r#type: vec!["VerifiableCredential".to_string()],
             ..Default::default()
         };
@@ -307,19 +305,7 @@ mod tests {
     fn test_v2_data_model_produces_vc_sd_jwt_format() {
         let template = Template {
             template_id: "t2".to_string(),
-            data_model: Some(DataModel::W3CVcDataModelV2_0),
-            r#type: vec!["VerifiableCredential".to_string()],
-            ..Default::default()
-        };
-        let config = credential_configuration_from_template(&template);
-        assert_eq!(config.format, "vc+sd-jwt");
-    }
-
-    #[test]
-    fn test_absent_data_model_produces_vc_sd_jwt_format() {
-        let template = Template {
-            template_id: "t3".to_string(),
-            data_model: None,
+            data_model: DataModel::W3CVcDataModelV2_0,
             r#type: vec!["VerifiableCredential".to_string()],
             ..Default::default()
         };
@@ -335,7 +321,7 @@ mod tests {
                 name: "Display Name".to_string(),
                 logo: None,
             }),
-            title: Some("Fallback Title".to_string()),
+            title: "Fallback Title".to_string(),
             ..Default::default()
         };
         let config = credential_configuration_from_template(&template);
@@ -356,7 +342,7 @@ mod tests {
         let template = Template {
             template_id: "t5".to_string(),
             display: None,
-            title: Some("My Title".to_string()),
+            title: "My Title".to_string(),
             ..Default::default()
         };
         let config = credential_configuration_from_template(&template);
@@ -370,18 +356,6 @@ mod tests {
             .name
             .clone();
         assert_eq!(name, "My Title");
-    }
-
-    #[test]
-    fn test_no_display_no_title_yields_no_credential_display() {
-        let template = Template {
-            template_id: "t6".to_string(),
-            display: None,
-            title: None,
-            ..Default::default()
-        };
-        let config = credential_configuration_from_template(&template);
-        assert!(config.credential_metadata.display.is_none());
     }
 
     #[test]
@@ -403,7 +377,7 @@ mod tests {
 
         let template = Template {
             template_id: "t7".to_string(),
-            data_model: Some(DataModel::W3CVcDataModelV2_0),
+            data_model: DataModel::W3CVcDataModelV2_0,
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(attrs),
             ..Default::default()
@@ -441,7 +415,7 @@ mod tests {
 
         let template = Template {
             template_id: "t8".to_string(),
-            data_model: Some(DataModel::OpenBadges3_0),
+            data_model: DataModel::OpenBadges3_0,
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             ..Default::default()
@@ -470,7 +444,7 @@ mod tests {
 
         let template = Template {
             template_id: "t9".to_string(),
-            data_model: Some(DataModel::W3CVcDataModelV1_1),
+            data_model: DataModel::W3CVcDataModelV1_1,
             schema: Box::new(Some(schema)),
             ..Default::default()
         };
@@ -484,7 +458,7 @@ mod tests {
     fn test_vc_sd_jwt_no_schema_yields_no_claims() {
         let template = Template {
             template_id: "t10".to_string(),
-            data_model: Some(DataModel::W3CVcDataModelV2_0),
+            data_model: DataModel::W3CVcDataModelV2_0,
             schema: Box::new(None),
             ..Default::default()
         };
@@ -497,7 +471,7 @@ mod tests {
     fn test_w3c_v1_data_model_type_includes_verifiable_credential() {
         let template = Template {
             template_id: "t11".to_string(),
-            data_model: Some(DataModel::W3CVcDataModelV1_1),
+            data_model: DataModel::W3CVcDataModelV1_1,
             ..Default::default()
         };
         let config = credential_configuration_from_template(&template);
@@ -508,7 +482,7 @@ mod tests {
     fn test_w3c_v2_data_model_type_includes_verifiable_credential() {
         let template = Template {
             template_id: "t12".to_string(),
-            data_model: Some(DataModel::W3CVcDataModelV2_0),
+            data_model: DataModel::W3CVcDataModelV2_0,
             ..Default::default()
         };
         let config = credential_configuration_from_template(&template);
@@ -519,7 +493,7 @@ mod tests {
     fn test_open_badges_data_model_type_uses_ob_types() {
         let template = Template {
             template_id: "t13".to_string(),
-            data_model: Some(DataModel::OpenBadges3_0),
+            data_model: DataModel::OpenBadges3_0,
             ..Default::default()
         };
         let config = credential_configuration_from_template(&template);
@@ -527,17 +501,5 @@ mod tests {
             config.type_,
             vec!["OpenBadgeCredential".to_string(), "AchievementCredential".to_string(),]
         );
-    }
-
-    #[test]
-    fn test_absent_data_model_uses_template_type_field() {
-        let template = Template {
-            template_id: "t14".to_string(),
-            data_model: None,
-            r#type: vec!["CustomType".to_string()],
-            ..Default::default()
-        };
-        let config = credential_configuration_from_template(&template);
-        assert_eq!(config.type_, vec!["CustomType".to_string()]);
     }
 }

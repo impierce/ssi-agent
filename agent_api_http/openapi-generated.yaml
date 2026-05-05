@@ -1303,7 +1303,9 @@ components:
       description: Data transfer object for Templates.
       required:
       - id
-      - tags
+      - title
+      - dataModel
+      - holderType
       - status
       - visibility
       - type
@@ -1313,9 +1315,7 @@ components:
           - string
           - 'null'
         dataModel:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/DataModel'
+          $ref: '#/components/schemas/DataModel'
         description:
           type:
           - string
@@ -1325,9 +1325,7 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
         holderType:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/HolderType'
+          $ref: '#/components/schemas/HolderType'
         id:
           type: string
         modifiedAt:
@@ -1350,13 +1348,13 @@ components:
         status:
           $ref: '#/components/schemas/TemplateStatus'
         tags:
-          type: array
+          type:
+          - array
+          - 'null'
           items:
             type: string
         title:
-          type:
-          - string
-          - 'null'
+          type: string
         type:
           type: array
           items:

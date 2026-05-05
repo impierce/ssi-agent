@@ -27,13 +27,13 @@ pub struct TemplateDto {
     #[serde(rename = "id")]
     pub template_id: String,
     pub source_template_id: Option<String>,
-    pub title: Option<String>,
+    pub title: String,
     pub display: Option<Display>,
-    pub data_model: Option<DataModel>,
+    pub data_model: DataModel,
     pub creator: Option<String>,
-    pub holder_type: Option<HolderType>,
+    pub holder_type: HolderType,
     pub modified_at: Option<String>,
-    pub tags: Vec<String>,
+    pub tags: Option<Vec<String>>,
     pub status: Status,
     pub visibility: Visibility,
     pub description: Option<String>,
@@ -201,25 +201,12 @@ pub(crate) async fn duplicate_template(
     let command = TemplateCommand::CreateTemplate {
         template_id: new_template_id.clone(),
         source_template_id: Some(source_template_id),
-        title: original_template
-            .title
-            .map(|t| format!("{} Copy", t))
-            .unwrap_or_else(|| "Untitled Copy".to_string()),
+        title: format!("{} Copy", original_template.title),
         display: Box::new(original_template.display),
-        data_model: original_template.data_model.ok_or_else(|| {
-            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-                .title("Source Template Invalid")
-                .message("Source template is missing a data_model.")
-                .finish()
-        })?,
+        data_model: original_template.data_model,
         creator: original_template.creator,
-        holder_type: original_template.holder_type.ok_or_else(|| {
-            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-                .title("Source Template Invalid")
-                .message("Source template is missing a holder_type.")
-                .finish()
-        })?,
-        tags: Some(original_template.tags),
+        holder_type: original_template.holder_type,
+        tags: original_template.tags,
         status: Status::Draft,
         visibility: original_template.visibility,
         description: original_template.description,

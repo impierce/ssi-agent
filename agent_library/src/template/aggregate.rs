@@ -100,13 +100,13 @@ pub struct Template {
     #[serde(rename = "id")]
     pub template_id: String,
     pub source_template_id: Option<String>,
-    pub title: Option<String>,
+    pub title: String,
     pub display: Option<Display>,
-    pub data_model: Option<DataModel>,
+    pub data_model: DataModel,
     pub creator: Option<String>,
-    pub holder_type: Option<HolderType>,
+    pub holder_type: HolderType,
     pub modified_at: Option<String>,
-    pub tags: Vec<String>,
+    pub tags: Option<Vec<String>>,
     pub status: Status,
     pub visibility: Visibility,
     pub description: Option<String>,
@@ -347,14 +347,14 @@ impl Aggregate for Template {
 
                 // For OpenBadges 3.0 templates, validate that all schema properties
                 // are within the allowed set and required properties have correct type.
-                if self.data_model == Some(DataModel::OpenBadges3_0) {
+                if self.data_model == DataModel::OpenBadges3_0 {
                     validate_open_badges_schema_properties(&schema)?;
                     validate_open_badges_required_properties(&schema)?;
                 }
 
                 // Ensure required keys are included in schema.required for OpenBadges 3.0
                 let mut schema = schema;
-                if self.data_model == Some(DataModel::OpenBadges3_0) {
+                if self.data_model == DataModel::OpenBadges3_0 {
                     ensure_schema_required_keys(&mut schema);
                 }
 
@@ -459,13 +459,13 @@ impl Aggregate for Template {
             } => {
                 self.template_id = template_id;
                 self.source_template_id = source_template_id;
-                self.title = Some(title);
+                self.title = title;
                 self.display = *display;
-                self.data_model = Some(data_model);
+                self.data_model = data_model;
                 self.creator = creator;
-                self.holder_type = Some(holder_type);
+                self.holder_type = holder_type;
                 self.modified_at.replace(modified_at);
-                self.tags = tags.unwrap_or_default();
+                self.tags = tags;
                 self.status = status;
                 self.visibility = visibility;
                 self.description = description;
@@ -478,7 +478,7 @@ impl Aggregate for Template {
                 title,
                 modified_at,
             } => {
-                self.title = Some(title);
+                self.title = title;
                 self.modified_at.replace(modified_at);
             }
             DisplayUpdated {
@@ -502,7 +502,7 @@ impl Aggregate for Template {
                 tags,
                 modified_at,
             } => {
-                self.tags = tags;
+                self.tags = Some(tags);
                 self.modified_at.replace(modified_at);
             }
             StatusUpdated {

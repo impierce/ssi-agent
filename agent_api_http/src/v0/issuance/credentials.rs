@@ -131,7 +131,7 @@ pub(crate) async fn credentials(
         if let Some(schema) = template.schema.as_ref() {
             // For OpenBadges 3.0 templates, the schema uses flat dot-notation keys (e.g. "achievement.name").
             // The API consumer sends data wrapped in "credentialSubject", so we unwrap it before validation.
-            let data_to_validate = if template.data_model == Some(DataModel::OpenBadges3_0) {
+            let data_to_validate = if template.data_model == DataModel::OpenBadges3_0 {
                 credential.get("credentialSubject").unwrap_or(&credential)
             } else {
                 &credential
@@ -142,7 +142,7 @@ pub(crate) async fn credentials(
 
     // For OpenBadges 3.0 templates, map the flat input (conforming to the template schema)
     // to the nested OBv3 credential structure expected by the issuance pipeline.
-    let credential = if !is_signed && template.data_model == Some(DataModel::OpenBadges3_0) {
+    let credential = if !is_signed && template.data_model == DataModel::OpenBadges3_0 {
         // Extract the credentialSubject content (flat dot-notation keys) for mapping.
         let flat_input = credential.get("credentialSubject").unwrap_or(&credential);
         map_open_badges_input_to_credential(flat_input)
