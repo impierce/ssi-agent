@@ -455,13 +455,7 @@ paths:
       - Library
       - Templates
       summary: Create a new template
-      description: |-
-        Creates a new template which can be used to issue credentials.
-        The request body uses a discriminated union based on `dataModel`:
-        - For `open_badges_3-0`: the schema must include the required properties
-          (`achievement.name`, `achievement.description`, `achievement.criteria.narrative`). A validation error is
-          returned if they are missing.
-        - For all other data models: no default schema requirements are enforced.
+      description: Creates a new template which can be used to issue credentials.
       operationId: create_template
       requestBody:
         content:
@@ -716,10 +710,12 @@ components:
           - $ref: '#/components/schemas/TemplateStatus'
           default: draft
         tags:
-          type: array
+          type:
+          - array
+          - 'null'
           items:
             type: string
-          default: []
+          default: null
         title:
           type: string
           default: ''
