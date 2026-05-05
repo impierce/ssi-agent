@@ -47,21 +47,21 @@ fn create_test_event_template_created(
 
 async fn setup() -> (Arc<IssuanceState>, Arc<LibraryState>, CredentialConfigurationProjection) {
     let issuance = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
-    let (policy, template_view_handle) = CredentialConfigurationProjection::new(issuance.clone());
-    // Build the library state WITHOUT the policy (the policy dispatches commands to issuance_state,
-    // not to this library state). Then wire the real view repo into the policy's OnceLock handle so
+    let (projection, template_view_handle) = CredentialConfigurationProjection::new(issuance.clone());
+    // Build the library state WITHOUT the projection (the projection dispatches commands to issuance_state,
+    // not to this library state). Then wire the real view repo into the projection's OnceLock handle so
     // that partial-update re-queries use the same MemRepository that the CQRS framework updates.
     let lib_state = Arc::new(library_state(&InMemory, Default::default(), vec![]).await);
     assert!(
         template_view_handle.set(lib_state.query.template.clone()).is_ok(),
         "template view already initialized"
     );
-    (issuance, lib_state, policy)
+    (issuance, lib_state, projection)
 }
 
 #[tokio::test]
 async fn test_template_created_registers_credential_configuration() {
-    let (issuance, _library, policy) = setup().await;
+    let (issuance, _library, projection) = setup().await;
 
     let template_id = "my-template";
     let event = create_test_event_template_created(
@@ -73,7 +73,7 @@ async fn test_template_created_registers_credential_configuration() {
         Status::Published,
     );
 
-    policy.dispatch(template_id, &[event]).await;
+    projection.dispatch(template_id, &[event]).await;
 
     let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
         .await
@@ -84,7 +84,7 @@ async fn test_template_created_registers_credential_configuration() {
 
 #[tokio::test]
 async fn test_template_created_with_v2_data_model_uses_vc_sd_jwt_format() {
-    let (issuance, _library, policy) = setup().await;
+    let (issuance, _library, projection) = setup().await;
 
     let template_id = "v2-template";
     let event = create_test_event_template_created(
@@ -96,7 +96,7 @@ async fn test_template_created_with_v2_data_model_uses_vc_sd_jwt_format() {
         Status::Published,
     );
 
-    policy.dispatch(template_id, &[event]).await;
+    projection.dispatch(template_id, &[event]).await;
 
     let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
         .await
@@ -111,7 +111,7 @@ async fn test_template_created_with_v2_data_model_uses_vc_sd_jwt_format() {
 
 #[tokio::test]
 async fn test_template_created_with_draft_status_skips_registration() {
-    let (issuance, _library, policy) = setup().await;
+    let (issuance, _library, projection) = setup().await;
 
     let template_id = "draft-template";
     let event = create_test_event_template_created(
@@ -123,7 +123,7 @@ async fn test_template_created_with_draft_status_skips_registration() {
         Status::Draft,
     );
 
-    policy.dispatch(template_id, &[event]).await;
+    projection.dispatch(template_id, &[event]).await;
 
     let contains_key = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
         .await
@@ -135,7 +135,7 @@ async fn test_template_created_with_draft_status_skips_registration() {
 
 #[tokio::test]
 async fn test_template_created_with_deleted_status_skips_registration() {
-    let (issuance, _library, policy) = setup().await;
+    let (issuance, _library, projection) = setup().await;
 
     let template_id = "deleted-template";
     let event = create_test_event_template_created(
@@ -147,7 +147,7 @@ async fn test_template_created_with_deleted_status_skips_registration() {
         Status::Deleted,
     );
 
-    policy.dispatch(template_id, &[event]).await;
+    projection.dispatch(template_id, &[event]).await;
 
     // A ServerConfig may not exist yet; if it does, it must not contain the deleted template.
     let contains_key = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
@@ -160,7 +160,7 @@ async fn test_template_created_with_deleted_status_skips_registration() {
 
 #[tokio::test]
 async fn test_display_updated_reflects_in_credential_configuration() {
-    let (issuance, lib_state, policy) = setup().await;
+    let (issuance, lib_state, projection) = setup().await;
 
     let template_id = "display-update-template";
 
@@ -203,9 +203,9 @@ async fn test_display_updated_reflects_in_credential_configuration() {
         }),
         Status::Published,
     );
-    policy.dispatch(template_id, &[create_event]).await;
+    projection.dispatch(template_id, &[create_event]).await;
 
-    // Update the display in the shared library state (the policy will re-query this exact view).
+    // Update the display in the shared library state (the projection will re-query this exact view).
     command_handler(
         template_id,
         &lib_state.command.template,
@@ -220,7 +220,7 @@ async fn test_display_updated_reflects_in_credential_configuration() {
     .await
     .unwrap();
 
-    // Dispatch DisplayUpdated — the policy re-queries the shared view and picks up the new display.
+    // Dispatch DisplayUpdated — the projection re-queries the shared view and picks up the new display.
     let update_event: EventEnvelope<agent_library::template::aggregate::Template> = EventEnvelope {
         aggregate_id: template_id.to_string(),
         sequence: 2,
@@ -234,7 +234,7 @@ async fn test_display_updated_reflects_in_credential_configuration() {
         },
         metadata: HashMap::new(),
     };
-    policy.dispatch(template_id, &[update_event]).await;
+    projection.dispatch(template_id, &[update_event]).await;
 
     let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
         .await
@@ -257,7 +257,7 @@ async fn test_display_updated_reflects_in_credential_configuration() {
 
 #[tokio::test]
 async fn test_title_updated_while_in_draft_skips_sync() {
-    let (issuance, library_for_query, policy) = setup().await;
+    let (issuance, library_for_query, projection) = setup().await;
 
     let template_id = "draft-update-template";
 
@@ -296,7 +296,7 @@ async fn test_title_updated_while_in_draft_skips_sync() {
         },
         metadata: HashMap::new(),
     };
-    policy.dispatch(template_id, &[update_event]).await;
+    projection.dispatch(template_id, &[update_event]).await;
 
     let contains_key = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
         .await
@@ -308,11 +308,11 @@ async fn test_title_updated_while_in_draft_skips_sync() {
 
 #[tokio::test]
 async fn test_title_updated_refreshes_credential_configuration() {
-    let (issuance, library_for_query, policy) = setup().await;
+    let (issuance, library_for_query, projection) = setup().await;
 
     let template_id = "updatable-template";
 
-    // Pre-populate the library state that the policy re-queries on partial updates.
+    // Pre-populate the library state that the projection re-queries on partial updates.
     command_handler(
         template_id,
         &library_for_query.command.template,
@@ -345,9 +345,9 @@ async fn test_title_updated_refreshes_credential_configuration() {
         None,
         Status::Published,
     );
-    policy.dispatch(template_id, &[create_event]).await;
+    projection.dispatch(template_id, &[create_event]).await;
 
-    // Apply the title update to the library state that the policy will re-query.
+    // Apply the title update to the library state that the projection will re-query.
     command_handler(
         template_id,
         &library_for_query.command.template,
@@ -359,7 +359,7 @@ async fn test_title_updated_refreshes_credential_configuration() {
     .await
     .unwrap();
 
-    // Dispatch TitleUpdated so the policy re-queries and syncs the credential configuration.
+    // Dispatch TitleUpdated so the projection re-queries and syncs the credential configuration.
     let update_event: EventEnvelope<agent_library::template::aggregate::Template> = EventEnvelope {
         aggregate_id: template_id.to_string(),
         sequence: 2,
@@ -370,7 +370,7 @@ async fn test_title_updated_refreshes_credential_configuration() {
         },
         metadata: HashMap::new(),
     };
-    policy.dispatch(template_id, &[update_event]).await;
+    projection.dispatch(template_id, &[update_event]).await;
 
     let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
         .await
@@ -393,7 +393,7 @@ async fn test_title_updated_refreshes_credential_configuration() {
 
 #[tokio::test]
 async fn test_template_deleted_removes_credential_configuration() {
-    let (issuance, _library, policy) = setup().await;
+    let (issuance, _library, projection) = setup().await;
 
     let template_id = "to-be-deleted";
 
@@ -406,7 +406,7 @@ async fn test_template_deleted_removes_credential_configuration() {
         None,
         Status::Published,
     );
-    policy.dispatch(template_id, &[create_event]).await;
+    projection.dispatch(template_id, &[create_event]).await;
 
     let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
         .await
@@ -423,7 +423,7 @@ async fn test_template_deleted_removes_credential_configuration() {
         },
         metadata: HashMap::new(),
     };
-    policy.dispatch(template_id, &[delete_event]).await;
+    projection.dispatch(template_id, &[delete_event]).await;
 
     let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
         .await
@@ -434,7 +434,7 @@ async fn test_template_deleted_removes_credential_configuration() {
 
 #[tokio::test]
 async fn test_status_updated_to_published_creates_credential_configuration() {
-    let (issuance, lib_state, policy) = setup().await;
+    let (issuance, lib_state, projection) = setup().await;
 
     let template_id = "draft-to-published";
 
@@ -470,7 +470,7 @@ async fn test_status_updated_to_published_creates_credential_configuration() {
         None,
         Status::Draft,
     );
-    policy.dispatch(template_id, &[create_event]).await;
+    projection.dispatch(template_id, &[create_event]).await;
 
     let contains_key = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
         .await
@@ -494,7 +494,7 @@ async fn test_status_updated_to_published_creates_credential_configuration() {
     .await
     .unwrap();
 
-    // Dispatch StatusUpdated — the policy should now create the credential configuration.
+    // Dispatch StatusUpdated — the projection should now create the credential configuration.
     let status_event: EventEnvelope<agent_library::template::aggregate::Template> = EventEnvelope {
         aggregate_id: template_id.to_string(),
         sequence: 2,
@@ -505,7 +505,7 @@ async fn test_status_updated_to_published_creates_credential_configuration() {
         },
         metadata: HashMap::new(),
     };
-    policy.dispatch(template_id, &[status_event]).await;
+    projection.dispatch(template_id, &[status_event]).await;
 
     let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
         .await
@@ -519,7 +519,7 @@ async fn test_status_updated_to_published_creates_credential_configuration() {
 
 #[tokio::test]
 async fn test_status_updated_to_deleted_removes_credential_configuration() {
-    let (issuance, lib_state, policy) = setup().await;
+    let (issuance, lib_state, projection) = setup().await;
 
     let template_id = "published-to-deleted";
 
@@ -555,7 +555,7 @@ async fn test_status_updated_to_deleted_removes_credential_configuration() {
         None,
         Status::Published,
     );
-    policy.dispatch(template_id, &[create_event]).await;
+    projection.dispatch(template_id, &[create_event]).await;
 
     let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
         .await
@@ -574,7 +574,7 @@ async fn test_status_updated_to_deleted_removes_credential_configuration() {
         },
         metadata: HashMap::new(),
     };
-    policy.dispatch(template_id, &[status_event]).await;
+    projection.dispatch(template_id, &[status_event]).await;
 
     let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
         .await

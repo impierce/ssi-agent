@@ -459,7 +459,7 @@ pub mod tests {
             .unwrap();
 
         // Register a credential configuration matching the template_id.
-        // This simulates what the issuer_metadata_synchronization_policy does in production.
+        // This simulates what the credential_configuration_projection does in production.
         let credential_configuration: CredentialConfiguration = serde_json::from_value(json!({
             "credential_configuration_id": template_id,
             "format": "jwt_vc_json",
