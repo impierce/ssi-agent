@@ -33,11 +33,11 @@ rust-version = "1.76.0"
 pedantic = "warn"
 
 [workspace.dependencies]
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "a9dd71a" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "a9dd71a" }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "a9dd71a" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "a9dd71a" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "a9dd71a" }
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "4e07f22" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "4e07f22" }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "4e07f22" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "4e07f22" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "4e07f22" }
 
 shared-kernel = { path = "shared-kernel" }
 
