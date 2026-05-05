@@ -192,7 +192,7 @@ impl Aggregate for Template {
                 }
 
                 // For OpenBadges 3.0 templates, auto-populate immutable attributes
-                // for schema properties. Only required fields (achievement.name,
+                // for schema properties. Only required fields (achievement.name, achievement.description,
                 // achievement.criteria.narrative) are immutable; optional fields are not.
                 let schema_properties_attributes = if data_model == DataModel::OpenBadges3_0 {
                     if let Some(ref s) = *schema {

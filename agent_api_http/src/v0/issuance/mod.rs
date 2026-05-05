@@ -45,9 +45,9 @@ pub fn router((issuance_state, library_state): (Arc<IssuanceState>, Arc<LibraryS
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send-offer-to-individual", post(individual_offer))
                 .route("/offers/send-offer-to-organization", post(organization_offer))
-                .with_state(issuance_state.clone())
                 .route("/credentials", get(all_credentials).post(credentials))
-                .with_state((issuance_state.clone(), library_state.clone())),
+                .with_state(issuance_state.clone())
+                .layer(axum::Extension(library_state)),
         )
         .route(
             "/.well-known/oauth-authorization-server",

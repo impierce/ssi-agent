@@ -193,7 +193,7 @@ fn build_claims_from_schema(template: &Template) -> Option<Vec<ClaimDescription>
             let mandatory = attributes
                 .and_then(|attrs| attrs.get(key))
                 .map(|attr| !attr.is_selectively_disclosable())
-                .unwrap_or(false);
+                .unwrap_or(true);
 
             Some(ClaimDescription {
                 path,

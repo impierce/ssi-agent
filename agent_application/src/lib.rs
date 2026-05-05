@@ -9,8 +9,7 @@ use agent_event_publisher_nats::EventPublisherNats;
 use agent_holder::services::HolderServices;
 use agent_identity::services::IdentityServices;
 use agent_issuance::{
-    application::policies::credential_configuration_projection::CredentialConfigurationProjection,
-    services::IssuanceServices,
+    application::credential_configuration_projection::CredentialConfigurationProjection, services::IssuanceServices,
 };
 use agent_secret_manager::{service::Service as _, subject::Subject};
 use agent_shared::config::{config, EventStoreType};

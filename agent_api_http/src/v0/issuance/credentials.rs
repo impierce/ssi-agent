@@ -15,6 +15,7 @@ use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{
     map_open_badges_input_to_credential, DataModel, Status as TemplateStatus, Template,
 };
+use axum::Extension;
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -78,7 +79,8 @@ pub struct CredentialsEndpointRequest {
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
-    State((issuance_state, library_state)): State<(Arc<IssuanceState>, Arc<LibraryState>)>,
+    State(issuance_state): State<Arc<IssuanceState>>,
+    Extension(library_state): Extension<Arc<LibraryState>>,
     Json(CredentialsEndpointRequest {
         template_id,
         offer_id,
@@ -264,9 +266,7 @@ pub(crate) async fn credentials(
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn all_credentials(
-    State((issuance_state, _library_state)): State<(Arc<IssuanceState>, Arc<LibraryState>)>,
-) -> Result<Response, ApiError> {
+pub(crate) async fn all_credentials(State(issuance_state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
     let all_credentials = query_handler("all_credentials", &issuance_state.query.all_credentials)
         .await?
         .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
