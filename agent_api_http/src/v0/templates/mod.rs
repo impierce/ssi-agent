@@ -72,7 +72,7 @@ pub struct CreateTemplateRequestBody {
     pub data_model: DataModel,
     pub creator: Option<String>,
     pub holder_type: HolderType,
-    pub tags: Vec<String>,
+    pub tags: Option<Vec<String>>,
     pub status: Status,
     pub visibility: Visibility,
     pub description: Option<String>,
@@ -133,7 +133,7 @@ pub(crate) async fn create_template(
     let command = TemplateCommand::CreateTemplate {
         template_id: template_id.clone(),
         source_template_id: None,
-        title: Some(title),
+        title,
         display: Box::new(display),
         data_model,
         creator,
@@ -206,12 +206,10 @@ pub(crate) async fn duplicate_template(
     let command = TemplateCommand::CreateTemplate {
         template_id: new_template_id.clone(),
         source_template_id: Some(source_template_id),
-        title: Some(
-            original_template
-                .title
-                .map(|t| format!("{} Copy", t))
-                .unwrap_or_else(|| "Untitled Copy".to_string()),
-        ),
+        title: original_template
+            .title
+            .map(|t| format!("{} Copy", t))
+            .unwrap_or_else(|| "Untitled Copy".to_string()),
         display: Box::new(original_template.display),
         data_model: original_template.data_model.ok_or_else(|| {
             ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
@@ -226,7 +224,7 @@ pub(crate) async fn duplicate_template(
                 .message("Source template is missing a holder_type.")
                 .finish()
         })?,
-        tags: original_template.tags,
+        tags: Some(original_template.tags),
         status: Status::Draft,
         visibility: original_template.visibility,
         description: original_template.description,

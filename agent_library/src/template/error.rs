@@ -16,8 +16,4 @@ pub enum TemplateError {
     InvalidRequiredPropertyType(String),
     #[error("A title is required when creating or updating a template")]
     MissingTitle,
-    #[error("{0}")]
-    ImmutableDataModel(String),
-    #[error("{0}")]
-    ImmutableHolderType(String),
 }

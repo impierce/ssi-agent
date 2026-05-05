@@ -30,13 +30,13 @@ impl View<Template> for Template {
             } => {
                 self.template_id.clone_from(template_id);
                 self.source_template_id.clone_from(source_template_id);
-                self.title.clone_from(title);
+                self.title = Some(title.clone());
                 self.display.clone_from(display);
                 self.data_model = Some(data_model.clone());
                 self.creator.clone_from(creator);
                 self.holder_type = Some(holder_type.clone());
                 self.modified_at.replace(modified_at.clone());
-                self.tags.clone_from(tags);
+                self.tags = tags.clone().unwrap_or_default();
                 self.status.clone_from(status);
                 self.visibility.clone_from(visibility);
                 self.description.clone_from(description);
@@ -61,28 +61,12 @@ impl View<Template> for Template {
                 self.display.replace(display.clone());
                 self.modified_at.replace(modified_at.clone());
             }
-            DataModelUpdated {
-                template_id: _,
-                data_model,
-                modified_at,
-            } => {
-                self.data_model.replace(data_model.clone());
-                self.modified_at.replace(modified_at.clone());
-            }
             CreatorUpdated {
                 template_id: _,
                 creator,
                 modified_at,
             } => {
                 self.creator.replace(creator.clone());
-                self.modified_at.replace(modified_at.clone());
-            }
-            HolderTypeUpdated {
-                template_id: _,
-                holder_type,
-                modified_at,
-            } => {
-                self.holder_type.replace(holder_type.clone());
                 self.modified_at.replace(modified_at.clone());
             }
             TagsUpdated {
