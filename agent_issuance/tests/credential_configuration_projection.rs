@@ -1,4 +1,4 @@
-use agent_issuance::application::policies::issuer_metadata_synchronization_policy::IssuerMetadataSynchronizationPolicy;
+use agent_issuance::application::credential_configuration_projection::CredentialConfigurationProjection;
 use agent_issuance::services::IssuanceServices;
 use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
 use agent_library::state::LibraryState;
@@ -13,9 +13,7 @@ use cqrs_es::{EventEnvelope, Query};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-fn make_template_created_event(
+fn create_test_event_template_created(
     template_id: &str,
     types: Vec<String>,
     data_model: DataModel,
@@ -47,13 +45,9 @@ fn make_template_created_event(
     }
 }
 
-async fn setup() -> (
-    Arc<IssuanceState>,
-    Arc<LibraryState>,
-    IssuerMetadataSynchronizationPolicy,
-) {
+async fn setup() -> (Arc<IssuanceState>, Arc<LibraryState>, CredentialConfigurationProjection) {
     let issuance = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
-    let (policy, template_view_handle) = IssuerMetadataSynchronizationPolicy::new(issuance.clone());
+    let (policy, template_view_handle) = CredentialConfigurationProjection::new(issuance.clone());
     // Build the library state WITHOUT the policy (the policy dispatches commands to issuance_state,
     // not to this library state). Then wire the real view repo into the policy's OnceLock handle so
     // that partial-update re-queries use the same MemRepository that the CQRS framework updates.
@@ -65,14 +59,12 @@ async fn setup() -> (
     (issuance, lib_state, policy)
 }
 
-// ── Tests ──────────────────────────────────────────────────────────────────────
-
 #[tokio::test]
 async fn test_template_created_registers_credential_configuration() {
     let (issuance, _library, policy) = setup().await;
 
     let template_id = "my-template";
-    let event = make_template_created_event(
+    let event = create_test_event_template_created(
         template_id,
         vec!["VerifiableCredential".to_string()],
         DataModel::W3CVcDataModelV2_0,
@@ -95,7 +87,7 @@ async fn test_template_created_with_v2_data_model_uses_vc_sd_jwt_format() {
     let (issuance, _library, policy) = setup().await;
 
     let template_id = "v2-template";
-    let event = make_template_created_event(
+    let event = create_test_event_template_created(
         template_id,
         vec!["VerifiableCredential".to_string()],
         DataModel::W3CVcDataModelV2_0,
@@ -122,7 +114,7 @@ async fn test_template_created_with_draft_status_skips_registration() {
     let (issuance, _library, policy) = setup().await;
 
     let template_id = "draft-template";
-    let event = make_template_created_event(
+    let event = create_test_event_template_created(
         template_id,
         vec!["VerifiableCredential".to_string()],
         DataModel::W3CVcDataModelV2_0,
@@ -146,7 +138,7 @@ async fn test_template_created_with_deleted_status_skips_registration() {
     let (issuance, _library, policy) = setup().await;
 
     let template_id = "deleted-template";
-    let event = make_template_created_event(
+    let event = create_test_event_template_created(
         template_id,
         vec!["VerifiableCredential".to_string()],
         DataModel::W3CVcDataModelV2_0,
@@ -200,7 +192,7 @@ async fn test_display_updated_reflects_in_credential_configuration() {
     .unwrap();
 
     // Register the initial credential configuration via TemplateCreated.
-    let create_event = make_template_created_event(
+    let create_event = create_test_event_template_created(
         template_id,
         vec!["VerifiableCredential".to_string()],
         DataModel::W3CVcDataModelV2_0,
@@ -345,7 +337,7 @@ async fn test_title_updated_refreshes_credential_configuration() {
     .unwrap();
 
     // Dispatch TemplateCreated to register the initial credential configuration.
-    let create_event = make_template_created_event(
+    let create_event = create_test_event_template_created(
         template_id,
         vec!["VerifiableCredential".to_string()],
         DataModel::W3CVcDataModelV2_0,
@@ -406,7 +398,7 @@ async fn test_template_deleted_removes_credential_configuration() {
     let template_id = "to-be-deleted";
 
     // Register the credential configuration first.
-    let create_event = make_template_created_event(
+    let create_event = create_test_event_template_created(
         template_id,
         vec!["VerifiableCredential".to_string()],
         DataModel::W3CVcDataModelV2_0,
@@ -470,7 +462,7 @@ async fn test_status_updated_to_published_creates_credential_configuration() {
     .await
     .unwrap();
 
-    let create_event = make_template_created_event(
+    let create_event = create_test_event_template_created(
         template_id,
         vec!["VerifiableCredential".to_string()],
         DataModel::W3CVcDataModelV2_0,
@@ -555,7 +547,7 @@ async fn test_status_updated_to_deleted_removes_credential_configuration() {
     .await
     .unwrap();
 
-    let create_event = make_template_created_event(
+    let create_event = create_test_event_template_created(
         template_id,
         vec!["VerifiableCredential".to_string()],
         DataModel::W3CVcDataModelV2_0,

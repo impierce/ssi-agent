@@ -9,7 +9,7 @@ use agent_event_publisher_nats::EventPublisherNats;
 use agent_holder::services::HolderServices;
 use agent_identity::services::IdentityServices;
 use agent_issuance::{
-    application::policies::issuer_metadata_synchronization_policy::IssuerMetadataSynchronizationPolicy,
+    application::policies::credential_configuration_projection::CredentialConfigurationProjection,
     services::IssuanceServices,
 };
 use agent_secret_manager::{service::Service as _, subject::Subject};
@@ -64,7 +64,7 @@ pub async fn state() -> io::Result<ApplicationState> {
                     Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);
 
                 let (issuer_metadata_synchronization_policy, template_view_handle) =
-                    IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
+                    CredentialConfigurationProjection::new(issuance_state.clone());
 
                 let library_state = Arc::new(
                     agent_store::library_state(
@@ -105,7 +105,7 @@ pub async fn state() -> io::Result<ApplicationState> {
                     Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);
 
                 let (issuer_metadata_synchronization_policy, template_view_handle) =
-                    IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
+                    CredentialConfigurationProjection::new(issuance_state.clone());
 
                 let library_state = Arc::new(
                     agent_store::library_state(
@@ -145,7 +145,7 @@ pub async fn state() -> io::Result<ApplicationState> {
                 );
 
                 let (issuer_metadata_synchronization_policy, template_view_handle) =
-                    IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
+                    CredentialConfigurationProjection::new(issuance_state.clone());
 
                 let library_state = Arc::new(
                     agent_store::library_state(

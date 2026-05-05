@@ -14,32 +14,32 @@ use oid4vci::credential_issuer::credential_configurations_supported::{
 use std::sync::{Arc, OnceLock};
 use tracing::warn;
 
-pub struct IssuerMetadataSynchronizationPolicy {
+type TemplateViewHandle = Arc<OnceLock<Arc<dyn ViewRepository<TemplateView, Template>>>>;
+
+pub struct CredentialConfigurationProjection {
     issuance_state: Arc<IssuanceState>,
     /// The template view repository used to re-query the current template state on partial updates.
     ///
     /// This is a `OnceLock` so that the real library state's view repository can be injected AFTER
     /// the library state (and hence the CQRS framework) is constructed, avoiding the circular
-    /// dependency: policy → library state → policy. By the time any template events arrive the
+    /// dependency: projection → library state → projection. By the time any template events arrive the
     /// application is already started and the lock is set.
-    template_view: Arc<OnceLock<Arc<dyn ViewRepository<TemplateView, Template>>>>,
+    template_view: TemplateViewHandle,
 }
 
-impl IssuerMetadataSynchronizationPolicy {
-    /// Creates a new policy.
+impl CredentialConfigurationProjection {
+    /// Creates a new projection.
     ///
-    /// Returns both the policy and the `OnceLock` handle.  After building the library state that
-    /// owns this policy, call `handle.set(library_state.query.template.clone()).unwrap()` to wire
-    /// the real (shared) view repository into the policy.
-    pub fn new(
-        issuance_state: Arc<IssuanceState>,
-    ) -> (Self, Arc<OnceLock<Arc<dyn ViewRepository<TemplateView, Template>>>>) {
+    /// Returns both the projection and the `OnceLock` handle.  After building the library state that
+    /// owns this projection, call `handle.set(library_state.query.template.clone()).unwrap()` to wire
+    /// the real (shared) view repository into the projection.
+    pub fn new(issuance_state: Arc<IssuanceState>) -> (Self, TemplateViewHandle) {
         let template_view = Arc::new(OnceLock::new());
-        let policy = Self {
+        let projection = Self {
             issuance_state,
             template_view: template_view.clone(),
         };
-        (policy, template_view)
+        (projection, template_view)
     }
 
     /// Re-queries the current template state from the view repository and, if the template is not
@@ -211,7 +211,7 @@ fn build_claims_from_schema(template: &Template) -> Option<Vec<ClaimDescription>
 }
 
 #[async_trait]
-impl Query<Template> for IssuerMetadataSynchronizationPolicy {
+impl Query<Template> for CredentialConfigurationProjection {
     async fn dispatch(&self, _aggregate_id: &str, events: &[EventEnvelope<Template>]) {
         use agent_library::template::aggregate::Status;
         use agent_library::template::event::TemplateEvent::*;
