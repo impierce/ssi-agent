@@ -154,10 +154,8 @@ impl Aggregate for Template {
                 schema_properties_attributes,
             } => {
                 // Validate that a title is provided
-                match title {
-                    None => return Err(TemplateError::MissingTitle),
-                    Some(ref t) if t.trim().is_empty() => return Err(TemplateError::MissingTitle),
-                    _ => {}
+                if title.trim().is_empty() {
+                    return Err(TemplateError::MissingTitle);
                 }
 
                 // For OpenBadges 3.0 templates, validate that the required properties are present
@@ -266,34 +264,6 @@ impl Aggregate for Template {
                     modified_at,
                 }])
             }
-            UpdateDataModel {
-                template_id,
-                data_model,
-            } => {
-                // data_model is immutable after creation
-                if let Some(ref current) = self.data_model {
-                    if *current != data_model {
-                        let current_serialized = serde_json::to_value(current).unwrap_or_default();
-                        let new_serialized = serde_json::to_value(&data_model).unwrap_or_default();
-                        return Err(TemplateError::ImmutableDataModel(format!(
-                            "The template uses the data_model `{}`, which is immutable after creation. If you wish to use the data_model `{}`, you must create a new template.",
-                            current_serialized.as_str().unwrap_or("unknown"),
-                            new_serialized.as_str().unwrap_or("unknown")
-                        )));
-                    }
-                }
-
-                #[cfg(not(test))]
-                let modified_at = chrono::Utc::now().to_rfc3339();
-                #[cfg(test)]
-                let modified_at = test_utils::modified_at();
-
-                Ok(vec![DataModelUpdated {
-                    template_id,
-                    data_model,
-                    modified_at,
-                }])
-            }
             UpdateCreator { template_id, creator } => {
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -303,34 +273,6 @@ impl Aggregate for Template {
                 Ok(vec![CreatorUpdated {
                     template_id,
                     creator,
-                    modified_at,
-                }])
-            }
-            UpdateHolderType {
-                template_id,
-                holder_type,
-            } => {
-                // holder_type is immutable after creation
-                if let Some(ref current) = self.holder_type {
-                    if *current != holder_type {
-                        let current_serialized = serde_json::to_value(current).unwrap_or_default();
-                        let new_serialized = serde_json::to_value(&holder_type).unwrap_or_default();
-                        return Err(TemplateError::ImmutableHolderType(format!(
-                            "The template uses the holder_type `{}`, which is immutable after creation. If you wish to use the holder_type `{}`, you must create a new template.",
-                            current_serialized.as_str().unwrap_or("unknown"),
-                            new_serialized.as_str().unwrap_or("unknown")
-                        )));
-                    }
-                }
-
-                #[cfg(not(test))]
-                let modified_at = chrono::Utc::now().to_rfc3339();
-                #[cfg(test)]
-                let modified_at = test_utils::modified_at();
-
-                Ok(vec![HolderTypeUpdated {
-                    template_id,
-                    holder_type,
                     modified_at,
                 }])
             }
@@ -517,13 +459,13 @@ impl Aggregate for Template {
             } => {
                 self.template_id = template_id;
                 self.source_template_id = source_template_id;
-                self.title = title;
+                self.title = Some(title);
                 self.display = *display;
                 self.data_model = Some(data_model);
                 self.creator = creator;
                 self.holder_type = Some(holder_type);
                 self.modified_at.replace(modified_at);
-                self.tags = tags;
+                self.tags = tags.unwrap_or_default();
                 self.status = status;
                 self.visibility = visibility;
                 self.description = description;
@@ -547,28 +489,12 @@ impl Aggregate for Template {
                 self.display = Some(display);
                 self.modified_at.replace(modified_at);
             }
-            DataModelUpdated {
-                template_id: _,
-                data_model,
-                modified_at,
-            } => {
-                self.data_model = Some(data_model);
-                self.modified_at.replace(modified_at);
-            }
             CreatorUpdated {
                 template_id: _,
                 creator,
                 modified_at,
             } => {
                 self.creator = Some(creator);
-                self.modified_at.replace(modified_at);
-            }
-            HolderTypeUpdated {
-                template_id: _,
-                holder_type,
-                modified_at,
-            } => {
-                self.holder_type = Some(holder_type);
                 self.modified_at.replace(modified_at);
             }
             TagsUpdated {
@@ -962,13 +888,13 @@ pub mod document_tests {
     #[serial_test::serial]
     async fn test_create_template(
         template_id: String,
-        title: Option<String>,
+        title: String,
         display: Option<Display>,
         data_model: DataModel,
         creator: Option<String>,
         holder_type: HolderType,
         modified_at: String,
-        tags: Vec<String>,
+        tags: Option<Vec<String>>,
         status: Status,
         visibility: Visibility,
         description: Option<String>,
@@ -1021,12 +947,12 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id,
                 source_template_id: None,
-                title: None,
+                title: String::new(),
                 display: Box::new(None),
                 data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
                 holder_type: HolderType::Individual,
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1045,12 +971,12 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id,
                 source_template_id: None,
-                title: Some("".to_string()),
+                title: "".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
                 holder_type: HolderType::Individual,
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1068,13 +994,13 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: Some("Original".to_string()),
+                title: "Original".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
                 holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1101,12 +1027,12 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id,
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
                 holder_type: HolderType::Individual,
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1125,12 +1051,12 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
                 holder_type: HolderType::Individual,
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1141,13 +1067,13 @@ pub mod document_tests {
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
                 template_id,
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
                 holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1168,13 +1094,13 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
                 holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1203,13 +1129,13 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
                 holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1252,12 +1178,12 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id,
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
                 holder_type: HolderType::Individual,
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1285,12 +1211,12 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id,
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
                 holder_type: HolderType::Individual,
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1324,13 +1250,13 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
                 holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1361,13 +1287,13 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
                 holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1429,13 +1355,13 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
                 holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1492,13 +1418,13 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::W3CVcDataModelV1_1,
                 creator: None,
                 holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1565,13 +1491,13 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::OpenBadges3_0,
                 creator: None,
                 holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1666,13 +1592,13 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::OpenBadges3_0,
                 creator: None,
                 holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1726,12 +1652,12 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id,
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::OpenBadges3_0,
                 creator: None,
                 holder_type: HolderType::Individual,
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1782,12 +1708,12 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::OpenBadges3_0,
                 creator: None,
                 holder_type: HolderType::Individual,
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1798,13 +1724,13 @@ pub mod document_tests {
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
                 template_id,
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::OpenBadges3_0,
                 creator: None,
                 holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1865,12 +1791,12 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::OpenBadges3_0,
                 creator: None,
                 holder_type: HolderType::Individual,
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1881,13 +1807,13 @@ pub mod document_tests {
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
                 template_id,
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::OpenBadges3_0,
                 creator: None,
                 holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -1950,13 +1876,13 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::OpenBadges3_0,
                 creator: None,
                 holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -2075,12 +2001,12 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id,
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::OpenBadges3_0,
                 creator: None,
                 holder_type: HolderType::Individual,
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -2140,13 +2066,13 @@ pub mod document_tests {
             .given(vec![TemplateEvent::TemplateCreated {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::OpenBadges3_0,
                 creator: None,
                 holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -2183,12 +2109,12 @@ pub mod document_tests {
             .when(TemplateCommand::CreateTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::OpenBadges3_0,
                 creator: None,
                 holder_type: HolderType::Individual,
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -2199,13 +2125,13 @@ pub mod document_tests {
             .then_expect_events(vec![TemplateEvent::TemplateCreated {
                 template_id,
                 source_template_id: None,
-                title: Some("Test".to_string()),
+                title: "Test".to_string(),
                 display: Box::new(None),
                 data_model: DataModel::OpenBadges3_0,
                 creator: None,
                 holder_type: HolderType::Individual,
                 modified_at: test_utils::modified_at(),
-                tags: vec![],
+                tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
@@ -2259,8 +2185,8 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn title() -> Option<String> {
-        Some("Sample Template".to_string())
+    pub fn title() -> String {
+        "Sample Template".to_string()
     }
 
     #[fixture]
@@ -2292,8 +2218,8 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn tags() -> Vec<String> {
-        vec!["tag1".to_string(), "tag2".to_string()]
+    pub fn tags() -> Option<Vec<String>> {
+        Some(vec!["tag1".to_string(), "tag2".to_string()])
     }
 
     #[fixture]

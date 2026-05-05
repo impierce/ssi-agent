@@ -9,12 +9,12 @@ pub enum TemplateCommand {
     CreateTemplate {
         template_id: String,
         source_template_id: Option<String>,
-        title: Option<String>,
+        title: String,
         display: Box<Option<Display>>,
         data_model: DataModel,
         creator: Option<String>,
         holder_type: HolderType,
-        tags: Vec<String>,
+        tags: Option<Vec<String>>,
         status: Status,
         visibility: Visibility,
         description: Option<String>,
@@ -30,17 +30,9 @@ pub enum TemplateCommand {
         template_id: String,
         display: Display,
     },
-    UpdateDataModel {
-        template_id: String,
-        data_model: DataModel,
-    },
     UpdateCreator {
         template_id: String,
         creator: String,
-    },
-    UpdateHolderType {
-        template_id: String,
-        holder_type: HolderType,
     },
     UpdateTags {
         template_id: String,

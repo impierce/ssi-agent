@@ -11,13 +11,13 @@ pub enum TemplateEvent {
     TemplateCreated {
         template_id: String,
         source_template_id: Option<String>,
-        title: Option<String>,
+        title: String,
         display: Box<Option<Display>>,
         data_model: DataModel,
         creator: Option<String>,
         holder_type: HolderType,
         modified_at: String,
-        tags: Vec<String>,
+        tags: Option<Vec<String>>,
         status: Status,
         visibility: Visibility,
         description: Option<String>,
@@ -35,19 +35,9 @@ pub enum TemplateEvent {
         display: Display,
         modified_at: String,
     },
-    DataModelUpdated {
-        template_id: String,
-        data_model: DataModel,
-        modified_at: String,
-    },
     CreatorUpdated {
         template_id: String,
         creator: String,
-        modified_at: String,
-    },
-    HolderTypeUpdated {
-        template_id: String,
-        holder_type: HolderType,
         modified_at: String,
     },
     TagsUpdated {
