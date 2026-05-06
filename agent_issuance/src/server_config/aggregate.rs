@@ -1,4 +1,5 @@
 use agent_shared::config::{config, Authorization};
+use agent_shared::UrlAppendHelpers as _;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::Aggregate;
@@ -106,9 +107,15 @@ impl Aggregate for ServerConfig {
             UpdateIssuerUrl { url } => {
                 let mut authorization_server_metadata = self.authorization_server_metadata.clone();
                 authorization_server_metadata.issuer = url.clone();
+                authorization_server_metadata.authorization_endpoint = Some(url.append_path_segment("auth/authorize"));
+                authorization_server_metadata.token_endpoint = Some(url.append_path_segment("auth/token"));
+                authorization_server_metadata.pushed_authorization_request_endpoint =
+                    Some(url.append_path_segment("auth/par"));
 
                 let mut credential_issuer_metadata = self.credential_issuer_metadata.clone();
-                credential_issuer_metadata.credential_issuer = url;
+                credential_issuer_metadata.credential_issuer = url.clone();
+                credential_issuer_metadata.credential_endpoint = url.append_path_segment("openid4vci/credential");
+                credential_issuer_metadata.nonce_endpoint = Some(url.append_path_segment("openid4vci/nonce"));
 
                 Ok(vec![IssuerUrlUpdated {
                     authorization_server_metadata: Box::new(authorization_server_metadata),
