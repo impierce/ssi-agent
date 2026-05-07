@@ -188,6 +188,7 @@ pub async fn state() -> io::Result<ApplicationState> {
         issuance_state: Some(issuance_state),
         holder_state: Some(holder_state),
         verification_state: Some(verification_state),
+        authorization_checker: None,
     })
 }
 
