@@ -50,10 +50,8 @@ agent_secret_manager = { path = "../agent_secret_manager", features = [
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
 async-std.workspace = true
-cqrs-es.workspace = true
-oid4vci.workspace = true
 serial_test = "3.0"
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio.workspace = true
 tracing-test.workspace = true
 
 [features]

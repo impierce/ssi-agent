@@ -515,8 +515,6 @@ pub mod tests {
             .await
             .unwrap();
 
-        println!("Response: {:?}", response);
-
         assert_eq!(response.status(), StatusCode::CREATED);
         assert_eq!(response.headers().get("Content-Type").unwrap(), "application/json");
 
