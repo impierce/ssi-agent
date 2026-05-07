@@ -3,6 +3,8 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 
+use crate::authorization::Actor;
+
 /// Defines the domain-specific types and handlers for a bounded context.
 ///
 /// Each bounded context implements this trait to declare its command/query types
@@ -38,6 +40,8 @@ pub trait ApplicationContext: Send + Sync + 'static {
 ///
 /// Sent from a presentation-layer handle to the [`ApplicationService`] over an `mpsc` channel.
 pub struct CommandEnvelope<AC: ApplicationContext> {
+    /// The actor of the command.
+    pub actor: Option<Actor>,
     /// The target aggregate ID.
     pub aggregate_id: String,
     /// The domain command to execute.
@@ -50,6 +54,8 @@ pub struct CommandEnvelope<AC: ApplicationContext> {
 ///
 /// Sent from a presentation-layer handle to the [`ApplicationService`] over an `mpsc` channel.
 pub struct QueryEnvelope<AC: ApplicationContext> {
+    /// The actor of the query.
+    pub actor: Option<Actor>,
     /// The domain query to execute.
     pub query: AC::Query,
     /// One-shot channel for sending back the result.
@@ -269,6 +275,7 @@ mod tests {
         service_handle
             .command_tx
             .send(CommandEnvelope {
+                actor: None,
                 aggregate_id: "aggregate-id".into(),
                 command: "create".into(),
                 reply: reply_tx,
@@ -288,6 +295,7 @@ mod tests {
         service_handle
             .query_tx
             .send(QueryEnvelope {
+                actor: None,
                 query: "my-query".into(),
                 reply: reply_tx,
             })
@@ -306,6 +314,7 @@ mod tests {
         service_handle
             .command_tx
             .send(CommandEnvelope {
+                actor: None,
                 aggregate_id: "aggregate-id".into(),
                 command: "bad-command".into(),
                 reply: reply_tx,
@@ -326,6 +335,7 @@ mod tests {
         service_handle
             .query_tx
             .send(QueryEnvelope {
+                actor: None,
                 query: "bad-query".into(),
                 reply: reply_tx,
             })
