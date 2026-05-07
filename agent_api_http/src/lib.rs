@@ -1,6 +1,7 @@
 pub mod public;
 pub mod v0;
 
+pub mod authorization;
 pub mod error;
 pub mod handlers;
 pub mod metrics;
@@ -28,6 +29,8 @@ use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, info, info_span, Span};
 
+use crate::authorization::{AllowAllAuthorizationChecker, SharedAuthorizationChecker};
+
 pub const API_VERSION: &str = "/v0";
 
 pub const DOCUMENTATION_URL: &str = "https://beta.docs.impierce.com/unicore/";
@@ -40,6 +43,7 @@ pub struct ApplicationState {
     pub issuance_state: Option<Arc<IssuanceState>>,
     pub holder_state: Option<Arc<HolderState>>,
     pub verification_state: Option<Arc<VerificationState>>,
+    pub authorization_checker: Option<SharedAuthorizationChecker>,
 }
 
 pub fn app(
@@ -50,8 +54,12 @@ pub fn app(
         issuance_state,
         holder_state,
         verification_state,
+        authorization_checker,
     }: ApplicationState,
 ) -> Router {
+    let authorization_checker: SharedAuthorizationChecker =
+        authorization_checker.unwrap_or_else(|| Arc::new(AllowAllAuthorizationChecker));
+
     let app = Router::new()
         .merge(identity_state.map(v0::identity::router).unwrap_or_default())
         .merge(library_state.map(v0::library::router).unwrap_or_default())
@@ -95,6 +103,10 @@ pub fn app(
                             }
                         }),
                 )
+                .layer(middleware::from_fn_with_state(
+                    authorization_checker,
+                    authorization::authorize_request,
+                ))
                 .layer(middleware::from_fn(log_request_body)),
         );
 

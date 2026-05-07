@@ -16,6 +16,7 @@ agent_verification = { path = "../agent_verification" }
 
 anyhow.workspace = true
 askama = "0.14"
+async-trait.workspace = true
 axum.workspace = true
 axum-auth = "0.8"
 axum-macros = "0.5"

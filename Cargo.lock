@@ -86,6 +86,7 @@ dependencies = [
  "agent_verification",
  "anyhow",
  "askama",
+ "async-trait",
  "axum 0.8.3",
  "axum-auth 0.8.1",
  "axum-macros",
