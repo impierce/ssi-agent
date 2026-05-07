@@ -35,3 +35,24 @@ impl AuthorizationChecker for AllowAllAuthorizationChecker {
         true
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn allow_all_authorization_checker_authorizes_requests() {
+        let checker = AllowAllAuthorizationChecker;
+        let request = AuthorizationRequest {
+            actor: Some(Actor {
+                subject: "user@example.test".to_string(),
+            }),
+            operation: AuthorizationOperation::Command {
+                aggregate_id: "aggregate-id".to_string(),
+                command_type: "test-command",
+            },
+        };
+
+        assert!(checker.is_authorized(&request).await);
+    }
+}

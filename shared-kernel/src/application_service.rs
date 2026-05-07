@@ -246,6 +246,7 @@ mod tests {
     use super::*;
     use std::fmt;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
     use tokio::sync::mpsc;
 
     // ── Fixture types ──────────────────────────────────────────────
@@ -358,6 +359,18 @@ mod tests {
         }
     }
 
+    struct CapturingAuthorizationChecker {
+        requests: Arc<Mutex<Vec<AuthorizationRequest>>>,
+    }
+
+    #[async_trait]
+    impl AuthorizationChecker for CapturingAuthorizationChecker {
+        async fn is_authorized(&self, request: &AuthorizationRequest) -> bool {
+            self.requests.lock().unwrap().push(request.clone());
+            true
+        }
+    }
+
     // ── Helper ─────────────────────────────────────────────────────
 
     /// Spawn the service and return the sender halves for commands and queries.
@@ -399,7 +412,7 @@ mod tests {
             .unwrap();
 
         let result = reply_rx.await.unwrap();
-        assert_eq!(result.unwrap(), "aggregate-id");
+        assert_eq!(result.ok(), Some("aggregate-id".to_string()));
     }
 
     #[tokio::test]
@@ -418,7 +431,7 @@ mod tests {
             .unwrap();
 
         let result = reply_rx.await.unwrap();
-        assert_eq!(result.unwrap(), TestView("my-view".into()));
+        assert_eq!(result.ok(), Some(TestView("my-view".into())));
     }
 
     #[tokio::test]
@@ -498,5 +511,109 @@ mod tests {
 
         assert!(matches!(result, Err(ServiceError::Forbidden)));
         assert_eq!(query_count.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn command_result_send_failure_does_not_panic() {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        drop(reply_rx);
+
+        process_command(
+            &EchoContext,
+            &AllowAllAuthorizationChecker,
+            CommandEnvelope {
+                actor: None,
+                aggregate_id: "aggregate-id".into(),
+                command: "create".into(),
+                reply: reply_tx,
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn query_result_send_failure_does_not_panic() {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        drop(reply_rx);
+
+        process_query(
+            &EchoContext,
+            &AllowAllAuthorizationChecker,
+            QueryEnvelope {
+                actor: None,
+                query: "my-query".into(),
+                reply: reply_tx,
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn service_stops_when_channels_close() {
+        let (command_tx, command_rx) = mpsc::channel(16);
+        let (query_tx, query_rx) = mpsc::channel(16);
+        drop(command_tx);
+        drop(query_tx);
+
+        ApplicationService::new(EchoContext, command_rx, query_rx).start().await;
+    }
+
+    #[tokio::test]
+    async fn command_authorization_request_contains_actor_and_operation() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let service_handle = spawn_service_with_authorization(
+            EchoContext,
+            Arc::new(CapturingAuthorizationChecker {
+                requests: Arc::clone(&requests),
+            }),
+        );
+
+        let actor = Actor {
+            subject: "user@example.test".to_string(),
+        };
+        let result = service_handle
+            .dispatch_command_as(Some(actor.clone()), "aggregate-id".into(), "create".into())
+            .await;
+
+        assert_eq!(result.ok(), Some("aggregate-id".to_string()));
+        assert_eq!(
+            requests.lock().unwrap().as_slice(),
+            &[AuthorizationRequest {
+                actor: Some(actor),
+                operation: AuthorizationOperation::Command {
+                    aggregate_id: "aggregate-id".to_string(),
+                    command_type: std::any::type_name::<String>(),
+                },
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn query_authorization_request_contains_actor_and_operation() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let service_handle = spawn_service_with_authorization(
+            EchoContext,
+            Arc::new(CapturingAuthorizationChecker {
+                requests: Arc::clone(&requests),
+            }),
+        );
+
+        let actor = Actor {
+            subject: "user@example.test".to_string(),
+        };
+        let result = service_handle
+            .dispatch_query_as(Some(actor.clone()), "my-query".into())
+            .await;
+
+        assert_eq!(result.ok(), Some(TestView("my-view".into())));
+        assert_eq!(
+            requests.lock().unwrap().as_slice(),
+            &[AuthorizationRequest {
+                actor: Some(actor),
+                operation: AuthorizationOperation::Query {
+                    query_type: std::any::type_name::<String>(),
+                },
+            }]
+        );
     }
 }
