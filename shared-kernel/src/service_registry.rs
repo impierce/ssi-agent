@@ -83,6 +83,7 @@ where
     ///
     /// Returns `ServiceError::SendCommandError` if sending the command fails.
     /// Returns `ServiceError::RecvError` if awaiting the response fails.
+    /// Returns `ServiceError::Forbidden` if authorization denies the command.
     /// Returns `ServiceError::CommandError` if the application service returns an error for the
     /// command.
     pub async fn dispatch_command(
@@ -98,6 +99,7 @@ where
     ///
     /// Returns `ServiceError::SendCommandError` if sending the command fails.
     /// Returns `ServiceError::RecvError` if awaiting the response fails.
+    /// Returns `ServiceError::Forbidden` if authorization denies the command.
     /// Returns `ServiceError::CommandError` if the application service returns an error for the
     /// command.
     pub async fn dispatch_command_as(
@@ -130,6 +132,7 @@ where
     ///
     /// Returns `ServiceError::SendQueryError` if sending the query fails.
     /// Returns `ServiceError::RecvError` if awaiting the response fails.
+    /// Returns `ServiceError::Forbidden` if authorization denies the query.
     /// Returns `ServiceError::QueryError` if the application service returns an error for the
     /// query.
     pub async fn dispatch_query(&self, query: AC::Query) -> Result<AC::View, ServiceError<AC>> {
@@ -141,6 +144,7 @@ where
     ///
     /// Returns `ServiceError::SendQueryError` if sending the query fails.
     /// Returns `ServiceError::RecvError` if awaiting the response fails.
+    /// Returns `ServiceError::Forbidden` if authorization denies the query.
     /// Returns `ServiceError::QueryError` if the application service returns an error for the
     /// query.
     pub async fn dispatch_query_as(
@@ -340,6 +344,56 @@ mod tests {
         query.reply.send(Ok(TestView("my-query".into()))).unwrap();
 
         assert_eq!(dispatch.await.unwrap().unwrap(), TestView("my-query".into()));
+    }
+
+    #[tokio::test]
+    async fn dispatch_command_maps_context_error_to_command_error() {
+        let (command_tx, mut command_rx) = mpsc::channel(16);
+        let (query_tx, _query_rx) = mpsc::channel(16);
+        let handle = ServiceHandle::<EchoContext>::new(command_tx, query_tx);
+
+        let dispatch = tokio::spawn(async move {
+            handle
+                .dispatch_command("aggregate-id".into(), "bad-command".into())
+                .await
+        });
+
+        let command = command_rx.recv().await.unwrap();
+        command
+            .reply
+            .send(Err(ApplicationServiceError::Context(TestCommandError(
+                "command failed".into(),
+            ))))
+            .unwrap();
+
+        let result = dispatch.await.unwrap();
+        assert!(matches!(
+            result,
+            Err(ServiceError::CommandError(error)) if error.to_string() == "command failed"
+        ));
+    }
+
+    #[tokio::test]
+    async fn dispatch_query_maps_context_error_to_query_error() {
+        let (command_tx, _command_rx) = mpsc::channel(16);
+        let (query_tx, mut query_rx) = mpsc::channel(16);
+        let handle = ServiceHandle::<EchoContext>::new(command_tx, query_tx);
+
+        let dispatch = tokio::spawn(async move { handle.dispatch_query("bad-query".into()).await });
+
+        let query = query_rx.recv().await.unwrap();
+        query
+            .reply
+            .send(Err(ApplicationServiceError::Context(TestQueryError(
+                "query failed".into(),
+            ))))
+            .unwrap();
+
+        let result = dispatch.await.unwrap();
+        assert!(matches!(
+            result,
+            Err(ServiceError::QueryError(error)) if error.to_string() == "query failed"
+        ));
     }
 
     #[tokio::test]

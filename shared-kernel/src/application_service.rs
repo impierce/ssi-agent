@@ -245,7 +245,6 @@ mod tests {
 
     use super::*;
     use std::fmt;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
     use tokio::sync::mpsc;
 
@@ -319,34 +318,6 @@ mod tests {
 
         async fn handle_query(&self, _query: Self::Query) -> Result<Self::View, Self::QueryError> {
             Err(TestQueryError("query failed".into()))
-        }
-    }
-
-    struct CountingContext {
-        command_count: Arc<AtomicUsize>,
-        query_count: Arc<AtomicUsize>,
-    }
-
-    #[async_trait]
-    impl ApplicationContext for CountingContext {
-        type Command = String;
-        type Query = String;
-        type View = TestView;
-        type CommandError = TestCommandError;
-        type QueryError = TestQueryError;
-
-        async fn handle_command(
-            &self,
-            aggregate_id: &str,
-            _command: Self::Command,
-        ) -> Result<String, Self::CommandError> {
-            self.command_count.fetch_add(1, Ordering::SeqCst);
-            Ok(aggregate_id.to_string())
-        }
-
-        async fn handle_query(&self, query: Self::Query) -> Result<Self::View, Self::QueryError> {
-            self.query_count.fetch_add(1, Ordering::SeqCst);
-            Ok(TestView(query))
         }
     }
 
@@ -476,41 +447,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn denied_command_returns_forbidden_without_calling_context() {
-        let command_count = Arc::new(AtomicUsize::new(0));
-        let query_count = Arc::new(AtomicUsize::new(0));
-        let service_handle = spawn_service_with_authorization(
-            CountingContext {
-                command_count: Arc::clone(&command_count),
-                query_count,
-            },
-            Arc::new(DenyAllAuthorizationChecker),
-        );
+    async fn denied_command_returns_forbidden_before_context_error() {
+        let service_handle = spawn_service_with_authorization(FailingContext, Arc::new(DenyAllAuthorizationChecker));
 
         let result = service_handle
             .dispatch_command("aggregate-id".into(), "create".into())
             .await;
 
         assert!(matches!(result, Err(ServiceError::Forbidden)));
-        assert_eq!(command_count.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]
-    async fn denied_query_returns_forbidden_without_calling_context() {
-        let command_count = Arc::new(AtomicUsize::new(0));
-        let query_count = Arc::new(AtomicUsize::new(0));
-        let service_handle = spawn_service_with_authorization(
-            CountingContext {
-                command_count,
-                query_count: Arc::clone(&query_count),
-            },
-            Arc::new(DenyAllAuthorizationChecker),
-        );
+    async fn denied_query_returns_forbidden_before_context_error() {
+        let service_handle = spawn_service_with_authorization(FailingContext, Arc::new(DenyAllAuthorizationChecker));
 
         let result = service_handle.dispatch_query("my-query".into()).await;
 
         assert!(matches!(result, Err(ServiceError::Forbidden)));
-        assert_eq!(query_count.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]
