@@ -151,7 +151,10 @@ async fn buffer_request_body(request: Request) -> Result<Request, Response> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use agent_shared::config::config;
+    use axum::body::Body;
+    use http::Request;
     use oid4vci::credential_issuer::{
         credential_configurations_supported::CredentialConfigurationsSupportedObject,
         credential_issuer_metadata::CredentialIssuerMetadata,
@@ -264,5 +267,19 @@ mod tests {
             })]),
             ..Default::default()
         };
+    }
+
+    #[tokio::test]
+    async fn buffer_request_body_preserves_body_for_downstream_handlers() {
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v0/test")
+            .body(Body::from(r#"{"message":"hello"}"#))
+            .unwrap();
+
+        let request = buffer_request_body(request).await.unwrap();
+        let bytes = request.into_body().collect().await.unwrap().to_bytes();
+
+        assert_eq!(&bytes[..], br#"{"message":"hello"}"#);
     }
 }

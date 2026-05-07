@@ -56,7 +56,24 @@ pub async fn authorize_request(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::Body;
+    use axum::{body::Body, middleware, routing::get, Router};
+    use std::sync::Mutex;
+    use tower::ServiceExt;
+
+    #[derive(Default)]
+    struct TestAuthorizationChecker {
+        authorized: bool,
+        requests: Mutex<Vec<AuthorizationRequest>>,
+    }
+
+    #[async_trait]
+    impl AuthorizationChecker for TestAuthorizationChecker {
+        async fn is_authorized(&self, request: &AuthorizationRequest) -> bool {
+            self.requests.lock().unwrap().push(request.clone());
+
+            self.authorized
+        }
+    }
 
     #[tokio::test]
     async fn allow_all_checker_authorizes_requests() {
@@ -85,6 +102,74 @@ mod tests {
                 method: "POST".to_string(),
                 path: "/v0/credentials".to_string(),
             }
+        );
+    }
+
+    #[tokio::test]
+    async fn authorize_request_allows_authorized_requests() {
+        let checker = Arc::new(TestAuthorizationChecker {
+            authorized: true,
+            ..Default::default()
+        });
+        let app = Router::new()
+            .route("/protected", get(|| async { StatusCode::OK }))
+            .layer(middleware::from_fn_with_state(
+                checker.clone() as SharedAuthorizationChecker,
+                authorize_request,
+            ));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/protected?ignored=true")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            checker.requests.lock().unwrap().as_slice(),
+            &[AuthorizationRequest {
+                method: "GET".to_string(),
+                path: "/protected".to_string(),
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn authorize_request_rejects_unauthorized_requests() {
+        let checker = Arc::new(TestAuthorizationChecker {
+            authorized: false,
+            ..Default::default()
+        });
+        let app = Router::new()
+            .route("/protected", get(|| async { StatusCode::OK }))
+            .layer(middleware::from_fn_with_state(
+                checker.clone() as SharedAuthorizationChecker,
+                authorize_request,
+            ));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/protected")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            checker.requests.lock().unwrap().as_slice(),
+            &[AuthorizationRequest {
+                method: "DELETE".to_string(),
+                path: "/protected".to_string(),
+            }]
         );
     }
 }

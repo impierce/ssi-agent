@@ -255,3 +255,29 @@ pub async fn start_server(alias: String, router: axum::Router, port: u16) {
 
     axum::serve(listener, router).await.unwrap();
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn router_exposes_liveness_probe() {
+        let response = router(ApplicationState::default())
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/healthz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+}
