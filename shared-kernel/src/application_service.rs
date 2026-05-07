@@ -3,7 +3,9 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 
-use crate::authorization::Actor;
+use crate::authorization::{
+    Actor, AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationOperation, AuthorizationRequest,
+};
 
 /// Defines the domain-specific types and handlers for a bounded context.
 ///
@@ -47,7 +49,7 @@ pub struct CommandEnvelope<AC: ApplicationContext> {
     /// The domain command to execute.
     pub command: AC::Command,
     /// One-shot channel for sending back the result.
-    pub reply: oneshot::Sender<Result<String, AC::CommandError>>,
+    pub reply: oneshot::Sender<Result<String, ApplicationServiceError<AC::CommandError>>>,
 }
 
 /// A query message together with a reply channel.
@@ -59,7 +61,19 @@ pub struct QueryEnvelope<AC: ApplicationContext> {
     /// The domain query to execute.
     pub query: AC::Query,
     /// One-shot channel for sending back the result.
-    pub reply: oneshot::Sender<Result<AC::View, AC::QueryError>>,
+    pub reply: oneshot::Sender<Result<AC::View, ApplicationServiceError<AC::QueryError>>>,
+}
+
+/// A shared application-service error around bounded-context command and query errors.
+#[derive(Debug, thiserror::Error)]
+pub enum ApplicationServiceError<E>
+where
+    E: std::error::Error,
+{
+    #[error("Forbidden")]
+    Forbidden,
+    #[error(transparent)]
+    Context(#[from] E),
 }
 
 /// An actor-style application service that drives an [`ApplicationContext`].
@@ -89,11 +103,12 @@ pub struct QueryEnvelope<AC: ApplicationContext> {
 ///
 /// // Send a command from the presentation layer:
 /// let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
-/// command_tx.send(CommandEnvelope { aggregate_id: "aggregate-id".into(), command: my_cmd, reply: reply_tx }).await?;
+/// command_tx.send(CommandEnvelope { actor: None, aggregate_id: "aggregate-id".into(), command: my_cmd, reply: reply_tx }).await?;
 /// let result = reply_rx.await?;
 /// ```
 pub struct ApplicationService<AC: ApplicationContext> {
     context: Arc<AC>,
+    authorization_checker: Arc<dyn AuthorizationChecker>,
     command_rx: mpsc::Receiver<CommandEnvelope<AC>>,
     query_rx: mpsc::Receiver<QueryEnvelope<AC>>,
 }
@@ -104,8 +119,18 @@ impl<AC: ApplicationContext> ApplicationService<AC> {
         command_rx: mpsc::Receiver<CommandEnvelope<AC>>,
         query_rx: mpsc::Receiver<QueryEnvelope<AC>>,
     ) -> Self {
+        Self::new_with_authorization(context, command_rx, query_rx, Arc::new(AllowAllAuthorizationChecker))
+    }
+
+    pub fn new_with_authorization(
+        context: AC,
+        command_rx: mpsc::Receiver<CommandEnvelope<AC>>,
+        query_rx: mpsc::Receiver<QueryEnvelope<AC>>,
+        authorization_checker: Arc<dyn AuthorizationChecker>,
+    ) -> Self {
         Self {
             context: Arc::new(context),
+            authorization_checker,
             command_rx,
             query_rx,
         }
@@ -123,14 +148,16 @@ impl<AC: ApplicationContext> ApplicationService<AC> {
             tokio::select! {
                 Some(msg) = self.command_rx.recv() => {
                     let context = Arc::clone(&self.context);
+                    let authorization_checker = Arc::clone(&self.authorization_checker);
                     tokio::spawn(async move {
-                        process_command(context.as_ref(), msg).await;
+                        process_command(context.as_ref(), authorization_checker.as_ref(), msg).await;
                     });
                 }
                 Some(msg) = self.query_rx.recv() => {
                     let context = Arc::clone(&self.context);
+                    let authorization_checker = Arc::clone(&self.authorization_checker);
                     tokio::spawn(async move {
-                        process_query(context.as_ref(), msg).await;
+                        process_query(context.as_ref(), authorization_checker.as_ref(), msg).await;
                     });
                 }
                 // Both channels are closed — all senders have been dropped.
@@ -143,10 +170,30 @@ impl<AC: ApplicationContext> ApplicationService<AC> {
     }
 }
 
-async fn process_command<AC: ApplicationContext>(context: &AC, msg: CommandEnvelope<AC>) {
+async fn process_command<AC: ApplicationContext>(
+    context: &AC,
+    authorization_checker: &dyn AuthorizationChecker,
+    msg: CommandEnvelope<AC>,
+) {
     debug!(aggregate_id = %msg.aggregate_id, "Processing command");
 
-    let result = context.handle_command(&msg.aggregate_id, msg.command).await;
+    let authorization_request = AuthorizationRequest {
+        actor: msg.actor.clone(),
+        operation: AuthorizationOperation::Command {
+            aggregate_id: msg.aggregate_id.clone(),
+            command_type: std::any::type_name::<AC::Command>(),
+        },
+    };
+    if !authorization_checker.is_authorized(&authorization_request).await {
+        let result = Err(ApplicationServiceError::Forbidden);
+        let _ = msg.reply.send(result);
+        return;
+    }
+
+    let result = context
+        .handle_command(&msg.aggregate_id, msg.command)
+        .await
+        .map_err(ApplicationServiceError::Context);
 
     match &result {
         Ok(id) => info!(aggregate_id = %id, "Command executed successfully"),
@@ -158,10 +205,29 @@ async fn process_command<AC: ApplicationContext>(context: &AC, msg: CommandEnvel
     }
 }
 
-async fn process_query<AC: ApplicationContext>(context: &AC, msg: QueryEnvelope<AC>) {
+async fn process_query<AC: ApplicationContext>(
+    context: &AC,
+    authorization_checker: &dyn AuthorizationChecker,
+    msg: QueryEnvelope<AC>,
+) {
     debug!("Processing query");
 
-    let result = context.handle_query(msg.query).await;
+    let authorization_request = AuthorizationRequest {
+        actor: msg.actor.clone(),
+        operation: AuthorizationOperation::Query {
+            query_type: std::any::type_name::<AC::Query>(),
+        },
+    };
+    if !authorization_checker.is_authorized(&authorization_request).await {
+        let result = Err(ApplicationServiceError::Forbidden);
+        let _ = msg.reply.send(result);
+        return;
+    }
+
+    let result = context
+        .handle_query(msg.query)
+        .await
+        .map_err(ApplicationServiceError::Context);
 
     match &result {
         Ok(_) => debug!("Query executed successfully"),
@@ -175,10 +241,11 @@ async fn process_query<AC: ApplicationContext>(context: &AC, msg: QueryEnvelope<
 
 #[cfg(test)]
 mod tests {
-    use crate::service_registry::ServiceHandle;
+    use crate::service_registry::{ServiceError, ServiceHandle};
 
     use super::*;
     use std::fmt;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio::sync::mpsc;
 
     // ── Fixture types ──────────────────────────────────────────────
@@ -254,6 +321,43 @@ mod tests {
         }
     }
 
+    struct CountingContext {
+        command_count: Arc<AtomicUsize>,
+        query_count: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl ApplicationContext for CountingContext {
+        type Command = String;
+        type Query = String;
+        type View = TestView;
+        type CommandError = TestCommandError;
+        type QueryError = TestQueryError;
+
+        async fn handle_command(
+            &self,
+            aggregate_id: &str,
+            _command: Self::Command,
+        ) -> Result<String, Self::CommandError> {
+            self.command_count.fetch_add(1, Ordering::SeqCst);
+            Ok(aggregate_id.to_string())
+        }
+
+        async fn handle_query(&self, query: Self::Query) -> Result<Self::View, Self::QueryError> {
+            self.query_count.fetch_add(1, Ordering::SeqCst);
+            Ok(TestView(query))
+        }
+    }
+
+    struct DenyAllAuthorizationChecker;
+
+    #[async_trait]
+    impl AuthorizationChecker for DenyAllAuthorizationChecker {
+        async fn is_authorized(&self, _request: &AuthorizationRequest) -> bool {
+            false
+        }
+    }
+
     // ── Helper ─────────────────────────────────────────────────────
 
     /// Spawn the service and return the sender halves for commands and queries.
@@ -261,6 +365,17 @@ mod tests {
         let (command_tx, command_rx) = mpsc::channel(16);
         let (query_tx, query_rx) = mpsc::channel(16);
         let service = ApplicationService::new(context, command_rx, query_rx);
+        tokio::spawn(service.start());
+        ServiceHandle::new(command_tx, query_tx)
+    }
+
+    fn spawn_service_with_authorization<AC: ApplicationContext>(
+        context: AC,
+        authorization_checker: Arc<dyn AuthorizationChecker>,
+    ) -> ServiceHandle<AC> {
+        let (command_tx, command_rx) = mpsc::channel(16);
+        let (query_tx, query_rx) = mpsc::channel(16);
+        let service = ApplicationService::new_with_authorization(context, command_rx, query_rx, authorization_checker);
         tokio::spawn(service.start());
         ServiceHandle::new(command_tx, query_tx)
     }
@@ -345,5 +460,43 @@ mod tests {
         let result = reply_rx.await.unwrap();
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().to_string(), "query failed");
+    }
+
+    #[tokio::test]
+    async fn denied_command_returns_forbidden_without_calling_context() {
+        let command_count = Arc::new(AtomicUsize::new(0));
+        let query_count = Arc::new(AtomicUsize::new(0));
+        let service_handle = spawn_service_with_authorization(
+            CountingContext {
+                command_count: Arc::clone(&command_count),
+                query_count,
+            },
+            Arc::new(DenyAllAuthorizationChecker),
+        );
+
+        let result = service_handle
+            .dispatch_command("aggregate-id".into(), "create".into())
+            .await;
+
+        assert!(matches!(result, Err(ServiceError::Forbidden)));
+        assert_eq!(command_count.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn denied_query_returns_forbidden_without_calling_context() {
+        let command_count = Arc::new(AtomicUsize::new(0));
+        let query_count = Arc::new(AtomicUsize::new(0));
+        let service_handle = spawn_service_with_authorization(
+            CountingContext {
+                command_count,
+                query_count: Arc::clone(&query_count),
+            },
+            Arc::new(DenyAllAuthorizationChecker),
+        );
+
+        let result = service_handle.dispatch_query("my-query".into()).await;
+
+        assert!(matches!(result, Err(ServiceError::Forbidden)));
+        assert_eq!(query_count.load(Ordering::SeqCst), 0);
     }
 }

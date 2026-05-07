@@ -4,7 +4,7 @@ use tokio::sync::oneshot::error::RecvError;
 use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
 
-use crate::application_service::{ApplicationContext, CommandEnvelope, QueryEnvelope};
+use crate::application_service::{ApplicationContext, ApplicationServiceError, CommandEnvelope, QueryEnvelope};
 use crate::authorization::Actor;
 
 /// A type-keyed registry for storing and retrieving services at runtime.
@@ -51,6 +51,8 @@ pub enum ServiceError<AC: ApplicationContext> {
     CommandError(AC::CommandError),
     #[error("Query error: {0}")]
     QueryError(AC::QueryError),
+    #[error("Forbidden")]
+    Forbidden,
 }
 
 /// A cloneable handle for sending commands and queries to an [`ApplicationService`](crate::application_service::ApplicationService).
@@ -116,7 +118,11 @@ where
 
         self.command_tx.send(command).await?;
 
-        reply_rx.await?.map_err(ServiceError::CommandError)
+        match reply_rx.await? {
+            Ok(id) => Ok(id),
+            Err(ApplicationServiceError::Forbidden) => Err(ServiceError::Forbidden),
+            Err(ApplicationServiceError::Context(error)) => Err(ServiceError::CommandError(error)),
+        }
     }
 
     /// Send a query to the application service and await the resulting view.
@@ -153,7 +159,11 @@ where
 
         self.query_tx.send(query).await?;
 
-        reply_rx.await?.map_err(ServiceError::QueryError)
+        match reply_rx.await? {
+            Ok(id) => Ok(id),
+            Err(ApplicationServiceError::Forbidden) => Err(ServiceError::Forbidden),
+            Err(ApplicationServiceError::Context(error)) => Err(ServiceError::QueryError(error)),
+        }
     }
 }
 
