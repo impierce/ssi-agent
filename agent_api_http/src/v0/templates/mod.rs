@@ -235,14 +235,14 @@ pub(crate) async fn duplicate_template(
 pub struct UpdateTemplateEndpointRequest {
     #[serde(rename = "id")]
     pub template_id: String,
-    pub title: String,
+    pub title: Option<String>,
     pub display: Option<Display>,
     pub creator: Option<String>,
-    pub tags: Vec<String>,
+    pub tags: Option<Vec<String>>,
     pub status: Option<Status>,
     pub visibility: Option<Visibility>,
     pub description: Option<String>,
-    pub r#type: Vec<String>,
+    pub r#type: Option<Vec<String>>,
     pub schema: Option<serde_json::Value>,
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
 }
@@ -294,11 +294,13 @@ pub(crate) async fn update_template(
                 .finish()
         })?;
 
-    let command = TemplateCommand::UpdateTitle {
-        template_id: template_id.clone(),
-        title,
-    };
-    command_handler(&template_id, &state.command.template, command).await?;
+    if let Some(title) = title {
+        let command = TemplateCommand::UpdateTitle {
+            template_id: template_id.clone(),
+            title,
+        };
+        command_handler(&template_id, &state.command.template, command).await?;
+    }
 
     if let Some(display) = display {
         let command = TemplateCommand::UpdateDisplay {
@@ -316,7 +318,7 @@ pub(crate) async fn update_template(
         command_handler(&template_id, &state.command.template, command).await?;
     }
 
-    if !tags.is_empty() {
+    if let Some(tags) = tags {
         let command = TemplateCommand::UpdateTags {
             template_id: template_id.clone(),
             tags,
@@ -348,7 +350,7 @@ pub(crate) async fn update_template(
         command_handler(&template_id, &state.command.template, command).await?;
     }
 
-    if !r#type.is_empty() {
+    if let Some(r#type) = r#type {
         let command = TemplateCommand::UpdateType {
             template_id: template_id.clone(),
             r#type,

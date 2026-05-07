@@ -1405,18 +1405,24 @@ components:
           - $ref: '#/components/schemas/TemplateStatus'
           default: null
         tags:
-          type: array
+          type:
+          - array
+          - 'null'
           items:
             type: string
-          default: []
+          default: null
         title:
-          type: string
-          default: ''
+          type:
+          - string
+          - 'null'
+          default: null
         type:
-          type: array
+          type:
+          - array
+          - 'null'
           items:
             type: string
-          default: []
+          default: null
         visibility:
           oneOf:
           - type: 'null'
