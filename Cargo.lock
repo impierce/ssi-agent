@@ -477,6 +477,7 @@ dependencies = [
  "serde_json",
  "serde_with 3.13.0",
  "serial_test",
+ "shared-kernel",
  "strum 0.26.3",
  "temp-env",
  "thiserror 1.0.69",
