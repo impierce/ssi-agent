@@ -2,9 +2,7 @@ use cqrs_es::{
     persist::{PersistenceError, ViewRepository},
     Aggregate, AggregateError, View,
 };
-use shared_kernel::authorization::{
-    Actor, AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationOperation, AuthorizationRequest,
-};
+use shared_kernel::authorization::{Actor, AuthorizationChecker, AuthorizationOperation, AuthorizationRequest};
 use std::{collections::HashMap, sync::Arc};
 use time::format_description::well_known::Rfc3339;
 use tracing::{debug, error, info};
@@ -45,27 +43,16 @@ where
 
 /// The `command_handler` function is used to execute a command on an aggregate.
 pub async fn command_handler<A>(
+    authorization_checker: Arc<dyn AuthorizationChecker>,
     aggregate_id: &str,
     state: &CommandHandler<A>,
     command: <A as Aggregate>::Command,
-) -> Result<(), AggregateError<<A as Aggregate>::Error>>
+) -> Result<(), CommandHandlerError<<A as Aggregate>::Error>>
 where
     A: Aggregate,
     <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
 {
-    match command_handler_with_authorization(
-        Arc::new(AllowAllAuthorizationChecker),
-        None,
-        aggregate_id,
-        state,
-        command,
-    )
-    .await
-    {
-        Ok(()) => Ok(()),
-        Err(CommandHandlerError::Aggregate(error)) => Err(error),
-        Err(CommandHandlerError::Forbidden) => unreachable!("allow-all authorization checker rejected command"),
-    }
+    command_handler_with_authorization(authorization_checker, None, aggregate_id, state, command).await
 }
 
 pub async fn command_handler_with_authorization<A>(
@@ -112,6 +99,7 @@ mod tests {
     use async_trait::async_trait;
     use cqrs_es::DomainEvent;
     use serde::{Deserialize, Serialize};
+    use shared_kernel::authorization::AllowAllAuthorizationChecker;
     use std::sync::Mutex;
 
     #[derive(Default, Debug, Serialize, Deserialize)]
@@ -212,13 +200,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn command_handler_uses_allow_all_checker() {
+    async fn command_handler_executes_authorized_command() {
         let handler = Arc::new(CapturingCommandHandler::default());
         let handler_ref: CommandHandler<TestAggregate> = handler.clone();
 
-        command_handler("aggregate-id", &handler_ref, "emit".to_string())
-            .await
-            .unwrap();
+        command_handler(
+            Arc::new(AllowAllAuthorizationChecker),
+            "aggregate-id",
+            &handler_ref,
+            "emit".to_string(),
+        )
+        .await
+        .unwrap();
 
         let calls = handler.calls.lock().unwrap();
         assert_eq!(calls.len(), 1);

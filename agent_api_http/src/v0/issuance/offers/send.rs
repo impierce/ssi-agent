@@ -44,7 +44,13 @@ pub(crate) async fn individual_offer(
     };
 
     // Send the Credential Offer to the recipient's email.
-    command_handler(&offer_id, &state.command.offer, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        &offer_id,
+        &state.command.offer,
+        command,
+    )
+    .await?;
 
     Ok(StatusCode::OK.into_response())
 }
@@ -79,7 +85,13 @@ pub(crate) async fn organization_offer(
     };
 
     // Send the offer to the organizational url.
-    command_handler(&offer_id, &state.command.offer, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        &offer_id,
+        &state.command.offer,
+        command,
+    )
+    .await?;
 
     Ok(StatusCode::OK.into_response())
 }

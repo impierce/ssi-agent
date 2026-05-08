@@ -1,5 +1,6 @@
 use agent_shared::application_state::CommandHandler;
 use cqrs_es::persist::ViewRepository;
+use shared_kernel::authorization::AuthorizationChecker;
 use std::sync::Arc;
 
 use crate::template::{
@@ -9,6 +10,7 @@ use crate::template::{
 
 #[derive(Clone)]
 pub struct LibraryState {
+    pub authorization_checker: Arc<dyn AuthorizationChecker>,
     pub command: CommandHandlers,
     pub query: Queries,
 }

@@ -3,6 +3,7 @@ use agent_shared::handlers::{command_handler, query_handler};
 use cqrs_es::persist::ViewRepository;
 use oid4vc_core::Sign;
 use oid4vci::authorization_request::CodeChallengeMethod;
+use shared_kernel::authorization::AuthorizationChecker;
 use std::sync::Arc;
 use tracing::{debug, info};
 
@@ -26,6 +27,7 @@ pub const UNIME_REDIRECT_URI: &str = "unime://callback";
 
 #[derive(Clone)]
 pub struct AuthorizationState {
+    pub authorization_checker: Arc<dyn AuthorizationChecker>,
     pub command: CommandHandlers,
     pub query: Queries,
     pub signer: Arc<dyn Sign>,
@@ -109,7 +111,13 @@ async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
             require_pushed_authorization_request: true,
         };
 
-        command_handler(UNIME_CLIENT_ID, &state.command.client, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            UNIME_CLIENT_ID,
+            &state.command.client,
+            command,
+        )
+        .await?;
 
         Ok(())
     }

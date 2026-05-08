@@ -1,5 +1,6 @@
 use agent_shared::application_state::CommandHandler;
 use cqrs_es::persist::ViewRepository;
+use shared_kernel::authorization::AuthorizationChecker;
 use std::sync::Arc;
 
 use crate::authorization_request::aggregate::AuthorizationRequest;
@@ -8,6 +9,7 @@ use crate::authorization_request::views::AuthorizationRequestView;
 
 #[derive(Clone)]
 pub struct VerificationState {
+    pub authorization_checker: Arc<dyn AuthorizationChecker>,
     pub command: CommandHandlers,
     pub query: Queries,
 }

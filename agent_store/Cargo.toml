@@ -18,6 +18,7 @@ cqrs-es.workspace = true
 mongo-es = "0.3"
 postgres-es = "0.4.12"
 serde_json.workspace = true
+shared-kernel.workspace = true
 sqlx = { version = "0.8", features = [
     "postgres",
     "runtime-tokio-rustls",

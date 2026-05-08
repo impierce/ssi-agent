@@ -136,7 +136,13 @@ pub(crate) async fn credentials(
     };
 
     // Create an unsigned/signed credential.
-    command_handler(&credential_id, &state.command.credential, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        &credential_id,
+        &state.command.credential,
+        command,
+    )
+    .await?;
 
     // Create an offer if it does not exist yet.
     if query_handler(&offer_id, &state.query.offer).await?.is_none() {
@@ -160,7 +166,13 @@ pub(crate) async fn credentials(
             delivery_options: None,
         };
 
-        command_handler(&offer_id, &state.command.offer, command).await?
+        command_handler(
+            state.authorization_checker.clone(),
+            &offer_id,
+            &state.command.offer,
+            command,
+        )
+        .await?
     };
 
     let command = OfferCommand::AddCredentials {
@@ -170,7 +182,13 @@ pub(crate) async fn credentials(
     };
 
     // Add the credential to the offer.
-    command_handler(&offer_id, &state.command.offer, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        &offer_id,
+        &state.command.offer,
+        command,
+    )
+    .await?;
 
     // Return the credential.
     query_handler(&credential_id, &state.query.credential)
@@ -235,7 +253,13 @@ pub async fn patch_credential(
             credential_status: credential_status.clone(),
         };
 
-        command_handler(&credential_id, &state.command.credential, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            &credential_id,
+            &state.command.credential,
+            command,
+        )
+        .await?;
 
         let command = StatusListCommand::UpdateIndex {
             index: credential_status.index,
@@ -248,7 +272,13 @@ pub async fn patch_credential(
             .next_back()
             .ok_or(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?; // This is an Internal Server Error because if this line fails that means we stored an incorect URL in our own credential.
 
-        command_handler(status_list_id, &state.command.status_list, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            status_list_id,
+            &state.command.status_list,
+            command,
+        )
+        .await?;
 
         Ok(StatusCode::NO_CONTENT.into_response())
     } else {

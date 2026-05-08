@@ -81,6 +81,7 @@ impl PushedAuthorizationService {
         };
 
         command_handler(
+            state.authorization_checker.clone(),
             &oauth2_authorization_request_id,
             &state.command.oauth2_authorization_request,
             command,

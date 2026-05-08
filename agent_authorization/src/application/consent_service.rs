@@ -46,6 +46,7 @@ impl ConsentService {
         };
 
         command_handler(
+            state.authorization_checker.clone(),
             &oauth_authorization_request_id,
             &state.command.oauth2_authorization_request,
             command,

@@ -60,7 +60,13 @@ pub(crate) async fn patch_profile(
             source: Source::Runtime,
         };
 
-        command_handler(&profile_id, &state.command.profile, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            &profile_id,
+            &state.command.profile,
+            command,
+        )
+        .await?;
     }
 
     if let Some(description) = description {
@@ -69,7 +75,13 @@ pub(crate) async fn patch_profile(
             source: Source::Runtime,
         };
 
-        command_handler(&profile_id, &state.command.profile, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            &profile_id,
+            &state.command.profile,
+            command,
+        )
+        .await?;
     }
 
     if let Some(logo) = logo {
@@ -78,7 +90,13 @@ pub(crate) async fn patch_profile(
             source: Source::Runtime,
         };
 
-        command_handler(&profile_id, &state.command.profile, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            &profile_id,
+            &state.command.profile,
+            command,
+        )
+        .await?;
     }
 
     if let Some(country) = country {
@@ -87,7 +105,13 @@ pub(crate) async fn patch_profile(
             source: Source::Runtime,
         };
 
-        command_handler(&profile_id, &state.command.profile, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            &profile_id,
+            &state.command.profile,
+            command,
+        )
+        .await?;
     }
 
     query_profile(&state).await.map_err(IntoApiErrorExt::into_api_error)?;

@@ -9,6 +9,7 @@ use agent_shared::UrlAppendHelpers;
 use cqrs_es::persist::ViewRepository;
 use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
+use shared_kernel::authorization::AuthorizationChecker;
 use std::sync::Arc;
 use tracing::{debug, info};
 
@@ -29,6 +30,7 @@ use crate::status_list::views::StatusListView;
 
 #[derive(Clone)]
 pub struct IssuanceState {
+    pub authorization_checker: Arc<dyn AuthorizationChecker>,
     pub command: CommandHandlers,
     pub query: Queries,
     pub subject: Arc<Subject>,
@@ -134,14 +136,26 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
                 let command = ServerConfigCommand::UpdateIssuerUrl {
                     url: public_url.clone(),
                 };
-                command_handler(SERVER_CONFIG_ID, &state.command.server_config, command).await?;
+                command_handler(
+                    state.authorization_checker.clone(),
+                    SERVER_CONFIG_ID,
+                    &state.command.server_config,
+                    command,
+                )
+                .await?;
             }
 
             if display != server_config_view.credential_issuer_metadata.display {
                 debug!("The server metadata display does not match the configured display.");
 
                 let command = ServerConfigCommand::UpdateIssuerDisplay { display };
-                command_handler(SERVER_CONFIG_ID, &state.command.server_config, command).await?;
+                command_handler(
+                    state.authorization_checker.clone(),
+                    SERVER_CONFIG_ID,
+                    &state.command.server_config,
+                    command,
+                )
+                .await?;
             }
         }
         None => {
@@ -168,7 +182,13 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
                 signing_algorithms_supported,
             };
 
-            command_handler(SERVER_CONFIG_ID, &state.command.server_config, command).await?;
+            command_handler(
+                state.authorization_checker.clone(),
+                SERVER_CONFIG_ID,
+                &state.command.server_config,
+                command,
+            )
+            .await?;
         }
     }
 
@@ -189,7 +209,13 @@ pub async fn update_cryptographic_binding_methods(state: &IssuanceState) -> anyh
                 cryptographic_binding_methods_supported,
             };
 
-            command_handler(SERVER_CONFIG_ID, &state.command.server_config, command).await?;
+            command_handler(
+                state.authorization_checker.clone(),
+                SERVER_CONFIG_ID,
+                &state.command.server_config,
+                command,
+            )
+            .await?;
         } else {
             debug!("Cryptographic binding methods are already up to date.");
         }
@@ -207,7 +233,13 @@ pub async fn update_signing_algorithms(state: &IssuanceState) -> anyhow::Result<
                 signing_algorithms_supported,
             };
 
-            command_handler(SERVER_CONFIG_ID, &state.command.server_config, command).await?;
+            command_handler(
+                state.authorization_checker.clone(),
+                SERVER_CONFIG_ID,
+                &state.command.server_config,
+                command,
+            )
+            .await?;
         } else {
             debug!("Signing algorithms are already up to date.");
         }
@@ -382,7 +414,13 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
             provisioned: true,
         };
 
-        command_handler(SERVER_CONFIG_ID, &state.command.server_config, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            SERVER_CONFIG_ID,
+            &state.command.server_config,
+            command,
+        )
+        .await?;
     }
 
     for provisioned_credential_configuration in provisioned_credential_configurations {
@@ -391,7 +429,13 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
             provisioned: true,
         };
 
-        command_handler(SERVER_CONFIG_ID, &state.command.server_config, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            SERVER_CONFIG_ID,
+            &state.command.server_config,
+            command,
+        )
+        .await?;
     }
 
     Ok(())

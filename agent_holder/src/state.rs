@@ -1,5 +1,6 @@
 use agent_shared::application_state::CommandHandler;
 use cqrs_es::persist::ViewRepository;
+use shared_kernel::authorization::AuthorizationChecker;
 use std::sync::Arc;
 
 use crate::credential::aggregate::Credential;
@@ -14,6 +15,7 @@ use crate::presentation::views::PresentationView;
 
 #[derive(Clone)]
 pub struct HolderState {
+    pub authorization_checker: Arc<dyn AuthorizationChecker>,
     pub command: CommandHandlers,
     pub query: Queries,
 }

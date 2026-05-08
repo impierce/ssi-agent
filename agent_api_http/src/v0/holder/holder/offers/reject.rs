@@ -30,7 +30,13 @@ pub(crate) async fn reject(
     };
 
     // Remove the Credential Offer from the state.
-    command_handler(&received_offer_id, &state.command.offer, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        &received_offer_id,
+        &state.command.offer,
+        command,
+    )
+    .await?;
 
     Ok(StatusCode::NO_CONTENT.into_response())
 }

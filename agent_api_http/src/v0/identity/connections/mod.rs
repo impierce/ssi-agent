@@ -54,7 +54,13 @@ pub(crate) async fn post_connection(
         url,
     };
 
-    command_handler(&connection_id, &state.command.connection, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        &connection_id,
+        &state.command.connection,
+        command,
+    )
+    .await?;
 
     // Return the connection.
     query_handler(&connection_id, &state.query.connection)
@@ -173,7 +179,13 @@ pub(crate) async fn sync_connection(
     let command = ConnectionCommand::SyncConnection {
         connection_id: id.clone(),
     };
-    command_handler(&id, &state.command.connection, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        &id,
+        &state.command.connection,
+        command,
+    )
+    .await?;
     Ok(StatusCode::OK.into_response())
 }
 
@@ -202,7 +214,13 @@ pub(crate) async fn accept_connection_changes(
     let command = ConnectionCommand::AcceptConnectionChanges {
         connection_id: id.clone(),
     };
-    command_handler(&id, &state.command.connection, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        &id,
+        &state.command.connection,
+        command,
+    )
+    .await?;
     Ok(StatusCode::OK.into_response())
 }
 
@@ -231,7 +249,13 @@ pub(crate) async fn remove_connection(
     let command = ConnectionCommand::RemoveConnection {
         connection_id: id.clone(),
     };
-    command_handler(&id, &state.command.connection, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        &id,
+        &state.command.connection,
+        command,
+    )
+    .await?;
     Ok(StatusCode::OK.into_response())
 }
 

@@ -1,5 +1,6 @@
 use crate::v0::issuance::error::{IntoPublicError, PublicError};
 use crate::DOCUMENTATION_URL;
+use agent_shared::handlers::CommandHandlerError;
 use cqrs_es::{persist::PersistenceError, AggregateError};
 use http_api_problem::ApiError;
 use hyper::StatusCode;
@@ -8,6 +9,7 @@ use hyper::StatusCode;
 #[derive(Debug)]
 pub enum ErrorWrapper<T: std::error::Error> {
     AggregateError(AggregateError<T>),
+    CommandHandlerError(CommandHandlerError<T>),
     PersistenceError(PersistenceError),
 }
 
@@ -23,6 +25,7 @@ where
     fn into_api_error(self) -> ApiError {
         match self {
             ErrorWrapper::AggregateError(error) => error.into_api_error(),
+            ErrorWrapper::CommandHandlerError(error) => error.into_api_error(),
             ErrorWrapper::PersistenceError(error) => error.into_api_error(),
         }
     }
@@ -42,6 +45,10 @@ impl<T: std::error::Error + IntoPublicError> From<ErrorWrapper<T>> for PublicErr
     fn from(err: ErrorWrapper<T>) -> Self {
         match err {
             ErrorWrapper::AggregateError(error) => PublicError::from(error),
+            ErrorWrapper::CommandHandlerError(error) => match error {
+                CommandHandlerError::Forbidden => PublicError::InternalServerError,
+                CommandHandlerError::Aggregate(error) => PublicError::from(error),
+            },
             ErrorWrapper::PersistenceError(error) => PublicError::from(error),
         }
     }
@@ -84,6 +91,22 @@ where
             .type_url(type_url("unexpected#unexpected-error"))
             .source_in_a_box(error)
                 .finish(),
+        }
+    }
+}
+
+impl<T: IntoApiErrorExt> IntoApiErrorExt for CommandHandlerError<T>
+where
+    T: Send + Sync + 'static,
+{
+    fn into_api_error(self) -> ApiError {
+        match self {
+            CommandHandlerError::Forbidden => ApiError::builder(StatusCode::FORBIDDEN)
+                .title("Forbidden")
+                .type_url(type_url("authorization#forbidden"))
+                .message("The request is not authorized")
+                .finish(),
+            CommandHandlerError::Aggregate(error) => error.into_api_error(),
         }
     }
 }

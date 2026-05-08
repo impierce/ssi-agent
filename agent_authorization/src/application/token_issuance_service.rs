@@ -130,9 +130,14 @@ impl TokenIssuanceService {
                     code_verifier,
                 };
 
-                command_handler(&code, &authorization_state.command.authorization_code, command)
-                    .await
-                    .map_err(|err| TokenIssuanceError::InvalidAuthorizationCodeError(err.to_string()))?;
+                command_handler(
+                    authorization_state.authorization_checker.clone(),
+                    &code,
+                    &authorization_state.command.authorization_code,
+                    command,
+                )
+                .await
+                .map_err(|err| TokenIssuanceError::InvalidAuthorizationCodeError(err.to_string()))?;
 
                 let issuer_state = query_handler(&code, &authorization_state.query.authorization_code)
                     .await
@@ -163,9 +168,14 @@ impl TokenIssuanceService {
             issuer_state,
         };
 
-        command_handler(&access_token_id, &authorization_state.command.access_token, command)
-            .await
-            .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?;
+        command_handler(
+            authorization_state.authorization_checker.clone(),
+            &access_token_id,
+            &authorization_state.command.access_token,
+            command,
+        )
+        .await
+        .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?;
 
         let AccessTokenView {
             access_token_id,

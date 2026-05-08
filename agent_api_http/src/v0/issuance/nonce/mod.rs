@@ -1,6 +1,6 @@
+use crate::handlers::command_handler;
 use agent_issuance::{nonce::command::NonceCommand, state::IssuanceState};
 use agent_shared::generate_random_string;
-use agent_shared::handlers::command_handler;
 use axum::{
     extract::State,
     http::{header::CACHE_CONTROL, HeaderMap, StatusCode},
@@ -19,9 +19,14 @@ pub(crate) async fn nonce(State(state): State<Arc<IssuanceState>>) -> Result<Res
         c_nonce: fresh_c_nonce.clone(),
     };
 
-    command_handler(&fresh_c_nonce, &state.command.nonce, command)
-        .await
-        .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
+    command_handler(
+        state.authorization_checker.clone(),
+        &fresh_c_nonce,
+        &state.command.nonce,
+        command,
+    )
+    .await
+    .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
     let mut headers = HeaderMap::new();
     headers.insert(CACHE_CONTROL, "no-store".parse().unwrap());

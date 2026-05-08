@@ -89,9 +89,14 @@ impl OAuth2AuthorizationService {
                     expires_in: 600, // 10 minutes
                 };
 
-                command_handler(&authorization_code_id, &state.command.authorization_code, command)
-                    .await
-                    .map_err(|err| OAuth2AuthorizationError::Internal(err.to_string()))?;
+                command_handler(
+                    state.authorization_checker.clone(),
+                    &authorization_code_id,
+                    &state.command.authorization_code,
+                    command,
+                )
+                .await
+                .map_err(|err| OAuth2AuthorizationError::Internal(err.to_string()))?;
 
                 let state = oauth2_authorization_request.state;
 

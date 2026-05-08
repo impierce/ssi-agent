@@ -55,7 +55,13 @@ pub async fn notification(
         notification: notification_request,
     };
 
-    command_handler(&credential_id, &state.command.credential, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        &credential_id,
+        &state.command.credential,
+        command,
+    )
+    .await?;
 
     Ok(StatusCode::NO_CONTENT.into_response())
 }

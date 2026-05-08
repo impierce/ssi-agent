@@ -43,7 +43,13 @@ pub(crate) async fn offers_params(
     };
 
     // Add the Credential Offer to the state.
-    command_handler(&received_offer_id, &state.command.offer, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        &received_offer_id,
+        &state.command.offer,
+        command,
+    )
+    .await?;
 
     Ok(StatusCode::OK.into_response())
 }
