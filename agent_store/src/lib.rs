@@ -593,6 +593,9 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
 mod test {
     use crate::in_memory::InMemory;
     use agent_secret_manager::{service::Service, subject::Subject};
+    use agent_shared::config::{
+        default_issuer_eddsa_key_id, default_issuer_es256_key_id, set_config, SecretManagerConfig,
+    };
     use agent_shared::handlers::AuthorizationContext;
     use async_trait::async_trait;
     use cqrs_es::EventEnvelope;
@@ -814,16 +817,16 @@ mod test {
 
     #[tokio::test]
     async fn states_expose_configured_authorization_checker() {
-        std::env::remove_var("UNICORE__CONFIG_FILE");
         std::env::set_var("UNICORE__PROFILE", "development");
-        std::env::set_var("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", "sup3rSecr3t");
-        std::env::set_var(
-            "UNICORE__SECRET_MANAGER__STRONGHOLD_PATH",
-            std::env::temp_dir()
+        set_config().set_secret_manager_config(SecretManagerConfig {
+            stronghold_password: "sup3rSecr3t".to_string(),
+            stronghold_path: std::env::temp_dir()
                 .join(format!("agent-store-authz-test-{}.stronghold", std::process::id()))
                 .to_string_lossy()
                 .into_owned(),
-        );
+            issuer_eddsa_key_id: default_issuer_eddsa_key_id(),
+            issuer_es256_key_id: default_issuer_es256_key_id(),
+        });
 
         let subject = Arc::new(Subject::test_subject().await);
 

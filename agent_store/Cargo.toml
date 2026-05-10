@@ -28,3 +28,4 @@ tokio.workspace = true
 
 [dev-dependencies]
 agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }
+agent_shared = { path = "../agent_shared", features = ["test_utils"] }
