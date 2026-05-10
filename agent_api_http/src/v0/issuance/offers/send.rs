@@ -83,3 +83,49 @@ pub(crate) async fn organization_offer(
 
     Ok(StatusCode::OK.into_response())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_issuance::{services::IssuanceServices, state::initialize};
+    use agent_secret_manager::service::Service;
+    use agent_store::{in_memory::InMemory, issuance_state};
+
+    async fn test_state() -> Arc<IssuanceState> {
+        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&state).await.unwrap();
+        state
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn individual_offer_dispatches_send_command() {
+        let error = individual_offer(
+            State(test_state().await),
+            Json(EmailOfferEndpointRequest {
+                offer_id: crate::tests::OFFER_ID.to_string(),
+                recipient_email: "receiver@example.com".to_string(),
+            }),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn organization_offer_dispatches_send_command() {
+        let error = organization_offer(
+            State(test_state().await),
+            Json(TargetUrlOfferEndpointRequest {
+                offer_id: crate::tests::OFFER_ID.to_string(),
+                target_url: "https://receiver.example.com/offers".parse().unwrap(),
+            }),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.status(), StatusCode::BAD_REQUEST);
+    }
+}

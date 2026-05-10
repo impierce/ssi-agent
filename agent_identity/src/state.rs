@@ -593,3 +593,127 @@ pub async fn query_all_documents(
         None => Ok(Default::default()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_shared::application_state::Command;
+    use async_trait::async_trait;
+    use cqrs_es::{
+        persist::{PersistenceError, ViewContext, ViewRepository},
+        Aggregate, AggregateError, View,
+    };
+    use shared_kernel::authorization::AllowAllAuthorizationChecker;
+    use std::marker::PhantomData;
+
+    struct NoopCommand<A>(PhantomData<A>);
+
+    #[async_trait]
+    impl<A> Command<A> for NoopCommand<A>
+    where
+        A: Aggregate + Send + Sync,
+        A::Command: Send + Sync,
+    {
+        async fn execute_with_metadata(
+            &self,
+            _aggregate_id: &str,
+            _command: A::Command,
+            _metadata: HashMap<String, String>,
+        ) -> Result<(), AggregateError<A::Error>> {
+            Ok(())
+        }
+    }
+
+    struct NoneRepo<V, A>(PhantomData<(V, A)>);
+
+    #[async_trait]
+    impl<V, A> ViewRepository<V, A> for NoneRepo<V, A>
+    where
+        V: View<A> + Send + Sync,
+        A: Aggregate + Send + Sync,
+    {
+        async fn load(&self, _view_id: &str) -> Result<Option<V>, PersistenceError> {
+            Ok(None)
+        }
+
+        async fn load_with_context(&self, _view_id: &str) -> Result<Option<(V, ViewContext)>, PersistenceError> {
+            Ok(None)
+        }
+
+        async fn update_view(&self, _view: V, _context: ViewContext) -> Result<(), PersistenceError> {
+            Ok(())
+        }
+    }
+
+    struct AllDocumentsRepo;
+
+    #[async_trait]
+    impl ViewRepository<AllDocumentsView, Document> for AllDocumentsRepo {
+        async fn load(&self, _view_id: &str) -> Result<Option<AllDocumentsView>, PersistenceError> {
+            Ok(Some(AllDocumentsView {
+                documents: HashMap::from([(
+                    "decentral-document".to_string(),
+                    Document {
+                        document_id: "decentral-document".to_string(),
+                        did_method: Some(SupportedDidMethod::Iota),
+                        ..Default::default()
+                    },
+                )]),
+            }))
+        }
+
+        async fn load_with_context(
+            &self,
+            view_id: &str,
+        ) -> Result<Option<(AllDocumentsView, ViewContext)>, PersistenceError> {
+            Ok(self
+                .load(view_id)
+                .await?
+                .map(|view| (view, ViewContext::new(view_id.to_string(), 0))))
+        }
+
+        async fn update_view(&self, _view: AllDocumentsView, _context: ViewContext) -> Result<(), PersistenceError> {
+            Ok(())
+        }
+    }
+
+    fn noop_command<A>() -> CommandHandler<A>
+    where
+        A: Aggregate + Send + Sync + 'static,
+        A::Command: Send + Sync,
+    {
+        Arc::new(NoopCommand::<A>(PhantomData))
+    }
+
+    fn none_repo<V, A>() -> Arc<dyn ViewRepository<V, A>>
+    where
+        V: View<A> + Send + Sync + 'static,
+        A: Aggregate + Send + Sync + 'static,
+    {
+        Arc::new(NoneRepo::<V, A>(PhantomData))
+    }
+
+    #[tokio::test]
+    async fn publish_decentrally_hosted_documents_dispatches_publish_command() {
+        let state = IdentityState {
+            authorization_checker: Arc::new(AllowAllAuthorizationChecker),
+            command: CommandHandlers {
+                connection: noop_command(),
+                document: noop_command(),
+                profile: noop_command(),
+                service: noop_command(),
+            },
+            query: ViewRepositories {
+                connection: none_repo(),
+                all_connections: none_repo(),
+                document: none_repo(),
+                all_documents: Arc::new(AllDocumentsRepo),
+                profile: none_repo(),
+                service: none_repo(),
+                all_services: none_repo(),
+            },
+        };
+
+        publish_decentrally_hosted_documents(&state).await.unwrap();
+    }
+}

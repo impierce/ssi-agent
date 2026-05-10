@@ -34,3 +34,20 @@ pub(crate) async fn reject(
 
     Ok(StatusCode::NO_CONTENT.into_response())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_holder::services::HolderServices;
+    use agent_secret_manager::service::Service;
+    use agent_store::{holder_state, in_memory::InMemory};
+
+    #[tokio::test]
+    async fn reject_dispatches_reject_command() {
+        let state = Arc::new(holder_state(&InMemory, HolderServices::default().await, Default::default()).await);
+
+        let response = reject(State(state), Path("missing-offer".to_string())).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+}
