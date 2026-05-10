@@ -505,6 +505,7 @@ dependencies = [
  "agent_identity",
  "agent_issuance",
  "agent_library",
+ "agent_secret_manager",
  "agent_shared",
  "agent_verification",
  "async-trait",

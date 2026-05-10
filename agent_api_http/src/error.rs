@@ -127,7 +127,9 @@ impl From<PersistenceError> for PublicError {
 pub mod tests {
     use super::*;
     use axum::response::Response;
+    use http_api_problem::IntoApiError;
     use serde_json::json;
+    use std::{error::Error, fmt};
 
     pub async fn into_json_value(response: Response) -> serde_json::Value {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -195,5 +197,78 @@ pub mod tests {
                 "detail": "An unexpected error occurred"
             }),
         );
+    }
+
+    #[tokio::test]
+    async fn command_handler_errors_successfully_convert_to_problem_details() {
+        assert_eq!(
+            into_json_value(
+                ErrorWrapper::<ApiError>::CommandHandlerError(CommandHandlerError::Forbidden)
+                    .into_api_error()
+                    .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/authorization#forbidden"),
+                "title": "Forbidden",
+                "status": 403,
+                "detail": "The request is not authorized"
+            }),
+        );
+
+        assert_eq!(
+            into_json_value(
+                ErrorWrapper::CommandHandlerError(CommandHandlerError::Aggregate(AggregateError::UserError(
+                    ApiError::builder(StatusCode::BAD_REQUEST)
+                        .title("Invalid Command")
+                        .type_url(type_url("test#invalid-command"))
+                        .message("The command is invalid")
+                        .finish(),
+                )))
+                .into_api_error()
+                .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/test#invalid-command"),
+                "title": "Invalid Command",
+                "status": 400,
+                "detail": "The command is invalid"
+            }),
+        );
+    }
+
+    #[test]
+    fn command_handler_errors_successfully_convert_to_public_errors() {
+        assert!(matches!(
+            PublicError::from(ErrorWrapper::<TestPublicError>::CommandHandlerError(
+                CommandHandlerError::Forbidden
+            )),
+            PublicError::InternalServerError
+        ));
+
+        assert!(matches!(
+            PublicError::from(ErrorWrapper::CommandHandlerError(CommandHandlerError::Aggregate(
+                AggregateError::UserError(TestPublicError)
+            ))),
+            PublicError::NotFoundError
+        ));
+    }
+
+    #[derive(Debug)]
+    struct TestPublicError;
+
+    impl fmt::Display for TestPublicError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("test public error")
+        }
+    }
+
+    impl Error for TestPublicError {}
+
+    impl IntoPublicError for TestPublicError {
+        fn into_public_error(self) -> PublicError {
+            PublicError::NotFoundError
+        }
     }
 }

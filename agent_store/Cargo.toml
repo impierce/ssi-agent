@@ -25,3 +25,6 @@ sqlx = { version = "0.8", features = [
     "json",
 ] }
 tokio.workspace = true
+
+[dev-dependencies]
+agent_secret_manager = { path = "../agent_secret_manager", features = ["test_utils"] }

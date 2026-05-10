@@ -506,3 +506,115 @@ pub(crate) async fn delete_template(
     command_handler(&state, &template_id, &state.command.template, command).await?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{error::tests::into_json_value, v0::library};
+    use agent_store::{in_memory::InMemory, library_state};
+    use axum::body::Body;
+    use http::Request;
+    use serde_json::json;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn template_command_endpoints_dispatch_successfully() {
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let app = library::router(state);
+
+        let response = app
+            .clone()
+            .oneshot(post_json(
+                "/v0/templates/create-template",
+                json!({
+                    "title": "Template",
+                    "status": "draft",
+                    "visibility": "private"
+                }),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let template = into_json_value(response).await;
+        let template_id = template["id"].as_str().unwrap().to_string();
+
+        let response = app
+            .clone()
+            .oneshot(post_json(
+                "/v0/templates/update-template",
+                json!({
+                    "id": template_id,
+                    "title": "Updated template",
+                    "display": {
+                        "name": "Updated template",
+                        "logo": {
+                            "uri": "https://example.com/logo.png",
+                            "altText": "Example logo"
+                        }
+                    },
+                    "dataModel": "w3c_vc_data_model_v2-0",
+                    "creator": "Impierce",
+                    "holderType": "organization",
+                    "tags": ["updated"],
+                    "status": "published",
+                    "visibility": "public",
+                    "description": "Updated description",
+                    "type": ["VerifiableCredential", "ExampleCredential"],
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "schemaPropertiesAttributes": {
+                        "name": {
+                            "selectivelyDisclosable": true
+                        }
+                    }
+                }),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let response = app
+            .clone()
+            .oneshot(post_json(
+                "/v0/templates/duplicate-template",
+                json!({
+                    "sourceTemplateId": template_id
+                }),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let duplicated_template = into_json_value(response).await;
+        assert_eq!(duplicated_template["source_template_id"], template_id);
+
+        let response = app
+            .oneshot(post_json(
+                "/v0/templates/delete-template",
+                json!({
+                    "id": template_id
+                }),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+
+    fn post_json(uri: &str, body: serde_json::Value) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri(uri)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    }
+}

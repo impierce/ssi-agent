@@ -591,6 +591,9 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
 
 #[cfg(test)]
 mod test {
+    use crate::in_memory::InMemory;
+    use agent_secret_manager::{service::Service, subject::Subject};
+    use agent_shared::handlers::AuthorizationContext;
     use async_trait::async_trait;
     use cqrs_es::EventEnvelope;
 
@@ -807,5 +810,74 @@ mod test {
         assert_eq!(presentation_event_publishers.len(), 0);
         assert_eq!(received_offer_event_publishers.len(), 0);
         assert_eq!(authorization_request_event_publishers.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn states_expose_configured_authorization_checker() {
+        std::env::remove_var("UNICORE__CONFIG_FILE");
+        std::env::set_var("UNICORE__PROFILE", "development");
+        std::env::set_var("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", "sup3rSecr3t");
+        std::env::set_var(
+            "UNICORE__SECRET_MANAGER__STRONGHOLD_PATH",
+            format!("/private/tmp/agent-store-authz-test-{}.stronghold", std::process::id()),
+        );
+
+        let subject = Arc::new(Subject::test_subject().await);
+
+        let identity = identity_state(
+            &InMemory,
+            Arc::new(IdentityServices::new(subject.clone())),
+            Default::default(),
+        )
+        .await;
+        assert!(Arc::ptr_eq(
+            identity.authorization_checker(),
+            &identity.authorization_checker
+        ));
+
+        let library = library_state(&InMemory, Default::default(), Default::default()).await;
+        assert!(Arc::ptr_eq(
+            library.authorization_checker(),
+            &library.authorization_checker
+        ));
+
+        let authorization = authorization_state(
+            &InMemory,
+            Arc::new(AuthorizationServices::new(subject.clone())),
+            Default::default(),
+        )
+        .await;
+        assert!(Arc::ptr_eq(
+            authorization.authorization_checker(),
+            &authorization.authorization_checker
+        ));
+
+        let issuance = issuance_state(
+            &InMemory,
+            Arc::new(agent_issuance::services::IssuanceServices::new(subject.clone())),
+            Default::default(),
+        )
+        .await;
+        assert!(Arc::ptr_eq(
+            issuance.authorization_checker(),
+            &issuance.authorization_checker
+        ));
+
+        let verification = verification_state(
+            &InMemory,
+            Arc::new(VerificationServices::new(subject.clone())),
+            Default::default(),
+        )
+        .await;
+        assert!(Arc::ptr_eq(
+            verification.authorization_checker(),
+            &verification.authorization_checker
+        ));
+
+        let holder = holder_state(&InMemory, Arc::new(HolderServices::new(subject)), Default::default()).await;
+        assert!(Arc::ptr_eq(
+            holder.authorization_checker(),
+            &holder.authorization_checker
+        ));
     }
 }
