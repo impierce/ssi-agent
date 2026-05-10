@@ -819,7 +819,10 @@ mod test {
         std::env::set_var("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", "sup3rSecr3t");
         std::env::set_var(
             "UNICORE__SECRET_MANAGER__STRONGHOLD_PATH",
-            format!("/private/tmp/agent-store-authz-test-{}.stronghold", std::process::id()),
+            std::env::temp_dir()
+                .join(format!("agent-store-authz-test-{}.stronghold", std::process::id()))
+                .to_string_lossy()
+                .into_owned(),
         );
 
         let subject = Arc::new(Subject::test_subject().await);
