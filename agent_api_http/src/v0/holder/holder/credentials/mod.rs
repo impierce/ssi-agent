@@ -55,13 +55,7 @@ pub(crate) async fn post_credentials(
         credential,
     };
 
-    command_handler(
-        state.authorization_checker.clone(),
-        &holder_credential_id,
-        &state.command.credential,
-        command,
-    )
-    .await?;
+    command_handler(&state, &holder_credential_id, &state.command.credential, command).await?;
 
     query_handler(&holder_credential_id, &state.query.holder_credential)
         .await?

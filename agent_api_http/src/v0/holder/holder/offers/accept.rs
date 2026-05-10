@@ -50,26 +50,14 @@ pub(crate) async fn accept(
     };
 
     // Accept the Credential Offer
-    command_handler(
-        state.authorization_checker.clone(),
-        &received_offer_id,
-        &state.command.offer,
-        command,
-    )
-    .await?;
+    command_handler(&state, &received_offer_id, &state.command.offer, command).await?;
 
     let command = OfferCommand::SendCredentialRequest {
         received_offer_id: received_offer_id.clone(),
     };
 
     // Send the Credential Request
-    command_handler(
-        state.authorization_checker.clone(),
-        &received_offer_id,
-        &state.command.offer,
-        command,
-    )
-    .await?;
+    command_handler(&state, &received_offer_id, &state.command.offer, command).await?;
 
     let credentials = match query_handler(&received_offer_id, &state.query.received_offer).await? {
         Some(ReceivedOfferView { credentials, .. }) => credentials,
@@ -89,13 +77,7 @@ pub(crate) async fn accept(
         };
 
         // Add the Credential to the state.
-        command_handler(
-            state.authorization_checker.clone(),
-            &holder_credential_id,
-            &state.command.credential,
-            command,
-        )
-        .await?;
+        command_handler(&state, &holder_credential_id, &state.command.credential, command).await?;
     }
 
     query_handler(&received_offer_id, &state.query.received_offer)

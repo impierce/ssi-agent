@@ -77,13 +77,7 @@ pub(crate) async fn credential(
     };
 
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
-    command_handler(
-        state.authorization_checker.clone(),
-        &offer_id,
-        &state.command.offer,
-        command,
-    )
-    .await?;
+    command_handler(&state, &offer_id, &state.command.offer, command).await?;
 
     let timeout = config().external_server_response_timeout_ms;
     let start_time = Instant::now();
@@ -136,13 +130,7 @@ pub(crate) async fn credential(
             let id = TEST_STATUS_LIST_ID.to_string();
 
             let command = StatusListCommand::CreateStatusList { id: id.clone() };
-            command_handler(
-                state.authorization_checker.clone(),
-                &id,
-                &state.command.status_list,
-                command,
-            )
-            .await?;
+            command_handler(&state, &id, &state.command.status_list, command).await?;
 
             id
         }
@@ -155,13 +143,7 @@ pub(crate) async fn credential(
             status: StatusType::VALID,
         };
 
-        command_handler(
-            state.authorization_checker.clone(),
-            &status_list_id,
-            &state.command.status_list,
-            command,
-        )
-        .await?;
+        command_handler(&state, &status_list_id, &state.command.status_list, command).await?;
 
         let status_list = query_handler(&status_list_id, &state.query.status_list)
             .await?
@@ -180,13 +162,7 @@ pub(crate) async fn credential(
                 .ok_or(PublicError::InternalServerError)?, // TODO: even though the AddIndex command is executed right before this, retrieving the index this way is not the prettiest since something of a "data race" could occur where another index has already been added between the AddIndex command and this command. Then two credentials would be assigned the same index, as they both retrieve the same last index.
         };
 
-        command_handler(
-            state.authorization_checker.clone(),
-            &credential_id,
-            &state.command.credential,
-            command,
-        )
-        .await?;
+        command_handler(&state, &credential_id, &state.command.credential, command).await?;
 
         let signed_credential = match query_handler(&credential_id, &state.query.credential).await? {
             Some(CredentialView {
@@ -206,13 +182,7 @@ pub(crate) async fn credential(
     };
 
     // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
-    command_handler(
-        state.authorization_checker.clone(),
-        &offer_id,
-        &state.command.offer,
-        command,
-    )
-    .await?;
+    command_handler(&state, &offer_id, &state.command.offer, command).await?;
 
     // Use the `offer_id` to get the `credential_response` from the `OfferView`.
     query_handler(&offer_id, &state.query.offer)
@@ -363,14 +333,9 @@ pub mod tests {
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),
         };
-        agent_shared::handlers::command_handler(
-            issuance_state.authorization_checker.clone(),
-            TEST_NONCE,
-            &issuance_state.command.nonce,
-            command,
-        )
-        .await
-        .unwrap();
+        agent_shared::handlers::command_handler(&issuance_state, TEST_NONCE, &issuance_state.command.nonce, command)
+            .await
+            .unwrap();
 
         let response = issuance_app
             .oneshot(
@@ -462,14 +427,9 @@ pub mod tests {
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),
         };
-        agent_shared::handlers::command_handler(
-            issuance_state.authorization_checker.clone(),
-            TEST_NONCE,
-            &issuance_state.command.nonce,
-            command,
-        )
-        .await
-        .unwrap();
+        agent_shared::handlers::command_handler(&issuance_state, TEST_NONCE, &issuance_state.command.nonce, command)
+            .await
+            .unwrap();
 
         let mut issuance_app = router(issuance_state.clone());
 

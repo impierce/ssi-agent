@@ -1,5 +1,5 @@
 use agent_shared::application_state::CommandHandler;
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::handlers::{command_handler, query_handler, AuthorizationContext};
 use cqrs_es::persist::ViewRepository;
 use oid4vc_core::Sign;
 use oid4vci::authorization_request::CodeChallengeMethod;
@@ -31,6 +31,12 @@ pub struct AuthorizationState {
     pub command: CommandHandlers,
     pub query: Queries,
     pub signer: Arc<dyn Sign>,
+}
+
+impl AuthorizationContext for AuthorizationState {
+    fn authorization_checker(&self) -> &Arc<dyn AuthorizationChecker> {
+        &self.authorization_checker
+    }
 }
 
 /// The command handlers are used to execute commands on the aggregates.
@@ -111,13 +117,7 @@ async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
             require_pushed_authorization_request: true,
         };
 
-        command_handler(
-            state.authorization_checker.clone(),
-            UNIME_CLIENT_ID,
-            &state.command.client,
-            command,
-        )
-        .await?;
+        command_handler(&state, UNIME_CLIENT_ID, &state.command.client, command).await?;
 
         Ok(())
     }

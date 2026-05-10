@@ -9,6 +9,34 @@ use tracing::{debug, error, info};
 
 use crate::application_state::CommandHandler;
 
+pub trait AuthorizationContext {
+    fn authorization_checker(&self) -> &Arc<dyn AuthorizationChecker>;
+}
+
+impl<T> AuthorizationContext for Arc<T>
+where
+    T: AuthorizationContext + ?Sized,
+{
+    fn authorization_checker(&self) -> &Arc<dyn AuthorizationChecker> {
+        self.as_ref().authorization_checker()
+    }
+}
+
+impl<T> AuthorizationContext for &T
+where
+    T: AuthorizationContext + ?Sized,
+{
+    fn authorization_checker(&self) -> &Arc<dyn AuthorizationChecker> {
+        (*self).authorization_checker()
+    }
+}
+
+impl AuthorizationContext for Arc<dyn AuthorizationChecker> {
+    fn authorization_checker(&self) -> &Arc<dyn AuthorizationChecker> {
+        self
+    }
+}
+
 /// The `query_handler` function is used to query the view repository for a specific view.
 pub async fn query_handler<A, V>(
     view_id: &str,
@@ -42,17 +70,25 @@ where
 }
 
 /// The `command_handler` function is used to execute a command on an aggregate.
-pub async fn command_handler<A>(
-    authorization_checker: Arc<dyn AuthorizationChecker>,
+pub async fn command_handler<C, A>(
+    authorization_context: &C,
     aggregate_id: &str,
     state: &CommandHandler<A>,
     command: <A as Aggregate>::Command,
 ) -> Result<(), CommandHandlerError<<A as Aggregate>::Error>>
 where
+    C: AuthorizationContext + ?Sized,
     A: Aggregate,
     <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
 {
-    command_handler_with_authorization(authorization_checker, None, aggregate_id, state, command).await
+    command_handler_with_authorization(
+        Arc::clone(authorization_context.authorization_checker()),
+        None,
+        aggregate_id,
+        state,
+        command,
+    )
+    .await
 }
 
 pub async fn command_handler_with_authorization<A>(
@@ -200,18 +236,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_aggregate_fixture_contract_is_exercised() {
+        assert_eq!(TestAggregate::aggregate_type(), "test");
+        assert_eq!(TestEvent.event_type(), "test-event");
+        assert_eq!(TestEvent.event_version(), "1");
+
+        let mut aggregate = TestAggregate;
+        assert_eq!(
+            aggregate.handle("emit".to_string(), &()).await.unwrap(),
+            vec![TestEvent]
+        );
+        assert!(aggregate.handle("ignore".to_string(), &()).await.unwrap().is_empty());
+        aggregate.apply(TestEvent);
+    }
+
+    #[tokio::test]
     async fn command_handler_executes_authorized_command() {
         let handler = Arc::new(CapturingCommandHandler::default());
         let handler_ref: CommandHandler<TestAggregate> = handler.clone();
+        let authorization_checker: Arc<dyn AuthorizationChecker> = Arc::new(AllowAllAuthorizationChecker);
 
-        command_handler(
-            Arc::new(AllowAllAuthorizationChecker),
-            "aggregate-id",
-            &handler_ref,
-            "emit".to_string(),
-        )
-        .await
-        .unwrap();
+        command_handler(&authorization_checker, "aggregate-id", &handler_ref, "emit".to_string())
+            .await
+            .unwrap();
 
         let calls = handler.calls.lock().unwrap();
         assert_eq!(calls.len(), 1);

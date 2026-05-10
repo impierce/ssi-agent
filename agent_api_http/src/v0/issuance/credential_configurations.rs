@@ -32,13 +32,7 @@ pub(crate) async fn credential_configurations(
         provisioned: false,
     };
 
-    command_handler(
-        state.authorization_checker.clone(),
-        SERVER_CONFIG_ID,
-        &state.command.server_config,
-        command,
-    )
-    .await?;
+    command_handler(&state, SERVER_CONFIG_ID, &state.command.server_config, command).await?;
 
     Ok((StatusCode::CREATED, Json(credential_configuration)).into_response())
 }

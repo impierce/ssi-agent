@@ -69,13 +69,7 @@ pub(crate) async fn post_presentations(
     };
 
     // Create the presentation.
-    command_handler(
-        state.authorization_checker.clone(),
-        &presentation_id,
-        &state.command.presentation,
-        command,
-    )
-    .await?;
+    command_handler(&state, &presentation_id, &state.command.presentation, command).await?;
 
     query_handler(&presentation_id, &state.query.presentation)
         .await?

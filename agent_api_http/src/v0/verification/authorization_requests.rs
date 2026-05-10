@@ -67,7 +67,7 @@ pub(crate) async fn authorization_requests(
 
     // Create the authorization request.
     command_handler(
-        verification_state.authorization_checker.clone(),
+        &verification_state,
         &state,
         &verification_state.command.authorization_request,
         command,
@@ -76,7 +76,7 @@ pub(crate) async fn authorization_requests(
 
     // Sign the authorization request object.
     command_handler(
-        verification_state.authorization_checker.clone(),
+        &verification_state,
         &state,
         &verification_state.command.authorization_request,
         AuthorizationRequestCommand::SignAuthorizationRequestObject,
