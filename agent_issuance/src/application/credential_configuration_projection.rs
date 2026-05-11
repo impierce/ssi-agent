@@ -224,6 +224,7 @@ impl Query<Template> for CredentialConfigurationProjection {
                     data_model,
                     r#type,
                     status,
+                    schema,
                     ..
                 } => {
                     // Only register a credential configuration once the template has left the draft stage.
@@ -238,6 +239,7 @@ impl Query<Template> for CredentialConfigurationProjection {
                         data_model: data_model.clone(),
                         r#type: r#type.clone(),
                         status: status.clone(),
+                        schema: schema.clone(),
                         ..Default::default()
                     };
 
