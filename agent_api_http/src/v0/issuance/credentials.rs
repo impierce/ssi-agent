@@ -105,16 +105,7 @@ pub(crate) async fn credentials(
 
     // Look up the template by ID.
     let template: Template = query_handler(&template_id, &library_state.query.template)
-        .await
-        .map_err(|_| {
-            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Template Query Error")
-                .type_url(type_url("issuance#template-query-error"))
-                .message(format!(
-                    "An error occurred while looking up the template with id: `{template_id}`"
-                ))
-                .finish()
-        })?
+        .await?
         .filter(|t| t.status != TemplateStatus::Deleted)
         .ok_or_else(|| {
             ApiError::builder(StatusCode::NOT_FOUND)

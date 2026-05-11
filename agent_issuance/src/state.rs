@@ -1,10 +1,7 @@
 use agent_secret_manager::subject::Subject;
 use agent_shared::application_state::CommandHandler;
-use agent_shared::config::{
-    config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, CredentialConfiguration,
-};
+use agent_shared::config::{config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported};
 use agent_shared::handlers::{command_handler, query_handler};
-use agent_shared::profile::ApplicationProfile;
 use agent_shared::UrlAppendHelpers;
 use cqrs_es::persist::ViewRepository;
 use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
@@ -104,7 +101,6 @@ pub async fn initialize(state: &IssuanceState) -> anyhow::Result<()> {
     load_server_metadata(state).await?;
     update_cryptographic_binding_methods(state).await?;
     update_signing_algorithms(state).await?;
-    update_credential_configurations(state).await?;
 
     Ok(())
 }
@@ -211,187 +207,6 @@ pub async fn update_signing_algorithms(state: &IssuanceState) -> anyhow::Result<
         } else {
             debug!("Signing algorithms are already up to date.");
         }
-    }
-
-    Ok(())
-}
-
-pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::Result<()> {
-    let provisioned_credential_configurations: Vec<CredentialConfiguration> = config()
-        .credential_configuration_file
-        .as_ref()
-        .map(|file| {
-            debug!("Path to credential configuration file: {}", file.as_path().display());
-
-            let file = std::fs::read(file.as_path()).expect("Failed to read credential configuration file");
-            serde_json::from_slice(&file).expect("Failed to parse credential configurations from file")
-        })
-        .unwrap_or_else(|| match ApplicationProfile::load() {
-            ApplicationProfile::Development => {
-                info!("Using default development credential configurations.");
-                serde_json::from_value::<Vec<CredentialConfiguration>>(serde_json::json!([
-                  {
-                    "credential_configuration_id": "001",
-                    "format": "jwt_vc_json",
-                    "type": ["VerifiableCredential"],
-                    "credential_metadata": {
-                        "display": [
-                            {
-                                "name": "Verifiable Credential",
-                                "locale": "en",
-                                "logo": {
-                                "uri": "https://www.impierce.com/external/impierce-logo.png",
-                                    "alt_text": "Impierce Logo"
-                                }
-                            }
-                        ],
-                        "claims": [
-                            {
-                                "path": ["credentialSubject", "first_name"],
-                                "display": [{
-                                    "name": "First Name",
-                                    "locale": "en"
-                                }],
-                            },
-                            {
-                                "path": ["credentialSubject", "last_name"],
-                                "display": [{
-                                    "name": "Last Name",
-                                    "locale": "en"
-                                }],
-                            },
-                            {
-                                "path": ["credentialSubject", "dob"],
-                                "display": [{
-                                    "name": "Date of Birth",
-                                    "locale": "en"
-                                }],
-                            }
-                        ]
-                    }
-                  },
-                  {
-                    "credential_configuration_id": "SD-JWT VC",
-                    "format": "dc+sd-jwt",
-                    "display": [
-                        {
-                            "name": "SD-JWT VC Credential",
-                            "locale": "en",
-                            "logo": {
-                            "uri": "https://www.impierce.com/external/impierce-logo.png",
-                                "alt_text": "Impierce Logo"
-                            }
-                        }
-                    ],
-                    "claims": [
-                        {
-                            "path": ["first_name"],
-                            "display": [{
-                                "name": "First Name",
-                                "locale": "en"
-                            }],
-                        },
-                        {
-                            "path": ["last_name"],
-                            "display": [{
-                                "name": "Last Name",
-                                "locale": "en"
-                            }],
-                        },
-                        {
-                            "path": ["dob"],
-                            "display": [{
-                                "name": "Date of Birth",
-                                "locale": "en"
-                            }],
-                        }
-                    ]
-                  },
-                  {
-                    "credential_configuration_id": "VCDM 2.0 SD-JWT",
-                    "format": "vc+sd-jwt",
-                    "type": ["VerifiableCredential"],
-                    "display": [
-                        {
-                            "name": "VCDM 2.0 SD-JWT Credential",
-                            "locale": "en",
-                            "logo": {
-                            "uri": "https://www.impierce.com/external/impierce-logo.png",
-                                "alt_text": "Impierce Logo"
-                            }
-                        }
-                    ],
-                    "claims": [
-                        {
-                            "path": ["credentialSubject", "first_name"],
-                            "display": [{
-                                "name": "First Name",
-                                "locale": "en"
-                            }],
-                        },
-                        {
-                            "path": ["credentialSubject", "last_name"],
-                            "display": [{
-                                "name": "Last Name",
-                                "locale": "en"
-                            }],
-                        },
-                        {
-                            "path": ["credentialSubject", "dob"],
-                            "display": [{
-                                "name": "Date of Birth",
-                                "locale": "en"
-                            }],
-                        }
-                    ]
-                  }
-                ]))
-                .expect("Failed to parse default development credential configurations")
-            }
-            ApplicationProfile::Production => {
-                info!("No credential configurations found");
-                vec![]
-            }
-        });
-
-    let previous_provisioned_credential_configuration_ids = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
-        .await?
-        .map(|server_config_view| {
-            server_config_view
-                .credential_configurations
-                .into_iter()
-                .filter_map(
-                    |(credential_configuration_id, (provisioned, _credential_configuration, _authorization))| {
-                        (provisioned
-                            && !provisioned_credential_configurations.iter().any(
-                                |provisioned_credential_configuration| {
-                                    *provisioned_credential_configuration.credential_configuration_id
-                                        == credential_configuration_id
-                                },
-                            ))
-                        .then_some(credential_configuration_id)
-                    },
-                )
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-
-    for credential_configuration_id in previous_provisioned_credential_configuration_ids {
-        let command = ServerConfigCommand::RemoveCredentialConfiguration {
-            credential_configuration_id,
-            provisioned: true,
-        };
-
-        command_handler(SERVER_CONFIG_ID, &state.command.server_config, command).await?;
-    }
-
-    for provisioned_credential_configuration in provisioned_credential_configurations {
-        let command = ServerConfigCommand::UpdateCredentialConfiguration {
-            credential_configuration: provisioned_credential_configuration,
-            provisioned: true,
-        };
-
-        command_handler(SERVER_CONFIG_ID, &state.command.server_config, command).await?;
     }
 
     Ok(())
