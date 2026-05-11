@@ -747,49 +747,6 @@ fn ensure_schema_required_keys(schema: &mut serde_json::Value) {
     }
 }
 
-/// Merges OpenBadges 3.0 default required properties into a user-provided schema.
-/// Ensures that the standard-mandated fields are always present and required.
-///
-/// # Panics
-/// Panics if `schema` is not a JSON object. Callers must ensure the schema is an object
-/// (or default to `{"type": "object"}`) before calling this function.
-#[cfg(test)]
-fn merge_open_badges_defaults(schema: &mut serde_json::Value) {
-    let default_props = open_badges_default_schema_properties();
-    let default_required = open_badges_default_required_keys();
-
-    // Ensure schema has "type": "object"
-    let schema_obj = schema
-        .as_object_mut()
-        .expect("merge_open_badges_defaults: schema must be a JSON object");
-    schema_obj.entry("type").or_insert(serde_json::json!("object"));
-
-    // Merge default properties into schema.properties
-    let properties = schema_obj.entry("properties").or_insert(serde_json::json!({}));
-
-    if let (Some(props_obj), Some(default_obj)) = (properties.as_object_mut(), default_props.as_object()) {
-        for (key, value) in default_obj {
-            props_obj.entry(key.clone()).or_insert(value.clone());
-        }
-    }
-
-    // Merge default required keys into schema.required
-    let required = schema
-        .as_object_mut()
-        .expect("merge_open_badges_defaults: schema must be a JSON object")
-        .entry("required")
-        .or_insert(serde_json::json!([]));
-
-    if let Some(required_arr) = required.as_array_mut() {
-        for key in &default_required {
-            let key_val = serde_json::Value::String(key.clone());
-            if !required_arr.contains(&key_val) {
-                required_arr.push(key_val);
-            }
-        }
-    }
-}
-
 /// Maps a flat credential input (conforming to an OpenBadges 3.0 template schema)
 /// to the nested OBv3 credential structure expected by the issuance pipeline.
 ///
@@ -1970,17 +1927,59 @@ pub mod document_tests {
     }
 
     #[test]
-    fn test_merge_open_badges_defaults_into_empty_schema() {
-        let mut schema = serde_json::json!({});
-        merge_open_badges_defaults(&mut schema);
+    fn test_validate_open_badges_required_properties_accepts_valid_schema() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "achievement.name": { "type": "string" },
+                "achievement.description": { "type": "string" },
+                "achievement.criteria.narrative": { "type": "string" }
+            }
+        });
+        assert!(validate_open_badges_required_properties(&schema).is_ok());
+    }
 
-        let props = schema.get("properties").unwrap().as_object().unwrap();
-        assert!(props.contains_key("achievement.name"));
-        assert!(props.contains_key("achievement.criteria.narrative"));
+    #[test]
+    fn test_validate_open_badges_required_properties_rejects_missing_key() {
+        // achievement.description is absent
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "achievement.name": { "type": "string" },
+                "achievement.criteria.narrative": { "type": "string" }
+            }
+        });
+        let err = validate_open_badges_required_properties(&schema).unwrap_err();
+        assert!(err.to_string().contains("achievement.description"));
+    }
 
-        let required = schema.get("required").unwrap().as_array().unwrap();
-        assert!(required.contains(&serde_json::json!("achievement.name")));
-        assert!(required.contains(&serde_json::json!("achievement.criteria.narrative")));
+    #[test]
+    fn test_validate_open_badges_required_properties_rejects_wrong_type() {
+        // achievement.name has type "integer" instead of "string"
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "achievement.name": { "type": "integer" },
+                "achievement.description": { "type": "string" },
+                "achievement.criteria.narrative": { "type": "string" }
+            }
+        });
+        let err = validate_open_badges_required_properties(&schema).unwrap_err();
+        assert!(err.to_string().contains("achievement.name"));
+    }
+
+    #[test]
+    fn test_validate_open_badges_required_properties_accepts_const_value() {
+        // A "const" value is a valid substitute for type "string"
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "achievement.name": { "const": "Fixed Name" },
+                "achievement.description": { "type": "string" },
+                "achievement.criteria.narrative": { "type": "string" }
+            }
+        });
+        assert!(validate_open_badges_required_properties(&schema).is_ok());
     }
 
     #[rstest]
