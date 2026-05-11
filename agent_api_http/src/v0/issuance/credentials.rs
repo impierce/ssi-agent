@@ -120,13 +120,9 @@ pub(crate) async fn credentials(
     // and cannot be validated against a template schema.
     if !is_signed {
         if let Some(schema) = template.schema.as_ref() {
-            // For OpenBadges 3.0 templates, the schema uses flat dot-notation keys (e.g. "achievement.name").
+            // Template schemas describe the shape of the credential subject data.
             // The API consumer sends data wrapped in "credentialSubject", so we unwrap it before validation.
-            let data_to_validate = if template.data_model == DataModel::OpenBadges3_0 {
-                credential.get("credentialSubject").unwrap_or(&credential)
-            } else {
-                &credential
-            };
+            let data_to_validate = credential.get("credentialSubject").unwrap_or(&credential);
             validate_credential_against_schema(data_to_validate, schema).map_err(|e| *e)?;
         }
     }
@@ -437,16 +433,10 @@ pub mod tests {
             schema: Box::new(Some(json!({
                 "type": "object",
                 "properties": {
-                    "credentialSubject": {
-                        "type": "object",
-                        "properties": {
-                            "first_name": { "type": "string" },
-                            "last_name": { "type": "string" }
-                        },
-                        "required": ["first_name", "last_name"]
-                    }
+                    "first_name": { "type": "string" },
+                    "last_name": { "type": "string" }
                 },
-                "required": ["credentialSubject"]
+                "required": ["first_name", "last_name"]
             }))),
             schema_properties_attributes: None,
         };
