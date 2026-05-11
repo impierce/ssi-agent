@@ -16,8 +16,8 @@ impl IntoApiErrorExt for TemplateError {
                 .source(self)
                 .finish(),
             TemplateError::NonRemovablePropertyViolation(_) => ApiError::builder(StatusCode::CONFLICT)
-                .title("Immutable Property Violation")
-                .type_url(type_url("templates#immutable-property-violation"))
+                .title("Non-removable Property Violation")
+                .type_url(type_url("templates#non-removable-property-violation"))
                 .source(self)
                 .finish(),
             TemplateError::DisallowedOpenBadgesProperties(_) => ApiError::builder(StatusCode::BAD_REQUEST)
