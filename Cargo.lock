@@ -247,6 +247,7 @@ dependencies = [
  "agent_authorization",
  "agent_holder",
  "agent_issuance",
+ "agent_library",
  "agent_secret_manager",
  "agent_shared",
  "agent_store",

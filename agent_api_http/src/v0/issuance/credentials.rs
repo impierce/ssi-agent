@@ -363,9 +363,9 @@ pub mod tests {
         server_config::command::ServerConfigCommand, services::IssuanceServices, state::initialize,
         state::SERVER_CONFIG_ID,
     };
-    use agent_library::template::aggregate::Status;
+    use agent_library::template::aggregate::{Logo, Status};
     use agent_library::template::command::TemplateCommand;
-    use agent_library::template::event::Visibility;
+    use agent_library::template::event::{Display, Visibility};
     use agent_secret_manager::service::Service;
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::{CredentialConfiguration, TESTINDEX};
@@ -419,7 +419,13 @@ pub mod tests {
             template_id: template_id.clone(),
             source_template_id: None,
             title: "Test Template".to_string(),
-            display: Box::new(None),
+            display: Box::new(Some(Display {
+                name: "Verifiable Credential".to_string(),
+                logo: Some(Logo {
+                    uri: "https://www.impierce.com/external/impierce-logo.png".to_string(),
+                    alt_text: Some("Impierce Logo".to_string()),
+                }),
+            })),
             data_model: agent_library::template::aggregate::DataModel::W3CVcDataModelV1_1,
             creator: None,
             holder_type: agent_library::template::aggregate::HolderType::Individual,
@@ -455,7 +461,16 @@ pub mod tests {
             "credential_configuration_id": template_id,
             "format": "jwt_vc_json",
             "type": ["VerifiableCredential"],
-            "display": [{ "name": "Verifiable Credential", "locale": "en" }],
+            "display": [
+                {
+                    "name": "Verifiable Credential",
+                    "locale": "en",
+                    "logo": {
+                        "uri": "https://www.impierce.com/external/impierce-logo.png",
+                        "alt_text": "Impierce Logo"
+                    }
+                }
+            ],
             "authorization": { "pre_authorized": pre_authorized }
         }))
         .unwrap();

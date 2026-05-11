@@ -35,7 +35,7 @@ mod tests {
     use super::*;
     use crate::{
         tests::CREDENTIAL_ISSUER_METADATA,
-        v0::issuance::{self},
+        v0::issuance::{self, credentials::tests::create_test_template},
     };
     use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_secret_manager::service::Service;
@@ -79,6 +79,8 @@ mod tests {
         initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+
+        create_test_template(&library_state, &issuance_state).await;
 
         let mut app = issuance::router((issuance_state.clone(), library_state));
 
