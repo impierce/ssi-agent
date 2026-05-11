@@ -148,7 +148,9 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
         });
 
     let claims = if format == "vc+sd-jwt" {
-        build_claims_from_schema(template)
+        build_claims_from_schema(template, Some("credentialSubject."))
+    } else if format == "dc+sd-jwt" {
+        build_claims_from_schema(template, None)
     } else {
         None
     };
@@ -168,7 +170,7 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
 /// Each property key (which may be dot-separated, e.g. "achievement.name") is converted
 /// into a `ClaimPathPointer` (e.g. `["achievement", "name"]`).
 /// A claim is marked as mandatory when it is NOT selectively disclosable.
-fn build_claims_from_schema(template: &Template) -> Option<Vec<ClaimDescription>> {
+fn build_claims_from_schema(template: &Template, prefix: Option<&str>) -> Option<Vec<ClaimDescription>> {
     let schema = template.schema.as_ref().as_ref()?;
     let properties = schema.get("properties")?.as_object()?;
 
@@ -181,8 +183,10 @@ fn build_claims_from_schema(template: &Template) -> Option<Vec<ClaimDescription>
     let claims: Vec<ClaimDescription> = properties
         .keys()
         .filter_map(|key| {
-            let path_elements: Vec<ClaimPathElement> = key
-                .split('.')
+            let path_elements: Vec<ClaimPathElement> = prefix
+                .iter()
+                .flat_map(|p| p.split('.').filter(|s| !s.is_empty()))
+                .chain(key.split('.').filter(|s| !s.is_empty()))
                 .map(|segment| ClaimPathElement::String(segment.to_string()))
                 .collect();
 
@@ -394,14 +398,26 @@ mod tests {
         // Find claim for "name" - selectively disclosable, so mandatory = false
         let name_claim = claims
             .iter()
-            .find(|c| c.path.as_ref() == &[ClaimPathElement::String("name".to_string())])
+            .find(|c| {
+                c.path.as_ref()
+                    == &[
+                        ClaimPathElement::String("credentialSubject".to_string()),
+                        ClaimPathElement::String("name".to_string()),
+                    ]
+            })
             .expect("name claim should exist");
         assert!(!name_claim.mandatory);
 
         // Find claim for "age" - not selectively disclosable, so mandatory = true
         let age_claim = claims
             .iter()
-            .find(|c| c.path.as_ref() == &[ClaimPathElement::String("age".to_string())])
+            .find(|c| {
+                c.path.as_ref()
+                    == &[
+                        ClaimPathElement::String("credentialSubject".to_string()),
+                        ClaimPathElement::String("age".to_string()),
+                    ]
+            })
             .expect("age claim should exist");
         assert!(age_claim.mandatory);
     }
@@ -429,6 +445,7 @@ mod tests {
         assert_eq!(
             claims[0].path.as_ref(),
             &[
+                ClaimPathElement::String("credentialSubject".to_string()),
                 ClaimPathElement::String("achievement".to_string()),
                 ClaimPathElement::String("name".to_string()),
             ]
@@ -489,6 +506,34 @@ mod tests {
         };
         let config = credential_configuration_from_template(&template);
         assert_eq!(config.type_, vec!["VerifiableCredential".to_string()]);
+    }
+
+    #[test]
+    fn test_vc_sd_jwt_claims_are_prefixed_with_credential_subject() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        let template = Template {
+            template_id: "t_prefix".to_string(),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            schema: Box::new(Some(schema)),
+            ..Default::default()
+        };
+
+        let config = credential_configuration_from_template(&template);
+        let claims = config.credential_metadata.claims.expect("claims should be present");
+        assert_eq!(claims.len(), 1);
+        assert_eq!(
+            claims[0].path.as_ref(),
+            &[
+                ClaimPathElement::String("credentialSubject".to_string()),
+                ClaimPathElement::String("name".to_string()),
+            ]
+        );
     }
 
     #[test]
