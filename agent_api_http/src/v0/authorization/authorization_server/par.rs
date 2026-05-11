@@ -6,21 +6,109 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use oid4vci::authorization_request::AuthorizationRequest;
+use oid4vci::{
+    authorization_request::AuthorizationRequest, InteractionType, InteractiveAuthorizationRequest,
+    InteractiveAuthorizationResponse, InteractiveAuthorizationStatus,
+};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum AuthorizationRequestDto {
+    InteractiveAuthorizationRequest(InteractiveAuthorizationRequest),
+    FollowUpInteractiveAuthorizationRequest {
+        auth_session: String,
+        openid4vp_response: Option<serde_json::Value>,
+        code_verifier: Option<String>,
+    },
+    PushedAuthorizationRequest(AuthorizationRequest),
+}
 
 #[axum_macros::debug_handler]
 pub(crate) async fn par(
     State(state): State<Arc<AuthorizationState>>,
-    StringifiedForm(pushed_authorization_request): StringifiedForm<AuthorizationRequest>,
+    StringifiedForm(authorization_request): StringifiedForm<AuthorizationRequestDto>,
 ) -> Result<Response, PublicError> {
-    let pushed_authorization_response =
-        PushedAuthorizationService::handle_pushed_authorization_request(&state, pushed_authorization_request)
-            .await
-            // TODO: implement proper error handling
-            .map_err(|_err| PublicError::InternalServerError)?;
+    match authorization_request {
+        AuthorizationRequestDto::InteractiveAuthorizationRequest(interactive_authorization_request) => Ok((
+            StatusCode::OK,
+            Json(InteractiveAuthorizationResponse {
+                status: InteractiveAuthorizationStatus::RequireInteraction,
+                code: None,
+                interaction_type: Some(InteractionType::OpenId4VpPresentation),
+                auth_session: Some("test_auth_session".to_string()),
+                openid4vp_request: Some(serde_json::json!({
+                  "response_type": "vp_token",
+                  "response_mode": "iae_post",
+                  "dcql_query": {
+                    "credentials": [
+                      {
+                        "id": "eduID",
+                        "format": "dc+sd-jwt",
+                        "meta": {
+                          "vct_values": [ "https://issuer.pilots.eduid.nl/vct/eduid" ]
+                        },
+                        "claims": [
+                            {"path": ["schac_home_organization"]},
+                            {"path": ["name"]},
+                            {"path": ["given_name"]},
+                            {"path": ["family_name"]},
+                            {"path": ["email"]},
+                            {"path": ["eduperson_scoped_affiliation"]},
+                            {"path": ["eduperson_assurance"]},
+                            {"path": ["is_student"]},
+                            {"path": ["is_faculty"]},
+                            {"path": ["is_member"]},
+                            {"path": ["is_staff"]},
+                            {"path": ["is_alum"]},
+                            {"path": ["is_affiliate"]},
+                            {"path": ["is_employee"]},
+                            {"path": ["is_library-walk-in"]}
+                        ]
+                      }
+                    ]
+                  },
+                  "nonce": "test_nonce"
+                })),
+                request_uri: None,
+                expires_in: None,
+            }),
+        )
+            .into_response()),
+        AuthorizationRequestDto::FollowUpInteractiveAuthorizationRequest {
+            auth_session,
+            openid4vp_response,
+            code_verifier,
+        } => {
+            if auth_session != "test_auth_session" {
+                return Err(PublicError::NotFoundError);
+            }
 
-    Ok((StatusCode::CREATED, Json(pushed_authorization_response)).into_response())
+            Ok((
+                StatusCode::OK,
+                Json(InteractiveAuthorizationResponse {
+                    status: InteractiveAuthorizationStatus::Ok,
+                    code: Some("test_authorization_code".to_string()),
+                    interaction_type: None,
+                    auth_session: None,
+                    openid4vp_request: None,
+                    request_uri: None,
+                    expires_in: None,
+                }),
+            )
+                .into_response())
+        }
+        AuthorizationRequestDto::PushedAuthorizationRequest(pushed_authorization_request) => {
+            let authorization_response =
+                PushedAuthorizationService::handle_pushed_authorization_request(&state, pushed_authorization_request)
+                    .await
+                    // TODO: implement proper error handling
+                    .map_err(|_err| PublicError::InternalServerError)?;
+
+            Ok((StatusCode::CREATED, Json(authorization_response)).into_response())
+        }
+    }
 }
 
 #[cfg(test)]

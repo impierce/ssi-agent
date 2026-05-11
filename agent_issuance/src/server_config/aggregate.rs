@@ -111,6 +111,8 @@ impl Aggregate for ServerConfig {
                 authorization_server_metadata.token_endpoint = Some(url.append_path_segment("auth/token"));
                 authorization_server_metadata.pushed_authorization_request_endpoint =
                     Some(url.append_path_segment("auth/par"));
+                authorization_server_metadata.interactive_authorization_endpoint =
+                    Some(url.append_path_segment("auth/par"));
 
                 let mut credential_issuer_metadata = self.credential_issuer_metadata.clone();
                 credential_issuer_metadata.credential_issuer = url.clone();

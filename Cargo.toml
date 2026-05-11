@@ -33,11 +33,11 @@ rust-version = "1.76.0"
 pedantic = "warn"
 
 [workspace.dependencies]
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "e860178" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "e860178" }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "e860178" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "e860178" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "e860178" }
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "b865624" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "b865624" }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "b865624" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "b865624" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "b865624" }
 
 shared-kernel = { path = "shared-kernel" }
 
@@ -110,3 +110,10 @@ wiremock = "0.6"
 [patch.crates-io]
 # We need this patch because it makes the `Hasher` trait `Send` and `Sync`. See: https://github.com/iotaledger/sd-jwt-payload/compare/main...impierce:sd-jwt-payload:fix/hasher-send-sync
 sd-jwt = { git = "https://github.com/impierce/sd-jwt-payload", rev = "f28789a", package = "sd-jwt-payload" }
+
+# [patch.'https://github.com/impierce/openid4vc']
+# siopv2 = { path = "../openid4vc/siopv2" }
+# oid4vci = { path = "../openid4vc/oid4vci" }
+# oid4vc-core = { path = "../openid4vc/oid4vc-core" }
+# oid4vc-manager = { path = "../openid4vc/oid4vc-manager" }
+# oid4vp = { path = "../openid4vc/oid4vp" }
