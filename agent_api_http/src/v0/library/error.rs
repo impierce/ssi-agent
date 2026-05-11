@@ -12,32 +12,32 @@ impl IntoApiErrorExt for TemplateError {
                 .finish(),
             TemplateError::InvalidSchemaPropertiesAttributes(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Schema Properties Attributes")
-                .type_url(type_url("templates#invalid-schema-properties-attributes"))
+                .type_url(type_url("library#invalid-schema-properties-attributes"))
                 .source(self)
                 .finish(),
             TemplateError::NonRemovablePropertyViolation(_) => ApiError::builder(StatusCode::CONFLICT)
                 .title("Non-removable Property Violation")
-                .type_url(type_url("templates#non-removable-property-violation"))
+                .type_url(type_url("library#non-removable-property-violation"))
                 .source(self)
                 .finish(),
             TemplateError::DisallowedOpenBadgesProperties(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Disallowed OpenBadges Schema Properties")
-                .type_url(type_url("templates#disallowed-open-badges-properties"))
+                .type_url(type_url("library#disallowed-open-badges-properties"))
                 .source(self)
                 .finish(),
             TemplateError::MissingRequiredOpenBadgesProperties(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Missing Required OpenBadges Schema Properties")
-                .type_url(type_url("templates#missing-required-open-badges-properties"))
+                .type_url(type_url("library#missing-required-open-badges-properties"))
                 .source(self)
                 .finish(),
             TemplateError::InvalidRequiredPropertyType(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Required Property Type")
-                .type_url(type_url("templates#invalid-required-property-type"))
+                .type_url(type_url("library#invalid-required-property-type"))
                 .source(self)
                 .finish(),
             TemplateError::MissingTitle => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Missing Title")
-                .type_url(type_url("templates#missing-title"))
+                .type_url(type_url("library#missing-title"))
                 .source(self)
                 .finish(),
         }
