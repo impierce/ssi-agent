@@ -111,9 +111,7 @@ LinkedVerifiablePresentationServiceCreated
 TemplateCreated
 TitleUpdated
 DisplayUpdated
-DataModelUpdated
 CreatorUpdated
-HolderTypeUpdated
 TagsUpdated
 StatusUpdated
 VisibilityUpdated
