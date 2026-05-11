@@ -136,14 +136,12 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
 
     match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
         Some(server_config_view) => {
-            if public_url != server_config_view.authorization_server_metadata.issuer {
-                debug!("The server metadata issuer URL does not match the configured URL.");
+            info!("Update Issuer URL in server metadata");
 
-                let command = ServerConfigCommand::UpdateIssuerUrl {
-                    url: public_url.clone(),
-                };
-                command_handler(&state, SERVER_CONFIG_ID, &state.command.server_config, command).await?;
-            }
+            let command = ServerConfigCommand::UpdateIssuerUrl {
+                url: public_url.clone(),
+            };
+            command_handler(&state, SERVER_CONFIG_ID, &state.command.server_config, command).await?;
 
             if display != server_config_view.credential_issuer_metadata.display {
                 debug!("The server metadata display does not match the configured display.");
