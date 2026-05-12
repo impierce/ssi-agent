@@ -179,7 +179,12 @@ impl axum::response::IntoResponse for PublicError {
                 let status = oid4vc_error.error.status_code();
                 (status, axum::Json(oid4vc_error)).into_response()
             }
-            PublicError::AccessTokenError(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            PublicError::AccessTokenError(_) => (
+                StatusCode::UNAUTHORIZED,
+                [("WWW-Authenticate", "Bearer error=\"invalid_token\"")],
+                Json(serde_json::json!({"error": "invalid_token"})),
+            )
+                .into_response(),
             PublicError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
             PublicError::NotFoundError => StatusCode::NOT_FOUND.into_response(),
         }

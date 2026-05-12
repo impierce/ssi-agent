@@ -40,12 +40,12 @@ pub(crate) async fn credential(
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> Result<Response, PublicError> {
-    let offer_id = AccessTokenValidationService::validate(&state, &access_token)
-        .await
-        .ok()
-        // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
-        .and_then(|claims| claims.issuer_state)
-        .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidProof))?;
+    let claims = AccessTokenValidationService::validate(&state, &access_token).await?;
+    // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
+
+    let offer_id = claims
+        .issuer_state
+        .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidCredentialRequest))?;
 
     NonceValidationService::validate(&state, &credential_request)
         .await
