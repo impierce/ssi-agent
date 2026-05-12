@@ -40,6 +40,11 @@ impl IntoApiErrorExt for TemplateError {
                 .type_url(type_url("library#missing-title"))
                 .source(self)
                 .finish(),
+            TemplateError::InvalidExpiration(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Expiration")
+                .type_url(type_url("library#invalid-expiration"))
+                .source(self)
+                .finish(),
         }
     }
 }

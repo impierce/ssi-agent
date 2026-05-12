@@ -691,6 +691,11 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
           default: null
+        expiration:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Expiration'
+          default: null
         holderType:
           oneOf:
           - $ref: '#/components/schemas/HolderType'
@@ -893,11 +898,12 @@ components:
       - templateId
       - offerId
       - credential
-      - expiresAt
       properties:
         credential: {}
         expiresAt:
-          $ref: '#/components/schemas/CredentialExpiry'
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/CredentialExpiry'
         isSigned:
           type: boolean
         offerId:
@@ -1000,6 +1006,43 @@ components:
           type: string
         recipientEmail:
           type: string
+    Expiration:
+      oneOf:
+      - type: object
+        description: Never expires.
+        required:
+        - type
+        properties:
+          type:
+            type: string
+            enum:
+            - never
+      - type: object
+        description: Relative duration in ISO 8601 format, e.g. `"P3DT4H"` or seconds as `"PT86400S"`.
+        required:
+        - value
+        - type
+        properties:
+          type:
+            type: string
+            enum:
+            - duration
+          value:
+            type: string
+            description: Relative duration in ISO 8601 format, e.g. `"P3DT4H"` or seconds as `"PT86400S"`.
+      - type: object
+        description: Absolute datetime in ISO 8601 format, e.g. `"2026-12-31T23:59:59Z"`.
+        required:
+        - value
+        - type
+        properties:
+          type:
+            type: string
+            enum:
+            - date_time
+          value:
+            type: string
+            description: Absolute datetime in ISO 8601 format, e.g. `"2026-12-31T23:59:59Z"`.
     GetConnectionsEndpointRequest:
       type: object
       properties:

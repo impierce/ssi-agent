@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-pub use super::aggregate::{DataModel, Display, HolderType, PropertyAttribute, Status, Visibility};
+pub use super::aggregate::{DataModel, Display, Expiration, HolderType, PropertyAttribute, Status, Visibility};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -17,6 +17,7 @@ pub enum TemplateCommand {
         tags: Option<Vec<String>>,
         status: Status,
         visibility: Visibility,
+        expiration: Option<Expiration>,
         description: Option<String>,
         r#type: Vec<String>,
         schema: Box<Option<serde_json::Value>>,
@@ -61,6 +62,10 @@ pub enum TemplateCommand {
     UpdateSchemaPropertiesAttributes {
         template_id: String,
         schema_properties_attributes: HashMap<String, PropertyAttribute>,
+    },
+    UpdateExpiration {
+        template_id: String,
+        expiration: Expiration,
     },
     DeleteTemplate {
         template_id: String,

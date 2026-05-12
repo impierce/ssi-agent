@@ -10,6 +10,7 @@ agent_shared = { path = "../agent_shared" }
 async-trait.workspace = true
 chrono.workspace = true
 cqrs-es.workspace = true
+iso8601.workspace = true
 jsonschema.workspace = true
 lazy_static.workspace = true
 serde.workspace = true

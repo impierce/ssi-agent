@@ -3,7 +3,7 @@ use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{
-    DataModel, Display, HolderType, PropertyAttribute, Status, Template, Visibility,
+    DataModel, Display, Expiration, HolderType, PropertyAttribute, Status, Template, Visibility,
 };
 use agent_library::template::command::TemplateCommand;
 use axum::{
@@ -75,6 +75,7 @@ pub struct CreateTemplateRequestBody {
     pub tags: Option<Vec<String>>,
     pub status: Status,
     pub visibility: Visibility,
+    pub expiration: Option<Expiration>,
     pub description: Option<String>,
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
@@ -117,6 +118,7 @@ pub(crate) async fn create_template(
         tags,
         status,
         visibility,
+        expiration,
         description,
         r#type,
         schema,
@@ -136,6 +138,7 @@ pub(crate) async fn create_template(
         tags,
         status,
         visibility,
+        expiration,
         description,
         r#type,
         schema: Box::new(schema),
@@ -209,6 +212,7 @@ pub(crate) async fn duplicate_template(
         tags: original_template.tags,
         status: Status::Draft,
         visibility: original_template.visibility,
+        expiration: Some(original_template.expiration),
         description: original_template.description,
         r#type: original_template.r#type,
         schema: original_template.schema,

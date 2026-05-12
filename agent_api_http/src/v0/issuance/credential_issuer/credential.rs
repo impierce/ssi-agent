@@ -279,7 +279,7 @@ pub mod tests {
                                         offer_id: offer_id.clone(),
                                         credential: json!(CREDENTIAL_JWT),
                                         is_signed: true,
-                                        expires_at: CredentialExpiry::Never,
+                                        expires_at: Some(CredentialExpiry::Never),
                                     }
                                 } else {
                                     // ...or else, submitting the data that will be signed inside `UniCore`.
@@ -294,7 +294,7 @@ pub mod tests {
                                             }
                                         }),
                                         is_signed: false,
-                                        expires_at: CredentialExpiry::Never,
+                                        expires_at: Some(CredentialExpiry::Never),
                                     }
                                 };
 

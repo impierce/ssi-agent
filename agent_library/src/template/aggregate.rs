@@ -66,6 +66,18 @@ pub enum Visibility {
     Public,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
+#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+pub enum Expiration {
+    /// Never expires.
+    #[default]
+    Never,
+    /// Relative duration in ISO 8601 format, e.g. `"P3DT4H"` or seconds as `"PT86400S"`.
+    Duration(String),
+    /// Absolute datetime in ISO 8601 format, e.g. `"2026-12-31T23:59:59Z"`.
+    DateTime(String),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PropertyAttribute {
@@ -109,6 +121,7 @@ pub struct Template {
     pub tags: Option<Vec<String>>,
     pub status: Status,
     pub visibility: Visibility,
+    pub expiration: Expiration,
     pub description: Option<String>,
     pub r#type: Vec<String>,
     pub schema: Box<Option<serde_json::Value>>,
@@ -148,6 +161,7 @@ impl Aggregate for Template {
                 tags,
                 status,
                 visibility,
+                expiration,
                 description,
                 r#type,
                 schema,
@@ -157,6 +171,10 @@ impl Aggregate for Template {
                 if title.trim().is_empty() {
                     return Err(TemplateError::MissingTitle);
                 }
+
+                // Validate the expiration value if provided.
+                let expiration = expiration.unwrap_or_default();
+                validate_expiration(&expiration)?;
 
                 // For OpenBadges 3.0 templates, validate that the required properties are present
                 // in the user-supplied schema. They are NOT auto-added.
@@ -230,6 +248,7 @@ impl Aggregate for Template {
                     tags,
                     status,
                     visibility,
+                    expiration,
                     description,
                     r#type,
                     schema,
@@ -431,6 +450,23 @@ impl Aggregate for Template {
                 }])
             }
             DeleteTemplate { template_id } => Ok(vec![TemplateDeleted { template_id }]),
+            UpdateExpiration {
+                template_id,
+                expiration,
+            } => {
+                validate_expiration(&expiration)?;
+
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![ExpirationUpdated {
+                    template_id,
+                    expiration,
+                    modified_at,
+                }])
+            }
         }
     }
 
@@ -452,6 +488,7 @@ impl Aggregate for Template {
                 tags,
                 status,
                 visibility,
+                expiration,
                 description,
                 r#type,
                 schema,
@@ -468,6 +505,7 @@ impl Aggregate for Template {
                 self.tags = tags;
                 self.status = status;
                 self.visibility = visibility;
+                self.expiration = expiration;
                 self.description = description;
                 self.r#type = r#type;
                 self.schema = schema;
@@ -553,6 +591,14 @@ impl Aggregate for Template {
                 self.schema_properties_attributes = Some(schema_properties_attributes);
                 self.modified_at.replace(modified_at);
             }
+            ExpirationUpdated {
+                template_id: _,
+                expiration,
+                modified_at,
+            } => {
+                self.expiration = expiration;
+                self.modified_at.replace(modified_at);
+            }
             TemplateDeleted { template_id } => {
                 *self = Self::default();
                 self.template_id = template_id;
@@ -566,6 +612,18 @@ fn validate_json_schema(schema: &serde_json::Value) -> Result<(), TemplateError>
     jsonschema::validator_for(schema)
         .map(|_| ())
         .map_err(|e| TemplateError::InvalidSchema(e.to_string()))
+}
+
+fn validate_expiration(expiration: &Expiration) -> Result<(), TemplateError> {
+    match expiration {
+        Expiration::Never => Ok(()),
+        Expiration::Duration(s) => iso8601::duration(s)
+            .map(|_| ())
+            .map_err(|_| TemplateError::InvalidExpiration(format!("`{s}` is not a valid ISO 8601 duration"))),
+        Expiration::DateTime(s) => chrono::DateTime::parse_from_rfc3339(s)
+            .map(|_| ())
+            .map_err(|e| TemplateError::InvalidExpiration(format!("`{s}` is not a valid ISO 8601 datetime: {e}"))),
+    }
 }
 
 fn get_schema_property_keys(schema: &serde_json::Value) -> std::collections::HashSet<String> {

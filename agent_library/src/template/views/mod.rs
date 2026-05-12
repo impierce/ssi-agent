@@ -23,6 +23,7 @@ impl View<Template> for Template {
                 tags,
                 status,
                 visibility,
+                expiration,
                 description,
                 r#type,
                 schema,
@@ -39,6 +40,7 @@ impl View<Template> for Template {
                 self.tags = tags.clone();
                 self.status.clone_from(status);
                 self.visibility.clone_from(visibility);
+                self.expiration = expiration.clone();
                 self.description.clone_from(description);
                 self.r#type.clone_from(r#type);
                 self.schema.clone_from(schema);
@@ -124,6 +126,14 @@ impl View<Template> for Template {
             } => {
                 self.schema_properties_attributes
                     .replace(schema_properties_attributes.clone());
+                self.modified_at.replace(modified_at.clone());
+            }
+            ExpirationUpdated {
+                template_id: _,
+                expiration,
+                modified_at,
+            } => {
+                self.expiration = expiration.clone();
                 self.modified_at.replace(modified_at.clone());
             }
             TemplateDeleted { template_id: _ } => {

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-pub use super::aggregate::{DataModel, Display, HolderType, PropertyAttribute, Status, Visibility};
+pub use super::aggregate::{DataModel, Display, Expiration, HolderType, PropertyAttribute, Status, Visibility};
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 use strum::Display;
@@ -20,6 +20,7 @@ pub enum TemplateEvent {
         tags: Option<Vec<String>>,
         status: Status,
         visibility: Visibility,
+        expiration: Expiration,
         description: Option<String>,
         r#type: Vec<String>,
         schema: Box<Option<serde_json::Value>>,
@@ -73,6 +74,11 @@ pub enum TemplateEvent {
     SchemaPropertiesAttributesUpdated {
         template_id: String,
         schema_properties_attributes: HashMap<String, PropertyAttribute>,
+        modified_at: String,
+    },
+    ExpirationUpdated {
+        template_id: String,
+        expiration: Expiration,
         modified_at: String,
     },
     TemplateDeleted {

@@ -13,7 +13,7 @@ use agent_issuance::{
 };
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{
-    map_open_badges_input_to_credential, DataModel, Status as TemplateStatus, Template,
+    map_open_badges_input_to_credential, DataModel, Expiration, Status as TemplateStatus, Template,
 };
 use axum::Extension;
 use axum::{
@@ -60,7 +60,8 @@ pub struct CredentialsEndpointRequest {
     pub credential: Value,
     #[serde(default)]
     pub is_signed: bool,
-    pub expires_at: CredentialExpiry,
+    #[serde(default)]
+    pub expires_at: Option<CredentialExpiry>,
 }
 
 /// Create a credential
@@ -126,6 +127,17 @@ pub(crate) async fn credentials(
             validate_credential_against_schema(data_to_validate, schema).map_err(|e| *e)?;
         }
     }
+
+    // Resolve the effective expiration: use the explicitly provided value, or fall back to the template's expiration.
+    // When an explicit value is provided it must not exceed the template's expiration deadline.
+    let expires_at = match expires_at {
+        Some(explicit) => {
+            let template_deadline = expiration_to_credential_expiry(&template.expiration)?;
+            validate_expiry_within_template_deadline(&explicit, &template_deadline)?;
+            explicit
+        }
+        None => expiration_to_credential_expiry(&template.expiration)?,
+    };
 
     // For OpenBadges 3.0 templates, map the flat input (conforming to the template schema)
     // to the nested OBv3 credential structure expected by the issuance pipeline.
@@ -309,8 +321,93 @@ pub async fn patch_credential(
     }
 }
 
-/// Validates the credential data against the template's JSON Schema.
+/// Converts a template's `Expiration` value into a `CredentialExpiry` for the issuance pipeline.
 ///
+/// - `Never` → `CredentialExpiry::Never`
+/// - `DateTime(s)` → `CredentialExpiry::Fixed(parsed datetime)`
+/// - `Duration(s)` → `CredentialExpiry::Fixed(Utc::now() + duration)`
+fn expiration_to_credential_expiry(expiration: &Expiration) -> Result<CredentialExpiry, ApiError> {
+    match expiration {
+        Expiration::Never => Ok(CredentialExpiry::Never),
+        Expiration::DateTime(s) => chrono::DateTime::parse_from_rfc3339(s)
+            .map(|dt| CredentialExpiry::Fixed(dt.with_timezone(&chrono::Utc)))
+            .map_err(|e| {
+                ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                    .title("Invalid Template Expiration")
+                    .message(format!("Template expiration datetime `{s}` could not be parsed: {e}"))
+                    .finish()
+            }),
+        Expiration::Duration(s) => iso8601::duration(s)
+            .map_err(|_| {
+                ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                    .title("Invalid Template Expiration")
+                    .message(format!("Template expiration duration `{s}` could not be parsed"))
+                    .finish()
+            })
+            .map(|d| {
+                let delta = match d {
+                    iso8601::Duration::YMDHMS {
+                        year,
+                        month,
+                        day,
+                        hour,
+                        minute,
+                        second,
+                        millisecond,
+                    } => {
+                        chrono::Duration::days(year as i64 * 365 + month as i64 * 30 + day as i64)
+                            + chrono::Duration::hours(hour as i64)
+                            + chrono::Duration::minutes(minute as i64)
+                            + chrono::Duration::seconds(second as i64)
+                            + chrono::Duration::milliseconds(millisecond as i64)
+                    }
+                    iso8601::Duration::Weeks(w) => chrono::Duration::weeks(w as i64),
+                };
+                CredentialExpiry::Fixed(chrono::Utc::now() + delta)
+            }),
+    }
+}
+
+/// Validates that an explicitly provided `expires_at` does not exceed the template's deadline.
+///
+/// - If the template deadline is `Never`, any explicit value is accepted.
+/// - If the explicit value is `Never` but the template has a fixed deadline, that is rejected.
+/// - Otherwise, the explicit datetime must be ≤ the template deadline.
+fn validate_expiry_within_template_deadline(
+    explicit: &CredentialExpiry,
+    deadline: &CredentialExpiry,
+) -> Result<(), ApiError> {
+    match (explicit, deadline) {
+        // Template has no deadline — anything goes.
+        (_, CredentialExpiry::Never) => Ok(()),
+        // Explicit is "never" but template enforces a deadline.
+        (CredentialExpiry::Never, CredentialExpiry::Fixed(limit)) => Err(ApiError::builder(StatusCode::BAD_REQUEST)
+            .title("Expiration Exceeds Template Limit")
+            .type_url(type_url("issuance#expiration-exceeds-template-limit"))
+            .message(format!(
+                "The template requires an expiration date not after {}",
+                limit.to_rfc3339()
+            ))
+            .finish()),
+        // Both are fixed — compare them.
+        (CredentialExpiry::Fixed(requested), CredentialExpiry::Fixed(limit)) => {
+            if requested > limit {
+                Err(ApiError::builder(StatusCode::BAD_REQUEST)
+                    .title("Expiration Exceeds Template Limit")
+                    .type_url(type_url("issuance#expiration-exceeds-template-limit"))
+                    .message(format!(
+                        "The template requires an expiration date not after {}",
+                        limit.to_rfc3339()
+                    ))
+                    .finish())
+            } else {
+                Ok(())
+            }
+        }
+    }
+}
+
+/// Validates the credential data against the template's JSON Schema.///
 /// Returns a detailed error response if validation fails, listing all schema violations.
 fn validate_credential_against_schema(credential: &Value, schema: &Value) -> Result<(), Box<ApiError>> {
     let validator = jsonschema::validator_for(schema).map_err(|e| {
@@ -428,6 +525,7 @@ pub mod tests {
             tags: None,
             status: Status::Published,
             visibility: Visibility::Private,
+            expiration: None,
             description: None,
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(Some(json!({

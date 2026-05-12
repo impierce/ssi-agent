@@ -16,4 +16,6 @@ pub enum TemplateError {
     InvalidRequiredPropertyType(String),
     #[error("A title is required when creating or updating a template")]
     MissingTitle,
+    #[error("Invalid expiration value: {0}")]
+    InvalidExpiration(String),
 }
