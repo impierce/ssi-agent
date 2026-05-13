@@ -278,9 +278,13 @@ impl AuthorizationHeader {
 
 impl ToActor for AuthorizationHeader {
     fn to_actor(&self) -> Option<Actor> {
-        let _ = &self.0;
-
-        None
+        self.0
+            .as_deref()
+            .and_then(|authorization_header| authorization_header.strip_prefix("Bearer "))
+            .filter(|token| !token.is_empty())
+            .map(|token| Actor {
+                subject: token.to_string(),
+            })
     }
 }
 
@@ -294,4 +298,82 @@ where
     request.extensions_mut().insert(actor);
 
     next.run(request).await
+}
+
+#[cfg(test)]
+mod actor_extraction_tests {
+    use super::*;
+    use axum::{body::Body, extract::Extension, routing::get};
+    use http::Request;
+    use shared_kernel::authorization::NoActorExtractor;
+    use tower::ServiceExt;
+
+    #[derive(Clone)]
+    struct MappingActorExtractor;
+
+    impl ActorExtractor for MappingActorExtractor {
+        fn extract_actor(&self, input: &dyn ToActor) -> Option<Actor> {
+            input.to_actor().and_then(|actor| {
+                (actor.subject == "valid-token").then(|| Actor {
+                    subject: "user@example.test".to_string(),
+                })
+            })
+        }
+    }
+
+    async fn actor_subject(Extension(actor): Extension<Option<Actor>>) -> String {
+        actor
+            .map(|actor| actor.subject)
+            .unwrap_or_else(|| "anonymous".to_string())
+    }
+
+    #[tokio::test]
+    async fn actor_extraction_middleware_stores_mapped_actor_in_request_extensions() {
+        let app = Router::new()
+            .route("/", get(actor_subject))
+            .layer(middleware::from_fn_with_state(
+                Arc::new(MappingActorExtractor),
+                extract_actor::<MappingActorExtractor>,
+            ));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header(AUTHORIZATION, "Bearer valid-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        assert_eq!(body.as_ref(), b"user@example.test");
+    }
+
+    #[tokio::test]
+    async fn no_actor_extractor_stores_anonymous_actor_extension() {
+        let app = Router::new()
+            .route("/", get(actor_subject))
+            .layer(middleware::from_fn_with_state(
+                Arc::new(NoActorExtractor),
+                extract_actor::<NoActorExtractor>,
+            ));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header(AUTHORIZATION, "Bearer valid-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        assert_eq!(body.as_ref(), b"anonymous");
+    }
 }
