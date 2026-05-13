@@ -15,15 +15,15 @@ use agent_shared::config::config;
 use agent_verification::state::VerificationState;
 use axum::{
     body::{Body, Bytes},
-    extract::{MatchedPath, Request},
-    middleware,
-    middleware::Next,
+    extract::{MatchedPath, Request, State},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     Router,
 };
+use http::{header::AUTHORIZATION, HeaderMap};
 use http_body_util::BodyExt as _;
 use hyper::StatusCode;
-use shared_kernel::authorization::ActorExtractor;
+use shared_kernel::authorization::{Actor, ActorExtractor, ToActor};
 use std::{sync::Arc, time::Duration};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
@@ -57,6 +57,8 @@ pub fn app<E>(
 where
     E: ActorExtractor,
 {
+    let actor_extractor = Arc::new(actor_extractor);
+
     let app = Router::new()
         .merge(identity_state.map(v0::identity::router).unwrap_or_default())
         .merge(library_state.map(v0::library::router).unwrap_or_default())
@@ -73,6 +75,7 @@ where
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())
         .merge(verification_state.map(v0::verification::router).unwrap_or_default())
         .merge(public::router())
+        .layer(middleware::from_fn_with_state(actor_extractor, extract_actor::<E>))
         // Trace layers
         .layer(
             ServiceBuilder::new()
@@ -258,6 +261,39 @@ mod tests {
             ..Default::default()
         };
     }
+}
+
+struct AuthorizationHeader(Option<String>);
+
+impl AuthorizationHeader {
+    fn from_headers(headers: &HeaderMap) -> Self {
+        Self(
+            headers
+                .get(AUTHORIZATION)
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_string),
+        )
+    }
+}
+
+impl ToActor for AuthorizationHeader {
+    fn to_actor(&self) -> Option<Actor> {
+        let _ = &self.0;
+
+        None
+    }
+}
+
+async fn extract_actor<E>(State(actor_extractor): State<Arc<E>>, mut request: Request, next: Next) -> Response
+where
+    E: ActorExtractor,
+{
+    let input = AuthorizationHeader::from_headers(request.headers());
+    let actor = actor_extractor.extract_actor(&input);
+
+    request.extensions_mut().insert(actor);
+
+    next.run(request).await
 }
 
 #[cfg(test)]
