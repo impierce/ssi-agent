@@ -3,9 +3,11 @@ use agent_holder::{offer::command::OfferCommand, state::HolderState};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
+    Extension,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
+use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 /// Rejects a credential offer
@@ -23,6 +25,7 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn reject(
     State(state): State<Arc<HolderState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Path(received_offer_id): Path<String>,
 ) -> Result<Response, ApiError> {
     let command = OfferCommand::RejectCredentialOffer {
@@ -32,7 +35,7 @@ pub(crate) async fn reject(
     // Remove the Credential Offer from the state.
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &received_offer_id,
         &state.command.offer,
         command,
@@ -53,7 +56,9 @@ mod tests {
     async fn reject_dispatches_reject_command() {
         let state = Arc::new(holder_state(&InMemory, HolderServices::default().await, Default::default()).await);
 
-        let response = reject(State(state), Path("missing-offer".to_string())).await.unwrap();
+        let response = reject(State(state), None, Path("missing-offer".to_string()))
+            .await
+            .unwrap();
 
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
     }

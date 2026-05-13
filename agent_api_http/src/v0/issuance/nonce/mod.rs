@@ -5,7 +5,9 @@ use axum::{
     extract::State,
     http::{header::CACHE_CONTROL, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
+    Extension,
 };
+use shared_kernel::authorization::Actor;
 
 use axum::Json;
 use http_api_problem::ApiError;
@@ -13,7 +15,10 @@ use serde_json::json;
 use std::sync::Arc;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn nonce(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
+pub(crate) async fn nonce(
+    State(state): State<Arc<IssuanceState>>,
+    actor: Option<Extension<Option<Actor>>>,
+) -> Result<Response, ApiError> {
     let fresh_c_nonce = generate_random_string();
     let command = NonceCommand::GenerateNonce {
         c_nonce: fresh_c_nonce.clone(),
@@ -21,7 +26,7 @@ pub(crate) async fn nonce(State(state): State<Arc<IssuanceState>>) -> Result<Res
 
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &fresh_c_nonce,
         &state.command.nonce,
         command,

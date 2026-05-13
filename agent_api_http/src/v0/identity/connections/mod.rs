@@ -1,3 +1,4 @@
+use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 use crate::handlers::{command_handler, query_handler};
@@ -9,7 +10,7 @@ use agent_identity::{
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Form, Json,
+    Extension, Form, Json,
 };
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
@@ -44,6 +45,7 @@ pub struct AddConnectionEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn post_connection(
     State(state): State<Arc<IdentityState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Json(AddConnectionEndpointRequest { url }): Json<AddConnectionEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let connection_id = uuid::Uuid::new_v4().to_string();
@@ -56,7 +58,7 @@ pub(crate) async fn post_connection(
 
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &connection_id,
         &state.command.connection,
         command,
@@ -106,6 +108,7 @@ pub struct GetConnectionsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connections(
     State(state): State<Arc<IdentityState>>,
+    _actor: Option<Extension<Option<Actor>>>,
     Form(GetConnectionsEndpointRequest { display, url, did }): Form<GetConnectionsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let filtered_connections = query_handler("all_connections", &state.query.all_connections)
@@ -145,6 +148,7 @@ pub(crate) async fn get_connections(
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connection(
     State(state): State<Arc<IdentityState>>,
+    _actor: Option<Extension<Option<Actor>>>,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&id, &state.query.connection)
@@ -175,6 +179,7 @@ pub struct SyncConnectionRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn sync_connection(
     State(state): State<Arc<IdentityState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Json(SyncConnectionRequest { id }): Json<SyncConnectionRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::SyncConnection {
@@ -182,7 +187,7 @@ pub(crate) async fn sync_connection(
     };
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &id,
         &state.command.connection,
         command,
@@ -211,6 +216,7 @@ pub struct AcceptConnectionChangesRequest {
 )]
 pub(crate) async fn accept_connection_changes(
     State(state): State<Arc<IdentityState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Json(AcceptConnectionChangesRequest { id }): Json<AcceptConnectionChangesRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::AcceptConnectionChanges {
@@ -218,7 +224,7 @@ pub(crate) async fn accept_connection_changes(
     };
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &id,
         &state.command.connection,
         command,
@@ -247,6 +253,7 @@ pub struct RemoveConnectionRequest {
 )]
 pub(crate) async fn remove_connection(
     State(state): State<Arc<IdentityState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Json(RemoveConnectionRequest { id }): Json<RemoveConnectionRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::RemoveConnection {
@@ -254,7 +261,7 @@ pub(crate) async fn remove_connection(
     };
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &id,
         &state.command.connection,
         command,
@@ -351,6 +358,7 @@ pub mod tests {
     async fn post_connection_dispatches_add_command() {
         let error = post_connection(
             State(test_state().await),
+            None,
             Json(AddConnectionEndpointRequest {
                 url: "127.0.0.1:9".to_string(),
             }),
@@ -367,6 +375,7 @@ pub mod tests {
 
         let error = sync_connection(
             State(state.clone()),
+            None,
             Json(SyncConnectionRequest {
                 id: "missing-connection".to_string(),
             }),
@@ -377,6 +386,7 @@ pub mod tests {
 
         let error = accept_connection_changes(
             State(state.clone()),
+            None,
             Json(AcceptConnectionChangesRequest {
                 id: "missing-connection".to_string(),
             }),
@@ -387,6 +397,7 @@ pub mod tests {
 
         let error = remove_connection(
             State(state),
+            None,
             Json(RemoveConnectionRequest {
                 id: "missing-connection".to_string(),
             }),

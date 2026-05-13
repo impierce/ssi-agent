@@ -8,14 +8,17 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
+    Extension,
 };
 use http_api_problem::ApiError;
 use oid4vc_core::utils::form_urlencoded::from_form_urlencoded_string;
+use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn redirect(
     State(verification_state): State<Arc<VerificationState>>,
+    actor: Option<Extension<Option<Actor>>>,
     body: String,
 ) -> Result<Response, ApiError> {
     let authorization_response: GenericAuthorizationResponse = from_form_urlencoded_string(&body).map_err(|e| {
@@ -35,7 +38,7 @@ pub(crate) async fn redirect(
     // Verify the authorization response.
     command_handler(
         verification_state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &authorization_request_id,
         &verification_state.command.authorization_request,
         command,

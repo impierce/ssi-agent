@@ -6,12 +6,13 @@ use agent_holder::{
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Json,
+    Extension, Json,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
+use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 /// List all credentials
@@ -45,6 +46,7 @@ pub struct HolderCredentialsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn post_credentials(
     State(state): State<Arc<HolderState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Json(HolderCredentialsEndpointRequest { credential }): Json<HolderCredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let holder_credential_id = uuid::Uuid::new_v4().to_string();
@@ -57,7 +59,7 @@ pub(crate) async fn post_credentials(
 
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &holder_credential_id,
         &state.command.credential,
         command,
@@ -87,6 +89,7 @@ pub(crate) async fn post_credentials(
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<HolderState>>,
+    _actor: Option<Extension<Option<Actor>>>,
     Path(holder_credential_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&holder_credential_id, &state.query.holder_credential)
@@ -109,6 +112,7 @@ mod tests {
 
         let response = post_credentials(
             State(state),
+            None,
             Json(HolderCredentialsEndpointRequest {
                 credential: Jwt::from(JWT_VC_JSON_OBV3_JWT.to_string()),
             }),

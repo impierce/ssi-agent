@@ -3,11 +3,12 @@ use agent_issuance::{offer::aggregate::DeliveryMethod, offer::command::OfferComm
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
-    Json,
+    Extension, Json,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
+use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 use url::Url;
 
@@ -33,6 +34,7 @@ pub struct EmailOfferEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn individual_offer(
     State(state): State<Arc<IssuanceState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Json(EmailOfferEndpointRequest {
         offer_id,
         recipient_email,
@@ -46,7 +48,7 @@ pub(crate) async fn individual_offer(
     // Send the Credential Offer to the recipient's email.
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &offer_id,
         &state.command.offer,
         command,
@@ -78,6 +80,7 @@ pub struct TargetUrlOfferEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn organization_offer(
     State(state): State<Arc<IssuanceState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Json(TargetUrlOfferEndpointRequest { offer_id, target_url }): Json<TargetUrlOfferEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let command = OfferCommand::SendCredentialOffer {
@@ -88,7 +91,7 @@ pub(crate) async fn organization_offer(
     // Send the offer to the organizational url.
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &offer_id,
         &state.command.offer,
         command,
@@ -116,6 +119,7 @@ mod tests {
     async fn individual_offer_dispatches_send_command() {
         let error = individual_offer(
             State(test_state().await),
+            None,
             Json(EmailOfferEndpointRequest {
                 offer_id: crate::tests::OFFER_ID.to_string(),
                 recipient_email: "receiver@example.com".to_string(),
@@ -132,6 +136,7 @@ mod tests {
     async fn organization_offer_dispatches_send_command() {
         let error = organization_offer(
             State(test_state().await),
+            None,
             Json(TargetUrlOfferEndpointRequest {
                 offer_id: crate::tests::OFFER_ID.to_string(),
                 target_url: "https://receiver.example.com/offers".parse().unwrap(),

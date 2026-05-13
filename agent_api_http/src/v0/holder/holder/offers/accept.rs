@@ -11,10 +11,11 @@ use agent_holder::{
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Json,
+    Extension, Json,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
+use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 /// Accept a credential offer
@@ -33,6 +34,7 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn accept(
     State(state): State<Arc<HolderState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Path(received_offer_id): Path<String>,
 ) -> Result<Response, ApiError> {
     // TODO: General note that also applies to other endpoints: currently we are using Application Layer logic in the
@@ -52,7 +54,7 @@ pub(crate) async fn accept(
     // Accept the Credential Offer
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &received_offer_id,
         &state.command.offer,
         command,
@@ -66,7 +68,7 @@ pub(crate) async fn accept(
     // Send the Credential Request
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &received_offer_id,
         &state.command.offer,
         command,
@@ -93,7 +95,7 @@ pub(crate) async fn accept(
         // Add the Credential to the state.
         command_handler(
             state.authorization_checker.clone(),
-            None,
+            actor.clone().and_then(|Extension(actor)| actor),
             &holder_credential_id,
             &state.command.credential,
             command,
@@ -212,7 +214,9 @@ mod tests {
         .await
         .unwrap();
 
-        let response = accept(State(holder_state), Path(received_offer_id)).await.unwrap();
+        let response = accept(State(holder_state), None, Path(received_offer_id))
+            .await
+            .unwrap();
 
         assert_eq!(response.status(), StatusCode::CREATED);
         *set_config() = original;

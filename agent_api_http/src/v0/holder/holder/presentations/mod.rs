@@ -7,11 +7,12 @@ use agent_holder::{
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Json,
+    Extension, Json,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
+use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 #[axum_macros::debug_handler]
@@ -27,6 +28,7 @@ pub(crate) async fn get_presentations(State(state): State<Arc<HolderState>>) -> 
 #[axum_macros::debug_handler]
 pub(crate) async fn presentation(
     State(state): State<Arc<HolderState>>,
+    _actor: Option<Extension<Option<Actor>>>,
     Path(presentation_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&presentation_id, &state.query.presentation)
@@ -44,6 +46,7 @@ pub struct PresentationsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn post_presentations(
     State(state): State<Arc<HolderState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Json(PresentationsEndpointRequest { credential_ids }): Json<PresentationsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let mut credentials = vec![];
@@ -71,7 +74,7 @@ pub(crate) async fn post_presentations(
     // Create the presentation.
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &presentation_id,
         &state.command.presentation,
         command,
@@ -101,6 +104,7 @@ mod tests {
         let state = Arc::new(holder_state(&InMemory, HolderServices::default().await, Default::default()).await);
         let response = post_credentials(
             State(state.clone()),
+            None,
             Json(HolderCredentialsEndpointRequest {
                 credential: Jwt::from(JWT_VC_JSON_OBV3_JWT.to_string()),
             }),
@@ -112,6 +116,7 @@ mod tests {
 
         let response = post_presentations(
             State(state),
+            None,
             Json(PresentationsEndpointRequest {
                 credential_ids: vec![credential.holder_credential_id],
             }),

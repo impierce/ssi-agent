@@ -8,17 +8,19 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
+    Extension, Json,
 };
 use http_api_problem::ApiError;
 use hyper::header;
 use oid4vp::dcql::dcql_query::DcqlQuery;
 use serde::{Deserialize, Serialize};
+use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn all_authorization_requests(
     State(state): State<Arc<VerificationState>>,
+    _actor: Option<Extension<Option<Actor>>>,
 ) -> Result<Response, ApiError> {
     let all_authorization_requests =
         query_handler("all_authorization_requests", &state.query.all_authorization_requests)
@@ -37,6 +39,7 @@ pub(crate) async fn all_authorization_requests(
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_request(
     State(state): State<Arc<VerificationState>>,
+    _actor: Option<Extension<Option<Actor>>>,
     Path(authorization_request_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&authorization_request_id, &state.query.authorization_request)
@@ -54,6 +57,7 @@ pub struct AuthorizationRequestsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_requests(
     State(verification_state): State<Arc<VerificationState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Json(AuthorizationRequestsEndpointRequest { state, dcql_query }): Json<AuthorizationRequestsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let state = state.unwrap_or(generate_random_string());
@@ -68,7 +72,7 @@ pub(crate) async fn authorization_requests(
     // Create the authorization request.
     command_handler(
         verification_state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &state,
         &verification_state.command.authorization_request,
         command,
@@ -78,7 +82,7 @@ pub(crate) async fn authorization_requests(
     // Sign the authorization request object.
     command_handler(
         verification_state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &state,
         &verification_state.command.authorization_request,
         AuthorizationRequestCommand::SignAuthorizationRequestObject,

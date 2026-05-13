@@ -12,11 +12,13 @@ use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
+    Extension,
 };
 use http_api_problem::ApiError;
 use hyper::header;
 use oid4vci::credential_offer::GrantType;
 use serde::{Deserialize, Serialize};
+use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 #[derive(Deserialize, Serialize)]
@@ -32,6 +34,7 @@ pub struct OffersEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(
     State(state): State<Arc<IssuanceState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Json(OffersEndpointRequest {
         offer_id,
         credential_configuration_ids,
@@ -91,7 +94,7 @@ pub(crate) async fn offers(
 
         command_handler(
             state.authorization_checker.clone(),
-            None,
+            actor.clone().and_then(|Extension(actor)| actor),
             &offer_id,
             &state.command.offer,
             command,
@@ -152,6 +155,7 @@ pub(crate) async fn all_offers(State(state): State<Arc<IssuanceState>>) -> Resul
 #[axum_macros::debug_handler]
 pub(crate) async fn offer(
     State(state): State<Arc<IssuanceState>>,
+    _actor: Option<Extension<Option<Actor>>>,
     Path(offer_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&offer_id, &state.query.offer)

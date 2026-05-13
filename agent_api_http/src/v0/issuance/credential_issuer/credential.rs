@@ -1,3 +1,4 @@
+use shared_kernel::authorization::Actor;
 use std::time::{Duration, Instant};
 
 use crate::{
@@ -20,6 +21,7 @@ use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
+    Extension,
 };
 use axum_auth::AuthBearer;
 use oauth_tsl::status_list::StatusType;
@@ -37,6 +39,7 @@ const POLLING_INTERVAL_MS: u64 = 100;
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<IssuanceState>>,
+    actor: Option<Extension<Option<Actor>>>,
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> Result<Response, PublicError> {
@@ -79,7 +82,7 @@ pub(crate) async fn credential(
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &offer_id,
         &state.command.offer,
         command,
@@ -139,7 +142,7 @@ pub(crate) async fn credential(
             let command = StatusListCommand::CreateStatusList { id: id.clone() };
             command_handler(
                 state.authorization_checker.clone(),
-                None,
+                actor.clone().and_then(|Extension(actor)| actor),
                 &id,
                 &state.command.status_list,
                 command,
@@ -159,7 +162,7 @@ pub(crate) async fn credential(
 
         command_handler(
             state.authorization_checker.clone(),
-            None,
+            actor.clone().and_then(|Extension(actor)| actor),
             &status_list_id,
             &state.command.status_list,
             command,
@@ -185,7 +188,7 @@ pub(crate) async fn credential(
 
         command_handler(
             state.authorization_checker.clone(),
-            None,
+            actor.clone().and_then(|Extension(actor)| actor),
             &credential_id,
             &state.command.credential,
             command,
@@ -212,7 +215,7 @@ pub(crate) async fn credential(
     // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &offer_id,
         &state.command.offer,
         command,

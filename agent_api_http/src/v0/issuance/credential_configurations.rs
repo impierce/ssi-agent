@@ -6,8 +6,10 @@ use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
+    Extension,
 };
 use http_api_problem::ApiError;
+use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 /// Update credential configuration
@@ -25,6 +27,7 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn credential_configurations(
     State(state): State<Arc<IssuanceState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Json(credential_configuration): Json<CredentialConfiguration>,
 ) -> Result<Response, ApiError> {
     let command = ServerConfigCommand::UpdateCredentialConfiguration {
@@ -34,7 +37,7 @@ pub(crate) async fn credential_configurations(
 
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         SERVER_CONFIG_ID,
         &state.command.server_config,
         command,
@@ -63,7 +66,7 @@ mod tests {
         }))
         .unwrap();
 
-        let response = credential_configurations(State(state), Json(credential_configuration))
+        let response = credential_configurations(State(state), None, Json(credential_configuration))
             .await
             .unwrap();
 

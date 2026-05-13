@@ -15,6 +15,7 @@ use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
+    Extension,
 };
 use http_api_problem::ApiError;
 use hyper::header;
@@ -22,6 +23,7 @@ use oauth_tsl::status_list::StatusType;
 use oid4vci::credential_offer::GrantType;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 /// Get credential by ID
@@ -39,6 +41,7 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<IssuanceState>>,
+    _actor: Option<Extension<Option<Actor>>>,
     Path(credential_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(&credential_id, &state.query.credential)
@@ -75,6 +78,7 @@ pub struct CredentialsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
     State(state): State<Arc<IssuanceState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Json(CredentialsEndpointRequest {
         offer_id,
         credential,
@@ -138,7 +142,7 @@ pub(crate) async fn credentials(
     // Create an unsigned/signed credential.
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &credential_id,
         &state.command.credential,
         command,
@@ -169,7 +173,7 @@ pub(crate) async fn credentials(
 
         command_handler(
             state.authorization_checker.clone(),
-            None,
+            actor.clone().and_then(|Extension(actor)| actor),
             &offer_id,
             &state.command.offer,
             command,
@@ -186,7 +190,7 @@ pub(crate) async fn credentials(
     // Add the credential to the offer.
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &offer_id,
         &state.command.offer,
         command,
@@ -239,6 +243,7 @@ pub struct PatchCredentialEndpointRequest {
 /// Currently, this endpoint only supports patching the CredentialStatus of a credential according to the IETF OAuth Token Status List spec.
 pub async fn patch_credential(
     State(state): State<Arc<IssuanceState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Path(credential_id): Path<String>,
     Json(PatchCredentialEndpointRequest {
         credential_status: status,
@@ -258,7 +263,7 @@ pub async fn patch_credential(
 
         command_handler(
             state.authorization_checker.clone(),
-            None,
+            actor.clone().and_then(|Extension(actor)| actor),
             &credential_id,
             &state.command.credential,
             command,
@@ -278,7 +283,7 @@ pub async fn patch_credential(
 
         command_handler(
             state.authorization_checker.clone(),
-            None,
+            actor.clone().and_then(|Extension(actor)| actor),
             status_list_id,
             &state.command.status_list,
             command,

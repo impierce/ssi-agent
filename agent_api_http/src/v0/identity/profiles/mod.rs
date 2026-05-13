@@ -9,12 +9,13 @@ use agent_shared::config::Logo;
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
-    Json,
+    Extension, Json,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
+use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -45,6 +46,7 @@ pub struct PatchProfileEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn patch_profile(
     State(state): State<Arc<IdentityState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Json(PatchProfileEndpointRequest {
         display_name,
         description,
@@ -62,7 +64,7 @@ pub(crate) async fn patch_profile(
 
         command_handler(
             state.authorization_checker.clone(),
-            None,
+            actor.clone().and_then(|Extension(actor)| actor),
             &profile_id,
             &state.command.profile,
             command,
@@ -78,7 +80,7 @@ pub(crate) async fn patch_profile(
 
         command_handler(
             state.authorization_checker.clone(),
-            None,
+            actor.clone().and_then(|Extension(actor)| actor),
             &profile_id,
             &state.command.profile,
             command,
@@ -94,7 +96,7 @@ pub(crate) async fn patch_profile(
 
         command_handler(
             state.authorization_checker.clone(),
-            None,
+            actor.clone().and_then(|Extension(actor)| actor),
             &profile_id,
             &state.command.profile,
             command,
@@ -110,7 +112,7 @@ pub(crate) async fn patch_profile(
 
         command_handler(
             state.authorization_checker.clone(),
-            None,
+            actor.clone().and_then(|Extension(actor)| actor),
             &profile_id,
             &state.command.profile,
             command,
@@ -202,6 +204,7 @@ mod tests {
 
         let response = patch_profile(
             State(state),
+            None,
             Json(PatchProfileEndpointRequest {
                 display_name: Some(Some("Runtime Name".to_string())),
                 description: Some(Some("Runtime Description".to_string())),

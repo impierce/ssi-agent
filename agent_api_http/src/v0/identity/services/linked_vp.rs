@@ -8,11 +8,12 @@ use agent_shared::config::SupportedDidMethod;
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
-    Json,
+    Extension, Json,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
+use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 #[derive(Deserialize, Serialize)]
@@ -24,6 +25,7 @@ pub struct LinkedVPEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn linked_vp(
     State(state): State<Arc<IdentityState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Json(LinkedVPEndpointRequest { presentation_ids }): Json<LinkedVPEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let service_id = "linked-verifiable-presentation-service".to_string();
@@ -36,7 +38,7 @@ pub(crate) async fn linked_vp(
     // Create a linked verifiable presentation service.
     command_handler(
         state.authorization_checker.clone(),
-        None,
+        actor.clone().and_then(|Extension(actor)| actor),
         &service_id,
         &state.command.service,
         command,
@@ -80,7 +82,7 @@ pub(crate) async fn linked_vp(
 
         command_handler(
             state.authorization_checker.clone(),
-            None,
+            actor.clone().and_then(|Extension(actor)| actor),
             document_id,
             &state.command.document,
             command,
@@ -137,6 +139,7 @@ mod tests {
 
         let response = linked_vp(
             State(state),
+            None,
             Json(LinkedVPEndpointRequest {
                 presentation_ids: vec!["presentation-id".to_string()],
             }),
