@@ -71,6 +71,7 @@ agent_verification = { path = "../agent_verification", features = [
     "test_utils",
 ] }
 
+async-trait.workspace = true
 futures.workspace = true
 jsonwebtoken.workspace = true
 lazy_static.workspace = true

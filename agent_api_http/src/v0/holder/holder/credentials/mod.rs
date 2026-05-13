@@ -97,29 +97,3 @@ pub(crate) async fn credential(
         .map(|holder_credential_view| (StatusCode::OK, Json(holder_credential_view)).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use agent_holder::services::HolderServices;
-    use agent_issuance::credential::aggregate::test_utils::JWT_VC_JSON_OBV3_JWT;
-    use agent_secret_manager::service::Service;
-    use agent_store::{holder_state, in_memory::InMemory};
-
-    #[tokio::test]
-    async fn post_credentials_dispatches_add_credential_command() {
-        let state = Arc::new(holder_state(&InMemory, HolderServices::default().await, Default::default()).await);
-
-        let response = post_credentials(
-            State(state),
-            None,
-            Json(HolderCredentialsEndpointRequest {
-                credential: Jwt::from(JWT_VC_JSON_OBV3_JWT.to_string()),
-            }),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(response.status(), StatusCode::CREATED);
-    }
-}

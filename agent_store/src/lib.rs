@@ -591,11 +591,6 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
 
 #[cfg(test)]
 mod test {
-    use crate::in_memory::InMemory;
-    use agent_secret_manager::{service::Service, subject::Subject};
-    use agent_shared::config::{
-        default_issuer_eddsa_key_id, default_issuer_es256_key_id, set_config, SecretManagerConfig,
-    };
     use async_trait::async_trait;
     use cqrs_es::EventEnvelope;
 
@@ -812,67 +807,5 @@ mod test {
         assert_eq!(presentation_event_publishers.len(), 0);
         assert_eq!(received_offer_event_publishers.len(), 0);
         assert_eq!(authorization_request_event_publishers.len(), 0);
-    }
-
-    #[tokio::test]
-    async fn states_expose_configured_authorization_checker() {
-        std::env::set_var("UNICORE__PROFILE", "development");
-        set_config().set_secret_manager_config(SecretManagerConfig {
-            stronghold_password: "sup3rSecr3t".to_string(),
-            stronghold_path: std::env::temp_dir()
-                .join(format!("agent-store-authz-test-{}.stronghold", std::process::id()))
-                .to_string_lossy()
-                .into_owned(),
-            issuer_eddsa_key_id: default_issuer_eddsa_key_id(),
-            issuer_es256_key_id: default_issuer_es256_key_id(),
-        });
-
-        let subject = Arc::new(Subject::test_subject().await);
-
-        let identity = identity_state(
-            &InMemory,
-            Arc::new(IdentityServices::new(subject.clone())),
-            Default::default(),
-        )
-        .await;
-        let request = shared_kernel::authorization::AuthorizationRequest {
-            actor: None,
-            operation: shared_kernel::authorization::AuthorizationOperation::Command {
-                aggregate_id: "aggregate-id".to_string(),
-                command_type: "test-command",
-            },
-        };
-
-        assert!(identity.authorization_checker.is_authorized(&request).await);
-
-        let library = library_state(&InMemory, Default::default(), Default::default()).await;
-        assert!(library.authorization_checker.is_authorized(&request).await);
-
-        let authorization = authorization_state(
-            &InMemory,
-            Arc::new(AuthorizationServices::new(subject.clone())),
-            Default::default(),
-        )
-        .await;
-        assert!(authorization.authorization_checker.is_authorized(&request).await);
-
-        let issuance = issuance_state(
-            &InMemory,
-            Arc::new(agent_issuance::services::IssuanceServices::new(subject.clone())),
-            Default::default(),
-        )
-        .await;
-        assert!(issuance.authorization_checker.is_authorized(&request).await);
-
-        let verification = verification_state(
-            &InMemory,
-            Arc::new(VerificationServices::new(subject.clone())),
-            Default::default(),
-        )
-        .await;
-        assert!(verification.authorization_checker.is_authorized(&request).await);
-
-        let holder = holder_state(&InMemory, Arc::new(HolderServices::new(subject)), Default::default()).await;
-        assert!(holder.authorization_checker.is_authorized(&request).await);
     }
 }

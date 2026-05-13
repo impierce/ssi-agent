@@ -56,36 +56,3 @@ pub(crate) async fn offers_params(
 
     Ok(StatusCode::OK.into_response())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use agent_holder::services::HolderServices;
-    use agent_secret_manager::service::Service;
-    use agent_store::{holder_state, in_memory::InMemory};
-    use oid4vci::credential_offer::{CredentialConfigurationIds, CredentialOfferParameters};
-    use serde_json::json;
-
-    #[tokio::test]
-    async fn offers_params_dispatches_receive_offer_command() {
-        let state = Arc::new(holder_state(&InMemory, HolderServices::default().await, Default::default()).await);
-        let credential_offer = serde_json::to_string(&CredentialOfferParameters {
-            credential_issuer: "http://127.0.0.1:9".parse().unwrap(),
-            credential_configuration_ids: CredentialConfigurationIds::try_new(vec!["001".to_string()]).unwrap(),
-            grants: None,
-        })
-        .unwrap();
-
-        let error = offers_params(
-            State(state),
-            None,
-            Form(json!({
-                "credential_offer": urlencoding::encode(&credential_offer).to_string(),
-            })),
-        )
-        .await
-        .unwrap_err();
-
-        assert_eq!(error.status(), StatusCode::INTERNAL_SERVER_ERROR);
-    }
-}

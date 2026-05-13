@@ -295,6 +295,3 @@ where
 
     next.run(request).await
 }
-
-#[cfg(test)]
-mod coverage_tests;

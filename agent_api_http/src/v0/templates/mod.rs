@@ -623,10 +623,34 @@ mod tests {
     use super::*;
     use crate::{error::tests::into_json_value, v0::library};
     use agent_store::{in_memory::InMemory, library_state};
-    use axum::body::Body;
+    use async_trait::async_trait;
+    use axum::{body::Body, Extension};
     use http::Request;
     use serde_json::json;
+    use shared_kernel::authorization::{AuthorizationChecker, AuthorizationOperation, AuthorizationRequest};
+    use std::sync::Mutex;
     use tower::ServiceExt;
+
+    struct DenyAllAuthorizationChecker;
+
+    #[async_trait]
+    impl AuthorizationChecker for DenyAllAuthorizationChecker {
+        async fn is_authorized(&self, _request: &AuthorizationRequest) -> bool {
+            false
+        }
+    }
+
+    struct CapturingAuthorizationChecker {
+        requests: Arc<Mutex<Vec<AuthorizationRequest>>>,
+    }
+
+    #[async_trait]
+    impl AuthorizationChecker for CapturingAuthorizationChecker {
+        async fn is_authorized(&self, request: &AuthorizationRequest) -> bool {
+            self.requests.lock().unwrap().push(request.clone());
+            true
+        }
+    }
 
     #[tokio::test]
     async fn template_command_endpoints_dispatch_successfully() {
@@ -718,6 +742,77 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn template_command_endpoint_returns_forbidden_when_authorization_denies() {
+        let mut state = library_state(&InMemory, Default::default(), Default::default()).await;
+        state.authorization_checker = Arc::new(DenyAllAuthorizationChecker);
+        let app = library::router(Arc::new(state));
+
+        let response = app
+            .oneshot(post_json(
+                "/v0/templates/create-template",
+                json!({
+                    "title": "Template",
+                    "status": "draft",
+                    "visibility": "private"
+                }),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            into_json_value(response).await,
+            json!({
+                "type": format!("{}problem-details/authorization#forbidden", crate::DOCUMENTATION_URL),
+                "title": "Forbidden",
+                "status": 403,
+                "detail": "The request is not authorized"
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn template_command_endpoint_passes_actor_to_authorization_checker() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let mut state = library_state(&InMemory, Default::default(), Default::default()).await;
+        state.authorization_checker = Arc::new(CapturingAuthorizationChecker {
+            requests: Arc::clone(&requests),
+        });
+        let actor = Actor {
+            subject: "user@example.test".to_string(),
+        };
+        let app = library::router(Arc::new(state)).layer(Extension(Some(actor.clone())));
+
+        let response = app
+            .oneshot(post_json(
+                "/v0/templates/create-template",
+                json!({
+                    "title": "Template",
+                    "status": "draft",
+                    "visibility": "private"
+                }),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].actor, Some(actor));
+
+        match &requests[0].operation {
+            AuthorizationOperation::Command {
+                aggregate_id,
+                command_type,
+            } => {
+                assert!(!aggregate_id.is_empty());
+                assert_eq!(*command_type, std::any::type_name::<TemplateCommand>());
+            }
+            operation => panic!("expected template command authorization request, got {operation:?}"),
+        }
     }
 
     fn post_json(uri: &str, body: serde_json::Value) -> Request<Body> {

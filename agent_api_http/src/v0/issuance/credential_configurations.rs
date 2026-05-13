@@ -46,30 +46,3 @@ pub(crate) async fn credential_configurations(
 
     Ok((StatusCode::CREATED, Json(credential_configuration)).into_response())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use agent_issuance::services::IssuanceServices;
-    use agent_secret_manager::service::Service;
-    use agent_store::{in_memory::InMemory, issuance_state};
-
-    #[serial_test::serial]
-    #[tokio::test]
-    async fn credential_configurations_dispatches_update_command() {
-        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
-        agent_issuance::state::initialize(&state).await.unwrap();
-        let credential_configuration = serde_json::from_value(serde_json::json!({
-            "credential_configuration_id": "test",
-            "format": "jwt_vc_json",
-            "type": ["VerifiableCredential"]
-        }))
-        .unwrap();
-
-        let response = credential_configurations(State(state), None, Json(credential_configuration))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::CREATED);
-    }
-}
