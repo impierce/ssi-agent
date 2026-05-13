@@ -131,7 +131,8 @@ impl TokenIssuanceService {
                 };
 
                 command_handler(
-                    &authorization_state,
+                    authorization_state.authorization_checker.clone(),
+                    None,
                     &code,
                     &authorization_state.command.authorization_code,
                     command,
@@ -169,7 +170,8 @@ impl TokenIssuanceService {
         };
 
         command_handler(
-            &authorization_state,
+            authorization_state.authorization_checker.clone(),
+            None,
             &access_token_id,
             &authorization_state.command.access_token,
             command,

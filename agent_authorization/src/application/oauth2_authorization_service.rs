@@ -90,7 +90,8 @@ impl OAuth2AuthorizationService {
                 };
 
                 command_handler(
-                    &state,
+                    state.authorization_checker.clone(),
+                    None,
                     &authorization_code_id,
                     &state.command.authorization_code,
                     command,

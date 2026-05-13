@@ -34,7 +34,8 @@ pub(crate) async fn redirect(
 
     // Verify the authorization response.
     command_handler(
-        &verification_state,
+        verification_state.authorization_checker.clone(),
+        None,
         &authorization_request_id,
         &verification_state.command.authorization_request,
         command,

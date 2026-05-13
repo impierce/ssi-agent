@@ -596,7 +596,6 @@ mod test {
     use agent_shared::config::{
         default_issuer_eddsa_key_id, default_issuer_es256_key_id, set_config, SecretManagerConfig,
     };
-    use agent_shared::handlers::AuthorizationContext;
     use async_trait::async_trait;
     use cqrs_es::EventEnvelope;
 

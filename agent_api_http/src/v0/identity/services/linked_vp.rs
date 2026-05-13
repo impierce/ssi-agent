@@ -34,7 +34,14 @@ pub(crate) async fn linked_vp(
     };
 
     // Create a linked verifiable presentation service.
-    command_handler(&state, &service_id, &state.command.service, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        None,
+        &service_id,
+        &state.command.service,
+        command,
+    )
+    .await?;
 
     let linked_verifiable_presentation_service = match query_handler(&service_id, &state.query.service).await? {
         Some(Service {
@@ -71,7 +78,14 @@ pub(crate) async fn linked_vp(
             service: Box::new(linked_verifiable_presentation_service.clone()),
         };
 
-        command_handler(&state, document_id, &state.command.document, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            document_id,
+            &state.command.document,
+            command,
+        )
+        .await?;
     }
 
     publish_decentrally_hosted_documents(&state)

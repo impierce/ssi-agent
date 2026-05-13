@@ -46,9 +46,15 @@ impl NonceValidationService {
             Some(n) if n.is_redeemed => Err(NonceValidationError::RedeemedNonce),
             Some(_) => {
                 let command = NonceCommand::RedeemNonce { c_nonce: nonce.clone() };
-                command_handler(&state, nonce, &state.command.nonce, command)
-                    .await
-                    .map_err(|_| NonceValidationError::InvalidNonce)?;
+                command_handler(
+                    state.authorization_checker.clone(),
+                    None,
+                    nonce,
+                    &state.command.nonce,
+                    command,
+                )
+                .await
+                .map_err(|_| NonceValidationError::InvalidNonce)?;
                 Ok(())
             }
             None => Err(NonceValidationError::MissingNonce),
@@ -153,9 +159,15 @@ mod tests {
         let nonce = NONCE_VALUE.to_string();
 
         let create_command = NonceCommand::GenerateNonce { c_nonce: nonce.clone() };
-        command_handler(&state, NONCE_VALUE, &state.command.nonce, create_command)
-            .await
-            .unwrap();
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            NONCE_VALUE,
+            &state.command.nonce,
+            create_command,
+        )
+        .await
+        .unwrap();
 
         let result = NonceValidationService::validate(&state, &credential_request).await;
         assert!(result.is_ok());
@@ -169,14 +181,26 @@ mod tests {
         initialize(&state).await.unwrap();
 
         let create_command = NonceCommand::GenerateNonce { c_nonce: nonce.clone() };
-        command_handler(&state, NONCE_VALUE, &state.command.nonce, create_command)
-            .await
-            .unwrap();
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            NONCE_VALUE,
+            &state.command.nonce,
+            create_command,
+        )
+        .await
+        .unwrap();
 
         let redeem_command = NonceCommand::RedeemNonce { c_nonce: nonce.clone() };
-        command_handler(&state, NONCE_VALUE, &state.command.nonce, redeem_command)
-            .await
-            .unwrap();
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            NONCE_VALUE,
+            &state.command.nonce,
+            redeem_command,
+        )
+        .await
+        .unwrap();
 
         let result = NonceValidationService::validate(&state, &credential_request).await;
         assert!(matches!(result, Err(NonceValidationError::RedeemedNonce)));
@@ -191,9 +215,15 @@ mod tests {
         let create_command = NonceCommand::GenerateNonce {
             c_nonce: NONCE_VALUE_2.to_string(),
         };
-        command_handler(&state, NONCE_VALUE_2, &state.command.nonce, create_command)
-            .await
-            .unwrap();
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            NONCE_VALUE_2,
+            &state.command.nonce,
+            create_command,
+        )
+        .await
+        .unwrap();
 
         let result = NonceValidationService::validate(&state, &credential_request).await;
         assert!(matches!(result, Err(NonceValidationError::MissingNonce)));

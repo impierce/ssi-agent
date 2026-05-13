@@ -138,7 +138,14 @@ pub(crate) async fn create_template(
         schema_properties_attributes,
     };
 
-    command_handler(&state, &template_id, &state.command.template, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        None,
+        &template_id,
+        &state.command.template,
+        command,
+    )
+    .await?;
 
     // Return the template.
     query_handler(&template_id, &state.query.template)
@@ -211,7 +218,14 @@ pub(crate) async fn duplicate_template(
         schema_properties_attributes: original_template.schema_properties_attributes,
     };
 
-    command_handler(&state, &new_template_id, &state.command.template, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        None,
+        &new_template_id,
+        &state.command.template,
+        command,
+    )
+    .await?;
 
     // Return the duplicated template.
     let new_template = query_handler(&new_template_id, &state.query.template)
@@ -299,7 +313,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             title,
         };
-        command_handler(&state, &template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(display) = display {
@@ -307,7 +328,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             display,
         };
-        command_handler(&state, &template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(data_model) = data_model {
@@ -315,7 +343,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             data_model,
         };
-        command_handler(&state, &template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(creator) = creator {
@@ -323,7 +358,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             creator,
         };
-        command_handler(&state, &template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(holder_type) = holder_type {
@@ -331,7 +373,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             holder_type,
         };
-        command_handler(&state, &template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if !tags.is_empty() {
@@ -339,7 +388,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             tags,
         };
-        command_handler(&state, &template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(status) = status {
@@ -347,7 +403,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             status,
         };
-        command_handler(&state, &template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(visibility) = visibility {
@@ -355,7 +418,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             visibility,
         };
-        command_handler(&state, &template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(description) = description {
@@ -363,7 +433,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             description,
         };
-        command_handler(&state, &template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if !r#type.is_empty() {
@@ -371,7 +448,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             r#type,
         };
-        command_handler(&state, &template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(schema) = schema {
@@ -379,7 +463,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             schema,
         };
-        command_handler(&state, &template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(schema_properties_attributes) = schema_properties_attributes {
@@ -387,7 +478,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             schema_properties_attributes,
         };
-        command_handler(&state, &template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     Ok(StatusCode::NO_CONTENT.into_response())
@@ -503,7 +601,14 @@ pub(crate) async fn delete_template(
         template_id: template_id.clone(),
     };
 
-    command_handler(&state, &template_id, &state.command.template, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        None,
+        &template_id,
+        &state.command.template,
+        command,
+    )
+    .await?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 

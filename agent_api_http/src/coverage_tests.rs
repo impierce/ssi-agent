@@ -79,7 +79,8 @@ async fn identity_initialize_updates_provisioned_profile_fields() {
     let state = identity_state(&InMemory, IdentityServices::default(), Default::default()).await;
 
     command_handler(
-        &state,
+        state.authorization_checker.clone(),
+        None,
         agent_identity::state::PROFILE_ID,
         &state.command.profile,
         ProfileCommand::CreateProfile {
@@ -119,7 +120,8 @@ async fn identity_initialize_handles_empty_display_configuration() {
     let state = identity_state(&InMemory, IdentityServices::default(), Default::default()).await;
 
     command_handler(
-        &state,
+        state.authorization_checker.clone(),
+        None,
         agent_identity::state::PROFILE_ID,
         &state.command.profile,
         ProfileCommand::CreateProfile {
@@ -163,7 +165,8 @@ async fn identity_document_and_service_initialization_dispatch_commands() {
     agent_identity::state::initialize(&state).await.unwrap();
 
     command_handler(
-        &state,
+        state.authorization_checker.clone(),
+        None,
         agent_identity::state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID,
         &state.command.service,
         ServiceCommand::CreateLinkedVerifiablePresentationService {

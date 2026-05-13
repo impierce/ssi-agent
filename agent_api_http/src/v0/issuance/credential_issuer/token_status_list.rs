@@ -147,9 +147,15 @@ pub mod tests {
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),
         };
-        agent_shared::handlers::command_handler(&issuance_state, TEST_NONCE, &issuance_state.command.nonce, command)
-            .await
-            .unwrap();
+        agent_shared::handlers::command_handler(
+            issuance_state.authorization_checker.clone(),
+            None,
+            TEST_NONCE,
+            &issuance_state.command.nonce,
+            command,
+        )
+        .await
+        .unwrap();
 
         let credential_configuration_id = "001".to_string();
 

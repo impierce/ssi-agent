@@ -89,7 +89,14 @@ pub(crate) async fn offers(
             delivery_options,
         };
 
-        command_handler(&state, &offer_id, &state.command.offer, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            &offer_id,
+            &state.command.offer,
+            command,
+        )
+        .await?;
     }
 
     query_handler(&offer_id, &state.query.offer)

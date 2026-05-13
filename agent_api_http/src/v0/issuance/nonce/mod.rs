@@ -19,9 +19,15 @@ pub(crate) async fn nonce(State(state): State<Arc<IssuanceState>>) -> Result<Res
         c_nonce: fresh_c_nonce.clone(),
     };
 
-    command_handler(&state, &fresh_c_nonce, &state.command.nonce, command)
-        .await
-        .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
+    command_handler(
+        state.authorization_checker.clone(),
+        None,
+        &fresh_c_nonce,
+        &state.command.nonce,
+        command,
+    )
+    .await
+    .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
     let mut headers = HeaderMap::new();
     headers.insert(CACHE_CONTROL, "no-store".parse().unwrap());

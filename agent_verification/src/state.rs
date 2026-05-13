@@ -1,4 +1,4 @@
-use agent_shared::{application_state::CommandHandler, handlers::AuthorizationContext};
+use agent_shared::application_state::CommandHandler;
 use cqrs_es::persist::ViewRepository;
 use shared_kernel::authorization::AuthorizationChecker;
 use std::sync::Arc;
@@ -12,12 +12,6 @@ pub struct VerificationState {
     pub authorization_checker: Arc<dyn AuthorizationChecker>,
     pub command: CommandHandlers,
     pub query: Queries,
-}
-
-impl AuthorizationContext for VerificationState {
-    fn authorization_checker(&self) -> &Arc<dyn AuthorizationChecker> {
-        &self.authorization_checker
-    }
 }
 
 /// The command handlers are used to execute commands on the aggregates.
