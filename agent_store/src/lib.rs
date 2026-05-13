@@ -835,16 +835,18 @@ mod test {
             Default::default(),
         )
         .await;
-        assert!(Arc::ptr_eq(
-            identity.authorization_checker(),
-            &identity.authorization_checker
-        ));
+        let request = shared_kernel::authorization::AuthorizationRequest {
+            actor: None,
+            operation: shared_kernel::authorization::AuthorizationOperation::Command {
+                aggregate_id: "aggregate-id".to_string(),
+                command_type: "test-command",
+            },
+        };
+
+        assert!(identity.authorization_checker.is_authorized(&request).await);
 
         let library = library_state(&InMemory, Default::default(), Default::default()).await;
-        assert!(Arc::ptr_eq(
-            library.authorization_checker(),
-            &library.authorization_checker
-        ));
+        assert!(library.authorization_checker.is_authorized(&request).await);
 
         let authorization = authorization_state(
             &InMemory,
@@ -852,10 +854,7 @@ mod test {
             Default::default(),
         )
         .await;
-        assert!(Arc::ptr_eq(
-            authorization.authorization_checker(),
-            &authorization.authorization_checker
-        ));
+        assert!(authorization.authorization_checker.is_authorized(&request).await);
 
         let issuance = issuance_state(
             &InMemory,
@@ -863,10 +862,7 @@ mod test {
             Default::default(),
         )
         .await;
-        assert!(Arc::ptr_eq(
-            issuance.authorization_checker(),
-            &issuance.authorization_checker
-        ));
+        assert!(issuance.authorization_checker.is_authorized(&request).await);
 
         let verification = verification_state(
             &InMemory,
@@ -874,15 +870,9 @@ mod test {
             Default::default(),
         )
         .await;
-        assert!(Arc::ptr_eq(
-            verification.authorization_checker(),
-            &verification.authorization_checker
-        ));
+        assert!(verification.authorization_checker.is_authorized(&request).await);
 
         let holder = holder_state(&InMemory, Arc::new(HolderServices::new(subject)), Default::default()).await;
-        assert!(Arc::ptr_eq(
-            holder.authorization_checker(),
-            &holder.authorization_checker
-        ));
+        assert!(holder.authorization_checker.is_authorized(&request).await);
     }
 }

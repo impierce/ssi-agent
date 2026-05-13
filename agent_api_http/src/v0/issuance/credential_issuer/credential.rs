@@ -2,7 +2,7 @@ use shared_kernel::authorization::Actor;
 use std::time::{Duration, Instant};
 
 use crate::{
-    handlers::{command_handler, query_handler},
+    handlers::{command_handler, query_handler, request_actor},
     v0::issuance::error::internal_server_error,
     v0::issuance::error::PublicError,
 };
@@ -82,7 +82,7 @@ pub(crate) async fn credential(
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &offer_id,
         &state.command.offer,
         command,
@@ -142,7 +142,7 @@ pub(crate) async fn credential(
             let command = StatusListCommand::CreateStatusList { id: id.clone() };
             command_handler(
                 state.authorization_checker.clone(),
-                actor.clone().and_then(|Extension(actor)| actor),
+                request_actor(&actor),
                 &id,
                 &state.command.status_list,
                 command,
@@ -162,7 +162,7 @@ pub(crate) async fn credential(
 
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &status_list_id,
             &state.command.status_list,
             command,
@@ -188,7 +188,7 @@ pub(crate) async fn credential(
 
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &credential_id,
             &state.command.credential,
             command,
@@ -215,7 +215,7 @@ pub(crate) async fn credential(
     // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &offer_id,
         &state.command.offer,
         command,

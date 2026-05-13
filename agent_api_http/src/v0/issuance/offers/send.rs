@@ -1,4 +1,4 @@
-use crate::handlers::command_handler;
+use crate::handlers::{command_handler, request_actor};
 use agent_issuance::{offer::aggregate::DeliveryMethod, offer::command::OfferCommand, state::IssuanceState};
 use axum::{
     extract::State,
@@ -48,7 +48,7 @@ pub(crate) async fn individual_offer(
     // Send the Credential Offer to the recipient's email.
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &offer_id,
         &state.command.offer,
         command,
@@ -91,7 +91,7 @@ pub(crate) async fn organization_offer(
     // Send the offer to the organizational url.
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &offer_id,
         &state.command.offer,
         command,

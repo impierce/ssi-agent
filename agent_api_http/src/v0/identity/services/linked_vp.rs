@@ -1,4 +1,4 @@
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, query_handler, request_actor};
 use agent_identity::{
     document::{aggregate::Status, command::DocumentCommand},
     service::{aggregate::Service, command::ServiceCommand},
@@ -38,7 +38,7 @@ pub(crate) async fn linked_vp(
     // Create a linked verifiable presentation service.
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &service_id,
         &state.command.service,
         command,
@@ -82,7 +82,7 @@ pub(crate) async fn linked_vp(
 
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             document_id,
             &state.command.document,
             command,

@@ -1,5 +1,5 @@
 use crate::error::type_url;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, query_handler, request_actor};
 use crate::API_VERSION;
 use agent_issuance::status_list::command::StatusListCommand;
 use agent_issuance::{
@@ -142,7 +142,7 @@ pub(crate) async fn credentials(
     // Create an unsigned/signed credential.
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &credential_id,
         &state.command.credential,
         command,
@@ -173,7 +173,7 @@ pub(crate) async fn credentials(
 
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &offer_id,
             &state.command.offer,
             command,
@@ -190,7 +190,7 @@ pub(crate) async fn credentials(
     // Add the credential to the offer.
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &offer_id,
         &state.command.offer,
         command,
@@ -263,7 +263,7 @@ pub async fn patch_credential(
 
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &credential_id,
             &state.command.credential,
             command,
@@ -283,7 +283,7 @@ pub async fn patch_credential(
 
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             status_list_id,
             &state.command.status_list,
             command,

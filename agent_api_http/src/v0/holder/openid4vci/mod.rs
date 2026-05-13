@@ -1,4 +1,4 @@
-use crate::handlers::command_handler;
+use crate::handlers::{command_handler, request_actor};
 use agent_holder::{offer::command::OfferCommand, state::HolderState};
 use axum::{
     extract::State,
@@ -47,7 +47,7 @@ pub(crate) async fn offers_params(
     // Add the Credential Offer to the state.
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &received_offer_id,
         &state.command.offer,
         command,

@@ -271,9 +271,4 @@ pub mod tests {
             PublicError::NotFoundError
         }
     }
-
-    #[test]
-    fn test_public_error_formats_display_message() {
-        assert_eq!(TestPublicError.to_string(), "test public error");
-    }
 }

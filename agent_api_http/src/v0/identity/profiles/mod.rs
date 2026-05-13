@@ -1,5 +1,5 @@
 use crate::error::IntoApiErrorExt;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, query_handler, request_actor};
 use crate::utils::serde_explicit_null;
 use agent_identity::profile::aggregate::Source;
 use agent_identity::profile::command::ProfileCommand;
@@ -64,7 +64,7 @@ pub(crate) async fn patch_profile(
 
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &profile_id,
             &state.command.profile,
             command,
@@ -80,7 +80,7 @@ pub(crate) async fn patch_profile(
 
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &profile_id,
             &state.command.profile,
             command,
@@ -96,7 +96,7 @@ pub(crate) async fn patch_profile(
 
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &profile_id,
             &state.command.profile,
             command,
@@ -112,7 +112,7 @@ pub(crate) async fn patch_profile(
 
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &profile_id,
             &state.command.profile,
             command,

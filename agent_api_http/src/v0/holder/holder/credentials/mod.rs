@@ -1,4 +1,4 @@
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, query_handler, request_actor};
 use agent_holder::{
     credential::{aggregate::Credential, command::CredentialCommand},
     state::HolderState,
@@ -59,7 +59,7 @@ pub(crate) async fn post_credentials(
 
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &holder_credential_id,
         &state.command.credential,
         command,

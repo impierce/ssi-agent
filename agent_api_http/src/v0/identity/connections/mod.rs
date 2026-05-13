@@ -1,7 +1,7 @@
 use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, query_handler, request_actor};
 use crate::API_VERSION;
 use agent_identity::{
     connection::{aggregate::ConnectionDisplayProperties, command::ConnectionCommand, views::ConnectionView},
@@ -58,7 +58,7 @@ pub(crate) async fn post_connection(
 
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &connection_id,
         &state.command.connection,
         command,
@@ -187,7 +187,7 @@ pub(crate) async fn sync_connection(
     };
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &id,
         &state.command.connection,
         command,
@@ -224,7 +224,7 @@ pub(crate) async fn accept_connection_changes(
     };
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &id,
         &state.command.connection,
         command,
@@ -261,7 +261,7 @@ pub(crate) async fn remove_connection(
     };
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &id,
         &state.command.connection,
         command,

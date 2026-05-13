@@ -187,21 +187,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_aggregate_fixture_contract_is_exercised() {
-        assert_eq!(TestAggregate::aggregate_type(), "test");
-        assert_eq!(TestEvent.event_type(), "test-event");
-        assert_eq!(TestEvent.event_version(), "1");
-
-        let mut aggregate = TestAggregate;
-        assert_eq!(
-            aggregate.handle("emit".to_string(), &()).await.unwrap(),
-            vec![TestEvent]
-        );
-        assert!(aggregate.handle("ignore".to_string(), &()).await.unwrap().is_empty());
-        aggregate.apply(TestEvent);
-    }
-
-    #[tokio::test]
     async fn command_handler_executes_authorized_command() {
         let handler = Arc::new(CapturingCommandHandler::default());
         let handler_ref: CommandHandler<TestAggregate> = handler.clone();

@@ -1,6 +1,6 @@
 pub mod presentation_signed;
 
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, query_handler, request_actor};
 use agent_holder::{
     credential::queries::HolderCredentialView, presentation::command::PresentationCommand, state::HolderState,
 };
@@ -74,7 +74,7 @@ pub(crate) async fn post_presentations(
     // Create the presentation.
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &presentation_id,
         &state.command.presentation,
         command,

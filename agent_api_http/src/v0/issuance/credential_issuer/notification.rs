@@ -1,4 +1,4 @@
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, query_handler, request_actor};
 use crate::v0::issuance::error::{internal_server_error, PublicError};
 use agent_issuance::application::access_token_validation_service::AccessTokenValidationService;
 use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
@@ -60,7 +60,7 @@ pub async fn notification(
 
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &credential_id,
         &state.command.credential,
         command,

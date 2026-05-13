@@ -1,4 +1,4 @@
-use crate::handlers::command_handler;
+use crate::handlers::{command_handler, request_actor};
 use agent_verification::{
     authorization_request::command::AuthorizationRequestCommand, generic_oid4vc::GenericAuthorizationResponse,
     state::VerificationState,
@@ -38,7 +38,7 @@ pub(crate) async fn redirect(
     // Verify the authorization response.
     command_handler(
         verification_state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &authorization_request_id,
         &verification_state.command.authorization_request,
         command,

@@ -1,4 +1,4 @@
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, query_handler, request_actor};
 use agent_holder::{
     credential::command::CredentialCommand,
     offer::{
@@ -54,7 +54,7 @@ pub(crate) async fn accept(
     // Accept the Credential Offer
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &received_offer_id,
         &state.command.offer,
         command,
@@ -68,7 +68,7 @@ pub(crate) async fn accept(
     // Send the Credential Request
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &received_offer_id,
         &state.command.offer,
         command,
@@ -95,7 +95,7 @@ pub(crate) async fn accept(
         // Add the Credential to the state.
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &holder_credential_id,
             &state.command.credential,
             command,

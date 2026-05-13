@@ -1,5 +1,5 @@
 use crate::{
-    handlers::{command_handler, query_handler},
+    handlers::{command_handler, query_handler, request_actor},
     API_VERSION,
 };
 use agent_shared::generate_random_string;
@@ -72,7 +72,7 @@ pub(crate) async fn authorization_requests(
     // Create the authorization request.
     command_handler(
         verification_state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &state,
         &verification_state.command.authorization_request,
         command,
@@ -82,7 +82,7 @@ pub(crate) async fn authorization_requests(
     // Sign the authorization request object.
     command_handler(
         verification_state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &state,
         &verification_state.command.authorization_request,
         AuthorizationRequestCommand::SignAuthorizationRequestObject,

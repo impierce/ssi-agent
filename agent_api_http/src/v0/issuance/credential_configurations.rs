@@ -1,4 +1,4 @@
-use crate::handlers::command_handler;
+use crate::handlers::{command_handler, request_actor};
 use agent_issuance::server_config::command::ServerConfigCommand;
 use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
 use agent_shared::config::CredentialConfiguration;
@@ -37,7 +37,7 @@ pub(crate) async fn credential_configurations(
 
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         SERVER_CONFIG_ID,
         &state.command.server_config,
         command,

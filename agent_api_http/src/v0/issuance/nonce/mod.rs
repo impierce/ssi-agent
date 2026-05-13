@@ -1,4 +1,4 @@
-use crate::handlers::command_handler;
+use crate::handlers::{command_handler, request_actor};
 use agent_issuance::{nonce::command::NonceCommand, state::IssuanceState};
 use agent_shared::generate_random_string;
 use axum::{
@@ -26,7 +26,7 @@ pub(crate) async fn nonce(
 
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &fresh_c_nonce,
         &state.command.nonce,
         command,

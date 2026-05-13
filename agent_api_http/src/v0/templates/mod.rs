@@ -1,5 +1,5 @@
 use crate::error::type_url;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, query_handler, request_actor};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{
@@ -142,7 +142,7 @@ pub(crate) async fn create_template(
 
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &template_id,
         &state.command.template,
         command,
@@ -223,7 +223,7 @@ pub(crate) async fn duplicate_template(
 
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &new_template_id,
         &state.command.template,
         command,
@@ -319,7 +319,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &template_id,
             &state.command.template,
             command,
@@ -334,7 +334,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &template_id,
             &state.command.template,
             command,
@@ -349,7 +349,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &template_id,
             &state.command.template,
             command,
@@ -364,7 +364,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &template_id,
             &state.command.template,
             command,
@@ -379,7 +379,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &template_id,
             &state.command.template,
             command,
@@ -394,7 +394,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &template_id,
             &state.command.template,
             command,
@@ -409,7 +409,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &template_id,
             &state.command.template,
             command,
@@ -424,7 +424,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &template_id,
             &state.command.template,
             command,
@@ -439,7 +439,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &template_id,
             &state.command.template,
             command,
@@ -454,7 +454,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &template_id,
             &state.command.template,
             command,
@@ -469,7 +469,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &template_id,
             &state.command.template,
             command,
@@ -484,7 +484,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &template_id,
             &state.command.template,
             command,
@@ -609,7 +609,7 @@ pub(crate) async fn delete_template(
 
     command_handler(
         state.authorization_checker.clone(),
-        actor.clone().and_then(|Extension(actor)| actor),
+        request_actor(&actor),
         &template_id,
         &state.command.template,
         command,

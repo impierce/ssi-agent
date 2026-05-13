@@ -2,7 +2,7 @@ pub mod send;
 
 use crate::{
     error::type_url,
-    handlers::{command_handler, query_handler},
+    handlers::{command_handler, query_handler, request_actor},
 };
 use agent_issuance::{
     offer::{aggregate::DeliveryOptions, command::OfferCommand, views::OfferView},
@@ -94,7 +94,7 @@ pub(crate) async fn offers(
 
         command_handler(
             state.authorization_checker.clone(),
-            actor.clone().and_then(|Extension(actor)| actor),
+            request_actor(&actor),
             &offer_id,
             &state.command.offer,
             command,
