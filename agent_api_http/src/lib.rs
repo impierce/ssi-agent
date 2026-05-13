@@ -23,6 +23,7 @@ use axum::{
 };
 use http_body_util::BodyExt as _;
 use hyper::StatusCode;
+use shared_kernel::authorization::ActorExtractor;
 use std::{sync::Arc, time::Duration};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
@@ -42,7 +43,7 @@ pub struct ApplicationState {
     pub verification_state: Option<Arc<VerificationState>>,
 }
 
-pub fn app(
+pub fn app<E>(
     ApplicationState {
         identity_state,
         library_state,
@@ -51,7 +52,11 @@ pub fn app(
         holder_state,
         verification_state,
     }: ApplicationState,
-) -> Router {
+    actor_extractor: E,
+) -> Router
+where
+    E: ActorExtractor,
+{
     let app = Router::new()
         .merge(identity_state.map(v0::identity::router).unwrap_or_default())
         .merge(library_state.map(v0::library::router).unwrap_or_default())

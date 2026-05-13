@@ -5,6 +5,23 @@ pub struct Actor {
     pub subject: String,
 }
 
+pub trait ToActor {
+    fn to_actor(&self) -> Option<Actor>;
+}
+
+pub trait ActorExtractor: Send + Sync + 'static {
+    fn extract_actor(&self, input: &dyn ToActor) -> Option<Actor>;
+}
+
+#[derive(Clone)]
+pub struct NoActorExtractor;
+
+impl ActorExtractor for NoActorExtractor {
+    fn extract_actor(&self, _input: &dyn ToActor) -> Option<Actor> {
+        None
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuthorizationOperation {
     Command {
@@ -40,6 +57,16 @@ impl AuthorizationChecker for AllowAllAuthorizationChecker {
 mod tests {
     use super::*;
 
+    struct TestActorInput;
+
+    impl ToActor for TestActorInput {
+        fn to_actor(&self) -> Option<Actor> {
+            Some(Actor {
+                subject: "user@example.test".to_string(),
+            })
+        }
+    }
+
     #[tokio::test]
     async fn allow_all_authorization_checker_authorizes_requests() {
         let checker = AllowAllAuthorizationChecker;
@@ -54,5 +81,12 @@ mod tests {
         };
 
         assert!(checker.is_authorized(&request).await);
+    }
+
+    #[test]
+    fn no_actor_extractor_does_not_extract_actor() {
+        let extractor = NoActorExtractor;
+
+        assert_eq!(extractor.extract_actor(&TestActorInput), None);
     }
 }

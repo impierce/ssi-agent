@@ -155,6 +155,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with 3.13.0",
+ "shared-kernel",
  "tokio",
  "tower-http 0.6.8",
  "tracing",
