@@ -102,13 +102,13 @@ impl IntoApiErrorExt for OfferError {
             UnrequestedTxCodeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
 
             // `/openid4vci/credential` endpoint
-            MissingCredentialError => ApiError::new(StatusCode::BAD_REQUEST),
-            MissingProofError => ApiError::new(StatusCode::BAD_REQUEST),
-            InvalidProofError(_) => ApiError::new(StatusCode::BAD_REQUEST),
-            MissingProofIssuerError => ApiError::new(StatusCode::BAD_REQUEST),
-            MissingCredentialConfigurationIdsError => ApiError::new(StatusCode::BAD_REQUEST),
-            UnknownCredentialConfiguration(_) => ApiError::new(StatusCode::BAD_REQUEST),
-            UnsupportedCredentialIdentifierError => ApiError::new(StatusCode::BAD_REQUEST),
+            MissingCredentialError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            MissingProofError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            InvalidProofError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            MissingProofIssuerError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            MissingCredentialConfigurationIdsError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            UnknownCredentialConfiguration(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            UnsupportedCredentialIdentifierError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
@@ -248,9 +248,10 @@ impl IntoPublicError for OfferError {
             UnsupportedCredentialIdentifierError => {
                 PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::UnknownCredentialIdentifier))
             }
-
             // Internal errors that shouldn't reach the public API
-            _ => PublicError::InternalServerError,
+            SendCredentialOfferError(_) => PublicError::InternalServerError,
+            UnsupportedTokenRequestGrantTypeError => PublicError::InternalServerError,
+            InvalidCredentialOfferUriError(_) => PublicError::InternalServerError,
         }
     }
 }

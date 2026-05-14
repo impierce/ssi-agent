@@ -25,10 +25,10 @@ pub async fn notification(
 ) -> Result<Response, PublicError> {
     info!("Notification Request: {}", json!(raw_value));
 
+    let _claims = AccessTokenValidationService::validate(&state, &access_token).await?;
+
     let notification_request: NotificationRequest = serde_json::from_value::<NotificationRequest>(raw_value)
         .map_err(|_| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
-
-    let _claims = AccessTokenValidationService::validate(&state, &access_token).await?;
 
     let credentials = match query_handler("all_credentials", &state.query.all_credentials).await? {
         Some(all_credentials) => all_credentials.credentials,
