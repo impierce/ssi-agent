@@ -525,7 +525,7 @@ pub mod tests {
             tags: None,
             status: Status::Published,
             visibility: Visibility::Private,
-            expiration: None,
+            expiration: Some(Expiration::Never),
             description: None,
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(Some(json!({
@@ -729,5 +729,145 @@ pub mod tests {
         let mut app = router((issuance_state.clone(), library_state));
 
         credentials(&mut app).await;
+    }
+
+    mod expiration_to_credential_expiry_tests {
+        use super::*;
+        use agent_library::template::aggregate::Expiration;
+
+        #[test]
+        fn never_maps_to_never() {
+            let result = expiration_to_credential_expiry(&Expiration::Never).unwrap();
+            assert!(matches!(result, CredentialExpiry::Never));
+        }
+
+        #[test]
+        fn datetime_maps_to_fixed() {
+            let result =
+                expiration_to_credential_expiry(&Expiration::DateTime("2030-06-01T00:00:00Z".to_string())).unwrap();
+            match result {
+                CredentialExpiry::Fixed(dt) => {
+                    assert_eq!(dt.to_rfc3339(), "2030-06-01T00:00:00+00:00");
+                }
+                _ => panic!("expected Fixed"),
+            }
+        }
+
+        #[test]
+        fn invalid_datetime_returns_error() {
+            let result = expiration_to_credential_expiry(&Expiration::DateTime("not-a-date".to_string()));
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().status(), StatusCode::INTERNAL_SERVER_ERROR);
+        }
+
+        #[test]
+        fn duration_days_maps_to_fixed_in_the_future() {
+            let before = chrono::Utc::now();
+            let result = expiration_to_credential_expiry(&Expiration::Duration("P30D".to_string())).unwrap();
+            let after = chrono::Utc::now();
+
+            match result {
+                CredentialExpiry::Fixed(dt) => {
+                    let thirty_days = chrono::Duration::days(30);
+                    assert!(dt >= before + thirty_days);
+                    assert!(dt <= after + thirty_days);
+                }
+                _ => panic!("expected Fixed"),
+            }
+        }
+
+        #[test]
+        fn duration_weeks_maps_to_fixed_in_the_future() {
+            let before = chrono::Utc::now();
+            let result = expiration_to_credential_expiry(&Expiration::Duration("P2W".to_string())).unwrap();
+            let after = chrono::Utc::now();
+
+            match result {
+                CredentialExpiry::Fixed(dt) => {
+                    let two_weeks = chrono::Duration::weeks(2);
+                    assert!(dt >= before + two_weeks);
+                    assert!(dt <= after + two_weeks);
+                }
+                _ => panic!("expected Fixed"),
+            }
+        }
+
+        #[test]
+        fn invalid_duration_returns_error() {
+            let result = expiration_to_credential_expiry(&Expiration::Duration("not-a-duration".to_string()));
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().status(), StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    mod validate_expiry_within_template_deadline_tests {
+        use super::*;
+
+        fn fixed(rfc3339: &str) -> CredentialExpiry {
+            CredentialExpiry::Fixed(
+                chrono::DateTime::parse_from_rfc3339(rfc3339)
+                    .unwrap()
+                    .with_timezone(&chrono::Utc),
+            )
+        }
+
+        #[test]
+        fn never_deadline_accepts_never() {
+            let result = validate_expiry_within_template_deadline(&CredentialExpiry::Never, &CredentialExpiry::Never);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn never_deadline_accepts_fixed() {
+            let result =
+                validate_expiry_within_template_deadline(&fixed("2030-01-01T00:00:00Z"), &CredentialExpiry::Never);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn never_explicit_with_fixed_deadline_is_rejected() {
+            let result =
+                validate_expiry_within_template_deadline(&CredentialExpiry::Never, &fixed("2030-01-01T00:00:00Z"));
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+            assert!(err
+                .message()
+                .unwrap_or_default()
+                .contains("The template requires an expiration date not after"));
+        }
+
+        #[test]
+        fn fixed_within_deadline_is_accepted() {
+            let result = validate_expiry_within_template_deadline(
+                &fixed("2029-06-01T00:00:00Z"),
+                &fixed("2030-01-01T00:00:00Z"),
+            );
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn fixed_equal_to_deadline_is_accepted() {
+            let result = validate_expiry_within_template_deadline(
+                &fixed("2030-01-01T00:00:00Z"),
+                &fixed("2030-01-01T00:00:00Z"),
+            );
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn fixed_exceeding_deadline_is_rejected() {
+            let result = validate_expiry_within_template_deadline(
+                &fixed("2031-01-01T00:00:00Z"),
+                &fixed("2030-01-01T00:00:00Z"),
+            );
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+            assert!(err
+                .message()
+                .unwrap_or_default()
+                .contains("The template requires an expiration date not after 2030-01-01T00:00:00+00:00"));
+        }
     }
 }

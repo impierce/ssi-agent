@@ -66,16 +66,22 @@ pub enum Visibility {
     Public,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 #[serde(tag = "type", content = "value", rename_all = "snake_case")]
 pub enum Expiration {
     /// Never expires.
-    #[default]
     Never,
     /// Relative duration in ISO 8601 format, e.g. `"P3DT4H"` or seconds as `"PT86400S"`.
     Duration(String),
     /// Absolute datetime in ISO 8601 format, e.g. `"2026-12-31T23:59:59Z"`.
     DateTime(String),
+}
+
+impl Default for Expiration {
+    /// Defaults to a relative 90-day expiration (`P90D`).
+    fn default() -> Self {
+        Expiration::Duration("P90D".to_string())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
@@ -930,6 +936,7 @@ pub mod document_tests {
                 tags: tags.clone(),
                 status: status.clone(),
                 visibility: visibility.clone(),
+                expiration: None,
                 description: description.clone(),
                 r#type: r#type.clone(),
                 schema: Box::new(schema.clone()),
@@ -947,6 +954,7 @@ pub mod document_tests {
                 tags,
                 status,
                 visibility,
+                expiration: Expiration::default(),
                 description,
                 r#type,
                 schema: Box::new(schema),
@@ -970,6 +978,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: None,
                 description: None,
                 r#type: vec![],
                 schema: Box::new(None),
@@ -994,6 +1003,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: None,
                 description: None,
                 r#type: vec![],
                 schema: Box::new(None),
@@ -1018,6 +1028,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: Expiration::default(),
                 description: None,
                 r#type: vec![],
                 schema: Box::new(None),
@@ -1050,6 +1061,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: None,
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some(invalid_schema)),
@@ -1074,6 +1086,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: None,
                 description: None,
                 r#type: vec![],
                 schema: Box::new(None),
@@ -1091,6 +1104,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: Expiration::default(),
                 description: None,
                 r#type: vec![],
                 schema: Box::new(None),
@@ -1118,6 +1132,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: Expiration::default(),
                 description: None,
                 r#type: vec![],
                 schema: Box::new(None),
@@ -1153,6 +1168,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: Expiration::default(),
                 description: None,
                 r#type: vec![],
                 schema: Box::new(None),
@@ -1201,6 +1217,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: None,
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some(schema)),
@@ -1234,6 +1251,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: None,
                 description: None,
                 r#type: vec![],
                 schema: Box::new(None),
@@ -1274,6 +1292,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: Expiration::default(),
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some(schema)),
@@ -1311,6 +1330,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: Expiration::default(),
                 description: None,
                 r#type: vec![],
                 schema: Box::new(None),
@@ -1379,6 +1399,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: Expiration::default(),
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some(original_schema)),
@@ -1442,6 +1463,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: Expiration::default(),
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some(original_schema)),
@@ -1515,6 +1537,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: Expiration::default(),
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some(original_schema)),
@@ -1616,6 +1639,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: Expiration::default(),
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some(original_schema)),
@@ -1675,6 +1699,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: None,
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some(schema)),
@@ -1731,6 +1756,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: None,
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some(schema.clone())),
@@ -1748,6 +1774,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: Expiration::default(),
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some({
@@ -1814,6 +1841,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: None,
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some(schema.clone())),
@@ -1831,6 +1859,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: Expiration::default(),
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some({
@@ -1900,6 +1929,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: Expiration::default(),
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some(schema)),
@@ -2066,6 +2096,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: None,
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some(schema)),
@@ -2132,6 +2163,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: Expiration::default(),
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some(original_schema)),
@@ -2174,6 +2206,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: None,
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some(schema.clone())),
@@ -2191,6 +2224,7 @@ pub mod document_tests {
                 tags: None,
                 status: Status::Draft,
                 visibility: Visibility::Private,
+                expiration: Expiration::default(),
                 description: None,
                 r#type: vec![],
                 schema: Box::new(Some({

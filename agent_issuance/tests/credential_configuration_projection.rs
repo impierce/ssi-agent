@@ -4,7 +4,7 @@ use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{DataModel, Display, Status, Visibility};
 use agent_library::template::command::TemplateCommand;
-use agent_library::template::event::{HolderType, TemplateEvent};
+use agent_library::template::event::{Expiration, HolderType, TemplateEvent};
 use agent_secret_manager::service::Service;
 use agent_shared::handlers::{command_handler, query_handler};
 use agent_store::in_memory::InMemory;
@@ -36,6 +36,7 @@ fn create_test_event_template_created(
             tags: None,
             status,
             visibility: Visibility::Private,
+            expiration: Expiration::Never,
             description: None,
             r#type: types,
             schema: Box::new(None),
@@ -182,6 +183,7 @@ async fn test_display_updated_reflects_in_credential_configuration() {
             tags: None,
             status: Status::Published,
             visibility: Visibility::Private,
+            expiration: None,
             description: None,
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
@@ -276,6 +278,7 @@ async fn test_title_updated_while_in_draft_skips_sync() {
             tags: None,
             status: Status::Draft,
             visibility: Visibility::Private,
+            expiration: None,
             description: None,
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
@@ -327,6 +330,7 @@ async fn test_title_updated_refreshes_credential_configuration() {
             tags: None,
             status: Status::Published,
             visibility: Visibility::Private,
+            expiration: None,
             description: None,
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
@@ -453,6 +457,7 @@ async fn test_status_updated_to_published_creates_credential_configuration() {
             tags: None,
             status: Status::Draft,
             visibility: Visibility::Private,
+            expiration: None,
             description: None,
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
@@ -538,6 +543,7 @@ async fn test_status_updated_to_deleted_removes_credential_configuration() {
             tags: None,
             status: Status::Published,
             visibility: Visibility::Private,
+            expiration: None,
             description: None,
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),

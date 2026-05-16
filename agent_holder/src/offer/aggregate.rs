@@ -398,6 +398,7 @@ pub mod tests {
                 tags: None,
                 status: TemplateStatus::Published,
                 visibility: Visibility::Private,
+                expiration: None,
                 description: None,
                 r#type: vec!["VerifiableCredential".to_string()],
                 schema: Box::new(None),
