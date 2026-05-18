@@ -8,6 +8,8 @@ use tracing::{debug, info};
 
 use super::{command::TemplateCommand, error::TemplateError, event::TemplateEvent};
 
+const DEFAULT_CREDENTIAL_TYPE: &str = "VerifiableCredential";
+
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
 pub struct Logo {
@@ -136,6 +138,8 @@ impl Aggregate for Template {
                 if let Some(ref attrs) = schema_properties_attributes {
                     validate_schema_properties_attributes(&schema, attrs)?;
                 }
+
+                let r#type = normalize_template_type(r#type);
 
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -497,6 +501,14 @@ fn validate_json_schema(schema: &serde_json::Value) -> Result<(), TemplateError>
         .map_err(|e| TemplateError::InvalidSchema(e.to_string()))
 }
 
+fn normalize_template_type(mut type_: Vec<String>) -> Vec<String> {
+    if type_.is_empty() {
+        type_.push(DEFAULT_CREDENTIAL_TYPE.to_string());
+    }
+
+    type_
+}
+
 fn get_schema_property_keys(schema: &serde_json::Value) -> std::collections::HashSet<String> {
     schema
         .get("properties")
@@ -654,7 +666,47 @@ pub mod document_tests {
                 status: Status::Draft,
                 visibility: Visibility::Private,
                 description: None,
+                r#type: vec![DEFAULT_CREDENTIAL_TYPE.to_string()],
+                schema: Box::new(None),
+                schema_properties_attributes: None,
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_template_with_empty_type_defaults_to_verifiable_credential(template_id: String) {
+        TemplateTestFramework::with(())
+            .given_no_previous_events()
+            .when(TemplateCommand::CreateTemplate {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: None,
+                display: Box::new(None),
+                data_model: None,
+                creator: None,
+                holder_type: None,
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
                 r#type: vec![],
+                schema: Box::new(None),
+                schema_properties_attributes: None,
+            })
+            .then_expect_events(vec![TemplateEvent::TemplateCreated {
+                template_id,
+                source_template_id: None,
+                title: None,
+                display: Box::new(None),
+                data_model: None,
+                creator: None,
+                holder_type: None,
+                modified_at: test_utils::modified_at(),
+                tags: vec![],
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                description: None,
+                r#type: vec![DEFAULT_CREDENTIAL_TYPE.to_string()],
                 schema: Box::new(None),
                 schema_properties_attributes: None,
             }])
