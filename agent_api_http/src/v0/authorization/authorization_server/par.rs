@@ -1,17 +1,18 @@
 use crate::{utils::StringifiedForm, v0::issuance::error::PublicError};
-use agent_authorization::application::pushed_authorization_service::PushedAuthorizationService;
+use agent_authorization::application::{
+    interactive_authorization_service::InteractiveAuthorizationService,
+    pushed_authorization_service::PushedAuthorizationService,
+};
 use agent_authorization::state::AuthorizationState;
 use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use oid4vci::{
-    authorization_request::AuthorizationRequest, InteractionType, InteractiveAuthorizationRequest,
-    InteractiveAuthorizationResponse, InteractiveAuthorizationStatus,
-};
+use oid4vci::{authorization_request::AuthorizationRequest, InteractiveAuthorizationRequest};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tracing::info;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
@@ -19,87 +20,64 @@ pub enum AuthorizationRequestDto {
     InteractiveAuthorizationRequest(InteractiveAuthorizationRequest),
     FollowUpInteractiveAuthorizationRequest {
         auth_session: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
         openid4vp_response: Option<serde_json::Value>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         code_verifier: Option<String>,
     },
     PushedAuthorizationRequest(AuthorizationRequest),
 }
 
+/// Handles the Pushed Authorization Request (PAR) endpoint as well as the Interactive Authorization Request flow as defined in OpenID4VCI 1.1
 #[axum_macros::debug_handler]
 pub(crate) async fn par(
     State(state): State<Arc<AuthorizationState>>,
     StringifiedForm(authorization_request): StringifiedForm<AuthorizationRequestDto>,
 ) -> Result<Response, PublicError> {
     match authorization_request {
-        AuthorizationRequestDto::InteractiveAuthorizationRequest(interactive_authorization_request) => Ok((
-            StatusCode::OK,
-            Json(InteractiveAuthorizationResponse {
-                status: InteractiveAuthorizationStatus::RequireInteraction,
-                code: None,
-                interaction_type: Some(InteractionType::OpenId4VpPresentation),
-                auth_session: Some("test_auth_session".to_string()),
-                openid4vp_request: Some(serde_json::json!({
-                  "response_type": "vp_token",
-                  "response_mode": "iae_post",
-                  "dcql_query": {
-                    "credentials": [
-                      {
-                        "id": "eduID",
-                        "format": "dc+sd-jwt",
-                        "meta": {
-                          "vct_values": [ "https://issuer.pilots.eduid.nl/vct/eduid" ]
-                        },
-                        "claims": [
-                            {"path": ["schac_home_organization"]},
-                            {"path": ["name"]},
-                            {"path": ["given_name"]},
-                            {"path": ["family_name"]},
-                            {"path": ["email"]},
-                            {"path": ["eduperson_scoped_affiliation"]},
-                            {"path": ["eduperson_assurance"]},
-                            {"path": ["is_student"]},
-                            {"path": ["is_faculty"]},
-                            {"path": ["is_member"]},
-                            {"path": ["is_staff"]},
-                            {"path": ["is_alum"]},
-                            {"path": ["is_affiliate"]},
-                            {"path": ["is_employee"]},
-                            {"path": ["is_library-walk-in"]}
-                        ]
-                      }
-                    ]
-                  },
-                  "nonce": "test_nonce"
-                })),
-                request_uri: None,
-                expires_in: None,
-            }),
-        )
-            .into_response()),
+        AuthorizationRequestDto::InteractiveAuthorizationRequest(interactive_authorization_request) => {
+            info!("Received interactive authorization request");
+            println!("{}:{}", file!(), line!());
+
+            let interactive_authorization_response =
+                InteractiveAuthorizationService::handle_interactive_authorization_request(
+                    &state,
+                    interactive_authorization_request,
+                )
+                .await
+                // TODO: implement proper error handling
+                .map_err(|_err| PublicError::InternalServerError)?;
+
+            Ok((StatusCode::OK, Json(interactive_authorization_response)).into_response())
+        }
         AuthorizationRequestDto::FollowUpInteractiveAuthorizationRequest {
             auth_session,
             openid4vp_response,
             code_verifier,
         } => {
-            if auth_session != "test_auth_session" {
-                return Err(PublicError::NotFoundError);
-            }
+            info!("Received follow-up interactive authorization request for auth session: {auth_session}");
 
-            Ok((
-                StatusCode::OK,
-                Json(InteractiveAuthorizationResponse {
-                    status: InteractiveAuthorizationStatus::Ok,
-                    code: Some("test_authorization_code".to_string()),
-                    interaction_type: None,
-                    auth_session: None,
-                    openid4vp_request: None,
-                    request_uri: None,
-                    expires_in: None,
-                }),
-            )
-                .into_response())
+            println!("{}:{}", file!(), line!());
+            let interactive_authorization_follow_up_response =
+                InteractiveAuthorizationService::handle_interactive_authorization_request_follow_up(
+                    &state,
+                    auth_session,
+                    openid4vp_response,
+                    code_verifier,
+                )
+                .await
+                // TODO: implement proper error handling
+                .map_err(|_err| PublicError::InternalServerError)?;
+
+            Ok((StatusCode::OK, Json(interactive_authorization_follow_up_response)).into_response())
         }
         AuthorizationRequestDto::PushedAuthorizationRequest(pushed_authorization_request) => {
+            info!(
+                "Received pushed authorization request with state: {:?}",
+                pushed_authorization_request.state
+            );
+            println!("{}:{}", file!(), line!());
+
             let authorization_response =
                 PushedAuthorizationService::handle_pushed_authorization_request(&state, pushed_authorization_request)
                     .await
@@ -136,6 +114,7 @@ pub mod tests {
         authorization_request::CodeChallengeMethod,
         credential_offer::AuthorizationCode,
         wallet::PushedAuthorizationResponse,
+        InteractiveAuthorizationResponse,
     };
     use serde_json::json;
     use tower::Service as _;
@@ -185,6 +164,99 @@ pub mod tests {
         pushed_authorization_response.request_uri
     }
 
+    pub async fn interactive_authorization_request(
+        app: &mut Router,
+        issuer_state: String,
+    ) -> InteractiveAuthorizationResponse {
+        println!("{}:{}", file!(), line!());
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/auth/par")
+                    .header(
+                        http::header::CONTENT_TYPE,
+                        mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
+                    )
+                    .body(Body::from(
+                        to_form_urlencoded_string(&json!(InteractiveAuthorizationRequest {
+                            authorization_request: AuthorizationRequest {
+                                response_type: "code".to_string(),
+                                state: Some("test_state".to_string()),
+                                client_id: UNIME_CLIENT_ID.to_string(),
+                                redirect_uri: Some(UNIME_REDIRECT_URI.parse().unwrap()),
+                                code_challenge: Some(code_challenge()),
+                                code_challenge_method: Some(CodeChallengeMethod::S256),
+                                scope: None,
+                                issuer_state: Some(issuer_state),
+                                authorization_details: vec![AuthorizationDetailsObject {
+                                    r#type: OpenidCredential::Type,
+                                    locations: None,
+                                    credential_configuration_id: "configuration_id".to_string(),
+                                    credential_identifiers: None,
+                                    claims: None,
+                                }],
+                            },
+                            interaction_types_supported: "FIXME".to_string(),
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        println!("{}:{}", file!(), line!());
+        assert_eq!(response.status(), StatusCode::OK);
+        println!("{}:{}", file!(), line!());
+        assert_eq!(response.headers().get("Content-Type").unwrap(), "application/json");
+
+        println!("{}:{}", file!(), line!());
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        println!("{}:{}", file!(), line!());
+        let interactive_authorization_response: InteractiveAuthorizationResponse =
+            serde_json::from_slice(&body).unwrap();
+
+        println!("{}:{}", file!(), line!());
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/auth/par")
+                    .header(
+                        http::header::CONTENT_TYPE,
+                        mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
+                    )
+                    .body(Body::from(
+                        to_form_urlencoded_string(&json!(
+                            AuthorizationRequestDto::FollowUpInteractiveAuthorizationRequest {
+                                auth_session: interactive_authorization_response.auth_session.clone().unwrap(),
+                                openid4vp_response: Some(serde_json::json!({})),
+                                code_verifier: None,
+                            }
+                        ))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        println!("{}:{}", file!(), line!());
+        assert_eq!(response.status(), StatusCode::OK);
+        println!("{}:{}", file!(), line!());
+        assert_eq!(response.headers().get("Content-Type").unwrap(), "application/json");
+
+        println!("{}:{}", file!(), line!());
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        println!("{}:{}", file!(), line!());
+        let interactive_authorization_response: InteractiveAuthorizationResponse =
+            serde_json::from_slice(&body).unwrap();
+
+        println!("{}:{}", file!(), line!());
+        interactive_authorization_response
+    }
+
     #[serial_test::serial]
     #[tokio::test]
     async fn test_pushed_authorization_request_endpoint() {
@@ -200,8 +272,15 @@ pub mod tests {
         let AuthorizationCode { issuer_state, .. } = authorization_code.unwrap();
         let issuer_state = issuer_state.unwrap();
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
@@ -209,5 +288,48 @@ pub mod tests {
         let mut app = authorization::router((authorization_state, issuance_state));
 
         let _request_uri = par(&mut app, issuer_state).await;
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_interactive_authorization_request_flow() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+
+        println!("{}:{}", file!(), line!());
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+
+        println!("{}:{}", file!(), line!());
+        let mut app = issuance::router(issuance_state.clone());
+
+        println!("{}:{}", file!(), line!());
+        credentials(&mut app, "002").await;
+        println!("{}:{}", file!(), line!());
+        let (authorization_code, _pre_authorized_code) = offers(&mut app, "002").await.unwrap();
+        println!("{}:{}", file!(), line!());
+        let AuthorizationCode { issuer_state, .. } = authorization_code.unwrap();
+        println!("{}:{}", file!(), line!());
+        let issuer_state = issuer_state.unwrap();
+
+        println!("{}:{}", file!(), line!());
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
+        println!("{}:{}", file!(), line!());
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
+
+        println!("{}:{}", file!(), line!());
+        let mut app = authorization::router((authorization_state, issuance_state));
+
+        println!("{}:{}", file!(), line!());
+        let _interactive_authorization_request = interactive_authorization_request(&mut app, issuer_state).await;
     }
 }

@@ -78,6 +78,7 @@ impl PushedAuthorizationService {
             oauth2_authorization_request_id: oauth2_authorization_request_id.clone(),
             pushed_authorization_request: pushed_authorization_request.clone(),
             expires_at,
+            interaction_type: None,
         };
 
         command_handler(

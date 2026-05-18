@@ -90,8 +90,15 @@ mod tests {
         credentials(&mut issuance_app, "001").await;
         let grants = offers(&mut issuance_app, "001").await.unwrap();
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
@@ -130,8 +137,15 @@ mod tests {
         credentials(&mut issuance_app, "001").await;
         let grants = offers(&mut issuance_app, "001").await.unwrap();
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

@@ -3,7 +3,7 @@ mod probes;
 
 pub use agent_api_http::metrics::metrics;
 use agent_api_http::{app, metrics::track_metrics, ApplicationState};
-use agent_authorization::services::AuthorizationServices;
+use agent_authorization::services::{AuthorizationServices, OAuth2AuthorizationRequestDomainServices};
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_event_publisher_nats::EventPublisherNats;
 use agent_holder::services::HolderServices;
@@ -21,6 +21,7 @@ use std::sync::Arc;
 use tokio::io;
 use tower_http::cors::CorsLayer;
 use tracing::info;
+use verification_authorization::VerificationAuthorizationAdapter;
 
 pub async fn run() -> io::Result<()> {
     let state = state().await?;
@@ -66,6 +67,15 @@ pub async fn state() -> io::Result<ApplicationState> {
                 let issuer_metadata_synchronization_policy =
                     IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
 
+                let verification_state = Arc::new(
+                    agent_store::verification_state(&builder, verification_services, verification_event_publishers)
+                        .await,
+                );
+
+                let oauth2_authorization_request_domain_services = OAuth2AuthorizationRequestDomainServices::new(
+                    Box::new(VerificationAuthorizationAdapter::new(verification_state.clone())),
+                );
+
                 (
                     Arc::new(agent_store::identity_state(&builder, identity_services, identity_event_publishers).await),
                     Arc::new(
@@ -81,15 +91,13 @@ pub async fn state() -> io::Result<ApplicationState> {
                             &builder,
                             authorization_services,
                             authorization_event_publishers,
+                            oauth2_authorization_request_domain_services,
                         )
                         .await,
                     ),
                     issuance_state,
                     Arc::new(agent_store::holder_state(&builder, holder_services, holder_event_publishers).await),
-                    Arc::new(
-                        agent_store::verification_state(&builder, verification_services, verification_event_publishers)
-                            .await,
-                    ),
+                    verification_state,
                 )
             }
             EventStoreType::MongoDb => {
@@ -101,6 +109,15 @@ pub async fn state() -> io::Result<ApplicationState> {
                 let issuer_metadata_synchronization_policy =
                     IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
 
+                let verification_state = Arc::new(
+                    agent_store::verification_state(&builder, verification_services, verification_event_publishers)
+                        .await,
+                );
+
+                let oauth2_authorization_request_domain_services = OAuth2AuthorizationRequestDomainServices::new(
+                    Box::new(VerificationAuthorizationAdapter::new(verification_state.clone())),
+                );
+
                 (
                     Arc::new(agent_store::identity_state(&builder, identity_services, identity_event_publishers).await),
                     Arc::new(
@@ -116,15 +133,13 @@ pub async fn state() -> io::Result<ApplicationState> {
                             &builder,
                             authorization_services,
                             authorization_event_publishers,
+                            oauth2_authorization_request_domain_services,
                         )
                         .await,
                     ),
                     issuance_state,
                     Arc::new(agent_store::holder_state(&builder, holder_services, holder_event_publishers).await),
-                    Arc::new(
-                        agent_store::verification_state(&builder, verification_services, verification_event_publishers)
-                            .await,
-                    ),
+                    verification_state,
                 )
             }
             EventStoreType::InMemory => {
@@ -134,6 +149,15 @@ pub async fn state() -> io::Result<ApplicationState> {
 
                 let issuer_metadata_synchronization_policy =
                     IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
+
+                let verification_state = Arc::new(
+                    agent_store::verification_state(&InMemory, verification_services, verification_event_publishers)
+                        .await,
+                );
+
+                let oauth2_authorization_request_domain_services = OAuth2AuthorizationRequestDomainServices::new(
+                    Box::new(VerificationAuthorizationAdapter::new(verification_state.clone())),
+                );
 
                 (
                     Arc::new(
@@ -152,19 +176,13 @@ pub async fn state() -> io::Result<ApplicationState> {
                             &InMemory,
                             authorization_services,
                             authorization_event_publishers,
+                            oauth2_authorization_request_domain_services,
                         )
                         .await,
                     ),
                     issuance_state,
                     Arc::new(agent_store::holder_state(&InMemory, holder_services, holder_event_publishers).await),
-                    Arc::new(
-                        agent_store::verification_state(
-                            &InMemory,
-                            verification_services,
-                            verification_event_publishers,
-                        )
-                        .await,
-                    ),
+                    verification_state,
                 )
             }
         };
