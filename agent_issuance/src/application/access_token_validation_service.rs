@@ -31,7 +31,6 @@ pub enum AccessTokenValidationError {
     InvalidToken,
     #[error("Failed to resolve the public key for the token's `kid`")]
     KidResolutionError,
-    
 }
 
 impl AccessTokenValidationService {
