@@ -86,11 +86,11 @@ pub(crate) async fn credentials(
     }): Json<CredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let credential_id = uuid::Uuid::new_v4().to_string();
-    
+
     if credential.to_string().contains("Rijksuniversiteit Groningen") {
         credential_configuration_id = "ELM SD-JWT".to_string();
     }
-    
+
     let (_, credential_configuration, authorization) = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
         .await?
         .and_then(|server_config_view| {

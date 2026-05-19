@@ -31,7 +31,7 @@ pub(crate) async fn par(
     StringifiedForm(authorization_request): StringifiedForm<AuthorizationRequestDto>,
 ) -> Result<Response, PublicError> {
     match authorization_request {
-        AuthorizationRequestDto::InteractiveAuthorizationRequest(interactive_authorization_request) => Ok((
+        AuthorizationRequestDto::InteractiveAuthorizationRequest(_interactive_authorization_request) => Ok((
             StatusCode::OK,
             Json(InteractiveAuthorizationResponse {
                 status: InteractiveAuthorizationStatus::RequireInteraction,
@@ -78,8 +78,8 @@ pub(crate) async fn par(
             .into_response()),
         AuthorizationRequestDto::FollowUpInteractiveAuthorizationRequest {
             auth_session,
-            openid4vp_response,
-            code_verifier,
+            openid4vp_response: _,
+            code_verifier: _,
         } => {
             if auth_session != "test_auth_session" {
                 return Err(PublicError::NotFoundError);
