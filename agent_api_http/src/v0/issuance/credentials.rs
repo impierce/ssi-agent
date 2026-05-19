@@ -20,9 +20,11 @@ use http_api_problem::ApiError;
 use hyper::header;
 use oauth_tsl::status_list::StatusType;
 use oid4vci::credential_offer::GrantType;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::sync::Arc;
+use tracing::info;
 
 /// Get credential by ID
 ///
@@ -77,14 +79,18 @@ pub(crate) async fn credentials(
     State(state): State<Arc<IssuanceState>>,
     Json(CredentialsEndpointRequest {
         offer_id,
-        credential,
+        mut credential,
         is_signed,
-        credential_configuration_id,
+        mut credential_configuration_id,
         expires_at,
     }): Json<CredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let credential_id = uuid::Uuid::new_v4().to_string();
-
+    
+    if credential.to_string().contains("Rijksuniversiteit Groningen") {
+        credential_configuration_id = "ELM SD-JWT".to_string();
+    }
+    
     let (_, credential_configuration, authorization) = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
         .await?
         .and_then(|server_config_view| {
@@ -125,6 +131,13 @@ pub(crate) async fn credentials(
                 .type_url(type_url("issuance#invalid-credential-type"))
                 .message("For unsigned credentials, the credential must be an object.")
                 .finish());
+        }
+        info!("Creating credential with configuration: {credential_configuration:#?}");
+        info!("Received credential data: {credential:#?}");
+
+        if credential.to_string().contains("Rijksuniversiteit Groningen") {
+            credential = quick_fix_transform(credential);
+            info!("Applied quick fix transformation for Rijksuniversiteit Groningen credential. Transformed credential data: {credential:#?}");
         }
 
         CredentialCommand::CreateUnsignedCredential {
@@ -254,6 +267,192 @@ pub async fn patch_credential(
     } else {
         Err(ApiError::new(StatusCode::NOT_FOUND))
     }
+}
+
+// Helpers
+
+// Quick helper to strip simple HTML tags and clean formatting
+fn clean_html(input: &str) -> String {
+    info!("Cleaning HTML from input: {input}");
+    let re_tags = Regex::new(r"<[^>]*>").unwrap();
+    let cleaned = re_tags.replace_all(input, "");
+    let output = cleaned.replace("&#39;", "'").trim().to_string();
+    info!("Cleaned HTML output: {output}");
+    output
+}
+
+// Parses specific Course rows out of the raw HTML string
+fn parse_courses(html_table: &str) -> Vec<Value> {
+    let mut courses = Vec::new();
+    let row_re = Regex::new(r"<tr>\s*<td>([^<]+)</td>\s*<td>([^<]*)</td>\s*<td>([^<]*)</td>\s*</tr>").unwrap();
+
+    for cap in row_re.captures_iter(html_table) {
+        let title = cap[1].trim().to_string();
+        let grade_val = cap[2].trim().to_string();
+        let ects_val = cap[3].trim().to_string();
+
+        if (grade_val.is_empty() && ects_val.is_empty()) || title.contains("Total number of credits") {
+            continue;
+        }
+
+        courses.push(json!({
+            "type": "LearningAchievement",
+            "title": { "en": title },
+            "creditReceived": [{
+                "type": "CreditPoint",
+                "framework": { "prefLabel": { "en": "ECTS" } },
+                "point": ects_val
+            }],
+            "provenBy": [{
+                "type": "LearningAssessment",
+                "title": { "en": format!("Assessment for {}", title) },
+                "grade": {
+                    "type": "Note",
+                    "noteLiteral": { "en": grade_val }
+                },
+                "awardedBy": { "type": "AwardingProcess" }
+            }],
+            "awardedBy": { "type": "AwardingProcess" }
+        }));
+    }
+    courses
+}
+
+fn quick_fix_transform(input: Value) -> Value {
+    let sub = input.get("credentialSubject").cloned().unwrap_or(json!({}));
+
+    info!("Extracted credentialSubject for quick fix transformation: {sub:#?}");
+
+    let get_val = |key: &str| {
+        sub.get(key)
+            .and_then(|v| v.as_str().map(ToString::to_string))
+            .unwrap_or_default()
+    };
+
+    info!("LastNames_1_1: {:?}", sub.get("LastNames_1_1"));
+    let last_name = clean_html(&get_val("LastNames_1_1"));
+    let first_name = clean_html(&get_val("FirstNames_1_2"));
+    let student_num = clean_html(&get_val("StudentNumber_1_4"));
+    let degree_title = clean_html(&get_val("NameOfQualification_2_1"));
+    let language = clean_html(&get_val("LanguageOfInstruction_2_5"));
+    let mode = clean_html(&get_val("ModeOfStudy_4_1"));
+    let requirements = clean_html(&get_val("ProgrammaRequirements_4_2"));
+    let mapped_courses = parse_courses(&get_val("ProgrammeDetails_4_3"));
+
+    json!({
+        "issued": "2026-05-15T00:00:00Z",
+        "credentialSubject": {
+            "type": "Person",
+            "familyName": { "en": last_name },
+            "givenName": { "en": first_name },
+            "dateOfBirth": "1999-01-01T00:00:00Z",
+            "identifier": { "notation": student_num },
+            "hasClaim": {
+                "type": "LearningAchievement",
+                "specifiedBy": {
+                    "type": "Qualification",
+                    "title": { "en": degree_title },
+                    "thematicArea": {
+                        "id": "http://data.europa.eu/esco/isced-f/0533",
+                        "prefLabel": { "en": "Astronomy" }
+                    },
+                    "accreditation": {
+                        "title": { "en": "Accreditation Organisation of The Netherlands and Flanders" },
+                        "accreditingAgent": {
+                            "type": "Organisation",
+                            "legalName": { "en": "Nederlands-Vlaamse Accreditatie Organisatie, NVAO" },
+                            "location": { "address": { "countryCode": { "notation": "NL" } } }
+                        },
+                        "dcType": { "prefLabel": { "en": "Programme Accreditation" } }
+                    },
+                    "language": { "prefLabel": { "en": language } },
+                    "eqfLevel": { "prefLabel": { "en": "Level 6" } },
+                    "nqfLevel": { "prefLabel": { "en": "Level 6" } },
+                    "volumeOfLearning": "P3Y",
+                    "creditPoint": {
+                        "type": "CreditPoint",
+                        "framework": { "prefLabel": { "en": "ECTS" } },
+                        "point": "180"
+                    },
+                    "entryRequirement": {
+                        "type": "Note",
+                        "noteLiteral": { "en": "VWO or equivalent level of education" }
+                    },
+                    "mode": { "prefLabel": { "en": mode } },
+                    "learningOutcomeSummary": {
+                        "type": "Note",
+                        "noteLiteral": { "en": requirements }
+                    }
+                },
+                "title": { "en": degree_title },
+                "awardedBy": {
+                    "type": "AwardingProcess",
+                    "awardingBody": {
+                        "type": "Organisation",
+                        "legalName": { "en": "Rijksuniversiteit Groningen (University of Groningen)" },
+                        "location": { "address": { "countryCode": { "notation": "NL" } } },
+                        "dcType": { "prefLabel": { "en": "Public University, state recognised" } }
+                    }
+                },
+                "provenBy": [
+                    {
+                        "type": "LearningAssessment",
+                        "title": { "en": "Transcript Summary" },
+                        "grade": {
+                            "type": "Note",
+                            "noteLiteral": { "en": "60 ECTS credits achieved in Year 1" }
+                        },
+                        "specifiedBy": {
+                            "type": "LearningAssessmentSpecification",
+                            "title": { "en": "Standard University Examination" },
+                            "gradingScheme": {
+                                "type": "GradingScheme",
+                                "title": { "en": "Dutch Grading System (1-10 scale)" },
+                                "description": { "en": "The Dutch grading system, used from elementary through to university education is the 1 to 10 scale, in which 10 is the highest grade, 6 the minimum pass and 1 the lowest grade. The grade 10 is rarely awarded." }
+                            }
+                        },
+                        "awardedBy": { "type": "AwardingProcess" }
+                    },
+                    {
+                        "type": "LearningAssessment",
+                        "title": { "en": "Overall Classification" },
+                        "grade": {
+                            "type": "Note",
+                            "noteLiteral": { "en": "Graduated" }
+                        },
+                        "awardedBy": { "type": "AwardingProcess" }
+                    }
+                ],
+                "hasPart": mapped_courses,
+                "entitlesTo": [
+                    {
+                        "type": "LearningEntitlement",
+                        "title": { "en": "Access to further study" },
+                        "description": { "en": "The Bachelor's degree may qualify for graduate programmes (MSc)" },
+                        "awardedBy": { "type": "AwardingProcess" }
+                    },
+                    {
+                        "type": "LearningEntitlement",
+                        "title": { "en": "Access to a regulated profession" },
+                        "description": { "en": "Not applicable" },
+                        "awardedBy": { "type": "AwardingProcess" }
+                    }
+                ],
+                "supplementaryDocument": [
+                    {
+                        "type": "WebResource",
+                        "title": { "en": "Rijksuniversiteit Groningen" },
+                        "contentURL": "http://www.rug.nl"
+                    },
+                    {
+                        "type": "WebResource",
+                        "title": { "en": "ENIC/NARIC Centre in the Netherlands" },
+                        "contentURL": "http://www.epnuffic.nl"
+                    }
+                ]
+            }
+        }
+    })
 }
 
 #[cfg(test)]

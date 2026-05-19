@@ -97,7 +97,6 @@ impl Aggregate for AuthorizationRequest {
                         OID4VPAuthorizationRequest::builder()
                             .dcql_query(dcql_query)
                             .client_id(ClientId::from_str(&client_id).unwrap())
-                            .scope(Scope::openid())
                             .response_uri(redirect_uri)
                             .response_mode("direct_post".to_string())
                             .client_metadata(oid4vp_client_metadata)
